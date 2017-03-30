@@ -4,7 +4,6 @@
 
 #include <stddef.h>
 
-#include "base/containers/hash_tables.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/layers/nine_patch_layer_impl.h"
 #include "cc/quads/texture_draw_quad.h"
@@ -68,7 +67,7 @@ void NinePatchLayerLayoutTest(const gfx::Size& bitmap_size,
   host_impl.CreateUIResource(uid, bitmap);
   layer->SetUIResourceId(uid);
   layer->SetImageBounds(bitmap_size);
-  layer->SetLayout(aperture_rect, border, fill_center);
+  layer->SetLayout(aperture_rect, border, fill_center, false);
   AppendQuadsData data;
   layer->AppendQuads(render_pass.get(), &data);
 
@@ -240,7 +239,7 @@ TEST(NinePatchLayerImplTest, Occlusion) {
 
   gfx::Rect aperture = gfx::Rect(3, 3, 4, 4);
   gfx::Rect border = gfx::Rect(300, 300, 400, 400);
-  nine_patch_layer_impl->SetLayout(aperture, border, true);
+  nine_patch_layer_impl->SetLayout(aperture, border, true, false);
 
   impl.CalcDrawProps(viewport_size);
 
@@ -318,7 +317,7 @@ TEST(NinePatchLayerImplTest, OpaqueRect) {
 
     gfx::Rect aperture = gfx::Rect(3, 3, 4, 4);
     gfx::Rect border = gfx::Rect(300, 300, 400, 400);
-    nine_patch_layer_impl->SetLayout(aperture, border, true);
+    nine_patch_layer_impl->SetLayout(aperture, border, true, false);
 
     impl.AppendQuadsWithOcclusion(nine_patch_layer_impl, gfx::Rect());
 

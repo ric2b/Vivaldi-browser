@@ -30,6 +30,8 @@
 
 #include "modules/serviceworkers/ServiceWorkerGlobalScope.h"
 
+#include "bindings/core/v8/CallbackPromiseAdapter.h"
+#include "bindings/core/v8/ScriptCallStack.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/ScriptState.h"
@@ -39,7 +41,6 @@
 #include "core/fetch/MemoryCache.h"
 #include "core/fetch/ResourceLoaderOptions.h"
 #include "core/inspector/ConsoleMessage.h"
-#include "core/inspector/ScriptCallStack.h"
 #include "core/inspector/WorkerInspectorController.h"
 #include "core/loader/ThreadableLoader.h"
 #include "core/workers/WorkerClients.h"
@@ -54,31 +55,15 @@
 #include "modules/serviceworkers/ServiceWorkerScriptCachedMetadataHandler.h"
 #include "modules/serviceworkers/ServiceWorkerThread.h"
 #include "modules/serviceworkers/WaitUntilObserver.h"
+#include "platform/Histogram.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/weborigin/DatabaseIdentifier.h"
 #include "platform/weborigin/KURL.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebURL.h"
-#include "public/platform/modules/serviceworker/WebServiceWorkerSkipWaitingCallbacks.h"
 #include "wtf/CurrentTime.h"
 
 namespace blink {
-
-class ServiceWorkerGlobalScope::SkipWaitingCallback final : public WebServiceWorkerSkipWaitingCallbacks {
-    WTF_MAKE_NONCOPYABLE(SkipWaitingCallback);
-public:
-    explicit SkipWaitingCallback(ScriptPromiseResolver* resolver)
-        : m_resolver(resolver) { }
-    ~SkipWaitingCallback() { }
-
-    void onSuccess() override
-    {
-        m_resolver->resolve();
-    }
-
-private:
-    Persistent<ScriptPromiseResolver> m_resolver;
-};
 
 PassRefPtrWillBeRawPtr<ServiceWorkerGlobalScope> ServiceWorkerGlobalScope::create(ServiceWorkerThread* thread, PassOwnPtr<WorkerThreadStartupData> startupData)
 {
@@ -109,11 +94,13 @@ ServiceWorkerGlobalScope::~ServiceWorkerGlobalScope()
 
 void ServiceWorkerGlobalScope::didEvaluateWorkerScript()
 {
-    if (Platform* platform = Platform::current()) {
-        platform->histogramCustomCounts("ServiceWorker.ScriptCount", m_scriptCount, 1, 1000, 50);
-        platform->histogramCustomCounts("ServiceWorker.ScriptTotalSize", m_scriptTotalSize, 1000, 5000000, 50);
-        if (m_scriptCachedMetadataTotalSize)
-            platform->histogramCustomCounts("ServiceWorker.ScriptCachedMetadataTotalSize", m_scriptCachedMetadataTotalSize, 1000, 50000000, 50);
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scriptCountHistogram, new CustomCountHistogram("ServiceWorker.ScriptCount", 1, 1000, 50));
+    scriptCountHistogram.count(m_scriptCount);
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scriptTotalSizeHistogram, new CustomCountHistogram("ServiceWorker.ScriptTotalSize", 1000, 5000000, 50));
+    scriptTotalSizeHistogram.count(m_scriptTotalSize);
+    if (m_scriptCachedMetadataTotalSize) {
+        DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, cachedMetadataHistogram, new CustomCountHistogram("ServiceWorker.ScriptCachedMetadataTotalSize", 1000, 50000000, 50));
+        cachedMetadataHistogram.count(m_scriptCachedMetadataTotalSize);
     }
     m_didEvaluateScript = true;
 }
@@ -150,7 +137,7 @@ ScriptPromise ServiceWorkerGlobalScope::skipWaiting(ScriptState* scriptState)
     ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
     ScriptPromise promise = resolver->promise();
 
-    ServiceWorkerGlobalScopeClient::from(executionContext)->skipWaiting(new SkipWaitingCallback(resolver));
+    ServiceWorkerGlobalScopeClient::from(executionContext)->skipWaiting(new CallbackPromiseAdapter<void, void>(resolver));
     return promise;
 }
 
@@ -180,14 +167,14 @@ const AtomicString& ServiceWorkerGlobalScope::interfaceName() const
     return EventTargetNames::ServiceWorkerGlobalScope;
 }
 
-bool ServiceWorkerGlobalScope::dispatchEventInternal(PassRefPtrWillBeRawPtr<Event> event)
+DispatchEventResult ServiceWorkerGlobalScope::dispatchEventInternal(PassRefPtrWillBeRawPtr<Event> event)
 {
     m_eventNestingLevel++;
-    bool result = WorkerGlobalScope::dispatchEventInternal(event.get());
+    DispatchEventResult dispatchResult = WorkerGlobalScope::dispatchEventInternal(event.get());
     if (event->interfaceName() == EventNames::ErrorEvent && m_eventNestingLevel == 2)
         m_hadErrorInTopLevelEventHandler = true;
     m_eventNestingLevel--;
-    return result;
+    return dispatchResult;
 }
 
 void ServiceWorkerGlobalScope::dispatchExtendableEvent(PassRefPtrWillBeRawPtr<Event> event, WaitUntilObserver* observer)
@@ -224,7 +211,7 @@ PassOwnPtrWillBeRawPtr<CachedMetadataHandler> ServiceWorkerGlobalScope::createWo
     return ServiceWorkerScriptCachedMetadataHandler::create(this, scriptURL, metaData);
 }
 
-void ServiceWorkerGlobalScope::logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtrWillBeRawPtr<ScriptCallStack> callStack)
+void ServiceWorkerGlobalScope::logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack> callStack)
 {
     WorkerGlobalScope::logExceptionToConsole(errorMessage, scriptId, sourceURL, lineNumber, columnNumber, callStack);
     RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, sourceURL, lineNumber, columnNumber);

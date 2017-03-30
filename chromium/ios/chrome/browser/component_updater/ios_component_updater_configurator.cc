@@ -5,6 +5,7 @@
 #include "ios/chrome/browser/component_updater/ios_component_updater_configurator.h"
 
 #include <string>
+#include <vector>
 
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/version.h"
@@ -36,11 +37,13 @@ class IOSConfigurator : public update_client::Configurator {
   std::string GetLang() const override;
   std::string GetOSLongName() const override;
   std::string ExtraRequestParams() const override;
+  std::string GetDownloadPreference() const override;
   net::URLRequestContextGetter* RequestContext() const override;
   scoped_refptr<update_client::OutOfProcessPatcher> CreateOutOfProcessPatcher()
       const override;
   bool DeltasEnabled() const override;
   bool UseBackgroundDownloader() const override;
+  bool UseCupSigning() const override;
   scoped_refptr<base::SequencedTaskRunner> GetSequencedTaskRunner()
       const override;
 
@@ -105,6 +108,10 @@ std::string IOSConfigurator::ExtraRequestParams() const {
   return configurator_impl_.ExtraRequestParams();
 }
 
+std::string IOSConfigurator::GetDownloadPreference() const {
+  return configurator_impl_.GetDownloadPreference();
+}
+
 net::URLRequestContextGetter* IOSConfigurator::RequestContext() const {
   return configurator_impl_.RequestContext();
 }
@@ -120,6 +127,10 @@ bool IOSConfigurator::DeltasEnabled() const {
 
 bool IOSConfigurator::UseBackgroundDownloader() const {
   return configurator_impl_.UseBackgroundDownloader();
+}
+
+bool IOSConfigurator::UseCupSigning() const {
+  return configurator_impl_.UseCupSigning();
 }
 
 scoped_refptr<base::SequencedTaskRunner>

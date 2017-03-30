@@ -204,13 +204,15 @@ RemoteCall.prototype.waitForElementLost =
  * @param {string} keyIdentifer Key identifier.
  * @param {boolean} ctrlKey Control key flag.
  * @param {boolean} shiftKey Shift key flag.
+ * @param {boolean} altKey Alt key flag.
  * @return {Promise} Promise to be fulfilled or rejected depending on the
  *     result.
  */
 RemoteCall.prototype.fakeKeyDown =
-    function(windowId, query, keyIdentifer, ctrlKey, shiftKey) {
+    function(windowId, query, keyIdentifer, ctrlKey, shiftKey, altKey) {
   var resultPromise = this.callRemoteTestUtil(
-      'fakeKeyDown', windowId, [query, keyIdentifer, ctrlKey, shiftKey]);
+      'fakeKeyDown', windowId,
+      [query, keyIdentifer, ctrlKey, shiftKey, altKey]);
   return resultPromise.then(function(result) {
     if (result)
       return true;
@@ -431,18 +433,18 @@ RemoteCallGallery.prototype.waitForSlideImage =
     expected.name = name;
 
   return repeatUntil(function() {
-    var query = '.gallery[mode="slide"] .content canvas.fullres';
+    var query = '.gallery[mode="slide"] .image-container > .image';
     return Promise.all([
         this.waitForElement(windowId, '.filename-spacer input'),
         this.waitForElement(windowId, query)
     ]).then(function(args) {
       var nameBox = args[0];
-      var fullResCanvas = args[1];
+      var image = args[1];
       var actual = {};
-      if (width && fullResCanvas)
-        actual.width = Number(fullResCanvas.attributes.width);
-      if (height && fullResCanvas)
-        actual.height = Number(fullResCanvas.attributes.height);
+      if (width && image)
+        actual.width = image.imageWidth;
+      if (height && image)
+        actual.height = image.imageHeight;
       if (name && nameBox)
         actual.name = nameBox.value;
 

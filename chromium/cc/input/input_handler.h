@@ -9,6 +9,8 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "cc/base/cc_export.h"
+#include "cc/input/event_listener_properties.h"
+#include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/input/scroll_state.h"
 #include "cc/input/scrollbar.h"
 #include "cc/trees/swap_promise_monitor.h"
@@ -77,14 +79,26 @@ class CC_EXPORT InputHandler {
  public:
   // Note these are used in a histogram. Do not reorder or delete existing
   // entries.
-  enum ScrollStatus {
+  enum ScrollThread {
     SCROLL_ON_MAIN_THREAD = 0,
-    SCROLL_STARTED,
+    SCROLL_ON_IMPL_THREAD,
     SCROLL_IGNORED,
     SCROLL_UNKNOWN,
-    // This must be the last entry.
-    ScrollStatusCount
+    LAST_SCROLL_STATUS = SCROLL_UNKNOWN
   };
+
+  struct ScrollStatus {
+    ScrollStatus()
+        : thread(SCROLL_ON_IMPL_THREAD),
+          main_thread_scrolling_reasons(
+              MainThreadScrollingReason::kNotScrollingOnMain) {}
+    ScrollStatus(ScrollThread thread, uint32_t main_thread_scrolling_reasons)
+        : thread(thread),
+          main_thread_scrolling_reasons(main_thread_scrolling_reasons) {}
+    ScrollThread thread;
+    uint32_t main_thread_scrolling_reasons;
+  };
+
   enum ScrollInputType { GESTURE, WHEEL, ANIMATED_WHEEL, NON_BUBBLING_GESTURE };
 
   // Binds a client to this handler to receive notifications. Only one client
@@ -157,7 +171,8 @@ class CC_EXPORT InputHandler {
   virtual bool IsCurrentlyScrollingLayerAt(const gfx::Point& viewport_point,
                                            ScrollInputType type) const = 0;
 
-  virtual bool HaveWheelEventHandlersAt(const gfx::Point& viewport_point) = 0;
+  virtual EventListenerProperties GetEventListenerProperties(
+      EventListenerClass event_class) const = 0;
 
   // Whether the page should be given the opportunity to suppress scrolling by
   // consuming touch events that started at |viewport_point|.

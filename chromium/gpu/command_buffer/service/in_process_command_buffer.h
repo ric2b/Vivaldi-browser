@@ -122,17 +122,12 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
                                      size_t height,
                                      unsigned internalformat,
                                      unsigned usage) override;
-  uint32_t InsertSyncPoint() override;
-  uint32_t InsertFutureSyncPoint() override;
-  void RetireSyncPoint(uint32_t sync_point) override;
-  void SignalSyncPoint(uint32_t sync_point,
-                       const base::Closure& callback) override;
   void SignalQuery(uint32_t query_id, const base::Closure& callback) override;
   void SetLock(base::Lock*) override;
   bool IsGpuChannelLost() override;
   void EnsureWorkVisible() override;
   CommandBufferNamespace GetNamespaceID() const override;
-  uint64_t GetCommandBufferID() const override;
+  CommandBufferId GetCommandBufferID() const override;
   int32_t GetExtraCommandBufferData() const override;
   uint64_t GenerateFenceSyncRelease() override;
   bool IsFenceSyncRelease(uint64_t release) override;
@@ -222,11 +217,9 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   State GetStateFast();
   void QueueTask(const base::Closure& task) { service_->ScheduleTask(task); }
   void CheckSequencedThread();
-  void RetireSyncPointOnGpuThread(uint32_t sync_point);
-  bool WaitSyncPointOnGpuThread(uint32_t sync_point);
   void FenceSyncReleaseOnGpuThread(uint64_t release);
   bool WaitFenceSyncOnGpuThread(gpu::CommandBufferNamespace namespace_id,
-                                uint64_t command_buffer_id,
+                                gpu::CommandBufferId command_buffer_id,
                                 uint64_t release);
   void SignalSyncTokenOnGpuThread(const SyncToken& sync_token,
                                   const base::Closure& callback);
@@ -248,7 +241,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   void PumpCommands();
   void PerformDelayedWork();
 
-  const uint64_t command_buffer_id_;
+  const CommandBufferId command_buffer_id_;
 
   // Members accessed on the gpu thread (possibly with the exception of
   // creation):

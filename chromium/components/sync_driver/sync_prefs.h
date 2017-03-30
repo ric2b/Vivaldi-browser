@@ -14,10 +14,10 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
-#include "base/prefs/pref_member.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "components/prefs/pref_member.h"
 #include "sync/internal_api/public/base/model_type.h"
 #include "sync/internal_api/public/sync_encryption_handler.h"
 
@@ -75,8 +75,8 @@ class SyncPrefs : NON_EXPORTED_BASE(public base::NonThreadSafe),
 
   // Getters and setters for global sync prefs.
 
-  bool HasSyncSetupCompleted() const;
-  void SetSyncSetupCompleted();
+  bool IsFirstSetupComplete() const;
+  void SetFirstSetupComplete();
 
   bool SyncHasAuthError() const;
   void SetSyncAuthError(bool error);
@@ -132,10 +132,6 @@ class SyncPrefs : NON_EXPORTED_BASE(public base::NonThreadSafe),
   std::string GetSpareBootstrapToken() const;
   void SetSpareBootstrapToken(const std::string& token);
 #endif
-
-  // Get/Set number of rollback attempts allowed.
-  virtual int GetRemainingRollbackTries() const;
-  virtual void SetRemainingRollbackTries(int times);
 
   // Get/set/clear first sync time of current user. Used to roll back browsing
   // data later when user signs out.

@@ -64,33 +64,6 @@ class WebLayer;
 // Manages a rendering target (framebuffer + attachment) for a canvas.  Can publish its rendering
 // results to a WebLayer for compositing.
 class PLATFORM_EXPORT DrawingBuffer : public RefCounted<DrawingBuffer>, public WebExternalTextureLayerClient  {
-    // If we used CHROMIUM_image as the backing storage for our buffers,
-    // we need to know the mapping from texture id to image.
-    struct TextureInfo {
-        DISALLOW_NEW();
-        Platform3DObject textureId;
-        WGC3Duint imageId;
-
-        TextureInfo()
-            : textureId(0)
-            , imageId(0)
-        {
-        }
-    };
-
-    struct MailboxInfo : public RefCounted<MailboxInfo> {
-        WTF_MAKE_NONCOPYABLE(MailboxInfo);
-    public:
-        MailboxInfo() { }
-
-        WebExternalTextureMailbox mailbox;
-        TextureInfo textureInfo;
-        IntSize size;
-        // This keeps the parent drawing buffer alive as long as the compositor is
-        // referring to one of the mailboxes DrawingBuffer produced. The parent drawing buffer is
-        // cleared when the compositor returns the mailbox. See mailboxReleased().
-        RefPtr<DrawingBuffer> m_parentDrawingBuffer;
-    };
     WTF_MAKE_NONCOPYABLE(DrawingBuffer);
 public:
     enum PreserveDrawingBuffer {
@@ -109,6 +82,12 @@ public:
     // Issues a glClear() on all framebuffers associated with this DrawingBuffer. The caller is responsible for
     // making the context current and setting the clear values and masks. Modifies the framebuffer binding.
     void clearFramebuffers(GLbitfield clearMask);
+
+    // Indicates whether the DrawingBuffer internally allocated a packed depth-stencil renderbuffer
+    // in the situation where the end user only asked for a depth buffer. In this case, we need to
+    // upgrade clears of the depth buffer to clears of the depth and stencil buffers in order to
+    // avoid performance problems on some GPUs.
+    bool hasImplicitStencilBuffer() const;
 
     // Given the desired buffer size, provides the largest dimensions that will fit in the pixel budget.
     static IntSize adjustSize(const IntSize& desiredSize, const IntSize& curSize, int maxTextureSize);
@@ -191,12 +170,13 @@ public:
     // Otherwise, bind to the default FBO.
     void restoreFramebufferBindings();
 
+    void addNewMailboxCallback(PassOwnPtr<Closure> closure) { m_newMailboxCallback = std::move(closure); }
+
 protected: // For unittests
     DrawingBuffer(
         PassOwnPtr<WebGraphicsContext3D>,
         PassOwnPtr<Extensions3DUtil>,
         bool multisampleExtensionSupported,
-        bool packedDepthStencilExtensionSupported,
         bool discardFramebufferSupported,
         PreserveDrawingBuffer,
         WebGraphicsContext3D::Attributes requestedAttributes);
@@ -204,9 +184,66 @@ protected: // For unittests
     bool initialize(const IntSize&);
 
 private:
+    struct TextureParameters {
+        DISALLOW_NEW();
+        WGC3Denum target;
+        WGC3Denum internalColorFormat;
+        WGC3Denum colorFormat;
+        WGC3Denum internalRenderbufferFormat;
+
+        TextureParameters()
+            : target(0)
+            , internalColorFormat(0)
+            , colorFormat(0)
+            , internalRenderbufferFormat(0)
+        {
+        }
+    };
+
+    // If we used CHROMIUM_image as the backing storage for our buffers,
+    // we need to know the mapping from texture id to image.
+    struct TextureInfo {
+        DISALLOW_NEW();
+        Platform3DObject textureId;
+        WGC3Duint imageId;
+        TextureParameters parameters;
+
+        TextureInfo()
+            : textureId(0)
+            , imageId(0)
+        {
+        }
+    };
+
+    struct MailboxInfo : public RefCounted<MailboxInfo> {
+        WTF_MAKE_NONCOPYABLE(MailboxInfo);
+
+    public:
+        MailboxInfo() {}
+
+        WebExternalTextureMailbox mailbox;
+        TextureInfo textureInfo;
+        IntSize size;
+        // This keeps the parent drawing buffer alive as long as the compositor is
+        // referring to one of the mailboxes DrawingBuffer produced. The parent drawing buffer is
+        // cleared when the compositor returns the mailbox. See mailboxReleased().
+        RefPtr<DrawingBuffer> m_parentDrawingBuffer;
+    };
+
+    // The texture parameters to use for a texture that will be backed by a
+    // CHROMIUM_image.
+    TextureParameters chromiumImageTextureParameters();
+
+    // The texture parameters to use for a default texture.
+    TextureParameters defaultTextureParameters();
+
     void mailboxReleasedWithoutRecycling(const WebExternalTextureMailbox&);
 
-    unsigned createColorTexture();
+    // Creates and binds a texture with the given parameters. Returns 0 on
+    // failure, or the newly created texture id on success. The caller takes
+    // ownership of the newly created texture.
+    WebGLId createColorTexture(const TextureParameters&);
+
     // Create the depth/stencil and multisample buffers, if needed.
     void createSecondaryBuffers();
     bool resizeFramebuffer(const IntSize&);
@@ -219,8 +256,6 @@ private:
     PassRefPtr<MailboxInfo> createNewMailbox(const TextureInfo&);
     void deleteMailbox(const WebExternalTextureMailbox&);
     void freeRecycledMailboxes();
-
-    void initializeInternalTextureParameters();
 
     // Updates the current size of the buffer, ensuring that s_currentResourceUsePixels is updated.
     void setSize(const IntSize& size);
@@ -242,8 +277,19 @@ private:
     // By default, alignment is 4, the OpenGL default setting.
     void texImage2DResourceSafe(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, GLint alignment = 4);
     // Allocate buffer storage to be sent to compositor using either texImage2D or CHROMIUM_image based on available support.
-    void allocateTextureMemory(TextureInfo*, const IntSize&);
     void deleteChromiumImageForTexture(TextureInfo*);
+
+    // Tries to create a CHROMIUM_image backed texture if
+    // RuntimeEnabledFeatures::webGLImageChromiumEnabled() is true. On failure,
+    // or if the flag is false, creates a default texture.
+    TextureInfo createTextureAndAllocateMemory(const IntSize&);
+
+    // Creates and allocates space for a default texture.
+    TextureInfo createDefaultTextureAndAllocateMemory(const IntSize&);
+
+    void resizeTextureMemory(TextureInfo*, const IntSize&);
+
+    void attachColorBufferToCurrentFBO();
 
     PreserveDrawingBuffer m_preserveDrawingBuffer;
     bool m_scissorEnabled;
@@ -257,7 +303,6 @@ private:
     IntSize m_size;
     WebGraphicsContext3D::Attributes m_requestedAttributes;
     bool m_multisampleExtensionSupported;
-    bool m_packedDepthStencilExtensionSupported;
     bool m_discardFramebufferSupported;
     Platform3DObject m_fbo;
     // DrawingBuffer's output is double-buffered. m_colorBuffer is the back buffer.
@@ -268,12 +313,10 @@ private:
     };
     FrontBufferInfo m_frontColorBuffer;
 
-    // This is used when we have OES_packed_depth_stencil.
-    Platform3DObject m_depthStencilBuffer;
+    OwnPtr<Closure> m_newMailboxCallback;
 
-    // These are used when we don't.
-    Platform3DObject m_depthBuffer;
-    Platform3DObject m_stencilBuffer;
+    // This is used when the user requests either a depth or stencil buffer.
+    Platform3DObject m_depthStencilBuffer;
 
     // For multisampling.
     Platform3DObject m_multisampleFBO;
@@ -296,10 +339,6 @@ private:
     AntialiasingMode m_antiAliasingMode;
 
     WebGraphicsContext3D::Attributes m_actualAttributes;
-    unsigned m_target;
-    unsigned m_internalColorFormat;
-    unsigned m_colorFormat;
-    unsigned m_internalRenderbufferFormat;
     int m_maxTextureSize;
     int m_sampleCount;
     int m_packAlignment;

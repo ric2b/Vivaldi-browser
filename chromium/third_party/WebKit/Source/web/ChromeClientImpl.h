@@ -94,6 +94,7 @@ public:
     void invalidateRect(const IntRect&) override;
     void scheduleAnimation(Widget*) override;
     IntRect viewportToScreen(const IntRect&) const override;
+    float windowToViewportScalar(const float) const override;
     WebScreenInfo screenInfo() const override;
     void contentsSizeChanged(LocalFrame*, const IntSize&) const override;
     void pageScaleFactorChanged() const override;
@@ -110,7 +111,10 @@ public:
     void enumerateChosenDirectory(FileChooser*) override;
     void setCursor(const Cursor&, LocalFrame* localRoot) override;
     Cursor lastSetCursorForTesting() const override;
-    void needTouchEvents(bool needTouchEvents) override;
+    void setEventListenerProperties(WebEventListenerClass, WebEventListenerProperties) override;
+    WebEventListenerProperties eventListenerProperties(WebEventListenerClass) const override;
+    void setHaveScrollEventHandlers(bool hasEventHandlers) override;
+    bool haveScrollEventHandlers() const override;
     void setTouchAction(TouchAction) override;
 
     GraphicsLayerFactory* graphicsLayerFactory() const override;
@@ -120,8 +124,8 @@ public:
 
     void didPaint(const PaintArtifact&) override;
 
-    void attachCompositorAnimationTimeline(WebCompositorAnimationTimeline*, LocalFrame* localRoot) override;
-    void detachCompositorAnimationTimeline(WebCompositorAnimationTimeline*, LocalFrame* localRoot) override;
+    void attachCompositorAnimationTimeline(CompositorAnimationTimeline*, LocalFrame* localRoot) override;
+    void detachCompositorAnimationTimeline(CompositorAnimationTimeline*, LocalFrame* localRoot) override;
 
     void enterFullScreenForElement(Element*) override;
     void exitFullScreenForElement(Element*) override;

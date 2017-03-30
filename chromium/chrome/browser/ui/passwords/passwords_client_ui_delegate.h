@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_PASSWORDS_PASSWORDS_CLIENT_UI_DELEGATE_H_
 #define CHROME_BROWSER_UI_PASSWORDS_PASSWORDS_CLIENT_UI_DELEGATE_H_
 
+#include <vector>
+
 #include "base/callback.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
@@ -54,6 +56,9 @@ class PasswordsClientUIDelegate {
   virtual void OnAutoSignin(
       ScopedVector<autofill::PasswordForm> local_forms) = 0;
 
+  // Called when it's the right time to enable autosign-in explicitly.
+  virtual void OnPromptEnableAutoSignin() = 0;
+
   // Called when the password will be saved automatically, but we still wish to
   // visually inform the user that the save has occured.
   virtual void OnAutomaticPasswordSave(
@@ -62,10 +67,13 @@ class PasswordsClientUIDelegate {
   // Called when a form is autofilled with login information, so we can manage
   // password credentials for the current site which are stored in
   // |password_form_map|. This stores a copy of |password_form_map| and shows
-  // the manage password icon.
+  // the manage password icon. |federated_matches| contain the matching stored
+  // federated credentials to display in the UI.
   virtual void OnPasswordAutofilled(
       const autofill::PasswordFormMap& password_form_map,
-      const GURL& origin) = 0;
+      const GURL& origin,
+      const std::vector<scoped_ptr<autofill::PasswordForm>>*
+          federated_matches) = 0;
 
  protected:
   virtual ~PasswordsClientUIDelegate() = default;

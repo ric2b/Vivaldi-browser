@@ -26,10 +26,9 @@
 namespace blink {
 
 SVGPathStringSource::SVGPathStringSource(const String& string)
-    : m_string(string)
-    , m_is8BitSource(string.is8Bit())
-    , m_seenError(false)
+    : m_is8BitSource(string.is8Bit())
     , m_previousCommand(PathSegUnknown)
+    , m_string(string)
 {
     ASSERT(!string.isNull());
 
@@ -43,13 +42,6 @@ SVGPathStringSource::SVGPathStringSource(const String& string)
     eatWhitespace();
 }
 
-bool SVGPathStringSource::hasMoreData() const
-{
-    if (m_is8BitSource)
-        return m_current.m_character8 < m_end.m_character8;
-    return m_current.m_character16 < m_end.m_character16;
-}
-
 void SVGPathStringSource::eatWhitespace()
 {
     if (m_is8BitSource)
@@ -58,7 +50,7 @@ void SVGPathStringSource::eatWhitespace()
         skipOptionalSVGSpaces(m_current.m_character16, m_end.m_character16);
 }
 
-static SVGPathSegType parseSVGSegmentTypeHelper(unsigned lookahead)
+static SVGPathSegType mapLetterToSegmentType(unsigned lookahead)
 {
     switch (lookahead) {
     case 'Z':
@@ -105,51 +97,69 @@ static SVGPathSegType parseSVGSegmentTypeHelper(unsigned lookahead)
     }
 }
 
-static bool nextCommandHelper(unsigned lookahead, SVGPathSegType previousCommand, SVGPathSegType& nextCommand)
+static bool isNumberStart(unsigned lookahead)
 {
-    // Check for remaining coordinates in the current command.
-    if ((lookahead == '+' || lookahead == '-' || lookahead == '.' || (lookahead >= '0' && lookahead <= '9'))
-        && previousCommand != PathSegClosePath) {
-        if (previousCommand == PathSegMoveToAbs) {
-            nextCommand = PathSegLineToAbs;
-            return true;
-        }
-        if (previousCommand == PathSegMoveToRel) {
-            nextCommand = PathSegLineToRel;
-            return true;
-        }
-        nextCommand = previousCommand;
+    return (lookahead >= '0' && lookahead <= '9')
+        || lookahead == '+'
+        || lookahead == '-'
+        || lookahead == '.';
+}
+
+static bool maybeImplicitCommand(unsigned lookahead, SVGPathSegType previousCommand, SVGPathSegType& nextCommand)
+{
+    // Check if the current lookahead may start a number - in which case it
+    // could be the start of an implicit command. The 'close' command does not
+    // have any parameters though and hence can't have an implicit
+    // 'continuation'.
+    if (!isNumberStart(lookahead) || previousCommand == PathSegClosePath)
+        return false;
+    // Implicit continuations of moveto command translate to linetos.
+    if (previousCommand == PathSegMoveToAbs) {
+        nextCommand = PathSegLineToAbs;
         return true;
     }
-    return false;
+    if (previousCommand == PathSegMoveToRel) {
+        nextCommand = PathSegLineToRel;
+        return true;
+    }
+    nextCommand = previousCommand;
+    return true;
+}
+
+void SVGPathStringSource::setErrorMark(SVGParseStatus status)
+{
+    if (m_error.status() != SVGParseStatus::NoError)
+        return;
+    size_t locus = m_is8BitSource
+        ? m_current.m_character8 - m_string.characters8()
+        : m_current.m_character16 - m_string.characters16();
+    m_error = SVGParsingError(status, locus);
 }
 
 float SVGPathStringSource::parseNumberWithError()
 {
     float numberValue = 0;
+    bool error;
     if (m_is8BitSource)
-        m_seenError |= !parseNumber(m_current.m_character8, m_end.m_character8, numberValue);
+        error = !parseNumber(m_current.m_character8, m_end.m_character8, numberValue);
     else
-        m_seenError |= !parseNumber(m_current.m_character16, m_end.m_character16, numberValue);
+        error = !parseNumber(m_current.m_character16, m_end.m_character16, numberValue);
+    if (UNLIKELY(error))
+        setErrorMark(SVGParseStatus::ExpectedNumber);
     return numberValue;
 }
 
 bool SVGPathStringSource::parseArcFlagWithError()
 {
     bool flagValue = false;
+    bool error;
     if (m_is8BitSource)
-        m_seenError |= !parseArcFlag(m_current.m_character8, m_end.m_character8, flagValue);
+        error = !parseArcFlag(m_current.m_character8, m_end.m_character8, flagValue);
     else
-        m_seenError |= !parseArcFlag(m_current.m_character16, m_end.m_character16, flagValue);
+        error = !parseArcFlag(m_current.m_character16, m_end.m_character16, flagValue);
+    if (UNLIKELY(error))
+        setErrorMark(SVGParseStatus::ExpectedArcFlag);
     return flagValue;
-}
-
-SVGPathSegType SVGPathStringSource::peekSegmentType()
-{
-    ASSERT(hasMoreData());
-    // This won't work in all cases because of the state required to "detect" implicit commands.
-    unsigned lookahead = m_is8BitSource ? *m_current.m_character8 : *m_current.m_character16;
-    return parseSVGSegmentTypeHelper(lookahead);
 }
 
 PathSegmentData SVGPathStringSource::parseSegment()
@@ -157,13 +167,25 @@ PathSegmentData SVGPathStringSource::parseSegment()
     ASSERT(hasMoreData());
     PathSegmentData segment;
     unsigned lookahead = m_is8BitSource ? *m_current.m_character8 : *m_current.m_character16;
-    SVGPathSegType command = parseSVGSegmentTypeHelper(lookahead);
-    if (command == PathSegUnknown) {
-        // Possibly an implicit command. Not allowed if this is the first command.
-        if (m_previousCommand == PathSegUnknown)
+    SVGPathSegType command = mapLetterToSegmentType(lookahead);
+    if (UNLIKELY(m_previousCommand == PathSegUnknown)) {
+        // First command has to be a moveto.
+        if (command != PathSegMoveToRel && command != PathSegMoveToAbs) {
+            setErrorMark(SVGParseStatus::ExpectedMoveToCommand);
             return segment;
-        if (!nextCommandHelper(lookahead, m_previousCommand, command))
+        }
+        // Consume command letter.
+        if (m_is8BitSource)
+            m_current.m_character8++;
+        else
+            m_current.m_character16++;
+    } else if (command == PathSegUnknown) {
+        // Possibly an implicit command.
+        ASSERT(m_previousCommand != PathSegUnknown);
+        if (!maybeImplicitCommand(lookahead, m_previousCommand, command)) {
+            setErrorMark(SVGParseStatus::ExpectedPathCommand);
             return segment;
+        }
     } else {
         // Valid explicit command.
         if (m_is8BitSource)
@@ -174,7 +196,7 @@ PathSegmentData SVGPathStringSource::parseSegment()
 
     segment.command = m_previousCommand = command;
 
-    ASSERT(!m_seenError);
+    ASSERT(m_error.status() == SVGParseStatus::NoError);
 
     switch (segment.command) {
     case PathSegCurveToCubicRel:
@@ -228,7 +250,7 @@ PathSegmentData SVGPathStringSource::parseSegment()
         ASSERT_NOT_REACHED();
     }
 
-    if (UNLIKELY(m_seenError))
+    if (UNLIKELY(m_error.status() != SVGParseStatus::NoError))
         segment.command = PathSegUnknown;
     return segment;
 }

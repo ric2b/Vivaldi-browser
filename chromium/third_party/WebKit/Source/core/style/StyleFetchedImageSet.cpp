@@ -55,6 +55,7 @@ StyleFetchedImageSet::~StyleFetchedImageSet()
 void StyleFetchedImageSet::dispose()
 {
     m_bestFitImage->removeClient(this);
+    m_bestFitImage = nullptr;
 }
 
 WrappedImagePtr StyleFetchedImageSet::data() const
@@ -99,19 +100,14 @@ LayoutSize StyleFetchedImageSet::imageSize(const LayoutObject* layoutObject, flo
     return scaledImageSize;
 }
 
-bool StyleFetchedImageSet::imageHasRelativeWidth() const
+bool StyleFetchedImageSet::imageHasRelativeSize() const
 {
-    return m_bestFitImage->imageHasRelativeWidth();
+    return m_bestFitImage->imageHasRelativeSize();
 }
 
-bool StyleFetchedImageSet::imageHasRelativeHeight() const
+void StyleFetchedImageSet::computeIntrinsicDimensions(const LayoutObject*, FloatSize& intrinsicSize, FloatSize& intrinsicRatio)
 {
-    return m_bestFitImage->imageHasRelativeHeight();
-}
-
-void StyleFetchedImageSet::computeIntrinsicDimensions(const LayoutObject*, Length& intrinsicWidth, Length& intrinsicHeight, FloatSize& intrinsicRatio)
-{
-    m_bestFitImage->computeIntrinsicDimensions(intrinsicWidth, intrinsicHeight, intrinsicRatio);
+    m_bestFitImage->computeIntrinsicDimensions(intrinsicSize, intrinsicRatio);
 }
 
 bool StyleFetchedImageSet::usesImageContainerSize() const
@@ -145,6 +141,7 @@ bool StyleFetchedImageSet::knownToBeOpaque(const LayoutObject* layoutObject) con
 
 DEFINE_TRACE(StyleFetchedImageSet)
 {
+    visitor->trace(m_bestFitImage);
     visitor->trace(m_imageSetValue);
     StyleImage::trace(visitor);
 }

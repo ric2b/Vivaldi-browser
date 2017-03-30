@@ -36,6 +36,7 @@
 #include "core/fetch/ResourceClient.h"
 #include "core/fetch/ResourceOwner.h"
 #include "core/loader/LinkLoaderClient.h"
+#include "core/loader/LinkPreloadResourceClients.h"
 #include "platform/CrossOriginAttributeValue.h"
 #include "platform/PrerenderClient.h"
 #include "platform/Timer.h"
@@ -50,10 +51,13 @@ class NetworkHintsInterface;
 class PrerenderHandle;
 
 // The LinkLoader can load link rel types icon, dns-prefetch, subresource, prefetch and prerender.
-class CORE_EXPORT LinkLoader final : public ResourceOwner<Resource, ResourceClient>, public PrerenderClient {
-    DISALLOW_NEW();
+class CORE_EXPORT LinkLoader final : public NoBaseWillBeGarbageCollectedFinalized<LinkLoader>, public ResourceOwner<Resource, ResourceClient>, public PrerenderClient {
+    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(LinkLoader);
 public:
-    explicit LinkLoader(LinkLoaderClient*);
+    static PassOwnPtrWillBeRawPtr<LinkLoader> create(LinkLoaderClient* client)
+    {
+        return adoptPtrWillBeNoop(new LinkLoader(client));
+    }
     ~LinkLoader() override;
 
     // from ResourceClient
@@ -66,26 +70,32 @@ public:
     void didSendLoadForPrerender() override;
     void didSendDOMContentLoadedForPrerender() override;
 
+    void triggerEvents(const Resource*);
+
     void released();
     bool loadLink(const LinkRelAttribute&, CrossOriginAttributeValue, const String& type, const String& as, const KURL&, Document&, const NetworkHintsInterface&);
-    enum CanLoadResources { LoadResources, DoNotLoadResources };
-    static bool loadLinkFromHeader(const String& headerValue, Document*, const NetworkHintsInterface&, CanLoadResources);
-    static Resource::Type getTypeFromAsAttribute(const String& as, Document*);
+    enum CanLoadResources { OnlyLoadResources, DoNotLoadResources, LoadResourcesAndPreconnect };
+    static bool loadLinkFromHeader(const String& headerValue, const KURL& baseURL, Document*, const NetworkHintsInterface&, CanLoadResources);
+    static bool getResourceTypeFromAsAttribute(const String& as, Resource::Type&);
 
     DECLARE_TRACE();
 
 private:
+    explicit LinkLoader(LinkLoaderClient*);
+
     void linkLoadTimerFired(Timer<LinkLoader>*);
     void linkLoadingErrorTimerFired(Timer<LinkLoader>*);
+    void createLinkPreloadResourceClient(Resource*);
 
-    LinkLoaderClient* m_client;
+    RawPtrWillBeMember<LinkLoaderClient> m_client;
 
     Timer<LinkLoader> m_linkLoadTimer;
     Timer<LinkLoader> m_linkLoadingErrorTimer;
 
     OwnPtrWillBeMember<PrerenderHandle> m_prerender;
+    OwnPtrWillBeMember<LinkPreloadResourceClient> m_linkPreloadResourceClient;
 };
 
-}
+} // namespace blink
 
 #endif

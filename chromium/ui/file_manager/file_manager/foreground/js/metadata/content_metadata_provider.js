@@ -63,14 +63,6 @@ ContentMetadataProvider.PROPERTY_NAMES = [
   'mediaTitle'
 ];
 
-
-/**
- * Watchdog timer considers there may be an error
- * if chrome.mediaGalleries.getMetadata does not responsed.
- * @const {number}
- */
-ContentMetadataProvider.MEDIA_GALLERIES_WATCHDOG_TIMEOUT = 1000; // [msec]
-
 /**
  * Path of a worker script.
  * @public {string}
@@ -174,15 +166,16 @@ ContentMetadataProvider.prototype.getFromMediaGalleries_ =
       if (names.indexOf('contentThumbnailUrl') !== -1) {
         metadataType = 'all';
       }
-      setTimeout(function() {
-        resolve(self.createError_(entry.toURL(),
-            'parsing metadata',
-            'chrome.mediaGalleries does not respond.'));
-      }, ContentMetadataProvider.MEDIA_GALLERIES_WATCHDOG_TIMEOUT);
       chrome.mediaGalleries.getMetadata(blob, {metadataType: metadataType},
           function(metadata) {
-            self.convertMediaMetadataToMetadataItem_(entry, metadata)
-                .then(resolve, reject);
+            if (chrome.runtime.lastError) {
+              resolve(self.createError_(entry.toURL(),
+                  'resolving metadata',
+                  chrome.runtime.lastError.toString()));
+            } else {
+              self.convertMediaMetadataToMetadataItem_(entry, metadata)
+                  .then(resolve, reject);
+            }
           });
     }, function(err) {
       resolve(self.createError_(entry.toURL(),
@@ -280,6 +273,11 @@ ContentMetadataProvider.prototype.onLog_ = function(arglist) {
 ContentMetadataProvider.prototype.convertMediaMetadataToMetadataItem_ =
     function(entry, metadata) {
   return new Promise(function(resolve, reject) {
+    if (!metadata) {
+      resolve(this.createError_(entry.toURL(), 'Reading a thumbnail image',
+          "Failed to parse metadata"));
+      return;
+    }
     var item = new MetadataItem();
     var mimeType = metadata['mimeType'];
     item.contentMimeType = mimeType;
@@ -318,7 +316,7 @@ ContentMetadataProvider.prototype.convertMediaMetadataToMetadataItem_ =
         resolve(item);
       };
       reader.onerror = function(e) {
-        reject(this.createError_(entry.toURL(), 'Reading a thumbnail image',
+        resolve(this.createError_(entry.toURL(), 'Reading a thumbnail image',
             reader.error.toString()));
       }.bind(this);
       reader.readAsDataURL(metadata.attachedImages[0]);

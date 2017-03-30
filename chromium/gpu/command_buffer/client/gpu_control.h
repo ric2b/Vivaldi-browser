@@ -13,6 +13,7 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "gpu/command_buffer/common/capabilities.h"
+#include "gpu/command_buffer/common/command_buffer_id.h"
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/gpu_export.h"
@@ -55,23 +56,6 @@ class GPU_EXPORT GpuControl {
                                              unsigned internalformat,
                                              unsigned usage) = 0;
 
-  // Inserts a sync point, returning its ID. Sync point IDs are global and can
-  // be used for cross-context synchronization.
-  virtual uint32_t InsertSyncPoint() = 0;
-
-  // Inserts a future sync point, returning its ID. Sync point IDs are global
-  // and can be used for cross-context synchronization. The sync point won't be
-  // retired immediately.
-  virtual uint32_t InsertFutureSyncPoint() = 0;
-
-  // Retires a future sync point. This will signal contexts that are waiting
-  // on it to start executing.
-  virtual void RetireSyncPoint(uint32_t sync_point) = 0;
-
-  // Runs |callback| when a sync point is reached.
-  virtual void SignalSyncPoint(uint32_t sync_point,
-                               const base::Closure& callback) = 0;
-
   // Runs |callback| when a query created via glCreateQueryEXT() has cleared
   // passed the glEndQueryEXT() point.
   virtual void SignalQuery(uint32_t query, const base::Closure& callback) = 0;
@@ -100,7 +84,7 @@ class GPU_EXPORT GpuControl {
   // extra field to identify unverified sync tokens for the implementation of
   // the CanWaitUnverifiedSyncToken() function.
   virtual CommandBufferNamespace GetNamespaceID() const = 0;
-  virtual uint64_t GetCommandBufferID() const = 0;
+  virtual CommandBufferId GetCommandBufferID() const = 0;
   virtual int32_t GetExtraCommandBufferData() const = 0;
 
   // Fence Syncs use release counters at a context level, these fence syncs

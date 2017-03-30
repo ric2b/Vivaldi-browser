@@ -21,3 +21,9 @@ IPC_MESSAGE_CONTROL2(ProfileImportProcessHostMsg_NotifyNotesImportStart,
 
 IPC_MESSAGE_CONTROL1(ProfileImportProcessHostMsg_NotifyNotesImportGroup,
                      std::vector<ImportedNotesEntry>)
+
+IPC_MESSAGE_CONTROL1(ProfileImportProcessHostMsg_NotifySpeedDialImportStart,
+                     int       /* total number of speed dials */)
+
+IPC_MESSAGE_CONTROL1(ProfileImportProcessHostMsg_NotifySpeedDialImportGroup,
+                     std::vector<ImportedSpeedDialEntry>)

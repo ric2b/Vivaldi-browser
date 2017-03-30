@@ -410,6 +410,10 @@ void NativeWidgetMac::ShowWithWindowState(ui::WindowShowState state) {
   bridge_->SetVisibilityState(state == ui::SHOW_STATE_INACTIVE
       ? BridgedNativeWidget::SHOW_INACTIVE
       : BridgedNativeWidget::SHOW_AND_ACTIVATE_WINDOW);
+
+  // Ignore the SetInitialFocus() result. BridgedContentView should get
+  // firstResponder status regardless.
+  delegate_->SetInitialFocus(state);
 }
 
 bool NativeWidgetMac::IsVisible() const {
@@ -484,7 +488,7 @@ bool NativeWidgetMac::IsFullscreen() const {
 }
 
 void NativeWidgetMac::SetOpacity(unsigned char opacity) {
-  NOTIMPLEMENTED();
+  [GetNativeWindow() setAlphaValue:opacity / 255.0];
 }
 
 void NativeWidgetMac::SetUseDragFrame(bool use_drag_frame) {
@@ -504,9 +508,15 @@ void NativeWidgetMac::RunShellDrag(View* view,
 }
 
 void NativeWidgetMac::SchedulePaintInRect(const gfx::Rect& rect) {
-  // TODO(tapted): This should use setNeedsDisplayInRect:, once the coordinate
-  // system of |rect| has been converted.
-  [GetNativeView() setNeedsDisplay:YES];
+  // |rect| is relative to client area of the window.
+  NSWindow* window = GetNativeWindow();
+  NSRect client_rect = [window contentRectForFrameRect:[window frame]];
+  NSRect target_rect = rect.ToCGRect();
+
+  // Convert to Appkit coordinate system (origin at bottom left).
+  target_rect.origin.y =
+      NSHeight(client_rect) - target_rect.origin.y - NSHeight(target_rect);
+  [GetNativeView() setNeedsDisplayInRect:target_rect];
   if (bridge_ && bridge_->layer())
     bridge_->layer()->SchedulePaint(rect);
 }

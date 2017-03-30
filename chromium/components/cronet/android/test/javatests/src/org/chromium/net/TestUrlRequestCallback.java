@@ -5,9 +5,11 @@
 package org.chromium.net;
 
 import android.os.ConditionVariable;
+import android.os.StrictMode;
 
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertFalse;
+import static junit.framework.Assert.assertNotNull;
 import static junit.framework.Assert.assertNull;
 import static junit.framework.Assert.assertTrue;
 
@@ -38,11 +40,6 @@ class TestUrlRequestCallback extends UrlRequest.Callback {
     public int mHttpResponseDataLength = 0;
     public String mResponseAsString = "";
 
-    // Expect legacy read() API to be used on UrlRequest.
-    // TODO(pauljensen): Remove when all callers of UrlRequest.read() are
-    // transitioned to UrlRequest.readNew();
-    public boolean mLegacyReadByteBufferAdjustment = false;
-
     private static final int READ_BUFFER_SIZE = 32 * 1024;
 
     // When false, the consumer is responsible for all calls into the request
@@ -68,8 +65,23 @@ class TestUrlRequestCallback extends UrlRequest.Callback {
     private int mBufferPositionBeforeRead;
 
     private class ExecutorThreadFactory implements ThreadFactory {
-        public Thread newThread(Runnable r) {
-            mExecutorThread = new Thread(r);
+        public Thread newThread(final Runnable r) {
+            mExecutorThread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    StrictMode.ThreadPolicy threadPolicy = StrictMode.getThreadPolicy();
+                    try {
+                        StrictMode.setThreadPolicy(new StrictMode.ThreadPolicy.Builder()
+                                                           .detectNetwork()
+                                                           .penaltyLog()
+                                                           .penaltyDeath()
+                                                           .build());
+                        r.run();
+                    } finally {
+                        StrictMode.setThreadPolicy(threadPolicy);
+                    }
+                }
+            });
             return mExecutorThread;
         }
     }
@@ -164,23 +176,14 @@ class TestUrlRequestCallback extends UrlRequest.Callback {
         mResponseStep = ResponseStep.ON_READ_COMPLETED;
 
         final byte[] lastDataReceivedAsBytes;
-        if (mLegacyReadByteBufferAdjustment) {
-            // Make a slice of ByteBuffer, so can read from it without affecting
-            // position, which allows tests to check the state of the buffer.
-            ByteBuffer slice = byteBuffer.slice();
-            mHttpResponseDataLength += slice.remaining();
-            lastDataReceivedAsBytes = new byte[slice.remaining()];
-            slice.get(lastDataReceivedAsBytes);
-        } else {
-            final int bytesRead = byteBuffer.position() - mBufferPositionBeforeRead;
-            mHttpResponseDataLength += bytesRead;
-            lastDataReceivedAsBytes = new byte[bytesRead];
-            // Rewind |byteBuffer.position()| to pre-read() position.
-            byteBuffer.position(mBufferPositionBeforeRead);
-            // This restores |byteBuffer.position()| to its value on entrance to
-            // this function.
-            byteBuffer.get(lastDataReceivedAsBytes);
-        }
+        final int bytesRead = byteBuffer.position() - mBufferPositionBeforeRead;
+        mHttpResponseDataLength += bytesRead;
+        lastDataReceivedAsBytes = new byte[bytesRead];
+        // Rewind |byteBuffer.position()| to pre-read() position.
+        byteBuffer.position(mBufferPositionBeforeRead);
+        // This restores |byteBuffer.position()| to its value on entrance to
+        // this function.
+        byteBuffer.get(lastDataReceivedAsBytes);
         mResponseAsString += new String(lastDataReceivedAsBytes);
 
         if (maybeThrowCancelOrPause(request)) {
@@ -215,6 +218,15 @@ class TestUrlRequestCallback extends UrlRequest.Callback {
         assertFalse(mOnErrorCalled);
         assertFalse(mOnCanceledCalled);
         assertNull(mError);
+        if (mFailureType == FailureType.THROW_SYNC) {
+            assertEquals(UrlRequestError.LISTENER_EXCEPTION_THROWN, error.getErrorCode());
+            assertEquals(0, error.getCronetInternalErrorCode());
+            assertEquals("Exception received from UrlRequest.Callback", error.getMessage());
+            assertNotNull(error.getCause());
+            assertTrue(error.getCause() instanceof IllegalStateException);
+            assertEquals("Listener Exception.", error.getCause().getMessage());
+            assertFalse(error.immediatelyRetryable());
+        }
 
         mOnErrorCalled = true;
         mError = error;

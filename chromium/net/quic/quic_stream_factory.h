@@ -28,6 +28,7 @@
 #include "net/proxy/proxy_server.h"
 #include "net/quic/network_connection.h"
 #include "net/quic/quic_chromium_client_session.h"
+#include "net/quic/quic_client_push_promise_index.h"
 #include "net/quic/quic_config.h"
 #include "net/quic/quic_crypto_stream.h"
 #include "net/quic/quic_http_stream.h"
@@ -149,8 +150,10 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
       bool delay_tcp_race,
       int max_server_configs_stored_in_properties,
       bool close_sessions_on_ip_change,
+      bool disable_quic_on_timeout_with_open_streams,
       int idle_connection_timeout_seconds,
       bool migrate_sessions_on_network_change,
+      bool migrate_sessions_early,
       const QuicTagVector& connection_options);
   ~QuicStreamFactory() override;
 
@@ -183,8 +186,12 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   bool OnHandshakeConfirmed(QuicChromiumClientSession* session,
                             float packet_loss_rate);
 
+  // Called when a TCP job completes for an origin that QUIC potentially
+  // could be used for.
+  void OnTcpJobCompleted(bool succeeded);
+
   // Returns true if QUIC is disabled for this port.
-  bool IsQuicDisabled(uint16_t port);
+  bool IsQuicDisabled(uint16_t port) const;
 
   // Returns reason QUIC is disabled for this port, or QUIC_DISABLED_NOT if not.
   QuicChromiumClientSession::QuicDisabledReason QuicDisabledReason(
@@ -226,7 +233,13 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
                       IPEndPoint addr,
                       NetworkChangeNotifier::NetworkHandle network);
 
-  // Helper method that initiates migration of active sessions
+  // Finds an alternative to |old_network| from the platform's list of connected
+  // networks. Returns NetworkChangeNotifier::kInvalidNetworkHandle if no
+  // alternative is found.
+  NetworkChangeNotifier::NetworkHandle FindAlternateNetwork(
+      NetworkChangeNotifier::NetworkHandle old_network);
+
+  // Method that initiates migration of active sessions
   // currently bound to |network| to an alternate network, if one
   // exists. Idle sessions bound to |network| are closed. If there is
   // no alternate network to migrate active sessions onto, active
@@ -234,6 +247,16 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // |network| otherwise. Sessions not bound to |network| are left unchanged.
   void MaybeMigrateOrCloseSessions(NetworkChangeNotifier::NetworkHandle network,
                                    bool force_close);
+
+  // Method that initiates early migration of |session| if |session| is
+  // active and if there is an alternate network than the one to which
+  // |session| is currently bound.
+  void MaybeMigrateSessionEarly(QuicChromiumClientSession* session);
+
+  // Method that migrates |session| over to using |new_network|.
+  void MigrateSessionToNetwork(
+      QuicChromiumClientSession* session,
+      NetworkChangeNotifier::NetworkHandle new_network);
 
   // NetworkChangeNotifier::IPAddressObserver methods:
 
@@ -311,6 +334,12 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   typedef std::deque<enum QuicChromiumClientSession::QuicDisabledReason>
       DisabledReasonsQueue;
 
+  enum FactoryStatus {
+    OPEN,     // New streams may be created.
+    CLOSED,   // No new streams may be created temporarily.
+    DISABLED  // No more streams may be created until the network changes.
+  };
+
   // Creates a job which doesn't wait for server config to be loaded from the
   // disk cache. This job is started via a PostTask.
   void CreateAuxilaryJob(const QuicServerId server_id,
@@ -350,10 +379,13 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   bool CryptoConfigCacheIsEmpty(const QuicServerId& server_id);
 
   // Initializes the cached state associated with |server_id| in
-  // |crypto_config_| with the information in |server_info|.
+  // |crypto_config_| with the information in |server_info|. Populates
+  // |connection_id| with the next server designated connection id,
+  // if any, and otherwise leaves it unchanged.
   void InitializeCachedStateInCryptoConfig(
       const QuicServerId& server_id,
-      const scoped_ptr<QuicServerInfo>& server_info);
+      const scoped_ptr<QuicServerInfo>& server_info,
+      QuicConnectionId* connection_id);
 
   // Initialize |quic_supported_servers_at_startup_| with the list of servers
   // that supported QUIC at start up and also initialize in-memory cache of
@@ -366,6 +398,8 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
 
   // Collect stats from recent connections, possibly disabling Quic.
   void MaybeDisableQuic(QuicChromiumClientSession* session);
+
+  void MaybeDisableQuic(uint16_t port);
 
   bool require_confirmation_;
   HostResolver* host_resolver_;
@@ -474,7 +508,7 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
 
   // If more than |yield_after_packets_| packets have been read or more than
   // |yield_after_duration_| time has passed, then
-  // QuicPacketReader::StartReading() yields by doing a PostTask().
+  // QuicChromiumPacketReader::StartReading() yields by doing a PostTask().
   int yield_after_packets_;
   QuicTime::Delta yield_after_duration_;
 
@@ -484,6 +518,10 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // Set if migration should be attempted on active sessions when primary
   // interface changes.
   const bool migrate_sessions_on_network_change_;
+
+  // Set if early migration should be attempted when the connection
+  // experiences poor connectivity.
+  const bool migrate_sessions_early_;
 
   // Each profile will (probably) have a unique port_seed_ value.  This value
   // is used to help seed a pseudo-random number generator (PortSuggester) so
@@ -500,6 +538,11 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   std::set<HostPortPair> quic_supported_servers_at_startup_;
 
   NetworkConnection network_connection_;
+
+  QuicClientPushPromiseIndex push_promise_index_;
+
+  // Current status of the factory's ability to create streams.
+  FactoryStatus status_;
 
   base::TaskRunner* task_runner_;
 

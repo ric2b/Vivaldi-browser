@@ -24,7 +24,7 @@ public:
 
     // LinkResource
     void process() override;
-    Type type() const override { return Manifest; }
+    LinkResourceType type() const override { return Manifest; }
     bool hasLoaded() const override;
     void ownerRemoved() override;
 
@@ -32,6 +32,6 @@ private:
     explicit LinkManifest(HTMLLinkElement* owner);
 };
 
-}
+} // namespace blink
 
 #endif // LinkManifest_h

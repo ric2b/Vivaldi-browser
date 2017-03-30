@@ -121,6 +121,7 @@
           ],
           'dependencies': [
             '<@(chromium_browser_dependencies)',
+            'chrome_features.gyp:chrome_common_features',
             '../content/content.gyp:content_app_browser',
             '<(VIVALDI)/vivaldi_chromium.gyp:*',
           ],
@@ -249,11 +250,6 @@
                 },
               },
               'conditions': [
-                ['win_use_allocator_shim==1', {
-                  'dependencies': [
-                    '<(allocator_target)',
-                  ],
-                }],
                 ['enable_basic_printing==1 or enable_print_preview==1', {
                   'dependencies': [
                     '../printing/printing.gyp:printing',
@@ -353,6 +349,7 @@
             '../components/components.gyp:browser_watcher_client',
             '../content/content.gyp:content_app_child',
             '../third_party/kasko/kasko.gyp:kasko',
+            'chrome_features.gyp:chrome_common_features',
             'chrome_version_resources',
             'policy_path_parser',
             '../../vivaldi_chromium.gyp:*',
@@ -367,13 +364,24 @@
             'app/chrome_main_delegate.h',
           ],
           'conditions': [
-            ['OS=="win" and win_use_allocator_shim==1', {
-              'dependencies': [
-                '<(allocator_target)',
-              ],
-            }],
             ['OS=="win"', {
               'conditions': [
+                ['chrome_pgo_phase!=0', {
+                  # Disable Warning 4702 ("Unreachable code") for the WPO/PGO
+                  # builds. Probably anything that this would catch that
+                  # wouldn't be caught in a normal build isn't going to
+                  # actually be a bug, so the incremental value of C4702 for
+                  # PGO builds is likely very small.
+                  'msvs_disabled_warnings': [
+                    4702
+                  ],
+                  'msvs_settings': {
+                    'VCCLCompilerTool': {
+                      # This implies link time code generation.
+                      'WholeProgramOptimization': 'true',
+                    },
+                  },
+                }],
                 ['chrome_pgo_phase==1', {
                   'msvs_settings': {
                     'VCLinkerTool': {

@@ -105,11 +105,11 @@ Notification* Notification::create(ExecutionContext* context, const String& titl
     return notification;
 }
 
-Notification* Notification::create(ExecutionContext* context, int64_t persistentId, const WebNotificationData& data)
+Notification* Notification::create(ExecutionContext* context, int64_t persistentId, const WebNotificationData& data, bool showing)
 {
     Notification* notification = new Notification(context, data);
     notification->setPersistentId(persistentId);
-    notification->setState(NotificationStateShowing);
+    notification->setState(showing ? NotificationStateShowing : NotificationStateClosed);
     notification->suspendIfNeeded();
 
     return notification;
@@ -253,6 +253,16 @@ NavigatorVibration::VibrationPattern Notification::vibrate(bool& isNull) const
     return pattern;
 }
 
+DOMTimeStamp Notification::timestamp() const
+{
+    return m_data.timestamp;
+}
+
+bool Notification::renotify() const
+{
+    return m_data.renotify;
+}
+
 bool Notification::silent() const
 {
     return m_data.silent;
@@ -288,6 +298,7 @@ HeapVector<NotificationAction> Notification::actions() const
     for (size_t i = 0; i < m_data.actions.size(); ++i) {
         actions[i].setAction(m_data.actions[i].action);
         actions[i].setTitle(m_data.actions[i].title);
+        actions[i].setIcon(m_data.actions[i].icon.string());
     }
 
     return actions;
@@ -341,7 +352,7 @@ size_t Notification::maxActions()
     return notificationManager()->maxActions();
 }
 
-bool Notification::dispatchEventInternal(PassRefPtrWillBeRawPtr<Event> event)
+DispatchEventResult Notification::dispatchEventInternal(PassRefPtrWillBeRawPtr<Event> event)
 {
     ASSERT(executionContext()->isContextThread());
     return EventTarget::dispatchEventInternal(event);

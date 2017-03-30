@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MEDIA_BASE_MIME_UTIL_H__
-#define MEDIA_BASE_MIME_UTIL_H__
+#ifndef MEDIA_BASE_MIME_UTIL_H_
+#define MEDIA_BASE_MIME_UTIL_H_
 
 #include <string>
 #include <vector>
@@ -32,19 +32,16 @@ MEDIA_EXPORT void ParseCodecString(const std::string& codecs,
                                    std::vector<std::string>* codecs_out,
                                    bool strip);
 
-// Indicates that the MIME type and (possible codec string) are supported by the
-// underlying platform.
+// Indicates that the MIME type and (possible codec string) are supported.
 enum SupportsType {
-  // The underlying platform is known not to support the given MIME type and
-  // codec combination.
+  // The given MIME type and codec combination is not supported.
   IsNotSupported,
 
-  // The underlying platform is known to support the given MIME type and codec
-  // combination.
+  // The given MIME type and codec combination is supported.
   IsSupported,
 
-  // The underlying platform is unsure whether the given MIME type and codec
-  // combination can be rendered or not before actually trying to play it.
+  // There's not enough information to determine if the given MIME type and
+  // codec combination can be rendered or not before actually trying to play it.
   MayBeSupported
 };
 
@@ -63,6 +60,11 @@ MEDIA_EXPORT SupportsType
 IsSupportedMediaFormat(const std::string& mime_type,
                        const std::vector<std::string>& codecs);
 
+// Similar to the above, but for encrypted formats.
+MEDIA_EXPORT SupportsType
+IsSupportedEncryptedMediaFormat(const std::string& mime_type,
+                                const std::vector<std::string>& codecs);
+
 // Test only method that removes proprietary media types and codecs from the
 // list of supported MIME types and codecs. These types and codecs must be
 // removed to ensure consistent layout test results across all Chromium
@@ -71,5 +73,4 @@ MEDIA_EXPORT void RemoveProprietaryMediaTypesAndCodecsForTests();
 
 }  // namespace media
 
-#endif  // MEDIA_BASE_MIME_UTIL_H__
-
+#endif  // MEDIA_BASE_MIME_UTIL_H_

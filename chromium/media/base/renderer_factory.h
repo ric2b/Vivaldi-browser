@@ -10,6 +10,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "media/base/media_export.h"
 #include "media/base/renderer.h"
+#include "media/base/surface_manager.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -37,6 +38,7 @@ class MEDIA_EXPORT RendererFactory {
       const scoped_refptr<base::TaskRunner>& worker_task_runner,
       AudioRendererSink* audio_renderer_sink,
       VideoRendererSink* video_renderer_sink,
+      const RequestSurfaceCB& request_surface_cb,
       bool use_platform_media_pipeline,
       bool platform_pipeline_enlarges_buffers_on_underflow) = 0;
 

@@ -12,6 +12,7 @@ import org.chromium.content_public.browser.WebContents;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Used for recording metrics about Chrome launches that need to be recorded before the native
@@ -91,6 +92,8 @@ public class LaunchMetrics {
     private static final List<Pair<String, Integer>> sTabUrls =
             new ArrayList<Pair<String, Integer>>();
 
+    private static final List<Long> sWebappHistogramTimes = new ArrayList<Long>();
+
     /**
      * Records the launch of a standalone Activity for a URL (i.e. a WebappActivity)
      * added from a specific source.
@@ -111,6 +114,14 @@ public class LaunchMetrics {
     }
 
     /**
+     * Records the time it took to look up from disk whether a MAC is valid during webapp startup.
+     * @param time the number of milliseconds it took to finish.
+     */
+    public static void recordWebappHistogramTimes(long time) {
+        sWebappHistogramTimes.add(time);
+    }
+
+    /**
      * Calls out to native code to record URLs that have been launched via the Home screen.
      * This intermediate step is necessary because Activity.onCreate() may be called when
      * the native library has not yet been loaded.
@@ -126,6 +137,12 @@ public class LaunchMetrics {
             nativeRecordLaunch(false, item.first, item.second, webContents);
         }
         sTabUrls.clear();
+
+        for (Long time : sWebappHistogramTimes) {
+            RecordHistogram.recordTimesHistogram("Android.StrictMode.WebappAuthenticatorMac", time,
+                    TimeUnit.MILLISECONDS);
+        }
+        sWebappHistogramTimes.clear();
 
         // Record generic cached events.
         for (CachedHistogram event : CachedHistogram.sEvents) event.commitAndClear();

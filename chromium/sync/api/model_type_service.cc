@@ -10,14 +10,15 @@ ModelTypeService::ModelTypeService() {}
 
 ModelTypeService::~ModelTypeService() {}
 
-syncer_v2::ModelTypeChangeProcessor* ModelTypeService::change_processor() {
+ModelTypeChangeProcessor* ModelTypeService::change_processor() const {
   return change_processor_.get();
 }
 
 void ModelTypeService::set_change_processor(
-    scoped_ptr<syncer_v2::ModelTypeChangeProcessor> change_processor) {
+    scoped_ptr<ModelTypeChangeProcessor> change_processor) {
   DCHECK(!change_processor_);
   change_processor_.swap(change_processor);
+  OnChangeProcessorSet();
 }
 
 void ModelTypeService::clear_change_processor() {

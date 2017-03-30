@@ -69,12 +69,12 @@ void LayoutSliderContainer::computeLogicalHeight(LayoutUnit logicalHeight, Layou
 
     if (input->layoutObject()->isSlider() && !isVertical && input->list()) {
         int offsetFromCenter = LayoutTheme::theme().sliderTickOffsetFromTrackCenter();
-        LayoutUnit trackHeight = 0;
+        LayoutUnit trackHeight;
         if (offsetFromCenter < 0) {
-            trackHeight = -2 * offsetFromCenter;
+            trackHeight = LayoutUnit(-2 * offsetFromCenter);
         } else {
             int tickLength = LayoutTheme::theme().sliderTickSize().height();
-            trackHeight = 2 * (offsetFromCenter + tickLength);
+            trackHeight = LayoutUnit(2 * (offsetFromCenter + tickLength));
         }
         float zoomFactor = style()->effectiveZoom();
         if (zoomFactor != 1.0)
@@ -87,7 +87,7 @@ void LayoutSliderContainer::computeLogicalHeight(LayoutUnit logicalHeight, Layou
         return;
     }
     if (isVertical)
-        logicalHeight = LayoutSlider::defaultTrackLength;
+        logicalHeight = LayoutUnit(LayoutSlider::defaultTrackLength);
 
     // FIXME: The trackHeight should have been added before updateLogicalHeight was called to avoid this hack.
     setIntrinsicContentLogicalHeight(logicalHeight);
@@ -129,7 +129,7 @@ void LayoutSliderContainer::layout()
     double percentageOffset = sliderPosition(input).toDouble();
     LayoutUnit availableExtent = isVertical ? track->contentHeight() : track->contentWidth();
     availableExtent -= isVertical ? thumb->size().height() : thumb->size().width();
-    LayoutUnit offset = percentageOffset * availableExtent;
+    LayoutUnit offset(percentageOffset * availableExtent);
     LayoutPoint thumbLocation = thumb->location();
     if (isVertical)
         thumbLocation.setY(thumbLocation.y() + track->contentHeight() - thumb->size().height() - offset);

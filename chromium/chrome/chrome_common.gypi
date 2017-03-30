@@ -44,8 +44,6 @@
       'common/ini_parser.h',
       'common/instant_types.cc',
       'common/instant_types.h',
-      'common/localized_error.cc',
-      'common/localized_error.h',
       'common/logging_chrome.cc',
       'common/logging_chrome.h',
       'common/mac/app_shim_launch.h',
@@ -319,7 +317,6 @@
         'safe_browsing_proto',
         '<(DEPTH)/base/base.gyp:base',
         '<(DEPTH)/base/base.gyp:base_i18n',
-        '<(DEPTH)/base/base.gyp:base_prefs',
         '<(DEPTH)/base/base.gyp:base_static',
         '<(DEPTH)/chrome/chrome_features.gyp:chrome_common_features',
         '<(DEPTH)/chrome/chrome_resources.gyp:chrome_resources',
@@ -348,6 +345,7 @@
         '<(DEPTH)/components/components.gyp:variations',
         '<(DEPTH)/components/components.gyp:version_info',
         '<(DEPTH)/components/components_strings.gyp:components_strings',
+        '<(DEPTH)/components/prefs/prefs.gyp:prefs',
         '<(DEPTH)/components/url_formatter/url_formatter.gyp:url_formatter',
         '<(DEPTH)/content/content.gyp:content_common',
         '<(DEPTH)/crypto/crypto.gyp:crypto',
@@ -638,14 +636,14 @@
       'target_name': 'common_mojo_bindings',
       'type': 'static_library',
       'includes': [
-        '../third_party/mojo/mojom_bindings_generator.gypi'
+        '../mojo/mojom_bindings_generator.gypi'
       ],
       'sources': [
         'common/resource_usage_reporter.mojom',
       ],
       'dependencies': [
         '../mojo/mojo_base.gyp:mojo_environment_chromium',
-        '../third_party/mojo/mojo_public.gyp:mojo_cpp_bindings',
+        '../mojo/mojo_public.gyp:mojo_cpp_bindings',
       ],
     },
   ],

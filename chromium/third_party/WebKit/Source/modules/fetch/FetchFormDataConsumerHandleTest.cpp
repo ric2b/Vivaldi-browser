@@ -6,14 +6,16 @@
 
 #include "core/dom/DOMTypedArray.h"
 #include "core/html/FormData.h"
-#include "core/loader/ThreadableLoader.h"
+#include "core/loader/MockThreadableLoader.h"
 #include "core/loader/ThreadableLoaderClient.h"
 #include "core/testing/DummyPageHolder.h"
 #include "modules/fetch/DataConsumerHandleTestUtil.h"
 #include "platform/network/ResourceResponse.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "platform/weborigin/KURL.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
@@ -37,29 +39,36 @@ using HandleReaderRunner = DataConsumerHandleTestUtil::HandleReaderRunner<T>;
 using ReplayingHandle = DataConsumerHandleTestUtil::ReplayingHandle;
 using Command = DataConsumerHandleTestUtil::Command;
 
+using ::testing::_;
+using ::testing::InvokeWithoutArgs;
+
 String toString(const Vector<char>& data)
 {
     return String(data.data(), data.size());
 }
 
-class NoopLoader final : public ThreadableLoader {
-public:
-    static PassRefPtr<ThreadableLoader> create() { return adoptRef(new NoopLoader); }
-    void overrideTimeout(unsigned long) override {}
-    void cancel() override {}
-};
-
 class LoaderFactory : public FetchBlobDataConsumerHandle::LoaderFactory {
 public:
-    explicit LoaderFactory(PassOwnPtr<WebDataConsumerHandle> handle) : m_handle(handle) {}
-    PassRefPtr<ThreadableLoader> create(ExecutionContext&, ThreadableLoaderClient* client, const ResourceRequest&, const ThreadableLoaderOptions&, const ResourceLoaderOptions&) override
+    explicit LoaderFactory(PassOwnPtr<WebDataConsumerHandle> handle)
+        : m_client(nullptr)
+        , m_handle(handle) {}
+    PassRefPtr<ThreadableLoader> create(ExecutionContext&, ThreadableLoaderClient* client, const ThreadableLoaderOptions&, const ResourceLoaderOptions&) override
     {
-        RefPtr<ThreadableLoader> loader = NoopLoader::create();
-        client->didReceiveResponse(0, ResourceResponse(), m_handle.release());
+        m_client = client;
+
+        RefPtr<MockThreadableLoader> loader = MockThreadableLoader::create();
+        EXPECT_CALL(*loader, start(_)).WillOnce(InvokeWithoutArgs(this, &LoaderFactory::handleDidReceiveResponse));
+        EXPECT_CALL(*loader, cancel()).Times(1);
         return loader.release();
     }
 
 private:
+    void handleDidReceiveResponse()
+    {
+        m_client->didReceiveResponse(0, ResourceResponse(), m_handle.release());
+    }
+
+    ThreadableLoaderClient* m_client;
     OwnPtr<WebDataConsumerHandle> m_handle;
 };
 

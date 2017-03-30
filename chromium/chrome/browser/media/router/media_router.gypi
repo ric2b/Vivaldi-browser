@@ -14,8 +14,6 @@
       'issue_manager.h',
       'issues_observer.h',
       'issues_observer.cc',
-      'local_media_routes_observer.cc',
-      'local_media_routes_observer.h',
       'media_route.cc',
       'media_route.h',
       'media_router.h',
@@ -46,9 +44,13 @@
       'presentation_session_messages_observer.cc',
       'presentation_session_messages_observer.h',
       'render_frame_host_id.h',
+      'route_request_result.cc',
+      'route_request_result.h',
     ],
     # Files that are only needed on desktop builds
     'media_router_non_android_sources': [
+      'media_route_provider_util_win.cc',
+      'media_route_provider_util_win.h',
       'media_router_mojo_impl.cc',
       'media_router_mojo_impl.h',
       'media_router_type_converters.cc',

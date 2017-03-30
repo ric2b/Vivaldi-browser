@@ -31,7 +31,7 @@ class WebMStreamParser : public StreamParser {
             bool ignore_text_tracks,
             const EncryptedMediaInitDataCB& encrypted_media_init_data_cb,
             const NewMediaSegmentCB& new_segment_cb,
-            const base::Closure& end_of_segment_cb,
+            const EndMediaSegmentCB& end_of_segment_cb,
             const scoped_refptr<MediaLog>& media_log) override;
   void Flush() override;
   bool Parse(const uint8_t* buf, int size) override;
@@ -65,7 +65,7 @@ class WebMStreamParser : public StreamParser {
   // Returning > 0 indicates success & the number of bytes parsed.
   int ParseCluster(const uint8_t* data, int size);
 
-  // Fire needkey event through the |encrypted_media_init_data_cb_|.
+  // Fire the encrypted event through the |encrypted_media_init_data_cb_|.
   void OnEncryptedMediaInitData(const std::string& key_id);
 
   State state_;
@@ -76,7 +76,7 @@ class WebMStreamParser : public StreamParser {
   EncryptedMediaInitDataCB encrypted_media_init_data_cb_;
 
   NewMediaSegmentCB new_segment_cb_;
-  base::Closure end_of_segment_cb_;
+  EndMediaSegmentCB end_of_segment_cb_;
   scoped_refptr<MediaLog> media_log_;
 
   bool unknown_segment_size_;

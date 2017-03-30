@@ -6,17 +6,28 @@
 
 #include "content/browser/media/android/browser_media_player_manager.h"
 #include "content/browser/media/android/browser_media_session_manager.h"
+#include "content/browser/media/android/browser_surface_view_manager.h"
+#include "content/browser/media/android/media_session.h"
+#include "content/browser/media/android/media_session_controller.h"
 #include "content/browser/media/android/media_session_observer.h"
 #include "content/browser/media/cdm/browser_cdm_manager.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/common/media/media_player_delegate_messages.h"
 #include "content/common/media/media_player_messages_android.h"
 #include "content/common/media/media_session_messages_android.h"
+#include "content/common/media/surface_view_manager_messages_android.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "ipc/ipc_message_macros.h"
 #include "media/base/android/media_player_android.h"
 
 namespace content {
+
+static void SuspendAllMediaPlayersInRenderFrame(
+    RenderFrameHost* render_frame_host) {
+  render_frame_host->Send(new MediaPlayerDelegateMsg_SuspendAllMediaPlayers(
+      render_frame_host->GetRoutingID()));
+}
 
 MediaWebContentsObserverAndroid::MediaWebContentsObserverAndroid(
     WebContents* web_contents)
@@ -58,6 +69,37 @@ MediaWebContentsObserverAndroid::GetMediaSessionManager(
   return manager;
 }
 
+BrowserSurfaceViewManager*
+MediaWebContentsObserverAndroid::GetSurfaceViewManager(
+    RenderFrameHost* render_frame_host) {
+  auto it = surface_view_managers_.find(render_frame_host);
+  if (it != surface_view_managers_.end())
+    return it->second;
+
+  BrowserSurfaceViewManager* manager =
+      new BrowserSurfaceViewManager(render_frame_host);
+  surface_view_managers_.set(render_frame_host, make_scoped_ptr(manager));
+  return manager;
+}
+
+void MediaWebContentsObserverAndroid::SuspendAllMediaPlayers() {
+  web_contents()->ForEachFrame(
+      base::Bind(&SuspendAllMediaPlayersInRenderFrame));
+}
+
+bool MediaWebContentsObserverAndroid::RequestPlay(
+    RenderFrameHost* render_frame_host,
+    int delegate_id,
+    bool has_audio,
+    bool is_remote,
+    base::TimeDelta duration) {
+  // |has_video| forced to true since the value doesn't matter at present.
+  OnMediaPlaying(render_frame_host, delegate_id, true, has_audio, is_remote,
+                 duration);
+  return media_session_map_.find(MediaPlayerId(
+             render_frame_host, delegate_id)) != media_session_map_.end();
+}
+
 #if defined(VIDEO_HOLE)
 void MediaWebContentsObserverAndroid::OnFrameInfoUpdated() {
   for (auto it = media_player_managers_.begin();
@@ -71,10 +113,18 @@ void MediaWebContentsObserverAndroid::RenderFrameDeleted(
     RenderFrameHost* render_frame_host) {
   MediaWebContentsObserver::RenderFrameDeleted(render_frame_host);
 
+  for (auto it = media_session_map_.begin(); it != media_session_map_.end();) {
+    if (it->first.first == render_frame_host)
+      it = media_session_map_.erase(it);
+    else
+      ++it;
+  }
+
   // Always destroy the media players before CDMs because we do not support
   // detaching CDMs from media players yet. See http://crbug.com/330324
   media_player_managers_.erase(render_frame_host);
   media_session_managers_.erase(render_frame_host);
+  surface_view_managers_.erase(render_frame_host);
 
   // TODO(xhwang): Currently MediaWebContentsObserver, BrowserMediaPlayerManager
   // and BrowserCdmManager all run on browser UI thread. So this call is okay.
@@ -90,13 +140,39 @@ void MediaWebContentsObserverAndroid::RenderFrameDeleted(
 bool MediaWebContentsObserverAndroid::OnMessageReceived(
     const IPC::Message& msg,
     RenderFrameHost* render_frame_host) {
+  // Receive play/pause/destroyed messages, but don't mark as processed so they
+  // are also handled by MediaWebContentsObserver.
+  OnMediaPlayerDelegateMessageReceived(msg, render_frame_host);
+
   if (MediaWebContentsObserver::OnMessageReceived(msg, render_frame_host))
     return true;
 
   if (OnMediaPlayerMessageReceived(msg, render_frame_host))
     return true;
 
-  return OnMediaPlayerSetCdmMessageReceived(msg, render_frame_host);
+  if (OnMediaPlayerSetCdmMessageReceived(msg, render_frame_host))
+    return true;
+
+  if (OnMediaSessionMessageReceived(msg, render_frame_host))
+    return true;
+
+  if (OnSurfaceViewManagerMessageReceived(msg, render_frame_host))
+    return true;
+
+  return false;
+}
+
+void MediaWebContentsObserverAndroid::OnMediaPlayerDelegateMessageReceived(
+    const IPC::Message& msg,
+    RenderFrameHost* render_frame_host) {
+  IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(MediaWebContentsObserverAndroid, msg,
+                                   render_frame_host)
+    IPC_MESSAGE_HANDLER(MediaPlayerDelegateHostMsg_OnMediaDestroyed,
+                        OnMediaDestroyed)
+    IPC_MESSAGE_HANDLER(MediaPlayerDelegateHostMsg_OnMediaPaused, OnMediaPaused)
+    IPC_MESSAGE_HANDLER(MediaPlayerDelegateHostMsg_OnMediaPlaying,
+                        OnMediaPlaying)
+  IPC_END_MESSAGE_MAP()
 }
 
 bool MediaWebContentsObserverAndroid::OnMediaPlayerMessageReceived(
@@ -143,12 +219,6 @@ bool MediaWebContentsObserverAndroid::OnMediaPlayerMessageReceived(
                         GetMediaPlayerManager(render_frame_host),
                         BrowserMediaPlayerManager::OnNotifyExternalSurface)
 #endif  // defined(VIDEO_HOLE)
-    IPC_MESSAGE_FORWARD(MediaSessionHostMsg_Activate,
-                        GetMediaSessionManager(render_frame_host),
-                        BrowserMediaSessionManager::OnActivate)
-    IPC_MESSAGE_FORWARD(MediaSessionHostMsg_Deactivate,
-                        GetMediaSessionManager(render_frame_host),
-                        BrowserMediaSessionManager::OnDeactivate)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -161,6 +231,43 @@ bool MediaWebContentsObserverAndroid::OnMediaPlayerSetCdmMessageReceived(
   IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(MediaWebContentsObserverAndroid, msg,
                                    render_frame_host)
     IPC_MESSAGE_HANDLER(MediaPlayerHostMsg_SetCdm, OnSetCdm)
+    IPC_MESSAGE_UNHANDLED(handled = false)
+  IPC_END_MESSAGE_MAP()
+  return handled;
+}
+
+bool MediaWebContentsObserverAndroid::OnMediaSessionMessageReceived(
+    const IPC::Message& msg,
+    RenderFrameHost* render_frame_host) {
+  bool handled = true;
+
+  IPC_BEGIN_MESSAGE_MAP(MediaWebContentsObserver, msg)
+    IPC_MESSAGE_FORWARD(MediaSessionHostMsg_Activate,
+                        GetMediaSessionManager(render_frame_host),
+                        BrowserMediaSessionManager::OnActivate)
+    IPC_MESSAGE_FORWARD(MediaSessionHostMsg_Deactivate,
+                        GetMediaSessionManager(render_frame_host),
+                        BrowserMediaSessionManager::OnDeactivate)
+    IPC_MESSAGE_FORWARD(MediaSessionHostMsg_SetMetadata,
+                        GetMediaSessionManager(render_frame_host),
+                        BrowserMediaSessionManager::OnSetMetadata)
+    IPC_MESSAGE_UNHANDLED(handled = false)
+  IPC_END_MESSAGE_MAP()
+
+  return handled;
+}
+
+bool MediaWebContentsObserverAndroid::OnSurfaceViewManagerMessageReceived(
+    const IPC::Message& msg,
+    RenderFrameHost* render_frame_host) {
+  bool handled = true;
+  IPC_BEGIN_MESSAGE_MAP(MediaWebContentsObserverAndroid, msg)
+    IPC_MESSAGE_FORWARD(SurfaceViewManagerHostMsg_CreateFullscreenSurface,
+                        GetSurfaceViewManager(render_frame_host),
+                        BrowserSurfaceViewManager::OnCreateFullscreenSurface)
+    IPC_MESSAGE_FORWARD(SurfaceViewManagerHostMsg_NaturalSizeChanged,
+                        GetSurfaceViewManager(render_frame_host),
+                        BrowserSurfaceViewManager::OnNaturalSizeChanged)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -195,6 +302,61 @@ void MediaWebContentsObserverAndroid::OnSetCdm(
   // TODO(xhwang): This could possibly fail. In that case we should reject the
   // promise.
   media_player->SetCdm(cdm);
+}
+
+void MediaWebContentsObserverAndroid::OnMediaDestroyed(
+    RenderFrameHost* render_frame_host,
+    int delegate_id) {
+  media_session_map_.erase(MediaPlayerId(render_frame_host, delegate_id));
+}
+
+void MediaWebContentsObserverAndroid::OnMediaPaused(
+    RenderFrameHost* render_frame_host,
+    int delegate_id,
+    bool reached_end_of_stream) {
+  // Drop the session if playback completes normally.
+  if (reached_end_of_stream) {
+    OnMediaDestroyed(render_frame_host, delegate_id);
+    return;
+  }
+
+  auto it =
+      media_session_map_.find(MediaPlayerId(render_frame_host, delegate_id));
+  if (it == media_session_map_.end())
+    return;
+
+  it->second->OnPlaybackPaused();
+}
+
+void MediaWebContentsObserverAndroid::OnMediaPlaying(
+    RenderFrameHost* render_frame_host,
+    int delegate_id,
+    bool has_video,
+    bool has_audio,
+    bool is_remote,
+    base::TimeDelta duration) {
+  const MediaPlayerId id(render_frame_host, delegate_id);
+
+  // Since we don't remove session instances on pause, there may be an existing
+  // instance for this playback attempt.
+  //
+  // In this case, try to reinitialize it with the new settings.  If they are
+  // the same, this is a no-op.  If the reinitialize fails, destroy the
+  // controller. A later playback attempt will create a new controller.
+  auto it = media_session_map_.find(id);
+  if (it != media_session_map_.end()) {
+    if (!it->second->Initialize(has_audio, is_remote, duration))
+      media_session_map_.erase(it);
+    return;
+  }
+
+  scoped_ptr<MediaSessionController> controller(
+      new MediaSessionController(id, this));
+
+  if (!controller->Initialize(has_audio, is_remote, duration))
+    return;
+
+  media_session_map_[id] = std::move(controller);
 }
 
 }  // namespace content

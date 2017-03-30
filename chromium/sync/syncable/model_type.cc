@@ -60,7 +60,7 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
     {AUTOFILL_WALLET_DATA, "AUTOFILL_WALLET", "autofill_wallet",
      "Autofill Wallet", sync_pb::EntitySpecifics::kAutofillWalletFieldNumber,
      34},
-    {AUTOFILL_WALLET_METADATA, "AUTOFILL_WALLET_METADATA",
+    {AUTOFILL_WALLET_METADATA, "WALLET_METADATA",
      "autofill_wallet_metadata", "Autofill Wallet Metadata",
      sync_pb::EntitySpecifics::kWalletMetadataFieldNumber, 35},
     {THEMES, "THEME", "themes", "Themes",
@@ -552,21 +552,6 @@ ModelTypeSet PriorityCoreTypes() {
   result.Put(SUPERVISED_USERS);
   result.Put(SUPERVISED_USER_SETTINGS);
 
-  return result;
-}
-
-ModelTypeSet BackupTypes() {
-  ModelTypeSet result;
-  result.Put(BOOKMARKS);
-  result.Put(PREFERENCES);
-  result.Put(THEMES);
-  result.Put(EXTENSIONS);
-  result.Put(SEARCH_ENGINES);
-  result.Put(APPS);
-  result.Put(APP_LIST);
-  result.Put(APP_SETTINGS);
-  result.Put(EXTENSION_SETTINGS);
-  result.Put(PRIORITY_PREFERENCES);
   return result;
 }
 

@@ -12,8 +12,10 @@ namespace content {
 const char kChromeDevToolsScheme[] = "chrome-devtools";
 const char kChromeUIScheme[] = "chrome";
 const char kVivaldiUIScheme[] = "vivaldi";
+const char kExeScheme[] = "exe";
 const char kGuestScheme[] = "chrome-guest";
 const char kMetadataScheme[] = "metadata";
+const char kMojoScheme[] = "mojo";
 const char kSwappedOutScheme[] = "swappedout";
 const char kViewSourceScheme[] = "view-source";
 #if defined(OS_CHROMEOS)
@@ -42,6 +44,7 @@ const char kChromeUIBadCastCrashURL[] = "chrome://badcastcrash";
 const char kChromeUIBrowserCrashURL[] = "chrome://inducebrowsercrashforrealz";
 const char kChromeUIBrowserUIHang[] = "chrome://uithreadhang";
 const char kChromeUICrashURL[] = "chrome://crash";
+const char kChromeUIDelayedBrowserUIHang[] = "chrome://delayeduithreadhang";
 const char kChromeUIDumpURL[] = "chrome://crashdump";
 const char kChromeUIGpuCleanURL[] = "chrome://gpuclean";
 const char kChromeUIGpuCrashURL[] = "chrome://gpucrash";

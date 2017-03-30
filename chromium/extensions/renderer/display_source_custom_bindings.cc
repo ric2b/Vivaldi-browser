@@ -67,12 +67,18 @@ v8::Local<v8::Value> GetChildValue(v8::Local<v8::Object> value,
   return v8::Null(isolate);
 }
 
+int32_t GetCallbackId() {
+  static int32_t sCallId = 0;
+  return ++sCallId;
+}
+
 }  // namespace
 
 void DisplaySourceCustomBindings::StartSession(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
   CHECK_EQ(1, args.Length());
   CHECK(args[0]->IsObject());
+
   v8::Isolate* isolate = context()->isolate();
   v8::Local<v8::Object> start_info = args[0].As<v8::Object>();
 
@@ -152,19 +158,21 @@ void DisplaySourceCustomBindings::StartSession(
     return;
   }
 
-  auto on_started_callback = base::Bind(
-      &DisplaySourceCustomBindings::OnSessionStarted,
-      weak_factory_.GetWeakPtr());
-  auto on_terminated_callback = base::Bind(
-      &DisplaySourceCustomBindings::OnSessionTerminated,
-      weak_factory_.GetWeakPtr());
-  auto on_error_callback = base::Bind(
-      &DisplaySourceCustomBindings::OnSessionError,
-      weak_factory_.GetWeakPtr());
-  session->SetCallbacks(on_started_callback,
-                        on_terminated_callback,
-                        on_error_callback);
-  session->Start();
+  auto on_terminated_callback =
+      base::Bind(&DisplaySourceCustomBindings::OnSessionTerminated,
+                 weak_factory_.GetWeakPtr(), sink_id);
+  auto on_error_callback =
+      base::Bind(&DisplaySourceCustomBindings::OnSessionError,
+                 weak_factory_.GetWeakPtr(), sink_id);
+  session->SetNotificationCallbacks(on_terminated_callback, on_error_callback);
+
+  int32_t call_id = GetCallbackId();
+  args.GetReturnValue().Set(call_id);
+
+  auto on_call_completed =
+      base::Bind(&DisplaySourceCustomBindings::OnSessionStarted,
+                 weak_factory_.GetWeakPtr(), sink_id, call_id);
+  session->Start(on_call_completed);
   session_map_.insert(std::make_pair(sink_id, std::move(session)));
 }
 
@@ -182,22 +190,63 @@ void DisplaySourceCustomBindings::TerminateSession(
     return;
   }
 
-  if (session->state() == DisplaySourceSession::Terminating) {
+  DisplaySourceSession::State state = session->state();
+  DCHECK_NE(state, DisplaySourceSession::Idle);
+  if (state == DisplaySourceSession::Establishing) {
+    // 'session started' callback has not yet been invoked.
+    // This session is not existing for the user.
+    isolate->ThrowException(v8::Exception::Error(
+        v8::String::NewFromUtf8(isolate, kSessionNotFound)));
+    return;
+  }
+
+  if (state == DisplaySourceSession::Terminating) {
     isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(
         isolate, kSessionAlreadyTerminating)));
     return;
   }
+
+  int32_t call_id = GetCallbackId();
+  args.GetReturnValue().Set(call_id);
+
+  auto on_call_completed =
+      base::Bind(&DisplaySourceCustomBindings::OnCallCompleted,
+                 weak_factory_.GetWeakPtr(), call_id);
   // The session will get removed from session_map_ in OnSessionTerminated.
-  session->Terminate();
+  session->Terminate(on_call_completed);
 }
 
-void DisplaySourceCustomBindings::DispatchSessionStarted(int sink_id) const {
+void DisplaySourceCustomBindings::OnCallCompleted(
+    int call_id,
+    bool success,
+    const std::string& error_message) {
   v8::Isolate* isolate = context()->isolate();
+  ModuleSystem* module_system = context()->module_system();
   v8::HandleScope handle_scope(isolate);
   v8::Context::Scope context_scope(context()->v8_context());
-  v8::Local<v8::Array> event_args = v8::Array::New(isolate, 1);
-  event_args->Set(0, v8::Integer::New(isolate, sink_id));
-  context()->DispatchEvent("displaySource.onSessionStarted", event_args);
+
+  v8::Local<v8::Value> callback_args[2];
+  callback_args[0] = v8::Integer::New(isolate, call_id);
+  if (success)
+    callback_args[1] = v8::Null(isolate);
+  else
+    callback_args[1] = v8::String::NewFromUtf8(isolate, error_message.c_str());
+
+  module_system->CallModuleMethod("displaySource", "callCompletionCallback", 2,
+                                  callback_args);
+}
+
+void DisplaySourceCustomBindings::OnSessionStarted(
+    int sink_id,
+    int call_id,
+    bool success,
+    const std::string& error_message) {
+  CHECK(GetDisplaySession(sink_id));
+  if (!success) {
+    // Session has failed to start, removing it.
+    session_map_.erase(sink_id);
+  }
+  OnCallCompleted(call_id, success, error_message);
 }
 
 void DisplaySourceCustomBindings::DispatchSessionTerminated(int sink_id) const {
@@ -241,13 +290,8 @@ DisplaySourceSession* DisplaySourceCustomBindings::GetDisplaySession(
   return nullptr;
 }
 
-void DisplaySourceCustomBindings::OnSessionStarted(int sink_id) {
-  DispatchSessionStarted(sink_id);
-}
-
 void DisplaySourceCustomBindings::OnSessionTerminated(int sink_id) {
-  DisplaySourceSession* session = GetDisplaySession(sink_id);
-  CHECK(session);
+  CHECK(GetDisplaySession(sink_id));
   session_map_.erase(sink_id);
   DispatchSessionTerminated(sink_id);
 }
@@ -255,15 +299,7 @@ void DisplaySourceCustomBindings::OnSessionTerminated(int sink_id) {
 void DisplaySourceCustomBindings::OnSessionError(int sink_id,
                                                  DisplaySourceErrorType type,
                                                  const std::string& message) {
-  DisplaySourceSession* session = GetDisplaySession(sink_id);
-  CHECK(session);
-  if (session->state() != DisplaySourceSession::Established &&
-      session->state() != DisplaySourceSession::Terminating) {
-    // Error has occured before the session has actually started,
-    // no need to wait for session termination notification.
-    session_map_.erase(sink_id);
-  }
-
+  CHECK(GetDisplaySession(sink_id));
   DispatchSessionError(sink_id, type, message);
 }
 

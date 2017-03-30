@@ -56,38 +56,32 @@ DialogClientView::DialogClientView(Widget* owner, View* contents_view)
     : ClientView(owner, contents_view),
       ok_button_(NULL),
       cancel_button_(NULL),
-      default_button_(NULL),
-      focus_manager_(NULL),
       extra_view_(NULL),
       footnote_view_(NULL),
-      notified_delegate_(false) {
-}
+      delegate_allowed_close_(false) {}
 
 DialogClientView::~DialogClientView() {
 }
 
 void DialogClientView::AcceptWindow() {
-  // Only notify the delegate once. See |notified_delegate_|'s comment.
-  if (!notified_delegate_ && GetDialogDelegate()->Accept(false)) {
-    notified_delegate_ = true;
-    Close();
+  // Only notify the delegate once. See |delegate_allowed_close_|'s comment.
+  if (!delegate_allowed_close_ && GetDialogDelegate()->Accept(false)) {
+    delegate_allowed_close_ = true;
+    GetWidget()->Close();
   }
 }
 
 void DialogClientView::CancelWindow() {
-  // Only notify the delegate once. See |notified_delegate_|'s comment.
-  if (!notified_delegate_ && GetDialogDelegate()->Cancel()) {
-    notified_delegate_ = true;
-    Close();
+  // Only notify the delegate once. See |delegate_allowed_close_|'s comment.
+  if (!delegate_allowed_close_ && GetDialogDelegate()->Cancel()) {
+    delegate_allowed_close_ = true;
+    GetWidget()->Close();
   }
 }
 
 void DialogClientView::UpdateDialogButtons() {
   const int buttons = GetDialogDelegate()->GetDialogButtons();
   ui::Accelerator escape(ui::VKEY_ESCAPE, ui::EF_NONE);
-  if (default_button_)
-    default_button_->SetIsDefault(false);
-  default_button_ = NULL;
 
   if (buttons & ui::DIALOG_BUTTON_OK) {
     if (!ok_button_) {
@@ -127,17 +121,11 @@ void DialogClientView::UpdateDialogButtons() {
 // DialogClientView, ClientView overrides:
 
 bool DialogClientView::CanClose() {
-  if (notified_delegate_)
-    return true;
-
-  // The dialog is closing but no Accept or Cancel action has been performed
-  // before: it's a Close action.
-  if (GetDialogDelegate()->Close()) {
-    notified_delegate_ = true;
-    GetDialogDelegate()->OnClosed();
-    return true;
-  }
-  return false;
+  // If the dialog is closing but no Accept or Cancel action has been performed
+  // before, it's a Close action.
+  if (!delegate_allowed_close_)
+    delegate_allowed_close_ = GetDialogDelegate()->Close();
+  return delegate_allowed_close_;
 }
 
 DialogClientView* DialogClientView::AsDialogClientView() {
@@ -146,31 +134,6 @@ DialogClientView* DialogClientView::AsDialogClientView() {
 
 const DialogClientView* DialogClientView::AsDialogClientView() const {
   return this;
-}
-
-void DialogClientView::OnWillChangeFocus(View* focused_before,
-                                         View* focused_now) {
-  // Make the newly focused button default or restore the dialog's default.
-  const int default_button = GetDialogDelegate()->GetDefaultDialogButton();
-  LabelButton* new_default_button = NULL;
-  if (focused_now &&
-      !strcmp(focused_now->GetClassName(), LabelButton::kViewClassName)) {
-    new_default_button = static_cast<LabelButton*>(focused_now);
-  } else if (default_button == ui::DIALOG_BUTTON_OK && ok_button_) {
-    new_default_button = ok_button_;
-  } else if (default_button == ui::DIALOG_BUTTON_CANCEL && cancel_button_) {
-    new_default_button = cancel_button_;
-  }
-
-  if (default_button_ && default_button_ != new_default_button)
-    default_button_->SetIsDefault(false);
-  default_button_ = new_default_button;
-  if (default_button_ && !default_button_->is_default())
-    default_button_->SetIsDefault(true);
-}
-
-void DialogClientView::OnDidChangeFocus(View* focused_before,
-                                        View* focused_now) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -269,7 +232,7 @@ void DialogClientView::Layout() {
 
 bool DialogClientView::AcceleratorPressed(const ui::Accelerator& accelerator) {
   DCHECK_EQ(accelerator.key_code(), ui::VKEY_ESCAPE);
-  Close();
+  GetWidget()->Close();
   return true;
 }
 
@@ -277,36 +240,21 @@ void DialogClientView::ViewHierarchyChanged(
     const ViewHierarchyChangedDetails& details) {
   ClientView::ViewHierarchyChanged(details);
   if (details.is_add && details.child == this) {
-    focus_manager_ = GetFocusManager();
-    if (focus_manager_)
-      GetFocusManager()->AddFocusChangeListener(this);
-
     UpdateDialogButtons();
     CreateExtraView();
     CreateFootnoteView();
-  } else if (!details.is_add && details.child == this) {
-    if (focus_manager_)
-      focus_manager_->RemoveFocusChangeListener(this);
-    focus_manager_ = NULL;
-  } else if (!details.is_add) {
-    if (details.child == default_button_)
-      default_button_ = NULL;
+  } else if (!details.is_add && details.child != this) {
     if (details.child == ok_button_)
-      ok_button_ = NULL;
-    if (details.child == cancel_button_)
-      cancel_button_ = NULL;
+      ok_button_ = nullptr;
+    else if (details.child == cancel_button_)
+      cancel_button_ = nullptr;
+    else if (details.child == extra_view_)
+      extra_view_ = nullptr;
+    else if (details.child == footnote_view_)
+      footnote_view_ = nullptr;
   }
-}
 
-void DialogClientView::NativeViewHierarchyChanged() {
-  FocusManager* focus_manager = GetFocusManager();
-  if (focus_manager_ != focus_manager) {
-    if (focus_manager_)
-      focus_manager_->RemoveFocusChangeListener(this);
-    focus_manager_ = focus_manager;
-    if (focus_manager_)
-      focus_manager_->AddFocusChangeListener(this);
-  }
+  SetupFocusChain();
 }
 
 void DialogClientView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
@@ -343,11 +291,9 @@ DialogClientView::DialogClientView(View* contents_view)
     : ClientView(NULL, contents_view),
       ok_button_(NULL),
       cancel_button_(NULL),
-      default_button_(NULL),
-      focus_manager_(NULL),
       extra_view_(NULL),
       footnote_view_(NULL),
-      notified_delegate_(false) {}
+      delegate_allowed_close_(false) {}
 
 DialogDelegate* DialogClientView::GetDialogDelegate() const {
   return GetWidget()->widget_delegate()->AsDialogDelegate();
@@ -409,11 +355,7 @@ void DialogClientView::UpdateButton(LabelButton* button,
   DialogDelegate* dialog = GetDialogDelegate();
   button->SetText(dialog->GetDialogButtonLabel(type));
   button->SetEnabled(dialog->IsDialogButtonEnabled(type));
-
-  if (type == dialog->GetDefaultDialogButton()) {
-    default_button_ = button;
-    button->SetIsDefault(true);
-  }
+  button->SetIsDefault(type == dialog->GetDefaultDialogButton());
 }
 
 int DialogClientView::GetButtonsAndExtraViewRowHeight() const {
@@ -432,9 +374,32 @@ gfx::Insets DialogClientView::GetButtonRowInsets() const {
                   kButtonVEdgeMarginNew, kButtonHEdgeMarginNew);
 }
 
-void DialogClientView::Close() {
-  GetWidget()->Close();
-  GetDialogDelegate()->OnClosed();
+
+
+void DialogClientView::SetupFocusChain() {
+  // Create a vector of child views in the order of intended focus.
+  std::vector<View*> child_views;
+  child_views.push_back(contents_view());
+  child_views.push_back(extra_view_);
+  if (kIsOkButtonOnLeftSide) {
+    child_views.push_back(ok_button_);
+    child_views.push_back(cancel_button_);
+  } else {
+    child_views.push_back(cancel_button_);
+    child_views.push_back(ok_button_);
+  }
+  child_views.push_back(footnote_view_);
+
+  // Remove all null views from the vector.
+  child_views.erase(
+      std::remove(child_views.begin(), child_views.end(), nullptr),
+      child_views.end());
+
+  // Setup focus.
+  for (size_t i = 0; i < child_views.size(); i++) {
+    child_views[i]->SetNextFocusableView(
+        i + 1 != child_views.size() ? child_views[i + 1] : nullptr);
+  }
 }
 
 }  // namespace views

@@ -34,21 +34,26 @@ EMEApp.prototype.createPlayer = function() {
   var videoPlayer = PlayerUtils.createPlayer(this.video_, this.testConfig_);
   if (!videoPlayer) {
     Utils.timeLog('Cannot create a media player.');
-    return;
+    return Promise.reject('Cannot create a media player.');
   }
+
   Utils.timeLog('Using ' + videoPlayer.constructor.name);
   if (this.testConfig_.runFPS)
     FPSObserver.observe(this.video_);
 
-  return videoPlayer.init().then(function(result) { return videoPlayer; });
+  return videoPlayer.init().then(function(result) {
+    if (result != videoPlayer) {
+      Utils.timeLog('Media player mismatch.');
+    }
+    Utils.timeLog('Media player created.');
+    return videoPlayer;
+  });
 };
 
 EMEApp.prototype.updateDocument = function(testConfig) {
   // Update document lists with test configuration values.
   Utils.addOptions(KEYSYSTEM_ELEMENT_ID, KEY_SYSTEMS);
   Utils.addOptions(MEDIA_TYPE_ELEMENT_ID, MEDIA_TYPES);
-  Utils.addOptions(USE_PREFIXED_EME_ID, EME_VERSIONS_OPTIONS,
-                   EME_DISABLED_OPTIONS);
   document.getElementById(MEDIA_FILE_ELEMENT_ID).value =
       testConfig.mediaFile || DEFAULT_MEDIA_FILE;
   document.getElementById(LICENSE_SERVER_ELEMENT_ID).value =
@@ -58,8 +63,6 @@ EMEApp.prototype.updateDocument = function(testConfig) {
   if (testConfig.mediaType)
     Utils.ensureOptionInList(MEDIA_TYPE_ELEMENT_ID, testConfig.mediaType);
   document.getElementById(USE_MSE_ELEMENT_ID).value = testConfig.useMSE;
-  if (testConfig.usePrefixedEME)
-    document.getElementById(USE_PREFIXED_EME_ID).value = EME_PREFIXED_VERSION;
 };
 
 EMEApp.prototype.updateTestConfig = function() {
@@ -72,9 +75,6 @@ EMEApp.prototype.updateTestConfig = function() {
       document.getElementById(MEDIA_TYPE_ELEMENT_ID).value;
   this.testConfig_.useMSE =
       document.getElementById(USE_MSE_ELEMENT_ID).value == 'true';
-  this.testConfig_.usePrefixedEME = (
-      document.getElementById(USE_PREFIXED_EME_ID).value ==
-      EME_PREFIXED_VERSION);
   this.testConfig_.licenseServerURL =
       document.getElementById(LICENSE_SERVER_ELEMENT_ID).value;
 };

@@ -246,24 +246,21 @@ bool ExtensionActionAPI::ShowExtensionActionPopup(
              extension->id(), grant_active_tab_permissions);
 }
 
-bool ExtensionActionAPI::ExtensionWantsToRun(
-    const Extension* extension, content::WebContents* web_contents) {
-  // An extension wants to act if it has a visible page action on the given
-  // page...
+bool ExtensionActionAPI::PageActionWantsToRun(
+    const Extension* extension,
+    content::WebContents* web_contents) {
   ExtensionAction* page_action =
       ExtensionActionManager::Get(browser_context_)->GetPageAction(*extension);
-  if (page_action &&
-      page_action->GetIsVisible(SessionTabHelper::IdForTab(web_contents)))
-    return true;
+  return page_action &&
+         page_action->GetIsVisible(SessionTabHelper::IdForTab(web_contents));
+}
 
-  // ... Or if it has pending scripts that need approval for execution.
+bool ExtensionActionAPI::HasBeenBlocked(const Extension* extension,
+                                        content::WebContents* web_contents) {
   ActiveScriptController* active_script_controller =
       ActiveScriptController::GetForWebContents(web_contents);
-  if (active_script_controller &&
-      active_script_controller->WantsToRun(extension))
-    return true;
-
-  return false;
+  return active_script_controller &&
+         active_script_controller->WantsToRun(extension);
 }
 
 void ExtensionActionAPI::NotifyChange(ExtensionAction* extension_action,
@@ -347,9 +344,8 @@ void ExtensionActionAPI::ExtensionActionExecuted(
 
   if (event_name) {
     scoped_ptr<base::ListValue> args(new base::ListValue());
-    base::DictionaryValue* tab_value =
-        ExtensionTabUtil::CreateTabValue(web_contents);
-    args->Append(tab_value);
+    args->Append(
+        ExtensionTabUtil::CreateTabObject(web_contents)->ToValue().release());
 
     DispatchEventToExtension(web_contents->GetBrowserContext(),
                              extension_action.extension_id(), histogram_value,
@@ -637,8 +633,7 @@ BrowserActionOpenPopupFunction::BrowserActionOpenPopupFunction()
 bool BrowserActionOpenPopupFunction::RunAsync() {
   // We only allow the popup in the active window.
   Profile* profile = GetProfile();
-  Browser* browser = chrome::FindLastActiveWithProfile(
-                         profile, chrome::GetActiveDesktop());
+  Browser* browser = chrome::FindLastActiveWithProfile(profile);
   // It's possible that the last active browser actually corresponds to the
   // associated incognito profile, and this won't be returned by
   // FindLastActiveWithProfile. If the browser we found isn't active and the
@@ -646,8 +641,8 @@ bool BrowserActionOpenPopupFunction::RunAsync() {
   if ((!browser || !browser->window()->IsActive()) &&
       util::IsIncognitoEnabled(extension()->id(), profile) &&
       profile->HasOffTheRecordProfile()) {
-    browser = chrome::FindLastActiveWithProfile(
-        profile->GetOffTheRecordProfile(), chrome::GetActiveDesktop());
+    browser =
+        chrome::FindLastActiveWithProfile(profile->GetOffTheRecordProfile());
   }
 
   // If there's no active browser, or the Toolbar isn't visible, abort.

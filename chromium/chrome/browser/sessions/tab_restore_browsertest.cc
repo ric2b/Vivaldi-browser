@@ -34,7 +34,6 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
-#include "net/base/net_util.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "url/gurl.h"
 
@@ -91,7 +90,7 @@ class TabRestoreTest : public InProcessBrowserTest {
 
  protected:
   void SetUpOnMainThread() override {
-    active_browser_list_ = BrowserList::GetInstance(chrome::GetActiveDesktop());
+    active_browser_list_ = BrowserList::GetInstance();
     InProcessBrowserTest::SetUpOnMainThread();
   }
 
@@ -461,9 +460,11 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreWithExistingSiteInstance) {
 
 // See crbug.com/248574
 #if defined(OS_WIN)
-#define MAYBE_RestoreCrossSiteWithExistingSiteInstance DISABLED_RestoreCrossSiteWithExistingSiteInstance
+#define MAYBE_RestoreCrossSiteWithExistingSiteInstance \
+  DISABLED_RestoreCrossSiteWithExistingSiteInstance
 #else
-#define MAYBE_RestoreCrossSiteWithExistingSiteInstance RestoreCrossSiteWithExistingSiteInstance
+#define MAYBE_RestoreCrossSiteWithExistingSiteInstance \
+  RestoreCrossSiteWithExistingSiteInstance
 #endif
 
 // Tests that the SiteInstances used for entries in a restored tab's history

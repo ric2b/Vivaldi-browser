@@ -55,12 +55,14 @@ class DumpAccessibilityTreeTest : public DumpAccessibilityTestBase {
   void AddDefaultFilters(std::vector<Filter>* filters) override {
     filters->push_back(Filter(base::ASCIIToUTF16("FOCUSABLE"), Filter::ALLOW));
     filters->push_back(Filter(base::ASCIIToUTF16("READONLY"), Filter::ALLOW));
-    filters->push_back(Filter(base::ASCIIToUTF16("name*"), Filter::ALLOW));
+    filters->push_back(Filter(base::ASCIIToUTF16("name=*"), Filter::ALLOW));
+    filters->push_back(Filter(base::ASCIIToUTF16("roleDescription=*"),
+                              Filter::ALLOW));
     filters->push_back(Filter(base::ASCIIToUTF16("*=''"), Filter::DENY));
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    ContentBrowserTest::SetUpCommandLine(command_line);
+    DumpAccessibilityTestBase::SetUpCommandLine(command_line);
     // Enable <dialog>, which is used in some tests.
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kEnableExperimentalWebPlatformFeatures);
@@ -826,10 +828,19 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityIframe) {
   RunHtmlTest(FILE_PATH_LITERAL("iframe.html"));
 }
 
-// Flaky. See http://crbug.com/224659.
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
-                       DISABLED_AccessibilityIframeCoordinates) {
+                       AccessibilityIframeCrossProcess) {
+  RunHtmlTest(FILE_PATH_LITERAL("iframe-cross-process.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityIframeCoordinates) {
   RunHtmlTest(FILE_PATH_LITERAL("iframe-coordinates.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityIframeCoordinatesCrossProcess) {
+  RunHtmlTest(FILE_PATH_LITERAL("iframe-coordinates-cross-process.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
@@ -839,6 +850,10 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityImg) {
   RunHtmlTest(FILE_PATH_LITERAL("img.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityImgEmptyAlt) {
+  RunHtmlTest(FILE_PATH_LITERAL("img-empty-alt.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInputButton) {

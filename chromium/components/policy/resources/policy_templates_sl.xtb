@@ -151,6 +151,13 @@ Vrednost prilagoditve mora biti 100 % ali več.</translation>
 <translation id="1522425503138261032">Dovoli mestom sledenje fizične lokacije uporabnika</translation>
 <translation id="152657506688053119">Seznam nadomestnih URL-jev za privzetega ponudnika iskanja</translation>
 <translation id="1530812829012954197">Vedno upodobi te vzorce URL-jev v gostiteljskem brskalniku</translation>
+<translation id="1553684822621013552">Če je ta pravilnik omogočen, bo ARC omogočen za uporabnika
+      (ob upoštevanju dodatnih preverjanj nastavitev pravilnika – ARC še
+      vedno ne bo na voljo, če je v trenutni uporabniški seji omogočen kratkotrajni
+      način ali prijava z več računi).
+
+      Če je ta nastavitev onemogočena ali ni nastavljena, uporabniki v velikih poslovnih
+      okoljih ne bodo mogli uporabljati ARC-ja.</translation>
 <translation id="1561424797596341174">Preglasitve pravilnika za delovne različice gostitelja za oddaljeni dostop, namenjene odpravljanju napak</translation>
 <translation id="1583248206450240930">Privzeto uporabi <ph name="PRODUCT_FRAME_NAME" /></translation>
 <translation id="1608755754295374538">URL-ji, ki jim bo brez poziva dovoljen dostop do naprav za zajem zvoka</translation>
@@ -202,6 +209,13 @@ Vrednost prilagoditve mora biti 100 % ali več.</translation>
 
           Ta pravilnik se upošteva samo, če je omogočen pravilnik »DefaultSearchProviderEnabled«.</translation>
 <translation id="1859633270756049523">Omejitev dolžine seje</translation>
+<translation id="1859859319036806634">Opozorilo: preklop na različico TLS-ja bo odstranjen iz brskalnika <ph name="PRODUCT_NAME" /> po različici 52 (približno septembra 2016) in ta pravilnik bo takrat prenehal delovati.
+
+      Če rokovanje TLS ne uspe, <ph name="PRODUCT_NAME" /> pred tem poskusi vzpostaviti povezavo z nižjo različico TLS-ja, da mu ni treba upoštevati napak v strežnikih HTTPS. Ta nastavitev konfigurira različico, pri kateri se postopek preklopa ustavi. Če strežnik pravilno izvede pogajanja glede različice (tj. brez prekinitve povezave), se ta nastavitev ne uporabi. Ne glede na to mora biti vzpostavljena povezava skladna s pravilnikom SSLVersionMin.
+
+      Če ta pravilnik ni konfiguriran ali če je nastavljen na »tls1.2«, <ph name="PRODUCT_NAME" /> ne izvede več tega preklopa. S tem ni onemogočena podpora za starejše različice TLS-ja, temveč je zgolj določeno, ali <ph name="PRODUCT_NAME" /> ne bo upošteval strežnikov z napakami, ki ne morejo pravilno izvesti pogajanj glede različice.
+
+      Če je treba ohraniti združljivost s strežnikom z napakami, je pravilnik lahko nastavljen na »tls1«. To je začasen ukrep in napake v strežniku je treba hitro odpraviti.</translation>
 <translation id="1861037019115362154">Določi seznam vtičnikov, ki so omogočeni v brskalniku <ph name="PRODUCT_NAME" />, in prepreči uporabnikom spreminjanje te nastavitve.
 
       Nadomestna znaka * in ? je mogoče uporabiti za nadomeščanje zaporedij poljubnih znakov. Znak * nadomešča poljubno število znakov, znak ? pa izbirni posamezen znak, tj. nadomešča nič znakov ali en znak. Ubežni znak je \; če torej želite nadomestiti dejanske znake *, ? ali \, lahko postavite prednje znak \.
@@ -253,6 +267,7 @@ Vrednost prilagoditve mora biti 100 % ali več.</translation>
       Če je ta pravilnik nastavljen na »true«, poskuša <ph name="PRODUCT_OS_NAME" /> samoposodobitvene pakete prenesti prek HTTP. Če je ta pravilnik nastavljen na »false« ali ni nastavljen, se za prenos samoposodobitvenih paketov uporabi HTTPS.</translation>
 <translation id="2006530844219044261">Upravljanje porabe</translation>
 <translation id="201557587962247231">Pogostost nalaganja poročil o stanju naprave</translation>
+<translation id="2024476116966025075">Konfiguriranje imena domene, potrebnega za odjemalce za oddaljeni dostop</translation>
 <translation id="2030905906517501646">Privzeta ključna beseda iskalnika</translation>
 <translation id="206623763829450685">Določa, katere načine preverjanja pristnosti HTTP podpira <ph name="PRODUCT_NAME" />.
 
@@ -488,6 +503,7 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
       Če ta pravilnik ni nastavljen, bo lahko uporabnik sam izbiral, ali želi uporabiti funkcijo strežnika proxy za stiskanje podatkov.</translation>
 <translation id="2587719089023392205">Nastavi <ph name="PRODUCT_NAME" /> za privzeti brskalnik</translation>
 <translation id="2592091433672667839">Trajanje nedejavnosti, preden se v maloprodajnem načinu na zaslonu za prijavo pokaže ohranjevalnik zaslona</translation>
+<translation id="260705825237536216">Konfiguriranje aplikacij ARC</translation>
 <translation id="2623014935069176671">Čakanje na začetno dejavnost uporabnika</translation>
 <translation id="262740370354162807">Omogoča pošiljanje dokumentov v storitev <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="2633084400146331575">Vklop izgovorjave</translation>
@@ -496,15 +512,6 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
           Če ta pravilnik ni nastavljen, bo uporabljen pravilnik »AskGeolocation« in uporabnik ga bo lahko spremenil.</translation>
 <translation id="2650049181907741121">Dejanje, ki naj se izvede, ko uporabnik zapre pokrov</translation>
 <translation id="2660846099862559570">Nikoli ne uporabi proxyja</translation>
-<translation id="2665596266623707739">Opozorilo: preklop na TLS 1.0 bo odstranjen iz brskalnika <ph name="PRODUCT_NAME" /> po različici 47 (približno januarja 2016) in možnost »tls1« bo tedaj prenehala delovati.
-
-      Če rokovanje TLS ne uspe, bo <ph name="PRODUCT_NAME" /> poskusil vzpostaviti povezavo z nižjo različico TLS-ja, da mu ne bo treba upoštevati napak v strežnikih HTTPS. Ta nastavitev konfigurira različico, pri kateri se postopek preklopa ustavi. Če strežnik pravilno izvede pogajanja glede različice (tj. brez prekinitve povezave), se ta nastavitev ne uporabi. Ne glede na to mora biti vzpostavljena povezava skladna s pravilnikom SSLVersionMin.
-
-      Če ta pravilnik ni konfiguriran, <ph name="PRODUCT_NAME" /> uporablja privzeto najnižjo različico, ki je v brskalniku <ph name="PRODUCT_NAME" /> različice 44 TLS 1.0, v poznejših različicah pa TLS 1.1. S tem ni onemogočena podpora za TLS 1.0, temveč je zgolj določeno, ali <ph name="PRODUCT_NAME" /> ne bo upošteval strežnikov z napakami, ki ne morejo pravilno izvesti pogajanj glede različice.
-
-      Sicer je lahko nastavljen na eno od teh vrednosti: »tls1«, »tls1.1« ali »tls1.2«. Če je treba ohraniti združljivost s strežnikom, je pravilnik lahko nastavljen na »tls1«. To je začasen ukrep in napake v strežniku je treba hitro odpraviti.
-
-      Nastavitev »tls1.2« onemogoča vse preklope, vendar ima to lahko precejšen vpliv na združljivost.</translation>
 <translation id="267596348720209223">Določa kodiranja znakov, ki jih podpira ponudnik iskanja. Kodiranja so imena kodnih strani, na primer UTF-8, GB2312 in ISO-8859-1. Poskusi uporabe potekajo po navedenem vrstnem redu.
 
           Ta pravilnik je izbiren. Če ni nastavljen, bo uporabljena privzeta nastavitev, ki je UTF-8.
@@ -525,11 +532,6 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
       Če je ta nastavitev onemogočena, spletne strani ne morejo uporabljati JavaScripta in uporabnik te vrednosti ne more spremeniti.
 
       Če je ta nastavitev omogočena ali ni nastavljena, lahko spletne strani uporabljajo JavaScript, toda uporabnik lahko to nastavitev spremeni.</translation>
-<translation id="2747783890942882652">Nastavi zahtevano ime domene gostitelja, ki bo veljalo za gostitelje oddaljenega dostopa, in prepreči uporabnikom njegovo spreminjanje.
-
-          Če je ta nastavitev omogočena, so lahko gostitelji v skupni rabi samo z uporabo računov, registriranih na določenem imenu domene.
-
-          Če je ta nastavitev onemogočena ali ni nastavljena, so lahko gostitelji v skupni rabi z uporabo poljubnega računa.</translation>
 <translation id="2757054304033424106">Vrste razširitev/aplikacij, katerih namestitev je dovoljena</translation>
 <translation id="2759224876420453487">Nadzor vedenja uporabnikov v večprofilni seji</translation>
 <translation id="2761483219396643566">Časovni zamik opozorila o nedejavnosti ob napajanju iz akumulatorja</translation>
@@ -601,6 +603,7 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
       Določa, ali mora biti razširitev za potrdila, domensko vezana na TLS, omogočena.
 
       Ta nastavitev se uporablja, da se razširitev za potrdila, domensko vezana na TLS, omogoči za preskušanje. Ta poskusna nastavitev bo v prihodnosti odstranjena.</translation>
+<translation id="2957506574938329824">Ne dovoli nobenemu spletnemu mestu zahtevanja dostopa do naprav Bluetooth prek API-ja za Web Bluetooth</translation>
 <translation id="2957513448235202597">Vrsta računa za preverjanje pristnosti z razširitvijo <ph name="HTTP_NEGOTIATE" /></translation>
 <translation id="2959898425599642200">Pravila, kdaj se obide proxy</translation>
 <translation id="2960691910306063964">Omogočanje ali onemogočanje preverjanja pristnosti brez kode PIN za gostitelje za oddaljeni dostop</translation>
@@ -613,6 +616,8 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
           Če pravilnik ni nastavljen, se uporabi privzeto trajanje.
 
           Vrednost pravilnika naj bo navedena v milisekundah. Vrednosti morajo biti manjše ali enake kot časovni zamik izklopa zaslona (če je nastavljen) in časovnik zamik nedejavnosti.</translation>
+<translation id="2987155890997901449">Omogočanje ARC-ja</translation>
+<translation id="2987227569419001736">Nadzor uporabe API-ja za Web Bluetooth</translation>
 <translation id="2998881342848488968">Ta pravilnik sistemu <ph name="PRODUCT_OS_NAME" /> omogoča obhod katerega koli strežnika proxy za preverjanje pristnosti v prestreznih portalih.
 
       Pravilnik se uveljavi samo, če je nastavljen strežnik proxy (na primer s pravilnikom, z razširitvami ali če ga je nastavil uporabnik v »chrome://settings«).
@@ -936,6 +941,7 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
 
           Ta pravilnik se upošteva samo, če je omogočen pravilnik »DefaultSearchProviderEnabled«.</translation>
 <translation id="4320376026953250541">Microsoft Windows XP SP2 ali novejši</translation>
+<translation id="4322842393287974810">Dovoli samodejno zagnani aplikaciji za kiosk brez zamika nadzor nad različico sistema <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="4325690621216251241">Dodajanje gumb za odjavo v sistemsko vrstico</translation>
 <translation id="4347908978527632940">Če je omogočeno in je uporabnik zaščiteni uporabnik, lahko druge aplikacije za Android prek ponudnika vsebine pošljejo poizvedbe o uporabnikovih spletnih omejitvah.
 
@@ -1222,10 +1228,15 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
 <translation id="5307432759655324440">Razpoložljivost načina brez beleženja zgodovine</translation>
 <translation id="5318185076587284965">Gostitelju oddaljenega dostopa omogoči uporabo posredovalnih strežnikov</translation>
 <translation id="5330684698007383292">Dovoli, da <ph name="PRODUCT_FRAME_NAME" /> obravnava te vrste vsebine.</translation>
-<translation id="5365946944967967336">V orodni vrstici pokaži gumb »Domov«</translation>
-<translation id="5366977351895725771">Če pravilnik ni vklopljen, ta uporabnik ne more ustvarjati nadzorovanih uporabnikov. Obstoječi nadzorovani uporabniki so še vedno na voljo.
+<translation id="5345267406698765263">Določa pravilnik za aplikacije ARC kot niz JSON, ki ga je mogoče nespremenjenega
+      posredovati izvajalniku ARC. Ta nastavitev se trenutno uporablja samo za
+      določanje vsiljene namestitve aplikacij.
 
-          Če je pravilnik vklopljen ali ni nastavljen, lahko ta uporabnik ustvarja in upravlja nadzorovane uporabnike.</translation>
+      Če ta pravilnik ni nastavljen, se nobena aplikacija ne namesti samodejno.</translation>
+<translation id="5365946944967967336">V orodni vrstici pokaži gumb »Domov«</translation>
+<translation id="5366977351895725771">Če pravilnik ni vklopljen, ta uporabnik ne more ustvarjati zaščitenih uporabnikov. Obstoječi zaščiteni uporabniki so še vedno na voljo.
+
+          Če je pravilnik vklopljen ali ni nastavljen, lahko ta uporabnik ustvarja in upravlja zaščitene uporabnike.</translation>
 <translation id="5378985487213287085">Omogoča nastavitev, ali lahko spletna mesta prikažejo obvestila na namizju. Prikazovanje obvestil na namizju je lahko privzeto dovoljeno, privzeto zavrnjeno ali pa je uporabnik vprašan, ko želi spletno mesti prikazati obvestilo na namizju.
 
           Če ta pravilnik ni nastavljen, bo uporabljen pravilnik »AskNotifications« in uporabnik bo lahko to spremenil.</translation>
@@ -1294,6 +1305,13 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
       Če tega pravilnika ne nastavite, lahko uporabniki izberejo, ali naj se polica samodejno skrije.</translation>
 <translation id="557658534286111200">Omogoči ali onemogoči urejanje zaznamkov</translation>
 <translation id="5586942249556966598">Ne naredi nič</translation>
+<translation id="5613179474872285001">Konfigurira potrebno ime domene, ki bo vsiljeno odjemalcem za oddaljeni dostop, in uporabnikom prepreči, da bi ga spremenili.
+
+          Če je ta nastavitev omogočena, se lahko z gostiteljem povežejo samo odjemalci iz navedene domene.
+
+          Če je ta nastavitev onemogočena ali ni nastavljena, se uporabi privzeti pravilnik za vrsto povezave. Za oddaljeno pomoč to omogoča povezovanje z gostiteljem odjemalcem iz poljubne domene. Za oddaljen dostop kadar koli se lahko poveže samo lastnik gostitelja.
+
+          Glejte tudi pravilnik RemoteAccessHostDomain.</translation>
 <translation id="5630352020869108293">Obnovi zadnjo sejo</translation>
 <translation id="5645779841392247734">Dovoli piškotke na teh mestih</translation>
 <translation id="5677038592630896441">Zahteva, da se ujemata ime lokalnega uporabnika in lastnika gostitelja za oddaljeni dostop.
@@ -1602,6 +1620,9 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
 
           Če ta pravilnik ni nastavljen, je zaslonska tipkovnica onemogočena pri prvem prikazu zaslona za prijavo. Uporabniki lahko zaslonsko tipkovnico kadar koli omogočijo ali onemogočijo in njeno stanje na zaslonu za prijavo velja za vse uporabnike.</translation>
 <translation id="6598235178374410284">Slika za avatar uporabnika</translation>
+<translation id="6628646143828354685">Omogoča nastavitev, ali lahko spletna mesta dostopajo do naprav Bluetooth v bližini. Dostop je mogoče v celoti blokirati ali pa je uporabnik vprašan, ko želi spletno mesto dostopati do naprav Bluetooth v bližini.
+
+          Če ta pravilnik ni nastavljen, je uporabljeno »3« in uporabnik lahko to spremeni.</translation>
 <translation id="6636268606788232221">Konfigurira nastavitve upravljanja energije, ko uporabnik postane nedejaven.
 
           Ta pravilnik nadzira različne nastavitve za strategijo upravljanja energije, ko uporabnik postane nedejaven.
@@ -1629,11 +1650,11 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
           Obstajajo tudi ločene nastavitve za napajanje iz električnega omrežja in akumulatorja.
           </translation>
 <translation id="6641981670621198190">Onemogoči podporo za vmesnike API za 3D-grafiko</translation>
-<translation id="6647965994887675196">Če je pravilnik vklopljen, je mogoče ustvariti in uporabiti nadzorovane uporabnike.
+<translation id="6647965994887675196">Če je pravilnik vklopljen, je mogoče ustvariti in uporabiti zaščitene uporabnike.
 
-          Če pravilnik ni vklopljen ali ni nastavljen, ustvarjanje in prijava nadzorovanih uporabnikov nista mogoča. Vsi obstoječi nadzorovani uporabniki so skriti.
+          Če pravilnik ni vklopljen ali ni nastavljen, ustvarjanje in prijava zaščitenih uporabnikov nista mogoča. Vsi obstoječi zaščiteni  uporabniki so skriti.
 
-          OPOMBA: Privzeta nastavitev se razlikuje v napravah za potrošnike in napravah za podjetja: v napravah za potrošnike so nadzorovani uporabniki privzeto omogočeni, v napravah za podjetja pa privzeto onemogočeni.</translation>
+          OPOMBA: Privzeta nastavitev se razlikuje v napravah za potrošnike in napravah za podjetja: v napravah za potrošnike so zaščiteni uporabniki privzeto omogočeni, v napravah za podjetja pa privzeto onemogočeni.</translation>
 <translation id="6649397154027560979">Ta pravilnik je zastarel, Namesto njega uporabite URLBlacklist.
 
 Onemogoči navedene sheme protokola v brskalniku <ph name="PRODUCT_NAME" />.
@@ -1694,6 +1715,7 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
           Če nastavite ta pravilnik, ga uporabniki ne morejo spremeniti ali preglasiti.
 
           Če ta pravilnik ni nastavljen, možnosti funkcij za ljudi s posebnimi potrebami niso prikazane v meniju sistemske vrstice, vendar lahko uporabniki nastavijo, da so možnosti funkcij za ljudi s posebnimi potrebami prikazane prek strani z nastavitvami.</translation>
+<translation id="6766216162565713893">Dovoli spletnim mestom, da od uporabnika zahtevajo, da omogočijo dostop do naprave Bluetooth v bližini</translation>
 <translation id="6770454900105963262">Poročanje podatkov o aktivnih sejah kioska</translation>
 <translation id="6774533686631353488">Dovoli gostitelje izvornega pošiljanja na uporabniški ravni (nameščene brez dovoljenj skrbnika).</translation>
 <translation id="6786747875388722282">Razširitve</translation>
@@ -1737,6 +1759,13 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
 <translation id="6943577887654905793">Ime nastavitve za Mac/Linux:</translation>
 <translation id="69525503251220566">Parameter, ki omogoča funkcijo iskanja po sliki za privzetega ponudnika iskanja</translation>
 <translation id="6956272732789158625">Spletnim mestom ne dovoli uporabe ustvarjanja ključev</translation>
+<translation id="695891079107014261">Konfigurira potrebno ime domene gostitelja, ki bo vsiljeno gostiteljem za oddaljeni dostop, in uporabnikom prepreči, da bi ga spremenili.
+
+          Če je ta nastavitev omogočena, je gostitelje mogoče dati v skupno rabo samo z uporabo računov, registriranih v navedenem imenu domene.
+
+          Če je ta nastavitev onemogočena ali ni nastavljena, je gostitelje mogoče dati v skupno rabo z uporabo poljubnega računa.
+
+          Glejte tudi pravilnik RemoteAccessHostClientDomain.</translation>
 <translation id="6997592395211691850">Ali so potrebna spletna preverjanja OCSP/CRL za lokalna sidra zaupanja?</translation>
 <translation id="7003334574344702284">Če je pravilnik omogočen, se shranjena gesla uvozijo iz prejšnjega privzetega brskalnika. Če je pravilnik omogočen, vpliva tudi na pogovorno okno za uvoz.
 
@@ -1884,6 +1913,13 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
 
       Če pravilnik ni nastavljen, bo protokol SPDY na voljo.</translation>
 <translation id="7384999953864505698">Dovoli protokol QUIC</translation>
+<translation id="7406651467768226499">Ali naj se samodejno zagnani aplikaciji za kiosk brez zamika dovoli nadzor nad različico sistema <ph name="PRODUCT_OS_NAME" />.
+
+      Ta pravilnik nadzira, ali naj se samodejno zagnani aplikaciji za kiosk brez zamika dovoli nadzor nad različico sistema <ph name="PRODUCT_OS_NAME" /> z označitvijo različice required_platform_version v njenem manifestu in njeno uporabo kot predpono za samodejno posodobitev ciljne različice.
+
+      Če je pravilnik omogočen, se vrednost ključa manifesta required_platform_version samodejno zagnane aplikacije za kiosk brez zamika uporabi kot predpona za samodejno posodobitev ciljne različice.
+
+      Če pravilnik ni konfiguriran ali ni omogočen, je ključ manifesta required_platform_version prezrt in samodejna posodobitev se nadaljuje kot običajno.</translation>
 <translation id="7417972229667085380">Odstotek prilagoditve časovnega zamika nedejavnosti v načinu predstavitve (zastarelo)</translation>
 <translation id="7421483919690710988">Nastavi velikost predpomnilnika medija v bajtih</translation>
 <translation id="7424751532654212117">Seznam izjem za seznam onemogočenih vtičnikov</translation>
@@ -1993,6 +2029,7 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
       Če tega pravilnika ne nastavite, bo <ph name="PRODUCT_NAME" /> uporabil privzeto vrednost 5000 ms.</translation>
 <translation id="7841880500990419427">Najnižja različica TLS-ja za rezervno uporabo</translation>
 <translation id="7842869978353666042">Konfigurira možnosti storitve Google Drive</translation>
+<translation id="7843525027689416831">Določa zastavice, ki naj se uporabijo za <ph name="PRODUCT_NAME" />, ko se zažene. Izbrane zastavice se uporabijo samo na zaslonu za prijavo. Zastavice, nastavljene prek tega pravilnika, se ne prenesejo v uporabniške seje.</translation>
 <translation id="7848840259379156480">Omogoča nastavitev privzetega upodabljalnika HTML-ja, ko je nameščen <ph name="PRODUCT_FRAME_NAME" />. Privzeta nastavitev je, da upodabljanje izvaja gostiteljski brskalnik, vendar lahko to preglasite in določite, da <ph name="PRODUCT_FRAME_NAME" /> privzeto upodablja strani HTML.</translation>
 <translation id="7882585827992171421">Ta pravilnik je aktiven samo v maloprodajnem načinu.
 
@@ -2323,7 +2360,6 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
           Vrednost pravilnika naj bo navedena v milisekundah. Vrednosti morajo biti manjše od časovnega zamika nedejavnosti.</translation>
 <translation id="891435090623616439">kodirano kot niz JSON; več informacij je na voljo na <ph name="COMPLEX_POLICIES_URL" /></translation>
 <translation id="8947415621777543415">Prijava lokacije naprave</translation>
-<translation id="89493502583189945">Določa zastavice, ki naj se uporabijo za <ph name="PRODUCT_NAME" />, ko se zažene. Izbrane zastavice se pred zagonom brskalnika <ph name="PRODUCT_NAME" /> uporabijo tudi za zaslon za prijavo.</translation>
 <translation id="8951350807133946005">Nastavi imenik predpomnilnika diska</translation>
 <translation id="8955719471735800169">Nazaj na vrh</translation>
 <translation id="8960850473856121830">Vzorci na tem seznamu se bodo primerjali z varnostnim

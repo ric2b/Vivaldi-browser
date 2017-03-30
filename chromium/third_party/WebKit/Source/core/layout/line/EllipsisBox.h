@@ -30,9 +30,9 @@ class HitTestResult;
 
 class EllipsisBox final : public InlineBox {
 public:
-    EllipsisBox(LayoutObject& obj, const AtomicString& ellipsisStr, InlineFlowBox* parent,
-        int width, int height, int x, int y, bool firstLine, bool isVertical)
-        : InlineBox(obj, LayoutPoint(x, y), width, firstLine, true, false, false, isVertical, 0, 0, parent)
+    EllipsisBox(InlineBox* inlineBox, const AtomicString& ellipsisStr, InlineFlowBox* parent,
+        LayoutUnit width, int height, int x, int y, bool firstLine, bool isVertical)
+        : InlineBox(inlineBox, LayoutPoint(x, y), width, firstLine, true, false, false, isVertical, 0, 0, parent)
         , m_height(height)
         , m_str(ellipsisStr)
         , m_selectionState(SelectionNone)
@@ -45,8 +45,8 @@ public:
     void setSelectionState(SelectionState s) { m_selectionState = s; }
     IntRect selectionRect() const;
 
-    LayoutUnit virtualLogicalHeight() const override { return m_height; }
-    SelectionState selectionState() const override { return m_selectionState; }
+    LayoutUnit virtualLogicalHeight() const override { return LayoutUnit(m_height); }
+    SelectionState getSelectionState() const override { return m_selectionState; }
     const AtomicString& ellipsisStr() const { return m_str; }
 
     const char* boxName() const override;

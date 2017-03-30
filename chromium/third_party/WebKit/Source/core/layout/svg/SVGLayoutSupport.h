@@ -84,7 +84,7 @@ public:
     static const LayoutObject* pushMappingToContainer(const LayoutObject*, const LayoutBoxModelObject* ancestorToStopAt, LayoutGeometryMap&);
 
     // Shared between SVG layoutObjects and resources.
-    static void applyStrokeStyleToStrokeData(StrokeData&, const ComputedStyle&, const LayoutObject&);
+    static void applyStrokeStyleToStrokeData(StrokeData&, const ComputedStyle&, const LayoutObject&, float dashScaleFactor);
 
     static DashArray resolveSVGDashArray(const SVGDashArray&, const ComputedStyle&, const SVGLengthContext&);
 
@@ -107,6 +107,8 @@ public:
 
     static AffineTransform deprecatedCalculateTransformToLayer(const LayoutObject*);
     static float calculateScreenFontSizeScalingFactor(const LayoutObject*);
+
+    static LayoutObject* findClosestLayoutSVGText(LayoutObject*, const FloatPoint&);
 
 private:
     static void updateObjectBoundingBox(FloatRect& objectBoundingBox, bool& objectBoundingBoxValid, LayoutObject* other, FloatRect otherBoundingBox);

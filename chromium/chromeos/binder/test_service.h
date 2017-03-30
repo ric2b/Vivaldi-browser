@@ -21,6 +21,9 @@ class TestService {
  public:
   enum {
     INCREMENT_INT_TRANSACTION = kFirstTransactionCode,
+    GET_FD_TRANSACTION,
+    WAIT_TRANSACTION,    // Waits for SIGNAL_TRANSACTION.
+    SIGNAL_TRANSACTION,  // Signals a waiting thread.
   };
 
   TestService();
@@ -36,6 +39,9 @@ class TestService {
   // Stops this service.
   void Stop();
 
+  // Returns the contents of the file returned by GET_FD_TRANSACTION.
+  static std::string GetFileContents();
+
  private:
   class TestObject;
 
@@ -44,7 +50,8 @@ class TestService {
   void Initialize(bool* result);
 
   base::string16 service_name_;
-  IpcThread thread_;
+  MainIpcThread main_thread_;
+  SubIpcThread sub_thread_;
 
   DISALLOW_COPY_AND_ASSIGN(TestService);
 };

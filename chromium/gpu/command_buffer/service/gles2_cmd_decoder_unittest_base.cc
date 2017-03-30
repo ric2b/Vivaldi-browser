@@ -253,9 +253,11 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
 
   AddExpectationsForBindVertexArrayOES();
 
-  EXPECT_CALL(*gl_, EnableVertexAttribArray(0))
-      .Times(1)
-      .RetiresOnSaturation();
+  if (!group_->feature_info()->gl_version_info().BehavesLikeGLES()) {
+    EXPECT_CALL(*gl_, EnableVertexAttribArray(0))
+        .Times(1)
+        .RetiresOnSaturation();
+  }
   static GLuint attrib_0_id[] = {
     kServiceAttrib0BufferId,
   };
@@ -502,18 +504,18 @@ void GLES2DecoderTestBase::ResetDecoder() {
     return;
   // All Tests should have read all their GLErrors before getting here.
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
-
-  EXPECT_CALL(*gl_, DeleteBuffersARB(1, _))
-      .Times(2)
-      .RetiresOnSaturation();
-  if (group_->feature_info()->feature_flags().native_vertex_array_object) {
-    EXPECT_CALL(*gl_, DeleteVertexArraysOES(1, Pointee(kServiceVertexArrayId)))
-        .Times(1)
-        .RetiresOnSaturation();
+  if (!decoder_->WasContextLost()) {
+    EXPECT_CALL(*gl_, DeleteBuffersARB(1, _)).Times(2).RetiresOnSaturation();
+    if (group_->feature_info()->feature_flags().native_vertex_array_object) {
+      EXPECT_CALL(*gl_,
+                  DeleteVertexArraysOES(1, Pointee(kServiceVertexArrayId)))
+          .Times(1)
+          .RetiresOnSaturation();
+    }
   }
 
   decoder_->EndDecoding();
-  decoder_->Destroy(true);
+  decoder_->Destroy(!decoder_->WasContextLost());
   decoder_.reset();
   group_->Destroy(mock_decoder_.get(), false);
   engine_.reset();
@@ -758,9 +760,6 @@ void GLES2DecoderTestBase::SetupExpectationsForFramebufferClearingMulti(
       .WillOnce(Return(GL_FRAMEBUFFER_COMPLETE))
       .RetiresOnSaturation();
   if (target == GL_READ_FRAMEBUFFER_EXT) {
-    EXPECT_CALL(*gl_, BindFramebufferEXT(GL_READ_FRAMEBUFFER_EXT, 0))
-        .Times(1)
-        .RetiresOnSaturation();
     EXPECT_CALL(*gl_, BindFramebufferEXT(
         GL_DRAW_FRAMEBUFFER_EXT, read_framebuffer_service_id))
         .Times(1)
@@ -795,10 +794,6 @@ void GLES2DecoderTestBase::SetupExpectationsForFramebufferClearingMulti(
       restore_depth, restore_scissor_test, restore_scissor_x, restore_scissor_y,
       restore_scissor_width, restore_scissor_height);
   if (target == GL_READ_FRAMEBUFFER_EXT) {
-    EXPECT_CALL(*gl_, BindFramebufferEXT(
-        GL_READ_FRAMEBUFFER_EXT, read_framebuffer_service_id))
-        .Times(1)
-        .RetiresOnSaturation();
     EXPECT_CALL(*gl_, BindFramebufferEXT(
         GL_DRAW_FRAMEBUFFER_EXT, draw_framebuffer_service_id))
         .Times(1)
@@ -1248,6 +1243,33 @@ void GLES2DecoderTestBase::DoCompressedTexImage2D(GLenum target,
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
 }
 
+void GLES2DecoderTestBase::DoTexImage3D(GLenum target,
+                                        GLint level,
+                                        GLenum internal_format,
+                                        GLsizei width,
+                                        GLsizei height,
+                                        GLsizei depth,
+                                        GLint border,
+                                        GLenum format,
+                                        GLenum type,
+                                        uint32_t shared_memory_id,
+                                        uint32_t shared_memory_offset) {
+  EXPECT_CALL(*gl_, GetError())
+      .WillOnce(Return(GL_NO_ERROR))
+      .RetiresOnSaturation();
+  EXPECT_CALL(*gl_, TexImage3D(target, level, internal_format,
+                               width, height, depth, border, format, type, _))
+      .Times(1)
+      .RetiresOnSaturation();
+  EXPECT_CALL(*gl_, GetError())
+      .WillOnce(Return(GL_NO_ERROR))
+      .RetiresOnSaturation();
+  cmds::TexImage3D cmd;
+  cmd.Init(target, level, internal_format, width, height, depth, format, type,
+           shared_memory_id, shared_memory_offset);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+}
+
 void GLES2DecoderTestBase::DoRenderbufferStorage(
     GLenum target, GLenum internal_format, GLenum actual_format,
     GLsizei width, GLsizei height,  GLenum error) {
@@ -1295,10 +1317,23 @@ void GLES2DecoderTestBase::DoFramebufferRenderbuffer(
   EXPECT_CALL(*gl_, GetError())
       .WillOnce(Return(GL_NO_ERROR))
       .RetiresOnSaturation();
-  EXPECT_CALL(*gl_, FramebufferRenderbufferEXT(
-      target, attachment, renderbuffer_target, renderbuffer_service_id))
-      .Times(1)
-      .RetiresOnSaturation();
+  if (attachment == GL_DEPTH_STENCIL_ATTACHMENT) {
+    EXPECT_CALL(*gl_, FramebufferRenderbufferEXT(
+        target, GL_DEPTH_ATTACHMENT, renderbuffer_target,
+        renderbuffer_service_id))
+        .Times(1)
+        .RetiresOnSaturation();
+    EXPECT_CALL(*gl_, FramebufferRenderbufferEXT(
+        target, GL_STENCIL_ATTACHMENT, renderbuffer_target,
+        renderbuffer_service_id))
+        .Times(1)
+        .RetiresOnSaturation();
+  } else {
+    EXPECT_CALL(*gl_, FramebufferRenderbufferEXT(
+        target, attachment, renderbuffer_target, renderbuffer_service_id))
+        .Times(1)
+        .RetiresOnSaturation();
+  }
   EXPECT_CALL(*gl_, GetError())
       .WillOnce(Return(error))
       .RetiresOnSaturation();

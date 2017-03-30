@@ -56,9 +56,9 @@ bool AnimatableSVGPaint::equalTo(const AnimatableValue* value) const
     const AnimatableSVGPaint* svgPaint = toAnimatableSVGPaint(value);
     return paintType() == svgPaint->paintType()
         && visitedLinkPaintType() == svgPaint->visitedLinkPaintType()
-        && color() == svgPaint->color()
+        && getColor() == svgPaint->getColor()
         && uri() == svgPaint->uri()
         && visitedLinkURI() == svgPaint->visitedLinkURI();
 }
 
-}
+} // namespace blink

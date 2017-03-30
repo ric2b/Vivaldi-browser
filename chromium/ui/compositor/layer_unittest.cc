@@ -20,16 +20,17 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
-#include "cc/layers/delegated_frame_provider.h"
-#include "cc/layers/delegated_frame_resource_collection.h"
 #include "cc/layers/layer.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/copy_output_result.h"
-#include "cc/output/delegated_frame_data.h"
+#include "cc/surfaces/surface_id.h"
+#include "cc/surfaces/surface_sequence.h"
 #include "cc/test/pixel_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/compositor/compositor_observer.h"
 #include "ui/compositor/dip_util.h"
+#include "ui/compositor/layer_animation_element.h"
+#include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/paint_context.h"
@@ -1472,68 +1473,13 @@ TEST_F(LayerWithDelegateTest, SetBoundsWhenInvisible) {
   EXPECT_TRUE(delegate.painted());
 }
 
-static scoped_ptr<cc::DelegatedFrameData> MakeFrameData(gfx::Size size) {
-  scoped_ptr<cc::DelegatedFrameData> frame_data(new cc::DelegatedFrameData);
-  scoped_ptr<cc::RenderPass> render_pass(cc::RenderPass::Create());
-  render_pass->SetNew(
-      cc::RenderPassId(1, 1), gfx::Rect(size), gfx::Rect(), gfx::Transform());
-  frame_data->render_pass_list.push_back(std::move(render_pass));
-  return frame_data;
-}
+namespace {
 
-TEST_F(LayerWithDelegateTest, DelegatedLayer) {
-  scoped_ptr<Layer> root(CreateNoTextureLayer(gfx::Rect(0, 0, 1000, 1000)));
+void FakeSatisfyCallback(cc::SurfaceSequence) {}
 
-  scoped_ptr<Layer> child(CreateLayer(LAYER_TEXTURED));
+void FakeRequireCallback(cc::SurfaceId, cc::SurfaceSequence) {}
 
-  child->SetBounds(gfx::Rect(0, 0, 10, 10));
-  child->SetVisible(true);
-  root->Add(child.get());
-  DrawTree(root.get());
-
-  scoped_refptr<cc::DelegatedFrameResourceCollection> resource_collection =
-      new cc::DelegatedFrameResourceCollection;
-  scoped_refptr<cc::DelegatedFrameProvider> frame_provider;
-
-  // Content matches layer size.
-  frame_provider = new cc::DelegatedFrameProvider(
-      resource_collection.get(), MakeFrameData(gfx::Size(10, 10)));
-  child->SetShowDelegatedContent(frame_provider.get(), gfx::Size(10, 10));
-  EXPECT_EQ(child->cc_layer_for_testing()->bounds().ToString(),
-            gfx::Size(10, 10).ToString());
-
-  // Content larger than layer.
-  child->SetBounds(gfx::Rect(0, 0, 5, 5));
-  EXPECT_EQ(child->cc_layer_for_testing()->bounds().ToString(),
-            gfx::Size(5, 5).ToString());
-
-  // Content smaller than layer.
-  child->SetBounds(gfx::Rect(0, 0, 10, 10));
-  frame_provider = new cc::DelegatedFrameProvider(
-      resource_collection.get(), MakeFrameData(gfx::Size(5, 5)));
-  child->SetShowDelegatedContent(frame_provider.get(), gfx::Size(5, 5));
-  EXPECT_EQ(child->cc_layer_for_testing()->bounds().ToString(),
-            gfx::Size(5, 5).ToString());
-
-  // Hi-DPI content on low-DPI layer.
-  frame_provider = new cc::DelegatedFrameProvider(
-      resource_collection.get(), MakeFrameData(gfx::Size(20, 20)));
-  child->SetShowDelegatedContent(frame_provider.get(), gfx::Size(10, 10));
-  EXPECT_EQ(child->cc_layer_for_testing()->bounds().ToString(),
-            gfx::Size(10, 10).ToString());
-
-  // Hi-DPI content on hi-DPI layer.
-  compositor()->SetScaleAndSize(2.f, gfx::Size(1000, 1000));
-  EXPECT_EQ(child->cc_layer_for_testing()->bounds().ToString(),
-            gfx::Size(10, 10).ToString());
-
-  // Low-DPI content on hi-DPI layer.
-  frame_provider = new cc::DelegatedFrameProvider(
-      resource_collection.get(), MakeFrameData(gfx::Size(10, 10)));
-  child->SetShowDelegatedContent(frame_provider.get(), gfx::Size(10, 10));
-  EXPECT_EQ(child->cc_layer_for_testing()->bounds().ToString(),
-            gfx::Size(10, 10).ToString());
-}
+}  // namespace
 
 TEST_F(LayerWithDelegateTest, ExternalContent) {
   scoped_ptr<Layer> root(CreateNoTextureLayer(gfx::Rect(0, 0, 1000, 1000)));
@@ -1550,15 +1496,11 @@ TEST_F(LayerWithDelegateTest, ExternalContent) {
   EXPECT_TRUE(child->cc_layer_for_testing());
   EXPECT_EQ(before.get(), child->cc_layer_for_testing());
 
-  scoped_refptr<cc::DelegatedFrameResourceCollection> resource_collection =
-      new cc::DelegatedFrameResourceCollection;
-  scoped_refptr<cc::DelegatedFrameProvider> frame_provider =
-      new cc::DelegatedFrameProvider(resource_collection.get(),
-                                     MakeFrameData(gfx::Size(10, 10)));
-
-  // Showing delegated content changes the underlying cc layer.
+  // Showing surface content changes the underlying cc layer.
   before = child->cc_layer_for_testing();
-  child->SetShowDelegatedContent(frame_provider.get(), gfx::Size(10, 10));
+  child->SetShowSurface(cc::SurfaceId(), base::Bind(&FakeSatisfyCallback),
+                        base::Bind(&FakeRequireCallback), gfx::Size(10, 10),
+                        1.0, gfx::Size(10, 10));
   EXPECT_TRUE(child->cc_layer_for_testing());
   EXPECT_NE(before.get(), child->cc_layer_for_testing());
 
@@ -1581,15 +1523,11 @@ TEST_F(LayerWithDelegateTest, LayerFiltersSurvival) {
   EXPECT_EQ(layer->layer_grayscale(), 0.5f);
   EXPECT_EQ(1u, layer->cc_layer_for_testing()->filters().size());
 
-  scoped_refptr<cc::DelegatedFrameResourceCollection> resource_collection =
-      new cc::DelegatedFrameResourceCollection;
-  scoped_refptr<cc::DelegatedFrameProvider> frame_provider =
-      new cc::DelegatedFrameProvider(resource_collection.get(),
-                                     MakeFrameData(gfx::Size(10, 10)));
-
-  // Showing delegated content changes the underlying cc layer.
+  // Showing surface content changes the underlying cc layer.
   scoped_refptr<cc::Layer> before = layer->cc_layer_for_testing();
-  layer->SetShowDelegatedContent(frame_provider.get(), gfx::Size(10, 10));
+  layer->SetShowSurface(cc::SurfaceId(), base::Bind(&FakeSatisfyCallback),
+                        base::Bind(&FakeRequireCallback), gfx::Size(10, 10),
+                        1.0, gfx::Size(10, 10));
   EXPECT_EQ(layer->layer_grayscale(), 0.5f);
   EXPECT_TRUE(layer->cc_layer_for_testing());
   EXPECT_NE(before.get(), layer->cc_layer_for_testing());
@@ -1605,41 +1543,41 @@ TEST_F(LayerWithRealCompositorTest, AddRemoveThreadedAnimations) {
   l1->SetAnimator(LayerAnimator::CreateImplicitAnimator());
   l2->SetAnimator(LayerAnimator::CreateImplicitAnimator());
 
-  EXPECT_FALSE(l1->HasPendingThreadedAnimations());
+  EXPECT_FALSE(l1->HasPendingThreadedAnimationsForTesting());
 
   // Trigger a threaded animation.
   l1->SetOpacity(0.5f);
 
-  EXPECT_TRUE(l1->HasPendingThreadedAnimations());
+  EXPECT_TRUE(l1->HasPendingThreadedAnimationsForTesting());
 
   // Ensure we can remove a pending threaded animation.
   l1->GetAnimator()->StopAnimating();
 
-  EXPECT_FALSE(l1->HasPendingThreadedAnimations());
+  EXPECT_FALSE(l1->HasPendingThreadedAnimationsForTesting());
 
   // Trigger another threaded animation.
   l1->SetOpacity(0.2f);
 
-  EXPECT_TRUE(l1->HasPendingThreadedAnimations());
+  EXPECT_TRUE(l1->HasPendingThreadedAnimationsForTesting());
 
   root->Add(l1.get());
   GetCompositor()->SetRootLayer(root.get());
 
   // Now that l1 is part of a tree, it should have dispatched the pending
   // animation.
-  EXPECT_FALSE(l1->HasPendingThreadedAnimations());
+  EXPECT_FALSE(l1->HasPendingThreadedAnimationsForTesting());
 
   // Ensure that l1 no longer holds on to animations.
   l1->SetOpacity(0.1f);
-  EXPECT_FALSE(l1->HasPendingThreadedAnimations());
+  EXPECT_FALSE(l1->HasPendingThreadedAnimationsForTesting());
 
   // Ensure that adding a layer to an existing tree causes its pending
   // animations to get dispatched.
   l2->SetOpacity(0.5f);
-  EXPECT_TRUE(l2->HasPendingThreadedAnimations());
+  EXPECT_TRUE(l2->HasPendingThreadedAnimationsForTesting());
 
   l1->Add(l2.get());
-  EXPECT_FALSE(l2->HasPendingThreadedAnimations());
+  EXPECT_FALSE(l2->HasPendingThreadedAnimationsForTesting());
 }
 
 // Tests that in-progress threaded animations complete when a Layer's
@@ -1785,6 +1723,59 @@ TEST_F(LayerWithDelegateTest, DestroyingLayerRemovesTheAnimatorFromCollection) {
   EXPECT_FALSE(compositor()->layer_animator_collection()->HasActiveAnimators());
 }
 
+// A LayerAnimationObserver that removes a child layer from a parent when an
+// animation completes.
+class LayerRemovingLayerAnimationObserver : public LayerAnimationObserver {
+ public:
+  LayerRemovingLayerAnimationObserver(Layer* root, Layer* child)
+      : root_(root), child_(child) {}
+
+  // LayerAnimationObserver:
+  void OnLayerAnimationEnded(LayerAnimationSequence* sequence) override {
+    root_->Remove(child_);
+  }
+
+  void OnLayerAnimationAborted(LayerAnimationSequence* sequence) override {
+    root_->Remove(child_);
+  }
+
+  void OnLayerAnimationScheduled(LayerAnimationSequence* sequence) override {}
+
+ private:
+  Layer* root_;
+  Layer* child_;
+
+  DISALLOW_COPY_AND_ASSIGN(LayerRemovingLayerAnimationObserver);
+};
+
+// Verifies that empty LayerAnimators are not left behind when removing child
+// Layers that own an empty LayerAnimator. See http://crbug.com/552037.
+TEST_F(LayerWithDelegateTest, NonAnimatingAnimatorsAreRemovedFromCollection) {
+  scoped_ptr<Layer> root(CreateLayer(LAYER_TEXTURED));
+  scoped_ptr<Layer> parent(CreateLayer(LAYER_TEXTURED));
+  scoped_ptr<Layer> child(CreateLayer(LAYER_TEXTURED));
+  root->Add(parent.get());
+  parent->Add(child.get());
+  compositor()->SetRootLayer(root.get());
+
+  child->SetAnimator(LayerAnimator::CreateDefaultAnimator());
+
+  LayerRemovingLayerAnimationObserver observer(root.get(), parent.get());
+  child->GetAnimator()->AddObserver(&observer);
+
+  LayerAnimationElement* element =
+      ui::LayerAnimationElement::CreateOpacityElement(
+          0.5f, base::TimeDelta::FromSeconds(1));
+  LayerAnimationSequence* sequence = new LayerAnimationSequence(element);
+
+  child->GetAnimator()->StartAnimation(sequence);
+  EXPECT_TRUE(compositor()->layer_animator_collection()->HasActiveAnimators());
+
+  child->GetAnimator()->StopAnimating();
+  EXPECT_FALSE(root->Contains(parent.get()));
+  EXPECT_FALSE(compositor()->layer_animator_collection()->HasActiveAnimators());
+}
+
 namespace {
 
 std::string Vector2dFTo100thPercisionString(const gfx::Vector2dF& vector) {
@@ -1854,12 +1845,9 @@ TEST(LayerDelegateTest, DelegatedFrameDamage) {
 
   FrameDamageCheckingDelegate delegate;
   layer->set_delegate(&delegate);
-  scoped_refptr<cc::DelegatedFrameResourceCollection> resource_collection =
-      new cc::DelegatedFrameResourceCollection;
-  scoped_refptr<cc::DelegatedFrameProvider> frame_provider(
-      new cc::DelegatedFrameProvider(resource_collection.get(),
-                                     MakeFrameData(gfx::Size(10, 10))));
-  layer->SetShowDelegatedContent(frame_provider.get(), gfx::Size(10, 10));
+  layer->SetShowSurface(cc::SurfaceId(), base::Bind(&FakeSatisfyCallback),
+                        base::Bind(&FakeRequireCallback), gfx::Size(10, 10),
+                        1.0, gfx::Size(10, 10));
 
   EXPECT_FALSE(delegate.delegated_frame_damage_called());
   layer->OnDelegatedFrameDamage(damage_rect);

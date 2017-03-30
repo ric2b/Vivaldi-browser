@@ -14,6 +14,8 @@ BookmarkMatch::BookmarkMatch(match_type kind)
     node(NULL) {
 }
 
+BookmarkMatch::BookmarkMatch(const BookmarkMatch& other) = default;
+
 BookmarkMatch::~BookmarkMatch() {}
 
 // static

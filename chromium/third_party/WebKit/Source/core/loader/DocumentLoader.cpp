@@ -65,8 +65,6 @@
 #include "platform/ThreadedDataReceiver.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/mhtml/ArchiveResource.h"
-#include "platform/mhtml/ArchiveResourceCollection.h"
-#include "platform/mhtml/MHTMLArchive.h"
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
 #include "platform/plugins/PluginData.h"
 #include "platform/weborigin/SchemeRegistry.h"
@@ -125,9 +123,8 @@ DEFINE_TRACE(DocumentLoader)
 {
     visitor->trace(m_frame);
     visitor->trace(m_fetcher);
-    // TODO(sof): start tracing ResourcePtr<>s (and m_mainResource.)
+    visitor->trace(m_mainResource);
     visitor->trace(m_writer);
-    visitor->trace(m_archive);
     visitor->trace(m_documentLoadTiming);
     visitor->trace(m_applicationCacheHost);
     visitor->trace(m_contentSecurityPolicy);
@@ -160,9 +157,9 @@ const KURL& DocumentLoader::url() const
     return m_request.url();
 }
 
-void DocumentLoader::startPreload(Resource::Type type, FetchRequest& request)
+Resource* DocumentLoader::startPreload(Resource::Type type, FetchRequest& request)
 {
-    ResourcePtr<Resource> resource;
+    RefPtrWillBeRawPtr<Resource> resource = nullptr;
     switch (type) {
     case Resource::Image:
         resource = ImageResource::fetch(request, fetcher());
@@ -175,6 +172,9 @@ void DocumentLoader::startPreload(Resource::Type type, FetchRequest& request)
         break;
     case Resource::Font:
         resource = FontResource::fetch(request, fetcher());
+        // This is needed for fonts as loading doesn't start until there's usage.
+        if (resource)
+            toFontResource(resource)->beginLoadIfNeeded(fetcher());
         break;
     case Resource::Media:
         resource = RawResource::fetchMedia(request, fetcher());
@@ -185,7 +185,7 @@ void DocumentLoader::startPreload(Resource::Type type, FetchRequest& request)
     case Resource::ImportResource:
         resource = RawResource::fetchImport(request, fetcher());
         break;
-    case Resource::LinkSubresource:
+    case Resource::LinkPreload:
         resource = RawResource::fetch(request, fetcher());
         break;
     default:
@@ -194,6 +194,7 @@ void DocumentLoader::startPreload(Resource::Type type, FetchRequest& request)
 
     if (resource)
         fetcher()->preloadStarted(resource.get());
+    return resource.get();
 }
 
 void DocumentLoader::didChangePerformanceTiming()
@@ -305,27 +306,14 @@ void DocumentLoader::finishedLoading(double finishTime)
             commitData(0, 0);
     }
 
+    if (!m_frame)
+        return;
+
     m_applicationCacheHost->finishedLoadingMainResource();
     endWriting(m_writer.get());
     if (m_state < MainResourceDone)
         m_state = MainResourceDone;
     clearMainResourceHandle();
-}
-
-bool DocumentLoader::isRedirectAfterPost(const ResourceRequest& newRequest, const ResourceResponse& redirectResponse)
-{
-    int status = redirectResponse.httpStatusCode();
-    if (((status >= 301 && status <= 303) || status == 307)
-        && m_originalRequest.httpMethod() == HTTPNames::POST)
-        return true;
-
-    return false;
-}
-
-void DocumentLoader::redirectReceived(Resource* resource, ResourceRequest& request, const ResourceResponse& redirectResponse)
-{
-    ASSERT_UNUSED(resource, resource == m_mainResource);
-    willSendRequest(request, redirectResponse);
 }
 
 void DocumentLoader::updateRequest(Resource* resource, const ResourceRequest& request)
@@ -334,51 +322,30 @@ void DocumentLoader::updateRequest(Resource* resource, const ResourceRequest& re
     m_request = request;
 }
 
-static bool isFormSubmission(NavigationType type)
+void DocumentLoader::redirectReceived(Resource* resource, ResourceRequest& request, const ResourceResponse& redirectResponse)
 {
-    return type == NavigationTypeFormSubmitted || type == NavigationTypeFormResubmitted;
-}
+    ASSERT_UNUSED(resource, resource == m_mainResource);
+    ASSERT(!redirectResponse.isNull());
+    m_request = request;
 
-void DocumentLoader::willSendRequest(ResourceRequest& newRequest, const ResourceResponse& redirectResponse)
-{
-    // Note that there are no asserts here as there are for the other callbacks. This is due to the
-    // fact that this "callback" is sent when starting every load, and the state of callback
-    // deferrals plays less of a part in this function in preventing the bad behavior deferring
-    // callbacks is meant to prevent.
-    ASSERT(!newRequest.isNull());
-    if (isFormSubmission(m_navigationType) && !m_frame->document()->contentSecurityPolicy()->allowFormAction(newRequest.url())) {
-        cancelMainResourceLoad(ResourceError::cancelledError(newRequest.url()));
+    // If the redirecting url is not allowed to display content from the target origin,
+    // then block the redirect.
+    const KURL& requestURL = m_request.url();
+    RefPtr<SecurityOrigin> redirectingOrigin = SecurityOrigin::create(redirectResponse.url());
+    if (!redirectingOrigin->canDisplay(requestURL)) {
+        FrameLoader::reportLocalLoadFailed(m_frame, requestURL.string());
+        cancelMainResourceLoad(ResourceError::cancelledError(requestURL));
+        return;
+    }
+    if (!frameLoader()->shouldContinueForNavigationPolicy(m_request, SubstituteData(), this, CheckContentSecurityPolicy, m_navigationType, NavigationPolicyCurrentTab, replacesCurrentHistoryItem(), isClientRedirect())) {
+        cancelMainResourceLoad(ResourceError::cancelledError(requestURL));
         return;
     }
 
     ASSERT(timing().fetchStart());
-    if (!redirectResponse.isNull()) {
-        // If the redirecting url is not allowed to display content from the target origin,
-        // then block the redirect.
-        RefPtr<SecurityOrigin> redirectingOrigin = SecurityOrigin::create(redirectResponse.url());
-        if (!redirectingOrigin->canDisplay(newRequest.url())) {
-            FrameLoader::reportLocalLoadFailed(m_frame, newRequest.url().string());
-            cancelMainResourceLoad(ResourceError::cancelledError(newRequest.url()));
-            return;
-        }
-        timing().addRedirect(redirectResponse.url(), newRequest.url());
-    }
-
-    // If we're fielding a redirect in response to a POST, force a load from origin, since
-    // this is a common site technique to return to a page viewing some data that the POST
-    // just modified.
-    if (newRequest.cachePolicy() == UseProtocolCachePolicy && isRedirectAfterPost(newRequest, redirectResponse))
-        newRequest.setCachePolicy(ReloadBypassingCache);
-
-    m_request = newRequest;
-
-    if (redirectResponse.isNull())
-        return;
-
-    appendRedirect(newRequest.url());
-    frameLoader()->receivedMainResourceRedirect(m_request.url());
-    if (!frameLoader()->shouldContinueForNavigationPolicy(newRequest, SubstituteData(), this, CheckContentSecurityPolicy, m_navigationType, NavigationPolicyCurrentTab, replacesCurrentHistoryItem()))
-        cancelMainResourceLoad(ResourceError::cancelledError(m_request.url()));
+    timing().addRedirect(redirectResponse.url(), requestURL);
+    appendRedirect(requestURL);
+    frameLoader()->receivedMainResourceRedirect(requestURL);
 }
 
 static bool canShowMIMEType(const String& mimeType, Page* page)
@@ -409,11 +376,6 @@ bool DocumentLoader::shouldContinueForResponse() const
 
     if (!canShowMIMEType(m_response.mimeType(), m_frame->page()))
         return false;
-
-    // Prevent remote web archives from loading because they can claim to be from any domain and thus avoid cross-domain security checks.
-    if (isArchiveMIMEType(m_response.mimeType()) && !SchemeRegistry::shouldTreatURLSchemeAsLocal(m_request.url().protocol()))
-        return false;
-
     return true;
 }
 
@@ -475,7 +437,7 @@ void DocumentLoader::responseReceived(Resource* resource, const ResourceResponse
 
     m_response = response;
 
-    if (isArchiveMIMEType(m_response.mimeType()) && m_mainResource->dataBufferingPolicy() != BufferData)
+    if (isArchiveMIMEType(m_response.mimeType()) && m_mainResource->getDataBufferingPolicy() != BufferData)
         m_mainResource->setDataBufferingPolicy(BufferData);
 
     if (!shouldContinueForResponse()) {
@@ -647,53 +609,23 @@ void DocumentLoader::clearMainResourceHandle()
 
 bool DocumentLoader::maybeCreateArchive()
 {
-    // Only the top-frame can load MHTML.
-    if (m_frame->tree().parent())
-        return false;
-
     // Give the archive machinery a crack at this document. If the MIME type is not an archive type, it will return 0.
     if (!isArchiveMIMEType(m_response.mimeType()))
         return false;
 
     ASSERT(m_mainResource);
-    m_archive = MHTMLArchive::create(m_response.url(), m_mainResource->resourceBuffer());
-    // Invalid MHTML.
-    if (!m_archive || !m_archive->mainResource()) {
-        m_archive.clear();
+    ArchiveResource* mainResource = m_fetcher->createArchive(m_mainResource.get());
+    if (!mainResource)
         return false;
-    }
-
-    m_fetcher->addAllArchiveResources(m_archive.get());
-    ArchiveResource* mainResource = m_archive->mainResource();
-
     // The origin is the MHTML file, we need to set the base URL to the document encoded in the MHTML so
     // relative URLs are resolved properly.
-    ensureWriter(mainResource->mimeType(), m_archive->mainResource()->url());
+    ensureWriter(mainResource->mimeType(), mainResource->url());
 
     // The Document has now been created.
     document()->enforceSandboxFlags(SandboxAll);
 
     commitData(mainResource->data()->data(), mainResource->data()->size());
     return true;
-}
-
-void DocumentLoader::prepareSubframeArchiveLoadIfNeeded()
-{
-    if (!m_frame->tree().parent() || !m_frame->tree().parent()->isLocalFrame())
-        return;
-
-    ArchiveResourceCollection* parentCollection = toLocalFrame(m_frame->tree().parent())->loader().documentLoader()->fetcher()->archiveResourceCollection();
-    if (!parentCollection)
-        return;
-
-    m_archive = parentCollection->popSubframeArchive(m_frame->tree().uniqueName(), m_request.url());
-
-    if (!m_archive)
-        return;
-    m_fetcher->addAllArchiveResources(m_archive.get());
-
-    ArchiveResource* mainResource = m_archive->mainResource();
-    m_substituteData = SubstituteData(mainResource->data(), mainResource->mimeType(), mainResource->textEncoding(), KURL());
 }
 
 const AtomicString& DocumentLoader::responseMIMEType() const
@@ -744,14 +676,8 @@ void DocumentLoader::startLoadingMainResource()
     ASSERT(timing().navigationStart());
     ASSERT(!timing().fetchStart());
     timing().markFetchStart();
-    willSendRequest(m_request, ResourceResponse());
-
-    // willSendRequest() may lead to our LocalFrame being detached or cancelling the load via nulling the ResourceRequest.
-    if (!m_frame || m_request.isNull())
-        return;
 
     m_applicationCacheHost->willStartLoadingMainResource(m_request);
-    prepareSubframeArchiveLoadIfNeeded();
 
     ResourceRequest request(m_request);
     DEFINE_STATIC_LOCAL(ResourceLoaderOptions, mainResourceLoadOptions,

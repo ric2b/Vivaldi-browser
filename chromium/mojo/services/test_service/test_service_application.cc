@@ -10,39 +10,40 @@
 #include "mojo/public/c/system/main.h"
 #include "mojo/services/test_service/test_service_impl.h"
 #include "mojo/services/test_service/test_time_service_impl.h"
-#include "mojo/shell/public/cpp/application_connection.h"
 #include "mojo/shell/public/cpp/application_runner.h"
+#include "mojo/shell/public/cpp/connection.h"
 
 namespace mojo {
 namespace test {
 
 TestServiceApplication::TestServiceApplication()
-    : ref_count_(0), app_impl_(nullptr) {
+    : ref_count_(0), connector_(nullptr) {
 }
 
 TestServiceApplication::~TestServiceApplication() {
 }
 
-void TestServiceApplication::Initialize(ApplicationImpl* app) {
-  app_impl_ = app;
+void TestServiceApplication::Initialize(Connector* connector,
+                                        const std::string& url,
+                                        uint32_t id, uint32_t user_id) {
+  connector_ = connector;
 }
 
-bool TestServiceApplication::ConfigureIncomingConnection(
-    ApplicationConnection* connection) {
-  connection->AddService<TestService>(this);
-  connection->AddService<TestTimeService>(this);
+bool TestServiceApplication::AcceptConnection(Connection* connection) {
+  connection->AddInterface<TestService>(this);
+  connection->AddInterface<TestTimeService>(this);
   return true;
 }
 
-void TestServiceApplication::Create(ApplicationConnection* connection,
+void TestServiceApplication::Create(Connection* connection,
                                     InterfaceRequest<TestService> request) {
-  new TestServiceImpl(app_impl_, this, std::move(request));
+  new TestServiceImpl(connector_, this, std::move(request));
   AddRef();
 }
 
-void TestServiceApplication::Create(ApplicationConnection* connection,
+void TestServiceApplication::Create(Connection* connection,
                                     InterfaceRequest<TestTimeService> request) {
-  new TestTimeServiceImpl(app_impl_, std::move(request));
+  new TestTimeServiceImpl(connector_, std::move(request));
 }
 
 void TestServiceApplication::AddRef() {

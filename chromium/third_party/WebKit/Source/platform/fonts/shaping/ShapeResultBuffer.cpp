@@ -294,14 +294,14 @@ FloatRect ShapeResultBuffer::selectionRect(TextDirection direction, float totalW
             ASSERT((direction == RTL) == result->m_runs[i]->rtl());
             int numCharacters = result->m_runs[i]->m_numCharacters;
             if (!foundFromX && from >= 0 && from < numCharacters) {
-                fromX = result->m_runs[i]->xPositionForVisualOffset(from) + currentX;
+                fromX = result->m_runs[i]->xPositionForVisualOffset(from, AdjustToStart) + currentX;
                 foundFromX = true;
             } else {
                 from -= numCharacters;
             }
 
             if (!foundToX && to >= 0 && to < numCharacters) {
-                toX = result->m_runs[i]->xPositionForVisualOffset(to) + currentX;
+                toX = result->m_runs[i]->xPositionForVisualOffset(to, AdjustToEnd) + currentX;
                 foundToX = true;
             } else {
                 to -= numCharacters;

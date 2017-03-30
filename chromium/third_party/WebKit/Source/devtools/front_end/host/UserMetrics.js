@@ -69,16 +69,13 @@ WebInspector.UserMetrics._PanelCodes = {
     profiles: 6,
     audits: 7,
     console: 8,
-    layers: 9
-}
-
-WebInspector.UserMetrics._DrawerCodes = {
-    "console": 1,
-    "animations": 2,
-    "network.config": 3,
-    "rendering": 4,
-    "sensors": 5,
-    "sources.search": 6
+    layers: 9,
+    "drawer-console": 10,
+    "drawer-animations": 11,
+    "drawer-network.config": 12,
+    "drawer-rendering": 13,
+    "drawer-sensors": 14,
+    "drawer-sources.search": 15
 }
 
 WebInspector.UserMetrics.prototype = {
@@ -93,13 +90,11 @@ WebInspector.UserMetrics.prototype = {
     },
 
     /**
-     * @param {string} viewId
+     * @param {string} drawerId
      */
-    drawerShown: function(viewId)
+    drawerShown: function(drawerId)
     {
-        var code = WebInspector.UserMetrics._DrawerCodes[viewId] || 0;
-        var size = Object.keys(WebInspector.UserMetrics._DrawerCodes).length + 1;
-        InspectorFrontendHost.recordEnumeratedHistogram("DevTools.DrawerShown", code, size);
+        this.panelShown("drawer-" + drawerId);
     },
 
     /**

@@ -56,11 +56,6 @@ bool MediaValuesDynamic::computeLength(double value, CSSPrimitiveValue::UnitType
         result);
 }
 
-bool MediaValuesDynamic::isSafeToSendToAnotherThread() const
-{
-    return false;
-}
-
 double MediaValuesDynamic::viewportWidth() const
 {
     return calculateViewportWidth(m_frame);
@@ -152,4 +147,4 @@ DEFINE_TRACE(MediaValuesDynamic)
     MediaValues::trace(visitor);
 }
 
-} // namespace
+} // namespace blink

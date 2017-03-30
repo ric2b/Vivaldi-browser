@@ -933,24 +933,23 @@ WebInspector.NetworkRequest.prototype = {
 
     /**
      * @override
-     * @param {function(?string)} callback
+     * @return {!Promise<?string>}
      */
-    requestContent: function(callback)
+    requestContent: function()
     {
         // We do not support content retrieval for WebSockets at the moment.
         // Since WebSockets are potentially long-living, fail requests immediately
         // to prevent caller blocking until resource is marked as finished.
-        if (this._resourceType === WebInspector.resourceTypes.WebSocket) {
-            callback(null);
-            return;
-        }
-        if (typeof this._content !== "undefined") {
-            callback(this.content || null);
-            return;
-        }
+        if (this._resourceType === WebInspector.resourceTypes.WebSocket)
+            return Promise.resolve(/** @type {?string} */(null));
+        if (typeof this._content !== "undefined")
+            return Promise.resolve(/** @type {?string} */(this.content || null));
+        var callback;
+        var promise = new Promise(fulfill => callback = fulfill);
         this._pendingContentCallbacks.push(callback);
         if (this.finished)
             this._innerRequestContent();
+        return promise;
     },
 
     /**
@@ -1062,7 +1061,7 @@ WebInspector.NetworkRequest.prototype = {
     },
 
     /**
-     * @return {!{type: !WebInspector.NetworkRequest.InitiatorType, url: string, lineNumber: number, columnNumber: number}}
+     * @return {!{type: !WebInspector.NetworkRequest.InitiatorType, url: string, lineNumber: number, columnNumber: number, scriptId: ?string}}
      */
     initiatorInfo: function()
     {
@@ -1073,6 +1072,7 @@ WebInspector.NetworkRequest.prototype = {
         var url = "";
         var lineNumber = -Infinity;
         var columnNumber = -Infinity;
+        var scriptId = null;
         var initiator = this._initiator;
 
         if (this.redirectSource) {
@@ -1084,17 +1084,21 @@ WebInspector.NetworkRequest.prototype = {
                 url = initiator.url ? initiator.url : url;
                 lineNumber = initiator.lineNumber ? initiator.lineNumber : lineNumber;
             } else if (initiator.type === NetworkAgent.InitiatorType.Script) {
-                var topFrame = initiator.stackTrace ? initiator.stackTrace[0] : null;
-                if (topFrame && topFrame.url) {
+                for (var stack = initiator.stack; stack; stack = stack.parent) {
+                    var topFrame = stack.callFrames.length ? stack.callFrames[0] : null;
+                    if (!topFrame)
+                        continue;
                     type = WebInspector.NetworkRequest.InitiatorType.Script;
-                    url = topFrame.url;
+                    url = topFrame.url || WebInspector.UIString("<anonymous>");
                     lineNumber = topFrame.lineNumber;
                     columnNumber = topFrame.columnNumber;
+                    scriptId = topFrame.scriptId;
+                    break;
                 }
             }
         }
 
-        this._initiatorInfo = {type: type, url: url, lineNumber: lineNumber, columnNumber: columnNumber};
+        this._initiatorInfo = {type: type, url: url, lineNumber: lineNumber, columnNumber: columnNumber, scriptId: scriptId};
         return this._initiatorInfo;
     },
 

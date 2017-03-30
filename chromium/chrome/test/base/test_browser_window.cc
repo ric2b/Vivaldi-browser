@@ -94,6 +94,10 @@ gfx::Rect TestBrowserWindow::GetBounds() const {
   return gfx::Rect();
 }
 
+gfx::Size TestBrowserWindow::GetContentsSize() const {
+  return gfx::Size();
+}
+
 bool TestBrowserWindow::IsMaximized() const {
   return false;
 }
@@ -111,23 +115,6 @@ bool TestBrowserWindow::IsFullscreen() const {
 }
 
 bool TestBrowserWindow::IsFullscreenBubbleVisible() const {
-  return false;
-}
-
-bool TestBrowserWindow::SupportsFullscreenWithToolbar() const {
-  return false;
-}
-
-void TestBrowserWindow::UpdateFullscreenWithToolbar(bool with_toolbar) {
-}
-
-void TestBrowserWindow::ToggleFullscreenToolbar() {}
-
-bool TestBrowserWindow::IsFullscreenWithToolbar() const {
-  return false;
-}
-
-bool TestBrowserWindow::ShouldHideFullscreenToolbar() const {
   return false;
 }
 

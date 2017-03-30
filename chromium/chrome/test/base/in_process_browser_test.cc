@@ -76,7 +76,7 @@
 #include "chrome/browser/captive_portal/captive_portal_service.h"
 #endif
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 #include "components/storage_monitor/test_storage_monitor.h"
 #endif
 
@@ -92,38 +92,6 @@ namespace {
 
 // Passed as value of kTestType.
 const char kBrowserTestType[] = "browser";
-
-// A BrowserListObserver that makes sure that all browsers created are on the
-// |allowed_desktop_|.
-class SingleDesktopTestObserver : public chrome::BrowserListObserver,
-                                  public base::NonThreadSafe {
- public:
-  explicit SingleDesktopTestObserver(chrome::HostDesktopType allowed_desktop);
-  ~SingleDesktopTestObserver() override;
-
-  // chrome::BrowserListObserver:
-  void OnBrowserAdded(Browser* browser) override;
-
- private:
-  chrome::HostDesktopType allowed_desktop_;
-
-  DISALLOW_COPY_AND_ASSIGN(SingleDesktopTestObserver);
-};
-
-SingleDesktopTestObserver::SingleDesktopTestObserver(
-    chrome::HostDesktopType allowed_desktop)
-        : allowed_desktop_(allowed_desktop) {
-  BrowserList::AddObserver(this);
-}
-
-SingleDesktopTestObserver::~SingleDesktopTestObserver() {
-  BrowserList::RemoveObserver(this);
-}
-
-void SingleDesktopTestObserver::OnBrowserAdded(Browser* browser) {
-  CHECK(CalledOnValidThread());
-  CHECK_EQ(browser->host_desktop_type(), allowed_desktop_);
-}
 
 }  // namespace
 
@@ -465,10 +433,9 @@ void InProcessBrowserTest::OpenDevToolsWindow(
 
 Browser* InProcessBrowserTest::OpenURLOffTheRecord(Profile* profile,
                                                    const GURL& url) {
-  chrome::HostDesktopType active_desktop = chrome::GetActiveDesktop();
-  chrome::OpenURLOffTheRecord(profile, url, active_desktop);
-  Browser* browser = chrome::FindTabbedBrowser(
-      profile->GetOffTheRecordProfile(), false, active_desktop);
+  chrome::OpenURLOffTheRecord(profile, url);
+  Browser* browser =
+      chrome::FindTabbedBrowser(profile->GetOffTheRecordProfile(), false);
   content::TestNavigationObserver observer(
       browser->tab_strip_model()->GetActiveWebContents());
   observer.Wait();
@@ -478,8 +445,7 @@ Browser* InProcessBrowserTest::OpenURLOffTheRecord(Profile* profile,
 // Creates a browser with a single tab (about:blank), waits for the tab to
 // finish loading and shows the browser.
 Browser* InProcessBrowserTest::CreateBrowser(Profile* profile) {
-  Browser* browser = new Browser(
-      Browser::CreateParams(profile, chrome::GetActiveDesktop()));
+  Browser* browser = new Browser(Browser::CreateParams(profile));
   AddBlankTabAndShow(browser);
   return browser;
 }
@@ -487,16 +453,14 @@ Browser* InProcessBrowserTest::CreateBrowser(Profile* profile) {
 Browser* InProcessBrowserTest::CreateIncognitoBrowser() {
   // Create a new browser with using the incognito profile.
   Browser* incognito = new Browser(
-      Browser::CreateParams(browser()->profile()->GetOffTheRecordProfile(),
-                            chrome::GetActiveDesktop()));
+      Browser::CreateParams(browser()->profile()->GetOffTheRecordProfile()));
   AddBlankTabAndShow(incognito);
   return incognito;
 }
 
 Browser* InProcessBrowserTest::CreateBrowserForPopup(Profile* profile) {
   Browser* browser =
-      new Browser(Browser::CreateParams(Browser::TYPE_POPUP, profile,
-                  chrome::GetActiveDesktop()));
+      new Browser(Browser::CreateParams(Browser::TYPE_POPUP, profile));
   AddBlankTabAndShow(browser);
   return browser;
 }
@@ -506,8 +470,7 @@ Browser* InProcessBrowserTest::CreateBrowserForApp(
     Profile* profile) {
   Browser* browser = new Browser(
       Browser::CreateParams::CreateForApp(
-          app_name, false /* trusted_source */, gfx::Rect(), profile,
-          chrome::GetActiveDesktop()));
+          app_name, false /* trusted_source */, gfx::Rect(), profile));
   AddBlankTabAndShow(browser);
   return browser;
 }
@@ -554,16 +517,7 @@ void InProcessBrowserTest::RunTestOnMainThreadLoop() {
   // Pump startup related events.
   content::RunAllPendingInMessageLoop();
 
-  chrome::HostDesktopType active_desktop = chrome::GetActiveDesktop();
-  // Self-adds/removes itself from the BrowserList observers.
-  scoped_ptr<SingleDesktopTestObserver> single_desktop_test_observer;
-  if (!multi_desktop_test_) {
-    single_desktop_test_observer.reset(
-        new SingleDesktopTestObserver(active_desktop));
-  }
-
-  const BrowserList* active_browser_list =
-      BrowserList::GetInstance(active_desktop);
+  const BrowserList* active_browser_list = BrowserList::GetInstance();
   if (!active_browser_list->empty()) {
     browser_ = active_browser_list->get(0);
 #if defined(USE_ASH)
@@ -575,7 +529,7 @@ void InProcessBrowserTest::RunTestOnMainThreadLoop() {
         browser_->tab_strip_model()->GetActiveWebContents());
   }
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
   // Do not use the real StorageMonitor for tests, which introduces another
   // source of variability and potential slowness.
   ASSERT_TRUE(storage_monitor::TestStorageMonitor::CreateForBrowserTests());
@@ -632,12 +586,8 @@ void InProcessBrowserTest::RunTestOnMainThreadLoop() {
   content::RunAllPendingInMessageLoop();
 
   QuitBrowsers();
-  // All BrowserLists should be empty at this point.
-  for (chrome::HostDesktopType t = chrome::HOST_DESKTOP_TYPE_FIRST;
-       t < chrome::HOST_DESKTOP_TYPE_COUNT;
-       t = static_cast<chrome::HostDesktopType>(t + 1)) {
-    CHECK(BrowserList::GetInstance(t)->empty()) << t;
-  }
+  // BrowserList should be empty at this point.
+  CHECK(BrowserList::GetInstance()->empty());
 }
 
 void InProcessBrowserTest::QuitBrowsers() {

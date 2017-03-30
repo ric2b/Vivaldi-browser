@@ -19,8 +19,10 @@ namespace content {
 CONTENT_EXPORT extern const char kChromeDevToolsScheme[];
 CONTENT_EXPORT extern const char kChromeUIScheme[];  // Used for WebUIs.
 CONTENT_EXPORT extern const char kVivaldiUIScheme[];
+CONTENT_EXPORT extern const char kExeScheme[];
 CONTENT_EXPORT extern const char kGuestScheme[];
 CONTENT_EXPORT extern const char kMetadataScheme[];
+CONTENT_EXPORT extern const char kMojoScheme[];
 CONTENT_EXPORT extern const char kSwappedOutScheme[];
 CONTENT_EXPORT extern const char kViewSourceScheme[];
 #if defined(OS_CHROMEOS)
@@ -51,14 +53,15 @@ CONTENT_EXPORT extern const char kChromeUIBadCastCrashURL[];
 CONTENT_EXPORT extern const char kChromeUIBrowserCrashURL[];
 CONTENT_EXPORT extern const char kChromeUIBrowserUIHang[];
 CONTENT_EXPORT extern const char kChromeUICrashURL[];
+CONTENT_EXPORT extern const char kChromeUIDelayedBrowserUIHang[];
 CONTENT_EXPORT extern const char kChromeUIDumpURL[];
 CONTENT_EXPORT extern const char kChromeUIGpuCleanURL[];
 CONTENT_EXPORT extern const char kChromeUIGpuCrashURL[];
 CONTENT_EXPORT extern const char kChromeUIGpuHangURL[];
 CONTENT_EXPORT extern const char kChromeUIHangURL[];
 CONTENT_EXPORT extern const char kChromeUIKillURL[];
-CONTENT_EXPORT extern const char kChromeUINetworkErrorURL[];
 CONTENT_EXPORT extern const char kChromeUINetworkErrorsListingURL[];
+CONTENT_EXPORT extern const char kChromeUINetworkErrorURL[];
 CONTENT_EXPORT extern const char kChromeUIPpapiFlashCrashURL[];
 CONTENT_EXPORT extern const char kChromeUIPpapiFlashHangURL[];
 CONTENT_EXPORT extern const char kChromeUIServiceWorkerInternalsURL[];

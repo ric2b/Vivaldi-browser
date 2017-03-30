@@ -11,7 +11,6 @@
 #include "net/tools/quic/quic_socket_utils.h"
 
 namespace net {
-namespace tools {
 namespace test {
 
 // An alarm that is scheduled if a blocked socket is simulated to indicate
@@ -74,8 +73,9 @@ void PacketDroppingTestWriter::Initialize(QuicConnectionHelperInterface* helper,
 WriteResult PacketDroppingTestWriter::WritePacket(
     const char* buffer,
     size_t buf_len,
-    const net::IPAddressNumber& self_address,
-    const net::IPEndPoint& peer_address) {
+    const IPAddress& self_address,
+    const IPEndPoint& peer_address,
+    PerPacketOptions* options) {
   ++num_calls_to_write_;
   ReleaseOldPackets();
 
@@ -122,8 +122,13 @@ WriteResult PacketDroppingTestWriter::WritePacket(
                       ? send_time.Add(bandwidth_delay)
                       : delayed_packets_.back().send_time.Add(bandwidth_delay);
     }
+    std::unique_ptr<PerPacketOptions> delayed_options;
+    if (options != nullptr) {
+      delayed_options.reset(options->Clone());
+    }
     delayed_packets_.push_back(
-        DelayedWrite(buffer, buf_len, self_address, peer_address, send_time));
+        DelayedWrite(buffer, buf_len, self_address, peer_address,
+                     std::move(delayed_options), send_time));
     cur_buffer_size_ += buf_len;
 
     // Set the alarm if it's not yet set.
@@ -135,7 +140,7 @@ WriteResult PacketDroppingTestWriter::WritePacket(
   }
 
   return QuicPacketWriterWrapper::WritePacket(buffer, buf_len, self_address,
-                                              peer_address);
+                                              peer_address, options);
 }
 
 bool PacketDroppingTestWriter::IsWriteBlocked() const {
@@ -173,9 +178,9 @@ QuicTime PacketDroppingTestWriter::ReleaseNextPacket() {
   DVLOG(1) << "Releasing packet.  " << (delayed_packets_.size() - 1)
            << " remaining.";
   // Grab the next one off the queue and send it.
-  QuicPacketWriterWrapper::WritePacket(iter->buffer.data(),
-                                       iter->buffer.length(),
-                                       iter->self_address, iter->peer_address);
+  QuicPacketWriterWrapper::WritePacket(
+      iter->buffer.data(), iter->buffer.length(), iter->self_address,
+      iter->peer_address, iter->options.get());
   DCHECK_GE(cur_buffer_size_, iter->buffer.length());
   cur_buffer_size_ -= iter->buffer.length();
   delayed_packets_.erase(iter);
@@ -205,16 +210,28 @@ void PacketDroppingTestWriter::OnCanWrite() {
 PacketDroppingTestWriter::DelayedWrite::DelayedWrite(
     const char* buffer,
     size_t buf_len,
-    const net::IPAddressNumber& self_address,
-    const net::IPEndPoint& peer_address,
+    const IPAddress& self_address,
+    const IPEndPoint& peer_address,
+    std::unique_ptr<PerPacketOptions> options,
     QuicTime send_time)
     : buffer(buffer, buf_len),
       self_address(self_address),
       peer_address(peer_address),
+      options(std::move(options)),
       send_time(send_time) {}
+
+// TODO(rtenneti): on windows RValue reference gives errors.
+PacketDroppingTestWriter::DelayedWrite::DelayedWrite(
+    PacketDroppingTestWriter::DelayedWrite&& other) = default;
+
+// TODO(rtenneti): on windows RValue reference gives errors.
+// IPAddress has no move assignment operator.
+//
+// PacketDroppingTestWriter::DelayedWrite&
+// PacketDroppingTestWriter::DelayedWrite::operator=(
+//    PacketDroppingTestWriter::DelayedWrite&& other) = default;
 
 PacketDroppingTestWriter::DelayedWrite::~DelayedWrite() {}
 
 }  // namespace test
-}  // namespace tools
 }  // namespace net

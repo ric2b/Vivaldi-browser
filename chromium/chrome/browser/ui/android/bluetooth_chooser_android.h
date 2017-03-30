@@ -9,13 +9,17 @@
 #include "content/public/browser/bluetooth_chooser.h"
 #include "content/public/browser/web_contents.h"
 
+namespace url {
+class Origin;
+}
+
 // Represents a way to ask the user to select a Bluetooth device from a list of
 // options.
 class BluetoothChooserAndroid : public content::BluetoothChooser {
  public:
-  BluetoothChooserAndroid(content::WebContents* web_contents,
-                          const EventHandler& event_handler,
-                          const GURL& origin);
+  // Both frame and event_handler must outlive the BluetoothChooserAndroid.
+  BluetoothChooserAndroid(content::RenderFrameHost* frame,
+                          const EventHandler& event_handler);
   ~BluetoothChooserAndroid() override;
 
   // content::BluetoothChooser:
@@ -33,13 +37,11 @@ class BluetoothChooserAndroid : public content::BluetoothChooser {
                         const base::android::JavaParamRef<jstring>& device_id);
 
   // Notify bluetooth stack that the search needs to be re-issued.
-  void RestartSearch(JNIEnv* env,
-                     const base::android::JavaParamRef<jobject>& obj);
+  void RestartSearch();
+  // Calls RestartSearch(). Unused JNI parameters enable calls from Java.
+  void RestartSearch(JNIEnv*, const base::android::JavaParamRef<jobject>&);
 
   void ShowBluetoothOverviewLink(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj);
-  void ShowBluetoothPairingLink(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
   void ShowBluetoothAdapterOffLink(
@@ -52,8 +54,10 @@ class BluetoothChooserAndroid : public content::BluetoothChooser {
   static bool Register(JNIEnv* env);
 
  private:
+  void OpenURL(const char* url);
   base::android::ScopedJavaGlobalRef<jobject> java_dialog_;
 
+  content::WebContents* web_contents_;
   BluetoothChooser::EventHandler event_handler_;
 };
 

@@ -16,7 +16,6 @@ ChromeUpdateClientConfig::ChromeUpdateClientConfig(
     content::BrowserContext* context)
     : impl_(base::CommandLine::ForCurrentProcess(),
             context->GetRequestContext()) {
-  impl_.set_enable_alt_source_url(false);
 }
 
 int ChromeUpdateClientConfig::InitialDelay() const {
@@ -67,6 +66,10 @@ std::string ChromeUpdateClientConfig::ExtraRequestParams() const {
   return impl_.ExtraRequestParams();
 }
 
+std::string ChromeUpdateClientConfig::GetDownloadPreference() const {
+  return std::string();
+}
+
 net::URLRequestContextGetter* ChromeUpdateClientConfig::RequestContext() const {
   return impl_.RequestContext();
 }
@@ -82,6 +85,10 @@ bool ChromeUpdateClientConfig::DeltasEnabled() const {
 
 bool ChromeUpdateClientConfig::UseBackgroundDownloader() const {
   return impl_.UseBackgroundDownloader();
+}
+
+bool ChromeUpdateClientConfig::UseCupSigning() const {
+  return impl_.UseCupSigning();
 }
 
 ChromeUpdateClientConfig::~ChromeUpdateClientConfig() {}

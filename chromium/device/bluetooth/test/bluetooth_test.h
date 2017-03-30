@@ -58,7 +58,7 @@ class BluetoothTestBase : public testing::Test {
   // Calls adapter_->StartDiscoverySessionWithFilter with Low Energy transport,
   // and this fixture's callbacks expecting success.
   // Then RunLoop().RunUntilIdle().
-  void StartLowEnergyDiscoverySession();
+  virtual void StartLowEnergyDiscoverySession();
 
   // Calls adapter_->StartDiscoverySessionWithFilter with Low Energy transport,
   // and this fixture's callbacks expecting error.
@@ -113,6 +113,9 @@ class BluetoothTestBase : public testing::Test {
       BluetoothDevice* device,
       const std::vector<std::string>& uuids) {}
 
+  // Simulates remove of a |service|.
+  virtual void SimulateGattServiceRemoved(BluetoothGattService* service) {}
+
   // Simulates failure to discover services.
   virtual void SimulateGattServicesDiscoveryError(BluetoothDevice* device) {}
 
@@ -120,6 +123,11 @@ class BluetoothTestBase : public testing::Test {
   virtual void SimulateGattCharacteristic(BluetoothGattService* service,
                                           const std::string& uuid,
                                           int properties) {}
+
+  // Simulates remove of a |characteristic| from |service|.
+  virtual void SimulateGattCharacteristicRemoved(
+      BluetoothGattService* service,
+      BluetoothGattCharacteristic* characteristic) {}
 
   // Remembers |characteristic|'s platform specific object to be used in a
   // subsequent call to methods such as SimulateGattCharacteristicRead that

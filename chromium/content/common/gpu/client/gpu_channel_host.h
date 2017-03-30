@@ -21,13 +21,12 @@
 #include "base/synchronization/lock.h"
 #include "content/common/content_export.h"
 #include "content/common/gpu/gpu_process_launch_causes.h"
-#include "content/common/gpu/gpu_result_codes.h"
-#include "content/common/gpu/gpu_stream_priority.h"
-#include "content/common/message_router.h"
+#include "content/common/gpu/gpu_stream_constants.h"
 #include "gpu/config/gpu_info.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_sync_channel.h"
 #include "ipc/message_filter.h"
+#include "ipc/message_router.h"
 #include "media/video/jpeg_decode_accelerator.h"
 #include "ui/events/latency_info.h"
 #include "ui/gfx/geometry/size.h"
@@ -70,10 +69,7 @@ class CONTENT_EXPORT GpuChannelHostFactory {
   virtual scoped_refptr<base::SingleThreadTaskRunner>
   GetIOThreadTaskRunner() = 0;
   virtual scoped_ptr<base::SharedMemory> AllocateSharedMemory(size_t size) = 0;
-  virtual CreateCommandBufferResult CreateViewCommandBuffer(
-      int32_t surface_id,
-      const GPUCreateCommandBufferConfig& init_params,
-      int32_t route_id) = 0;
+  virtual gfx::GLSurfaceHandle GetSurfaceHandle(int32_t surface_id) = 0;
 };
 
 // Encapsulates an IPC channel between the client and one GPU process.
@@ -92,7 +88,7 @@ class GpuChannelHost : public IPC::Sender,
       base::WaitableEvent* shutdown_event,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager);
 
-  static const int32_t kDefaultStreamId = -1;
+  static const int32_t kDefaultStreamId = GPU_STREAM_DEFAULT;
   static const GpuStreamPriority kDefaultStreamPriority =
       GpuStreamPriority::NORMAL;
 
@@ -231,6 +227,7 @@ class GpuChannelHost : public IPC::Sender,
    private:
     struct ListenerInfo {
       ListenerInfo();
+      ListenerInfo(const ListenerInfo& other);
       ~ListenerInfo();
 
       base::WeakPtr<IPC::Listener> listener;
@@ -252,6 +249,7 @@ class GpuChannelHost : public IPC::Sender,
 
   struct StreamFlushInfo {
     StreamFlushInfo();
+    StreamFlushInfo(const StreamFlushInfo& other);
     ~StreamFlushInfo();
 
     // These are global per stream.

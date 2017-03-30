@@ -314,9 +314,10 @@ void MultibufferDataSource::SetBitrate(int bitrate) {
                             weak_factory_.GetWeakPtr(), bitrate));
 }
 
-void MultibufferDataSource::OnBufferingHaveEnough() {
+void MultibufferDataSource::OnBufferingHaveEnough(bool always_cancel) {
   DCHECK(render_task_runner_->BelongsToCurrentThread());
-  if (reader_ && preload_ == METADATA && !media_has_played_ && !IsStreaming()) {
+  if (reader_ && (always_cancel || (preload_ == METADATA &&
+                                    !media_has_played_ && !IsStreaming()))) {
     cancel_on_defer_ = true;
     if (!loading_)
       reader_.reset(nullptr);
@@ -356,8 +357,13 @@ void MultibufferDataSource::Read(int64_t position,
 }
 
 bool MultibufferDataSource::GetSize(int64_t* size_out) {
-  *size_out = url_data_->length();
-  return *size_out != kPositionNotSpecified;
+  base::AutoLock auto_lock(lock_);
+  if (total_bytes_ != kPositionNotSpecified) {
+    *size_out = total_bytes_;
+    return true;
+  }
+  *size_out = 0;
+  return false;
 }
 
 bool MultibufferDataSource::IsStreaming() {
@@ -445,7 +451,10 @@ void MultibufferDataSource::StartCallback() {
                   url_data_->length() != kPositionNotSpecified);
 
   if (success) {
-    total_bytes_ = url_data_->length();
+    {
+      base::AutoLock auto_lock(lock_);
+      total_bytes_ = url_data_->length();
+    }
     streaming_ =
         !assume_fully_buffered() && (total_bytes_ == kPositionNotSpecified ||
                                      !url_data_->range_supported());

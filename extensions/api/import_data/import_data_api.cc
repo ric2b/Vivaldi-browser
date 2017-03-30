@@ -7,7 +7,6 @@
 
 #include "app/vivaldi_resources.h"
 
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -28,6 +27,7 @@
 
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -121,6 +121,7 @@ static struct ImportItemToStringMapping {
   { importer::COOKIES, "cookies" },
   { importer::SEARCH_ENGINES, "search" },
   { importer::NOTES, "notes" },
+  { importer::SPEED_DIAL, "speeddial" },
 };
 
 const size_t kImportItemToStringMappingLength =
@@ -296,6 +297,7 @@ void ImporterApiFunction::Finished() {
         ((browser_services & importer::MASTER_PASSWORD) != 0);
     profile->search = ((browser_services & importer::SEARCH_ENGINES) != 0);
     profile->notes = ((browser_services & importer::NOTES) != 0);
+    profile->speeddial = ((browser_services & importer::SPEED_DIAL) != 0);
 
     profile->supports_standalone_import =
         (source_profile.importer_type == importer::TYPE_OPERA ||
@@ -414,6 +416,9 @@ bool ImportDataStartImportFunction::RunAsyncImpl() {
   source_profile.selected_profile_name = ids[7];
   if (params->master_password.get()) {
     source_profile.master_password = *params->master_password;
+  }
+  if (ids[8] == "true") {
+    selected_items |= importer::SPEED_DIAL;
   }
 
   int imported_items = (selected_items & supported_items);
@@ -536,7 +541,8 @@ void ImportDataStartImportFunction::StartImport(
 
 ImportDataSetVivaldiAsDefaultBrowserFunction::
     ImportDataSetVivaldiAsDefaultBrowserFunction() {
-  default_browser_worker_ = new ShellIntegration::DefaultBrowserWorker(this);
+  default_browser_worker_ =
+    new shell_integration::DefaultBrowserWorker(this, false);
 }
 
 ImportDataSetVivaldiAsDefaultBrowserFunction::
@@ -545,18 +551,18 @@ ImportDataSetVivaldiAsDefaultBrowserFunction::
     default_browser_worker_->ObserverDestroyed();
 }
 
-// ShellIntegration::DefaultWebClientObserver implementation.
+// shell_integration::DefaultWebClientObserver implementation.
 void ImportDataSetVivaldiAsDefaultBrowserFunction::SetDefaultWebClientUIState(
-    ShellIntegration::DefaultWebClientUIState state) {
-  if (state == ShellIntegration::STATE_IS_DEFAULT) {
+    shell_integration::DefaultWebClientUIState state) {
+  if (state == shell_integration::STATE_IS_DEFAULT) {
     results_ =
         vivaldi::import_data::SetVivaldiAsDefaultBrowser::Results::Create(
             "true");
     SendResponse(true);  // Already default
     Release();
-  } else if (state == ShellIntegration::STATE_NOT_DEFAULT) {
-    if (ShellIntegration::CanSetAsDefaultBrowser() ==
-        ShellIntegration::SET_DEFAULT_NOT_ALLOWED) {
+  } else if (state == shell_integration::STATE_NOT_DEFAULT) {
+    if (shell_integration::CanSetAsDefaultBrowser() ==
+        shell_integration::SET_DEFAULT_NOT_ALLOWED) {
     } else {
       // Not default browser
       results_ =
@@ -565,15 +571,10 @@ void ImportDataSetVivaldiAsDefaultBrowserFunction::SetDefaultWebClientUIState(
       SendResponse(true);
       Release();
     }
-  } else if (state == ShellIntegration::STATE_UNKNOWN) {
+  } else if (state == shell_integration::STATE_UNKNOWN) {
   } else {
     return;  // Still processing.
   }
-}
-
-bool ImportDataSetVivaldiAsDefaultBrowserFunction::
-    IsInteractiveSetDefaultPermitted() {
-  return true;
 }
 
 bool ImportDataSetVivaldiAsDefaultBrowserFunction::RunAsync() {
@@ -585,7 +586,8 @@ bool ImportDataSetVivaldiAsDefaultBrowserFunction::RunAsync() {
 
 ImportDataIsVivaldiDefaultBrowserFunction::
     ImportDataIsVivaldiDefaultBrowserFunction() {
-  default_browser_worker_ = new ShellIntegration::DefaultBrowserWorker(this);
+  default_browser_worker_ =
+    new shell_integration::DefaultBrowserWorker(this, false);
 }
 
 ImportDataIsVivaldiDefaultBrowserFunction::
@@ -600,17 +602,17 @@ bool ImportDataIsVivaldiDefaultBrowserFunction::RunAsync() {
   return true;
 }
 
-// ShellIntegration::DefaultWebClientObserver implementation.
+// shell_integration::DefaultWebClientObserver implementation.
 void ImportDataIsVivaldiDefaultBrowserFunction::SetDefaultWebClientUIState(
-    ShellIntegration::DefaultWebClientUIState state) {
-  if (state == ShellIntegration::STATE_IS_DEFAULT) {
+    shell_integration::DefaultWebClientUIState state) {
+  if (state == shell_integration::STATE_IS_DEFAULT) {
     results_ =
         vivaldi::import_data::IsVivaldiDefaultBrowser::Results::Create("true");
     SendResponse(true);  // Already default
     Release();
-  } else if (state == ShellIntegration::STATE_NOT_DEFAULT) {
-    if (ShellIntegration::CanSetAsDefaultBrowser() ==
-        ShellIntegration::SET_DEFAULT_NOT_ALLOWED) {
+  } else if (state == shell_integration::STATE_NOT_DEFAULT) {
+    if (shell_integration::CanSetAsDefaultBrowser() ==
+        shell_integration::SET_DEFAULT_NOT_ALLOWED) {
     } else {
       // Not default browser
       results_ = vivaldi::import_data::IsVivaldiDefaultBrowser::Results::Create(
@@ -618,14 +620,10 @@ void ImportDataIsVivaldiDefaultBrowserFunction::SetDefaultWebClientUIState(
       SendResponse(true);
       Release();
     }
-  } else if (state == ShellIntegration::STATE_UNKNOWN) {
+  } else if (state == shell_integration::STATE_UNKNOWN) {
   } else {
     return;  // Still processing.
   }
-}
-bool ImportDataIsVivaldiDefaultBrowserFunction::
-    IsInteractiveSetDefaultPermitted() {
-  return true;
 }
 
 ImportDataLaunchNetworkSettingsFunction::

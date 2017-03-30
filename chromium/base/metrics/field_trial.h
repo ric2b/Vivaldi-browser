@@ -119,6 +119,7 @@ class BASE_EXPORT FieldTrial : public RefCounted<FieldTrial> {
     bool activated;
 
     State();
+    State(const State& other);
     ~State();
   };
 
@@ -320,14 +321,6 @@ class BASE_EXPORT FieldTrial : public RefCounted<FieldTrial> {
 // Only one instance of this class exists.
 class BASE_EXPORT FieldTrialList {
  public:
-  // Specifies whether field trials should be activated (marked as "used"), when
-  // created using |CreateTrialsFromString()|. Has no effect on trials that are
-  // prefixed with |kActivationMarker|, which will always be activated."
-  enum FieldTrialActivationMode {
-    DONT_ACTIVATE_TRIALS,
-    ACTIVATE_TRIALS,
-  };
-
   // Year that is guaranteed to not be expired when instantiating a field trial
   // via |FactoryGetFieldTrial()|.  Set to two years from the build date.
   static int kNoExpirationYear;
@@ -457,14 +450,12 @@ class BASE_EXPORT FieldTrialList {
   // for each trial, force them to have the same group string. This is commonly
   // used in a non-browser process, to carry randomly selected state in a
   // browser process into this non-browser process, but could also be invoked
-  // through a command line argument to the browser process. The created field
-  // trials are all marked as "used" for the purposes of active trial reporting
-  // if |mode| is ACTIVATE_TRIALS, otherwise each trial will be marked as "used"
-  // if it is prefixed with |kActivationMarker|. Trial names in
+  // through a command line argument to the browser process. Created field
+  // trials will be marked "used" for the purposes of active trial reporting
+  // if they are prefixed with |kActivationMarker|. Trial names in
   // |ignored_trial_names| are ignored when parsing |trials_string|.
   static bool CreateTrialsFromString(
       const std::string& trials_string,
-      FieldTrialActivationMode mode,
       const std::set<std::string>& ignored_trial_names);
 
   // Create a FieldTrial with the given |name| and using 100% probability for
@@ -518,6 +509,8 @@ class BASE_EXPORT FieldTrialList {
   // Lock for access to registered_.
   base::Lock lock_;
   RegistrationMap registered_;
+
+  std::map<std::string, std::string> seen_states_;
 
   // Entropy provider to be used for one-time randomized field trials. If NULL,
   // one-time randomization is not supported.

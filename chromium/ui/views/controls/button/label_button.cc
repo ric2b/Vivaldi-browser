@@ -17,6 +17,8 @@
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/views/animation/flood_fill_ink_drop_animation.h"
+#include "ui/views/animation/ink_drop_hover.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/painter.h"
@@ -51,6 +53,21 @@ const gfx::FontList& GetDefaultBoldFontList() {
   return font_list.Get();
 }
 
+// Ink drop container view that does not capture any events.
+class InkDropContainerView : public views::View {
+ public:
+  InkDropContainerView() {}
+
+  // View:
+  bool CanProcessEventsWithinSubtree() const override {
+    // Ensure the container View is found as the EventTarget instead of this.
+    return false;
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(InkDropContainerView);
+};
+
 }  // namespace
 
 namespace views {
@@ -64,6 +81,7 @@ LabelButton::LabelButton(ButtonListener* listener, const base::string16& text)
     : CustomButton(listener),
       image_(new ImageView()),
       label_(new Label()),
+      ink_drop_container_(new InkDropContainerView()),
       cached_normal_font_list_(GetDefaultNormalFontList()),
       cached_bold_font_list_(GetDefaultBoldFontList()),
       button_state_images_(),
@@ -76,6 +94,11 @@ LabelButton::LabelButton(ButtonListener* listener, const base::string16& text)
       horizontal_alignment_(gfx::ALIGN_LEFT) {
   SetAnimationDuration(kHoverAnimationDurationMs);
   SetText(text);
+
+  AddChildView(ink_drop_container_);
+  ink_drop_container_->SetPaintToLayer(true);
+  ink_drop_container_->SetFillsBoundsOpaquely(false);
+  ink_drop_container_->SetVisible(false);
 
   AddChildView(image_);
   image_->set_interactive(false);
@@ -181,11 +204,7 @@ void LabelButton::SetIsDefault(bool is_default) {
   if (style_ == STYLE_BUTTON) {
     label_->SetFontList(
         is_default ? cached_bold_font_list_ : cached_normal_font_list_);
-    // Usually this function is called before |this| is attached to a widget,
-    // but in the cases where |this| is already shown, we need to re-layout
-    // because font boldness affects the label's size.
-    if (GetWidget())
-      Layout();
+    InvalidateLayout();
   }
 }
 
@@ -282,6 +301,8 @@ int LabelButton::GetHeightForWidth(int w) const {
 }
 
 void LabelButton::Layout() {
+  ink_drop_container_->SetBoundsRect(GetLocalBounds());
+
   // By default, GetChildAreaBounds() ignores the top and bottom border, but we
   // want the image to respect it.
   gfx::Rect child_area(GetChildAreaBounds());
@@ -382,6 +403,38 @@ void LabelButton::OnNativeThemeChanged(const ui::NativeTheme* theme) {
   UpdateThemedBorder();
   // Invalidate the layout to pickup the new insets from the border.
   InvalidateLayout();
+}
+
+void LabelButton::AddInkDropLayer(ui::Layer* ink_drop_layer) {
+  image()->SetPaintToLayer(true);
+  image()->SetFillsBoundsOpaquely(false);
+  ink_drop_container_->SetVisible(true);
+  ink_drop_container_->layer()->Add(ink_drop_layer);
+}
+
+void LabelButton::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
+  image()->SetPaintToLayer(false);
+  ink_drop_container_->layer()->Remove(ink_drop_layer);
+  ink_drop_container_->SetVisible(false);
+}
+
+scoped_ptr<views::InkDropAnimation> LabelButton::CreateInkDropAnimation()
+    const {
+  // TODO(bruthig): Make the flood fill ink drops centered on the LocatedEvent
+  // that triggered them.
+  return GetText().empty()
+             ? CustomButton::CreateInkDropAnimation()
+             : make_scoped_ptr(new views::FloodFillInkDropAnimation(
+                   size(), GetInkDropCenter(), GetInkDropBaseColor()));
+}
+
+scoped_ptr<views::InkDropHover> LabelButton::CreateInkDropHover() const {
+  if (!ShouldShowInkDropHover())
+    return nullptr;
+  return GetText().empty()
+             ? CustomButton::CreateInkDropHover()
+             : make_scoped_ptr(new views::InkDropHover(
+                   size(), 0, GetInkDropCenter(), GetInkDropBaseColor()));
 }
 
 void LabelButton::StateChanged() {

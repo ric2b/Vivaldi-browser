@@ -8,12 +8,13 @@
 #include <map>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/values.h"
 #include "cc/base/synced_property.h"
+#include "cc/input/event_listener_properties.h"
 #include "cc/input/layer_selection_bound.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/output/begin_frame_args.h"
@@ -111,6 +112,9 @@ class CC_EXPORT LayerTreeImpl {
   bool RequiresHighResToDraw() const;
   bool SmoothnessTakesPriority() const;
   VideoFrameControllerClient* GetVideoFrameControllerClient() const;
+  AnimationHost* animation_host() const {
+    return layer_tree_host_impl_->animation_host();
+  }
 
   // Tree specific methods exposed to layer-impl tree.
   // ---------------------------------------------------------------------------
@@ -374,9 +378,6 @@ class CC_EXPORT LayerTreeImpl {
 
   LayerImpl* FindLayerThatIsHitByPoint(const gfx::PointF& screen_space_point);
 
-  LayerImpl* FindLayerWithWheelHandlerThatIsHitByPoint(
-      const gfx::PointF& screen_space_point);
-
   LayerImpl* FindLayerThatIsHitByPointInTouchHandlerRegion(
       const gfx::PointF& screen_space_point);
 
@@ -414,12 +415,12 @@ class CC_EXPORT LayerTreeImpl {
   bool HasPotentiallyRunningOpacityAnimation(const LayerImpl* layer) const;
   bool HasPotentiallyRunningTransformAnimation(const LayerImpl* layer) const;
 
-  bool HasAnyAnimationTargetingProperty(
-      const LayerImpl* layer,
-      Animation::TargetProperty property) const;
+  bool HasAnyAnimationTargetingProperty(const LayerImpl* layer,
+                                        TargetProperty::Type property) const;
 
   bool FilterIsAnimatingOnImplOnly(const LayerImpl* layer) const;
   bool OpacityIsAnimatingOnImplOnly(const LayerImpl* layer) const;
+  bool ScrollOffsetIsAnimatingOnImplOnly(const LayerImpl* layer) const;
   bool TransformIsAnimatingOnImplOnly(const LayerImpl* layer) const;
 
   bool AnimationsPreserveAxisAlignment(const LayerImpl* layer) const;
@@ -438,6 +439,23 @@ class CC_EXPORT LayerTreeImpl {
   bool TransformAnimationBoundsForBox(const LayerImpl* layer,
                                       const gfx::BoxF& box,
                                       gfx::BoxF* bounds) const;
+
+  bool have_scroll_event_handlers() const {
+    return have_scroll_event_handlers_;
+  }
+  void set_have_scroll_event_handlers(bool have_event_handlers) {
+    have_scroll_event_handlers_ = have_event_handlers;
+  }
+
+  EventListenerProperties event_listener_properties(
+      EventListenerClass event_class) const {
+    return event_listener_properties_[static_cast<size_t>(event_class)];
+  }
+  void set_event_listener_properties(EventListenerClass event_class,
+                                     EventListenerProperties event_properties) {
+    event_listener_properties_[static_cast<size_t>(event_class)] =
+        event_properties;
+  }
 
  protected:
   explicit LayerTreeImpl(
@@ -464,7 +482,6 @@ class CC_EXPORT LayerTreeImpl {
   SkColor background_color_;
   bool has_transparent_background_;
 
-  int currently_scrolling_layer_id_;
   int last_scrolled_layer_id_;
   int overscroll_elasticity_layer_id_;
   int page_scale_layer_id_;
@@ -482,15 +499,15 @@ class CC_EXPORT LayerTreeImpl {
 
   scoped_refptr<SyncedElasticOverscroll> elastic_overscroll_;
 
-  typedef base::hash_map<int, LayerImpl*> LayerIdMap;
+  using LayerIdMap = std::unordered_map<int, LayerImpl*>;
   LayerIdMap layer_id_map_;
 
-  base::hash_map<uint64_t, ElementLayers> element_layers_map_;
+  std::unordered_map<uint64_t, ElementLayers> element_layers_map_;
 
   // Maps from clip layer ids to scroll layer ids.  Note that this only includes
   // the subset of clip layers that act as scrolling containers.  (This is
   // derived from LayerImpl::scroll_clip_layer_ and exists to avoid O(n) walks.)
-  base::hash_map<int, int> clip_scroll_map_;
+  std::unordered_map<int, int> clip_scroll_map_;
 
   // Maps scroll layer ids to scrollbar layer ids.  For each scroll layer, there
   // may be 1 or 2 scrollbar layers (for vertical and horizontal).  (This is
@@ -526,10 +543,13 @@ class CC_EXPORT LayerTreeImpl {
 
   int render_surface_layer_list_id_;
 
+  bool have_scroll_event_handlers_;
+  EventListenerProperties event_listener_properties_[static_cast<size_t>(
+      EventListenerClass::kNumClasses)];
+
   // Whether or not Blink's viewport size was shrunk by the height of the top
   // controls at the time of the last layout.
   bool top_controls_shrink_blink_size_;
-
   float top_controls_height_;
 
   // The amount that the top controls are shown from 0 (hidden) to 1 (fully

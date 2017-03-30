@@ -19,6 +19,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/ssl_status.h"
+#include "grit/components_strings.h"
 #include "jni/ConnectionInfoPopup_jni.h"
 #include "net/cert/x509_certificate.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -137,8 +138,16 @@ void ConnectionInfoPopupAndroid::SetIdentityInfo(
 
     ScopedJavaLocalRef<jstring> description =
         ConvertUTF8ToJavaString(env, identity_info.identity_status_description);
-    base::string16 certificate_label =
-        l10n_util::GetStringUTF16(IDS_PAGEINFO_CERT_INFO_BUTTON);
+    base::string16 certificate_label;
+
+    // Only show the certificate viewer link if the connection actually used a
+    // certificate.
+    if (identity_info.identity_status !=
+        WebsiteSettings::SITE_IDENTITY_STATUS_NO_CERT) {
+      certificate_label =
+          l10n_util::GetStringUTF16(IDS_PAGEINFO_CERT_INFO_BUTTON);
+    }
+
     Java_ConnectionInfoPopup_addCertificateSection(
         env,
         popup_jobject_.obj(),

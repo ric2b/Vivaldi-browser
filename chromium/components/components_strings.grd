@@ -185,20 +185,25 @@
       <part file="app_modal_strings.grdp" />
       <part file="autofill_strings.grdp" />
       <part file="bookmark_bar_strings.grdp" />
+      <part file="bookmark_component_strings.grdp" />
       <part file="browser_sync_strings.grdp" />
       <part file="components_settings_strings.grdp" />
       <part file="crash_strings.grdp" />
       <part file="data_reduction_proxy_strings.grdp" />
       <part file="dialog_strings.grdp" />
       <part file="dom_distiller_strings.grdp" />
-      <part file="enhanced_bookmarks_strings.grdp" />
       <part file="error_page_strings.grdp" />
+      <part file="find_in_page_strings.grdp" />
       <part file="flags_ui_strings.grdp" />
-      <part file="history_ui_strings.grdp" />
+      <part file="history_strings.grdp" />
+      <part file="login_dialog_strings.grdp" />
+      <part file="new_or_sad_tab_strings.grdp" />
       <part file="omnibox_strings.grdp" />
+      <part file="pageinfo_strings.grdp" />
       <part file="password_manager_strings.grdp" />
       <part file="pdf_strings.grdp" />
       <part file="policy_strings.grdp" />
+      <part file="search_engines_strings.grdp" />
       <part file="security_interstitials_strings.grdp" />
       <part file="ssl_errors_strings.grdp" />
       <part file="sync_ui_strings.grdp" />
@@ -222,6 +227,9 @@
       <message name="IDS_OK" desc="Used for OK on buttons">
         OK
       </message>
+      <message name="IDS_PLUGIN_NOT_SUPPORTED" desc="The placeholder text for an unsupported plugin.">
+        This plugin is not supported.
+      </message>
       <if expr="not is_android">
         <if expr="not use_titlecase">
           <message name="IDS_PRINT" desc="The text label of the Print... menu item. Opens a dialog box to select print settings">
@@ -233,6 +241,16 @@
             &amp;Print...
           </message>
         </if>
+      </if>
+      <if expr="not use_titlecase">
+        <message name="IDS_RECENTLY_CLOSED" desc="The section header for the Recently Closed section of the Recent Tabs menu.">
+          Recently closed
+        </message>
+      </if>
+      <if expr="use_titlecase">
+        <message name="IDS_RECENTLY_CLOSED" desc="In Title Case: The section header for the Recently Closed section of the Recent Tabs menu.">
+          Recently Closed
+        </message>
       </if>
 
       <!-- Accessibility labels for generic items -->
@@ -251,6 +269,20 @@
 
       <message name="IDS_UTILITY_PROCESS_JSON_PARSER_NAME" desc="The name of the utility process used for parsing JSON files.">
         JSON Parser
+      </message>
+
+      <message name="IDS_SESSION_CRASHED_VIEW_RESTORE_BUTTON" desc="Title of the restore button in the session crashed view.">
+        Restore
+      </message>
+
+      <!-- Website Settings UI -->
+      <message name="IDS_WEBSITE_SETTINGS_NON_SECURE_TRANSPORT" desc="Text that is displayed in the header of the Website Settings popup if the website uses non-secure transport.">
+        Your connection to this site is not private.
+      </message>
+
+      <!-- Advanced Section Titles -->
+      <message name="IDS_OPTIONS_ADVANCED_SECTION_TITLE_PRIVACY">
+        Privacy
       </message>
     </messages>
   </release>

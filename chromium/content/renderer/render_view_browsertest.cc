@@ -17,9 +17,12 @@
 #include "base/time/time.h"
 #include "base/win/windows_version.h"
 #include "build/build_config.h"
+#include "cc/trees/layer_tree_host.h"
 #include "content/child/request_extra_data.h"
 #include "content/child/service_worker/service_worker_network_provider.h"
+#include "content/common/content_switches_internal.h"
 #include "content/common/frame_messages.h"
+#include "content/common/frame_replication_state.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/common/ssl_status_serialization.h"
 #include "content/common/view_messages.h"
@@ -41,6 +44,7 @@
 #include "content/public/test/test_utils.h"
 #include "content/renderer/accessibility/renderer_accessibility.h"
 #include "content/renderer/devtools/devtools_agent.h"
+#include "content/renderer/gpu/render_widget_compositor.h"
 #include "content/renderer/history_controller.h"
 #include "content/renderer/history_serialization.h"
 #include "content/renderer/navigation_state_impl.h"
@@ -59,6 +63,7 @@
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
 #include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebDeviceEmulationParams.h"
+#include "third_party/WebKit/public/web/WebFrameContentDumper.h"
 #include "third_party/WebKit/public/web/WebHistoryCommitType.h"
 #include "third_party/WebKit/public/web/WebHistoryItem.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
@@ -87,6 +92,7 @@
 #include "url/url_constants.h"
 
 using blink::WebFrame;
+using blink::WebFrameContentDumper;
 using blink::WebInputEvent;
 using blink::WebLocalFrame;
 using blink::WebMouseEvent;
@@ -150,6 +156,31 @@ class WebUITestWebUIControllerFactory : public WebUIControllerFactory {
 // constraints on systems with these timers.
 bool TimeTicksGT(const base::TimeTicks& x, const base::TimeTicks& y) {
   return base::TimeTicks::IsHighResolution() ? x > y : x >= y;
+}
+
+// FrameReplicationState is normally maintained in the browser process,
+// but the function below provides a way for tests to construct a partial
+// FrameReplicationState within the renderer process.  We say "partial",
+// because some fields of FrameReplicationState cannot be filled out
+// by content-layer, renderer code (still the constructed, partial
+// FrameReplicationState is sufficiently complete to avoid trigerring
+// asserts that a default/empty FrameReplicationState would).
+FrameReplicationState ReconstructReplicationStateForTesting(
+    TestRenderFrame* test_render_frame) {
+  blink::WebLocalFrame* frame = test_render_frame->GetWebFrame();
+
+  FrameReplicationState result;
+  // can't recover result.scope - no way to get WebTreeScopeType via public
+  // blink API...
+  result.name = base::UTF16ToUTF8(base::StringPiece16(frame->assignedName()));
+  result.unique_name =
+      base::UTF16ToUTF8(base::StringPiece16(frame->uniqueName()));
+  result.sandbox_flags = frame->effectiveSandboxFlags();
+  // result.should_enforce_strict_mixed_content_checking is calculated in the
+  // browser...
+  result.origin = frame->securityOrigin();
+
+  return result;
 }
 
 }  // namespace
@@ -393,9 +424,9 @@ class RenderViewImplBlinkSettingsTest : public RenderViewImplTest {
 };
 
 class RenderViewImplScaleFactorTest : public RenderViewImplBlinkSettingsTest {
- public:
+ protected:
   void SetDeviceScaleFactor(float dsf) {
-    ViewMsg_Resize_Params params;
+    ResizeParams params;
     params.screen_info.deviceScaleFactor = dsf;
     params.new_size = gfx::Size(100, 100);
     params.physical_backing_size = gfx::Size(200, 200);
@@ -403,6 +434,33 @@ class RenderViewImplScaleFactorTest : public RenderViewImplBlinkSettingsTest {
     params.needs_resize_ack = false;
     view()->OnResize(params);
     ASSERT_EQ(dsf, view()->device_scale_factor_);
+  }
+
+  void TestEmulatedSizeDprDsf(int width, int height, float dpr,
+                              float compositor_dsf) {
+    static base::string16 get_width =
+        base::ASCIIToUTF16("Number(window.innerWidth)");
+    static base::string16 get_height =
+        base::ASCIIToUTF16("Number(window.innerHeight)");
+    static base::string16 get_dpr =
+        base::ASCIIToUTF16("Number(window.devicePixelRatio * 10)");
+
+    int emulated_width, emulated_height;
+    int emulated_dpr;
+    blink::WebDeviceEmulationParams params;
+    params.viewSize.width = width;
+    params.viewSize.height = height;
+    params.deviceScaleFactor = dpr;
+    view()->OnEnableDeviceEmulation(params);
+    EXPECT_TRUE(ExecuteJavaScriptAndReturnIntValue(get_width, &emulated_width));
+    EXPECT_EQ(width, emulated_width);
+    EXPECT_TRUE(ExecuteJavaScriptAndReturnIntValue(get_height,
+                                                   &emulated_height));
+    EXPECT_EQ(height, emulated_height);
+    EXPECT_TRUE(ExecuteJavaScriptAndReturnIntValue(get_dpr, &emulated_dpr));
+    EXPECT_EQ(static_cast<int>(dpr * 10), emulated_dpr);
+    EXPECT_EQ(compositor_dsf,
+              view()->compositor()->layer_tree_host()->device_scale_factor());
   }
 };
 
@@ -501,7 +559,6 @@ TEST_F(RenderViewImplTest, OnNavStateChanged) {
     EXPECT_TRUE(render_thread_->sink().GetUniqueMessageMatching(
         ViewHostMsg_UpdateState::ID));
   }
-  ProcessPendingMessages();
 }
 
 TEST_F(RenderViewImplTest, OnNavigationHttpPost) {
@@ -585,6 +642,11 @@ TEST_F(RenderViewImplTest, DecideNavigationPolicy) {
 
   // Navigations to normal HTTP URLs can be handled locally.
   blink::WebURLRequest request(GURL("http://foo.com"));
+  request.setFetchRequestMode(blink::WebURLRequest::FetchRequestModeNavigate);
+  request.setFetchCredentialsMode(
+      blink::WebURLRequest::FetchCredentialsModeInclude);
+  request.setFetchRedirectMode(blink::WebURLRequest::FetchRedirectModeManual);
+  request.setFrameType(blink::WebURLRequest::FrameTypeTopLevel);
   blink::WebFrameClient::NavigationPolicyInfo policy_info(request);
   policy_info.navigationType = blink::WebNavigationTypeLinkClicked;
   policy_info.defaultPolicy = blink::WebNavigationPolicyCurrentTab;
@@ -595,7 +657,7 @@ TEST_F(RenderViewImplTest, DecideNavigationPolicy) {
   } else {
     // If this is a renderer-initiated navigation that just begun, it should
     // stop and be sent to the browser.
-    EXPECT_EQ(blink::WebNavigationPolicyIgnore, policy);
+    EXPECT_EQ(blink::WebNavigationPolicyHandledByClient, policy);
 
     // If this a navigation that is ready to commit, it should be handled
     // locally.
@@ -721,7 +783,8 @@ TEST_F(RenderViewImplTest, SendSwapOutACK) {
   RenderProcess::current()->AddRefProcess();
 
   // Respond to a swap out request.
-  frame()->SwapOut(kProxyRoutingId, true, content::FrameReplicationState());
+  frame()->SwapOut(kProxyRoutingId, true,
+                   ReconstructReplicationStateForTesting(frame()));
 
   // Ensure the swap out commits synchronously.
   EXPECT_NE(initial_page_id, view_page_id());
@@ -734,7 +797,8 @@ TEST_F(RenderViewImplTest, SendSwapOutACK) {
   // It is possible to get another swap out request.  Ensure that we send
   // an ACK, even if we don't have to do anything else.
   render_thread_->sink().ClearMessages();
-  frame()->SwapOut(kProxyRoutingId, false, content::FrameReplicationState());
+  frame()->SwapOut(kProxyRoutingId, false,
+                   ReconstructReplicationStateForTesting(frame()));
   const IPC::Message* msg2 = render_thread_->sink().GetUniqueMessageMatching(
       FrameHostMsg_SwapOut_ACK::ID);
   ASSERT_TRUE(msg2);
@@ -802,7 +866,8 @@ TEST_F(RenderViewImplTest, ReloadWhileSwappedOut) {
   ProcessPendingMessages();
 
   // Respond to a swap out request.
-  frame()->SwapOut(kProxyRoutingId, true, content::FrameReplicationState());
+  frame()->SwapOut(kProxyRoutingId, true,
+                   ReconstructReplicationStateForTesting(frame()));
 
   // Check for a OnSwapOutACK.
   const IPC::Message* msg = render_thread_->sink().GetUniqueMessageMatching(
@@ -858,7 +923,8 @@ TEST_F(RenderViewImplTest, OriginReplicationForSwapOut) {
 
   // Swap the child frame out and pass a replicated origin to be set for
   // WebRemoteFrame.
-  content::FrameReplicationState replication_state;
+  content::FrameReplicationState replication_state =
+      ReconstructReplicationStateForTesting(child_frame);
   replication_state.origin = url::Origin(GURL("http://foo.com"));
   child_frame->SwapOut(kProxyRoutingId, true, replication_state);
 
@@ -896,7 +962,9 @@ TEST_F(RenderViewImplTest, NavigateProxyAndDetachBeforeOnNavigate) {
       RenderFrame::FromWebFrame(web_frame->firstChild()));
 
   // Swap the child frame out.
-  child_frame->SwapOut(kProxyRoutingId, true, content::FrameReplicationState());
+  FrameReplicationState replication_state =
+      ReconstructReplicationStateForTesting(child_frame);
+  child_frame->SwapOut(kProxyRoutingId, true, replication_state);
   EXPECT_TRUE(web_frame->firstChild()->isWebRemoteFrame());
 
   // Do the first step of a remote-to-local transition for the child proxy,
@@ -907,13 +975,13 @@ TEST_F(RenderViewImplTest, NavigateProxyAndDetachBeforeOnNavigate) {
   widget_params.hidden = false;
   RenderFrameImpl::CreateFrame(routing_id, kProxyRoutingId, MSG_ROUTING_NONE,
                                frame()->GetRoutingID(), MSG_ROUTING_NONE,
-                               content::FrameReplicationState(), nullptr,
-                               widget_params, blink::WebFrameOwnerProperties());
+                               replication_state, nullptr, widget_params,
+                               blink::WebFrameOwnerProperties());
   TestRenderFrame* provisional_frame =
       static_cast<TestRenderFrame*>(RenderFrameImpl::FromRoutingID(routing_id));
   EXPECT_TRUE(provisional_frame);
 
-  // Detach the child frame (current remote) in the main frame.
+  // Detach the child frame (currently remote) in the main frame.
   ExecuteJavaScriptForTests(
       "document.body.removeChild(document.querySelector('iframe'));");
   RenderFrameProxy* child_proxy =
@@ -935,6 +1003,10 @@ TEST_F(RenderViewImplTest, NavigateProxyAndDetachBeforeOnNavigate) {
       render_thread_->sink().GetUniqueMessageMatching(
           FrameHostMsg_DidCommitProvisionalLoad::ID);
   EXPECT_FALSE(frame_navigate_msg);
+
+  // Detach the provisional frame to clean it up.  Normally, the browser
+  // process would trigger this via FrameMsg_Delete.
+  provisional_frame->GetWebFrame()->detach();
 }
 
 // Verify that DidFlushPaint doesn't crash if called after a RenderView is
@@ -951,8 +1023,9 @@ TEST_F(RenderViewImplTest, PaintAfterSwapOut) {
   // Respond to a swap out request.
   TestRenderFrame* new_main_frame =
       static_cast<TestRenderFrame*>(new_view->GetMainRenderFrame());
-  new_main_frame->SwapOut(kProxyRoutingId, true,
-                          content::FrameReplicationState());
+  new_main_frame->SwapOut(
+      kProxyRoutingId, true,
+      ReconstructReplicationStateForTesting(new_main_frame));
 
   // Simulate getting painted after swapping out.
   new_view->DidFlushPaint();
@@ -978,7 +1051,8 @@ TEST_F(RenderViewImplTest, SetZoomLevelAfterCrossProcessNavigation) {
   // Swap the main frame out after which it should become a WebRemoteFrame.
   TestRenderFrame* main_frame =
       static_cast<TestRenderFrame*>(view()->GetMainRenderFrame());
-  main_frame->SwapOut(kProxyRoutingId, true, content::FrameReplicationState());
+  main_frame->SwapOut(kProxyRoutingId, true,
+                      ReconstructReplicationStateForTesting(main_frame));
   EXPECT_TRUE(view()->webview()->mainFrame()->isWebRemoteFrame());
 
   // This should not cause a crash.
@@ -1314,6 +1388,7 @@ TEST_F(RenderViewImplTest, ImeComposition) {
         view()->OnImeSetComposition(
             base::WideToUTF16(ime_message->ime_string),
             std::vector<blink::WebCompositionUnderline>(),
+            gfx::Range::InvalidRange(),
             ime_message->selection_start,
             ime_message->selection_end);
         break;
@@ -1329,6 +1404,7 @@ TEST_F(RenderViewImplTest, ImeComposition) {
         view()->OnImeSetComposition(
             base::string16(),
             std::vector<blink::WebCompositionUnderline>(),
+            gfx::Range::InvalidRange(),
             0, 0);
         break;
     }
@@ -1343,8 +1419,8 @@ TEST_F(RenderViewImplTest, ImeComposition) {
       // Retrieve the content of this page and compare it with the expected
       // result.
       const int kMaxOutputCharacters = 128;
-      base::string16 output =
-          GetMainFrame()->contentAsText(kMaxOutputCharacters);
+      base::string16 output = WebFrameContentDumper::dumpFrameTreeAsText(
+          GetMainFrame(), kMaxOutputCharacters);
       EXPECT_EQ(base::WideToUTF16(ime_message->result), output);
     }
   }
@@ -1393,7 +1469,8 @@ TEST_F(RenderViewImplTest, OnSetTextDirection) {
     // Copy the document content to std::wstring and compare with the
     // expected result.
     const int kMaxOutputCharacters = 16;
-    base::string16 output = GetMainFrame()->contentAsText(kMaxOutputCharacters);
+    base::string16 output = WebFrameContentDumper::dumpFrameTreeAsText(
+        GetMainFrame(), kMaxOutputCharacters);
     EXPECT_EQ(base::WideToUTF16(kTextDirection[i].expected_result), output);
   }
 }
@@ -1533,8 +1610,9 @@ TEST_F(RenderViewImplTest, OnHandleKeyboardEvent) {
         // text created from a virtual-key code, a character code, and the
         // modifier-key status.
         const int kMaxOutputCharacters = 1024;
-        std::string output = base::UTF16ToUTF8(base::StringPiece16(
-            GetMainFrame()->contentAsText(kMaxOutputCharacters)));
+        std::string output = base::UTF16ToUTF8(
+            base::StringPiece16(WebFrameContentDumper::dumpFrameTreeAsText(
+                GetMainFrame(), kMaxOutputCharacters)));
         EXPECT_EQ(expected_result, output);
       }
     }
@@ -1765,7 +1843,8 @@ TEST_F(RenderViewImplTest, MAYBE_InsertCharacters) {
     // text created from a virtual-key code, a character code, and the
     // modifier-key status.
     const int kMaxOutputCharacters = 4096;
-    base::string16 output = GetMainFrame()->contentAsText(kMaxOutputCharacters);
+    base::string16 output = WebFrameContentDumper::dumpFrameTreeAsText(
+        GetMainFrame(), kMaxOutputCharacters);
     EXPECT_EQ(base::WideToUTF16(kLayouts[i].expected_result), output);
   }
 #else
@@ -1936,7 +2015,8 @@ TEST_F(RenderViewImplTest, GetCompositionCharacterBoundsTest) {
 
   // ASCII composition
   const base::string16 ascii_composition = base::UTF8ToUTF16("aiueo");
-  view()->OnImeSetComposition(ascii_composition, empty_underline, 0, 0);
+  view()->OnImeSetComposition(ascii_composition, empty_underline,
+                              gfx::Range::InvalidRange(), 0, 0);
   view()->GetCompositionCharacterBounds(&bounds);
   ASSERT_EQ(ascii_composition.size(), bounds.size());
 
@@ -1948,7 +2028,8 @@ TEST_F(RenderViewImplTest, GetCompositionCharacterBoundsTest) {
   // Non surrogate pair unicode character.
   const base::string16 unicode_composition = base::UTF8ToUTF16(
       "\xE3\x81\x82\xE3\x81\x84\xE3\x81\x86\xE3\x81\x88\xE3\x81\x8A");
-  view()->OnImeSetComposition(unicode_composition, empty_underline, 0, 0);
+  view()->OnImeSetComposition(unicode_composition, empty_underline,
+                              gfx::Range::InvalidRange(), 0, 0);
   view()->GetCompositionCharacterBounds(&bounds);
   ASSERT_EQ(unicode_composition.size(), bounds.size());
   for (size_t i = 0; i < bounds.size(); ++i)
@@ -1961,6 +2042,7 @@ TEST_F(RenderViewImplTest, GetCompositionCharacterBoundsTest) {
       base::UTF8ToUTF16("\xF0\xA0\xAE\x9F");
   view()->OnImeSetComposition(surrogate_pair_char,
                               empty_underline,
+                              gfx::Range::InvalidRange(),
                               0,
                               0);
   view()->GetCompositionCharacterBounds(&bounds);
@@ -1979,6 +2061,7 @@ TEST_F(RenderViewImplTest, GetCompositionCharacterBoundsTest) {
     false, true, false, false, true, false, false, true };
   view()->OnImeSetComposition(surrogate_pair_mixed_composition,
                               empty_underline,
+                              gfx::Range::InvalidRange(),
                               0,
                               0);
   view()->GetCompositionCharacterBounds(&bounds);
@@ -2096,8 +2179,9 @@ TEST_F(RenderViewImplTest, NavigateSubframe) {
   // Copy the document content to std::wstring and compare with the
   // expected result.
   const int kMaxOutputCharacters = 256;
-  std::string output = base::UTF16ToUTF8(base::StringPiece16(
-      GetMainFrame()->contentAsText(kMaxOutputCharacters)));
+  std::string output = base::UTF16ToUTF8(
+      base::StringPiece16(WebFrameContentDumper::dumpFrameTreeAsText(
+          GetMainFrame(), kMaxOutputCharacters)));
   EXPECT_EQ(output, "hello \n\nworld");
 }
 
@@ -2217,8 +2301,9 @@ TEST_F(RendererErrorPageTest, MAYBE_Suppresses) {
   main_frame->didFailProvisionalLoad(web_frame, error,
                                      blink::WebStandardCommit);
   const int kMaxOutputCharacters = 22;
-  EXPECT_EQ("", base::UTF16ToASCII(
-      base::StringPiece16(web_frame->contentAsText(kMaxOutputCharacters))));
+  EXPECT_EQ("", base::UTF16ToASCII(base::StringPiece16(
+                    WebFrameContentDumper::dumpFrameTreeAsText(
+                        web_frame, kMaxOutputCharacters))));
 }
 
 #if defined(OS_ANDROID)
@@ -2252,8 +2337,9 @@ TEST_F(RendererErrorPageTest, MAYBE_DoesNotSuppress) {
   FrameLoadWaiter(main_frame).Wait();
   const int kMaxOutputCharacters = 22;
   EXPECT_EQ("A suffusion of yellow.",
-            base::UTF16ToASCII(base::StringPiece16(
-                web_frame->contentAsText(kMaxOutputCharacters))));
+            base::UTF16ToASCII(
+                base::StringPiece16(WebFrameContentDumper::dumpFrameTreeAsText(
+                    web_frame, kMaxOutputCharacters))));
 }
 
 #if defined(OS_ANDROID)
@@ -2279,15 +2365,17 @@ TEST_F(RendererErrorPageTest, MAYBE_HttpStatusCodeErrorWithEmptyBody) {
                        RequestNavigationParams());
 
   // Emulate a 4xx/5xx main resource response with an empty body.
-  main_frame->didReceiveResponse(web_frame, 1, response);
-  main_frame->didFinishDocumentLoad(web_frame, true);
+  main_frame->didReceiveResponse(1, response);
+  main_frame->didFinishDocumentLoad(web_frame);
+  main_frame->runScriptsAtDocumentReady(web_frame, true);
 
   // The error page itself is loaded asynchronously.
   FrameLoadWaiter(main_frame).Wait();
   const int kMaxOutputCharacters = 22;
   EXPECT_EQ("A suffusion of yellow.",
-            base::UTF16ToASCII(base::StringPiece16(
-                web_frame->contentAsText(kMaxOutputCharacters))));
+            base::UTF16ToASCII(
+                base::StringPiece16(WebFrameContentDumper::dumpFrameTreeAsText(
+                    web_frame, kMaxOutputCharacters))));
 }
 
 // Ensure the render view sends favicon url update events correctly.
@@ -2400,36 +2488,6 @@ TEST_F(RenderViewImplTest, OnSetAccessibilityMode) {
   frame()->SetAccessibilityMode(AccessibilityModeComplete);
   ASSERT_EQ(AccessibilityModeComplete, frame()->accessibility_mode());
   ASSERT_NE((RendererAccessibility*) NULL, frame()->renderer_accessibility());
-}
-
-TEST_F(RenderViewImplTest, ScreenMetricsEmulation) {
-  LoadHTML("<body style='min-height:1000px;'></body>");
-
-  blink::WebDeviceEmulationParams params;
-  base::string16 get_width = base::ASCIIToUTF16("Number(window.innerWidth)");
-  base::string16 get_height = base::ASCIIToUTF16("Number(window.innerHeight)");
-  int width, height;
-
-  params.viewSize.width = 327;
-  params.viewSize.height = 415;
-  view()->OnEnableDeviceEmulation(params);
-  EXPECT_TRUE(ExecuteJavaScriptAndReturnIntValue(get_width, &width));
-  EXPECT_EQ(params.viewSize.width, width);
-  EXPECT_TRUE(ExecuteJavaScriptAndReturnIntValue(get_height, &height));
-  EXPECT_EQ(params.viewSize.height, height);
-
-  params.viewSize.width = 1005;
-  params.viewSize.height = 1102;
-  view()->OnEnableDeviceEmulation(params);
-  EXPECT_TRUE(ExecuteJavaScriptAndReturnIntValue(get_width, &width));
-  EXPECT_EQ(params.viewSize.width, width);
-  EXPECT_TRUE(ExecuteJavaScriptAndReturnIntValue(get_height, &height));
-  EXPECT_EQ(params.viewSize.height, height);
-
-  view()->OnDisableDeviceEmulation();
-
-  view()->OnEnableDeviceEmulation(params);
-  // Don't disable here to test that emulation is being shutdown properly.
 }
 
 // Sanity check for the Navigation Timing API |navigationStart| override. We
@@ -2603,6 +2661,8 @@ TEST_F(RenderViewImplBlinkSettingsTest, Negative) {
 
 TEST_F(RenderViewImplScaleFactorTest, ConverViewportToWindowWithoutZoomForDSF) {
   DoSetUp();
+  if (IsUseZoomForDSFEnabled())
+    return;
   SetDeviceScaleFactor(2.f);
   blink::WebRect rect(20, 10, 200, 100);
   view()->convertViewportToWindow(&rect);
@@ -2610,6 +2670,66 @@ TEST_F(RenderViewImplScaleFactorTest, ConverViewportToWindowWithoutZoomForDSF) {
   EXPECT_EQ(10, rect.y);
   EXPECT_EQ(200, rect.width);
   EXPECT_EQ(100, rect.height);
+}
+
+TEST_F(RenderViewImplScaleFactorTest, ScreenMetricsEmulationWithOriginalDSF1) {
+  DoSetUp();
+  SetDeviceScaleFactor(1.f);
+
+  LoadHTML("<body style='min-height:1000px;'></body>");
+  {
+    SCOPED_TRACE("327x415 1dpr");
+    TestEmulatedSizeDprDsf(327, 415, 1.f, 1.f);
+  }
+  {
+    SCOPED_TRACE("327x415 1.5dpr");
+    TestEmulatedSizeDprDsf(327, 415, 1.5f, 1.f);
+  }
+  {
+    SCOPED_TRACE("1005x1102 2dpr");
+    TestEmulatedSizeDprDsf(1005, 1102, 2.f, 1.f);
+  }
+  {
+    SCOPED_TRACE("1005x1102 3dpr");
+    TestEmulatedSizeDprDsf(1005, 1102, 3.f, 1.f);
+  }
+
+  view()->OnDisableDeviceEmulation();
+
+  blink::WebDeviceEmulationParams params;
+  view()->OnEnableDeviceEmulation(params);
+  // Don't disable here to test that emulation is being shutdown properly.
+}
+
+TEST_F(RenderViewImplScaleFactorTest, ScreenMetricsEmulationWithOriginalDSF2) {
+  DoSetUp();
+  SetDeviceScaleFactor(2.f);
+  float compositor_dsf =
+      IsUseZoomForDSFEnabled() ? 1.f : 2.f;
+
+  LoadHTML("<body style='min-height:1000px;'></body>");
+  {
+    SCOPED_TRACE("327x415 1dpr");
+    TestEmulatedSizeDprDsf(327, 415, 1.f, compositor_dsf);
+  }
+  {
+    SCOPED_TRACE("327x415 1.5dpr");
+    TestEmulatedSizeDprDsf(327, 415, 1.5f, compositor_dsf);
+  }
+  {
+    SCOPED_TRACE("1005x1102 2dpr");
+    TestEmulatedSizeDprDsf(1005, 1102, 2.f, compositor_dsf);
+  }
+  {
+    SCOPED_TRACE("1005x1102 3dpr");
+    TestEmulatedSizeDprDsf(1005, 1102, 3.f, compositor_dsf);
+  }
+
+  view()->OnDisableDeviceEmulation();
+
+  blink::WebDeviceEmulationParams params;
+  view()->OnEnableDeviceEmulation(params);
+  // Don't disable here to test that emulation is being shutdown properly.
 }
 
 TEST_F(RenderViewImplScaleFactorTest, ConverViewportToWindowWithZoomForDSF) {
@@ -2638,7 +2758,8 @@ TEST_F(RenderViewImplScaleFactorTest, ConverViewportToWindowWithZoomForDSF) {
 }
 
 #if defined(OS_MACOSX) || defined(USE_AURA)
-TEST_F(RenderViewImplScaleFactorTest, GetCompositionCharacterBoundsTest) {
+TEST_F(RenderViewImplScaleFactorTest,
+       DISABLED_GetCompositionCharacterBoundsTest) {  // http://crbug.com/582016
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kEnableUseZoomForDSF);
   DoSetUp();
@@ -2659,7 +2780,8 @@ TEST_F(RenderViewImplScaleFactorTest, GetCompositionCharacterBoundsTest) {
 
   // ASCII composition
   const base::string16 ascii_composition = base::UTF8ToUTF16("aiueo");
-  view()->OnImeSetComposition(ascii_composition, empty_underline, 0, 0);
+  view()->OnImeSetComposition(ascii_composition, empty_underline,
+                              gfx::Range::InvalidRange(), 0, 0);
   view()->GetCompositionCharacterBounds(&bounds_at_1x);
   ASSERT_EQ(ascii_composition.size(), bounds_at_1x.size());
 

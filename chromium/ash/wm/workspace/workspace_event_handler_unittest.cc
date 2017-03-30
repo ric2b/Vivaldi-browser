@@ -12,6 +12,7 @@
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace_controller.h"
 #include "ash/wm/workspace_controller_test_helper.h"
+#include "base/thread_task_runner_handle.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
@@ -106,8 +107,9 @@ TEST_F(WorkspaceEventHandlerTest, DoubleClickSingleAxisResizeEdge) {
 
   wm::ActivateWindow(window.get());
 
-  gfx::Rect work_area = Shell::GetScreen()->GetDisplayNearestWindow(
-      window.get()).work_area();
+  gfx::Rect work_area = gfx::Screen::GetScreen()
+                            ->GetDisplayNearestWindow(window.get())
+                            .work_area();
 
   ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow(),
                                      window.get());
@@ -212,8 +214,9 @@ TEST_F(WorkspaceEventHandlerTest, DoubleClickSingleAxisWhenSideSnapped) {
   aura::test::TestWindowDelegate delegate;
   scoped_ptr<aura::Window> window(CreateTestWindow(&delegate, restored_bounds));
 
-  gfx::Rect work_area_in_screen = Shell::GetScreen()->GetDisplayNearestWindow(
-      window.get()).work_area();
+  gfx::Rect work_area_in_screen = gfx::Screen::GetScreen()
+                                      ->GetDisplayNearestWindow(window.get())
+                                      .work_area();
 
   wm::WindowState* window_state = wm::GetWindowState(window.get());
   const wm::WMEvent snap_event(wm::WM_EVENT_SNAP_LEFT);
@@ -253,8 +256,9 @@ TEST_F(WorkspaceEventHandlerTest,
 
   wm::ActivateWindow(window.get());
 
-  gfx::Rect work_area = Shell::GetScreen()->GetDisplayNearestWindow(
-      window.get()).work_area();
+  gfx::Rect work_area = gfx::Screen::GetScreen()
+                            ->GetDisplayNearestWindow(window.get())
+                            .work_area();
 
   delegate.set_maximum_size(gfx::Size(0, 100));
 
@@ -277,8 +281,9 @@ TEST_F(WorkspaceEventHandlerTest,
 
   wm::ActivateWindow(window.get());
 
-  gfx::Rect work_area = Shell::GetScreen()->GetDisplayNearestWindow(
-      window.get()).work_area();
+  gfx::Rect work_area = gfx::Screen::GetScreen()
+                            ->GetDisplayNearestWindow(window.get())
+                            .work_area();
 
   delegate.set_maximum_size(gfx::Size(100, 0));
 
@@ -453,7 +458,7 @@ TEST_F(WorkspaceEventHandlerTest, DeleteWhileInRunLoop) {
   delegate.set_window_component(HTCAPTION);
 
   ASSERT_TRUE(aura::client::GetWindowMoveClient(window->GetRootWindow()));
-  base::MessageLoop::current()->DeleteSoon(FROM_HERE, window.get());
+  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, window.get());
   aura::client::GetWindowMoveClient(window->GetRootWindow())
       ->RunMoveLoop(window.release(),
                     gfx::Vector2d(),

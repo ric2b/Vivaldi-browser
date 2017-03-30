@@ -38,6 +38,12 @@ const char kQuicPacketLossThreshold[] = "packet_loss_threshold";
 const char kQuicIdleConnectionTimeoutSeconds[] =
     "idle_connection_timeout_seconds";
 const char kQuicHostWhitelist[] = "host_whitelist";
+const char kQuicCloseSessionsOnIpChange[] = "close_sessions_on_ip_change";
+const char kQuicMigrateSessionsOnNetworkChange[] =
+    "migrate_sessions_on_network_change";
+const char kQuicPreferAes[] = "prefer_aes";
+const char kQuicUserAgentId[] = "user_agent_id";
+const char kQuicMigrateSessionsEarly[] = "migrate_sessions_early";
 
 // AsyncDNS experiment dictionary name.
 const char kAsyncDnsFieldTrialName[] = "AsyncDNS";
@@ -131,6 +137,37 @@ void ParseAndSetExperimentalOptions(
       }
       context_builder->set_quic_host_whitelist(hosts);
     }
+
+    bool quic_close_sessions_on_ip_change = false;
+    if (quic_args->GetBoolean(kQuicCloseSessionsOnIpChange,
+                              &quic_close_sessions_on_ip_change)) {
+      context_builder->set_quic_close_sessions_on_ip_change(
+          quic_close_sessions_on_ip_change);
+    }
+
+    bool quic_migrate_sessions_on_network_change = false;
+    if (quic_args->GetBoolean(kQuicMigrateSessionsOnNetworkChange,
+                              &quic_migrate_sessions_on_network_change)) {
+      context_builder->set_quic_migrate_sessions_on_network_change(
+          quic_migrate_sessions_on_network_change);
+    }
+
+    bool quic_prefer_aes = false;
+    if (quic_args->GetBoolean(kQuicPreferAes, &quic_prefer_aes)) {
+      context_builder->set_quic_prefer_aes(quic_prefer_aes);
+    }
+
+    std::string quic_user_agent_id;
+    if (quic_args->GetString(kQuicUserAgentId, &quic_user_agent_id)) {
+      context_builder->set_quic_user_agent_id(quic_user_agent_id);
+    }
+
+    bool quic_migrate_sessions_early = false;
+    if (quic_args->GetBoolean(kQuicMigrateSessionsEarly,
+                              &quic_migrate_sessions_early)) {
+      context_builder->set_quic_migrate_sessions_early(
+          quic_migrate_sessions_early);
+    }
   }
 
   const base::DictionaryValue* async_dns_args = nullptr;
@@ -170,6 +207,7 @@ URLRequestContextConfig::Pkp::~Pkp() {}
 
 URLRequestContextConfig::URLRequestContextConfig(
     bool enable_quic,
+    const std::string& quic_user_agent_id,
     bool enable_spdy,
     bool enable_sdch,
     HttpCacheType http_cache,
@@ -184,6 +222,7 @@ URLRequestContextConfig::URLRequestContextConfig(
     const std::string& data_reduction_secure_proxy_check_url,
     scoped_ptr<net::CertVerifier> mock_cert_verifier)
     : enable_quic(enable_quic),
+      quic_user_agent_id(quic_user_agent_id),
       enable_spdy(enable_spdy),
       enable_sdch(enable_sdch),
       http_cache(http_cache),
@@ -222,6 +261,8 @@ void URLRequestContextConfig::ConfigureURLRequestContextBuilder(
   context_builder->set_user_agent(user_agent);
   context_builder->SetSpdyAndQuicEnabled(enable_spdy, enable_quic);
   context_builder->set_sdch_enabled(enable_sdch);
+  if (enable_quic)
+    context_builder->set_quic_user_agent_id(quic_user_agent_id);
 
   ParseAndSetExperimentalOptions(experimental_options, context_builder,
                                  net_log);

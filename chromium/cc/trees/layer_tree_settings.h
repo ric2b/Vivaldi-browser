@@ -26,6 +26,7 @@ class LayerTreeSettings;
 class CC_EXPORT LayerTreeSettings {
  public:
   LayerTreeSettings();
+  LayerTreeSettings(const LayerTreeSettings& other);
   virtual ~LayerTreeSettings();
 
   bool operator==(const LayerTreeSettings& other) const;
@@ -83,11 +84,10 @@ class CC_EXPORT LayerTreeSettings {
   bool ignore_root_layer_flings;
   size_t scheduled_raster_task_limit;
   bool use_occlusion_for_tile_prioritization;
-  bool verify_property_trees;
-  bool use_property_trees;
   bool image_decode_tasks_enabled;
   bool use_compositor_animation_timelines;
   bool wait_for_beginframe_interval;
+  bool use_mouse_wheel_gestures;
   int max_staging_buffer_usage_in_bytes;
   ManagedMemoryPolicy memory_policy_;
 

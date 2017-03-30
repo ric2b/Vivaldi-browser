@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <algorithm>
 #include <set>
 
 #include "base/i18n/icu_string_conversions.h"
@@ -119,6 +120,9 @@ base::string16 RefCountedMemoryToString16(
 ///////////////////////////////////////////////////////////////////////////////
 
 SelectionFormatMap::SelectionFormatMap() {}
+
+SelectionFormatMap::SelectionFormatMap(const SelectionFormatMap& other) =
+    default;
 
 SelectionFormatMap::~SelectionFormatMap() {}
 

@@ -70,8 +70,7 @@ class DesktopSessionAgent
       scoped_refptr<AutoThreadTaskRunner> audio_capture_task_runner,
       scoped_refptr<AutoThreadTaskRunner> caller_task_runner,
       scoped_refptr<AutoThreadTaskRunner> input_task_runner,
-      scoped_refptr<AutoThreadTaskRunner> io_task_runner,
-      scoped_refptr<AutoThreadTaskRunner> video_capture_task_runner);
+      scoped_refptr<AutoThreadTaskRunner> io_task_runner);
 
   // IPC::Listener implementation.
   bool OnMessageReceived(const IPC::Message& message) override;
@@ -79,7 +78,6 @@ class DesktopSessionAgent
   void OnChannelError() override;
 
   // webrtc::DesktopCapturer::Callback implementation.
-  webrtc::SharedMemory* CreateSharedMemory(size_t size) override;
   void OnCaptureCompleted(webrtc::DesktopFrame* frame) override;
 
   // webrtc::MouseCursorMonitor::Callback implementation.
@@ -123,9 +121,6 @@ class DesktopSessionAgent
   // Handles CaptureFrame requests from the client.
   void OnCaptureFrame();
 
-  // Handles SharedBufferCreated notification from the client.
-  void OnSharedBufferCreated(int id);
-
   // Handles event executor requests from the client.
   void OnInjectClipboardEvent(const std::string& serialized_event);
   void OnInjectKeyEvent(const std::string& serialized_event);
@@ -138,7 +133,7 @@ class DesktopSessionAgent
   void SetScreenResolution(const ScreenResolution& resolution);
 
   // Sends a message to the network process.
-  void SendToNetwork(IPC::Message* message);
+  void SendToNetwork(scoped_ptr<IPC::Message> message);
 
   // Posted to |audio_capture_task_runner_| to start the audio capturer.
   void StartAudioCapturer();
@@ -146,21 +141,7 @@ class DesktopSessionAgent
   // Posted to |audio_capture_task_runner_| to stop the audio capturer.
   void StopAudioCapturer();
 
-  // Posted to |video_capture_task_runner_| to start the video capturer and the
-  // mouse cursor monitor.
-  void StartVideoCapturerAndMouseMonitor();
-
-  // Posted to |video_capture_task_runner_| to stop the video capturer and the
-  // mouse cursor monitor.
-  void StopVideoCapturerAndMouseMonitor();
-
  private:
-  class SharedBuffer;
-  friend class SharedBuffer;
-
-  // Called by SharedBuffer when it's destroyed.
-  void OnSharedBufferDeleted(int id);
-
   // Task runner dedicated to running methods of |audio_capturer_|.
   scoped_refptr<AutoThreadTaskRunner> audio_capture_task_runner_;
 
@@ -172,9 +153,6 @@ class DesktopSessionAgent
 
   // Task runner used by the IPC channel.
   scoped_refptr<AutoThreadTaskRunner> io_task_runner_;
-
-  // Task runner dedicated to running methods of |video_capturer_|.
-  scoped_refptr<AutoThreadTaskRunner> video_capture_task_runner_;
 
   // Captures audio output.
   scoped_ptr<AudioCapturer> audio_capturer_;
@@ -208,14 +186,8 @@ class DesktopSessionAgent
   // Size of the most recent captured video frame.
   webrtc::DesktopSize current_size_;
 
-  // Next shared buffer ID to be used.
-  int next_shared_buffer_id_;
-
-  // The number of currently allocated shared buffers.
-  int shared_buffers_;
-
   // True if the desktop session agent has been started.
-  bool started_;
+  bool started_ = false;
 
   // Captures the screen.
   scoped_ptr<webrtc::DesktopCapturer> video_capturer_;

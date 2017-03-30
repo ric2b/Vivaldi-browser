@@ -7,6 +7,7 @@
 #include "build/build_config.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/common/browser_side_navigation_policy.h"
+#include "content/public/common/url_constants.h"
 
 namespace content {
 
@@ -14,12 +15,13 @@ namespace content {
 bool ShouldMakeNetworkRequestForURL(const GURL& url) {
   CHECK(IsBrowserSideNavigationEnabled());
 
-  // Data URLs, Javascript URLs and about:blank should not send a request to the
-  // network stack.
+  // Data URLs, Javascript URLs, about:blank, srcdoc should not send a request
+  // to the network stack.
   // TODO(clamy): same document navigations should not send requests to the
   // network stack. Neither should pushState/popState.
   return !url.SchemeIs(url::kDataScheme) && url != GURL(url::kAboutBlankURL) &&
-         !url.SchemeIs(url::kJavaScriptScheme);
+         !url.SchemeIs(url::kJavaScriptScheme) && !url.is_empty() &&
+         url != GURL(content::kAboutSrcDocURL);
 }
 
 CommonNavigationParams::CommonNavigationParams()
@@ -59,6 +61,9 @@ CommonNavigationParams::CommonNavigationParams(
       navigation_start(navigation_start) {
 }
 
+CommonNavigationParams::CommonNavigationParams(
+    const CommonNavigationParams& other) = default;
+
 CommonNavigationParams::~CommonNavigationParams() {
 }
 
@@ -81,6 +86,9 @@ BeginNavigationParams::BeginNavigationParams(
       has_user_gesture(has_user_gesture),
       skip_service_worker(skip_service_worker),
       request_context_type(request_context_type) {}
+
+BeginNavigationParams::BeginNavigationParams(
+    const BeginNavigationParams& other) = default;
 
 StartNavigationParams::StartNavigationParams()
     : is_post(false),
@@ -109,6 +117,9 @@ StartNavigationParams::StartNavigationParams(
       transferred_request_child_id(transferred_request_child_id),
       transferred_request_request_id(transferred_request_request_id) {
 }
+
+StartNavigationParams::StartNavigationParams(
+    const StartNavigationParams& other) = default;
 
 StartNavigationParams::~StartNavigationParams() {
 }
@@ -163,6 +174,9 @@ RequestNavigationParams::RequestNavigationParams(
       should_clear_history_list(should_clear_history_list),
       should_create_service_worker(false),
       service_worker_provider_id(kInvalidServiceWorkerProviderId) {}
+
+RequestNavigationParams::RequestNavigationParams(
+    const RequestNavigationParams& other) = default;
 
 RequestNavigationParams::~RequestNavigationParams() {
 }

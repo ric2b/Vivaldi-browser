@@ -11,6 +11,7 @@
 #include "ash/shelf/shelf_types.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/display_manager_test_api.h"
 #include "ash/wm/window_state.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client.h"
@@ -104,9 +105,7 @@ class ImmersiveFullscreenControllerTest : public ash::test::AshTestBase {
   };
 
   ImmersiveFullscreenControllerTest()
-      : widget_(NULL),
-        top_container_(NULL),
-        content_view_(NULL) {}
+      : widget_(nullptr), top_container_(nullptr), content_view_(nullptr) {}
   ~ImmersiveFullscreenControllerTest() override {}
 
   ImmersiveFullscreenController* controller() {
@@ -444,9 +443,7 @@ TEST_F(ImmersiveFullscreenControllerTest, OnMouseEvent) {
 TEST_F(ImmersiveFullscreenControllerTest, Inactive) {
   // Set up initial state.
   views::Widget* popup_widget = views::Widget::CreateWindowWithContextAndBounds(
-      NULL,
-      CurrentContext(),
-      gfx::Rect(0, 0, 200, 200));
+      nullptr, CurrentContext(), gfx::Rect(0, 0, 200, 200));
   popup_widget->Show();
   ASSERT_FALSE(top_container()->GetWidget()->IsActive());
 
@@ -506,9 +503,8 @@ TEST_F(ImmersiveFullscreenControllerTest, MouseEventsVerticalDisplayLayout) {
 
   // Set up initial state.
   UpdateDisplay("800x600,800x600");
-  ash::DisplayLayout display_layout(ash::DisplayLayout::TOP, 0);
   ash::Shell::GetInstance()->display_manager()->SetLayoutForCurrentDisplays(
-      display_layout);
+      test::CreateDisplayLayout(ash::DisplayPlacement::TOP, 0));
 
   SetEnabled(true);
   ASSERT_TRUE(controller()->IsEnabled());
@@ -574,9 +570,7 @@ TEST_F(ImmersiveFullscreenControllerTest, MouseEventsVerticalDisplayLayout) {
   // Test that it is possible to reveal the top-of-window views by overshooting
   // the top edge slightly when the top container's widget is not active.
   views::Widget* popup_widget = views::Widget::CreateWindowWithContextAndBounds(
-      NULL,
-      CurrentContext(),
-      gfx::Rect(0, 200, 100, 100));
+      nullptr, CurrentContext(), gfx::Rect(0, 200, 100, 100));
   popup_widget->Show();
   ASSERT_FALSE(top_container()->GetWidget()->IsActive());
   ASSERT_FALSE(top_container()->GetBoundsInScreen().Intersects(

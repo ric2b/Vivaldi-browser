@@ -70,8 +70,22 @@ group("remoting_all") {
     }
   }
 
-  if (enable_pnacl) {
+  if (enable_nacl) {
     deps += [ "//remoting/tools/javascript_key_tester" ]
+  }
+}
+
+if (is_win) {
+  # GYP version: remoting/remoting_host_win.gypi:remoting_breakpad_tester
+  executable("remoting_breakpad_tester") {
+    deps = [
+      "//base",
+      "//remoting/host",
+    ]
+
+    sources = [
+      "tools/breakpad_tester_win.cc",
+    ]
   }
 }
 
@@ -104,15 +118,6 @@ source_set("test_support") {
 
 # TODO(GYP) remoting_unittests on Mac. Needs to be tested.
 if (!is_mac) {
-  # TODO(GYP): Delete this after we've converted everything to GN.
-  # The _run targets exist only for compatibility w/ GYP.
-  group("remoting_unittests_run") {
-    testonly = true
-    deps = [
-      ":remoting_unittests",
-    ]
-  }
-
   test("remoting_unittests") {
     configs += [
       ":version",
@@ -129,7 +134,6 @@ if (!is_mac) {
 
     deps = [
       ":test_support",
-      "//base/allocator",
       "//google_apis",
       "//remoting/base:unit_tests",
       "//remoting/client:unit_tests",
@@ -164,9 +168,7 @@ if (!is_mac) {
   if (enable_remoting_host) {
     test("remoting_perftests") {
       sources = [
-        "codec/codec_test.cc",
-        "codec/codec_test.h",
-        "codec/video_encoder_vpx_perftest.cc",
+        "test/codec_perftest.cc",
         "test/protocol_perftest.cc",
       ]
 

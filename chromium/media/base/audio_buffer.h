@@ -78,6 +78,12 @@ class MEDIA_EXPORT AudioBuffer
   // is disallowed.
   static scoped_refptr<AudioBuffer> CreateEOSBuffer();
 
+  // Update sample rate and computed duration.
+  // TODO(chcunningham): Remove this upon patching FFmpeg's AAC decoder to
+  // provide the correct sample rate at the boundary of an implicit config
+  // change.
+  void AdjustSampleRate(int sample_rate);
+
   // Copy frames into |dest|. |frames_to_copy| is the number of frames to copy.
   // |source_frame_offset| specifies how many frames in the buffer to skip
   // first. |dest_frame_offset| is the frame offset in |dest|. The frames are
@@ -131,9 +137,15 @@ class MEDIA_EXPORT AudioBuffer
   // If there's no data in this buffer, it represents end of stream.
   bool end_of_stream() const { return end_of_stream_; }
 
-  // Access to the raw buffer for ffmpeg to write directly to. Data for planar
-  // data is grouped by channel. There is only 1 entry for interleaved formats.
+  // Access to the raw buffer for ffmpeg and Android MediaCodec decoders to
+  // write directly to. For planar formats the vector elements correspond to
+  // the channels. For interleaved formats the resulting vector has exactly
+  // one element which contains the buffer pointer.
   const std::vector<uint8_t*>& channel_data() const { return channel_data_; }
+
+  // The size of allocated data memory block. For planar formats channels go
+  // sequentially in this block.
+  size_t data_size() const { return data_size_; }
 
  private:
   friend class base::RefCountedThreadSafe<AudioBuffer>;
@@ -162,7 +174,7 @@ class MEDIA_EXPORT AudioBuffer
   const SampleFormat sample_format_;
   const ChannelLayout channel_layout_;
   const int channel_count_;
-  const int sample_rate_;
+  int sample_rate_;
   int adjusted_frame_count_;
   int trim_start_;
   const bool end_of_stream_;

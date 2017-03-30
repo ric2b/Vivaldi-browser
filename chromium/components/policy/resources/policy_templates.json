@@ -63,7 +63,7 @@
 #     Windows ignore this. Policies on Mac are using this instead of caption.
 #
 # Non-translateable strings should be tagged using <ph name="..."></ph> as
-# described in https://code.google.com/p/grit-i18n/wiki/GritUsersGuide.
+# described in https://www.chromium.org/developers/tools-we-use-in-chromium/grit/grit-users-guide
 #
 # Generated grd names:
 #   Each name has two parts: the second part is either CAPTION, DESC or LABEL,
@@ -137,7 +137,7 @@
 #   persistent IDs for all fields (but not for groups!) are needed. These are
 #   specified by the 'id' keys of each policy. NEVER CHANGE EXISTING IDs,
 #   because doing so would break the deployed wire format!
-#   For your editing convenience: highest ID currently used: 315
+#   For your editing convenience: highest ID currently used: 320
 #
 # Placeholders:
 #   The following placeholder strings are automatically substituted:
@@ -701,6 +701,27 @@
           If this setting is disabled and outgoing UDP connections are filtered by the firewall, then this machine can only connect to host machines within the local network.''',
         },
         {
+          'name': 'RemoteAccessHostClientDomain',
+          'type': 'string',
+          'schema': { 'type': 'string' },
+          'supported_on': ['chrome.*:22-', 'chrome_os:41-'],
+          'features': {
+            'dynamic_refresh': True,
+            'per_profile': False,
+          },
+          'example_value': 'my-awesome-domain.com',
+          'id': 316,
+          'caption': '''Configure the required domain name for remote access clients''',
+          'tags': [],
+          'desc': '''Configures the required client domain name that will be imposed on remote access clients and prevents users from changing it.
+
+          If this setting is enabled, then only clients from the specified domain can connect to the host.
+
+          If this setting is disabled or not set, then the default policy for the connection type is applied. For remote assistance, this allows clients from any domain can connect to the host; for anytime remote access, only the host owner can connect.
+
+          See also RemoteAccessHostDomain.''',
+        },
+        {
           'name': 'RemoteAccessHostFirewallTraversal',
           'type': 'main',
           'schema': { 'type': 'boolean' },
@@ -738,7 +759,9 @@
 
           If this setting is enabled, then hosts can be shared only using accounts registered on the specified domain name.
 
-          If this setting is disabled or not set, then hosts can be shared using any account.''',
+          If this setting is disabled or not set, then hosts can be shared using any account.
+
+          See also RemoteAccessHostClientDomain.''',
         },
         {
           'name': 'RemoteAccessHostRequireTwoFactor',
@@ -3051,6 +3074,38 @@
           'desc': '''Allows you to set whether websites are allowed to get access to media capture devices. Access to media capture devices can be allowed by default, or the user can be asked every time a website wants to get access to media capture devices.
 
           If this policy is left not set, 'PromptOnAccess' will be used and the user will be able to change it.''',
+        },
+        {
+          'name': 'DefaultWebBluetoothGuardSetting',
+          'type': 'int-enum',
+          'schema': {
+            'type': 'integer',
+            'enum': [ 2, 3 ],
+          },
+          'items': [
+            {
+              'name': 'BlockWebBluetooth',
+              'value': 2,
+              'caption': '''Do not allow any site to request access to Bluetooth devices via the Web Bluetooth API''',
+            },
+            {
+              'name': 'AskWebBluetooth',
+              'value': 3,
+              'caption': '''Allow sites to ask the user to grant access to a nearby Bluetooth device''',
+            },
+          ],
+          'supported_on': ['chrome_os:50-', 'android:50-', 'chrome.*:50-'],
+          'features': {
+            'dynamic_refresh': True,
+            'per_profile': True,
+          },
+          'example_value': 2,
+          'id': 320,
+          'caption': '''Control use of the Web Bluetooth API''',
+          'tags': ['website-sharing'],
+          'desc': '''Allows you to set whether websites are allowed to get access to nearby Bluetooth devices. Access can be completely blocked, or the user can be asked every time a website wants to get access to nearby Bluetooth devices.
+
+          If this policy is left not set, '3' will be used, and the user will be able to change it.''',
         },
         {
           'name': 'DefaultKeygenSetting',
@@ -7076,7 +7131,7 @@
       'id': 191,
       'caption': '''System wide flags to be applied on <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> start-up''',
       'tags': [],
-      'desc': '''Specifies the flags that should be applied to <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> when it starts. The specified flags are applied before <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> is started even for the sign-in screen.''',
+      'desc': '''Specifies the flags that should be applied to <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> when it starts. The specified flags are applied on the login screen only. Flags set via this policy do not propagate into user sessions.''',
     },
     {
       'name': 'UptimeLimit',
@@ -7814,17 +7869,11 @@
       'schema': {
         'type': 'string',
         'enum': [
-          'tls1',
           'tls1.1',
           'tls1.2',
         ],
       },
       'items': [
-        {
-          'name': 'TLSv1',
-          'value': 'tls1',
-          'caption': 'TLS 1.0',
-        },
         {
           'name': 'TLSv1.1',
           'value': 'tls1.1',
@@ -7837,10 +7886,10 @@
         },
       ],
       'supported_on': [
-        'chrome.*:45-47',
-        'chrome_os:45-47',
-        'android:45-47',
-        'ios:45-47',
+        'chrome.*:50-52',
+        'chrome_os:50-52',
+        'android:50-52',
+        'ios:50-52',
       ],
       'features': {
         'dynamic_refresh': True,
@@ -7849,16 +7898,14 @@
       'example_value': 'tls1.1',
       'id': 280,
       'caption': '''Minimum TLS version to fallback to''',
-      'tags': [],
-      'desc': '''Warning: The TLS 1.0 version fallback will be removed from <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> after version 47 (around January 2016) and the "tls1" option will stop working then.
+      'tags': ['system-security'],
+      'desc': '''Warning: The TLS version fallback will be removed from <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> after version 52 (around September 2016) and this policy will stop working then.
 
-      When a TLS handshake fails, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will retry the connection with a lesser version of TLS in order to work around bugs in HTTPS servers. This setting configures the version at which this fallback process will stop. If a server performs version negotiation correctly (i.e. without breaking the connection) then this setting doesn't apply. Regardless, the resulting connection must still comply with SSLVersionMin.
+      When a TLS handshake fails, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> would previously retry the connection with a lesser version of TLS in order to work around bugs in HTTPS servers. This setting configures the version at which this fallback process will stop. If a server performs version negotiation correctly (i.e. without breaking the connection) then this setting doesn't apply. Regardless, the resulting connection must still comply with SSLVersionMin.
 
-      If this policy is not configured then <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> uses a default minimum version which is TLS 1.0 in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> 44 and TLS 1.1 in later versions. Note this does not disable support for TLS 1.0, only whether <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will work around buggy servers which cannot negotiate versions correctly.
+      If this policy is not configured or if it is set to "tls1.2" then <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> no longer performs this fallback. Note this does not disable support for older TLS versions, only whether <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will work around buggy servers which cannot negotiate versions correctly.
 
-      Otherwise it may be set to one of the following values: "tls1", "tls1.1" or "tls1.2". If compatibility with a buggy server must be maintained, this may be set to "tls1". This is a stopgap measure and the server should be rapidly fixed.
-
-      A setting of "tls1.2" disables all fallback but this may have a significant compatibility impact.''',
+      Otherwise, if compatibility with a buggy server must be maintained, this policy may be set to "tls1.1". This is a stopgap measure and the server should be rapidly fixed.''',
     },
     {
       'name': 'RC4Enabled',
@@ -8155,6 +8202,70 @@
       If the policy is not set, the default value is 0 degrees and the user is
       free to change it. In this case, the default value is not reapplied at
       restart.''',
+    },
+    {
+      'name': 'ArcEnabled',
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome_os:50-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': False,
+      },
+      'example_value': False,
+      'id': 317,
+      'default_for_enterprise_users': False,
+      'caption': '''Enable ARC''',
+      'tags': [],
+      'desc':
+      '''When this policy is set to true, ARC will be enabled for the user
+      (subject to additional policy settings checks - ARC will still be
+      unavailable if either ephemeral mode or multiple sign-in is enabled
+      in the current user session).
+
+      If this setting is disabled or not configured then enterprise users are
+      unable to use ARC.''',
+    },
+    {
+      'name': 'ArcApplicationPolicy',
+      'type': 'string',
+      'schema': { 'type': 'string' },
+      'supported_on': ['chrome_os:50-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': False,
+      },
+      'example_value': '',
+      'id': 318,
+      'caption': '''Configure ARC apps''',
+      'tags': [],
+      'desc':
+      '''Specifies the ARC application policy as JSON string which can be
+      handed-off as-is to the ARC runtime. At the moment, this setting is used
+      solely to specify force-installation of the apps.
+
+      If this policy is left not set, no apps are installed automatically.'''
+    },
+    {
+      'name': 'AllowKioskAppControlChromeVersion',
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome_os:51-'],
+      'device_only': True,
+      'features': {
+        'dynamic_refresh': True,
+      },
+      'example_value': True,
+      'id': 319,
+      'caption': '''Allow the auto launched with zero delay kiosk app to control <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> version''',
+      'tags': [],
+      'desc': '''Whether to allow the auto launched with zero delay kiosk app to control <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> version.
+
+      This policy controls whether to allow the auto launched with zero delay kiosk app to control <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> version by declaring a required_platform_version in its manifest and use it as the auto update target version prefix.
+
+      If the policy is set to true, the value of required_platform_version manifest key of the auto launched with zero delay kiosk app is used as auto update target version prefix.
+
+      If the policy is not configured or set to false, the required_platform_version manifest key is ignored and auto update proceeds as normal.''',
     },
   ],
   'messages': {

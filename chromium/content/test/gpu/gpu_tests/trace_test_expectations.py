@@ -13,6 +13,7 @@ class TraceTestExpectations(GpuTestExpectations):
     #     ['mac', 'amd', ('nvidia', 0x1234)], bug=123)
     pass
 
+
 class DeviceTraceTestExpectations(GpuTestExpectations):
   def SetExpectations(self):
     # Device traces are not supported on all machines.

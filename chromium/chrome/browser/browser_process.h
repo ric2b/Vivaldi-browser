@@ -182,10 +182,9 @@ class BrowserProcess {
 
   virtual GpuModeManager* gpu_mode_manager() = 0;
 
-  virtual void CreateDevToolsHttpProtocolHandler(
-      chrome::HostDesktopType host_desktop_type,
-      const std::string& ip,
-      uint16_t port) = 0;
+  virtual void CreateDevToolsHttpProtocolHandler(const std::string& ip,
+                                                 uint16_t port) = 0;
+  virtual void CreateDevToolsAutoOpener() = 0;
 
   virtual unsigned int AddRefModule() = 0;
   virtual unsigned int ReleaseModule() = 0;
@@ -266,7 +265,7 @@ class BrowserProcess {
   // Returns the default web client state of Chrome (i.e., was it the user's
   // default browser) at the time a previous check was made sometime between
   // process startup and now.
-  virtual ShellIntegration::DefaultWebClientState
+  virtual shell_integration::DefaultWebClientState
   CachedDefaultWebClientState() = 0;
 
  private:

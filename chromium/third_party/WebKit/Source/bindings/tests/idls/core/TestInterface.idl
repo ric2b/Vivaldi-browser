@@ -32,12 +32,12 @@
 // Also used as a target by TestObject
 
 [
-    ActiveDOMObject,
+    DependentLifetime,
     Custom=LegacyCallAsFunction,
     DoNotCheckConstants,
-    APIExperimentEnabled=ExperimentName,
     ImplementedAs=TestInterfaceImplementation,
     Iterable,
+    OriginTrialEnabled=OriginTrialFeatureName,
     RuntimeEnabled=FeatureName,
     SetWrapperReferenceTo(TestInterface referencedName),
     Exposed=(Worker,Window),

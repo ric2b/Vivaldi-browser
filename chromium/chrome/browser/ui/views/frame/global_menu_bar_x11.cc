@@ -11,7 +11,6 @@
 #include "base/debug/leak_annotations.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -20,7 +19,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
@@ -34,6 +32,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/history/core/browser/top_sites.h"
+#include "components/prefs/pref_service.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "grit/components_strings.h"
 #include "ui/base/accelerators/menu_label_accelerator_util_linux.h"
@@ -129,7 +128,7 @@ const unsigned int kMostVisitedCount = 8;
 const unsigned int kRecentlyClosedCount = 8;
 
 // Menus more than this many chars long will get trimmed.
-const int kMaximumMenuWidthInChars = 50;
+const size_t kMaximumMenuWidthInChars = 50;
 
 // Constants used in menu definitions.
 const int MENU_SEPARATOR =-1;
@@ -203,44 +202,42 @@ GlobalMenuBarCommand view_menu[] = {
 };
 
 GlobalMenuBarCommand history_menu[] = {
-  { IDS_HISTORY_HOME_LINUX, IDC_HOME },
-  { IDS_HISTORY_BACK_LINUX, IDC_BACK },
-  { IDS_HISTORY_FORWARD_LINUX, IDC_FORWARD },
+    {IDS_HISTORY_HOME_LINUX, IDC_HOME},
+    {IDS_HISTORY_BACK_LINUX, IDC_BACK},
+    {IDS_HISTORY_FORWARD_LINUX, IDC_FORWARD},
 
-  { MENU_SEPARATOR, MENU_SEPARATOR },
+    {MENU_SEPARATOR, MENU_SEPARATOR},
 
-  { IDS_HISTORY_CLOSED_LINUX, MENU_DISABLED_ID, TAG_RECENTLY_CLOSED_HEADER },
+    {IDS_HISTORY_CLOSED_LINUX, MENU_DISABLED_ID, TAG_RECENTLY_CLOSED_HEADER},
 
-  { MENU_SEPARATOR, MENU_SEPARATOR },
+    {MENU_SEPARATOR, MENU_SEPARATOR},
 
-  { IDS_HISTORY_VISITED_LINUX, MENU_DISABLED_ID, TAG_MOST_VISITED_HEADER },
+    {IDS_HISTORY_VISITED_LINUX, MENU_DISABLED_ID, TAG_MOST_VISITED_HEADER},
 
-  { MENU_SEPARATOR, MENU_SEPARATOR },
+    {MENU_SEPARATOR, MENU_SEPARATOR},
 
-  { IDS_SHOWFULLHISTORY_LINK, IDC_SHOW_HISTORY },
+    {IDS_HISTORY_SHOWFULLHISTORY_LINK, IDC_SHOW_HISTORY},
 
-  { MENU_END, MENU_END }
-};
+    {MENU_END, MENU_END}};
 
 GlobalMenuBarCommand tools_menu[] = {
-  { IDS_SHOW_DOWNLOADS, IDC_SHOW_DOWNLOADS },
-  { IDS_SHOW_HISTORY, IDC_SHOW_HISTORY },
-  { IDS_SHOW_EXTENSIONS, IDC_MANAGE_EXTENSIONS },
+    {IDS_SHOW_DOWNLOADS, IDC_SHOW_DOWNLOADS},
+    {IDS_HISTORY_SHOW_HISTORY, IDC_SHOW_HISTORY},
+    {IDS_SHOW_EXTENSIONS, IDC_MANAGE_EXTENSIONS},
 
-  { MENU_SEPARATOR, MENU_SEPARATOR },
+    {MENU_SEPARATOR, MENU_SEPARATOR},
 
-  { IDS_TASK_MANAGER, IDC_TASK_MANAGER },
-  { IDS_CLEAR_BROWSING_DATA, IDC_CLEAR_BROWSING_DATA },
+    {IDS_TASK_MANAGER, IDC_TASK_MANAGER},
+    {IDS_CLEAR_BROWSING_DATA, IDC_CLEAR_BROWSING_DATA},
 
-  { MENU_SEPARATOR, MENU_SEPARATOR },
+    {MENU_SEPARATOR, MENU_SEPARATOR},
 
-  { IDS_VIEW_SOURCE, IDC_VIEW_SOURCE },
-  { IDS_DEV_TOOLS, IDC_DEV_TOOLS },
-  { IDS_DEV_TOOLS_CONSOLE, IDC_DEV_TOOLS_CONSOLE },
-  { IDS_DEV_TOOLS_DEVICES, IDC_DEV_TOOLS_DEVICES },
+    {IDS_VIEW_SOURCE, IDC_VIEW_SOURCE},
+    {IDS_DEV_TOOLS, IDC_DEV_TOOLS},
+    {IDS_DEV_TOOLS_CONSOLE, IDC_DEV_TOOLS_CONSOLE},
+    {IDS_DEV_TOOLS_DEVICES, IDC_DEV_TOOLS_DEVICES},
 
-  { MENU_END, MENU_END }
-};
+    {MENU_END, MENU_END}};
 
 GlobalMenuBarCommand help_menu[] = {
 #if defined(GOOGLE_CHROME_BUILD)
@@ -442,7 +439,7 @@ void GlobalMenuBarX11::InitServer(unsigned long xid) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   DCHECK(profile_manager);
   avatar_menu_.reset(new AvatarMenu(
-      &profile_manager->GetProfileInfoCache(), this, nullptr));
+      &profile_manager->GetProfileAttributesStorage(), this, nullptr));
   avatar_menu_->RebuildMenu();
   BrowserList::AddObserver(this);
 
@@ -855,7 +852,7 @@ void GlobalMenuBarX11::OnHistoryItemActivated(DbusmenuMenuitem* sender,
       TabRestoreServiceFactory::GetForProfile(profile_);
   if (item->session_id && service) {
     service->RestoreEntryById(browser_->live_tab_context(), item->session_id,
-                              browser_->host_desktop_type(), UNKNOWN);
+                              UNKNOWN);
   } else {
     DCHECK(item->url.is_valid());
     browser_->OpenURL(content::OpenURLParams(
@@ -896,7 +893,6 @@ void GlobalMenuBarX11::OnEditProfileItemActivated(DbusmenuMenuitem* sender,
 
 void GlobalMenuBarX11::OnCreateProfileItemActivated(DbusmenuMenuitem* sender,
                                                     unsigned int timestamp) {
-  profiles::CreateAndSwitchToNewProfile(chrome::HOST_DESKTOP_TYPE_NATIVE,
-                                        ProfileManager::CreateCallback(),
+  profiles::CreateAndSwitchToNewProfile(ProfileManager::CreateCallback(),
                                         ProfileMetrics::ADD_NEW_USER_MENU);
 }

@@ -44,8 +44,8 @@ private:
     PassOwnPtr<CSSParserSelector> consumePseudo(CSSParserTokenRange&);
     PassOwnPtr<CSSParserSelector> consumeAttribute(CSSParserTokenRange&);
 
-    CSSSelector::Relation consumeCombinator(CSSParserTokenRange&);
-    CSSSelector::Match consumeAttributeMatch(CSSParserTokenRange&);
+    CSSSelector::RelationType consumeCombinator(CSSParserTokenRange&);
+    CSSSelector::MatchType consumeAttributeMatch(CSSParserTokenRange&);
     CSSSelector::AttributeMatchType consumeAttributeFlags(CSSParserTokenRange&);
 
     const AtomicString& defaultNamespace() const;
@@ -81,6 +81,6 @@ private:
     };
 };
 
-} // namespace
+} // namespace blink
 
 #endif // CSSSelectorParser_h

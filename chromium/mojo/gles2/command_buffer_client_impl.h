@@ -16,6 +16,7 @@
 #include "components/mus/public/interfaces/command_buffer.mojom.h"
 #include "gpu/command_buffer/client/gpu_control.h"
 #include "gpu/command_buffer/common/command_buffer.h"
+#include "gpu/command_buffer/common/command_buffer_id.h"
 #include "gpu/command_buffer/common/command_buffer_shared.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
@@ -33,7 +34,7 @@ class CommandBufferDelegate {
 };
 
 class CommandBufferClientImpl
-    : public mus::mojom::CommandBufferLostContextObserver,
+    : public mus::mojom::CommandBufferClient,
       public gpu::CommandBuffer,
       public gpu::GpuControl {
  public:
@@ -68,17 +69,12 @@ class CommandBufferClientImpl
                                      size_t height,
                                      unsigned internalformat,
                                      unsigned usage) override;
-  uint32_t InsertSyncPoint() override;
-  uint32_t InsertFutureSyncPoint() override;
-  void RetireSyncPoint(uint32_t sync_point) override;
-  void SignalSyncPoint(uint32_t sync_point,
-                       const base::Closure& callback) override;
   void SignalQuery(uint32_t query, const base::Closure& callback) override;
   void SetLock(base::Lock*) override;
   bool IsGpuChannelLost() override;
   void EnsureWorkVisible() override;
   gpu::CommandBufferNamespace GetNamespaceID() const override;
-  uint64_t GetCommandBufferID() const override;
+  gpu::CommandBufferId GetCommandBufferID() const override;
   int32_t GetExtraCommandBufferData() const override;
   uint64_t GenerateFenceSyncRelease() override;
   bool IsFenceSyncRelease(uint64_t release) override;
@@ -89,8 +85,12 @@ class CommandBufferClientImpl
   bool CanWaitUnverifiedSyncToken(const gpu::SyncToken* sync_token) override;
 
  private:
-  // mus::mojom::CommandBufferLostContextObserver implementation:
-  void DidLoseContext(int32_t lost_reason) override;
+  // mus::mojom::CommandBufferClient implementation:
+  void Destroyed(int32_t lost_reason, int32_t error) override;
+  void SignalAck(uint32_t id) override;
+  void SwapBuffersCompleted(int32_t result) override;
+  void UpdateState(const gpu::CommandBuffer::State& state) override;
+  void UpdateVSyncParameters(int64_t timebase, int64_t interval) override;
 
   void TryUpdateState();
   void MakeProgressAndUpdateState();
@@ -99,10 +99,10 @@ class CommandBufferClientImpl
 
   CommandBufferDelegate* delegate_;
   std::vector<int32_t> attribs_;
-  mojo::Binding<mus::mojom::CommandBufferLostContextObserver> observer_binding_;
+  mojo::Binding<mus::mojom::CommandBufferClient> client_binding_;
   mus::mojom::CommandBufferPtr command_buffer_;
 
-  uint64_t command_buffer_id_;
+  gpu::CommandBufferId command_buffer_id_;
   gpu::Capabilities capabilities_;
   State last_state_;
   mojo::ScopedSharedBufferHandle shared_state_handle_;

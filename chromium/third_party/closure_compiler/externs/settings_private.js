@@ -7,7 +7,7 @@
 // NOTE: The format of types has changed. 'FooType' is now
 //   'chrome.settingsPrivate.FooType'.
 // Please run the closure compiler before committing changes.
-// See https://code.google.com/p/chromium/wiki/ClosureCompilation.
+// See https://chromium.googlesource.com/chromium/src/+/master/docs/closure_compilation.md
 
 /** @fileoverview Externs generated from namespace: settingsPrivate */
 
@@ -26,6 +26,7 @@ chrome.settingsPrivate.PrefType = {
   STRING: 'STRING',
   URL: 'URL',
   LIST: 'LIST',
+  DICTIONARY: 'DICTIONARY',
 };
 
 /**

@@ -57,13 +57,21 @@ source_set("ui") {
     "//components/certificate_reporting:encrypted_cert_logger_proto",
     "//components/dom_distiller/webui",
     "//components/flags_ui",
+    "//components/guest_view/browser",
+    "//components/history/core/browser",
     "//components/invalidation/impl",
+    "//components/keyed_service/content",
+    "//components/keyed_service/core",
     "//components/omnibox/common",
     "//components/onc",
     "//components/password_manager/core/browser",
     "//components/resources",
+    "//components/signin/core/browser",
     "//components/strings",
+    "//components/sync_driver",
     "//components/toolbar",
+    "//components/translate/core/browser",
+    "//components/ui/zoom",
     "//components/update_client",
     "//components/version_ui",
     "//content/public/common",
@@ -86,6 +94,10 @@ source_set("ui") {
     "//ui/strings",
   ]
 
+  if (enable_extensions) {
+    deps += [ "//extensions/browser" ]
+  }
+
   if (!is_ios) {
     sources += rebase_path(gypi_values.chrome_browser_ui_non_ios_sources,
                            ".",
@@ -98,6 +110,7 @@ source_set("ui") {
       "//chrome/browser/ui/views",
       "//chrome/browser/ui/webui/engagement:mojo_bindings",
       "//chrome/browser/ui/webui/omnibox:mojo_bindings",
+      "//chrome/browser/ui/webui/plugins:mojo_bindings",
       "//chrome/common/net",
       "//chrome/installer/util:with_no_strings",
       "//components/autofill/content/browser:risk_proto",
@@ -110,6 +123,7 @@ source_set("ui") {
       "//components/url_formatter",
       "//device/nfc",
       "//media",
+      "//mojo/edk/system",
       "//net:net_with_v8",
       "//net:stale_while_revalidate_experiment_domains",
       "//storage/browser",
@@ -118,7 +132,6 @@ source_set("ui") {
       "//third_party/adobe/flash:flapper_version_h",
       "//third_party/leveldatabase",
       "//third_party/libjingle",
-      "//third_party/mojo/src/mojo/edk/system",
       "//third_party/re2",
       "//ui/base/ime",
       "//ui/compositor",
@@ -201,9 +214,8 @@ source_set("ui") {
     deps += [
       "//chrome/browser/chromeos",
       "//components/arc",
+      "//ui/base/ime",
     ]
-  } else {
-    defines += [ "FRAME_AVATAR_BUTTON=1" ]
   }
   if (use_cups) {
     configs += [ "//printing:cups" ]
@@ -211,11 +223,16 @@ source_set("ui") {
   if (use_ash) {
     sources +=
         rebase_path(gypi_values.chrome_browser_ui_ash_sources, ".", "//chrome")
+    sources += [
+      "ash/keyboard_ui_service.cc",
+      "ash/keyboard_ui_service.h",
+    ]
     deps += [
       "//ash",
       "//ash:ash_with_content",
       "//ash/strings",
       "//components/user_manager",
+      "//ui/keyboard:mojom",
     ]
     if (!is_chromeos) {
       sources += rebase_path(gypi_values.chrome_browser_ui_ash_non_chromeos,
@@ -284,6 +301,8 @@ source_set("ui") {
         # This is not explicitly excluded in GYP, but I think the static
         # library linking rules means it's never referenced when compiling in
         # non-Views mode on Mac. It appears not to link in that case.
+        "views/frame/avatar_button_manager.cc",
+        "views/frame/avatar_button_manager.h",
         "views/profiles/new_avatar_button.cc",
         "views/profiles/new_avatar_button.h",
       ]
@@ -397,6 +416,8 @@ source_set("ui") {
       "//third_party/isimpledom",
       "//third_party/wtl",
       "//ui/app_list",
+      "//ui/base/ime",
+      "//ui/events:dom_keycode_converter",
     ]
     if (!is_chrome_branded) {
       deps -= [ "//google_update" ]
@@ -418,6 +439,10 @@ source_set("ui") {
     sources += rebase_path(gypi_values.chrome_browser_ui_desktop_linux_sources,
                            ".",
                            "//chrome")
+    deps += [
+      "//ui/base/ime",
+      "//ui/events:dom_keycode_converter",
+    ]
   }
   if (is_linux) {  # Both desktop Linux and ChromeOS.
     sources += rebase_path(gypi_values.chrome_browser_ui_linux_sources,
@@ -529,7 +554,7 @@ if (is_mac) {
 
   action("generate_localizer") {
     script = "//chrome/tools/build/mac/generate_localizer"
-    sources = []
+    sources = rebase_path(nib_gypi_values.mac_translated_xibs, ".", "//chrome")
     table_path = "$target_gen_dir/ui_localizer_table.h"
     outputs = [
       table_path,

@@ -16,6 +16,18 @@
       '../..',  # Root of Chromium checkout
       '../public/',  # Public APIs
     ],
+    'target_conditions': [
+      ['_type=="executable"', {
+        'ldflags': [
+          # Allow  OEMs to override default libraries that are shipped with
+          # cast receiver package by installed OEM-specific libraries in
+          # /oem_cast_shlib.
+          '-Wl,-rpath=/oem_cast_shlib',
+          # Some shlibs are built in same directory of executables.
+          '-Wl,-rpath=\$$ORIGIN',
+        ],
+      }],
+    ],
   },
   'targets': [
     {
@@ -124,6 +136,8 @@
         'cma/base/decoder_buffer_adapter.h',
         'cma/base/decoder_config_adapter.cc',
         'cma/base/decoder_config_adapter.h',
+        'cma/base/demuxer_stream_adapter.cc',
+        'cma/base/demuxer_stream_adapter.h',
         'cma/base/media_task_runner.cc',
         'cma/base/media_task_runner.h',
         'cma/base/simple_media_task_runner.cc',
@@ -271,6 +285,10 @@
         'cma/base/balanced_media_task_runner_unittest.cc',
         'cma/base/buffering_controller_unittest.cc',
         'cma/base/buffering_frame_provider_unittest.cc',
+        'cma/base/demuxer_stream_adapter_unittest.cc',
+        'cma/base/demuxer_stream_for_test.cc',
+        'cma/base/demuxer_stream_for_test.h',
+        'cma/base/multi_demuxer_stream_adapter_unittest.cc',
         'cma/ipc/media_message_fifo_unittest.cc',
         'cma/ipc/media_message_unittest.cc',
         'cma/ipc_streamer/av_streamer_unittest.cc',
@@ -284,14 +302,6 @@
         'cma/test/mock_frame_provider.cc',
         'cma/test/mock_frame_provider.h',
         'cma/test/run_all_unittests.cc',
-      ],
-      'ldflags': [
-        # Allow  OEMs to override default libraries that are shipped with
-        # cast receiver package by installed OEM-specific libraries in
-        # /oem_cast_shlib.
-        '-Wl,-rpath=/oem_cast_shlib',
-        # Some shlibs are built in same directory of executables.
-        '-Wl,-rpath=\$$ORIGIN',
       ],
       'conditions': [
         ['chromecast_branding=="public"', {
@@ -320,6 +330,8 @@
       'target_name': 'libcast_media_1.0_default_core',
       'type': '<(component)',
       'dependencies': [
+        '<(DEPTH)/base/base.gyp:base',
+        '<(DEPTH)/chromecast/chromecast.gyp:cast_base',
         '../../chromecast/chromecast.gyp:cast_public_api',
         'default_cma_backend'
       ],

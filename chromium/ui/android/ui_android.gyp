@@ -167,6 +167,29 @@
       ],
     },
     {
+      # GN: //ui/android:ui_junit_tests
+      'target_name': 'ui_junit_tests',
+      'type': 'none',
+      'dependencies': [
+        'ui_java',
+        '../../base/base.gyp:base',
+        '../../base/base.gyp:base_junit_test_support',
+        '../../testing/android/junit/junit_test.gyp:junit_test_support',
+      ],
+      'variables': {
+        'main_class': 'org.chromium.testing.local.JunitTestMain',
+        'src_paths': [
+          'junit/',
+        ],
+        'test_type': 'junit',
+        'wrapper_script_name': 'helper/<(_target_name)',
+      },
+      'includes': [
+        '../../build/android/test_runner.gypi',
+        '../../build/host_jar.gypi',
+      ],
+    },
+    {
       # GN version: //ui/android:ui_android_unittests
       'target_name': 'ui_android_unittests',
       'type': '<(gtest_target_type)',

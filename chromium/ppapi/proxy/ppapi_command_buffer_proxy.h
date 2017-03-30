@@ -14,6 +14,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "gpu/command_buffer/client/gpu_control.h"
 #include "gpu/command_buffer/common/command_buffer.h"
+#include "gpu/command_buffer/common/command_buffer_id.h"
 #include "gpu/command_buffer/common/command_buffer_shared.h"
 #include "ppapi/proxy/plugin_dispatcher.h"
 #include "ppapi/proxy/ppapi_proxy_export.h"
@@ -35,7 +36,7 @@ class PPAPI_PROXY_EXPORT PpapiCommandBufferProxy : public gpu::CommandBuffer,
                           PluginDispatcher* dispatcher,
                           const gpu::Capabilities& capabilities,
                           const SerializedHandle& shared_state,
-                          uint64_t command_buffer_id);
+                          gpu::CommandBufferId command_buffer_id);
   ~PpapiCommandBufferProxy() override;
 
   // gpu::CommandBuffer implementation:
@@ -62,17 +63,12 @@ class PPAPI_PROXY_EXPORT PpapiCommandBufferProxy : public gpu::CommandBuffer,
                                      size_t height,
                                      unsigned internalformat,
                                      unsigned usage) override;
-  uint32_t InsertSyncPoint() override;
-  uint32_t InsertFutureSyncPoint() override;
-  void RetireSyncPoint(uint32_t sync_point) override;
-  void SignalSyncPoint(uint32_t sync_point,
-                       const base::Closure& callback) override;
   void SignalQuery(uint32_t query, const base::Closure& callback) override;
   void SetLock(base::Lock*) override;
   bool IsGpuChannelLost() override;
   void EnsureWorkVisible() override;
   gpu::CommandBufferNamespace GetNamespaceID() const override;
-  uint64_t GetCommandBufferID() const override;
+  gpu::CommandBufferId GetCommandBufferID() const override;
   uint64_t GenerateFenceSyncRelease() override;
   bool IsFenceSyncRelease(uint64_t release) override;
   bool IsFenceSyncFlushed(uint64_t release) override;
@@ -94,7 +90,7 @@ class PPAPI_PROXY_EXPORT PpapiCommandBufferProxy : public gpu::CommandBuffer,
 
   void FlushInternal();
 
-  const uint64_t command_buffer_id_;
+  const gpu::CommandBufferId command_buffer_id_;
 
   gpu::Capabilities capabilities_;
   State last_state_;

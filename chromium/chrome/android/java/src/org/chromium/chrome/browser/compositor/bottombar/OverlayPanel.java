@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.compositor.bottombar;
 
 import android.app.Activity;
 import android.content.Context;
+import android.view.View;
 import android.view.View.MeasureSpec;
 
 import org.chromium.base.ActivityState;
@@ -14,10 +15,10 @@ import org.chromium.base.ApplicationStatus.ActivityStateListener;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager.PanelPriority;
-import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPanelAnimation;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.browser.compositor.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.content.browser.ContentVideoViewEmbedder;
 import org.chromium.content.browser.ContentViewClient;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content_public.common.TopControlsState;
@@ -27,8 +28,8 @@ import org.chromium.ui.resources.ResourceManager;
 /**
  * Controls the Overlay Panel.
  */
-public class OverlayPanel extends ContextualSearchPanelAnimation
-        implements ActivityStateListener, OverlayPanelContentFactory {
+public class OverlayPanel extends OverlayPanelAnimation implements ActivityStateListener,
+        OverlayPanelContentFactory {
 
     /**
      * The extra dp added around the close button touch target.
@@ -75,42 +76,31 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
         FULLSCREEN_EXITED,
         INFOBAR_SHOWN,
         INFOBAR_HIDDEN,
-        CONTENT_CHANGED;
+        CONTENT_CHANGED,
+        KEYBOARD_SHOWN,
+        KEYBOARD_HIDDEN,
+        TAB_NAVIGATION;
     }
 
-    /**
-     * The activity this panel is in.
-     */
+    /** The activity this panel is in. */
     protected ChromeActivity mActivity;
 
-    /**
-     * The initial height of the Overlay Panel.
-     */
+    /** The initial height of the Overlay Panel. */
     private float mInitialPanelHeight;
 
-    /**
-     * Whether a touch gesture has been detected.
-     */
+    /** Whether a touch gesture has been detected. */
     private boolean mHasDetectedTouchGesture;
 
-    /**
-     * That factory that creates OverlayPanelContents.
-     */
+    /** That factory that creates OverlayPanelContents. */
     private OverlayPanelContentFactory mContentFactory;
 
-    /**
-     * Container for content the panel will show.
-     */
+    /** Container for content the panel will show. */
     private OverlayPanelContent mContent;
 
-    /**
-     * The {@link OverlayPanelHost} used to communicate with the supported layout.
-     */
+    /** The {@link OverlayPanelHost} used to communicate with the supported layout. */
     private OverlayPanelHost mOverlayPanelHost;
 
-    /**
-     * OverlayPanel manager handle for notifications of opening and closing.
-     */
+    /** OverlayPanel manager handle for notifications of opening and closing. */
     protected OverlayPanelManager mPanelManager;
 
     // ============================================================================================
@@ -239,9 +229,12 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
 
     /**
      * Notify the panel's content that it has been touched.
+     * @param x The X position of the touch in dp.
      */
-    public void notifyPanelTouched() {
-        getOverlayPanelContent().notifyPanelTouched();
+    public void notifyBarTouched(float x) {
+        if (!isCoordinateInsideCloseButton(x)) {
+            getOverlayPanelContent().notifyBarTouched();
+        }
     }
 
     /**
@@ -324,24 +317,45 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
         content.setContentViewClient(new ContentViewClient() {
             @Override
             public int getDesiredWidthMeasureSpec() {
-                if (isFullscreenSizePanel()) {
+                if (isFullWidthSizePanel()) {
                     return super.getDesiredWidthMeasureSpec();
                 } else {
                     return MeasureSpec.makeMeasureSpec(
-                            getSearchContentViewWidthPx(),
+                            getContentViewWidthPx(),
                             MeasureSpec.EXACTLY);
                 }
             }
 
             @Override
             public int getDesiredHeightMeasureSpec() {
-                if (isFullscreenSizePanel()) {
+                if (isFullWidthSizePanel()) {
                     return super.getDesiredHeightMeasureSpec();
                 } else {
                     return MeasureSpec.makeMeasureSpec(
-                            getSearchContentViewHeightPx(),
+                            getContentViewHeightPx(),
                             MeasureSpec.EXACTLY);
                 }
+            }
+
+            @Override
+            public ContentVideoViewEmbedder getContentVideoViewEmbedder() {
+                // TODO(mdjones): Possibly enable fullscreen video in overlay panels rather than
+                // passing an empty implementation.
+                return new ContentVideoViewEmbedder() {
+                    @Override
+                    public void enterFullscreenVideo(View view) {}
+
+                    @Override
+                    public void exitFullscreenVideo() {}
+
+                    @Override
+                    public View getVideoLoadingProgressView() {
+                        return null;
+                    }
+
+                    @Override
+                    public void setSystemUiVisibility(boolean enterFullscreen) {}
+                };
             }
         });
 
@@ -392,7 +406,7 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
     public void updateTopControlsState() {
         if (mContent == null) return;
 
-        if (isFullscreenSizePanel()) {
+        if (isFullWidthSizePanel()) {
             // Consider the ContentView height to be fullscreen, and inform the system that
             // the Toolbar is always visible (from the Compositor's perspective), even though
             // the Toolbar and Base Page might be offset outside the screen. This means the
@@ -650,7 +664,7 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
      */
     public boolean isCoordinateInsideBar(float x, float y) {
         return isCoordinateInsideOverlayPanel(x, y)
-                && y >= getOffsetY() && y <= (getOffsetY() + getSearchBarContainerHeight());
+                && y >= getOffsetY() && y <= (getOffsetY() + getBarContainerHeight());
     }
 
     /**
@@ -674,7 +688,7 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
      * @return The vertical offset of the Overlay Content View in dp.
      */
     public float getContentY() {
-        return getOffsetY() + getSearchBarContainerHeight() + getPromoHeight();
+        return getOffsetY() + getBarContainerHeight() + getPromoHeight();
     }
 
     /**

@@ -108,7 +108,6 @@ Niektoré funkcie nemusia byť k dispozícii a zmeny vykonané v predvoľbách s
 <translation id="457845228957001925">Dôležité informácie týkajúce sa údajov prehliadača Chromium</translation>
 <translation id="459535195905078186">Aplikácie Chromium</translation>
 <translation id="4677944499843243528">Zdá sa, že profil používa ďalší proces prehliadača Chromium (<ph name="PROCESS_ID" />) na inom počítači (<ph name="HOST_NAME" />). Prehliadač Chromium daný profil uzamkol, aby sa nepoškodil. Ak s istotou viete, že tento profil nepoužívajú žiadne iné procesy, môžete ho odomknúť a prehliadač Chromium znova spustiť.</translation>
-<translation id="473775607612524610">Aktualizovať</translation>
 <translation id="4743926867934016338">Prijať a vyhľadať</translation>
 <translation id="4888717733111232871">Pravidlo pre prichádzajúce prenosy pre prehliadač Chromium, ktoré povoľuje prenos dát mDNS.</translation>
 <translation id="4943838377383847465">Chromium je v režime na pozadí.</translation>
@@ -122,6 +121,7 @@ Niektoré funkcie nemusia byť k dispozícii a zmeny vykonané v predvoľbách s
 <translation id="549669000822060376">Počkajte, kým Chromium nainštaluje najnovšie aktualizácie systému.</translation>
 <translation id="5563479599352954471">Vyhľadávanie jediným klepnutím</translation>
 <translation id="5620765574781326016">Získajte informácie o témach zmienených na stránke bez toho, aby ste danú stránku museli opustiť.</translation>
+<translation id="5634636535844844681">Chromium vyžaduje systém Windows 7 alebo vyšší.</translation>
 <translation id="5680901439334282664">prihláste sa do prehliadača Chromium</translation>
 <translation id="5772805321386874569">(vyžaduje <ph name="BEGIN_BUTTON" />reštartovanie<ph name="END_BUTTON" /> prehliadača Chromium)</translation>
 <translation id="5796460469508169315">Prehliadač Chromium je takmer pripravený</translation>
@@ -130,7 +130,6 @@ Niektoré funkcie nemusia byť k dispozícii a zmeny vykonané v predvoľbách s
 <translation id="5859963531214966875">Budúce verzie prehliadača Chromium už nebudú podporovať túto verziu systému Linux.</translation>
 <translation id="5862307444128926510">Vitajte v prehliadači Chromium</translation>
 <translation id="5877064549588274448">Kanál sa zmenil. Ak chcete zmeny použiť, reštartujte zariadenie.</translation>
-<translation id="5909170354645388250">V prehliadači Chromium sa nepoužíva. Zástupný znak na zachovanie synchronizácie máp zdroja. Očakáva jeden argument: $1.</translation>
 <translation id="5942225298871134766">Chromium uloží toto heslo pomocou funkcie <ph name="SAVED_PASSWORD_LINK" /> a ponúkne vám ho, keď ho budete najbližšie potrebovať.</translation>
 <translation id="5942520288919337908">Rozšírenie <ph name="EXTENSION_NAME" /> bolo pridané do prehliadača Chromium.</translation>
 <translation id="59625444380784159">Podrobnosti z vašich kontaktov vám môžu pomôcť rýchlejšie vypĺňať formuláre v prehliadači Chromium.</translation>
@@ -142,7 +141,6 @@ Niektoré funkcie nemusia byť k dispozícii a zmeny vykonané v predvoľbách s
 <translation id="6334986366598267305">Teraz je používanie prehliadača Chromium s účtom Google a na zdieľaných počítačoch oveľa ľahšie.</translation>
 <translation id="6373523479360886564">Naozaj chcete Chromium odinštalovať?</translation>
 <translation id="6403826409255603130">Chromium je webový prehliadač, ktorý spúšťa webové stránky a aplikácie rýchlosťou svetla. Je rýchly, stabilný a ľahko sa používa. S ochranou proti škodlivému softvéru a phishingu, ktorá je zabudovaná do prehliadača Chromium, môžete prehliadať web bezpečnejšie.</translation>
-<translation id="6424492062988593837">Systém Chromium bol práve vylepšený. K dispozícii je nová verzia.</translation>
 <translation id="6475912303565314141">Tiež určuje, ktorá stránka sa zobrazí pri spustení prehliadača Chromium.</translation>
 <translation id="6485906693002546646">Na synchronizáciu prehliadača Chromium používate účet <ph name="PROFILE_EMAIL" />. Ak chcete upraviť predvoľby synchronizácie alebo používať prehliadač Chromium bez účtu Google, prejdite na <ph name="SETTINGS_LINK" />.</translation>
 <translation id="6510925080656968729">Odinštalovať Chromium</translation>
@@ -211,7 +209,6 @@ Prehliadač Chromium nedokáže obnoviť vaše nastavenia.</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> Autori Chromium. Všetky práva vyhradené.</translation>
 <translation id="8621669128220841554">Inštalácia zlyhala kvôli neznámej chybe. Skúste prehliadač Chromium stiahnuť znova.</translation>
 <translation id="8628626585870903697">Prehliadač Chromium neobsahuje nástroj na zobrazovanie súborov PDF, ktorý je potrebný pre funkciu Ukážka pred tlačou.</translation>
-<translation id="8684913864886094367">Chromium nebol správne vypnutý.</translation>
 <translation id="8697124171261953979">Tiež určuje, ktorá stránka sa zobrazí pri spustení prehliadača Chromium alebo pri vyhľadávaní pomocou všeobecného poľa.</translation>
 <translation id="8704119203788522458">Toto je váš prehliadač Chromium</translation>
 <translation id="872034308864968620">Povoliť prehliadaču Chromium spustenie na pozadí</translation>
@@ -228,7 +225,6 @@ Prehliadač Chromium nedokáže obnoviť vaše nastavenia.</translation>
 
 Ak sa chcete aj napriek tomu prihlásiť, informácie prehliadača Chromium, ako sú záložky, história a iné nastavenia, sa priradia k účtu <ph name="ACCOUNT_EMAIL_NEW" />.</translation>
 <translation id="9013087743919948559">Pridať do prehliadača Chromium</translation>
-<translation id="9013262824292842194">Prehliadač Chromium vyžaduje systém Windows Vista alebo Windows XP s balíkom SP2 alebo vyšším.</translation>
 <translation id="9019929317751753759">Z dôvodu zvýšenia bezpečnosti prehliadača Chromium sme zakázali nasledujúce rozšírenie, ktoré nie je uvedené v službe <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> a mohlo byť pridané bez vášho vedomia.</translation>
 <translation id="9022552996538154597">Prihlásiť sa do prehliadača Chromium</translation>
 <translation id="9036189287518468038">Spúšťač aplikácií Chromium</translation>

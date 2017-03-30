@@ -29,6 +29,7 @@
 #include "platform/geometry/IntPoint.h"
 #include "platform/geometry/IntRectOutsets.h"
 #include "wtf/Allocator.h"
+#include "wtf/Forward.h"
 #include "wtf/Vector.h"
 #include "wtf/VectorTraits.h"
 
@@ -42,6 +43,10 @@ typedef struct CGRect CGRect;
 
 struct SkRect;
 struct SkIRect;
+
+namespace gfx {
+class Rect;
+}
 
 namespace blink {
 
@@ -172,9 +177,12 @@ public:
     operator SkRect() const;
     operator SkIRect() const;
 
+    operator gfx::Rect() const;
+
 #ifndef NDEBUG
     // Prints the rect to the screen.
     void show() const;
+    String toString() const;
 #endif
 
 private:

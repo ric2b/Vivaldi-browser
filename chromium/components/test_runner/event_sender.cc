@@ -88,6 +88,11 @@ int GetWebMouseEventModifierForButton(WebMouseEvent::Button button) {
 const int kButtonsInModifiers = WebMouseEvent::LeftButtonDown
     | WebMouseEvent::MiddleButtonDown | WebMouseEvent::RightButtonDown;
 
+int modifiersWithButtons(int modifiers, int buttons) {
+  return (modifiers & ~kButtonsInModifiers)
+      | (buttons & kButtonsInModifiers);
+}
+
 void InitMouseEvent(WebInputEvent::Type t,
                     WebMouseEvent::Button b,
                     int current_buttons,
@@ -98,8 +103,7 @@ void InitMouseEvent(WebInputEvent::Type t,
                     WebMouseEvent* e) {
   e->type = t;
   e->button = b;
-  e->modifiers = (modifiers & ~kButtonsInModifiers)
-      | (current_buttons & kButtonsInModifiers);
+  e->modifiers = modifiersWithButtons(modifiers, current_buttons);
   e->x = pos.x;
   e->y = pos.y;
   e->globalX = pos.x;
@@ -408,6 +412,30 @@ bool IsSystemKeyEvent(const WebKeyboardEvent& event) {
 #endif
 }
 
+bool GetScrollUnits(gin::Arguments* args, WebGestureEvent::ScrollUnits* units) {
+  std::string units_string;
+  if (!args->PeekNext().IsEmpty()) {
+    if (args->PeekNext()->IsString())
+      args->GetNext(&units_string);
+    if (units_string == "Page") {
+      *units = WebGestureEvent::Page;
+      return true;
+    } else if (units_string == "Pixels") {
+      *units = WebGestureEvent::Pixels;
+      return true;
+    } else if (units_string == "PrecisePixels") {
+      *units = WebGestureEvent::PrecisePixels;
+      return true;
+    } else {
+      args->ThrowError();
+      return false;
+    }
+  } else {
+    *units = WebGestureEvent::PrecisePixels;
+    return true;
+  }
+}
+
 const char* kSourceDeviceStringTouchpad = "touchpad";
 const char* kSourceDeviceStringTouchscreen = "touchscreen";
 
@@ -459,6 +487,7 @@ class EventSenderBindings : public gin::Wrappable<EventSenderBindings> {
                          float velocity_x,
                          float velocity_y,
                          gin::Arguments* args);
+  bool IsFlinging() const;
   void GestureScrollFirstPoint(int x, int y);
   void TouchStart();
   void TouchMove();
@@ -586,6 +615,7 @@ EventSenderBindings::GetObjectTemplateBuilder(v8::Isolate* isolate) {
                  &EventSenderBindings::DumpFilenameBeingDragged)
       .SetMethod("gestureFlingCancel", &EventSenderBindings::GestureFlingCancel)
       .SetMethod("gestureFlingStart", &EventSenderBindings::GestureFlingStart)
+      .SetMethod("isFlinging", &EventSenderBindings::IsFlinging)
       .SetMethod("gestureScrollFirstPoint",
                  &EventSenderBindings::GestureScrollFirstPoint)
       .SetMethod("touchStart", &EventSenderBindings::TouchStart)
@@ -757,6 +787,12 @@ void EventSenderBindings::GestureFlingStart(float x,
                                             gin::Arguments* args) {
   if (sender_)
     sender_->GestureFlingStart(x, y, velocity_x, velocity_y, args);
+}
+
+bool EventSenderBindings::IsFlinging() const {
+  if (sender_)
+    return sender_->IsFlinging();
+  return false;
 }
 
 void EventSenderBindings::GestureScrollFirstPoint(int x, int y) {
@@ -1257,7 +1293,7 @@ void EventSender::DoDragDrop(const WebDragData& drag_data,
       client_point,
       screen_point,
       current_drag_effects_allowed_,
-      modifiers_);
+      modifiersWithButtons(modifiers_, current_buttons_));
 
   // Finish processing events.
   ReplaySavedEvents();
@@ -1780,6 +1816,10 @@ void EventSender::GestureFlingStart(float x,
   HandleInputEventOnViewOrPopup(event);
 }
 
+bool EventSender::IsFlinging() const {
+  return view_->isFlinging();
+}
+
 void EventSender::GestureScrollFirstPoint(int x, int y) {
   current_gesture_location_ = WebPoint(x, y);
 }
@@ -1817,6 +1857,16 @@ void EventSender::LeapForward(int milliseconds) {
 }
 
 void EventSender::BeginDragWithFiles(const std::vector<std::string>& files) {
+  if (!current_drag_data_.isNull()) {
+    // Nested dragging not supported, fuzzer code a likely culprit.
+    // Cancel the current drag operation and throw an error.
+    KeyDown("escape", 0, DOMKeyLocationStandard);
+    v8::Isolate* isolate = blink::mainThreadIsolate();
+    isolate->ThrowException(v8::Exception::Error(
+        gin::StringToV8(isolate,
+                        "Nested beginDragWithFiles() not supported.")));
+    return;
+  }
   current_drag_data_.initialize();
   WebVector<WebString> absolute_filenames(files.size());
   for (size_t i = 0; i < files.size(); ++i) {
@@ -1860,6 +1910,10 @@ void EventSender::AddTouchPoint(float x, float y, gin::Arguments* args) {
 
   InitPointerProperties(args, &touch_point, &touch_point.radiusX,
                         &touch_point.radiusY);
+
+  // Set the touch point pressure to zero if it was not set by the caller
+  if (std::isnan(touch_point.force))
+      touch_point.force = 0.0;
 
   touch_points_.push_back(touch_point);
 }
@@ -2071,7 +2125,7 @@ void EventSender::DoLeapForward(int milliseconds) {
 }
 
 void EventSender::SendCurrentTouchEvent(WebInputEvent::Type type,
-                                        bool causesScrollingIfUncanceled) {
+                                        bool movedBeyondSlopRegion) {
   DCHECK_GT(static_cast<unsigned>(WebTouchEvent::touchesLengthCap),
             touch_points_.size());
   if (force_layout_on_events_)
@@ -2082,7 +2136,7 @@ void EventSender::SendCurrentTouchEvent(WebInputEvent::Type type,
   touch_event.modifiers = touch_modifiers_;
   touch_event.cancelable = touch_cancelable_;
   touch_event.timeStampSeconds = GetCurrentEventTimeSec();
-  touch_event.causesScrollingIfUncanceled = causesScrollingIfUncanceled;
+  touch_event.movedBeyondSlopRegion = movedBeyondSlopRegion;
   touch_event.touchesLength = touch_points_.size();
   for (size_t i = 0; i < touch_points_.size(); ++i)
     touch_event.touches[i] = touch_points_[i];
@@ -2142,6 +2196,8 @@ void EventSender::GestureEvent(WebInputEvent::Type type,
           return;
         }
       }
+      if (!GetScrollUnits(args, &event.data.scrollUpdate.deltaUnits))
+        return;
 
       event.data.scrollUpdate.deltaX = static_cast<float>(x);
       event.data.scrollUpdate.deltaY = static_cast<float>(y);
@@ -2538,13 +2594,17 @@ void EventSender::DoMouseUp(const WebMouseEvent& e) {
 
   WebPoint client_point(e.x, e.y);
   WebPoint screen_point(e.globalX, e.globalY);
-  FinishDragAndDrop(
-      e,
-      view_->dragTargetDragOver(
-          client_point,
-          screen_point,
-          current_drag_effects_allowed_,
-          e.modifiers));
+  blink::WebDragOperation drag_effect = view_->dragTargetDragOver(
+      client_point,
+      screen_point,
+      current_drag_effects_allowed_,
+      e.modifiers);
+
+  // Bail if dragover caused cancellation.
+  if (current_drag_data_.isNull())
+    return;
+
+  FinishDragAndDrop(e, drag_effect);
 }
 
 void EventSender::DoMouseMove(const WebMouseEvent& e) {

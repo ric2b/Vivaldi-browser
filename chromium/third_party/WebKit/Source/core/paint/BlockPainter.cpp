@@ -10,6 +10,7 @@
 #include "core/layout/LayoutBlockFlow.h"
 #include "core/layout/LayoutFlexibleBox.h"
 #include "core/layout/LayoutInline.h"
+#include "core/layout/api/LineLayoutAPIShim.h"
 #include "core/layout/api/LineLayoutBox.h"
 #include "core/page/Page.h"
 #include "core/paint/BoxClipper.h"
@@ -17,7 +18,6 @@
 #include "core/paint/InlinePainter.h"
 #include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/LineBoxListPainter.h"
-#include "core/paint/LineLayoutPaintShim.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/ScopeRecorder.h"
@@ -30,17 +30,17 @@ namespace blink {
 
 void BlockPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
-    if (!intersectsPaintRect(paintInfo, paintOffset))
+    LayoutPoint adjustedPaintOffset = paintOffset + m_layoutBlock.location();
+    if (!intersectsPaintRect(paintInfo, adjustedPaintOffset))
         return;
 
-    LayoutPoint adjustedPaintOffset = paintOffset + m_layoutBlock.location();
     PaintInfo localPaintInfo(paintInfo);
     PaintPhase originalPhase = localPaintInfo.phase;
 
     // There are some cases where not all clipped visual overflow is accounted for.
     // FIXME: reduce the number of such cases.
     ContentsClipBehavior contentsClipBehavior = ForceContentsClip;
-    if (m_layoutBlock.hasOverflowClip() && !m_layoutBlock.hasControlClip() && !(m_layoutBlock.shouldPaintSelectionGaps() && originalPhase == PaintPhaseForeground) && !m_layoutBlock.hasCaret())
+    if (m_layoutBlock.hasOverflowClip() && !m_layoutBlock.hasControlClip() && !m_layoutBlock.hasCaret())
         contentsClipBehavior = SkipContentsClipIfPossible;
 
     if (originalPhase == PaintPhaseOutline) {
@@ -74,7 +74,6 @@ void BlockPainter::paintOverflowControlsIfNeeded(const PaintInfo& paintInfo, con
     if (m_layoutBlock.hasOverflowClip()
         && m_layoutBlock.style()->visibility() == VISIBLE
         && shouldPaintSelfBlockBackground(paintInfo.phase)
-        && paintInfo.shouldPaintWithinRoot(&m_layoutBlock)
         && !paintInfo.paintRootBackgroundOnly()) {
         Optional<ClipRecorder> clipRecorder;
         if (!m_layoutBlock.layer()->isSelfPaintingLayer()) {
@@ -114,14 +113,17 @@ void BlockPainter::paintChildAsPseudoStackingContext(const LayoutBox& child, con
 
 void BlockPainter::paintInlineBox(const InlineBox& inlineBox, const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
-    if (!paintInfo.shouldPaintWithinRoot(LineLayoutPaintShim::constLayoutObjectFrom(inlineBox.lineLayoutItem())) || (paintInfo.phase != PaintPhaseForeground && paintInfo.phase != PaintPhaseSelection))
+    if (paintInfo.phase != PaintPhaseForeground && paintInfo.phase != PaintPhaseSelection)
         return;
 
-    LayoutPoint childPoint = paintOffset;
-    if (inlineBox.parent()->lineLayoutItem().style()->isFlippedBlocksWritingMode()) // Faster than calling containingBlock().
-        childPoint = LineLayoutPaintShim::layoutObjectFrom(inlineBox.lineLayoutItem())->containingBlock()->flipForWritingModeForChild(&toLayoutBox(inlineBox.layoutObject()), childPoint);
+    // Text clips are painted only for the direct inline children of the object that has a text clip style on it, not block children.
+    ASSERT(paintInfo.phase != PaintPhaseTextClip);
 
-    ObjectPainter(inlineBox.layoutObject()).paintAsPseudoStackingContext(paintInfo, childPoint);
+    LayoutPoint childPoint = paintOffset;
+    if (inlineBox.parent()->getLineLayoutItem().style()->isFlippedBlocksWritingMode()) // Faster than calling containingBlock().
+        childPoint = LineLayoutAPIShim::layoutObjectFrom(inlineBox.getLineLayoutItem())->containingBlock()->flipForWritingModeForChild(toLayoutBox(LineLayoutAPIShim::layoutObjectFrom(inlineBox.getLineLayoutItem())), childPoint);
+
+    ObjectPainter(*LineLayoutAPIShim::constLayoutObjectFrom(inlineBox.getLineLayoutItem())).paintAsPseudoStackingContext(paintInfo, childPoint);
 }
 
 void BlockPainter::paintObject(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
@@ -134,7 +136,7 @@ void BlockPainter::paintObject(const PaintInfo& paintInfo, const LayoutPoint& pa
         // Set previousPaintOffset here in case that m_layoutBlock paints nothing and no
         // LayoutObjectDrawingRecorder updates its previousPaintOffset.
         // TODO(wangxianzhu): Integrate paint offset checking into new paint invalidation.
-        m_layoutBlock.mutableForPainting().setPreviousPaintOffset(paintOffset);
+        m_layoutBlock.getMutableForPainting().setPreviousPaintOffset(paintOffset);
     }
 
     const PaintPhase paintPhase = paintInfo.phase;
@@ -160,8 +162,6 @@ void BlockPainter::paintObject(const PaintInfo& paintInfo, const LayoutPoint& pa
         return;
     }
 
-    // FIXME: When Skia supports annotation rect covering (https://code.google.com/p/skia/issues/detail?id=3872),
-    // this rect may be covered by foreground and descendant drawings. Then we may need a dedicated paint phase.
     if (paintPhase == PaintPhaseForeground && paintInfo.isPrinting())
         ObjectPainter(m_layoutBlock).addPDFURLRectIfNeeded(paintInfo, paintOffset);
 
@@ -214,23 +214,35 @@ void BlockPainter::paintCarets(const PaintInfo& paintInfo, const LayoutPoint& pa
         frame->page()->dragCaretController().paintDragCaret(frame, paintInfo.context, paintOffset);
 }
 
-bool BlockPainter::intersectsPaintRect(const PaintInfo& paintInfo, const LayoutPoint& paintOffset) const
+bool BlockPainter::intersectsPaintRect(const PaintInfo& paintInfo, const LayoutPoint& adjustedPaintOffset) const
 {
-    LayoutRect overflowRect = m_layoutBlock.visualOverflowRect();
+    LayoutRect overflowRect;
+    if (paintInfo.isPrinting() && m_layoutBlock.isAnonymousBlock() && m_layoutBlock.childrenInline()) {
+        // For case <a href="..."><div>...</div></a>, when m_layoutBlock is the anonymous container
+        // of <a>, the anonymous container's visual overflow is empty, but we need to continue
+        // painting to output <a>'s PDF URL rect which covers the continuations, as if we included
+        // <a>'s PDF URL rect into m_layoutBlock's visual overflow.
+        Vector<LayoutRect> rects;
+        m_layoutBlock.addElementVisualOverflowRects(rects, LayoutPoint());
+        overflowRect = unionRect(rects);
+    } else {
+        overflowRect = m_layoutBlock.visualOverflowRect();
+    }
+
     if (m_layoutBlock.hasOverflowModel() && m_layoutBlock.usesCompositedScrolling()) {
         overflowRect.unite(m_layoutBlock.layoutOverflowRect());
         overflowRect.move(-m_layoutBlock.scrolledContentOffset());
     }
     m_layoutBlock.flipForWritingMode(overflowRect);
-    overflowRect.moveBy(paintOffset + m_layoutBlock.location());
+    overflowRect.moveBy(adjustedPaintOffset);
     return paintInfo.cullRect().intersectsCullRect(overflowRect);
 }
 
 void BlockPainter::paintContents(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     // Avoid painting descendants of the root element when stylesheets haven't loaded. This eliminates FOUC.
-    // It's ok not to draw, because later on, when all the stylesheets do load, styleResolverChanged() on the Document
-    // will do a full paint invalidation.
+    // It's ok not to draw, because later on, when all the stylesheets do load, styleResolverMayHaveChanged()
+    // on Document will trigger a full paint invalidation.
     if (m_layoutBlock.document().didLayoutWithPendingStylesheets() && !m_layoutBlock.isLayoutView())
         return;
 
@@ -241,7 +253,6 @@ void BlockPainter::paintContents(const PaintInfo& paintInfo, const LayoutPoint& 
             LineBoxListPainter(m_layoutBlock.lineBoxes()).paint(m_layoutBlock, paintInfo, paintOffset);
     } else {
         PaintInfo paintInfoForDescendants = paintInfo.forDescendants();
-        paintInfoForDescendants.updatePaintingRootForChildren(&m_layoutBlock);
         m_layoutBlock.paintChildren(paintInfoForDescendants, paintOffset);
     }
 }

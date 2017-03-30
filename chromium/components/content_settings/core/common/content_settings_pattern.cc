@@ -13,7 +13,6 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "components/content_settings/core/common/content_settings_pattern_parser.h"
-#include "net/base/net_util.h"
 #include "net/base/url_util.h"
 #include "url/gurl.h"
 
@@ -333,6 +332,9 @@ ContentSettingsPattern::PatternParts::PatternParts()
           has_domain_wildcard(false),
           is_port_wildcard(false),
           is_path_wildcard(false) {}
+
+ContentSettingsPattern::PatternParts::PatternParts(const PatternParts& other) =
+    default;
 
 ContentSettingsPattern::PatternParts::~PatternParts() {}
 

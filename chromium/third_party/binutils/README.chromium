@@ -13,7 +13,8 @@ They were built from binutils-2.25 using the "build-all.sh" script on a Ubuntu
 Precise.
 
 The script creates chroots for 32bit and 64bit Ubuntu Precise and then builds
-binutils inside the roots.
+binutils inside the roots. It also builds tcmalloc and links binutils with it
+to improve the speed of LTO.
 
 Version 2.25 was released on Wed, 24 Dec 2014
 
@@ -43,7 +44,9 @@ To upgrade binutils, use the following steps:
  * Remove any patches which have been merged upstream from build-all.sh
  * Update this README.chromium file
  * Run build-all.sh
- * Run upload.sh
+ * Run upload.sh. Note: you will need write access to
+   gs://chromium-binutils bucket on Google Cloud Storage. To get the
+   access, subscribe to the internal chrome-team mailing list.
  * Wait for goma to have new binutils deployed (see http://go/ma).
     Please notify {ukai,yyanagisawa,shinyak}@chromium.org and await
     confirmation.

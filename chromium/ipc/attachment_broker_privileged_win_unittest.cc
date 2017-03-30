@@ -267,7 +267,7 @@ class IPCAttachmentBrokerPrivilegedWinTest : public IPCTestBase {
       set_broker(new IPC::AttachmentBrokerUnprivilegedWin);
     broker_->AddObserver(&observer_, task_runner());
     CreateChannel(&proxy_listener_);
-    broker_->DesignateBrokerCommunicationChannel(channel());
+    broker_->RegisterBrokerCommunicationChannel(channel());
     ASSERT_TRUE(ConnectChannel());
     ASSERT_TRUE(StartClient());
 
@@ -470,7 +470,7 @@ TEST_F(IPCAttachmentBrokerPrivilegedWinTest, SendHandleTwice) {
 
 // An unprivileged process makes a shared memory region and sends it to the
 // privileged process.
-TEST_F(IPCAttachmentBrokerPrivilegedWinTest, DISABLED_SendSharedMemoryHandle) {
+TEST_F(IPCAttachmentBrokerPrivilegedWinTest, SendSharedMemoryHandle) {
   Init("SendSharedMemoryHandle");
 
   CommonSetUp();

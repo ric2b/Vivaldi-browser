@@ -134,6 +134,13 @@
 <translation id="1522425503138261032">Zezwalaj witrynom na śledzenie fizycznej lokalizacji użytkownika</translation>
 <translation id="152657506688053119">Lista alternatywnych URL-i dla domyślnego dostawcy wyszukiwania</translation>
 <translation id="1530812829012954197">Zawsze renderuj strony w przeglądarce hosta według następujących wzorców adresów URL</translation>
+<translation id="1553684822621013552">Gdy ta zasada jest włączona, użytkownik ma dostęp do rozszerzenia ARC
+      (zależy to jednak od kontroli dodatkowych ustawień zasad – rozszerzenie ARC nadal jest niedostępne,
+      jeśli w bieżącej sesji użytkownika włączono tryb tymczasowy
+      lub wielokrotne logowanie).
+
+      Jeśli to ustawienie jest wyłączone lub nie jest skonfigurowane, użytkownicy w firmie
+      nie mogą używać rozszerzenia ARC.</translation>
 <translation id="1561424797596341174">Zasada zastępuje kompilacje hosta dostępu zdalnego w trybie debugowania</translation>
 <translation id="1583248206450240930">Używaj domyślnie wtyczki <ph name="PRODUCT_FRAME_NAME" /></translation>
 <translation id="1608755754295374538">Adresy URL, które bez pytania otrzymają dostęp do urządzeń do nagrywania dźwięku</translation>
@@ -185,6 +192,13 @@
 
           Ta zasada jest uwzględniana tylko wtedy, gdy włączona jest zasada „DefaultSearchProviderEnabled”.</translation>
 <translation id="1859633270756049523">Ogranicz długość sesji</translation>
+<translation id="1859859319036806634">Ostrzeżenie: możliwość zastępczego użycia starszej wersji protokołu TLS zostanie wycofana z <ph name="PRODUCT_NAME" /> po wersji 52 (w okolicach września 2016 roku), a zasada przestanie działać.
+
+      Jeśli uzgadnianie połączenia w protokole TLS nie udało się, <ph name="PRODUCT_NAME" /> wcześniej podejmował ponowną próbę nawiązania połączenia przy użyciu starszej wersji protokołu TLS, by obejść błędy w działaniu serwerów HTTPS. To ustawienie pozwala skonfigurować wersję, przy której ten proces zastępczego używania starszej wersji się zatrzyma. Jeśli serwer prawidłowo (tj. bez przerywania połączenia) przeprowadzi negocjowanie wersji, ustawienie nie będzie stosowane. Niezależnie od sposobu, w jaki zostanie nawiązane połączenie, musi być ono zgodne z wartością SSLVersionMin.
+
+      Jeśli ta zasada nie jest skonfigurowana lub jest ustawiona na „tls1.2”, <ph name="PRODUCT_NAME" /> nie stosuje już tego rozwiązania zastępczego. Pamiętaj, że nie wyłącza to obsługi starszych wersji protokołu TLS, tylko określa, czy <ph name="PRODUCT_NAME" /> będzie mieć możliwość obejścia wadliwie działających serwerów, które nie są w stanie przeprowadzić prawidłowego negocjowania wersji.
+
+      Jeśli utrzymanie zgodności z wadliwie działającym serwerem jest konieczne, można wybrać „tls1.1”. To jednak tylko rozwiązanie tymczasowe – serwer trzeba jak najszybciej naprawić.</translation>
 <translation id="1861037019115362154">Pozwala określić listę wtyczek wyłączonych w <ph name="PRODUCT_NAME" /> i uniemożliwia użytkownikom zmianę tego ustawienia. Możesz użyć symboli wieloznacznych „*” i „?”, by dopasować sekwencje dowolnych znaków. Symbol „*” odpowiada dowolnej liczbie znaków, natomiast „?” oznacza jeden opcjonalny znak (czyli jeden lub zero znaków). Znakiem zmiany znaczenia jest „\”, dlatego by wprowadzić faktyczny znak „*”, „?” lub „\”, musisz umieścić przed nim znak „\”. Jeśli włączysz to ustawienie, wtyczki wymienione na liście nigdy nie będą używane w <ph name="PRODUCT_NAME" />. Wtyczki są oznaczone jako wyłączone na stronie „about:plugins”, a użytkownicy nie mogą ich włączyć. Pamiętaj, że ta zasada jest zastępowana przez zasady EnabledPlugins i DisabledPluginsExceptions. Jeśli zasada nie zostanie ustawiona, użytkownik będzie mógł korzystać ze wszystkich wtyczek zainstalowanych w systemie oprócz przestarzałych, niebezpiecznych i niezgodnych wbudowanych wtyczek.</translation>
 <translation id="1865417998205858223">Uprawnienia klucza</translation>
 <translation id="186719019195685253">Działanie, jakie ma zostać podjęte po osiągnięciu opóźnienia bezczynności przy zasilaniu prądem zmiennym</translation>
@@ -215,6 +229,7 @@
       Jeśli ustawisz tu wartość prawda, <ph name="PRODUCT_OS_NAME" /> będzie próbować pobierać ładunki aktualizacji automatycznych przez HTTP. Jeśli nie skonfigurujesz tej zasady lub ustawisz w niej wartość fałsz, do pobierania ładunków aktualizacji automatycznych będzie używany protokół HTTPS.</translation>
 <translation id="2006530844219044261">Zarządzanie energią</translation>
 <translation id="201557587962247231">Częstotliwość pobierania raportów o stanie urządzenia</translation>
+<translation id="2024476116966025075">Konfiguracja wymaganej nazwy domeny dla klientów zdalnego dostępu</translation>
 <translation id="2030905906517501646">Słowo kluczowe domyślnego dostawcy wyszukiwania</translation>
 <translation id="206623763829450685">Pozwala określić schematy uwierzytelniania HTTP obsługiwane w <ph name="PRODUCT_NAME" />.
 
@@ -434,21 +449,13 @@
       Jeśli nie skonfigurujesz tej zasady, użytkownicy będą mogli sami wybrać, czy chcą używać serwera proxy kompresowania danych czy nie.</translation>
 <translation id="2587719089023392205">Ustaw <ph name="PRODUCT_NAME" /> jako przeglądarkę domyślną</translation>
 <translation id="2592091433672667839">Czas bezczynności, po upływie którego w trybie sklepu na ekranie logowania jest wyświetlany wygaszacz ekranu</translation>
+<translation id="260705825237536216">Konfigurowanie aplikacji ARC</translation>
 <translation id="2623014935069176671">Poczekaj na początkową aktywność użytkownika</translation>
 <translation id="262740370354162807">Włącz wysyłanie dokumentów do <ph name="CLOUD_PRINT_NAME" />.</translation>
 <translation id="2633084400146331575">Włącz potwierdzenia głosowe</translation>
 <translation id="2646290749315461919">Umożliwia określenie, czy witryny mogą śledzić fizyczną lokalizację użytkownika. Śledzenie fizycznej lokalizacji użytkownika może być domyślnie dozwolone lub zabronione bądź użytkownik może być o to pytany za każdym razem, gdy witryna żąda informacji o lokalizacji. W przypadku nieskonfigurowania tej zasady używane będzie ustawienie „AskGeolocation”, a użytkownik będzie mógł je zmienić.</translation>
 <translation id="2650049181907741121">Działanie, jakie ma zostać wykonane po zamknięciu pokrywy przez użytkownika</translation>
 <translation id="2660846099862559570">Nigdy nie używaj serwera proxy</translation>
-<translation id="2665596266623707739">Ostrzeżenie: możliwość zastępczego użycia wersji 1.0 protokołu TLS zostanie wycofana z <ph name="PRODUCT_NAME" /> po wersji 47 (w okolicach stycznia 2016 roku.), a opcja „tls1” przestanie działać.
-
-      Jeśli uzgadnianie połączenia w protokole TLS się nie powiedzie, <ph name="PRODUCT_NAME" /> podejmuje ponowną próbę nawiązania połączenia przy użyciu starszej wersji protokołu TLS, by obejść błędy w działaniu serwerów HTTPS. To ustawienie pozwala skonfigurować wersję, przy której ten proces zastępczego używania innej wersji się zatrzyma. Jeśli serwer prawidłowo (tj. bez przerywania połączenia) przeprowadzi negocjowanie wersji, ustawienie nie będzie stosowane. Niezależnie od sposobu, w jaki zostanie nawiązane, połączenie musi być zgodne z wartością SSLVersionMin.
-
-      Jeśli ta zasada nie jest skonfigurowana, <ph name="PRODUCT_NAME" /> stosuje minimalną domyślną wersję, czyli TLS 1.0 w przypadku <ph name="PRODUCT_NAME" /> 44 oraz TLS 1.1 w późniejszych wersjach. Pamiętaj, że to nie wyłącza obsługi protokołu TLS 1.0, tylko określa, czy będzie możliwość obejścia wadliwie działających serwerów, które nie są w stanie przeprowadzić prawidłowego negocjowania wersji w <ph name="PRODUCT_NAME" />.
-
-      W przeciwnym wypadku można ustawić jedną z tych wartości: „tls1”, „tls1.1” lub „tls1.2”. Jeśli utrzymanie zgodności z wadliwie działającym serwerem jest konieczne, można wybrać „tls1”. To jednak rozwiązanie tymczasowe – serwer trzeba szybko naprawić.
-
-      Ustawienie „tls1.2” wyłącza zastępcze używanie innej wersji, ale może to mieć duży wpływ na zgodność.</translation>
 <translation id="267596348720209223">Pozwala określić kodowania znaków obsługiwane przez dostawcę wyszukiwania. Kodowania są określane za pomocą nazw stron kodowych, np. UTF-8, GB2312 czy ISO-8859-1. Są stosowane w podanej kolejności. Ta zasada jest opcjonalna. Jeśli nie zostanie skonfigurowana, będzie używana wartość domyślna, czyli UTF-8. Zasada ta jest stosowana tylko przy włączonej zasadzie „DefaultSearchProviderEnabled”.</translation>
 <translation id="2682225790874070339">Wyłącz Dysk w aplikacji Pliki w <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="268577405881275241">Włącz serwer proxy kompresowania danych</translation>
@@ -465,11 +472,6 @@
       Jeśli to ustawienie zostanie wyłączone, strony nie będą mogły używać JavaScriptu, a użytkownik nie będzie mógł zmienić tego ustawienia.
 
       Jeśli to ustawienie będzie włączone lub nieustawione, strony będą mogły używać JavaScriptu, ale użytkownik będzie mógł zmienić to ustawienie.</translation>
-<translation id="2747783890942882652">Konfiguruje wymaganą nazwę hosta, która będzie stosowana do hostów zdalnego dostępu, i uniemożliwia użytkownikom jej zmianę.
-
-          Jeśli to ustawienie zostanie włączone, hosty będą mogły być udostępniane tylko z użyciem kont zarejestrowanych w określonej domenie.
-
-          W przypadku wyłączenia lub nieskonfigurowania tego ustawienia hosty będą mogły być udostępniane z użyciem dowolnego konta.</translation>
 <translation id="2757054304033424106">Typy rozszerzeń/aplikacji, które można instalować</translation>
 <translation id="2759224876420453487">Kontrolowanie zachowania użytkownika w sesji wieloprofilowej</translation>
 <translation id="2761483219396643566">Opóźnienie ostrzeżenia o bezczynności przy zasilaniu z baterii</translation>
@@ -534,6 +536,7 @@
       Określa, czy ma być włączone rozszerzenie certyfikatów TLS powiązanych z domeną.
 
       To ustawienie umożliwia testowanie rozszerzenia certyfikatów TLS powiązanych z domeną. Jest eksperymentalne i zostanie usunięte w przyszłości.</translation>
+<translation id="2957506574938329824">Nie pozwalaj żadnym witrynom na wysyłanie żądań dostępu do urządzeń Bluetooth poprzez interfejs API Web Bluetooth</translation>
 <translation id="2957513448235202597">Rodzaj konta na potrzeby uwierzytelniania <ph name="HTTP_NEGOTIATE" /></translation>
 <translation id="2959898425599642200">Reguły omijania serwera proxy</translation>
 <translation id="2960691910306063964">Włącz lub wyłącz uwierzytelnianie hostów dostępu zdalnego bez kodu PIN</translation>
@@ -546,6 +549,8 @@
           Jeśli ta zasada nie jest ustawiona, używana jest domyślna wartość długości czasu.
 
           Wartość tej zasady powinna być określona w milisekundach. Wartości nie mogą być większe niż opóźnienie wyłączenia ekranu (jeśli jest ustawione) i opóźnienie bezczynności.</translation>
+<translation id="2987155890997901449">Włączenie ARC</translation>
+<translation id="2987227569419001736">Kontrolowanie użycia interfejsu API Web Bluetooth</translation>
 <translation id="2998881342848488968">Ta zasada umożliwia <ph name="PRODUCT_OS_NAME" /> ominięcie dowolnego serwera proxy w celu uwierzytelnienia portalu przechwytującego.
 
       Zasada działa tylko wtedy, gdy serwer proxy jest skonfigurowany (np. przez zasadę, użytkownika na chrome://settings lub rozszerzenie).
@@ -830,6 +835,7 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
 
           Ta zasada jest uwzględniana tyko wtedy, gdy włączona jest zasada „DefaultSearchProviderEnabled”.</translation>
 <translation id="4320376026953250541">Microsoft Windows XP z dodatkiem SP2 lub nowszy</translation>
+<translation id="4322842393287974810">Zezwalaj aplikacji kiosku uruchamianej automatycznie z zerowym opóźnieniem na kontrolowanie wersji <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="4325690621216251241">Dodaj przycisk wylogowania do paska zadań</translation>
 <translation id="4347908978527632940">Jeśli jest włączona i użytkownik jest nadzorowany, inne aplikacje na Androida mogą sprawdzać ograniczenia dostępu do internetu dla użytkownika za pośrednictwem dostawcy treści.
 
@@ -1076,6 +1082,11 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
 <translation id="5307432759655324440">Dostępność trybu incognito</translation>
 <translation id="5318185076587284965">Zezwalaj hostowi zdalnego dostępu na korzystanie z serwerów przekazujących</translation>
 <translation id="5330684698007383292">Zezwalaj <ph name="PRODUCT_FRAME_NAME" /> na obsługę tych typów treści</translation>
+<translation id="5345267406698765263">Określa zasady aplikacji ARC jako ciąg znaków JSON, który może zostać
+      przekazany w niezmienionej postaci do środowiska wykonawczego ARC. Aktualnie to ustawienie jest używane
+      wyłącznie do określania wymuszonej instalacji aplikacji.
+
+      Jeśli ta zasada nie jest ustawiona, aplikacje nie są instalowane automatycznie.</translation>
 <translation id="5365946944967967336">Pokaż przycisk strony startowej na pasku narzędzi</translation>
 <translation id="5366977351895725771">Jeśli ta zasada ma wartość „fałsz”, ten użytkownik nie może tworzyć użytkowników nadzorowanych. Dotychczasowi użytkownicy nadzorowani będą nadal dostępni.
 
@@ -1139,6 +1150,13 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
       Jeśli ta opcja pozostanie nieustawiona, półka będzie ukrywana automatycznie.</translation>
 <translation id="557658534286111200">Włącz lub wyłącz edytowanie zakładek</translation>
 <translation id="5586942249556966598">Nic nie rób</translation>
+<translation id="5613179474872285001">Konfiguruje wymaganą nazwę domeny klienta, która będzie stosowana do klientów zdalnego dostępu, i uniemożliwia użytkownikom jej zmianę.
+
+          Jeśli to ustawienie jest włączone, z hostem mogą się łączyć tylko klienty z określonej domeny.
+
+          Jeśli to ustawienie jest wyłączone lub nie jest skonfigurowane, do danego rodzaju połączenia stosowane są zasady domyślne. Dzięki temu na potrzeby pomocy zdalnej z hostem mogą łączyć się klienty z dowolnej domeny, a na potrzeby uzyskania dostępu zdalnego w dowolnym momencie łączyć się może tylko właściciel hosta.
+
+          Zobacz też RemoteAccessHostDomain.</translation>
 <translation id="5630352020869108293">Przywróć ostatnią sesję</translation>
 <translation id="5645779841392247734">Zezwalaj na pliki cookie w tych witrynach</translation>
 <translation id="5677038592630896441">Wymaga dopasowania nazwy użytkownika lokalnego do nazwy hosta dostępu zdalnego.
@@ -1408,6 +1426,9 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
 
           Jeśli nie skonfigurujesz tej zasady, klawiatura ekranowa będzie wyłączona po pierwszym wyświetleniu ekranu logowania. Użytkownicy będą mogli ją włączyć i wyłączyć w każdej chwili i jej stan na tym ekranie będzie utrzymywany między użytkownikami.</translation>
 <translation id="6598235178374410284">Obraz awatara użytkownika</translation>
+<translation id="6628646143828354685">Pozwala określić, czy strony mogą korzystać z urządzeń Bluetooth w pobliżu. Dostęp może być całkowicie zablokowany lub użytkownik może być pytany za każdym razem, gdy strona chce użyć takiego urządzenia.
+
+          Jeśli ta zasada nie zostanie ustawiona, będzie stosowane ustawienie „3”, a użytkownik będzie mógł je zmienić.</translation>
 <translation id="6636268606788232221">Skonfiguruj ustawienia zarządzania energią, gdy użytkownik jest nieaktywny.
 
           Ta zasada określa szereg ustawień strategii zarządzania energią, gdy użytkownik jest nieaktywny.
@@ -1483,6 +1504,7 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
           Jeśli skonfigurujesz tę zasadę, użytkownicy nie będą mogli jej zmienić ani zastąpić.
 
           Jeśli nie skonfigurujesz tej zasady, Opcje ułatwień dostępu nie będą widoczne w menu na pasku zadań, ale użytkownik będzie mógł włączyć ich wyświetlanie na stronie Ustawień.</translation>
+<translation id="6766216162565713893">Zezwól, by witryny prosiły użytkownika o przyznanie dostępu do urządzeń Bluetooth w pobliżu</translation>
 <translation id="6770454900105963262">Informuj o aktywnych sesjach kiosku</translation>
 <translation id="6774533686631353488">Zezwól na hosty Wiadomości natywnych na poziomie użytkownika (instalowane bez uprawnień administratora).</translation>
 <translation id="6786747875388722282">Rozszerzenia</translation>
@@ -1514,6 +1536,13 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
 <translation id="6943577887654905793">Nazwa ustawienia w systemie Mac OS/Linux:</translation>
 <translation id="69525503251220566">Parametr udostępniający funkcję wyszukiwania obrazem dla domyślnego dostawcy wyszukiwania</translation>
 <translation id="6956272732789158625">Nie zezwalaj na generowanie kluczy w żadnej witrynie</translation>
+<translation id="695891079107014261">Konfiguruje wymaganą nazwę domeny hosta, która będzie stosowana do hostów zdalnego dostępu, i uniemożliwia użytkownikom jej zmianę.
+
+          Jeśli to ustawienie jest włączone, udostępnianie hostów jest możliwe tylko z użyciem kont zarejestrowanych w określonej domenie.
+
+          Jeśli to ustawienie jest wyłączone lub nie jest skonfigurowane, udostępnianie hostów jest możliwe z użyciem dowolnego konta.
+
+          Zobacz też RemoteAccessHostClientDomain.</translation>
 <translation id="6997592395211691850">Określa, czy dla lokalnych kotwic zaufania są wymagane sprawdzenia online OCSP/CRL</translation>
 <translation id="7003334574344702284">Po włączeniu tej zasady wymuszany jest import zapisanych haseł z poprzedniej przeglądarki domyślnej. Włączenie zasady ma również wpływ na opcje w oknie dialogowym importowania. W przypadku jej wyłączenia zapisane hasła nie są importowane. Jeśli zasada nie jest skonfigurowana, użytkownik może zostać zapytany, czy zaimportować hasła lub operacja ta zostanie wykonana automatycznie.</translation>
 <translation id="7003746348783715221">Ustawienia przeglądarki <ph name="PRODUCT_NAME" /></translation>
@@ -1607,7 +1636,7 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
 
           Jeśli to ustawienie jest wyłączone, ta funkcja nie będzie dostępna.</translation>
 <translation id="7275334191706090484">Zakładki zarządzane</translation>
-<translation id="7295019613773647480">Włącz obsługę użytkowników nadzorowanych</translation>
+<translation id="7295019613773647480">Włącz obsługę nadzorowanych użytkowników</translation>
 <translation id="7301543427086558500">Określa listę alternatywnych URL-i, które umożliwiają uzyskanie wyników haseł z wyszukiwarki. Adresy URL powinny zawierać łańcuch <ph name="SEARCH_TERM_MARKER" /> używany do wskazania haseł do wyszukania.
 
           Ta zasada jest opcjonalna. Jeśli nie zostanie ustawiona, do wydobywania haseł do wyszukania nie będą używane alternatywne URL-e.
@@ -1641,6 +1670,13 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
 <translation id="7340034977315324840">Zgłoś godziny aktywności urządzenia</translation>
 <translation id="7381326101471547614">Wyłącza protokół SPDY w <ph name="PRODUCT_NAME" />. Po włączeniu tej zasady protokół SPDY jest niedostępny w <ph name="PRODUCT_NAME" />. W przeciwnym razie protokołu można używać. Jeśli zasada nie zostanie ustawiona, protokół SPDY będzie dostępny.</translation>
 <translation id="7384999953864505698">Zezwala na protokół QUIC</translation>
+<translation id="7406651467768226499">Czy zezwolić aplikacji kiosku uruchamianej automatycznie z zerowym opóźnieniem na kontrolowanie wersji <ph name="PRODUCT_OS_NAME" />.
+
+      Ta zasada określa, czy uruchamiana automatycznie z zerowym opóźnieniem aplikacja kiosku może kontrolować wersję <ph name="PRODUCT_OS_NAME" /> przez zadeklarowanie w swoim pliku manifestu wartości klucza required_platform_version i używanie jej jako przedrostka docelowej wersji po aktualizacji automatycznej.
+
+      Jeśli ustawisz w niej wartość prawda, wartość klucza manifestu required_platform_version uruchamianej automatycznie z zerowym opóźnieniem aplikacji kiosku będzie używana jako przedrostek docelowej wersji po aktualizacji automatycznej.
+
+      Jeśli nie skonfigurujesz tej zasady lub ustawisz w niej wartość fałsz, klucz manifestu required_platform_version będzie ignorowany i aktualizacje automatyczne będą przebiegać normalnie.</translation>
 <translation id="7417972229667085380">Wartość procentowa skalowania opóźnienia bezczynności w trybie prezentacji (wycofana)</translation>
 <translation id="7421483919690710988">Ustaw rozmiar dyskowej pamięci podręcznej multimediów w bajtach</translation>
 <translation id="7424751532654212117">Lista wyjątków od listy wyłączonych wtyczek</translation>
@@ -1741,6 +1777,7 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
       Nieskonfigurowanie tej zasady spowoduje, że <ph name="PRODUCT_NAME" /> będzie używać domyślnej wartości 5000 milisekund.</translation>
 <translation id="7841880500990419427">Najniższa wersja TLS, która zostanie użyta zastępczo</translation>
 <translation id="7842869978353666042">Skonfiguruj opcje Dysku Google</translation>
+<translation id="7843525027689416831">Określa flagi stosowane przy uruchamianiu <ph name="PRODUCT_NAME" />. Wybrane flagi są używane tylko na ekranie logowania. Flagi ustawiane przez tę zasadę nie przechodzą na sesje użytkownika.</translation>
 <translation id="7848840259379156480">Umożliwia skonfigurowanie domyślnego mechanizmu renderowania HTML po zainstalowaniu wtyczki <ph name="PRODUCT_FRAME_NAME" />. Ustawieniem domyślnym jest zezwolenie przeglądarce hosta na wykonywanie renderowania, jednak możesz opcjonalnie zastąpić to ustawienie, tak aby strony HTML były domyślnie renderowane przez wtyczkę <ph name="PRODUCT_FRAME_NAME" />.</translation>
 <translation id="7882585827992171421">Ta zasada jest aktywna tylko w trybie sklepu.
 
@@ -2032,7 +2069,6 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
           Wartość zasady powinna być określona w milisekundach. Wartości muszą być mniejsze niż opóźnienie bezczynności.</translation>
 <translation id="891435090623616439">zakodowane jako ciąg JSON – więcej szczegółów znajdziesz na <ph name="COMPLEX_POLICIES_URL" /></translation>
 <translation id="8947415621777543415">Zgłoś lokalizację urządzenia</translation>
-<translation id="89493502583189945">Określa flagi stosowane przy uruchamianiu <ph name="PRODUCT_NAME" />. Wybrane flagi zaczynają obowiązywać w <ph name="PRODUCT_NAME" /> jeszcze przed wyświetleniem ekranu logowania.</translation>
 <translation id="8951350807133946005">Ustaw katalog podręcznej pamięci dyskowej</translation>
 <translation id="8955719471735800169">Powrót do góry</translation>
 <translation id="8960850473856121830">Wzorce na tej liście są porównywane ze źródłem zabezpieczeń

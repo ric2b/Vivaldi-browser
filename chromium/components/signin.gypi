@@ -39,7 +39,6 @@
       'dependencies': [
         '../base/base.gyp:base',
         '../base/base.gyp:base_i18n',
-        '../base/base.gyp:base_prefs',
         '../crypto/crypto.gyp:crypto',
         '../google_apis/google_apis.gyp:google_apis',
         '../net/net.gyp:net',
@@ -54,6 +53,7 @@
         'keyed_service_core',
         'metrics',
         'os_crypt',
+        'prefs/prefs.gyp:prefs',
         'signin_core_common',
         'signin_core_account_id',
         'webdata_common',
@@ -199,12 +199,21 @@
           },
           'includes': [ '../build/jni_generator.gypi' ],
         },
+        {
+          # GN: //components/signin/core/browser:investigated_scenario_java
+          'target_name': 'investigated_scenario_java',
+          'type': 'none',
+          'variables': {
+            'source_file': 'signin/core/browser/signin_investigator.h',
+          },
+          'includes': [ '../build/android/java_cpp_enum.gypi' ],
+        },
       ],
     }],
     ['OS == "ios"', {
-      # GN version: //components/signin/core/browser:ios
       'targets': [
         {
+          # GN version: //components/signin/ios/browser
           'target_name': 'signin_ios_browser',
           'type': 'static_library',
           'dependencies': [
@@ -229,6 +238,7 @@
           ],
         },
         {
+          # GN version: //components/signin/ios/browser:test_support
           'target_name': 'signin_ios_browser_test_support',
           'type': 'static_library',
           'dependencies': [

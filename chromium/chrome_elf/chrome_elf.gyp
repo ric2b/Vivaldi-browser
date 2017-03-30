@@ -147,4 +147,19 @@
       ],
     },
   ], # targets
+  'conditions': [
+    ['test_isolation_mode != "noop"', {
+      'targets': [
+        {
+          'target_name': 'chrome_elf_unittests_run',
+          'type': 'none',
+          'dependencies': [
+            'chrome_elf_unittests',
+          ],
+          'includes': [ '../build/isolate.gypi' ],
+          'sources': [ 'chrome_elf_unittests.isolate' ],
+        },
+      ],
+    }],
+  ],
 }

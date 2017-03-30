@@ -31,15 +31,40 @@ Polymer({
     /**
      * The origin that this widget is showing details for.
      */
-    origin: String,
+    origin: {
+      type: String,
+      observer: 'onOriginChanged_',
+    },
 
     /**
      * The amount of data stored for the origin.
      */
     storedData_: {
       type: String,
-      observer: 'onStoredDataChanged_',
+      value: '',
     },
+
+    /**
+     * The type of storage for the origin.
+     */
+    storageType_: Number,
+
+    /**
+     * The category the user selected to get to this page.
+     */
+    categorySelected: String,
+
+    /**
+     * The current active route.
+     */
+    currentRoute: {
+      type: Object,
+      notify: true,
+    },
+  },
+
+  listeners: {
+    'usage-deleted': 'onUsageDeleted',
   },
 
   ready: function() {
@@ -51,24 +76,61 @@ Polymer({
     this.$.fullscreen.category = settings.ContentSettingsTypes.FULLSCREEN;
     this.$.camera.category = settings.ContentSettingsTypes.CAMERA;
     this.$.mic.category = settings.ContentSettingsTypes.MIC;
-
-    this.storedData_ = '1337 MB';  // TODO(finnur): Fetch actual data.
   },
 
-  onStoredDataChanged_: function() {
-    this.$.usage.hidden = false;
-    this.$.storage.hidden = false;
+  /**
+   * Handler for when the origin changes.
+   */
+  onOriginChanged_: function() {
+    var url = /** @type {{hostname: string}} */(new URL(this.origin));
+    this.$.usageApi.fetchUsageTotal(url.hostname);
   },
 
+  /**
+   * Clears all data stored for the current origin.
+   */
   onClearStorage_: function() {
-    // TODO(finnur): Implement.
+    this.$.usageApi.clearUsage(this.origin, this.storageType_);
   },
 
+  /**
+   * Called when usage has been deleted for an origin.
+   */
+  onUsageDeleted: function(event) {
+    if (event.detail.origin == this.origin) {
+      this.storedData_ = '';
+      this.navigateBackIfNoData_();
+    }
+  },
+
+  /**
+   * Resets all permissions and clears all data stored for the current origin.
+   */
   onClearAndReset_: function() {
     Array.prototype.forEach.call(
         this.root.querySelectorAll('site-details-permission'),
         function(element) { element.resetPermission(); });
 
-    this.onClearStorage_();
+    if (this.storedData_ != '')
+      this.onClearStorage_();
+    else
+      this.navigateBackIfNoData_();
+  },
+
+  /**
+   * Navigate back if the UI is empty (everything been cleared).
+   */
+  navigateBackIfNoData_: function() {
+    if (this.storedData_ == '' && !this.permissionShowing_())
+      this.fire('subpage-back');
+  },
+
+  /**
+   * Returns true if one or more permission is showing.
+   */
+  permissionShowing_: function() {
+    return Array.prototype.some.call(
+        this.root.querySelectorAll('site-details-permission'),
+        function(element) { return element.offsetHeight > 0; });
   },
 });

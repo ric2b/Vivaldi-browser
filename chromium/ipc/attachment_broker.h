@@ -97,6 +97,14 @@ class IPC_EXPORT AttachmentBroker : public Listener {
   virtual void RegisterCommunicationChannel(Endpoint* endpoint);
   virtual void DeregisterCommunicationChannel(Endpoint* endpoint);
 
+  // In each unprivileged process, exactly one channel should be used to
+  // communicate brokerable attachments with the broker process.
+  virtual void RegisterBrokerCommunicationChannel(Endpoint* endpoint);
+  virtual void DeregisterBrokerCommunicationChannel(Endpoint* endpoint);
+
+  // True if and only if this broker is privileged.
+  virtual bool IsPrivilegedBroker();
+
  protected:
   using AttachmentVector = std::vector<scoped_refptr<BrokerableAttachment>>;
 
@@ -134,6 +142,7 @@ class IPC_EXPORT AttachmentBroker : public Listener {
 
   struct ObserverInfo {
     ObserverInfo();
+    ObserverInfo(const ObserverInfo& other);
     ~ObserverInfo();
 
     Observer* observer;

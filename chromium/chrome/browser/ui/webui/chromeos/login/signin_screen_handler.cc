@@ -17,10 +17,8 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string16.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -31,6 +29,7 @@
 #include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
+#include "chrome/browser/chromeos/feedback_util.h"
 #include "chrome/browser/chromeos/input_method/input_method_util.h"
 #include "chrome/browser/chromeos/login/error_screens_histogram_helper.h"
 #include "chrome/browser/chromeos/login/hwid_checker.h"
@@ -71,6 +70,9 @@
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "components/login/localized_values_builder.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/proximity_auth/screenlock_bridge.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user.h"
@@ -449,6 +451,13 @@ void SigninScreenHandler::DeclareLocalizedValues(
                IDS_ENTERPRISE_ENROLLMENT_AUTH_FATAL_ERROR);
   builder->Add("insecureURLEnrollmentError",
                IDS_ENTERPRISE_ENROLLMENT_AUTH_INSECURE_URL_ERROR);
+
+  builder->Add("unrecoverableCryptohomeErrorMessage",
+               IDS_LOGIN_UNRECOVERABLE_CRYPTOHOME_ERROR_MESSAGE);
+  builder->Add("unrecoverableCryptohomeErrorContinue",
+               IDS_LOGIN_UNRECOVERABLE_CRYPTOHOME_ERROR_CONTINUE);
+  builder->Add("unrecoverableCryptohomeErrorSendFeedback",
+               IDS_LOGIN_UNRECOVERABLE_CRYPTOHOME_ERROR_SEND_FEEDBACK);
 }
 
 void SigninScreenHandler::RegisterMessages() {
@@ -499,6 +508,8 @@ void SigninScreenHandler::RegisterMessages() {
               &SigninScreenHandler::HandleFirstIncorrectPasswordAttempt);
   AddCallback("maxIncorrectPasswordAttempts",
               &SigninScreenHandler::HandleMaxIncorrectPasswordAttempts);
+  AddCallback("sendFeedbackAndResyncUserData",
+              &SigninScreenHandler::HandleSendFeedbackAndResyncUserData);
 
   // This message is sent by the kiosk app menu, but is handled here
   // so we can tell the delegate to launch the app.
@@ -928,6 +939,10 @@ void SigninScreenHandler::ShowWhitelistCheckFailedError() {
   gaia_screen_handler_->ShowWhitelistCheckFailedError();
 }
 
+void SigninScreenHandler::ShowUnrecoverableCrypthomeErrorDialog() {
+  CallJS("login.UnrecoverableCryptohomeErrorScreen.show");
+}
+
 void SigninScreenHandler::Observe(int type,
                                   const content::NotificationSource& source,
                                   const content::NotificationDetails& details) {
@@ -998,8 +1013,8 @@ void SigninScreenHandler::HandleShowSupervisedUserCreationScreen() {
     LOG(ERROR) << "Managed users not allowed.";
     return;
   }
-  LoginDisplayHostImpl::default_host()->
-      StartWizard(WizardController::kSupervisedUserCreationScreenName);
+  LoginDisplayHost::default_host()->StartWizard(
+      WizardController::kSupervisedUserCreationScreenName);
 }
 
 void SigninScreenHandler::HandleLaunchPublicSession(
@@ -1043,6 +1058,11 @@ void SigninScreenHandler::HandleRebootSystem() {
 }
 
 void SigninScreenHandler::HandleRemoveUser(const AccountId& account_id) {
+  if (delegate_ &&
+      (delegate_->IsUserSigninCompleted() || delegate_->IsSigninInProgress())) {
+    return;
+  }
+
   ProfileMetrics::LogProfileDeleteUser(
       ProfileMetrics::DELETE_PROFILE_USER_MANAGER);
 
@@ -1081,7 +1101,7 @@ void SigninScreenHandler::HandleToggleKioskEnableScreen() {
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
   if (delegate_ && !connector->IsEnterpriseManaged() &&
-      LoginDisplayHostImpl::default_host()) {
+      LoginDisplayHost::default_host()) {
     delegate_->ShowKioskEnableScreen();
   }
 }
@@ -1142,7 +1162,7 @@ void SigninScreenHandler::HandleSignOutUser() {
 }
 
 void SigninScreenHandler::HandleOpenProxySettings() {
-  LoginDisplayHostImpl::default_host()->OpenProxySettings();
+  LoginDisplayHost::default_host()->OpenProxySettings();
 }
 
 void SigninScreenHandler::HandleLoginVisible(const std::string& source) {
@@ -1297,6 +1317,17 @@ void SigninScreenHandler::HandleMaxIncorrectPasswordAttempts(
   RecordReauthReason(account_id, ReauthReason::INCORRECT_PASSWORD_ENTERED);
 }
 
+void SigninScreenHandler::HandleSendFeedbackAndResyncUserData() {
+  const std::string description = base::StringPrintf(
+      "Auto generated feedback for http://crbug.com/547857.\n"
+      "(uniquifier:%s)",
+      base::Int64ToString(base::Time::Now().ToInternalValue()).c_str());
+  feedback_util::SendSysLogFeedback(
+      Profile::FromWebUI(web_ui()), description,
+      base::Bind(&SigninScreenHandler::OnSysLogFeedbackSent,
+                 weak_factory_.GetWeakPtr()));
+}
+
 bool SigninScreenHandler::AllWhitelistedUsersPresent() {
   CrosSettings* cros_settings = CrosSettings::Get();
   bool allow_new_user = false;
@@ -1390,6 +1421,12 @@ void SigninScreenHandler::OnCapsLockChanged(bool enabled) {
   caps_lock_enabled_ = enabled;
   if (page_is_ready())
     CallJS("login.AccountPickerScreen.setCapsLockState", caps_lock_enabled_);
+}
+
+void SigninScreenHandler::OnSysLogFeedbackSent(bool sent) {
+  LOG_IF(ERROR, !sent) << "Failed to send syslog feedback.";
+  // Recreate user's cryptohome after the feedkback is attempted.
+  HandleResyncUserData();
 }
 
 }  // namespace chromeos

@@ -13,10 +13,12 @@
 
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "components/sync_driver/device_info_tracker.h"
 #include "components/sync_driver/local_device_info_provider.h"
 #include "sync/api/model_type_service.h"
+#include "sync/api/model_type_store.h"
 #include "sync/internal_api/public/simple_metadata_change_list.h"
 
 namespace syncer {
@@ -39,22 +41,26 @@ namespace sync_driver_v2 {
 class DeviceInfoService : public syncer_v2::ModelTypeService,
                           public sync_driver::DeviceInfoTracker {
  public:
-  explicit DeviceInfoService(
-      sync_driver::LocalDeviceInfoProvider* local_device_info_provider);
+  typedef base::Callback<void(syncer_v2::ModelTypeStore::InitCallback callback)>
+      StoreFactoryFunction;
+
+  DeviceInfoService(
+      sync_driver::LocalDeviceInfoProvider* local_device_info_provider,
+      const StoreFactoryFunction& callback);
   ~DeviceInfoService() override;
 
   // ModelTypeService implementation.
   scoped_ptr<syncer_v2::MetadataChangeList> CreateMetadataChangeList() override;
   syncer::SyncError MergeSyncData(
       scoped_ptr<syncer_v2::MetadataChangeList> metadata_change_list,
-      syncer_v2::EntityDataList entity_data_list) override;
+      syncer_v2::EntityDataMap entity_data_map) override;
   syncer::SyncError ApplySyncChanges(
       scoped_ptr<syncer_v2::MetadataChangeList> metadata_change_list,
       syncer_v2::EntityChangeList entity_changes) override;
-  void LoadMetadata(MetadataCallback callback) override;
-  void GetData(ClientKeyList client_keys, DataCallback callback) override;
+  void GetData(ClientTagList client_tags, DataCallback callback) override;
   void GetAllData(DataCallback callback) override;
   std::string GetClientTag(const syncer_v2::EntityData& entity_data) override;
+  void OnChangeProcessorSet() override;
 
   // DeviceInfoTracker implementation.
   bool IsSyncing() const override;
@@ -63,11 +69,6 @@ class DeviceInfoService : public syncer_v2::ModelTypeService,
   ScopedVector<sync_driver::DeviceInfo> GetAllDeviceInfo() const override;
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
-
-  // Called to update local device backup time.
-  void UpdateLocalDeviceBackupTime(base::Time backup_time);
-  // Gets the most recently set local device backup time.
-  base::Time GetLocalDeviceBackupTime() const;
 
  private:
   friend class DeviceInfoServiceTest;
@@ -79,6 +80,9 @@ class DeviceInfoService : public syncer_v2::ModelTypeService,
   // Allocate new DeviceInfo from SyncData.
   static scoped_ptr<sync_driver::DeviceInfo> CreateDeviceInfo(
       const sync_pb::DeviceInfoSpecifics& specifics);
+  // Conversion as we prepare to hand data to the processor.
+  static scoped_ptr<syncer_v2::EntityData> CopyIntoNewEntityData(
+      const sync_pb::DeviceInfoSpecifics& specifics);
 
   // Store SyncData in the cache.
   void StoreSpecifics(scoped_ptr<sync_pb::DeviceInfoSpecifics> specifics);
@@ -88,27 +92,33 @@ class DeviceInfoService : public syncer_v2::ModelTypeService,
   // Notify all registered observers.
   void NotifyObservers();
 
+  // Used as callback given to LocalDeviceInfoProvider.
   void OnProviderInitialized();
 
-  // |local_device_backup_time_| accessors.
-  int64_t local_device_backup_time() const { return local_device_backup_time_; }
-  bool has_local_device_backup_time() const {
-    return local_device_backup_time_ >= 0;
-  }
-  void set_local_device_backup_time(int64_t value) {
-    local_device_backup_time_ = value;
-  }
-  void clear_local_device_backup_time() { local_device_backup_time_ = -1; }
+  // Methods used as callbacks given to DataTypeStore.
+  void OnStoreCreated(syncer_v2::ModelTypeStore::Result result,
+                      scoped_ptr<syncer_v2::ModelTypeStore> store);
+  void OnReadAllData(
+      syncer_v2::ModelTypeStore::Result result,
+      scoped_ptr<syncer_v2::ModelTypeStore::RecordList> record_list);
+  void OnReadAllMetadata(
+      syncer_v2::ModelTypeStore::Result result,
+      scoped_ptr<syncer_v2::ModelTypeStore::RecordList> metadata_records,
+      const std::string& global_metadata);
 
-  // TODO(skym): Remove once we remove local provider.
-  // Local device last set backup time (in proto format).
-  // -1 if the value hasn't been specified
-  int64_t local_device_backup_time_;
+  // Checks if conditions have been met to perform reconciliation between the
+  // locally provide device info and the stored device info data. If conditions
+  // are met and the sets of data differ, than we condier this a local change
+  // and we send it to the processor.
+  void TryReconcileLocalAndStored();
+
+  // Checks if conditions have been met to load and report metadata to our
+  // current processor if able.
+  void TryLoadAllMetadata();
 
   // |local_device_info_provider_| isn't owned.
   const sync_driver::LocalDeviceInfoProvider* const local_device_info_provider_;
 
-  // TODO(skym): Switch to use client tag hash instead of cache guid as key.
   // Cache of all syncable and local data, stored by device cache guid.
   using ClientIdToSpecifics =
       std::map<std::string, scoped_ptr<sync_pb::DeviceInfoSpecifics>>;
@@ -117,7 +127,20 @@ class DeviceInfoService : public syncer_v2::ModelTypeService,
   // Registered observers, not owned.
   base::ObserverList<Observer, true> observers_;
 
+  // Used to listen for provider initialization. If the provider is already
+  // initialized during our constructor then the subscription is never used.
   scoped_ptr<sync_driver::LocalDeviceInfoProvider::Subscription> subscription_;
+
+  // In charge of actually persiting changes to disk, or loading previous data.
+  scoped_ptr<syncer_v2::ModelTypeStore> store_;
+
+  // If |store_| has invoked |LoadAllDataCallback|.
+  bool has_data_loaded_ = false;
+  // If |local_device_info_provider_| has initialized.
+  bool has_provider_initialized_ = false;
+
+  // Should always be last member.
+  base::WeakPtrFactory<DeviceInfoService> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(DeviceInfoService);
 };

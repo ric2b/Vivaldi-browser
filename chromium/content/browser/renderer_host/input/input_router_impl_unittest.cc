@@ -167,6 +167,18 @@ class InputRouterImplTest : public testing::Test {
     browser_context_.reset();
   }
 
+  void SetUpForGestureBasedWheelScrolling(bool enabled) {
+    CHECK(!base::CommandLine::ForCurrentProcess()->HasSwitch(
+              switches::kDisableWheelGestures) &&
+          !base::CommandLine::ForCurrentProcess()->HasSwitch(
+              switches::kEnableWheelGestures));
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        enabled ? switches::kEnableWheelGestures
+                : switches::kDisableWheelGestures);
+    TearDown();
+    SetUp();
+  }
+
   void SetUpForTouchAckTimeoutTest(int desktop_timeout_ms,
                                    int mobile_timeout_ms) {
     config_.touch_config.desktop_touch_ack_timeout_delay =
@@ -936,6 +948,8 @@ TEST_F(InputRouterImplTest, AckedTouchEventState) {
 #endif  // defined(USE_AURA)
 
 TEST_F(InputRouterImplTest, UnhandledWheelEvent) {
+  SetUpForGestureBasedWheelScrolling(false);
+
   // Simulate wheel events.
   SimulateWheelEvent(0, 0, 0, -5, 0, false);   // sent directly
   SimulateWheelEvent(0, 0, 0, -10, 0, false);  // enqueued
@@ -959,8 +973,49 @@ TEST_F(InputRouterImplTest, UnhandledWheelEvent) {
                   InputMsg_HandleInputEvent::ID));
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
 
+  // Indicate that the wheel event was unhandled.
+  SendInputEventACK(WebInputEvent::MouseWheel,
+                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+
   // Check that the correct unhandled wheel event was received.
+  EXPECT_EQ(1U, ack_handler_->GetAndResetAckCount());
+  EXPECT_EQ(INPUT_EVENT_ACK_STATE_NOT_CONSUMED, ack_handler_->ack_state());
+  EXPECT_EQ(ack_handler_->acked_wheel_event().deltaY, -10);
+}
+
+TEST_F(InputRouterImplTest, UnhandledWheelEventWithGestureScrolling) {
+  SetUpForGestureBasedWheelScrolling(true);
+
+  // Simulate wheel events.
+  SimulateWheelEvent(0, 0, 0, -5, 0, false);   // sent directly
+  SimulateWheelEvent(0, 0, 0, -10, 0, false);  // enqueued
+
+  // Check that only the first event was sent.
+  EXPECT_TRUE(
+      process_->sink().GetUniqueMessageMatching(InputMsg_HandleInputEvent::ID));
+  EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
+
+  // Indicate that the wheel event was unhandled.
+  SendInputEventACK(WebInputEvent::MouseWheel,
+                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+
+  // Check that the ack for the MouseWheel and ScrollBegin
+  // were processed.
+  EXPECT_EQ(2U, ack_handler_->GetAndResetAckCount());
+
+  // There should be a ScrollBegin and ScrollUpdate, MouseWheel sent
+  EXPECT_EQ(3U, GetSentMessageCountAndResetSink());
+
   EXPECT_EQ(ack_handler_->acked_wheel_event().deltaY, -5);
+  SendInputEventACK(WebInputEvent::GestureScrollUpdate,
+                    INPUT_EVENT_ACK_STATE_CONSUMED);
+  SendInputEventACK(WebInputEvent::MouseWheel,
+                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+
+  // Check that the correct unhandled wheel event was received.
+  EXPECT_EQ(2U, ack_handler_->GetAndResetAckCount());
+  EXPECT_EQ(INPUT_EVENT_ACK_STATE_NOT_CONSUMED, ack_handler_->ack_state());
+  EXPECT_EQ(ack_handler_->acked_wheel_event().deltaY, -10);
 }
 
 TEST_F(InputRouterImplTest, TouchTypesIgnoringAck) {
@@ -1781,7 +1836,8 @@ TEST_F(InputRouterImplTest, TouchpadPinchAndScrollUpdate) {
   EXPECT_EQ(1, client_->in_flight_event_count());
 
   // Ack the wheel event.
-  SendInputEventACK(WebInputEvent::MouseWheel, INPUT_EVENT_ACK_STATE_CONSUMED);
+  SendInputEventACK(WebInputEvent::GesturePinchUpdate,
+                    INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(0U, GetSentMessageCountAndResetSink());
   EXPECT_EQ(1U, ack_handler_->GetAndResetAckCount());
   EXPECT_EQ(0, client_->in_flight_event_count());
@@ -1822,6 +1878,38 @@ TEST_F(InputRouterImplTest, OverscrollDispatch) {
             client_overscroll.latest_overscroll_delta);
   EXPECT_EQ(wheel_overscroll.current_fling_velocity,
             client_overscroll.current_fling_velocity);
+}
+
+// Tests that touch event stream validation passes when events are filtered
+// out. See crbug.com/581231 for details.
+TEST_F(InputRouterImplTest, TouchValidationPassesWithFilteredInputEvents) {
+  // Touch sequence with touch handler.
+  OnHasTouchEventHandlers(true);
+  PressTouchPoint(1, 1);
+  uint32_t touch_press_event_id = SendTouchEvent();
+  SendTouchEventACK(WebInputEvent::TouchStart,
+                    INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS,
+                    touch_press_event_id);
+
+  PressTouchPoint(1, 1);
+  touch_press_event_id = SendTouchEvent();
+  SendTouchEventACK(WebInputEvent::TouchStart,
+                    INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS,
+                    touch_press_event_id);
+
+  // This event will be filtered out, since no consumer exists.
+  ReleaseTouchPoint(1);
+  uint32_t touch_release_event_id = SendTouchEvent();
+  SendTouchEventACK(WebInputEvent::TouchEnd, INPUT_EVENT_ACK_STATE_NOT_CONSUMED,
+                    touch_release_event_id);
+
+  // If the validator didn't see the filtered out release event, it will crash
+  // now, upon seeing a press for a touch which it believes to be still pressed.
+  PressTouchPoint(1, 1);
+  touch_press_event_id = SendTouchEvent();
+  SendTouchEventACK(WebInputEvent::TouchStart,
+                    INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS,
+                    touch_press_event_id);
 }
 
 namespace {

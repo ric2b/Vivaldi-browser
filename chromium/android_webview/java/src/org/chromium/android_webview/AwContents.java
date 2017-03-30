@@ -27,6 +27,7 @@ import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.Base64;
 import android.util.Pair;
+import android.view.DragEvent;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -68,6 +69,7 @@ import org.chromium.content_public.browser.navigation_controller.LoadURLType;
 import org.chromium.content_public.browser.navigation_controller.UserAgentOverrideOption;
 import org.chromium.content_public.common.Referrer;
 import org.chromium.net.NetError;
+import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
@@ -80,7 +82,6 @@ import java.net.URL;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
-import java.util.WeakHashMap;
 import java.util.concurrent.Callable;
 
 /**
@@ -314,9 +315,13 @@ public class AwContents implements SmartClipProvider,
 
     private static final class DestroyRunnable implements Runnable {
         private final long mNativeAwContents;
+        // Hold onto a reference to the window (via its wrapper), so that it is not destroyed
+        // until we are done here.
+        private final WindowAndroidWrapper mWindowAndroid;
 
-        private DestroyRunnable(long nativeAwContents) {
+        private DestroyRunnable(long nativeAwContents, WindowAndroidWrapper windowAndroid) {
             mNativeAwContents = nativeAwContents;
+            mWindowAndroid = windowAndroid;
         }
         @Override
         public void run() {
@@ -915,31 +920,16 @@ public class AwContents implements SmartClipProvider,
             return mWindowAndroid;
         }
     }
-    private static WindowAndroidWrapper sCachedWindowAndroid;
-    private static WeakHashMap<Context, WindowAndroidWrapper> sActivityContextWindowMap;
 
-    // getWindowAndroid is only called on UI thread, so there are no threading issues with lazy
-    // initialization.
-    @SuppressFBWarnings("LI_LAZY_INIT_STATIC")
-    private static WindowAndroidWrapper getWindowAndroid(Context context) {
+    private static WindowAndroidWrapper createWindowAndroid(Context context) {
         // TODO(boliu): WebView does not currently initialize ApplicationStatus, crbug.com/470582.
         boolean contextWrapsActivity = activityFromContext(context) != null;
         if (!contextWrapsActivity) {
-            if (sCachedWindowAndroid == null) {
-                sCachedWindowAndroid = new WindowAndroidWrapper(new WindowAndroid(context));
-            }
-            return sCachedWindowAndroid;
+            return new WindowAndroidWrapper(new WindowAndroid(context));
         }
 
-        if (sActivityContextWindowMap == null) sActivityContextWindowMap = new WeakHashMap<>();
-        WindowAndroidWrapper activityWindowAndroid = sActivityContextWindowMap.get(context);
-        if (activityWindowAndroid == null) {
-            final boolean listenToActivityState = false;
-            activityWindowAndroid = new WindowAndroidWrapper(
-                    new ActivityWindowAndroid(context, listenToActivityState));
-            sActivityContextWindowMap.put(context, activityWindowAndroid);
-        }
-        return activityWindowAndroid;
+        final boolean listenToActivityState = false;
+        return new WindowAndroidWrapper(new ActivityWindowAndroid(context, listenToActivityState));
     }
 
     @VisibleForTesting
@@ -973,7 +963,7 @@ public class AwContents implements SmartClipProvider,
 
         WebContents webContents = nativeGetWebContents(mNativeAwContents);
 
-        mWindowAndroid = getWindowAndroid(mContext);
+        mWindowAndroid = createWindowAndroid(mContext);
         mContentViewCore = createAndInitializeContentViewCore(mContainerView, mContext,
                 mInternalAccessAdapter, webContents, new AwGestureStateListener(),
                 mContentViewClient, mZoomControls, mWindowAndroid.getWindowAndroid());
@@ -989,7 +979,7 @@ public class AwContents implements SmartClipProvider,
         // The native side object has been bound to this java instance, so now is the time to
         // bind all the native->java relationships.
         mCleanupReference =
-                new CleanupReference(this, new DestroyRunnable(mNativeAwContents));
+                new CleanupReference(this, new DestroyRunnable(mNativeAwContents, mWindowAndroid));
     }
 
     private void installWebContentsObserver() {
@@ -1840,6 +1830,13 @@ public class AwContents implements SmartClipProvider,
     }
 
     /**
+     * @see android.webkit.WebView#onDragEvent(DragEvent)
+     */
+    public boolean onDragEvent(DragEvent event) {
+        return mAwViewMethods.onDragEvent(event);
+    }
+
+    /**
      * @see android.webkit.WebView#onKeyUp(int, KeyEvent)
      */
     public boolean onKeyUp(int keyCode, KeyEvent event) {
@@ -2528,7 +2525,13 @@ public class AwContents implements SmartClipProvider,
 
     public void setNetworkAvailable(boolean networkUp) {
         if (TRACE) Log.d(TAG, "setNetworkAvailable=%s", networkUp);
-        if (!isDestroyed(WARN)) nativeSetJsOnlineProperty(mNativeAwContents, networkUp);
+        if (!isDestroyed(WARN)) {
+            // For backward compatibility when an app uses this API disable the
+            // Network Information API to prevent inconsistencies,
+            // see crbug.com/520088.
+            NetworkChangeNotifier.setAutoDetectConnectivityState(false);
+            nativeSetJsOnlineProperty(mNativeAwContents, networkUp);
+        }
     }
 
     /**
@@ -2903,16 +2906,20 @@ public class AwContents implements SmartClipProvider,
             }
 
             mScrollOffsetManager.syncScrollOffsetFromOnDraw();
+            int scrollX = mContainerView.getScrollX();
+            int scrollY = mContainerView.getScrollY();
             Rect globalVisibleRect = getGlobalVisibleRect();
-            boolean did_draw = nativeOnDraw(
-                    mNativeAwContents, canvas, canvas.isHardwareAccelerated(),
-                    mContainerView.getScrollX(), mContainerView.getScrollY(),
-                    globalVisibleRect.left, globalVisibleRect.top,
-                    globalVisibleRect.right, globalVisibleRect.bottom);
+            boolean did_draw = nativeOnDraw(mNativeAwContents, canvas,
+                    canvas.isHardwareAccelerated(), scrollX, scrollY, globalVisibleRect.left,
+                    globalVisibleRect.top, globalVisibleRect.right, globalVisibleRect.bottom);
             if (did_draw && canvas.isHardwareAccelerated() && !FORCE_AUXILIARY_BITMAP_RENDERING) {
                 did_draw = mNativeGLDelegate.requestDrawGL(canvas, false, mContainerView);
             }
-            if (!did_draw) {
+            if (did_draw) {
+                int scrollXDiff = mContainerView.getScrollX() - scrollX;
+                int scrollYDiff = mContainerView.getScrollY() - scrollY;
+                canvas.translate(-scrollXDiff, -scrollYDiff);
+            } else {
                 TraceEvent.instant("NativeDrawFailed");
                 canvas.drawColor(getEffectiveBackgroundColor());
             }
@@ -2961,6 +2968,12 @@ public class AwContents implements SmartClipProvider,
         }
 
         @Override
+        public boolean onDragEvent(DragEvent event) {
+            // TODO(hush): implement this. crbug.com/584789
+            return false;
+        }
+
+        @Override
         public boolean onKeyUp(int keyCode, KeyEvent event) {
             return isDestroyed(NO_WARN) ? false : mContentViewCore.onKeyUp(keyCode, event);
         }
@@ -3005,7 +3018,7 @@ public class AwContents implements SmartClipProvider,
                 nativeRequestNewHitTestDataAt(mNativeAwContents,
                         event.getX() / (float) mDIPScale,
                         event.getY() / (float) mDIPScale,
-                        event.getTouchMajor() / (float) mDIPScale);
+                        Math.max(event.getTouchMajor(), event.getTouchMinor()) / (float) mDIPScale);
             }
 
             if (mOverScrollGlow != null) {

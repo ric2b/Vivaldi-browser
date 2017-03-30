@@ -66,17 +66,10 @@ Output = function() {
 
   /**
    * Current global options.
-   * @type {{speech: boolean, braille: boolean}}
+   * @type {{speech: boolean, braille: boolean, auralStyle: boolean}}
    * @private
    */
-  this.formatOptions_ = {speech: true, braille: false};
-
-  /**
-   * Speech properties to apply to the entire output.
-   * @type {!Object<*>}
-   * @private
-   */
-  this.speechProperties_ = {};
+  this.formatOptions_ = {speech: true, braille: false, auralStyle: false};
 
   /**
    * The speech category for the generated speech utterance.
@@ -111,8 +104,7 @@ Output.SPACE = ' ';
  */
 Output.ROLE_INFO_ = {
   alert: {
-    msgId: 'role_alert',
-    earconId: 'ALERT_NONMODAL',
+    msgId: 'role_alert'
   },
   alertDialog: {
     msgId: 'role_alertdialog'
@@ -228,7 +220,8 @@ Output.ROLE_INFO_ = {
     inherits: 'abstractContainer'
   },
   menu: {
-    msgId: 'role_menu'
+    msgId: 'role_menu',
+    earconId: 'LISTBOX',
   },
   menuBar: {
     msgId: 'role_menubar',
@@ -267,10 +260,6 @@ Output.ROLE_INFO_ = {
   },
   radioGroup: {
     msgId: 'role_radiogroup',
-  },
-  region: {
-    msgId: 'role_region',
-    inherits: 'abstractContainer'
   },
   rowHeader: {
     msgId: 'role_rowheader',
@@ -320,6 +309,10 @@ Output.ROLE_INFO_ = {
   },
   toolbar: {
     msgId: 'role_toolbar'
+  },
+  toggleButton: {
+    msgId: 'role_checkbox',
+    inherits: 'checkBox'
   },
   tree: {
     msgId: 'role_tree'
@@ -404,7 +397,7 @@ Output.RULES = {
       leave: '@exited_container($role)'
     },
     alert: {
-      speak: '!doNotInterrupt $role $descendants'
+      speak: '!doNotInterrupt $role $earcon(ALERT_NONMODAL) $descendants'
     },
     alertDialog: {
       enter: '$name $role $description $descendants'
@@ -428,14 +421,14 @@ Output.RULES = {
     },
     heading: {
       enter: '@tag_h+$hierarchicalLevel',
-      speak: '@tag_h+$hierarchicalLevel $nameOrDescendants='
+      speak: '@tag_h+$hierarchicalLevel !relativePitch(hierarchicalLevel)' +
+          ' $nameOrDescendants='
     },
     inlineTextBox: {
       speak: '$name='
     },
     link: {
-      enter: '$name $if($visited, @visited_link, $role)',
-      stay: '$name= $if($visited, @visited_link, $role)',
+      enter: '$name= $if($visited, @visited_link, $role)',
       speak: '$name= $if($visited, @visited_link, $role) $description'
     },
     list: {
@@ -453,8 +446,8 @@ Output.RULES = {
       enter: '$role'
     },
     menu: {
-      enter: '$name $role @@list_with_items($countChildren(menuItem)) ' +
-          '$description'
+      enter: '$name $role',
+      speak: '$name $role @@list_with_items($countChildren(menuItem))'
     },
     menuItem: {
       speak: '$name $role $if($haspopup, @has_submenu) ' +
@@ -481,7 +474,11 @@ Output.RULES = {
       enter: '$name $role $description'
     },
     rootWebArea: {
-      enter: '$name'
+      enter: '$name',
+      speak: '$if($name, $name, $docUrl)'
+    },
+    region: {
+      speak: '$descendants'
     },
     row: {
       enter: '@row_granularity $tableRowIndex'
@@ -496,8 +493,8 @@ Output.RULES = {
       speak: '@describe_tab($name)'
     },
     textField: {
-      speak: '$name $value $if(' +
-          '$inputType, $inputType, $role) $description',
+      speak: '$name $value $if($multiline, @tag_textarea, $if(' +
+          '$inputType, $inputType, $role)) $description',
       braille: ''
     },
     toolbar: {
@@ -542,6 +539,12 @@ Output.RULES = {
 };
 
 /**
+ * Used to annotate utterances with speech properties.
+ * @constructor
+ */
+Output.SpeechProperties = function() {};
+
+/**
  * Custom actions performed while rendering an output string.
  * @constructor
  */
@@ -575,22 +578,24 @@ Output.EarconAction.prototype = {
 };
 
 /**
- * Annotation for selection.
+ * Annotation for text with a selection inside it.
  * @param {number} startIndex
  * @param {number} endIndex
+ * @param {number=} opt_offset
  * @constructor
  */
-Output.SelectionSpan = function(startIndex, endIndex) {
+Output.SelectionSpan = function(startIndex, endIndex, opt_offset) {
   // TODO(dtseng): Direction lost below; should preserve for braille panning.
   this.startIndex = startIndex < endIndex ? startIndex : endIndex;
   this.endIndex = endIndex > startIndex ? endIndex : startIndex;
+  this.offset = opt_offset || 0;
 };
 
 /**
  * Wrapper for automation nodes as annotations.  Since the
  * {@code AutomationNode} constructor isn't exposed in the API, this class is
  * used to allow instanceof checks on these annotations.
- @ @param {!AutomationNode} node
+ * @param {!AutomationNode} node
  * @constructor
  */
 Output.NodeSpan = function(node) {
@@ -663,7 +668,20 @@ Output.prototype = {
    * @return {!Output}
    */
   withSpeech: function(range, prevRange, type) {
-    this.formatOptions_ = {speech: true, braille: false};
+    this.formatOptions_ = {speech: true, braille: false, auralStyle: false};
+    this.render_(range, prevRange, type, this.speechBuffer_);
+    return this;
+  },
+
+    /**
+   * Specify ranges for aurally styled speech.
+   * @param {!cursors.Range} range
+   * @param {cursors.Range} prevRange
+   * @param {EventType|Output.EventType} type
+   * @return {!Output}
+   */
+  withRichSpeech: function(range, prevRange, type) {
+    this.formatOptions_ = {speech: true, braille: false, auralStyle: true};
     this.render_(range, prevRange, type, this.speechBuffer_);
     return this;
   },
@@ -676,7 +694,7 @@ Output.prototype = {
    * @return {!Output}
    */
   withBraille: function(range, prevRange, type) {
-    this.formatOptions_ = {speech: false, braille: true};
+    this.formatOptions_ = {speech: false, braille: true, auralStyle: false};
     this.render_(range, prevRange, type, this.brailleBuffer_);
     return this;
   },
@@ -689,7 +707,7 @@ Output.prototype = {
    * @return {!Output}
    */
   withLocation: function(range, prevRange, type) {
-    this.formatOptions_ = {speech: false, braille: false};
+    this.formatOptions_ = {speech: false, braille: false, auralStyle: false};
     this.render_(range, prevRange, type, [] /*unused output*/);
     return this;
   },
@@ -703,6 +721,19 @@ Output.prototype = {
    */
   withSpeechAndBraille: function(range, prevRange, type) {
     this.withSpeech(range, prevRange, type);
+    this.withBraille(range, prevRange, type);
+    return this;
+  },
+
+    /**
+   * Specify the same ranges for aurally styled speech and braille.
+   * @param {!cursors.Range} range
+   * @param {cursors.Range} prevRange
+   * @param {EventType|Output.EventType} type
+   * @return {!Output}
+   */
+  withRichSpeechAndBraille: function(range, prevRange, type) {
+    this.withRichSpeech(range, prevRange, type);
     this.withBraille(range, prevRange, type);
     return this;
   },
@@ -728,20 +759,59 @@ Output.prototype = {
   },
 
   /**
+   * Output a string literal.
+   * @param {string} value
+   * @return {!Output}
+   */
+  withString: function(value) {
+    this.append_(this.speechBuffer_, value);
+    this.append_(this.brailleBuffer_, value);
+    return this;
+  },
+
+  /**
    * Apply a format string directly to the output buffer. This lets you
    * output a message directly to the buffer using the format syntax.
    * @param {string} formatStr
-   * @param {!AutomationNode=} opt_node An optional
-   *     node to apply the formatting to.
-   * @return {!Output}
+   * @param {!AutomationNode=} opt_node An optional node to apply the
+   *     formatting to.
+   * @return {!Output} |this| for chaining
    */
   format: function(formatStr, opt_node) {
+    return this
+        .formatForSpeech(formatStr, opt_node)
+        .formatForBraille(formatStr, opt_node);
+  },
+
+  /**
+   * Apply a format string directly to the speech output buffer. This lets you
+   * output a message directly to the buffer using the format syntax.
+   * @param {string} formatStr
+   * @param {!AutomationNode=} opt_node An optional node to apply the
+   *     formatting to.
+   * @return {!Output} |this| for chaining
+   */
+  formatForSpeech: function(formatStr, opt_node) {
     var node = opt_node || null;
 
-    this.formatOptions_ = {speech: true, braille: false};
+    this.formatOptions_ = {speech: true, braille: false, auralStyle: false};
     this.format_(node, formatStr, this.speechBuffer_);
 
-    this.formatOptions_ = {speech: false, braille: true};
+    return this;
+  },
+
+  /**
+   * Apply a format string directly to the braille output buffer. This lets you
+   * output a message directly to the buffer using the format syntax.
+   * @param {string} formatStr
+   * @param {!AutomationNode=} opt_node An optional node to apply the
+   *     formatting to.
+   * @return {!Output} |this| for chaining
+   */
+  formatForBraille: function(formatStr, opt_node) {
+    var node = opt_node || null;
+
+    this.formatOptions_ = {speech: false, braille: true, auralStyle: false};
     this.format_(node, formatStr, this.brailleBuffer_);
 
     return this;
@@ -770,12 +840,15 @@ Output.prototype = {
       Output.flushNextSpeechUtterance_ = false;
     }
 
-    this.speechProperties_.category = this.speechCategory_;
-
     this.speechBuffer_.forEach(function(buff, i, a) {
+      var speechProps = {};
       (function() {
         var scopedBuff = buff;
-        this.speechProperties_['startCallback'] = function() {
+        speechProps =
+            scopedBuff.getSpanInstanceOf(Output.SpeechProperties) || {};
+        speechProps.category = this.speechCategory_;
+
+        speechProps['startCallback'] = function() {
           var actions = scopedBuff.getSpansInstanceOf(Output.Action);
           if (actions) {
             actions.forEach(function(a) {
@@ -786,11 +859,11 @@ Output.prototype = {
       }.bind(this)());
 
       if (this.speechEndCallback_ && i == a.length - 1)
-        this.speechProperties_['endCallback'] = this.speechEndCallback_;
+        speechProps['endCallback'] = this.speechEndCallback_;
       else
-        this.speechProperties_['endCallback'] = null;
+        speechProps['endCallback'] = null;
       cvox.ChromeVox.tts.speak(
-          buff.toString(), queueMode, this.speechProperties_);
+          buff.toString(), queueMode, speechProps);
       queueMode = cvox.QueueMode.QUEUE;
     }.bind(this));
 
@@ -805,7 +878,7 @@ Output.prototype = {
         var valueEnd = buff.getSpanEnd(selSpan);
         startIndex = valueStart + selSpan.startIndex;
         endIndex = valueStart + selSpan.endIndex;
-        buff.setSpan(new cvox.ValueSpan(0), valueStart, valueEnd);
+        buff.setSpan(new cvox.ValueSpan(selSpan.offset), valueStart, valueEnd);
         buff.setSpan(new cvox.ValueSelectionSpan(), startIndex, endIndex);
       }
 
@@ -847,11 +920,9 @@ Output.prototype = {
    * @param {string|!Object} format The output format either specified as an
    * output template string or a parsed output format tree.
    * @param {!Array<Spannable>} buff Buffer to receive rendered output.
-   * @param {!Object=} opt_exclude A set of attributes to exclude.
    * @private
    */
-  format_: function(node, format, buff, opt_exclude) {
-    opt_exclude = opt_exclude || {};
+  format_: function(node, format, buff) {
     var tokens = [];
     var args = null;
 
@@ -863,6 +934,7 @@ Output.prototype = {
       tokens = [format];
     }
 
+    var speechProps = null;
     tokens.forEach(function(token) {
       // Ignore empty tokens.
       if (!token)
@@ -887,15 +959,12 @@ Output.prototype = {
 
       // Annotate braille output with the corresponding automation nodes
       // to support acting on nodes based on location in the output.
-      if (this.formatOptions_.braille)
+      if (node && this.formatOptions_.braille)
         options.annotation.push(new Output.NodeSpan(node));
 
       // Process token based on prefix.
       var prefix = token[0];
       token = token.slice(1);
-
-      if (opt_exclude[token])
-        return;
 
       // All possible tokens based on prefix.
       if (prefix == '$') {
@@ -908,10 +977,6 @@ Output.prototype = {
                   node.textSelEnd));
             }
           }
-          // Annotate this as a name so we don't duplicate names from ancestors.
-          if (node.role == RoleType.inlineTextBox ||
-              node.role == RoleType.staticText)
-            token = 'name';
           options.annotation.push(token);
           this.append_(buff, text, options);
         } else if (token == 'name') {
@@ -977,6 +1042,13 @@ Output.prototype = {
             prev = cursors.Range.fromNode(node);
           this.range_(subrange, prev, Output.EventType.NAVIGATE, buff);
         } else if (token == 'role') {
+          if (localStorage['useVerboseMode'] == 'false')
+            return;
+
+          if (this.formatOptions_.auralStyle) {
+            speechProps = new Output.SpeechProperties();
+            speechProps['relativePitch'] = -0.3;
+          }
           options.annotation.push(token);
           var msg = node.role;
           var info = Output.ROLE_INFO_[node.role];
@@ -1057,6 +1129,10 @@ Output.prototype = {
           }
         }
       } else if (prefix == '@') {
+        if (this.formatOptions_.auralStyle) {
+          speechProps = new Output.SpeechProperties();
+          speechProps['relativePitch'] = -0.2;
+        }
         var isPluralized = (token[0] == '@');
         if (isPluralized)
           token = token.slice(1);
@@ -1112,7 +1188,33 @@ Output.prototype = {
 
         this.append_(buff, msg, options);
       } else if (prefix == '!') {
-        this.speechProperties_[token] = true;
+        speechProps = new Output.SpeechProperties();
+        speechProps[token] = true;
+        if (tree.firstChild) {
+          if (!this.formatOptions_.auralStyle) {
+            speechProps = undefined;
+            return;
+          }
+
+          var value = tree.firstChild.value;
+
+          // Currently, speech params take either attributes or floats.
+          var float = 0;
+          if (float = parseFloat(value))
+            value = float;
+          else
+            value = parseFloat(node[value]) / -10.0;
+          speechProps[token] = value;
+          return;
+        }
+      }
+
+      // Post processing.
+      if (speechProps) {
+        if (buff.length > 0) {
+          buff[buff.length - 1].setSpan(speechProps, 0, 0);
+          speechProps = null;
+        }
       }
     }.bind(this));
   },
@@ -1134,7 +1236,8 @@ Output.prototype = {
       var buff = [];
       this.ancestry_(node, prevNode, type, buff);
       this.node_(node, prevNode, type, buff);
-      this.locations_.push(node.location);
+      if (node.location)
+        this.locations_.push(node.location);
       return buff;
     }.bind(this);
 
@@ -1159,12 +1262,9 @@ Output.prototype = {
    * @param {!AutomationNode} prevNode
    * @param {EventType|Output.EventType} type
    * @param {!Array<Spannable>} buff
-   * @param {!Object=} opt_exclude A list of attributes to exclude from
-   * processing.
    * @private
    */
-  ancestry_: function(node, prevNode, type, buff, opt_exclude) {
-    opt_exclude = opt_exclude || {};
+  ancestry_: function(node, prevNode, type, buff) {
     var prevUniqueAncestors =
         AutomationUtil.getUniqueAncestors(node, prevNode);
     var uniqueAncestors = AutomationUtil.getUniqueAncestors(prevNode, node);
@@ -1185,12 +1285,24 @@ Output.prototype = {
       return mergedRoleBlock;
     };
 
+    // Hash the roles we've entered.
+    var enteredRoleSet = {};
+    for (var j = uniqueAncestors.length - 2, hashNode;
+         (hashNode = uniqueAncestors[j]);
+         j--)
+      enteredRoleSet[hashNode.role] = true;
+
     for (var i = 0, formatPrevNode;
          (formatPrevNode = prevUniqueAncestors[i]);
          i++) {
+      // This prevents very repetitive announcements.
+      if (enteredRoleSet[formatPrevNode.role] ||
+          localStorage['useVerboseMode'] == 'false')
+        continue;
+
       var roleBlock = getMergedRoleBlock(formatPrevNode.role);
-      if (roleBlock.leave)
-        this.format_(formatPrevNode, roleBlock.leave, buff, opt_exclude);
+      if (roleBlock.leave && localStorage['useVerboseMode'] == 'true')
+        this.format_(formatPrevNode, roleBlock.leave, buff);
     }
 
     var enterOutputs = [];
@@ -1204,7 +1316,7 @@ Output.prototype = {
           continue;
         enterRole[formatNode.role] = true;
         var tempBuff = [];
-        this.format_(formatNode, roleBlock.enter, tempBuff, opt_exclude);
+        this.format_(formatNode, roleBlock.enter, tempBuff);
         enterOutputs.unshift(tempBuff);
       }
       if (formatNode.role == 'window')
@@ -1213,17 +1325,6 @@ Output.prototype = {
     enterOutputs.forEach(function(b) {
       buff.push.apply(buff, b);
     });
-
-    if (!opt_exclude.stay) {
-      var commonFormatNode = uniqueAncestors[0];
-      while (commonFormatNode && commonFormatNode.parent) {
-        commonFormatNode = commonFormatNode.parent;
-        var roleBlock =
-            eventBlock[commonFormatNode.role] || eventBlock['default'];
-        if (roleBlock.stay)
-          this.format_(commonFormatNode, roleBlock.stay, buff, opt_exclude);
-      }
-    }
   },
 
   /**
@@ -1236,8 +1337,13 @@ Output.prototype = {
   node_: function(node, prevNode, type, buff) {
     // Navigate is the default event.
     var eventBlock = Output.RULES[type] || Output.RULES['navigate'];
-    var roleBlock = eventBlock[node.role] || eventBlock['default'];
-    var speakFormat = roleBlock.speak || eventBlock['default'].speak;
+    var roleBlock = eventBlock[node.role] || {};
+    var parentRole = (Output.ROLE_INFO_[node.role] || {}).inherits;
+    var parentRoleBlock = eventBlock[parentRole || ''] || {};
+    var speakFormat = roleBlock.speak ||
+        parentRoleBlock.speak ||
+        eventBlock['default'].speak;
+
     this.format_(node, speakFormat, buff);
   },
 
@@ -1252,18 +1358,31 @@ Output.prototype = {
     if (!prevRange)
       prevRange = range;
     var dir = cursors.Range.getDirection(prevRange, range);
+    var node = range.start.node;
     var prevNode = prevRange.getBound(dir).node;
-    this.ancestry_(
-        range.start.node, prevNode, type, buff,
-        {stay: true, name: true, value: true});
+    var options = {annotation: ['name'], isUnique: true};
     var startIndex = range.start.index;
     var endIndex = range.end.index;
-    if (startIndex === endIndex)
-      endIndex++;
-    this.append_(
-        buff, range.start.getText().substring(startIndex, endIndex));
-    this.locations_.push(
-        range.start.node.boundsForRange(startIndex, endIndex));
+    if (this.formatOptions_.braille) {
+      options.annotation.push(new Output.NodeSpan(node));
+      var selStart = node.textSelStart;
+      var selEnd = node.textSelEnd;
+      if (selStart !== undefined &&
+          (selEnd >= startIndex && selStart <= endIndex)) {
+        options.annotation.push(new Output.SelectionSpan(
+            selStart - startIndex,
+            selEnd - startIndex,
+            startIndex));
+      }
+    }
+    this.ancestry_(node, prevNode, type, buff);
+    this.append_(buff, range.start.getText().substring(startIndex, endIndex),
+        options);
+
+    var loc =
+        range.start.node.boundsForRange(startIndex, endIndex);
+    if (loc)
+      this.locations_.push(loc);
   },
 
   /**
@@ -1291,13 +1410,18 @@ Output.prototype = {
           function(annotation) {
             return !(annotation instanceof Output.NodeSpan);
           });
+
       var alreadyAnnotated = buff.some(function(s) {
         return annotationSansNodes.some(function(annotation) {
           if (!s.hasSpan(annotation))
             return false;
           var start = s.getSpanStart(annotation);
           var end = s.getSpanEnd(annotation);
-          return s.substring(start, end).toString() == value.toString();
+          var substr = s.substring(start, end);
+          if (substr && value)
+            return substr.toString() == value.toString();
+          else
+            return false;
         });
       });
       if (alreadyAnnotated)
@@ -1342,7 +1466,7 @@ Output.prototype = {
     }
 
     if (currentNode != root)
-      throw 'Unbalanced parenthesis.';
+      throw 'Unbalanced parenthesis: ' + inputStr;
 
     return root;
   },

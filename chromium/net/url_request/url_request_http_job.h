@@ -87,7 +87,6 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   void AddExtraHeaders();
   void AddCookieHeaderAndStart();
   void SaveCookiesAndNotifyHeadersComplete(int result);
-  void SaveNextCookie();
   void FetchResponseCookies(std::vector<std::string>* cookies);
 
   // Processes a Backoff header, if one exists.
@@ -163,16 +162,8 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   void DoneWithRequest(CompletionCause reason);
 
   // Callback functions for Cookie Monster
-  void DoLoadCookies();
-  void CheckCookiePolicyAndLoad(const CookieList& cookie_list);
-  void OnCookiesLoaded(const std::string& cookie_line);
+  void SetCookieHeaderAndStart(const CookieList& cookie_list);
   void DoStartTransaction();
-
-  // See the implementation for a description of save_next_cookie_running and
-  // callback_pending.
-  void OnCookieSaved(scoped_refptr<SharedBoolean> save_next_cookie_running,
-                     scoped_refptr<SharedBoolean> callback_pending,
-                     bool cookie_status);
 
   // Some servers send the body compressed, but specify the content length as
   // the uncompressed size. If this is the case, we return true in order
@@ -189,10 +180,6 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
 
   HttpRequestInfo request_info_;
   const HttpResponseInfo* response_info_;
-
-  std::vector<std::string> response_cookies_;
-  size_t response_cookies_save_index_;
-  base::Time response_date_;
 
   // Auth states for proxy and origin server.
   AuthState proxy_auth_state_;

@@ -137,7 +137,7 @@ class ThemeService : public base::NonThreadSafe,
   virtual bool ShouldInitWithSystemTheme() const;
 
   // Get the specified tint - |id| is one of the TINT_* enum values.
-  color_utils::HSL GetTint(int id, bool otr) const;
+  color_utils::HSL GetTint(int id, bool incognito) const;
 
   // Clears all the override fields and saves the dictionary.
   virtual void ClearAllThemeData();
@@ -175,8 +175,7 @@ class ThemeService : public base::NonThreadSafe,
   // track of the incognito state of the calling code.
   class BrowserThemeProvider : public ui::ThemeProvider {
    public:
-    BrowserThemeProvider(const ThemeService& theme_service,
-                         bool off_the_record);
+    BrowserThemeProvider(const ThemeService& theme_service, bool incognito);
     ~BrowserThemeProvider() override;
 
     // Overridden from ui::ThemeProvider:
@@ -198,19 +197,33 @@ class ThemeService : public base::NonThreadSafe,
 
    private:
     const ThemeService& theme_service_;
-    bool off_the_record_;
+    bool incognito_;
 
     DISALLOW_COPY_AND_ASSIGN(BrowserThemeProvider);
   };
   friend class BrowserThemeProvider;
   friend class theme_service_internal::ThemeServiceTest;
 
+  // Key for cache of separator colors; pair is <tab color, frame color>.
+  using SeparatorColorKey = std::pair<SkColor, SkColor>;
+  using SeparatorColorCache = std::map<SeparatorColorKey, SkColor>;
+
+  // Computes the "toolbar top separator" color.  This color is drawn atop the
+  // frame to separate it from tabs, the toolbar, and the new tab button, as
+  // well as atop background tabs to separate them from other tabs or the
+  // toolbar.  We use semitransparent black or white so as to darken or lighten
+  // the frame, with the goal of contrasting with both the frame color and the
+  // active tab (i.e. toolbar) color.  (It's too difficult to try to find colors
+  // that will contrast with both of these as well as the background tab color,
+  // and contrasting with the foreground tab is the most important).
+  static SkColor GetSeparatorColor(SkColor tab_color, SkColor frame_color);
+
   const ui::ThemeProvider& GetOrCreateThemeProviderForProfile(Profile* profile);
 
   // These methods provide the implementation for ui::ThemeProvider (exposed
   // via BrowserThemeProvider).
-  gfx::ImageSkia* GetImageSkiaNamed(int id) const;
-  SkColor GetColor(int id, bool off_the_record) const;
+  gfx::ImageSkia* GetImageSkiaNamed(int id, bool incognito) const;
+  SkColor GetColor(int id, bool incognito) const;
   int GetDisplayProperty(int id) const;
   bool ShouldUseNativeFrame() const;
   bool HasCustomImage(int id) const;
@@ -228,7 +241,7 @@ class ThemeService : public base::NonThreadSafe,
   //
   // TODO(erg): Make this part of the ui::ThemeProvider and the main way to get
   // theme properties out of the theme provider since it's cross platform.
-  gfx::Image GetImageNamed(int id) const;
+  gfx::Image GetImageNamed(int id, bool incognito) const;
 
   // Called when the extension service is ready.
   void OnExtensionServiceReady();
@@ -288,6 +301,10 @@ class ThemeService : public base::NonThreadSafe,
   // The number of infobars currently displayed.
   int number_of_infobars_;
 
+  // A cache of already-computed values for COLOR_TOOLBAR_TOP_SEPARATOR, which
+  // can be expensive to compute.
+  mutable SeparatorColorCache separator_color_cache_;
+
   content::NotificationRegistrar registrar_;
 
   scoped_ptr<ThemeSyncableService> theme_syncable_service_;
@@ -298,7 +315,7 @@ class ThemeService : public base::NonThreadSafe,
 #endif
 
   BrowserThemeProvider original_theme_provider_;
-  BrowserThemeProvider otr_theme_provider_;
+  BrowserThemeProvider incognito_theme_provider_;
 
   base::WeakPtrFactory<ThemeService> weak_ptr_factory_;
 

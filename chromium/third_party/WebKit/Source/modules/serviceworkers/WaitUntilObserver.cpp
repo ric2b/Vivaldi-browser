@@ -169,10 +169,16 @@ void WaitUntilObserver::decrementPendingActivity()
     case Install:
         client->didHandleInstallEvent(m_eventID, result);
         break;
+    case Message:
+        client->didHandleExtendableMessageEvent(m_eventID, result);
+        break;
     case NotificationClick:
         client->didHandleNotificationClickEvent(m_eventID, result);
         m_consumeWindowInteractionTimer.stop();
         consumeWindowInteraction(nullptr);
+        break;
+    case NotificationClose:
+        client->didHandleNotificationCloseEvent(m_eventID, result);
         break;
     case Push:
         client->didHandlePushEvent(m_eventID, result);

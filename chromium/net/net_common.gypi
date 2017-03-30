@@ -8,7 +8,6 @@
   'variables': { 'enable_wexit_time_destructors': 1, },
   'dependencies': [
     '../base/base.gyp:base',
-    '../base/base.gyp:base_prefs',
     '../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
     '../crypto/crypto.gyp:crypto',
     '../sdch/sdch.gyp:sdch',
@@ -136,9 +135,20 @@
           'socket/ssl_client_socket_nss.h',
           'socket/ssl_server_socket_nss.cc',
           'socket/ssl_server_socket_nss.h',
+          'ssl/token_binding_nss.cc',
         ],
         'dependencies': [
           '../third_party/boringssl/boringssl.gyp:boringssl',
+        ],
+        'conditions': [
+          ['chromecast==1 and use_nss_certs==1', {
+            'sources': [
+              'ssl/ssl_platform_key_chromecast.cc',
+            ],
+            'sources!': [
+              'ssl/ssl_platform_key_nss.cc',
+            ],
+          }],
         ],
       },
       {  # else !use_openssl: remove the unneeded files and depend on NSS.
@@ -177,8 +187,11 @@
           'ssl/ssl_platform_key_nss.cc',
           'ssl/ssl_platform_key_task_runner.cc',
           'ssl/ssl_platform_key_task_runner.h',
+          'ssl/test_ssl_private_key.cc',
+          'ssl/test_ssl_private_key.h',
           'ssl/threaded_ssl_private_key.cc',
           'ssl/threaded_ssl_private_key.h',
+          'ssl/token_binding_openssl.cc',
         ],
       },
     ],

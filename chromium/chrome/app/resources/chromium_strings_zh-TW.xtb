@@ -106,7 +106,6 @@
 <translation id="457845228957001925">Chromium 資料的相關重要資訊</translation>
 <translation id="459535195905078186">Chromium 應用程式</translation>
 <translation id="4677944499843243528">另一台電腦 (<ph name="HOST_NAME" />) 的 Chromium 處理程序 (<ph name="PROCESS_ID" />) 正在使用這個設定檔。Chromium 已鎖定此設定檔，確保其不致受損。如果您確定其他處理程序目前未使用此設定檔，請予以解除鎖定，然後重新啟動 Chromium。</translation>
-<translation id="473775607612524610">更新</translation>
 <translation id="4743926867934016338">接受並搜尋</translation>
 <translation id="4888717733111232871">允許 mDNS 流量的 Chromium 輸入規則。</translation>
 <translation id="4943838377383847465">Chromium 正在背景模式中執行。</translation>
@@ -120,6 +119,7 @@
 <translation id="549669000822060376">請稍候，Chromium 正在安裝最新的系統更新。</translation>
 <translation id="5563479599352954471">輕觸即可搜尋</translation>
 <translation id="5620765574781326016">不必離開所在頁面即可瞭解網站上有哪些主題。</translation>
+<translation id="5634636535844844681">Chromium 僅支援 Windows 7 以上版本的作業系統。</translation>
 <translation id="5680901439334282664">登入 Chromium</translation>
 <translation id="5772805321386874569">(必須<ph name="BEGIN_BUTTON" />重新啟動<ph name="END_BUTTON" /> Chromium)</translation>
 <translation id="5796460469508169315">Chromium 即將準備就緒。</translation>
@@ -128,7 +128,6 @@
 <translation id="5859963531214966875">日後發佈的 Chromium 版本將不再支援這種 Linux 系統。</translation>
 <translation id="5862307444128926510">歡迎使用 Chromium</translation>
 <translation id="5877064549588274448">版本已變更。請重新啟動裝置以套用變更。</translation>
-<translation id="5909170354645388250">Chromium 不適用本規範。請加入預留位置，確保資源同步對應。預期的引數為：$1。</translation>
 <translation id="5942225298871134766">Chromium 會使用「<ph name="SAVED_PASSWORD_LINK" />」儲存此密碼，讓您在下次需要使用時套用。</translation>
 <translation id="5942520288919337908">已將「<ph name="EXTENSION_NAME" />」加到 Chromium。</translation>
 <translation id="59625444380784159">利用您的通訊錄詳細資料，快速在 Chromium 中填寫表單。</translation>
@@ -140,7 +139,6 @@
 <translation id="6334986366598267305">無論是登入 Google 帳戶使用 Chromium，還是以 Google 帳戶使用共用電腦，現在都變得更容易了。</translation>
 <translation id="6373523479360886564">您確定要解除安裝 Chromium 嗎？</translation>
 <translation id="6403826409255603130">Chromium 網路瀏覽器開啟網頁和執行應用程式的速度十分迅速。除了迅速、穩定且易於使用之外，Chromium 的內建惡意軟體與網路釣魚防護功能，可讓您安心悠遊網路。</translation>
-<translation id="6424492062988593837">Chromium 現在變得更進步了！歡迎您升級使用新版本。</translation>
 <translation id="6475912303565314141">這個擴充功能也會控管您啟動 Chromium 時所顯示的網頁。</translation>
 <translation id="6485906693002546646">您正使用 <ph name="PROFILE_EMAIL" /> 帳戶同步處理您的 Chromium 資料。如要更新您的偏好設定，或是在未登入 Google 帳戶的情況下使用 Chromium，請前往 [<ph name="SETTINGS_LINK" />]。</translation>
 <translation id="6510925080656968729">解除安裝 Chromium</translation>
@@ -209,7 +207,6 @@ Chromium 無法復原您的設定。</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> The Chromium Authors. 版權所有。</translation>
 <translation id="8621669128220841554">不明錯誤導致安裝失敗，請重新下載 Chromium。</translation>
 <translation id="8628626585870903697">Chromium 不含 PDF 檢視器，因此無法執行預覽列印功能。</translation>
-<translation id="8684913864886094367">Chromium 未正確關閉。</translation>
 <translation id="8697124171261953979">這個擴充功能也會控管 Chromium 啟動時或您使用網址列搜尋時所顯示的網頁。</translation>
 <translation id="8704119203788522458">這是您專屬的 Chromium</translation>
 <translation id="872034308864968620">讓 Chromium 在背景執行</translation>
@@ -226,7 +223,6 @@ Chromium 無法復原您的設定。</translation>
 
 如果您仍要繼續登入帳戶，各項 Chromium 資訊 (例如書籤、紀錄和其他設定) 則會合併至 <ph name="ACCOUNT_EMAIL_NEW" />。</translation>
 <translation id="9013087743919948559">新增至 Chromium</translation>
-<translation id="9013262824292842194">Chromium 僅支援 Windows Vista 或 Windows XP SP2 以上版本。</translation>
 <translation id="9019929317751753759">為了讓 Chromium 的安全性更有保障，我們停用了以下這個未列在「<ph name="IDS_EXTENSION_WEB_STORE_TITLE" />」中的擴充功能 (它可能是在您不知情的情況下加入瀏覽器)。</translation>
 <translation id="9022552996538154597">登入 Chromium</translation>
 <translation id="9036189287518468038">Chromium 應用程式啟動器</translation>

@@ -100,6 +100,7 @@
       <structure type="chrome_scaled_image" name="IDR_BLOCKED_CAMERA" file="common/blocked_camera.png" />
       <structure type="chrome_scaled_image" name="IDR_BLOCKED_COOKIES" file="common/blocked_cookies.png" />
       <structure type="chrome_scaled_image" name="IDR_BLOCKED_DOWNLOADS" file="common/blocked_downloads.png" />
+      <structure type="chrome_scaled_image" name="IDR_BLOCKED_EXTENSION_SCRIPT" file="common/blocked_extension_script.png" />
       <structure type="chrome_scaled_image" name="IDR_BLOCKED_IMAGES" file="common/blocked_images.png" />
       <structure type="chrome_scaled_image" name="IDR_BLOCKED_JAVASCRIPT" file="common/blocked_script.png" />
       <structure type="chrome_scaled_image" name="IDR_BLOCKED_KEYGEN" file="common/blocked_keygen.png" />
@@ -234,8 +235,6 @@
       <structure type="chrome_scaled_image" name="IDR_DOWNLOAD_BUTTON_RIGHT_TOP_H" file="common/download_button_right_top_hover.png" />
       <structure type="chrome_scaled_image" name="IDR_DOWNLOAD_BUTTON_RIGHT_TOP_NO_DD" file="common/download_button_right_top_no_dd.png" />
       <structure type="chrome_scaled_image" name="IDR_DOWNLOAD_BUTTON_RIGHT_TOP_P" file="common/download_button_right_top_pressed.png" />
-      <structure type="chrome_scaled_image" name="IDR_DOWNLOAD_PROGRESS_BACKGROUND_32" file="common/download_progress_background32.png" />
-      <structure type="chrome_scaled_image" name="IDR_DOWNLOAD_PROGRESS_FOREGROUND_32" file="common/download_progress_foreground32.png" />
       <if expr="chromeos">
         <structure type="chrome_scaled_image" name="IDR_DOWNLOAD_NOTIFICATION_MENU_CANCEL" file="cros/downloads/cancel.png" />
         <structure type="chrome_scaled_image" name="IDR_DOWNLOAD_NOTIFICATION_MENU_DELETE" file="cros/downloads/delete.png" />
@@ -246,7 +245,6 @@
         <structure type="chrome_scaled_image" name="IDR_ENABLE_DEBUGGING_FAILURE" file="cros/enable_debugging_failure.png" />
         <structure type="chrome_scaled_image" name="IDR_ENABLE_DEBUGGING_SUCCESS" file="cros/enable_debugging_success.png" />
       </if>
-      <structure type="chrome_scaled_image" name="IDR_ERROR_NETWORK_GENERIC" file="common/error_network_generic.png" />
       <structure type="chrome_scaled_image" name="IDR_ERROR_NETWORK_OFFLINE" file="common/error_network_offline.png" />
       <if expr="enable_extensions">
         <structure type="chrome_scaled_image" name="IDR_EXTENSIONS_FAVICON" file="common/favicon_extensions.png" />
@@ -303,7 +301,6 @@
         <structure type="chrome_scaled_image" name="IDR_GENERATE_PASSWORD_KEY" file="legacy/password_generation_key.png" />
       </if>
       <structure type="chrome_scaled_image" name="IDR_HELP_MENU" file="common/help_16.png" />
-      <structure type="chrome_scaled_image" name="IDR_HISTORY_FAVICON" file="common/favicon_history.png" />
       <if expr="toolkit_views or is_macosx or is_ios">
         <structure type="chrome_scaled_image" name="IDR_HOME" file="common/browser_home_normal.png" />
       </if>
@@ -483,9 +480,6 @@
       <structure type="chrome_scaled_image" name="IDR_OMNIBOX_EV_BUBBLE_TOP_LEFT" file="common/omnibox_ev_bubble_top_left.png" />
       <structure type="chrome_scaled_image" name="IDR_OMNIBOX_EV_BUBBLE_TOP_RIGHT" file="common/omnibox_ev_bubble_top_right.png" />
       <structure type="chrome_scaled_image" name="IDR_OMNIBOX_EXTENSION_APP_SELECTED" file="common/omnibox_extension_app_selected.png" />
-      <structure type="chrome_scaled_image" name="IDR_OMNIBOX_HTTPS_INVALID" file="common/omnibox_https_invalid.png" />
-      <structure type="chrome_scaled_image" name="IDR_OMNIBOX_HTTPS_POLICY_WARNING" file="common/controlled_setting_mandatory.png" />
-      <structure type="chrome_scaled_image" name="IDR_OMNIBOX_HTTPS_VALID" file="common/omnibox_https_valid.png" />
       <structure type="chrome_scaled_image" name="IDR_OMNIBOX_HTTP_SELECTED" file="common/omnibox_http_selected.png" />
       <if expr="is_macosx or is_ios">
         <structure type="chrome_scaled_image" name="IDR_OMNIBOX_KEYWORD_HINT_TAB" file="mac/omnibox_keyword_hint_tab.png" />
@@ -503,7 +497,6 @@
       <structure type="chrome_scaled_image" name="IDR_OMNIBOX_POPUP_BORDER_AND_SHADOW_TOP" file="common/omnibox_popup_border_and_shadow_top.png" />
       <structure type="chrome_scaled_image" name="IDR_OMNIBOX_POPUP_BORDER_AND_SHADOW_TOP_LEFT" file="common/omnibox_popup_border_and_shadow_top_left.png" />
       <structure type="chrome_scaled_image" name="IDR_OMNIBOX_POPUP_BORDER_AND_SHADOW_TOP_RIGHT" file="common/omnibox_popup_border_and_shadow_top_right.png" />
-      <structure type="chrome_scaled_image" name="IDR_OMNIBOX_SEARCH_BUTTON_LOUPE" file="common/omnibox_search_button_loupe.png" />
       <structure type="chrome_scaled_image" name="IDR_OMNIBOX_SEARCH_SELECTED" file="common/omnibox_search_selected.png" />
       <structure type="chrome_scaled_image" name="IDR_OMNIBOX_SELECTED_KEYWORD_BUBBLE_BOTTOM" file="common/omnibox_selected_keyword_bubble_bottom.png" />
       <structure type="chrome_scaled_image" name="IDR_OMNIBOX_SELECTED_KEYWORD_BUBBLE_BOTTOM_LEFT" file="common/omnibox_selected_keyword_bubble_bottom_left.png" />
@@ -525,9 +518,6 @@
         </if>
         <if expr="use_ash">
           <structure type="chrome_scaled_image" name="IDR_OTR_ICON" file="common/ash/otr_icon.png" />
-          <if expr="not chromeos">
-            <structure type="chrome_scaled_image" name="IDR_OTR_ICON_DESKTOP" file="common/otr_icon.png" />
-          </if>
         </if>
       </if>
       <if expr="is_macosx or is_ios">
@@ -633,7 +623,7 @@
         <structure type="chrome_scaled_image" name="IDR_AVATAR_THEMED_BUTTON_PRESSED_TOP_LEFT" file="win/avatar_button/themed/sign_in_button_pressed_top_left.png" />
         <structure type="chrome_scaled_image" name="IDR_AVATAR_THEMED_BUTTON_PRESSED_TOP_RIGHT" file="win/avatar_button/themed/sign_in_button_pressed_top_right.png" />
 
-        <!-- Windows, Aero -->
+        <!-- Windows 7, Aero -->
         <structure type="chrome_scaled_image" name="IDR_AVATAR_GLASS_BUTTON_AVATAR" file="win/avatar_button/win7/sign_in_button_avatar.png" />
         <structure type="chrome_scaled_image" name="IDR_AVATAR_GLASS_BUTTON_NORMAL_BOTTOM" file="win/avatar_button/win7/sign_in_button_bottom.png" />
         <structure type="chrome_scaled_image" name="IDR_AVATAR_GLASS_BUTTON_NORMAL_BOTTOM_LEFT" file="win/avatar_button/win7/sign_in_button_bottom_left.png" />
@@ -663,68 +653,68 @@
         <structure type="chrome_scaled_image" name="IDR_AVATAR_GLASS_BUTTON_PRESSED_TOP_LEFT" file="win/avatar_button/win7/sign_in_button_pressed_top_left.png" />
         <structure type="chrome_scaled_image" name="IDR_AVATAR_GLASS_BUTTON_PRESSED_TOP_RIGHT" file="win/avatar_button/win7/sign_in_button_pressed_top_right.png" />
 
-        <!-- Windows, metro -->
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_AVATAR" file="win/avatar_button/win8/sign_in_button_avatar.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_NORMAL_BOTTOM" file="win/avatar_button/win8/sign_in_button_bottom.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_NORMAL_BOTTOM_LEFT" file="win/avatar_button/win8/sign_in_button_bottom_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_NORMAL_BOTTOM_RIGHT" file="win/avatar_button/win8/sign_in_button_bottom_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_NORMAL_CENTER" file="win/avatar_button/win8/sign_in_button_center.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_NORMAL_LEFT" file="win/avatar_button/win8/sign_in_button_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_NORMAL_RIGHT" file="win/avatar_button/win8/sign_in_button_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_NORMAL_TOP" file="win/avatar_button/win8/sign_in_button_top.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_NORMAL_TOP_LEFT" file="win/avatar_button/win8/sign_in_button_top_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_NORMAL_TOP_RIGHT" file="win/avatar_button/win8/sign_in_button_top_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_HOVER_BOTTOM" file="win/avatar_button/win8/sign_in_button_hover_bottom.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_HOVER_BOTTOM_LEFT" file="win/avatar_button/win8/sign_in_button_hover_bottom_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_HOVER_BOTTOM_RIGHT" file="win/avatar_button/win8/sign_in_button_hover_bottom_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_HOVER_CENTER" file="win/avatar_button/win8/sign_in_button_hover_center.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_HOVER_LEFT" file="win/avatar_button/win8/sign_in_button_hover_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_HOVER_RIGHT" file="win/avatar_button/win8/sign_in_button_hover_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_HOVER_TOP" file="win/avatar_button/win8/sign_in_button_hover_top.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_HOVER_TOP_LEFT" file="win/avatar_button/win8/sign_in_button_hover_top_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_HOVER_TOP_RIGHT" file="win/avatar_button/win8/sign_in_button_hover_top_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_PRESSED_BOTTOM" file="win/avatar_button/win8/sign_in_button_pressed_bottom.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_PRESSED_BOTTOM_LEFT" file="win/avatar_button/win8/sign_in_button_pressed_bottom_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_PRESSED_BOTTOM_RIGHT" file="win/avatar_button/win8/sign_in_button_pressed_bottom_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_PRESSED_CENTER" file="win/avatar_button/win8/sign_in_button_pressed_center.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_PRESSED_LEFT" file="win/avatar_button/win8/sign_in_button_pressed_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_PRESSED_RIGHT" file="win/avatar_button/win8/sign_in_button_pressed_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_PRESSED_TOP" file="win/avatar_button/win8/sign_in_button_pressed_top.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_PRESSED_TOP_LEFT" file="win/avatar_button/win8/sign_in_button_pressed_top_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_METRO_BUTTON_PRESSED_TOP_RIGHT" file="win/avatar_button/win8/sign_in_button_pressed_top_right.png" />
+        <!-- Windows 8 and up -->
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_AVATAR" file="win/avatar_button/win8/sign_in_button_avatar.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_NORMAL_BOTTOM" file="win/avatar_button/win8/sign_in_button_bottom.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_NORMAL_BOTTOM_LEFT" file="win/avatar_button/win8/sign_in_button_bottom_left.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_NORMAL_BOTTOM_RIGHT" file="win/avatar_button/win8/sign_in_button_bottom_right.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_NORMAL_CENTER" file="win/avatar_button/win8/sign_in_button_center.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_NORMAL_LEFT" file="win/avatar_button/win8/sign_in_button_left.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_NORMAL_RIGHT" file="win/avatar_button/win8/sign_in_button_right.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_NORMAL_TOP" file="win/avatar_button/win8/sign_in_button_top.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_NORMAL_TOP_LEFT" file="win/avatar_button/win8/sign_in_button_top_left.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_NORMAL_TOP_RIGHT" file="win/avatar_button/win8/sign_in_button_top_right.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_HOVER_BOTTOM" file="win/avatar_button/win8/sign_in_button_hover_bottom.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_HOVER_BOTTOM_LEFT" file="win/avatar_button/win8/sign_in_button_hover_bottom_left.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_HOVER_BOTTOM_RIGHT" file="win/avatar_button/win8/sign_in_button_hover_bottom_right.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_HOVER_CENTER" file="win/avatar_button/win8/sign_in_button_hover_center.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_HOVER_LEFT" file="win/avatar_button/win8/sign_in_button_hover_left.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_HOVER_RIGHT" file="win/avatar_button/win8/sign_in_button_hover_right.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_HOVER_TOP" file="win/avatar_button/win8/sign_in_button_hover_top.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_HOVER_TOP_LEFT" file="win/avatar_button/win8/sign_in_button_hover_top_left.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_HOVER_TOP_RIGHT" file="win/avatar_button/win8/sign_in_button_hover_top_right.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_PRESSED_BOTTOM" file="win/avatar_button/win8/sign_in_button_pressed_bottom.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_PRESSED_BOTTOM_LEFT" file="win/avatar_button/win8/sign_in_button_pressed_bottom_left.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_PRESSED_BOTTOM_RIGHT" file="win/avatar_button/win8/sign_in_button_pressed_bottom_right.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_PRESSED_CENTER" file="win/avatar_button/win8/sign_in_button_pressed_center.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_PRESSED_LEFT" file="win/avatar_button/win8/sign_in_button_pressed_left.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_PRESSED_RIGHT" file="win/avatar_button/win8/sign_in_button_pressed_right.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_PRESSED_TOP" file="win/avatar_button/win8/sign_in_button_pressed_top.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_PRESSED_TOP_LEFT" file="win/avatar_button/win8/sign_in_button_pressed_top_left.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_PRESSED_TOP_RIGHT" file="win/avatar_button/win8/sign_in_button_pressed_top_right.png" />
       </if>  <!-- toolkit_views and not is_macosx -->
       <if expr="is_macosx">
         <!-- Mac -->
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_AVATAR" file="mac/avatar_button/sign_in_button_avatar.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_AVATAR_HOVER" file="mac/avatar_button/sign_in_button_avatar_hover.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_AVATAR_PRESSED" file="mac/avatar_button/sign_in_button_avatar_pressed.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_NORMAL_BOTTOM" file="mac/avatar_button/sign_in_button_bottom.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_NORMAL_BOTTOM_LEFT" file="mac/avatar_button/sign_in_button_bottom_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_NORMAL_BOTTOM_RIGHT" file="mac/avatar_button/sign_in_button_bottom_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_NORMAL_CENTER" file="mac/avatar_button/sign_in_button_center.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_NORMAL_LEFT" file="mac/avatar_button/sign_in_button_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_NORMAL_RIGHT" file="mac/avatar_button/sign_in_button_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_NORMAL_TOP" file="mac/avatar_button/sign_in_button_top.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_NORMAL_TOP_LEFT" file="mac/avatar_button/sign_in_button_top_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_NORMAL_TOP_RIGHT" file="mac/avatar_button/sign_in_button_top_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_HOVER_BOTTOM" file="mac/avatar_button/sign_in_button_bottom_hover.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_HOVER_BOTTOM_LEFT" file="mac/avatar_button/sign_in_button_bottom_left_hover.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_HOVER_BOTTOM_RIGHT" file="mac/avatar_button/sign_in_button_bottom_right_hover.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_HOVER_CENTER" file="mac/avatar_button/sign_in_button_center_hover.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_HOVER_LEFT" file="mac/avatar_button/sign_in_button_left_hover.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_HOVER_RIGHT" file="mac/avatar_button/sign_in_button_right_hover.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_HOVER_TOP" file="mac/avatar_button/sign_in_button_top_hover.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_HOVER_TOP_LEFT" file="mac/avatar_button/sign_in_button_top_left_hover.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_HOVER_TOP_RIGHT" file="mac/avatar_button/sign_in_button_top_right_hover.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_PRESSED_BOTTOM" file="mac/avatar_button/sign_in_button_bottom_pressed.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_PRESSED_BOTTOM_LEFT" file="mac/avatar_button/sign_in_button_bottom_left_pressed.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_PRESSED_BOTTOM_RIGHT" file="mac/avatar_button/sign_in_button_bottom_right_pressed.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_PRESSED_CENTER" file="mac/avatar_button/sign_in_button_center_pressed.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_PRESSED_LEFT" file="mac/avatar_button/sign_in_button_left_pressed.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_PRESSED_RIGHT" file="mac/avatar_button/sign_in_button_right_pressed.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_PRESSED_TOP" file="mac/avatar_button/sign_in_button_top_pressed.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_PRESSED_TOP_LEFT" file="mac/avatar_button/sign_in_button_top_left_pressed.png" />
-        <structure type="chrome_scaled_image" name="IDR_AVATAR_MAC_BUTTON_PRESSED_TOP_RIGHT" file="mac/avatar_button/sign_in_button_top_right_pressed.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_AVATAR" file="mac/avatar_button/sign_in_button_avatar.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_AVATAR_HOVER" file="mac/avatar_button/sign_in_button_avatar_hover.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_AVATAR_PRESSED" file="mac/avatar_button/sign_in_button_avatar_pressed.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_NORMAL_BOTTOM" file="mac/avatar_button/sign_in_button_bottom.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_NORMAL_BOTTOM_LEFT" file="mac/avatar_button/sign_in_button_bottom_left.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_NORMAL_BOTTOM_RIGHT" file="mac/avatar_button/sign_in_button_bottom_right.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_NORMAL_CENTER" file="mac/avatar_button/sign_in_button_center.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_NORMAL_LEFT" file="mac/avatar_button/sign_in_button_left.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_NORMAL_RIGHT" file="mac/avatar_button/sign_in_button_right.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_NORMAL_TOP" file="mac/avatar_button/sign_in_button_top.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_NORMAL_TOP_LEFT" file="mac/avatar_button/sign_in_button_top_left.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_NORMAL_TOP_RIGHT" file="mac/avatar_button/sign_in_button_top_right.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_HOVER_BOTTOM" file="mac/avatar_button/sign_in_button_bottom_hover.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_HOVER_BOTTOM_LEFT" file="mac/avatar_button/sign_in_button_bottom_left_hover.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_HOVER_BOTTOM_RIGHT" file="mac/avatar_button/sign_in_button_bottom_right_hover.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_HOVER_CENTER" file="mac/avatar_button/sign_in_button_center_hover.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_HOVER_LEFT" file="mac/avatar_button/sign_in_button_left_hover.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_HOVER_RIGHT" file="mac/avatar_button/sign_in_button_right_hover.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_HOVER_TOP" file="mac/avatar_button/sign_in_button_top_hover.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_HOVER_TOP_LEFT" file="mac/avatar_button/sign_in_button_top_left_hover.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_HOVER_TOP_RIGHT" file="mac/avatar_button/sign_in_button_top_right_hover.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_PRESSED_BOTTOM" file="mac/avatar_button/sign_in_button_bottom_pressed.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_PRESSED_BOTTOM_LEFT" file="mac/avatar_button/sign_in_button_bottom_left_pressed.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_PRESSED_BOTTOM_RIGHT" file="mac/avatar_button/sign_in_button_bottom_right_pressed.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_PRESSED_CENTER" file="mac/avatar_button/sign_in_button_center_pressed.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_PRESSED_LEFT" file="mac/avatar_button/sign_in_button_left_pressed.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_PRESSED_RIGHT" file="mac/avatar_button/sign_in_button_right_pressed.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_PRESSED_TOP" file="mac/avatar_button/sign_in_button_top_pressed.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_PRESSED_TOP_LEFT" file="mac/avatar_button/sign_in_button_top_left_pressed.png" />
+        <structure type="chrome_scaled_image" name="IDR_AVATAR_NATIVE_BUTTON_PRESSED_TOP_RIGHT" file="mac/avatar_button/sign_in_button_top_right_pressed.png" />
 
         <!-- Mac, themed -->
         <structure type="chrome_scaled_image" name="IDR_AVATAR_THEMED_MAC_BUTTON_NORMAL_BOTTOM" file="mac/avatar_button/sign_in_button_themed_bottom.png" />
@@ -760,9 +750,6 @@
         <structure type="chrome_scaled_image" name="IDR_RELOAD_P" file="common/browser_reload_pressed.png" />
       </if>
       <structure type="chrome_scaled_image" name="IDR_RESTORE_BUTTON_MASK" file="common/restore_button_mask.png" />
-      <if expr="is_macosx">
-        <structure type="chrome_scaled_image" name="IDR_SAD_TAB" file="legacy/sadtab.png" />
-      </if>
       <structure type="chrome_scaled_image" name="IDR_SAFEBROWSING_WARNING" file="common/safebrowsing_warning.png" />
       <if expr="is_macosx">
         <structure type="chrome_scaled_image" name="IDR_SAVE_PASSWORD_ACTIVE" file="legacy/save_password_active.png" />
@@ -852,17 +839,10 @@
         <structure type="chrome_scaled_image" name="IDR_THEME_FRAME_INCOGNITO_INACTIVE" file="theme_frame_incognito_inactive.png" />
       </if>
       <if expr="use_ash">
-        <!-- Ash has a gray frame, Windows uses blue. -->
-        <structure type="chrome_scaled_image" name="IDR_THEME_FRAME" file="common/ash/theme_frame_active.png" />
-        <structure type="chrome_scaled_image" name="IDR_THEME_FRAME_INACTIVE" file="common/ash/theme_frame_inactive.png" />
-        <structure type="chrome_scaled_image" name="IDR_THEME_FRAME_INCOGNITO" file="common/ash/theme_frame_incognito_active.png" />
-        <structure type="chrome_scaled_image" name="IDR_THEME_FRAME_INCOGNITO_INACTIVE" file="common/ash/theme_frame_incognito_inactive.png" />
-        <if expr="not chromeos">
-          <structure type="chrome_scaled_image" name="IDR_THEME_FRAME_DESKTOP" file="theme_frame.png" />
-          <structure type="chrome_scaled_image" name="IDR_THEME_FRAME_INACTIVE_DESKTOP" file="theme_frame_inactive.png" />
-          <structure type="chrome_scaled_image" name="IDR_THEME_FRAME_INCOGNITO_DESKTOP" file="theme_frame_incognito.png" />
-          <structure type="chrome_scaled_image" name="IDR_THEME_FRAME_INCOGNITO_INACTIVE_DESKTOP" file="theme_frame_incognito_inactive.png" />
-        </if>
+        <structure type="chrome_scaled_image" name="IDR_THEME_FRAME" file="notused.png" />
+        <structure type="chrome_scaled_image" name="IDR_THEME_FRAME_INACTIVE" file="notused.png" />
+        <structure type="chrome_scaled_image" name="IDR_THEME_FRAME_INCOGNITO" file="notused.png" />
+        <structure type="chrome_scaled_image" name="IDR_THEME_FRAME_INCOGNITO_INACTIVE" file="notused.png" />
       </if>
       <structure type="chrome_scaled_image" name="IDR_THEME_FRAME_OVERLAY" file="notused.png" />
       <structure type="chrome_scaled_image" name="IDR_THEME_FRAME_OVERLAY_INACTIVE" file="notused.png" />
@@ -876,10 +856,6 @@
         <!-- Ash has gray tab backgrounds, Windows uses blue. -->
         <structure type="chrome_scaled_image" name="IDR_THEME_TAB_BACKGROUND" file="common/ash/theme_default_inactive.png" />
         <structure type="chrome_scaled_image" name="IDR_THEME_TAB_BACKGROUND_INCOGNITO" file="common/ash/theme_default_inactive.png" />
-        <if expr="not chromeos">
-          <structure type="chrome_scaled_image" name="IDR_THEME_TAB_BACKGROUND_DESKTOP" file="theme_tab_background.png" />
-          <structure type="chrome_scaled_image" name="IDR_THEME_TAB_BACKGROUND_INCOGNITO_DESKTOP" file="theme_tab_background_incognito.png" />
-        </if>
       </if>
       <if expr="is_macosx or is_ios">
         <structure type="chrome_scaled_image" name="IDR_THEME_TAB_BACKGROUND" file="mac/theme_default_inactive.png" />
@@ -895,9 +871,6 @@
       <if expr="use_ash">
         <!-- Ash has a dark gray toolbar background, Windows has light gray. -->
         <structure type="chrome_scaled_image" name="IDR_THEME_TOOLBAR" file="common/ash/theme_default_active.png" />
-        <if expr="not chromeos">
-          <structure type="chrome_scaled_image" name="IDR_THEME_TOOLBAR_DESKTOP" file="theme_toolbar_default.png" />
-        </if>
       </if>
       <if expr="is_macosx or is_ios">
         <structure type="chrome_scaled_image" name="IDR_THEME_TOOLBAR" file="mac/theme_default_active.png" />
@@ -909,7 +882,6 @@
         <structure type="chrome_scaled_image" name="IDR_THROBBER_WAITING" file="legacy/throbber_waiting.png" />
       </if>
       <if expr="use_ash">
-        <structure type="chrome_scaled_image" name="IDR_TOOLBAR_SHADE_BOTTOM" file="common/toolbar_shade_bottom.png" />
         <structure type="chrome_scaled_image" name="IDR_TOOLBAR_SHADE_LEFT" file="common/toolbar_shade_left.png" />
         <structure type="chrome_scaled_image" name="IDR_TOOLBAR_SHADE_RIGHT" file="common/toolbar_shade_right.png" />
         <structure type="chrome_scaled_image" name="IDR_TOOLBAR_SHADE_TOP" file="common/toolbar_shade_top.png" />
@@ -952,17 +924,6 @@
         <structure type="chrome_scaled_image" name="IDR_USER_IMAGE_RECYCLE" file="cros/discard_wide.png" />
       </if>
       <structure type="chrome_scaled_image" name="IDR_WARNING" file="common/alert_small.png" />
-      <if expr="is_macosx">
-        <structure type="chrome_scaled_image" name="IDR_WEBSITE_SETTINGS_TABSTRIP_CENTER" file="mac/website_settings_tabstrip_center.png" />
-        <structure type="chrome_scaled_image" name="IDR_WEBSITE_SETTINGS_TABSTRIP_LEFT" file="mac/website_settings_tabstrip_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_WEBSITE_SETTINGS_TABSTRIP_RIGHT" file="mac/website_settings_tabstrip_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_WEBSITE_SETTINGS_TAB_CENTER" file="mac/website_settings_tab_center.png" />
-        <structure type="chrome_scaled_image" name="IDR_WEBSITE_SETTINGS_TAB_LEFT" file="mac/website_settings_tab_left.png" />
-        <structure type="chrome_scaled_image" name="IDR_WEBSITE_SETTINGS_TAB_RIGHT" file="mac/website_settings_tab_right.png" />
-        <structure type="chrome_scaled_image" name="IDR_WEBSITE_SETTINGS_TAB_CENTER2" file="mac/website_settings_tab_center2.png" />
-        <structure type="chrome_scaled_image" name="IDR_WEBSITE_SETTINGS_TAB_LEFT2" file="mac/website_settings_tab_left2.png" />
-        <structure type="chrome_scaled_image" name="IDR_WEBSITE_SETTINGS_TAB_RIGHT2" file="mac/website_settings_tab_right2.png" />
-      </if>
       <if expr="not _google_chrome">
         <structure type="chrome_scaled_image" name="IDR_WEBSTORE_ICON" file="chromium/webstore_icon.png" />
         <structure type="chrome_scaled_image" name="IDR_WEBSTORE_ICON_16" file="chromium/webstore_icon_16.png" />

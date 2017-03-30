@@ -53,7 +53,8 @@ class UsbDeviceHandleImpl : public UsbDeviceHandle {
                         const ResultCallback& callback) override;
   void ClaimInterface(int interface_number,
                       const ResultCallback& callback) override;
-  bool ReleaseInterface(int interface_number) override;
+  void ReleaseInterface(int interface_number,
+                        const ResultCallback& callback) override;
   void SetInterfaceAlternateSetting(int interface_number,
                                     int alternate_setting,
                                     const ResultCallback& callback) override;
@@ -71,14 +72,18 @@ class UsbDeviceHandleImpl : public UsbDeviceHandle {
                        unsigned int timeout,
                        const TransferCallback& callback) override;
 
-  void IsochronousTransfer(UsbEndpointDirection direction,
-                           uint8_t endpoint_number,
-                           scoped_refptr<net::IOBuffer> buffer,
-                           size_t length,
-                           unsigned int packets,
-                           unsigned int packet_length,
-                           unsigned int timeout,
-                           const TransferCallback& callback) override;
+  void IsochronousTransferIn(
+      uint8_t endpoint,
+      const std::vector<uint32_t>& packet_lengths,
+      unsigned int timeout,
+      const IsochronousTransferCallback& callback) override;
+
+  void IsochronousTransferOut(
+      uint8_t endpoint,
+      scoped_refptr<net::IOBuffer> buffer,
+      const std::vector<uint32_t>& packet_lengths,
+      unsigned int timeout,
+      const IsochronousTransferCallback& callback) override;
 
   void GenericTransfer(UsbEndpointDirection direction,
                        uint8_t endpoint_number,
@@ -112,8 +117,7 @@ class UsbDeviceHandleImpl : public UsbDeviceHandle {
   void SetConfigurationComplete(bool success, const ResultCallback& callback);
   void ClaimInterfaceOnBlockingThread(int interface_number,
                                       const ResultCallback& callback);
-  void ClaimInterfaceComplete(int interface_number,
-                              bool success,
+  void ClaimInterfaceComplete(scoped_refptr<InterfaceClaimer> interface_claimer,
                               const ResultCallback& callback);
   void SetInterfaceAlternateSettingOnBlockingThread(
       int interface_number,
@@ -149,15 +153,20 @@ class UsbDeviceHandleImpl : public UsbDeviceHandle {
       scoped_refptr<base::TaskRunner> callback_task_runner,
       const TransferCallback& callback);
 
-  void IsochronousTransferInternal(
+  void IsochronousTransferInInternal(
       uint8_t endpoint_address,
-      scoped_refptr<net::IOBuffer> buffer,
-      size_t length,
-      unsigned int packets,
-      unsigned int packet_length,
+      const std::vector<uint32_t>& packet_lengths,
       unsigned int timeout,
       scoped_refptr<base::TaskRunner> callback_task_runner,
-      const TransferCallback& callback);
+      const IsochronousTransferCallback& callback);
+
+  void IsochronousTransferOutInternal(
+      uint8_t endpoint_address,
+      scoped_refptr<net::IOBuffer> buffer,
+      const std::vector<uint32_t>& packet_lengths,
+      unsigned int timeout,
+      scoped_refptr<base::TaskRunner> callback_task_runner,
+      const IsochronousTransferCallback& callback);
 
   void GenericTransferInternal(
       uint8_t endpoint_address,

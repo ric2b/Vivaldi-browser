@@ -32,15 +32,10 @@
 
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/V8Binding.h"
-#include "core/InspectorBackendDispatcher.h"
-#include "core/InspectorFrontend.h"
-#include "core/frame/FrameConsole.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/inspector/IdentifiersFactory.h"
-#include "core/inspector/InjectedScriptHost.h"
-#include "core/inspector/InjectedScriptManager.h"
 #include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InspectorAnimationAgent.h"
 #include "core/inspector/InspectorApplicationCacheAgent.h"
@@ -58,9 +53,7 @@
 #include "core/inspector/InspectorProfilerAgent.h"
 #include "core/inspector/InspectorResourceAgent.h"
 #include "core/inspector/InspectorResourceContentLoader.h"
-#include "core/inspector/InspectorState.h"
 #include "core/inspector/InspectorTaskRunner.h"
-#include "core/inspector/InspectorTimelineAgent.h"
 #include "core/inspector/InspectorTracingAgent.h"
 #include "core/inspector/InspectorWorkerAgent.h"
 #include "core/inspector/InstrumentingAgents.h"
@@ -75,16 +68,16 @@
 #include "modules/accessibility/InspectorAccessibilityAgent.h"
 #include "modules/cachestorage/InspectorCacheStorageAgent.h"
 #include "modules/device_orientation/DeviceOrientationInspectorAgent.h"
-#include "modules/filesystem/InspectorFileSystemAgent.h"
 #include "modules/indexeddb/InspectorIndexedDBAgent.h"
-#include "modules/screen_orientation/ScreenOrientationInspectorAgent.h"
 #include "modules/storage/InspectorDOMStorageAgent.h"
 #include "modules/webdatabase/InspectorDatabaseAgent.h"
-#include "platform/JSONValues.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/TraceEvent.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/PaintController.h"
+#include "platform/inspector_protocol/Dispatcher.h"
+#include "platform/inspector_protocol/Frontend.h"
+#include "platform/inspector_protocol/Values.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebLayerTreeView.h"
 #include "public/platform/WebRect.h"
@@ -121,7 +114,7 @@ public:
         s_instance = instance.get();
         v8::Isolate* isolate = V8PerIsolateData::mainThreadIsolate();
         V8PerIsolateData* data = V8PerIsolateData::from(isolate);
-        data->setScriptDebugger(MainThreadDebugger::create(instance.release(), isolate));
+        data->setThreadDebugger(MainThreadDebugger::create(instance.release(), isolate));
     }
 
     static void webViewImplClosed(WebViewImpl* view)
@@ -139,24 +132,51 @@ public:
     static void continueProgram()
     {
         // Release render thread if necessary.
-        if (s_instance && s_instance->m_running)
+        if (s_instance)
             s_instance->quitNow();
+    }
+
+    static void pauseForCreateWindow(WebLocalFrameImpl* frame)
+    {
+        if (s_instance)
+            s_instance->runForCreateWindow(frame);
+    }
+
+    static bool resumeForCreateWindow()
+    {
+        return s_instance ? s_instance->quitForCreateWindow() : false;
     }
 
 private:
     ClientMessageLoopAdapter(PassOwnPtr<WebDevToolsAgentClient::WebKitClientMessageLoop> messageLoop)
-        : m_running(false)
+        : m_runningForDebugBreak(false)
+        , m_runningForCreateWindow(false)
         , m_messageLoop(messageLoop) { }
 
     void run(LocalFrame* frame) override
     {
-        if (m_running)
+        if (m_runningForDebugBreak)
             return;
-        m_running = true;
 
+        m_runningForDebugBreak = true;
+        if (!m_runningForCreateWindow)
+            runLoop(WebLocalFrameImpl::fromFrame(frame));
+    }
+
+    void runForCreateWindow(WebLocalFrameImpl* frame)
+    {
+        if (m_runningForCreateWindow)
+            return;
+
+        m_runningForCreateWindow = true;
+        if (!m_runningForDebugBreak)
+            runLoop(frame);
+    }
+
+    void runLoop(WebLocalFrameImpl* frame)
+    {
         // 0. Flush pending frontend messages.
-        WebLocalFrameImpl* frameImpl = WebLocalFrameImpl::fromFrame(frame);
-        WebDevToolsAgentImpl* agent = frameImpl->devToolsAgentImpl();
+        WebDevToolsAgentImpl* agent = frame->devToolsAgentImpl();
         agent->flushPendingProtocolNotifications();
 
         Vector<WebViewImpl*> views;
@@ -213,16 +233,30 @@ private:
         // 8. All views have been resumed, clear the set.
         m_frozenViews.clear();
         m_frozenWidgets.clear();
-
-        m_running = false;
     }
 
     void quitNow() override
     {
-        m_messageLoop->quitNow();
+        if (m_runningForDebugBreak) {
+            m_runningForDebugBreak = false;
+            if (!m_runningForCreateWindow)
+                m_messageLoop->quitNow();
+        }
     }
 
-    bool m_running;
+    bool quitForCreateWindow()
+    {
+        if (m_runningForCreateWindow) {
+            m_runningForCreateWindow = false;
+            if (!m_runningForDebugBreak)
+                m_messageLoop->quitNow();
+            return true;
+        }
+        return false;
+    }
+
+    bool m_runningForDebugBreak;
+    bool m_runningForCreateWindow;
     OwnPtr<WebDevToolsAgentClient::WebKitClientMessageLoop> m_messageLoop;
     typedef HashSet<WebViewImpl*> FrozenViewsSet;
     FrozenViewsSet m_frozenViews;
@@ -231,25 +265,6 @@ private:
 };
 
 ClientMessageLoopAdapter* ClientMessageLoopAdapter::s_instance = nullptr;
-
-class PageInjectedScriptHostClient: public InjectedScriptHostClient {
-public:
-    PageInjectedScriptHostClient() { }
-
-    ~PageInjectedScriptHostClient() override { }
-
-    void muteWarningsAndDeprecations()
-    {
-        FrameConsole::mute();
-        UseCounter::muteForInspector();
-    }
-
-    void unmuteWarningsAndDeprecations()
-    {
-        FrameConsole::unmute();
-        UseCounter::unmuteForInspector();
-    }
-};
 
 class DebuggerTask : public InspectorTaskRunner::Task {
 public:
@@ -294,7 +309,7 @@ PassOwnPtrWillBeRawPtr<WebDevToolsAgentImpl> WebDevToolsAgentImpl::create(WebLoc
     // TODO(dgozman): we should actually pass the view instead of frame, but during
     // remote->local transition we cannot access mainFrameImpl() yet, so we have to store the
     // frame which will become the main frame later.
-    agent->registerAgent(InspectorRenderingAgent::create(frame));
+    agent->registerAgent(InspectorRenderingAgent::create(frame, agent->m_overlay.get()));
     agent->registerAgent(InspectorEmulationAgent::create(frame, agent));
     // TODO(dgozman): migrate each of the following agents to frame once module is ready.
     agent->registerAgent(InspectorDatabaseAgent::create(view->page()));
@@ -317,9 +332,7 @@ WebDevToolsAgentImpl::WebDevToolsAgentImpl(
     , m_hasBeenDisposed(false)
 #endif
     , m_instrumentingAgents(m_webLocalFrameImpl->frame()->instrumentingAgents())
-    , m_injectedScriptManager(InjectedScriptManager::createForPage())
     , m_resourceContentLoader(InspectorResourceContentLoader::create(m_webLocalFrameImpl->frame()))
-    , m_state(adoptPtrWillBeNoop(new InspectorCompositeState(this)))
     , m_overlay(overlay)
     , m_inspectedFrames(InspectedFrames::create(m_webLocalFrameImpl->frame()))
     , m_inspectorAgent(nullptr)
@@ -330,9 +343,10 @@ WebDevToolsAgentImpl::WebDevToolsAgentImpl(
     , m_tracingAgent(nullptr)
     , m_pageRuntimeAgent(nullptr)
     , m_pageConsoleAgent(nullptr)
-    , m_agents(m_instrumentingAgents.get(), m_state.get())
+    , m_agents(m_instrumentingAgents.get())
     , m_deferredAgentsInitialized(false)
     , m_sessionId(0)
+    , m_stateMuted(false)
 {
     ASSERT(isMainThread());
     ASSERT(m_webLocalFrameImpl->frame());
@@ -340,13 +354,20 @@ WebDevToolsAgentImpl::WebDevToolsAgentImpl(
     long processId = Platform::current()->getUniqueIdForProcess();
     ASSERT(processId > 0);
     IdentifiersFactory::setProcessId(processId);
-    InjectedScriptManager* injectedScriptManager = m_injectedScriptManager.get();
 
-    OwnPtrWillBeRawPtr<InspectorInspectorAgent> inspectorAgentPtr(InspectorInspectorAgent::create(injectedScriptManager));
+    ClientMessageLoopAdapter::ensureMainThreadDebuggerCreated(m_client);
+    MainThreadDebugger* mainThreadDebugger = MainThreadDebugger::instance();
+
+    OwnPtrWillBeRawPtr<InspectorInspectorAgent> inspectorAgentPtr(InspectorInspectorAgent::create());
     m_inspectorAgent = inspectorAgentPtr.get();
     m_agents.append(inspectorAgentPtr.release());
 
-    OwnPtrWillBeRawPtr<InspectorDOMAgent> domAgentPtr(InspectorDOMAgent::create(m_inspectedFrames.get(), injectedScriptManager, m_overlay.get()));
+    OwnPtrWillBeRawPtr<PageRuntimeAgent> pageRuntimeAgentPtr(PageRuntimeAgent::create(this, mainThreadDebugger->debugger(), m_inspectedFrames.get()));
+    m_pageRuntimeAgent = pageRuntimeAgentPtr.get();
+    m_agents.append(pageRuntimeAgentPtr.release());
+
+    v8::Isolate* isolate = V8PerIsolateData::mainThreadIsolate();
+    OwnPtrWillBeRawPtr<InspectorDOMAgent> domAgentPtr(InspectorDOMAgent::create(isolate, m_inspectedFrames.get(), m_pageRuntimeAgent->v8Agent(), m_overlay.get()));
     m_domAgent = domAgentPtr.get();
     m_agents.append(domAgentPtr.release());
 
@@ -354,16 +375,7 @@ WebDevToolsAgentImpl::WebDevToolsAgentImpl(
     m_layerTreeAgent = layerTreeAgentPtr.get();
     m_agents.append(layerTreeAgentPtr.release());
 
-    m_agents.append(InspectorTimelineAgent::create());
-
-    ClientMessageLoopAdapter::ensureMainThreadDebuggerCreated(m_client);
-    MainThreadDebugger* mainThreadDebugger = MainThreadDebugger::instance();
-
-    OwnPtrWillBeRawPtr<PageRuntimeAgent> pageRuntimeAgentPtr(PageRuntimeAgent::create(injectedScriptManager, this, mainThreadDebugger->debugger(), m_inspectedFrames.get()));
-    m_pageRuntimeAgent = pageRuntimeAgentPtr.get();
-    m_agents.append(pageRuntimeAgentPtr.release());
-
-    OwnPtrWillBeRawPtr<PageConsoleAgent> pageConsoleAgentPtr = PageConsoleAgent::create(injectedScriptManager, m_domAgent, m_inspectedFrames.get());
+    OwnPtrWillBeRawPtr<PageConsoleAgent> pageConsoleAgentPtr = PageConsoleAgent::create(m_pageRuntimeAgent->v8Agent(), m_domAgent, m_inspectedFrames.get());
     m_pageConsoleAgent = pageConsoleAgentPtr.get();
 
     OwnPtrWillBeRawPtr<InspectorWorkerAgent> workerAgentPtr = InspectorWorkerAgent::create(pageConsoleAgentPtr.get());
@@ -374,8 +386,6 @@ WebDevToolsAgentImpl::WebDevToolsAgentImpl(
 
     m_agents.append(workerAgentPtr.release());
     m_agents.append(pageConsoleAgentPtr.release());
-
-    m_agents.append(ScreenOrientationInspectorAgent::create(*m_webLocalFrameImpl->frame()));
 }
 
 WebDevToolsAgentImpl::~WebDevToolsAgentImpl()
@@ -411,9 +421,7 @@ DEFINE_TRACE(WebDevToolsAgentImpl)
 {
     visitor->trace(m_webLocalFrameImpl);
     visitor->trace(m_instrumentingAgents);
-    visitor->trace(m_injectedScriptManager);
     visitor->trace(m_resourceContentLoader);
-    visitor->trace(m_state);
     visitor->trace(m_overlay);
     visitor->trace(m_inspectedFrames);
     visitor->trace(m_inspectorAgent);
@@ -424,7 +432,6 @@ DEFINE_TRACE(WebDevToolsAgentImpl)
     visitor->trace(m_tracingAgent);
     visitor->trace(m_pageRuntimeAgent);
     visitor->trace(m_pageConsoleAgent);
-    visitor->trace(m_inspectorBackendDispatcher);
     visitor->trace(m_agents);
 }
 
@@ -434,7 +441,6 @@ void WebDevToolsAgentImpl::willBeDestroyed()
     ASSERT(m_inspectedFrames->root()->view());
 
     detach();
-    m_injectedScriptManager->disconnect();
     m_resourceContentLoader->dispose();
     m_agents.discardAgents();
     m_instrumentingAgents->reset();
@@ -446,8 +452,6 @@ void WebDevToolsAgentImpl::initializeDeferredAgents()
         return;
     m_deferredAgentsInitialized = true;
 
-    InjectedScriptManager* injectedScriptManager = m_injectedScriptManager.get();
-
     OwnPtrWillBeRawPtr<InspectorResourceAgent> resourceAgentPtr(InspectorResourceAgent::create(m_inspectedFrames.get()));
     m_resourceAgent = resourceAgentPtr.get();
     m_agents.append(resourceAgentPtr.release());
@@ -456,40 +460,32 @@ void WebDevToolsAgentImpl::initializeDeferredAgents()
     InspectorCSSAgent* cssAgent = cssAgentPtr.get();
     m_agents.append(cssAgentPtr.release());
 
-    m_agents.append(InspectorAnimationAgent::create(m_inspectedFrames.get(), m_domAgent, cssAgent, injectedScriptManager));
+    m_agents.append(InspectorAnimationAgent::create(m_inspectedFrames.get(), m_domAgent, cssAgent, m_pageRuntimeAgent->v8Agent()));
 
     m_agents.append(InspectorMemoryAgent::create());
 
     m_agents.append(InspectorApplicationCacheAgent::create(m_inspectedFrames.get()));
-    m_agents.append(InspectorFileSystemAgent::create(m_inspectedFrames.get()));
     m_agents.append(InspectorIndexedDBAgent::create(m_inspectedFrames.get()));
 
-    OwnPtrWillBeRawPtr<InspectorDebuggerAgent> debuggerAgentPtr(PageDebuggerAgent::create(MainThreadDebugger::instance(), m_inspectedFrames.get(), injectedScriptManager));
+    OwnPtrWillBeRawPtr<InspectorDebuggerAgent> debuggerAgentPtr(PageDebuggerAgent::create(MainThreadDebugger::instance(), m_inspectedFrames.get(), m_pageRuntimeAgent->v8Agent()));
     InspectorDebuggerAgent* debuggerAgent = debuggerAgentPtr.get();
     m_agents.append(debuggerAgentPtr.release());
 
-    m_agents.append(InspectorDOMDebuggerAgent::create(injectedScriptManager, m_domAgent, debuggerAgent->v8DebuggerAgent()));
-
-    m_agents.append(InspectorInputAgent::create(m_inspectedFrames.get()));
-
     v8::Isolate* isolate = V8PerIsolateData::mainThreadIsolate();
-    m_agents.append(InspectorProfilerAgent::create(isolate, m_overlay.get()));
 
-    m_agents.append(InspectorHeapProfilerAgent::create(isolate, injectedScriptManager));
+    m_agents.append(InspectorDOMDebuggerAgent::create(isolate, m_domAgent, m_pageRuntimeAgent->v8Agent(), debuggerAgent->v8Agent()));
+    m_agents.append(InspectorInputAgent::create(m_inspectedFrames.get()));
+    m_agents.append(InspectorProfilerAgent::create(MainThreadDebugger::instance()->debugger(), m_overlay.get()));
+    m_agents.append(InspectorHeapProfilerAgent::create(isolate, m_pageRuntimeAgent->v8Agent()));
 
-    OwnPtrWillBeRawPtr<InspectorPageAgent> pageAgentPtr(InspectorPageAgent::create(m_inspectedFrames.get(), m_overlay.get(), m_resourceContentLoader.get(), debuggerAgent));
+    OwnPtrWillBeRawPtr<InspectorPageAgent> pageAgentPtr(InspectorPageAgent::create(m_inspectedFrames.get(), this, m_resourceContentLoader.get(), debuggerAgent));
     m_pageAgent = pageAgentPtr.get();
     m_agents.append(pageAgentPtr.release());
 
-    m_pageConsoleAgent->setDebuggerAgent(debuggerAgent->v8DebuggerAgent());
+    m_pageConsoleAgent->setDebuggerAgent(debuggerAgent->v8Agent());
 
-    MainThreadDebugger* mainThreadDebugger = MainThreadDebugger::instance();
-    m_injectedScriptManager->injectedScriptHost()->init(
-        m_pageConsoleAgent.get(),
-        debuggerAgent->v8DebuggerAgent(),
-        bind<PassRefPtr<TypeBuilder::Runtime::RemoteObject>, PassRefPtr<JSONObject>>(&InspectorInspectorAgent::inspect, m_inspectorAgent.get()),
-        mainThreadDebugger->debugger(),
-        adoptPtr(new PageInjectedScriptHostClient()));
+    m_pageRuntimeAgent->v8Agent()->setClearConsoleCallback(bind<>(&InspectorConsoleAgent::clearAllMessages, m_pageConsoleAgent.get()));
+    m_pageRuntimeAgent->v8Agent()->setInspectObjectCallback(bind<PassOwnPtr<protocol::Runtime::RemoteObject>, PassRefPtr<protocol::DictionaryValue>>(&InspectorInspectorAgent::inspect, m_inspectorAgent.get()));
 
     if (m_overlay)
         m_overlay->init(cssAgent, debuggerAgent, m_domAgent.get());
@@ -512,15 +508,15 @@ void WebDevToolsAgentImpl::attach(const WebString& hostId, int sessionId)
     initializeDeferredAgents();
     m_resourceAgent->setHostId(hostId);
 
-    m_inspectorFrontend = adoptPtr(new InspectorFrontend(this));
+    m_inspectorFrontend = adoptPtr(new protocol::Frontend(this));
     // We can reconnect to existing front-end -> unmute state.
-    m_state->unmute();
+    m_stateMuted = false;
     m_agents.setFrontend(m_inspectorFrontend.get());
 
     InspectorInstrumentation::registerInstrumentingAgents(m_instrumentingAgents.get());
     InspectorInstrumentation::frontendCreated();
 
-    m_inspectorBackendDispatcher = InspectorBackendDispatcher::create(this);
+    m_inspectorBackendDispatcher = protocol::Dispatcher::create(this);
     m_agents.registerInDispatcher(m_inspectorBackendDispatcher.get());
 
     Platform::current()->currentThread()->addTaskObserver(this);
@@ -532,8 +528,7 @@ void WebDevToolsAgentImpl::reattach(const WebString& hostId, int sessionId, cons
         return;
 
     attach(hostId, sessionId);
-    m_state->loadFromCookie(savedState);
-    m_agents.restore();
+    m_agents.restore(savedState);
 }
 
 void WebDevToolsAgentImpl::detach()
@@ -548,7 +543,7 @@ void WebDevToolsAgentImpl::detach()
 
     // Destroying agents would change the state, but we don't want that.
     // Pre-disconnect state will be used to restore inspector agents.
-    m_state->mute();
+    m_stateMuted = true;
     m_agents.clearFrontend();
     m_inspectorFrontend.clear();
 
@@ -642,16 +637,29 @@ void WebDevToolsAgentImpl::inspectElementAt(const WebPoint& pointInRootFrame)
     m_domAgent->inspect(node);
 }
 
-void WebDevToolsAgentImpl::sendProtocolResponse(int sessionId, int callId, PassRefPtr<JSONObject> message)
+void WebDevToolsAgentImpl::failedToRequestDevTools()
+{
+    ClientMessageLoopAdapter::resumeForCreateWindow();
+}
+
+void WebDevToolsAgentImpl::sendProtocolResponse(int sessionId, int callId, PassRefPtr<protocol::DictionaryValue> message)
 {
     if (!m_attached)
         return;
     flushPendingProtocolNotifications();
-    m_client->sendProtocolMessage(sessionId, callId, message->toJSONString(), m_stateCookie);
-    m_stateCookie = String();
+    String stateToSend;
+    if (!m_stateMuted) {
+        stateToSend = m_agents.state();
+        if (stateToSend == m_stateCookie)
+            stateToSend = String();
+        else
+            m_stateCookie = stateToSend;
+    }
+
+    m_client->sendProtocolMessage(sessionId, callId, message->toJSONString(), stateToSend);
 }
 
-void WebDevToolsAgentImpl::sendProtocolNotification(PassRefPtr<JSONObject> message)
+void WebDevToolsAgentImpl::sendProtocolNotification(PassRefPtr<protocol::DictionaryValue> message)
 {
     if (!m_attached)
         return;
@@ -663,14 +671,33 @@ void WebDevToolsAgentImpl::flush()
     flushPendingProtocolNotifications();
 }
 
-void WebDevToolsAgentImpl::updateInspectorStateCookie(const String& state)
-{
-    m_stateCookie = state;
-}
-
 void WebDevToolsAgentImpl::resumeStartup()
 {
+    // If we've paused for createWindow, handle it ourselves.
+    if (ClientMessageLoopAdapter::resumeForCreateWindow())
+        return;
+    // Otherwise, pass to the client (embedded workers do it differently).
     m_client->resumeStartup();
+}
+
+void WebDevToolsAgentImpl::pageLayoutInvalidated(bool resized)
+{
+    if (m_overlay)
+        m_overlay->pageLayoutInvalidated(resized);
+}
+
+void WebDevToolsAgentImpl::setPausedInDebuggerMessage(const String& message)
+{
+    if (m_overlay)
+        m_overlay->setPausedInDebuggerMessage(message);
+}
+
+void WebDevToolsAgentImpl::waitForCreateWindow(LocalFrame* frame)
+{
+    if (!m_attached)
+        return;
+    if (m_client->requestDevToolsForFrame(WebLocalFrameImpl::fromFrame(frame)))
+        ClientMessageLoopAdapter::pauseForCreateWindow(m_webLocalFrameImpl);
 }
 
 void WebDevToolsAgentImpl::evaluateInWebInspector(long callId, const WebString& script)
@@ -724,13 +751,13 @@ void WebDevToolsAgent::interruptAndDispatch(int sessionId, MessageDescriptor* ra
 bool WebDevToolsAgent::shouldInterruptForMessage(const WebString& message)
 {
     String commandName;
-    if (!InspectorBackendDispatcher::getCommandName(message, &commandName))
+    if (!protocol::Dispatcher::getCommandName(message, &commandName))
         return false;
-    return commandName == InspectorBackendDispatcher::commandName(InspectorBackendDispatcher::kDebugger_pauseCmd)
-        || commandName == InspectorBackendDispatcher::commandName(InspectorBackendDispatcher::kDebugger_setBreakpointCmd)
-        || commandName == InspectorBackendDispatcher::commandName(InspectorBackendDispatcher::kDebugger_setBreakpointByUrlCmd)
-        || commandName == InspectorBackendDispatcher::commandName(InspectorBackendDispatcher::kDebugger_removeBreakpointCmd)
-        || commandName == InspectorBackendDispatcher::commandName(InspectorBackendDispatcher::kDebugger_setBreakpointsActiveCmd);
+    return commandName == "Debugger.pause"
+        || commandName == "Debugger.setBreakpoint"
+        || commandName == "Debugger.setBreakpointByUrl"
+        || commandName == "Debugger.removeBreakpoint"
+        || commandName == "Debugger.setBreakpointsActive";
 }
 
 } // namespace blink

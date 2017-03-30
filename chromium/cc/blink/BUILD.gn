@@ -13,18 +13,6 @@ component("blink") {
     "context_provider_web_context.h",
     "scrollbar_impl.cc",
     "scrollbar_impl.h",
-    "web_animation_curve_common.cc",
-    "web_animation_curve_common.h",
-    "web_animation_impl.cc",
-    "web_animation_impl.h",
-    "web_compositor_animation_player_impl.cc",
-    "web_compositor_animation_player_impl.h",
-    "web_compositor_animation_timeline_impl.cc",
-    "web_compositor_animation_timeline_impl.h",
-    "web_compositor_mutable_state_impl.cc",
-    "web_compositor_mutable_state_impl.h",
-    "web_compositor_mutable_state_provider_impl.cc",
-    "web_compositor_mutable_state_provider_impl.h",
     "web_compositor_support_impl.cc",
     "web_compositor_support_impl.h",
     "web_content_layer_impl.cc",
@@ -35,28 +23,16 @@ component("blink") {
     "web_external_bitmap_impl.h",
     "web_external_texture_layer_impl.cc",
     "web_external_texture_layer_impl.h",
-    "web_filter_animation_curve_impl.cc",
-    "web_filter_animation_curve_impl.h",
-    "web_filter_operations_impl.cc",
-    "web_filter_operations_impl.h",
-    "web_float_animation_curve_impl.cc",
-    "web_float_animation_curve_impl.h",
     "web_image_layer_impl.cc",
     "web_image_layer_impl.h",
     "web_layer_impl.cc",
     "web_layer_impl.h",
     "web_layer_impl_fixed_bounds.cc",
     "web_layer_impl_fixed_bounds.h",
-    "web_scroll_offset_animation_curve_impl.cc",
-    "web_scroll_offset_animation_curve_impl.h",
     "web_scrollbar_layer_impl.cc",
     "web_scrollbar_layer_impl.h",
     "web_to_cc_animation_delegate_adapter.cc",
     "web_to_cc_animation_delegate_adapter.h",
-    "web_transform_animation_curve_impl.cc",
-    "web_transform_animation_curve_impl.h",
-    "web_transform_operations_impl.cc",
-    "web_transform_operations_impl.h",
   ]
 
   defines = [ "CC_BLINK_IMPLEMENTATION" ]
@@ -70,7 +46,7 @@ component("blink") {
     "//base/third_party/dynamic_annotations",
     "//cc",
     "//gpu",
-    "//third_party/WebKit/public:blink",
+    "//third_party/WebKit/public:blink_for_unittests",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
@@ -81,10 +57,6 @@ component("blink") {
 if (!is_mac) {
   test("cc_blink_unittests") {
     sources = [
-      "web_animation_unittest.cc",
-      "web_compositor_animation_player_unittest.cc",
-      "web_compositor_mutable_state_impl_unittest.cc",
-      "web_float_animation_curve_unittest.cc",
       "web_layer_impl_fixed_bounds_unittest.cc",
 
       # Setup.

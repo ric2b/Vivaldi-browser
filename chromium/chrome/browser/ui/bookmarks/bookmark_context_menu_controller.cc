@@ -8,7 +8,6 @@
 
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
-#include "base/prefs/pref_service.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
@@ -28,6 +27,7 @@
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/managed/managed_bookmark_service.h"
+#include "components/prefs/pref_service.h"
 #include "components/undo/bookmark_undo_service.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/user_metrics.h"
@@ -111,10 +111,7 @@ void BookmarkContextMenuController::BuildMenu() {
   AddSeparator();
   AddItem(IDC_BOOKMARK_MANAGER, IDS_BOOKMARK_MANAGER);
   // Use the native host desktop type in tests.
-  if (chrome::IsAppsShortcutEnabled(
-          profile_,
-          browser_ ? browser_->host_desktop_type()
-                   : chrome::HOST_DESKTOP_TYPE_NATIVE)) {
+  if (chrome::IsAppsShortcutEnabled(profile_)) {
     AddCheckboxItem(IDC_BOOKMARK_BAR_SHOW_APPS_SHORTCUT,
                     IDS_BOOKMARK_BAR_SHOW_APPS_SHORTCUT);
   }

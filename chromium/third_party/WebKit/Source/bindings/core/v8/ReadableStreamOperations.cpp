@@ -6,83 +6,90 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/V8BindingMacros.h"
+#include "bindings/core/v8/ToV8.h"
+#include "bindings/core/v8/V8ScriptRunner.h"
+#include "core/streams/UnderlyingSourceBase.h"
 
 namespace blink {
 
-namespace {
-
-v8::MaybeLocal<v8::Value> call(ScriptState* scriptState, const char* name, size_t numArgs, v8::Local<v8::Value>* args)
+ScriptValue ReadableStreamOperations::createReadableStream(ScriptState* scriptState, UnderlyingSourceBase* underlyingSource, ScriptValue strategy)
 {
-    v8::Isolate* isolate = scriptState->isolate();
-    v8::Local<v8::Context> context = scriptState->context();
-    v8::Local<v8::Value> undefined = v8::Undefined(isolate);
-    v8::Local<v8::Value> functionValue = scriptState->getFromExtrasExports(name).v8Value();
-    ASSERT(!functionValue.IsEmpty() && functionValue->IsFunction());
-    v8::Local<v8::Function> function = functionValue.As<v8::Function>();
-    return function->Call(context, undefined, numArgs, args);
+    ScriptState::Scope scope(scriptState);
+
+    v8::Local<v8::Value> jsUnderlyingSource = toV8(underlyingSource, scriptState);
+    v8::Local<v8::Value> jsStrategy = strategy.v8Value();
+    v8::Local<v8::Value> args[] = { jsUnderlyingSource, jsStrategy };
+    v8::Local<v8::Value> jsStream = V8ScriptRunner::callExtraOrCrash(scriptState, "createReadableStreamWithExternalController", args);
+
+    return ScriptValue(scriptState, jsStream);
 }
 
-template <size_t N>
-v8::MaybeLocal<v8::Value> call(ScriptState* scriptState, const char* name, v8::Local<v8::Value>(&args)[N])
+ScriptValue ReadableStreamOperations::createCountQueuingStrategy(ScriptState* scriptState, size_t highWaterMark)
 {
-    return call(scriptState, name, N, args);
+    ScriptState::Scope scope(scriptState);
+
+    v8::Local<v8::Value> args[] = { v8::Number::New(scriptState->isolate(), highWaterMark) };
+    v8::Local<v8::Value> jsStrategy = V8ScriptRunner::callExtraOrCrash(scriptState, "createBuiltInCountQueuingStrategy", args);
+
+    return ScriptValue(scriptState, jsStrategy);
 }
 
-} // namespace
-
-ScriptValue ReadableStreamOperations::getReader(ScriptState* scriptState, v8::Local<v8::Value> stream, ExceptionState& es)
+ScriptValue ReadableStreamOperations::getReader(ScriptState* scriptState, ScriptValue stream, ExceptionState& es)
 {
     ASSERT(isReadableStream(scriptState, stream));
 
     v8::TryCatch block(scriptState->isolate());
-    v8::Local<v8::Value> args[] = { stream };
-    ScriptValue result(scriptState, call(scriptState, "AcquireReadableStreamReader", args));
+    v8::Local<v8::Value> args[] = { stream.v8Value() };
+    ScriptValue result(scriptState, V8ScriptRunner::callExtra(scriptState, "AcquireReadableStreamReader", args));
     if (block.HasCaught())
         es.rethrowV8Exception(block.Exception());
     return result;
 }
 
-bool ReadableStreamOperations::isReadableStream(ScriptState* scriptState, v8::Local<v8::Value> value)
+bool ReadableStreamOperations::isReadableStream(ScriptState* scriptState, ScriptValue value)
 {
-    if (!value->IsObject())
+    ASSERT(!value.isEmpty());
+
+    if (!value.isObject())
         return false;
 
-    v8::Local<v8::Value> args[] = { value };
-    return v8CallOrCrash(call(scriptState, "IsReadableStream", args))->ToBoolean()->Value();
+    v8::Local<v8::Value> args[] = { value.v8Value() };
+    return V8ScriptRunner::callExtraOrCrash(scriptState, "IsReadableStream", args)->ToBoolean()->Value();
 }
 
-bool ReadableStreamOperations::isDisturbed(ScriptState* scriptState, v8::Local<v8::Value> stream)
+bool ReadableStreamOperations::isDisturbed(ScriptState* scriptState, ScriptValue stream)
 {
     ASSERT(isReadableStream(scriptState, stream));
 
-    v8::Local<v8::Value> args[] = { stream };
-    return v8CallOrCrash(call(scriptState, "IsReadableStreamDisturbed", args))->ToBoolean()->Value();
+    v8::Local<v8::Value> args[] = { stream.v8Value() };
+    return V8ScriptRunner::callExtraOrCrash(scriptState, "IsReadableStreamDisturbed", args)->ToBoolean()->Value();
 }
 
-bool ReadableStreamOperations::isLocked(ScriptState* scriptState, v8::Local<v8::Value> stream)
+bool ReadableStreamOperations::isLocked(ScriptState* scriptState, ScriptValue stream)
 {
     ASSERT(isReadableStream(scriptState, stream));
 
-    v8::Local<v8::Value> args[] = { stream };
-    return v8CallOrCrash(call(scriptState, "IsReadableStreamLocked", args))->ToBoolean()->Value();
+    v8::Local<v8::Value> args[] = { stream.v8Value() };
+    return V8ScriptRunner::callExtraOrCrash(scriptState, "IsReadableStreamLocked", args)->ToBoolean()->Value();
 }
 
-bool ReadableStreamOperations::isReadableStreamReader(ScriptState* scriptState, v8::Local<v8::Value> value)
+bool ReadableStreamOperations::isReadableStreamReader(ScriptState* scriptState, ScriptValue value)
 {
-    if (!value->IsObject())
+    ASSERT(!value.isEmpty());
+
+    if (!value.isObject())
         return false;
 
-    v8::Local<v8::Value> args[] = { value };
-    return v8CallOrCrash(call(scriptState, "IsReadableStreamReader", args))->ToBoolean()->Value();
+    v8::Local<v8::Value> args[] = { value.v8Value() };
+    return V8ScriptRunner::callExtraOrCrash(scriptState, "IsReadableStreamReader", args)->ToBoolean()->Value();
 }
 
-ScriptPromise ReadableStreamOperations::read(ScriptState* scriptState, v8::Local<v8::Value> reader)
+ScriptPromise ReadableStreamOperations::read(ScriptState* scriptState, ScriptValue reader)
 {
     ASSERT(isReadableStreamReader(scriptState, reader));
 
-    v8::Local<v8::Value> args[] = { reader };
-    return ScriptPromise::cast(scriptState, v8CallOrCrash(call(scriptState, "ReadFromReadableStreamReader", args)));
+    v8::Local<v8::Value> args[] = { reader.v8Value() };
+    return ScriptPromise::cast(scriptState, V8ScriptRunner::callExtraOrCrash(scriptState, "ReadFromReadableStreamReader", args));
 }
 
 } // namespace blink

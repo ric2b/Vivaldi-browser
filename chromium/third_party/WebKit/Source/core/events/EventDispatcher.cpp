@@ -41,7 +41,7 @@
 
 namespace blink {
 
-bool EventDispatcher::dispatchEvent(Node& node, PassRefPtrWillBeRawPtr<EventDispatchMediator> mediator)
+DispatchEventResult EventDispatcher::dispatchEvent(Node& node, PassRefPtrWillBeRawPtr<EventDispatchMediator> mediator)
 {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("blink.debug"), "EventDispatcher::dispatchEvent");
     ASSERT(!EventDispatchForbiddenScope::isEventDispatchForbidden());
@@ -101,7 +101,7 @@ void EventDispatcher::dispatchSimulatedClick(Node& node, Event* underlyingEvent,
     nodesDispatchingSimulatedClicks->remove(&node);
 }
 
-bool EventDispatcher::dispatch()
+DispatchEventResult EventDispatcher::dispatch()
 {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("blink.debug"), "EventDispatcher::dispatch");
 
@@ -111,7 +111,7 @@ bool EventDispatcher::dispatch()
 #endif
     if (event().eventPath().isEmpty()) {
         // eventPath() can be empty if event path is shrinked by relataedTarget retargeting.
-        return true;
+        return DispatchEventResult::NotCanceled;
     }
     m_event->eventPath().ensureWindowEventContext();
 
@@ -134,7 +134,7 @@ bool EventDispatcher::dispatch()
     m_event->setCurrentTarget(nullptr);
     TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "UpdateCounters", TRACE_EVENT_SCOPE_THREAD, "data", InspectorUpdateCountersEvent::data());
 
-    return !m_event->defaultPrevented();
+    return EventTarget::dispatchEventResult(*m_event);
 }
 
 inline EventDispatchContinuation EventDispatcher::dispatchEventPreProcess(void*& preDispatchEventHandlerResult)
@@ -202,9 +202,16 @@ inline void EventDispatcher::dispatchEventPostProcess(void* preDispatchEventHand
     // Pass the data from the preDispatchEventHandler to the postDispatchEventHandler.
     m_node->postDispatchEventHandler(m_event.get(), preDispatchEventHandlerResult);
 
+    bool isClick = m_event->isMouseEvent() && toMouseEvent(*m_event).type() == EventTypeNames::click;
+    if (isClick) {
+        // Fire an accessibility event indicating a node was clicked on.  This is safe if m_event->target()->toNode() returns null.
+        if (AXObjectCache* cache = m_node->document().existingAXObjectCache())
+            cache->handleClicked(m_event->target()->toNode());
+    }
+
     // The DOM Events spec says that events dispatched by JS (other than "click")
     // should not have their default handlers invoked.
-    bool isTrustedOrClick = !RuntimeEnabledFeatures::trustedEventsDefaultActionEnabled() || m_event->isTrusted() || (m_event->isMouseEvent() && toMouseEvent(*m_event).type() == EventTypeNames::click);
+    bool isTrustedOrClick = !RuntimeEnabledFeatures::trustedEventsDefaultActionEnabled() || m_event->isTrusted() || isClick;
 
     // Call default event handlers. While the DOM does have a concept of preventing
     // default handling, the detail of which handlers are called is an internal
@@ -231,4 +238,4 @@ inline void EventDispatcher::dispatchEventPostProcess(void* preDispatchEventHand
     }
 }
 
-}
+} // namespace blink

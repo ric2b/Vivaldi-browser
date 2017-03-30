@@ -65,8 +65,8 @@ def get_sanitizer_env(cmd, asan, lsan, msan, tsan):
 
   # TODO(glider): remove the symbolizer path once
   # https://code.google.com/p/address-sanitizer/issues/detail?id=134 is fixed.
-  symbolizer_path = os.path.abspath(os.path.join(ROOT_DIR, 'third_party',
-      'llvm-build', 'Release+Asserts', 'bin', 'llvm-symbolizer'))
+  symbolizer_path = os.path.join(ROOT_DIR,
+      'third_party', 'llvm-build', 'Release+Asserts', 'bin', 'llvm-symbolizer')
 
   if lsan or tsan:
     # LSan is not sandbox-compatible, so we can use online symbolization. In
@@ -125,7 +125,8 @@ def get_sanitizer_env(cmd, asan, lsan, msan, tsan):
 
 def get_sanitizer_symbolize_command(json_path=None, executable_path=None):
   """Construct the command to invoke offline symbolization script."""
-  script_path = '../tools/valgrind/asan/asan_symbolize.py'
+  script_path = os.path.join(
+      ROOT_DIR, 'tools', 'valgrind', 'asan', 'asan_symbolize.py')
   cmd = [sys.executable, script_path]
   if json_path is not None:
     cmd.append('--test-summary-json-file=%s' % json_path)
@@ -155,11 +156,13 @@ def symbolize_snippets_in_json(cmd, env):
     p = subprocess.Popen(symbolize_command, stderr=subprocess.PIPE, env=env)
     (_, stderr) = p.communicate()
   except OSError as e:
-      print 'Exception while symbolizing snippets: %s' % e
+    print >> sys.stderr, 'Exception while symbolizing snippets: %s' % e
+    raise
 
   if p.returncode != 0:
-    print "Error: failed to symbolize snippets in JSON:\n"
-    print stderr
+    print >> sys.stderr, "Error: failed to symbolize snippets in JSON:\n"
+    print >> sys.stderr, stderr
+    raise subprocess.CalledProcessError(p.returncode, symbolize_command)
 
 
 def run_executable(cmd, env):

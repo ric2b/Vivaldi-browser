@@ -88,7 +88,7 @@ class SyncService : public DataTypeEncryptionHandler {
   // that sync is currently running (due to delayed startup, unrecoverable
   // errors, or shutdown). See IsSyncActive below for checking whether sync
   // is actually running.
-  virtual bool HasSyncSetupCompleted() const = 0;
+  virtual bool IsFirstSetupComplete() const = 0;
 
   // Whether sync is allowed to start. Command line flags, platform-level
   // overrides, and account-level overrides are examples of reasons this
@@ -99,8 +99,6 @@ class SyncService : public DataTypeEncryptionHandler {
   // an initial configuration has successfully completed, although there may
   // be datatype specific, auth, or other transient errors. To see which
   // datetypes are actually syncing, see GetActiveTypes() below.
-  // Note that if sync is in backup or rollback mode, IsSyncActive() will be
-  // false.
   virtual bool IsSyncActive() const = 0;
 
   // Triggers a GetUpdates call for the specified |types|, pulling any new data
@@ -149,7 +147,7 @@ class SyncService : public DataTypeEncryptionHandler {
 
   // The user requests that sync start. This only actually starts sync if
   // IsSyncAllowed is true and the user is signed in. Once sync starts,
-  // other things such as HasSyncSetupCompleted being false can still prevent
+  // other things such as IsFirstSetupComplete being false can still prevent
   // it from moving into the "active" state.
   virtual void RequestStart() = 0;
 
@@ -166,7 +164,7 @@ class SyncService : public DataTypeEncryptionHandler {
                                     syncer::ModelTypeSet chosen_types) = 0;
 
   // Called whe Sync has been setup by the user and can be started.
-  virtual void SetSyncSetupCompleted() = 0;
+  virtual void SetFirstSetupComplete() = 0;
 
   // Returns true if initial sync setup is in progress (does not return true
   // if the user is customizing sync after already completing setup once).

@@ -65,6 +65,11 @@
             "description": "The <a href='manifest/version'>version</a> of this extension, app, or theme.",
             "type": "string"
           },
+          "versionName": {
+            "description": "The <a href='manifest/version#version_name'>version name</a> of this extension, app, or theme if the manifest specified one.",
+            "type": "string",
+            "optional": true
+          },
           "mayDisable": {
             "description": "Whether this extension can be disabled or uninstalled by the user.",
             "type": "boolean"
@@ -259,7 +264,7 @@
       },
       {
         "name": "setEnabled",
-        "description": "Enables or disables an app or extension.",
+        "description": "Enables or disables an app or extension. In most cases this function must be called in the context of a user gesture (e.g. an onclick handler for a button), and may present the user with a native confirmation UI as a way of preventing abuse.",
         "parameters": [
           {
             "name": "id",

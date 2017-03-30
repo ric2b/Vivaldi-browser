@@ -76,6 +76,13 @@ public class NetworkChangeNotifier {
     }
 
     @CalledByNative
+    public int getCurrentConnectionSubtype() {
+        return mAutoDetector == null
+                ? ConnectionSubtype.SUBTYPE_UNKNOWN
+                : mAutoDetector.getCurrentConnectionSubtype(mAutoDetector.getCurrentNetworkState());
+    }
+
+    @CalledByNative
     public double getCurrentMaxBandwidthInMbps() {
         return mCurrentMaxBandwidth;
     }
@@ -415,7 +422,6 @@ public class NetworkChangeNotifier {
      */
     public static boolean isOnline() {
         int connectionType = getInstance().getCurrentConnectionType();
-        return connectionType != ConnectionType.CONNECTION_UNKNOWN
-                && connectionType != ConnectionType.CONNECTION_NONE;
+        return connectionType != ConnectionType.CONNECTION_NONE;
     }
 }

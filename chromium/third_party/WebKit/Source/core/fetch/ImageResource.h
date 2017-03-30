@@ -24,7 +24,7 @@
 #define ImageResource_h
 
 #include "core/CoreExport.h"
-#include "core/fetch/ResourcePtr.h"
+#include "core/fetch/Resource.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/IntSizeHash.h"
 #include "platform/geometry/LayoutSize.h"
@@ -44,15 +44,23 @@ class SecurityOrigin;
 
 class CORE_EXPORT ImageResource final : public Resource, public ImageObserver {
     friend class MemoryCache;
-
+    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(ImageResource);
 public:
     using ClientType = ImageResourceClient;
 
-    static ResourcePtr<ImageResource> fetch(FetchRequest&, ResourceFetcher*);
+    static PassRefPtrWillBeRawPtr<ImageResource> fetch(FetchRequest&, ResourceFetcher*);
 
-    ImageResource(blink::Image*);
+    static PassRefPtrWillBeRawPtr<ImageResource> create(blink::Image* image)
+    {
+        return adoptRefWillBeNoop(new ImageResource(image));
+    }
+
     // Exposed for testing
-    ImageResource(const ResourceRequest&, blink::Image*);
+    static PassRefPtrWillBeRawPtr<ImageResource> create(const ResourceRequest& request, blink::Image* image)
+    {
+        return adoptRefWillBeNoop(new ImageResource(request, image));
+    }
+
     ~ImageResource() override;
 
     void load(ResourceFetcher*, const ResourceLoaderOptions&) override;
@@ -67,8 +75,7 @@ public:
     bool canRender() { return !errorOccurred() && !imageSize(DoNotRespectImageOrientation, 1).isEmpty(); }
 
     bool usesImageContainerSize() const;
-    bool imageHasRelativeWidth() const;
-    bool imageHasRelativeHeight() const;
+    bool imageHasRelativeSize() const;
     // The device pixel ratio we got from the server for this image, or 1.0.
     float devicePixelRatioHeaderValue() const { return m_devicePixelRatioHeaderValue; }
     bool hasDevicePixelRatioHeaderValue() const { return m_hasDevicePixelRatioHeaderValue; }
@@ -79,11 +86,15 @@ public:
     };
     // This method takes a zoom multiplier that can be used to increase the natural size of the image by the zoom.
     LayoutSize imageSize(RespectImageOrientationEnum shouldRespectImageOrientation, float multiplier, SizeType = IntrinsicSize);
-    void computeIntrinsicDimensions(Length& intrinsicWidth, Length& intrinsicHeight, FloatSize& intrinsicRatio);
+    void computeIntrinsicDimensions(FloatSize& intrinsicSize, FloatSize& intrinsicRatio);
 
     bool isAccessAllowed(SecurityOrigin*);
 
     void updateImageAnimationPolicy();
+
+    // If this ImageResource has the Lo-Fi response headers, reload it with
+    // the Lo-Fi state set to off and bypassing the cache.
+    void reloadIfLoFi(ResourceFetcher*);
 
     void didAddClient(ResourceClient*) override;
     void didRemoveClient(ResourceClient*) override;
@@ -99,7 +110,7 @@ public:
     bool shouldIgnoreHTTPStatusCodeErrors() const override { return true; }
 
     bool isImage() const override { return true; }
-    bool stillNeedsLoad() const override { return !errorOccurred() && status() == Unknown && !isLoading(); }
+    bool stillNeedsLoad() const override { return !errorOccurred() && getStatus() == Unknown && !isLoading(); }
 
     // ImageObserver
     void decodedSizeChanged(const blink::Image*, int delta) override;
@@ -109,20 +120,25 @@ public:
     void animationAdvanced(const blink::Image*) override;
     void changedInRect(const blink::Image*, const IntRect&) override;
 
+    DECLARE_VIRTUAL_TRACE();
+
 protected:
     bool isSafeToUnlock() const override;
     void destroyDecodedDataIfPossible() override;
     void destroyDecodedDataForFailedRevalidation() override;
 
 private:
+    explicit ImageResource(blink::Image*);
+    ImageResource(const ResourceRequest&, blink::Image*);
+
     class ImageResourceFactory : public ResourceFactory {
     public:
         ImageResourceFactory()
             : ResourceFactory(Resource::Image) { }
 
-        Resource* create(const ResourceRequest& request, const String&) const override
+        PassRefPtrWillBeRawPtr<Resource> create(const ResourceRequest& request, const String&) const override
         {
-            return new ImageResource(request);
+            return adoptRefWillBeNoop(new ImageResource(request));
         }
     };
     ImageResource(const ResourceRequest&);
@@ -145,6 +161,6 @@ private:
 
 DEFINE_RESOURCE_TYPE_CASTS(Image);
 
-}
+} // namespace blink
 
 #endif

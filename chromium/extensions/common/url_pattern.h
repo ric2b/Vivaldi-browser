@@ -91,6 +91,7 @@ class URLPattern {
   URLPattern(int valid_schemes, const std::string& pattern);
 
   URLPattern();
+  URLPattern(const URLPattern& other);
   ~URLPattern();
 
   bool operator<(const URLPattern& other) const;

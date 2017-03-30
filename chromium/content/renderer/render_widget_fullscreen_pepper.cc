@@ -370,8 +370,7 @@ void RenderWidgetFullscreenPepper::Close() {
   RenderWidget::Close();
 }
 
-void RenderWidgetFullscreenPepper::OnResize(
-    const ViewMsg_Resize_Params& params) {
+void RenderWidgetFullscreenPepper::OnResize(const ResizeParams& params) {
   if (layer_)
     layer_->setBounds(blink::WebSize(params.new_size));
   RenderWidget::OnResize(params);
@@ -385,11 +384,9 @@ GURL RenderWidgetFullscreenPepper::GetURLForGraphicsContext3D() {
   return active_url_;
 }
 
-void RenderWidgetFullscreenPepper::SetDeviceScaleFactor(
-    float device_scale_factor) {
-  RenderWidget::SetDeviceScaleFactor(device_scale_factor);
+void RenderWidgetFullscreenPepper::OnDeviceScaleFactorChanged() {
   if (compositor_)
-    compositor_->setDeviceScaleFactor(device_scale_factor);
+    compositor_->setDeviceScaleFactor(device_scale_factor_);
 }
 
 }  // namespace content

@@ -24,7 +24,6 @@
 namespace cc {
 
 class DamageTracker;
-class DelegatedRendererLayerImpl;
 class Occlusion;
 class RenderPassId;
 class RenderPassSink;
@@ -109,11 +108,6 @@ class CC_EXPORT RenderSurfaceImpl {
   void SetContentRect(const gfx::Rect& content_rect);
   gfx::Rect content_rect() const { return content_rect_; }
 
-  void SetContentRectFromPropertyTrees(const gfx::Rect& content_rect);
-  gfx::Rect content_rect_from_property_trees() const {
-    return content_rect_from_property_trees_;
-  }
-
   void SetAccumulatedContentRect(const gfx::Rect& content_rect);
   gfx::Rect accumulated_content_rect() const {
     return accumulated_content_rect_;
@@ -127,7 +121,6 @@ class CC_EXPORT RenderSurfaceImpl {
   }
 
   LayerImplList& layer_list() { return layer_list_; }
-  void AddContributingDelegatedRenderPassLayer(LayerImpl* layer);
   void ClearLayerLists();
 
   int OwningLayerId() const;
@@ -155,14 +148,12 @@ class CC_EXPORT RenderSurfaceImpl {
   int TransformTreeIndex() const;
   int ClipTreeIndex() const;
   int EffectTreeIndex() const;
-  int TargetEffectTreeIndex() const;
 
  private:
   LayerImpl* owning_layer_;
 
   // Uses this surface's space.
   gfx::Rect content_rect_;
-  gfx::Rect content_rect_from_property_trees_;
   // Is used to calculate the content rect from property trees.
   gfx::Rect accumulated_content_rect_;
   bool surface_property_changed_ : 1;
@@ -180,8 +171,6 @@ class CC_EXPORT RenderSurfaceImpl {
   gfx::Rect clip_rect_;
 
   LayerImplList layer_list_;
-  std::vector<DelegatedRendererLayerImpl*>
-      contributing_delegated_render_pass_layer_list_;
   Occlusion occlusion_in_content_space_;
 
   // The nearest ancestor target surface that will contain the contents of this

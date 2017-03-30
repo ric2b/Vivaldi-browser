@@ -25,20 +25,41 @@
 #define SVGPathBuilder_h
 
 #include "core/svg/SVGPathConsumer.h"
+#include "core/svg/SVGPathData.h"
+#include "platform/geometry/FloatPoint.h"
 
 namespace blink {
 
+class FloatSize;
 class Path;
 
 class SVGPathBuilder final : public SVGPathConsumer {
 public:
-    SVGPathBuilder(Path& path) : m_path(path), m_closed(true) { }
+    SVGPathBuilder(Path& path)
+        : m_path(path)
+        , m_lastCommand(PathSegUnknown)
+    { }
 
-private:
     void emitSegment(const PathSegmentData&) override;
 
+private:
+    void emitClose();
+    void emitMoveTo(const FloatPoint&);
+    void emitLineTo(const FloatPoint&);
+    void emitQuadTo(const FloatPoint&, const FloatPoint&);
+    void emitSmoothQuadTo(const FloatPoint&);
+    void emitCubicTo(const FloatPoint&, const FloatPoint&, const FloatPoint&);
+    void emitSmoothCubicTo(const FloatPoint&, const FloatPoint&);
+    void emitArcTo(const FloatPoint&, const FloatSize&, float, bool largeArc, bool sweep);
+
+    FloatPoint smoothControl(bool isSmooth) const;
+
     Path& m_path;
-    bool m_closed;
+
+    SVGPathSegType m_lastCommand;
+    FloatPoint m_subpathPoint;
+    FloatPoint m_currentPoint;
+    FloatPoint m_lastControlPoint;
 };
 
 } // namespace blink

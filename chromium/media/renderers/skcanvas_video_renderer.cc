@@ -349,12 +349,12 @@ void SkCanvasVideoRenderer::Paint(const scoped_refptr<VideoFrame>& video_frame,
     if (video_frame->HasTextures()) {
       DCHECK(context_3d.gr_context);
       DCHECK(gl);
-      if (media::VideoFrame::NumPlanes(video_frame->format()) == 1) {
-        last_image_ =
-            NewSkImageFromVideoFrameNative(video_frame.get(), context_3d);
-      } else {
+      if (media::VideoFrame::NumPlanes(video_frame->format()) == 3) {
         last_image_ =
             NewSkImageFromVideoFrameYUVTextures(video_frame.get(), context_3d);
+      } else {
+        last_image_ =
+            NewSkImageFromVideoFrameNative(video_frame.get(), context_3d);
       }
     } else {
       auto video_generator = new VideoImageGenerator(video_frame);
@@ -448,6 +448,62 @@ void SkCanvasVideoRenderer::Copy(const scoped_refptr<VideoFrame>& video_frame,
         SkXfermode::kSrc_Mode, media::VIDEO_ROTATION_0, context_3d);
 }
 
+namespace {
+
+// libyuv doesn't support 9- and 10-bit video frames yet. This function
+// creates a regular 8-bit video frame which we can give to libyuv.
+scoped_refptr<VideoFrame> DownShiftHighbitVideoFrame(
+    const VideoFrame* video_frame) {
+  VideoPixelFormat format;
+  int shift = 1;
+  switch (video_frame->format()) {
+    case PIXEL_FORMAT_YUV420P10:
+      shift = 2;
+    case PIXEL_FORMAT_YUV420P9:
+      format = PIXEL_FORMAT_I420;
+      break;
+    case PIXEL_FORMAT_YUV422P10:
+      shift = 2;
+    case PIXEL_FORMAT_YUV422P9:
+      format = PIXEL_FORMAT_YV16;
+      break;
+    case PIXEL_FORMAT_YUV444P10:
+      shift = 2;
+    case PIXEL_FORMAT_YUV444P9:
+      format = PIXEL_FORMAT_YV24;
+      break;
+
+    default:
+      NOTREACHED();
+      return nullptr;
+  }
+  scoped_refptr<VideoFrame> ret = VideoFrame::CreateFrame(
+      format, video_frame->coded_size(), video_frame->visible_rect(),
+      video_frame->natural_size(), video_frame->timestamp());
+
+  // Copy all metadata.
+  // (May be enough to copy color space)
+  base::DictionaryValue tmp;
+  video_frame->metadata()->MergeInternalValuesInto(&tmp);
+  ret->metadata()->MergeInternalValuesFrom(tmp);
+
+  for (int plane = VideoFrame::kYPlane; plane <= VideoFrame::kVPlane; ++plane) {
+    int width = ret->row_bytes(plane);
+    const uint16_t* src =
+        reinterpret_cast<const uint16_t*>(video_frame->data(plane));
+    uint8_t* dst = ret->data(plane);
+    for (int row = 0; row < video_frame->rows(plane); row++) {
+      for (int x = 0; x < width; x++) {
+        dst[x] = src[x] >> shift;
+      }
+      src += video_frame->stride(plane) / 2;
+      dst += ret->stride(plane);
+    }
+  }
+  return ret;
+}
+}
+
 // static
 void SkCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
     const VideoFrame* video_frame,
@@ -461,8 +517,6 @@ void SkCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
     NOTREACHED() << "Non YUV formats are not supported";
     return;
   }
-  DCHECK_EQ(video_frame->stride(VideoFrame::kUPlane),
-            video_frame->stride(VideoFrame::kVPlane));
 
   switch (video_frame->format()) {
     case PIXEL_FORMAT_YV12:
@@ -538,6 +592,20 @@ void SkCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
                           video_frame->visible_rect().width(),
                           video_frame->visible_rect().height());
       break;
+
+    case PIXEL_FORMAT_YUV420P9:
+    case PIXEL_FORMAT_YUV422P9:
+    case PIXEL_FORMAT_YUV444P9:
+    case PIXEL_FORMAT_YUV420P10:
+    case PIXEL_FORMAT_YUV422P10:
+    case PIXEL_FORMAT_YUV444P10: {
+      scoped_refptr<VideoFrame> temporary_frame =
+          DownShiftHighbitVideoFrame(video_frame);
+      ConvertVideoFrameToRGBPixels(temporary_frame.get(), rgb_pixels,
+                                   row_bytes);
+      break;
+    }
+
     case PIXEL_FORMAT_NV12:
     case PIXEL_FORMAT_NV21:
     case PIXEL_FORMAT_UYVY:
@@ -564,7 +632,6 @@ void SkCanvasVideoRenderer::CopyVideoFrameSingleTextureToGLTexture(
     bool flip_y) {
   DCHECK(video_frame);
   DCHECK(video_frame->HasTextures());
-  DCHECK_EQ(1u, VideoFrame::NumPlanes(video_frame->format()));
 
   const gpu::MailboxHolder& mailbox_holder = video_frame->mailbox_holder(0);
   DCHECK(mailbox_holder.texture_target == GL_TEXTURE_2D ||
@@ -584,7 +651,6 @@ void SkCanvasVideoRenderer::CopyVideoFrameSingleTextureToGLTexture(
   // "flip_y == false" means to keep the intrinsic orientation.
   gl->CopyTextureCHROMIUM(source_texture, texture, internal_format, type,
                           flip_y, premultiply_alpha, false);
-
   gl->DeleteTextures(1, &source_texture);
   gl->Flush();
 

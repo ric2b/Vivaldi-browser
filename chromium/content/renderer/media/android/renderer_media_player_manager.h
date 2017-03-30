@@ -40,7 +40,6 @@ class RendererMediaPlayerManager :
 
   // RenderFrameObserver overrides.
   bool OnMessageReceived(const IPC::Message& msg) override;
-  void WasHidden() override;
 
   // Initializes a MediaPlayerAndroid object in browser process.
   void Initialize(MediaPlayerHostMsg_Initialize_Type type,
@@ -49,7 +48,8 @@ class RendererMediaPlayerManager :
                   const GURL& first_party_for_cookies,
                   int demuxer_client_id,
                   const GURL& frame_url,
-                  bool allow_credentials) override;
+                  bool allow_credentials,
+                  int delegate_id) override;
 
   // Starts the player.
   void Start(int player_id) override;

@@ -55,7 +55,6 @@ class ManagePasswordsBubbleView : public LocationBarBubbleDelegateView {
   ManagePasswordsBubbleModel* model() { return &model_; }
 
  private:
-  class AccountChooserView;
   class AutoSigninView;
   class BlacklistedView;
   class ManageView;
@@ -65,7 +64,7 @@ class ManagePasswordsBubbleView : public LocationBarBubbleDelegateView {
   class WebContentMouseHandler;
 
   ManagePasswordsBubbleView(content::WebContents* web_contents,
-                            ManagePasswordsIconViews* anchor_view,
+                            views::View* anchor_view,
                             DisplayReason reason);
   ~ManagePasswordsBubbleView() override;
 
@@ -75,6 +74,8 @@ class ManagePasswordsBubbleView : public LocationBarBubbleDelegateView {
   void Close() override;
 
   // WidgetDelegate:
+  base::string16 GetWindowTitle() const override;
+  bool ShouldShowWindowTitle() const override;
   bool ShouldShowCloseButton() const override;
 
   // Refreshes the bubble's state: called to display a confirmation screen after
@@ -96,8 +97,6 @@ class ManagePasswordsBubbleView : public LocationBarBubbleDelegateView {
   static int auto_signin_toast_timeout_;
 
   ManagePasswordsBubbleModel model_;
-
-  ManagePasswordsIconViews* anchor_view_;
 
   views::View* initially_focused_view_;
 

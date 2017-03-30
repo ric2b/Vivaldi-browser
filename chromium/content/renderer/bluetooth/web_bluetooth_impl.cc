@@ -27,10 +27,14 @@ void WebBluetoothImpl::requestDevice(
   GetDispatcher()->requestDevice(frame_routing_id_, options, callbacks);
 }
 
-void WebBluetoothImpl::connectGATT(
+void WebBluetoothImpl::connect(
     const blink::WebString& device_id,
-    blink::WebBluetoothConnectGATTCallbacks* callbacks) {
-  GetDispatcher()->connectGATT(frame_routing_id_, device_id, callbacks);
+    blink::WebBluetoothRemoteGATTServerConnectCallbacks* callbacks) {
+  GetDispatcher()->connect(frame_routing_id_, device_id, callbacks);
+}
+
+void WebBluetoothImpl::disconnect(const blink::WebString& device_id) {
+  GetDispatcher()->disconnect(frame_routing_id_, device_id);
 }
 
 void WebBluetoothImpl::getPrimaryService(
@@ -43,10 +47,18 @@ void WebBluetoothImpl::getPrimaryService(
 
 void WebBluetoothImpl::getCharacteristic(
     const blink::WebString& service_instance_id,
-    const blink::WebString& characteristic_uuid,
+    const blink::WebString& characteristics_uuid,
     blink::WebBluetoothGetCharacteristicCallbacks* callbacks) {
   GetDispatcher()->getCharacteristic(frame_routing_id_, service_instance_id,
-                                     characteristic_uuid, callbacks);
+                                     characteristics_uuid, callbacks);
+}
+
+void WebBluetoothImpl::getCharacteristics(
+    const blink::WebString& service_instance_id,
+    const blink::WebString& characteristic_uuid,
+    blink::WebBluetoothGetCharacteristicsCallbacks* callbacks) {
+  GetDispatcher()->getCharacteristics(frame_routing_id_, service_instance_id,
+                                      characteristic_uuid, callbacks);
 }
 
 void WebBluetoothImpl::readValue(
@@ -66,7 +78,7 @@ void WebBluetoothImpl::writeValue(
 
 void WebBluetoothImpl::startNotifications(
     const blink::WebString& characteristic_instance_id,
-    blink::WebBluetoothGATTCharacteristic* characteristic,
+    blink::WebBluetoothRemoteGATTCharacteristic* characteristic,
     blink::WebBluetoothNotificationsCallbacks* callbacks) {
   GetDispatcher()->startNotifications(
       frame_routing_id_, characteristic_instance_id, characteristic, callbacks);
@@ -74,7 +86,7 @@ void WebBluetoothImpl::startNotifications(
 
 void WebBluetoothImpl::stopNotifications(
     const blink::WebString& characteristic_instance_id,
-    blink::WebBluetoothGATTCharacteristic* characteristic,
+    blink::WebBluetoothRemoteGATTCharacteristic* characteristic,
     blink::WebBluetoothNotificationsCallbacks* callbacks) {
   GetDispatcher()->stopNotifications(
       frame_routing_id_, characteristic_instance_id, characteristic, callbacks);
@@ -82,14 +94,14 @@ void WebBluetoothImpl::stopNotifications(
 
 void WebBluetoothImpl::characteristicObjectRemoved(
     const blink::WebString& characteristic_instance_id,
-    blink::WebBluetoothGATTCharacteristic* characteristic) {
+    blink::WebBluetoothRemoteGATTCharacteristic* characteristic) {
   GetDispatcher()->characteristicObjectRemoved(
       frame_routing_id_, characteristic_instance_id, characteristic);
 }
 
 void WebBluetoothImpl::registerCharacteristicObject(
     const blink::WebString& characteristic_instance_id,
-    blink::WebBluetoothGATTCharacteristic* characteristic) {
+    blink::WebBluetoothRemoteGATTCharacteristic* characteristic) {
   GetDispatcher()->registerCharacteristicObject(
       frame_routing_id_, characteristic_instance_id, characteristic);
 }

@@ -7,15 +7,19 @@
 
 #include <stdint.h>
 
+#include <set>
 #include <utility>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
+#include "base/task_runner.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "chrome/browser/memory/tab_stats.h"
@@ -24,12 +28,14 @@
 
 class BrowserList;
 class GURL;
+class TabStripModel;
 
 namespace base {
 class TickClock;
 }
 
 namespace content {
+class RenderProcessHost;
 class WebContents;
 }
 
@@ -78,6 +84,9 @@ class TabManager : public TabStripModelObserver {
   // thread.
   TabStatsList GetTabStats();
 
+  // Returns a sorted list of renderers, from most important to least important.
+  std::vector<content::RenderProcessHost*> GetOrderedRenderers();
+
   // Returns true if |contents| is currently discarded.
   bool IsTabDiscarded(content::WebContents* contents) const;
 
@@ -104,13 +113,42 @@ class TabManager : public TabStripModelObserver {
   void set_test_tick_clock(base::TickClock* test_tick_clock);
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest, ChildProcessNotifications);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, Comparator);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, DiscardedTabKeepsLastActiveTime);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, DiscardWebContentsAt);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest, InvalidOrEmptyURL);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, IsInternalPage);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest, OomPressureListener);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, ProtectRecentlyUsedTabs);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest, ProtectVideoTabs);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, ReloadDiscardedTabContextMenu);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, TabManagerBasics);
+
+  // The time that a renderer is given to react to a memory pressure
+  // notification before another renderer is also notified. This prevents all
+  // renderers from receiving and acting upon notifications simultaneously,
+  // which can quickly overload a system. Exposed for unittesting.
+  // NOTE: This value needs to be big enough to allow a process to get over the
+  // hump in responding to memory pressure, so there aren't multiple processes
+  // fighting for CPU and worse, temporary memory, while trying to free things
+  // up. Similarly, it shouldn't be too large otherwise it will take too long
+  // for the entire system to respond. Ideally, there would be a callback from a
+  // child process indicating that the message has been handled. In the meantime
+  // this is chosen to be sufficient to allow a worst-case V8+Oilpan GC to run,
+  // with a little slop.
+  enum : int { kRendererNotificationDelayInSeconds = 2 };
+
+  using MemoryPressureLevel = base::MemoryPressureListener::MemoryPressureLevel;
+
+  // A callback that returns the current memory pressure level.
+  using MemoryPressureLevelCallback = base::Callback<MemoryPressureLevel()>;
+
+  // Callback that notifies a |renderer| of the memory pressure at a given
+  // |level|. Provides a testing seam.
+  using RendererNotificationCallback = base::Callback<
+      void(const content::RenderProcessHost* /* renderer */,
+           MemoryPressureLevel /* level */)>;
 
   static void PurgeMemoryAndDiscardTab();
 
@@ -133,10 +171,14 @@ class TabManager : public TabStripModelObserver {
   // Returns the number of tabs open in all browser instances.
   int GetTabCount() const;
 
-  // Adds all the stats of the tabs in |browser_list| into |stats_list|. If
-  // |active_desktop| is true, consider its first window as being active.
-  void AddTabStats(BrowserList* browser_list,
-                   bool active_desktop,
+  // Adds all the stats of the tabs to |stats_list|.
+  void AddTabStats(TabStatsList* stats_list);
+
+  // Adds all the stats of the tabs in |tab_strip_model| into |stats_list|.
+  // If |active_model| is true, consider its first tab as being active.
+  void AddTabStats(const TabStripModel* model,
+                   bool is_app,
+                   bool active_model,
                    TabStatsList* stats_list);
 
   // Callback for when |update_timer_| fires. Takes care of executing the tasks
@@ -165,6 +207,9 @@ class TabManager : public TabStripModelObserver {
                         content::WebContents* new_contents,
                         int index,
                         int reason) override;
+  void TabInsertedAt(content::WebContents* contents,
+                     int index,
+                     bool foreground) override;
 
   // Returns true if the tab is currently playing audio or has played audio
   // recently, or if the tab is currently accessing the camera, microphone or
@@ -182,6 +227,10 @@ class TabManager : public TabStripModelObserver {
   // Returns either the system's clock or the test clock. See |test_tick_clock_|
   // for more details.
   base::TimeTicks NowTicks() const;
+
+  // Dispatches a memory pressure message to a single child process, and
+  // schedules another call to itself as long as memory pressure continues.
+  void DoChildProcessDispatch();
 
   // Timer to periodically update the stats of the renderers.
   base::RepeatingTimer update_timer_;
@@ -222,11 +271,50 @@ class TabManager : public TabStripModelObserver {
   scoped_ptr<TabManagerDelegate> delegate_;
 #endif
 
+  // Responsible for automatically registering this class as an observer of all
+  // TabStripModels. Automatically tracks browsers as they come and go.
   BrowserTabStripTracker browser_tab_strip_tracker_;
 
   // Pointer to a test clock. If this is set, NowTicks() returns the value of
   // this test clock. Otherwise it returns the system clock's value.
   base::TickClock* test_tick_clock_;
+
+  // The task runner used for child process notifications. Defaults to the
+  // thread task runner handle that is used by the memory pressure subsystem,
+  // but may be explicitly set for unittesting.
+  scoped_refptr<base::TaskRunner> task_runner_;
+
+  // Indicates that the system is currently experiencing memory pressure. Used
+  // to determine whether a new round of child-process memory pressure
+  // dispatches is starting, or whether an existing one is continuing.
+  bool under_memory_pressure_;
+
+  // The set of child renderers that have received memory pressure notifications
+  // during the current bout of memory pressure. This is emptied when all
+  // children have been notified (restarting another round of notification) and
+  // when a bout of memory pressure ends.
+  std::set<const content::RenderProcessHost*> notified_renderers_;
+
+  // The callback that returns the current memory pressure level. Defaults to
+  // querying base::MemoryPressureMonitor, but can be overridden for testing.
+  MemoryPressureLevelCallback get_current_pressure_level_;
+
+  // The callback to be invoked to notify renderers. Defaults to calling
+  // content::SendPressureNotification, but can be overridden for testing.
+  RendererNotificationCallback notify_renderer_process_;
+
+  // Injected tab strip models. Allows this to be tested end-to-end without
+  // requiring a full browser environment. If specified these tab strips will be
+  // crawled as the authoritative source of tabs, otherwise the BrowserList and
+  // associated Browser objects are crawled. The first of these is considered to
+  // be the 'active' tab strip model.
+  // TODO(chrisha): Factor out tab-strip model enumeration to a helper class,
+  //     and make a delegate that centralizes all testing seams.
+  using TestTabStripModel = std::pair<const TabStripModel*, bool>;
+  std::vector<TestTabStripModel> test_tab_strip_models_;
+
+  // Weak pointer factory used for posting delayed tasks to task_runner_.
+  base::WeakPtrFactory<TabManager> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(TabManager);
 };

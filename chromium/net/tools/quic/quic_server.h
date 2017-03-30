@@ -24,13 +24,11 @@
 #include "net/tools/quic/quic_default_packet_writer.h"
 
 namespace net {
-namespace tools {
 
 namespace test {
 class QuicServerPeer;
 }  // namespace test
 
-class ProcessPacketInterface;
 class QuicDispatcher;
 class QuicPacketReader;
 
@@ -89,7 +87,7 @@ class QuicServer : public EpollCallbackInterface {
   QuicDispatcher* dispatcher() { return dispatcher_.get(); }
 
  private:
-  friend class net::tools::test::QuicServerPeer;
+  friend class net::test::QuicServerPeer;
 
   // Initialize the internal state of the server.
   void Initialize();
@@ -134,7 +132,6 @@ class QuicServer : public EpollCallbackInterface {
   DISALLOW_COPY_AND_ASSIGN(QuicServer);
 };
 
-}  // namespace tools
 }  // namespace net
 
 #endif  // NET_TOOLS_QUIC_QUIC_SERVER_H_

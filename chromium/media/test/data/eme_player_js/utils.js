@@ -175,7 +175,7 @@ Utils.getHexString = function(uintArray) {
 };
 
 Utils.hasPrefix = function(msg, prefix) {
-  var message = String.fromCharCode.apply(null, msg);
+  var message = String.fromCharCode.apply(null, Utils.convertToUint8Array(msg));
   return message.substring(0, prefix.length) == prefix;
 };
 
@@ -189,18 +189,11 @@ Utils.isRenewalMessage = function(message) {
   if (message.messageType != 'license-renewal')
     return false;
 
-  if (!Utils.isRenewalMessagePrefixed(message.message)) {
+  if (!Utils.hasPrefix(message.message, EME_RENEWAL_MESSAGE_HEADER)) {
     Utils.failTest('license-renewal message doesn\'t contain expected header',
-                   PREFIXED_EME_RENEWAL_MISSING_HEADER);
+                   EME_RENEWAL_MISSING_HEADER);
   }
   return true;
-};
-
-// For the prefixed API renewal messages are determined by looking at the
-// message and finding a known string.
-Utils.isRenewalMessagePrefixed = function(msg) {
-  return Utils.hasPrefix(Utils.convertToUint8Array(msg),
-                         PREFIXED_EME_RENEWAL_MESSAGE_HEADER);
 };
 
 Utils.resetTitleChange = function() {

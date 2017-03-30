@@ -31,6 +31,42 @@ bool HistogramNameLesser(const base::HistogramBase* a,
 
 namespace base {
 
+StatisticsRecorder::HistogramIterator::HistogramIterator(
+    const HistogramMap::iterator& iter, bool include_persistent)
+    : iter_(iter),
+      include_persistent_(include_persistent) {
+}
+
+StatisticsRecorder::HistogramIterator::HistogramIterator(
+    const HistogramIterator& rhs)
+    : iter_(rhs.iter_),
+      include_persistent_(rhs.include_persistent_) {
+}
+
+StatisticsRecorder::HistogramIterator::~HistogramIterator() {}
+
+StatisticsRecorder::HistogramIterator&
+StatisticsRecorder::HistogramIterator::operator++() {
+  const HistogramMap::iterator histograms_end = histograms_->end();
+  if (iter_ == histograms_end || lock_ == NULL)
+    return *this;
+
+  base::AutoLock auto_lock(*lock_);
+
+  for (;;) {
+    ++iter_;
+    if (iter_ == histograms_end)
+      break;
+    if (!include_persistent_ && (iter_->second->flags() &
+                                 HistogramBase::kIsPersistent)) {
+      continue;
+    }
+    break;
+  }
+
+  return *this;
+}
+
 // static
 void StatisticsRecorder::Initialize() {
   // Ensure that an instance of the StatisticsRecorder object is created.
@@ -66,7 +102,8 @@ HistogramBase* StatisticsRecorder::RegisterOrDeleteDuplicate(
       histogram_to_return = histogram;
     } else {
       const std::string& name = histogram->histogram_name();
-      uint64_t name_hash = histogram->name_hash();
+      const uint64_t name_hash = histogram->name_hash();
+      DCHECK_NE(0U, name_hash);
       HistogramMap::iterator it = histograms_->find(name_hash);
       if (histograms_->end() == it) {
         (*histograms_)[name_hash] = histogram;
@@ -235,7 +272,7 @@ void StatisticsRecorder::GetBucketRanges(
 }
 
 // static
-HistogramBase* StatisticsRecorder::FindHistogram(const std::string& name) {
+HistogramBase* StatisticsRecorder::FindHistogram(base::StringPiece name) {
   if (lock_ == NULL)
     return NULL;
   base::AutoLock auto_lock(*lock_);
@@ -247,6 +284,32 @@ HistogramBase* StatisticsRecorder::FindHistogram(const std::string& name) {
     return NULL;
   DCHECK_EQ(name, it->second->histogram_name()) << "hash collision";
   return it->second;
+}
+
+// static
+StatisticsRecorder::HistogramIterator StatisticsRecorder::begin(
+    bool include_persistent) {
+  return HistogramIterator(histograms_->begin(), include_persistent);
+}
+
+// static
+StatisticsRecorder::HistogramIterator StatisticsRecorder::end() {
+  return HistogramIterator(histograms_->end(), true);
+}
+
+// static
+void StatisticsRecorder::GetSnapshot(const std::string& query,
+                                     Histograms* snapshot) {
+  if (lock_ == NULL)
+    return;
+  base::AutoLock auto_lock(*lock_);
+  if (histograms_ == NULL)
+    return;
+
+  for (const auto& entry : *histograms_) {
+    if (entry.second->histogram_name().find(query) != std::string::npos)
+      snapshot->push_back(entry.second);
+  }
 }
 
 // static
@@ -264,7 +327,7 @@ bool StatisticsRecorder::SetCallback(
     return false;
   callbacks_->insert(std::make_pair(name, cb));
 
-  HistogramMap::iterator it = histograms_->find(HashMetricName(name));
+  auto it = histograms_->find(HashMetricName(name));
   if (it != histograms_->end()) {
     DCHECK_EQ(name, it->second->histogram_name()) << "hash collision";
     it->second->SetFlags(HistogramBase::kCallbackExists);
@@ -284,7 +347,7 @@ void StatisticsRecorder::ClearCallback(const std::string& name) {
   callbacks_->erase(name);
 
   // We also clear the flag from the histogram (if it exists).
-  HistogramMap::iterator it = histograms_->find(HashMetricName(name));
+  auto it = histograms_->find(HashMetricName(name));
   if (it != histograms_->end()) {
     DCHECK_EQ(name, it->second->histogram_name()) << "hash collision";
     it->second->ClearFlags(HistogramBase::kCallbackExists);
@@ -305,19 +368,16 @@ StatisticsRecorder::OnSampleCallback StatisticsRecorder::FindCallback(
                                                 : OnSampleCallback();
 }
 
-// private static
-void StatisticsRecorder::GetSnapshot(const std::string& query,
-                                     Histograms* snapshot) {
-  if (lock_ == NULL)
-    return;
-  base::AutoLock auto_lock(*lock_);
-  if (histograms_ == NULL)
-    return;
+// static
+void StatisticsRecorder::ResetForTesting() {
+  // Just call the private version that is used also by the destructor.
+  Reset();
+}
 
-  for (const auto& entry : *histograms_) {
-    if (entry.second->histogram_name().find(query) != std::string::npos)
-      snapshot->push_back(entry.second);
-  }
+// static
+void StatisticsRecorder::ForgetHistogramForTesting(base::StringPiece name) {
+  if (histograms_)
+    histograms_->erase(HashMetricName(name.as_string()));
 }
 
 // This singleton instance should be started during the single threaded portion
@@ -343,17 +403,19 @@ StatisticsRecorder::StatisticsRecorder() {
     AtExitManager::RegisterCallback(&DumpHistogramsToVlog, this);
 }
 
-// static
-void StatisticsRecorder::DumpHistogramsToVlog(void* instance) {
-  std::string output;
-  StatisticsRecorder::WriteGraph(std::string(), &output);
-  VLOG(1) << output;
-}
-
 StatisticsRecorder::~StatisticsRecorder() {
   DCHECK(histograms_ && ranges_ && lock_);
 
-  // Clean up.
+  // Global clean up.
+  Reset();
+}
+
+// static
+void StatisticsRecorder::Reset() {
+  // If there's no lock then there is nothing to reset.
+  if (!lock_)
+    return;
+
   scoped_ptr<HistogramMap> histograms_deleter;
   scoped_ptr<CallbackMap> callbacks_deleter;
   scoped_ptr<RangesMap> ranges_deleter;
@@ -369,6 +431,13 @@ StatisticsRecorder::~StatisticsRecorder() {
     ranges_ = NULL;
   }
   // We are going to leak the histograms and the ranges.
+}
+
+// static
+void StatisticsRecorder::DumpHistogramsToVlog(void* instance) {
+  std::string output;
+  StatisticsRecorder::WriteGraph(std::string(), &output);
+  VLOG(1) << output;
 }
 
 

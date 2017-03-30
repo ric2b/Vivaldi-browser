@@ -87,7 +87,8 @@ public:
     LayoutUnit pageLogicalHeightForOffset(LayoutUnit);
     LayoutUnit pageRemainingLogicalHeightForOffset(LayoutUnit, PageBoundaryRule);
 
-    virtual void contentWasLaidOut(LayoutUnit logicalTopInFlowThreadAfterPagination) = 0;
+    virtual void contentWasLaidOut(LayoutUnit logicalBottomInFlowThreadAfterPagination) = 0;
+    virtual bool canSkipLayout(const LayoutBox&) const = 0;
 
     // Find and return the next logical top after |flowThreadOffset| that can fit unbreakable
     // content as tall as |contentLogicalHeight|. |flowThreadOffset| is expected to be at the exact
@@ -155,7 +156,7 @@ DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutFlowThread, isLayoutFlowThread());
 // These structures are used by PODIntervalTree for debugging.
 #ifndef NDEBUG
 template <> struct ValueToString<LayoutMultiColumnSet*> {
-    static String string(const LayoutMultiColumnSet* value) { return String::format("%p", value); }
+    static String toString(const LayoutMultiColumnSet* value) { return String::format("%p", value); }
 };
 #endif
 

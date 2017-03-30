@@ -5,7 +5,6 @@
 #include <stddef.h>
 
 #include "base/bind.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -19,7 +18,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_iterator.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/panels/base_panel_browser_test.h"
 #include "chrome/browser/ui/panels/docked_panel_collection.h"
@@ -35,6 +34,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/app_modal/app_modal_dialog.h"
 #include "components/app_modal/native_app_modal_dialog.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/web_contents.h"
@@ -42,7 +42,6 @@
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
-#include "net/base/net_util.h"
 #include "net/test/url_request/url_request_mock_http_job.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/hit_test.h"
@@ -1623,9 +1622,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, DevTools) {
 
   // Open devtools.
   size_t num_browsers = 1;
-  EXPECT_EQ(num_browsers, chrome::GetBrowserCount(
-                              browser()->profile(),
-                              browser()->host_desktop_type()));
+  EXPECT_EQ(num_browsers, chrome::GetBrowserCount(browser()->profile()));
   content::WindowedNotificationObserver signal(
       chrome::NOTIFICATION_BROWSER_WINDOW_READY,
       content::NotificationService::AllSources());
@@ -1634,13 +1631,11 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, DevTools) {
 
   // Check that the new browser window that opened is dev tools window.
   ++num_browsers;
-  EXPECT_EQ(num_browsers, chrome::GetBrowserCount(
-                              browser()->profile(),
-                              browser()->host_desktop_type()));
-  for (chrome::BrowserIterator iter; !iter.done(); iter.Next()) {
-    if (*iter == browser())
+  EXPECT_EQ(num_browsers, chrome::GetBrowserCount(browser()->profile()));
+  for (auto* b : *BrowserList::GetInstance()) {
+    if (b == browser())
       continue;
-    ASSERT_TRUE((*iter)->is_devtools());
+    ASSERT_TRUE(b->is_devtools());
   }
 
   panel->Close();
@@ -1657,9 +1652,7 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, DevToolsConsole) {
 
   // Open devtools console.
   size_t num_browsers = 1;
-  EXPECT_EQ(num_browsers, chrome::GetBrowserCount(
-                              browser()->profile(),
-                              browser()->host_desktop_type()));
+  EXPECT_EQ(num_browsers, chrome::GetBrowserCount(browser()->profile()));
   content::WindowedNotificationObserver signal(
       chrome::NOTIFICATION_BROWSER_WINDOW_READY,
       content::NotificationService::AllSources());
@@ -1668,13 +1661,11 @@ IN_PROC_BROWSER_TEST_F(PanelBrowserTest, DevToolsConsole) {
 
   // Check that the new browser window that opened is dev tools window.
   ++num_browsers;
-  EXPECT_EQ(num_browsers, chrome::GetBrowserCount(
-                              browser()->profile(),
-                              browser()->host_desktop_type()));
-  for (chrome::BrowserIterator iter; !iter.done(); iter.Next()) {
-    if (*iter == browser())
+  EXPECT_EQ(num_browsers, chrome::GetBrowserCount(browser()->profile()));
+  for (auto* b : *BrowserList::GetInstance()) {
+    if (b == browser())
       continue;
-    ASSERT_TRUE((*iter)->is_devtools());
+    ASSERT_TRUE(b->is_devtools());
   }
 
   panel->Close();

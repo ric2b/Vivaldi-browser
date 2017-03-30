@@ -26,7 +26,6 @@
 #define InspectorConsoleAgent_h
 
 #include "core/CoreExport.h"
-#include "core/InspectorFrontend.h"
 #include "core/inspector/InspectorBaseAgent.h"
 #include "wtf/Forward.h"
 #include "wtf/Noncopyable.h"
@@ -35,17 +34,16 @@ namespace blink {
 
 class ConsoleMessage;
 class ConsoleMessageStorage;
-class InjectedScriptManager;
 class V8DebuggerAgent;
+class V8RuntimeAgent;
 
 typedef String ErrorString;
 
-class CORE_EXPORT InspectorConsoleAgent : public InspectorBaseAgent<InspectorConsoleAgent, InspectorFrontend::Console>, public InspectorBackendDispatcher::ConsoleCommandHandler {
+class CORE_EXPORT InspectorConsoleAgent : public InspectorBaseAgent<InspectorConsoleAgent, protocol::Frontend::Console>, public protocol::Dispatcher::ConsoleCommandHandler {
     WTF_MAKE_NONCOPYABLE(InspectorConsoleAgent);
 public:
-    explicit InspectorConsoleAgent(InjectedScriptManager*);
+    explicit InspectorConsoleAgent(V8RuntimeAgent*);
     ~InspectorConsoleAgent() override;
-    DECLARE_VIRTUAL_TRACE();
 
     void setDebuggerAgent(V8DebuggerAgent* debuggerAgent) { m_debuggerAgent = debuggerAgent; }
 
@@ -56,6 +54,7 @@ public:
     void restore() final;
 
     void addMessageToConsole(ConsoleMessage*);
+    void clearAllMessages();
     void consoleMessagesCleared();
 
 protected:
@@ -65,7 +64,7 @@ protected:
     virtual void enableStackCapturingIfNeeded() = 0;
     virtual void disableStackCapturingIfNeeded() = 0;
 
-    RawPtrWillBeMember<InjectedScriptManager> m_injectedScriptManager;
+    V8RuntimeAgent* m_runtimeAgent;
     V8DebuggerAgent* m_debuggerAgent;
     bool m_enabled;
 };

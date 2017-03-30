@@ -28,6 +28,7 @@
 #include "core/layout/LayoutAnalyzer.h"
 #include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutView.h"
+#include "core/layout/svg/LayoutSVGText.h"
 #include "core/layout/svg/SVGLayoutSupport.h"
 #include "core/layout/svg/SVGResourcesCache.h"
 #include "core/paint/PaintLayer.h"
@@ -48,48 +49,44 @@ LayoutSVGRoot::LayoutSVGRoot(SVGElement* node)
     , m_hasNonIsolatedBlendingDescendants(false)
     , m_hasNonIsolatedBlendingDescendantsDirty(false)
 {
+    SVGSVGElement* svg = toSVGSVGElement(node);
+    ASSERT(svg);
+
+    LayoutSize intrinsicSize(svg->intrinsicWidth(), svg->intrinsicHeight());
+    if (!svg->hasIntrinsicWidth())
+        intrinsicSize.setWidth(LayoutUnit(defaultWidth));
+    if (!svg->hasIntrinsicHeight())
+        intrinsicSize.setHeight(LayoutUnit(defaultHeight));
+    setIntrinsicSize(intrinsicSize);
 }
 
 LayoutSVGRoot::~LayoutSVGRoot()
 {
 }
 
-void LayoutSVGRoot::computeIntrinsicRatioInformation(FloatSize& intrinsicSize, double& intrinsicRatio) const
+void LayoutSVGRoot::computeIntrinsicSizingInfo(IntrinsicSizingInfo& intrinsicSizingInfo) const
 {
-    // Spec: http://www.w3.org/TR/SVG/coords.html#IntrinsicSizing
-    // SVG needs to specify how to calculate some intrinsic sizing properties to enable inclusion within other languages.
-    // The intrinsic width and height of the viewport of SVG content must be determined from the 'width' and 'height' attributes.
+    // https://www.w3.org/TR/SVG/coords.html#IntrinsicSizing
+
     SVGSVGElement* svg = toSVGSVGElement(node());
     ASSERT(svg);
 
-    // The intrinsic aspect ratio of the viewport of SVG content is necessary for example, when including SVG from an 'object'
-    // element in HTML styled with CSS. It is possible (indeed, common) for an SVG graphic to have an intrinsic aspect ratio but
-    // not to have an intrinsic width or height. The intrinsic aspect ratio must be calculated based upon the following rules:
-    // - The aspect ratio is calculated by dividing a width by a height.
-    // - If the 'width' and 'height' of the rootmost 'svg' element are both specified with unit identifiers (in, mm, cm, pt, pc,
-    //   px, em, ex) or in user units, then the aspect ratio is calculated from the 'width' and 'height' attributes after
-    //   resolving both values to user units.
-    intrinsicSize.setWidth(floatValueForLength(svg->intrinsicWidth(), 0));
-    intrinsicSize.setHeight(floatValueForLength(svg->intrinsicHeight(), 0));
+    intrinsicSizingInfo.size = FloatSize(svg->intrinsicWidth(), svg->intrinsicHeight());
+    intrinsicSizingInfo.hasWidth = svg->hasIntrinsicWidth();
+    intrinsicSizingInfo.hasHeight = svg->hasIntrinsicHeight();
 
-    if (!isHorizontalWritingMode())
-        intrinsicSize = intrinsicSize.transposedSize();
-
-    if (!intrinsicSize.isEmpty()) {
-        intrinsicRatio = intrinsicSize.width() / static_cast<double>(intrinsicSize.height());
+    if (!intrinsicSizingInfo.size.isEmpty()) {
+        intrinsicSizingInfo.aspectRatio = intrinsicSizingInfo.size;
     } else {
-        // - If either/both of the 'width' and 'height' of the rootmost 'svg' element are in percentage units (or omitted), the
-        //   aspect ratio is calculated from the width and height values of the 'viewBox' specified for the current SVG document
-        //   fragment. If the 'viewBox' is not correctly specified, or set to 'none', the intrinsic aspect ratio cannot be
-        //   calculated and is considered unspecified.
         FloatSize viewBoxSize = svg->viewBox()->currentValue()->value().size();
         if (!viewBoxSize.isEmpty()) {
             // The viewBox can only yield an intrinsic ratio, not an intrinsic size.
-            intrinsicRatio = viewBoxSize.width() / static_cast<double>(viewBoxSize.height());
-            if (!isHorizontalWritingMode())
-                intrinsicRatio = 1 / intrinsicRatio;
+            intrinsicSizingInfo.aspectRatio = viewBoxSize;
         }
     }
+
+    if (!isHorizontalWritingMode())
+        intrinsicSizingInfo.transpose();
 }
 
 bool LayoutSVGRoot::isEmbeddedThroughSVGImage() const
@@ -117,15 +114,11 @@ LayoutUnit LayoutSVGRoot::computeReplacedLogicalWidth(ShouldComputePreferred sho
 {
     // When we're embedded through SVGImage (border-image/background-image/<html:img>/...) we're forced to resize to a specific size.
     if (!m_containerSize.isEmpty())
-        return m_containerSize.width();
+        return LayoutUnit(m_containerSize.width());
 
     if (isEmbeddedThroughFrameContainingSVGDocument())
         return containingBlock()->availableLogicalWidth();
 
-    if (style()->logicalWidth().isSpecified() || style()->logicalMaxWidth().isSpecified())
-        return LayoutReplaced::computeReplacedLogicalWidth(shouldComputePreferred);
-
-    // SVG embedded via SVGImage (background-image/border-image/etc) / Inline SVG.
     return LayoutReplaced::computeReplacedLogicalWidth(shouldComputePreferred);
 }
 
@@ -133,15 +126,11 @@ LayoutUnit LayoutSVGRoot::computeReplacedLogicalHeight() const
 {
     // When we're embedded through SVGImage (border-image/background-image/<html:img>/...) we're forced to resize to a specific size.
     if (!m_containerSize.isEmpty())
-        return m_containerSize.height();
+        return LayoutUnit(m_containerSize.height());
 
     if (isEmbeddedThroughFrameContainingSVGDocument())
         return containingBlock()->availableLogicalHeight(IncludeMarginBorderPadding);
 
-    if (style()->logicalHeight().isSpecified() || style()->logicalMaxHeight().isSpecified())
-        return LayoutReplaced::computeReplacedLogicalHeight();
-
-    // SVG embedded via SVGImage (background-image/border-image/etc) / Inline SVG.
     return LayoutReplaced::computeReplacedLogicalHeight();
 }
 
@@ -203,8 +192,6 @@ void LayoutSVGRoot::paintReplaced(const PaintInfo& paintInfo, const LayoutPoint&
 
 void LayoutSVGRoot::willBeDestroyed()
 {
-    LayoutBlock::removePercentHeightDescendant(const_cast<LayoutSVGRoot*>(this));
-
     SVGResourcesCache::clientDestroyed(this);
     LayoutReplaced::willBeDestroyed();
 }
@@ -281,6 +268,30 @@ void LayoutSVGRoot::willBeRemovedFromTree()
     LayoutReplaced::willBeRemovedFromTree();
 }
 
+PositionWithAffinity LayoutSVGRoot::positionForPoint(const LayoutPoint& point)
+{
+    FloatPoint absolutePoint = FloatPoint(point);
+    absolutePoint = m_localToBorderBoxTransform.inverse().mapPoint(absolutePoint);
+    LayoutObject* closestDescendant = SVGLayoutSupport::findClosestLayoutSVGText(this, absolutePoint);
+
+    if (!closestDescendant)
+        return LayoutReplaced::positionForPoint(point);
+
+    LayoutObject* layoutObject = closestDescendant;
+    AffineTransform transform = layoutObject->localToParentTransform();
+    transform.translate(toLayoutSVGText(layoutObject)->location().x(), toLayoutSVGText(layoutObject)->location().y());
+    while (layoutObject) {
+        layoutObject = layoutObject->parent();
+        if (layoutObject->isSVGRoot())
+            break;
+        transform = layoutObject->localToParentTransform() * transform;
+    }
+
+    absolutePoint = transform.inverse().mapPoint(absolutePoint);
+
+    return closestDescendant->positionForPoint(LayoutPoint(absolutePoint));
+}
+
 // LayoutBox methods will expect coordinates w/o any transforms in coordinates
 // relative to our borderBox origin.  This method gives us exactly that.
 void LayoutSVGRoot::buildLocalToBorderBoxTransform()
@@ -310,7 +321,7 @@ const AffineTransform& LayoutSVGRoot::localToParentTransform() const
 LayoutRect LayoutSVGRoot::clippedOverflowRectForPaintInvalidation(const LayoutBoxModelObject* paintInvalidationContainer, const PaintInvalidationState* paintInvalidationState) const
 {
     // This is an open-coded aggregate of SVGLayoutSupport::clippedOverflowRectForPaintInvalidation,
-    // LayoutSVGRoot::mapToVisibleRectInContainerSpace and LayoutReplaced::clippedOverflowRectForPaintInvalidation.
+    // LayoutSVGRoot::mapToVisibleRectInAncestorSpace and LayoutReplaced::clippedOverflowRectForPaintInvalidation.
     // The reason for this is to optimize/minimize the paint invalidation rect when the box is not "decorated"
     // (does not have background/border/etc.)
 
@@ -358,7 +369,7 @@ void LayoutSVGRoot::mapToVisibleRectInAncestorSpace(const LayoutBoxModelObject* 
 // to convert from SVG viewport coordinates to local CSS box coordinates.
 void LayoutSVGRoot::mapLocalToAncestor(const LayoutBoxModelObject* ancestor, TransformState& transformState, MapCoordinatesFlags mode, bool* wasFixed, const PaintInvalidationState* paintInvalidationState) const
 {
-    ASSERT(mode & ~IsFixed); // We should have no fixed content in the SVG layout tree.
+    ASSERT(!(mode & IsFixed)); // We should have no fixed content in the SVG layout tree.
 
     LayoutReplaced::mapLocalToAncestor(ancestor, transformState, mode | ApplyContainerFlip, wasFixed, paintInvalidationState);
 }
@@ -391,7 +402,7 @@ bool LayoutSVGRoot::nodeAtPoint(HitTestResult& result, const HitTestLocation& lo
                 // FIXME: nodeAtFloatPoint() doesn't handle rect-based hit tests yet.
                 if (child->nodeAtFloatPoint(result, localPoint, hitTestAction)) {
                     updateHitTestResult(result, pointInBorderBox);
-                    if (!result.addNodeToListBasedTestResult(child->node(), locationInContainer))
+                    if (result.addNodeToListBasedTestResult(child->node(), locationInContainer) == StopHitTesting)
                         return true;
                 }
             }
@@ -407,7 +418,7 @@ bool LayoutSVGRoot::nodeAtPoint(HitTestResult& result, const HitTestLocation& lo
         LayoutRect boundsRect(accumulatedOffset + location(), size());
         if (locationInContainer.intersects(boundsRect)) {
             updateHitTestResult(result, pointInBorderBox);
-            if (!result.addNodeToListBasedTestResult(node(), locationInContainer, boundsRect))
+            if (result.addNodeToListBasedTestResult(node(), locationInContainer, boundsRect) == StopHitTesting)
                 return true;
         }
     }
@@ -415,4 +426,4 @@ bool LayoutSVGRoot::nodeAtPoint(HitTestResult& result, const HitTestLocation& lo
     return false;
 }
 
-}
+} // namespace blink

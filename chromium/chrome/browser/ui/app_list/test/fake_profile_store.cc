@@ -4,10 +4,10 @@
 
 #include "chrome/browser/ui/app_list/test/fake_profile_store.h"
 
-#include "base/prefs/pref_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 
 FakeProfileStore::FakeProfileStore(const base::FilePath& user_data_dir,
                                    PrefService* local_state)
@@ -28,15 +28,15 @@ void FakeProfileStore::LoadProfile(Profile* profile) {
 
 void FakeProfileStore::RemoveProfile(Profile* profile) {
   base::FilePath path(profile->GetPath());
-  FOR_EACH_OBSERVER(ProfileInfoCacheObserver, observer_list_,
+  FOR_EACH_OBSERVER(ProfileAttributesStorage::Observer, observer_list_,
                     OnProfileWillBeRemoved(path));
   loaded_profiles_.erase(path);
-  FOR_EACH_OBSERVER(ProfileInfoCacheObserver, observer_list_,
+  FOR_EACH_OBSERVER(ProfileAttributesStorage::Observer, observer_list_,
                     OnProfileWasRemoved(path, base::string16()));
 }
 
 void FakeProfileStore::AddProfileObserver(
-    ProfileInfoCacheObserver* observer) {
+    ProfileAttributesStorage::Observer* observer) {
   observer_list_.AddObserver(observer);
 }
 

@@ -78,15 +78,14 @@ public class PrerenderTestHelper {
     }
 
     /**
-     * Trains the autocomplete action predictor to pre-render a url.
+     * Prerenders a url.
      *
      * @param testUrl Url to prerender
-     * @param testBase ChromeTabbedActivityTestBase instance.
+     * @param tab The tab to add the prerender to.
      */
-    public static ExternalPrerenderHandler prerenderUrlAndFocusOmnibox(
-            final String testUrl, final ChromeTabbedActivityTestBase testBase)
-                    throws InterruptedException {
-        final Tab currentTab = testBase.getActivity().getActivityTab();
+    public static ExternalPrerenderHandler prerenderUrl(final String testUrl, Tab tab)
+            throws InterruptedException {
+        final Tab currentTab = tab;
 
         ExternalPrerenderHandler prerenderHandler = ThreadUtils.runOnUiThreadBlockingNoException(
                 new Callable<ExternalPrerenderHandler>() {
@@ -98,13 +97,13 @@ public class PrerenderTestHelper {
                                 currentTab.getContentViewCore().getRenderCoordinates()
                                         .getContentWidthPixInt(),
                                 currentTab.getContentViewCore().getRenderCoordinates()
-                                        .getContentHeightPixInt());
+                                        .getContentHeightPixInt(),
+                                false);
                         Assert.assertTrue("Failed to prerender test url: " + testUrl, didPrerender);
                         return prerenderHandler;
                     }
                 });
 
-        testBase.typeInOmnibox(testUrl, false);
         Assert.assertTrue("URL was not prerendered.",
                 PrerenderTestHelper.waitForPrerenderUrl(currentTab, testUrl, false));
 

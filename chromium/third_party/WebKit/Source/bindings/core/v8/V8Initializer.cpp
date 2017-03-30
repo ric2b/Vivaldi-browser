@@ -28,7 +28,7 @@
 #include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/RejectedPromises.h"
 #include "bindings/core/v8/RetainedDOMInfo.h"
-#include "bindings/core/v8/ScriptCallStackFactory.h"
+#include "bindings/core/v8/ScriptCallStack.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/V8Binding.h"
@@ -50,7 +50,6 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/ScriptArguments.h"
-#include "core/inspector/ScriptCallStack.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -96,17 +95,16 @@ static void reportFatalErrorInMainThread(const char* location, const char* messa
     CRASH();
 }
 
-static PassRefPtrWillBeRawPtr<ScriptCallStack> extractCallStack(v8::Isolate* isolate, v8::Local<v8::Message> message, int* const scriptId)
+static PassRefPtr<ScriptCallStack> extractCallStack(v8::Isolate* isolate, v8::Local<v8::Message> message, int* const scriptId)
 {
     v8::Local<v8::StackTrace> stackTrace = message->GetStackTrace();
-    RefPtrWillBeRawPtr<ScriptCallStack> callStack = nullptr;
+    RefPtr<ScriptCallStack> callStack = nullptr;
     *scriptId = message->GetScriptOrigin().ScriptID()->Value();
     // Currently stack trace is only collected when inspector is open.
     if (!stackTrace.IsEmpty() && stackTrace->GetFrameCount() > 0) {
-        callStack = createScriptCallStack(isolate, stackTrace, ScriptCallStack::maxCallStackSizeToCapture);
-        bool success = false;
-        int topScriptId = callStack->at(0).scriptId().toInt(&success);
-        if (success && topScriptId == *scriptId)
+        callStack = ScriptCallStack::create(isolate, stackTrace);
+        int topScriptId = stackTrace->GetFrame(0)->GetScriptId();
+        if (topScriptId == *scriptId)
             *scriptId = 0;
     }
     return callStack.release();
@@ -143,7 +141,7 @@ static void messageHandlerInMainThread(v8::Local<v8::Message> message, v8::Local
         return;
 
     int scriptId = 0;
-    RefPtrWillBeRawPtr<ScriptCallStack> callStack = extractCallStack(isolate, message, &scriptId);
+    RefPtr<ScriptCallStack> callStack = extractCallStack(isolate, message, &scriptId);
     String resourceName = extractResourceName(message, enteredWindow->document());
     AccessControlStatus accessControlStatus = NotSharableCrossOrigin;
     if (message->IsOpaque())
@@ -191,7 +189,7 @@ namespace {
 static RejectedPromises& rejectedPromisesOnMainThread()
 {
     ASSERT(isMainThread());
-    DEFINE_STATIC_LOCAL(RefPtrWillBePersistent<RejectedPromises>, rejectedPromises, (RejectedPromises::create()));
+    DEFINE_STATIC_LOCAL(RefPtr<RejectedPromises>, rejectedPromises, (RejectedPromises::create()));
     return *rejectedPromises;
 }
 
@@ -231,7 +229,7 @@ static void promiseRejectHandler(v8::PromiseRejectMessage data, RejectedPromises
     String resourceName = fallbackResourceName;
     String errorMessage;
     AccessControlStatus corsStatus = NotSharableCrossOrigin;
-    RefPtrWillBeRawPtr<ScriptCallStack> callStack = nullptr;
+    RefPtr<ScriptCallStack> callStack;
 
     v8::Local<v8::Message> message = v8::Exception::CreateMessage(isolate, exception);
     if (!message.IsEmpty()) {
@@ -287,7 +285,7 @@ static void promiseRejectHandlerInWorker(v8::PromiseRejectMessage data)
         return;
 
     ASSERT(executionContext->isWorkerGlobalScope());
-    WorkerOrWorkletScriptController* scriptController = toWorkerGlobalScope(executionContext)->script();
+    WorkerOrWorkletScriptController* scriptController = toWorkerGlobalScope(executionContext)->scriptController();
     ASSERT(scriptController);
 
     promiseRejectHandler(data, *scriptController->rejectedPromises(), String());
@@ -408,7 +406,7 @@ static void messageHandlerInWorker(v8::Local<v8::Message> message, v8::Local<v8:
         String errorMessage = toCoreStringWithNullCheck(message->Get());
         TOSTRING_VOID(V8StringResource<>, sourceURL, message->GetScriptOrigin().ResourceName());
         int scriptId = 0;
-        RefPtrWillBeRawPtr<ScriptCallStack> callStack = extractCallStack(isolate, message, &scriptId);
+        RefPtr<ScriptCallStack> callStack = extractCallStack(isolate, message, &scriptId);
 
         int lineNumber = 0;
         int columnNumber = 0;

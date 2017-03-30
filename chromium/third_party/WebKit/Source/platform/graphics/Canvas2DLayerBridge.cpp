@@ -25,6 +25,7 @@
 
 #include "platform/graphics/Canvas2DLayerBridge.h"
 
+#include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/TraceEvent.h"
 #include "platform/graphics/CanvasMetrics.h"
@@ -58,7 +59,7 @@ WTF::RefCountedLeakCounter& canvas2DLayerBridgeInstanceCounter()
 }
 #endif
 
-} // unnamed
+} // namespace
 
 namespace blink {
 
@@ -206,6 +207,9 @@ static void hibernateWrapper(WeakPtr<Canvas2DLayerBridge> bridge, double /*idleD
 void Canvas2DLayerBridge::hibernate()
 {
     ASSERT(!isHibernating());
+    ASSERT(m_hibernationScheduled);
+
+    m_hibernationScheduled = false;
 
     if (m_destructionInProgress) {
         m_logger->reportHibernationEvent(HibernationAbortedDueToPendingDestruction);
@@ -279,8 +283,7 @@ SkSurface* Canvas2DLayerBridge::getOrCreateSurface(AccelerationHint hint)
 
     bool wantAcceleration = shouldAccelerate(hint);
     bool surfaceIsAccelerated;
-
-    if (isHidden() && wantAcceleration) {
+    if (CANVAS2D_BACKGROUND_RENDER_SWITCH_TO_CPU && isHidden() && wantAcceleration) {
         wantAcceleration = false;
         m_softwareRenderingWhileHidden = true;
     }
@@ -332,7 +335,7 @@ SkCanvas* Canvas2DLayerBridge::canvas()
     return m_recorder->getRecordingCanvas();
 }
 
-void Canvas2DLayerBridge::disableDeferral()
+void Canvas2DLayerBridge::disableDeferral(DisableDeferralReason reason)
 {
     // Disabling deferral is permanent: once triggered by disableDeferral()
     // we stay in immediate mode indefinitely. This is a performance heuristic
@@ -346,6 +349,8 @@ void Canvas2DLayerBridge::disableDeferral()
     if (!m_isDeferralEnabled)
         return;
 
+    DEFINE_STATIC_LOCAL(EnumerationHistogram, gpuDisabledHistogram, ("Canvas.GPUAccelerated2DCanvasDisableDeferralReason", DisableDeferralReasonCount));
+    gpuDisabledHistogram.count(reason);
     CanvasMetrics::countCanvasContextUsage(CanvasMetrics::GPUAccelerated2DCanvasDeferralDisabled);
     flushRecordingOnly();
     // Because we will be discarding the recorder, if the flush failed
@@ -418,10 +423,11 @@ void Canvas2DLayerBridge::setIsHidden(bool hidden)
         return;
 
     m_isHidden = newHiddenValue;
-    if (CANVAS2D_HIBERNATION_ENABLED && m_surface && isHidden() && !m_destructionInProgress) {
+    if (CANVAS2D_HIBERNATION_ENABLED && m_surface && isHidden() && !m_destructionInProgress && !m_hibernationScheduled) {
         if (m_layer)
             m_layer->clearTexture();
         m_logger->reportHibernationEvent(HibernationScheduled);
+        m_hibernationScheduled = true;
         Platform::current()->currentThread()->scheduler()->postIdleTask(BLINK_FROM_HERE, WTF::bind<double>(&hibernateWrapper, m_weakPtrFactory.createWeakPtr()));
     }
     if (!isHidden() && m_softwareRenderingWhileHidden) {
@@ -603,7 +609,7 @@ bool Canvas2DLayerBridge::prepareMailbox(WebExternalTextureMailbox* outMailbox, 
         return false;
     }
 
-    RefPtr<SkImage> image = newImageSnapshot(PreferAcceleration);
+    RefPtr<SkImage> image = newImageSnapshot(PreferAcceleration, SnapshotReasonUnknown);
     if (!image || !image->getTexture())
         return false;
 
@@ -640,6 +646,7 @@ bool Canvas2DLayerBridge::prepareMailbox(WebExternalTextureMailbox* outMailbox, 
     // the state cached in skia so that the deferred copy on write
     // in SkSurface_Gpu does not make any false assumptions.
     mailboxInfo.m_image->getTexture()->textureParamsModified();
+    mailboxInfo.m_mailbox.textureTarget = GL_TEXTURE_2D;
 
     webContext->bindTexture(GL_TEXTURE_2D, mailboxInfo.m_image->getTexture()->getTextureHandle());
     webContext->texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
@@ -742,7 +749,7 @@ void Canvas2DLayerBridge::didDraw(const FloatRect& rect)
         IntRect pixelBounds = enclosingIntRect(rect);
         m_recordingPixelCount += pixelBounds.width() * pixelBounds.height();
         if (m_recordingPixelCount >= (m_size.width() * m_size.height() * ExpensiveCanvasHeuristicParameters::ExpensiveOverdrawThreshold)) {
-            disableDeferral();
+            disableDeferral(DisableDeferralReasonExpensiveOverdrawHeuristic);
         }
     }
     if (!m_isRegisteredTaskObserver) {
@@ -798,7 +805,7 @@ void Canvas2DLayerBridge::willProcessTask()
     ASSERT_NOT_REACHED();
 }
 
-PassRefPtr<SkImage> Canvas2DLayerBridge::newImageSnapshot(AccelerationHint hint)
+PassRefPtr<SkImage> Canvas2DLayerBridge::newImageSnapshot(AccelerationHint hint, SnapshotReason)
 {
     if (!checkSurfaceValid())
         return nullptr;
@@ -827,7 +834,8 @@ Canvas2DLayerBridge::MailboxInfo::MailboxInfo(const MailboxInfo& other)
 
 void Canvas2DLayerBridge::Logger::reportHibernationEvent(HibernationEvent event)
 {
-    blink::Platform::current()->histogramEnumeration("Canvas.HibernationEvents", event, HibernationEventCount);
+    DEFINE_STATIC_LOCAL(EnumerationHistogram, hibernationHistogram, ("Canvas.HibernationEvents", HibernationEventCount));
+    hibernationHistogram.count(event);
 }
 
 } // namespace blink

@@ -25,8 +25,6 @@ component("common_base") {
     "data_pipe_utils.h",
     "user_agent.cc",
     "user_agent.h",
-    "weak_binding_set.h",
-    "weak_interface_ptr_set.h",
   ]
 
   defines = [ "MOJO_COMMON_IMPLEMENTATION" ]
@@ -53,23 +51,12 @@ source_set("url_type_converters") {
     "url_type_converters.h",
   ]
 
-  include_dirs = [ "//third_party/mojo/src/" ]
-
   deps = [
     ":common_base",
     "//base",
     "//base/third_party/dynamic_annotations",
     "//mojo/public/cpp/bindings",
     "//url",
-  ]
-}
-
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("mojo_common_unittests_run") {
-  testonly = true
-  deps = [
-    ":mojo_common_unittests",
   ]
 }
 
@@ -80,13 +67,13 @@ test("mojo_common_unittests") {
     "//base",
     "//base:message_loop_tests",
     "//base/test:test_support",
+    "//mojo/edk/test:run_all_unittests",
+    "//mojo/edk/test:test_support",
     "//mojo/environment:chromium",
     "//mojo/message_pump",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/test_support:test_utils",
     "//testing/gtest",
-    "//third_party/mojo/src/mojo/edk/test:run_all_unittests",
-    "//third_party/mojo/src/mojo/edk/test:test_support",
     "//url",
   ]
 
@@ -109,11 +96,11 @@ test("mojo_common_perftests") {
   deps = [
     ":common",
     "//base",
+    "//mojo/edk/test:run_all_perftests",
     "//mojo/environment:chromium",
     "//mojo/message_pump",
     "//mojo/public/cpp/test_support:test_utils",
     "//testing/gtest",
-    "//third_party/mojo/src/mojo/edk/test:run_all_perftests",
   ]
 
   sources = [
@@ -125,4 +112,15 @@ test("mojo_common_perftests") {
     # builds.
     configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
   }
+}
+
+source_set("mojo_scheme_register") {
+  sources = [
+    "mojo_scheme_register.cc",
+    "mojo_scheme_register.h",
+  ]
+
+  deps = [
+    "//url",
+  ]
 }

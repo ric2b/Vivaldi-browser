@@ -19,7 +19,6 @@
 #include "components/nacl/renderer/plugin/nacl_subprocess.h"
 #include "components/nacl/renderer/plugin/pnacl_coordinator.h"
 #include "components/nacl/renderer/plugin/service_runtime.h"
-#include "components/nacl/renderer/plugin/utility.h"
 #include "components/nacl/renderer/ppb_nacl_private.h"
 #include "ppapi/cpp/instance.h"
 #include "ppapi/cpp/private/uma_private.h"
@@ -93,8 +92,6 @@ class Plugin : public pp::Instance {
   // Report an error that was encountered while loading a module.
   void ReportLoadError(const ErrorInfo& error_info);
 
-  const PPB_NaCl_Private* nacl_interface() const { return nacl_interface_; }
-
  private:
   // The browser will invoke the destructor via the pp::Instance
   // pointer to this object, not from base's Delete().
@@ -103,11 +100,6 @@ class Plugin : public pp::Instance {
   // Shuts down socket connection, service runtime, and receive thread,
   // in this order, for the main nacl subprocess.
   void ShutDownSubprocesses();
-
-  // Start sel_ldr given the start params. This is invoked on the main thread.
-  void StartSelLdr(ServiceRuntime* service_runtime,
-                   const SelLdrStartParams& params,
-                   pp::CompletionCallback callback);
 
   // Callback used when getting the URL for the .nexe file.  If the URL loading
   // is successful, the file descriptor is opened and can be passed to sel_ldr
@@ -144,7 +136,6 @@ class Plugin : public pp::Instance {
 
   PP_NaClFileInfo nexe_file_info_;
 
-  const PPB_NaCl_Private* nacl_interface_;
   pp::UMAPrivate uma_interface_;
 
   DISALLOW_COPY_AND_ASSIGN(Plugin);

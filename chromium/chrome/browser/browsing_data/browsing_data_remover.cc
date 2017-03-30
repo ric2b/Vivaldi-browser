@@ -13,12 +13,12 @@
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/prefs/pref_service.h"
 #include "build/build_config.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
+#include "chrome/browser/browsing_data/origin_filter_builder.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/domain_reliability/service_factory.h"
@@ -56,6 +56,7 @@
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/power/origin_power_map.h"
 #include "components/power/origin_power_map_factory.h"
+#include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/web_cache/browser/web_cache_manager.h"
@@ -343,7 +344,19 @@ void BrowsingDataRemover::RemoveImpl(const TimeRange& time_range,
   delete_end_ = time_range.end;
   remove_mask_ = remove_mask;
   origin_type_mask_ = origin_type_mask;
-  url::Origin remove_origin(remove_url);
+
+  // TODO(msramek): Replace |remove_origin| with |filter| in all backends.
+  const url::Origin remove_origin(remove_url);
+  OriginFilterBuilder builder(OriginFilterBuilder::BLACKLIST);
+  if (!remove_url.is_empty()) {
+    // Make sure that only URLs representing origins, with no extra components,
+    // are passed to this class.
+    DCHECK_EQ(remove_url, remove_url.GetOrigin());
+    builder.SetMode(OriginFilterBuilder::WHITELIST);
+    builder.AddOrigin(url::Origin(remove_origin));
+  }
+  base::Callback<bool(const GURL& url)> same_origin_filter =
+      builder.BuildSameOriginFilter();
 
   PrefService* prefs = profile_->GetPrefs();
   bool may_delete_history = prefs->GetBoolean(
@@ -379,6 +392,12 @@ void BrowsingDataRemover::RemoveImpl(const TimeRange& time_range,
         HistoryServiceFactory::GetForProfile(
             profile_, ServiceAccessType::EXPLICIT_ACCESS);
     if (history_service) {
+      // Selective history deletion is currently done through HistoryUI ->
+      // HistoryBackend -> HistoryService, and that is for individual URLs,
+      // not origins. The code below is currently unused, as the only callsite
+      // supplying |remove_url| is the unittest.
+      // TODO(msramek): Make it possible to delete history per origin, not just
+      // per URL, and use that functionality here.
       std::set<GURL> restrict_urls;
       if (!remove_url.is_empty())
         restrict_urls.insert(remove_url);
@@ -559,11 +578,8 @@ void BrowsingDataRemover::RemoveImpl(const TimeRange& time_range,
     content::RecordAction(UserMetricsAction("ClearBrowsingData_Downloads"));
     content::DownloadManager* download_manager =
         BrowserContext::GetDownloadManager(profile_);
-    if (remove_origin.unique())
-      download_manager->RemoveDownloadsBetween(delete_begin_, delete_end_);
-    else
-      download_manager->RemoveDownloadsByOriginAndTime(
-          remove_origin, delete_begin_, delete_end_);
+    download_manager->RemoveDownloadsByURLAndTime(
+        same_origin_filter, delete_begin_, delete_end_);
     DownloadPrefs* download_prefs = DownloadPrefs::FromDownloadManager(
         download_manager);
     download_prefs->SetSaveFilePath(download_prefs->DownloadPath());
@@ -605,9 +621,6 @@ void BrowsingDataRemover::RemoveImpl(const TimeRange& time_range,
     }
 
     MediaDeviceIDSalt::Reset(profile_->GetPrefs());
-
-    // TODO(mkwst): If we're not removing passwords, then clear the 'zero-click'
-    // flag for all credentials in the password store.
   }
 
   // Channel IDs are not separated for protected and unprotected web
@@ -698,10 +711,31 @@ void BrowsingDataRemover::RemoveImpl(const TimeRange& time_range,
 
     if (password_store) {
       waiting_for_clear_passwords_ = true;
-      password_store->RemoveLoginsCreatedBetween(
-          delete_begin_, delete_end_,
+      auto on_cleared_passwords =
           base::Bind(&BrowsingDataRemover::OnClearedPasswords,
-                     weak_ptr_factory_.GetWeakPtr()));
+                     weak_ptr_factory_.GetWeakPtr());
+      if (remove_url.is_empty()) {
+        password_store->RemoveLoginsCreatedBetween(delete_begin_, delete_end_,
+                                                   on_cleared_passwords);
+      } else {
+        password_store->RemoveLoginsByOriginAndTime(
+            remove_origin, delete_begin_, delete_end_, on_cleared_passwords);
+      }
+    }
+  }
+
+  if (remove_mask & REMOVE_COOKIES) {
+    password_manager::PasswordStore* password_store =
+        PasswordStoreFactory::GetForProfile(profile_,
+                                            ServiceAccessType::EXPLICIT_ACCESS)
+            .get();
+
+    if (password_store) {
+      waiting_for_clear_auto_sign_in_ = true;
+      base::Closure on_cleared_auto_sign_in =
+          base::Bind(&BrowsingDataRemover::OnClearedAutoSignIn,
+                     weak_ptr_factory_.GetWeakPtr());
+      password_store->DisableAutoSignInForAllLogins(on_cleared_auto_sign_in);
     }
   }
 
@@ -964,22 +998,16 @@ base::Time BrowsingDataRemover::CalculateBeginDeleteTime(
 
 bool BrowsingDataRemover::AllDone() {
   return !waiting_for_clear_autofill_origin_urls_ &&
-         !waiting_for_clear_cache_ &&
-         !waiting_for_clear_content_licenses_ &&
-         !waiting_for_clear_channel_ids_ &&
-         !waiting_for_clear_cookies_count_ &&
+         !waiting_for_clear_cache_ && !waiting_for_clear_content_licenses_ &&
+         !waiting_for_clear_channel_ids_ && !waiting_for_clear_cookies_count_ &&
          !waiting_for_clear_domain_reliability_monitor_ &&
-         !waiting_for_clear_form_ &&
-         !waiting_for_clear_history_ &&
+         !waiting_for_clear_form_ && !waiting_for_clear_history_ &&
          !waiting_for_clear_hostname_resolution_cache_ &&
-         !waiting_for_clear_keyword_data_ &&
-         !waiting_for_clear_nacl_cache_ &&
+         !waiting_for_clear_keyword_data_ && !waiting_for_clear_nacl_cache_ &&
          !waiting_for_clear_network_predictor_ &&
          !waiting_for_clear_networking_history_ &&
-         !waiting_for_clear_passwords_ &&
-         !waiting_for_clear_passwords_stats_ &&
-         !waiting_for_clear_platform_keys_ &&
-         !waiting_for_clear_plugin_data_ &&
+         !waiting_for_clear_passwords_ && !waiting_for_clear_passwords_stats_ &&
+         !waiting_for_clear_platform_keys_ && !waiting_for_clear_plugin_data_ &&
          !waiting_for_clear_pnacl_cache_ &&
 #if BUILDFLAG(ANDROID_JAVA_UI)
          !waiting_for_clear_precache_history_ &&
@@ -989,7 +1017,8 @@ bool BrowsingDataRemover::AllDone() {
 #if defined(ENABLE_WEBRTC)
          !waiting_for_clear_webrtc_logs_ &&
 #endif
-         !waiting_for_clear_storage_partition_data_;
+         !waiting_for_clear_storage_partition_data_ &&
+         !waiting_for_clear_auto_sign_in_;
 }
 
 void BrowsingDataRemover::OnKeywordsLoaded() {
@@ -1120,6 +1149,12 @@ void BrowsingDataRemover::OnClearedPasswords() {
 void BrowsingDataRemover::OnClearedPasswordsStats() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   waiting_for_clear_passwords_stats_ = false;
+  NotifyIfDone();
+}
+
+void BrowsingDataRemover::OnClearedAutoSignIn() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  waiting_for_clear_auto_sign_in_ = false;
   NotifyIfDone();
 }
 

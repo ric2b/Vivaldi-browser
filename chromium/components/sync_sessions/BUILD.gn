@@ -34,6 +34,8 @@ source_set("sync_sessions") {
     "sessions_sync_manager.h",
     "sync_sessions_client.cc",
     "sync_sessions_client.h",
+    "sync_sessions_metrics.cc",
+    "sync_sessions_metrics.h",
     "synced_session.cc",
     "synced_session.h",
     "synced_session_tracker.cc",
@@ -49,10 +51,10 @@ source_set("sync_sessions") {
 
   deps = [
     "//base",
-    "//base:prefs",
     "//components/bookmarks/browser",
     "//components/favicon/core",
     "//components/history/core/browser",
+    "//components/prefs",
     "//components/sessions",
     "//components/sync_driver",
     "//components/variations",
@@ -90,6 +92,7 @@ source_set("unit_tests") {
     "revisit/sessions_page_revisit_observer_unittest.cc",
     "revisit/typed_url_page_revisit_task_unittest.cc",
     "session_data_type_controller_unittest.cc",
+    "sync_sessions_metrics_unittest.cc",
     "synced_session_tracker_unittest.cc",
     "tab_node_pool_unittest.cc",
   ]
@@ -97,11 +100,10 @@ source_set("unit_tests") {
   deps = [
     ":sync_sessions",
     ":test_support",
-    "//base:prefs",
-    "//base:prefs_test_support",
     "//base/test:test_support",
     "//components/bookmarks/browser",
     "//components/history/core/browser",
+    "//components/prefs:test_support",
     "//components/sessions:test_support",
     "//components/sync_driver",
     "//components/sync_driver:test_support",

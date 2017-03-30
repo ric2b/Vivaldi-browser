@@ -10,19 +10,19 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
-#include "mojo/common/weak_binding_set.h"
-#include "mojo/common/weak_interface_ptr_set.h"
+#include "mojo/public/cpp/bindings/binding_set.h"
+#include "mojo/public/cpp/bindings/interface_ptr_set.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/services/tracing/public/interfaces/tracing.mojom.h"
 #include "mojo/services/tracing/trace_data_sink.h"
 #include "mojo/services/tracing/trace_recorder_impl.h"
-#include "mojo/shell/public/cpp/application_delegate.h"
 #include "mojo/shell/public/cpp/interface_factory.h"
+#include "mojo/shell/public/cpp/shell_client.h"
 
 namespace tracing {
 
 class TracingApp
-    : public mojo::ApplicationDelegate,
+    : public mojo::ShellClient,
       public mojo::InterfaceFactory<TraceCollector>,
       public TraceCollector,
       public mojo::InterfaceFactory<StartupPerformanceDataCollector>,
@@ -32,17 +32,17 @@ class TracingApp
   ~TracingApp() override;
 
  private:
-  // mojo::ApplicationDelegate implementation.
-  bool ConfigureIncomingConnection(
-      mojo::ApplicationConnection* connection) override;
+  // mojo::ShellClient implementation.
+  bool AcceptConnection(mojo::Connection* connection) override;
+  bool ShellConnectionLost() override;
 
   // mojo::InterfaceFactory<TraceCollector> implementation.
-  void Create(mojo::ApplicationConnection* connection,
+  void Create(mojo::Connection* connection,
               mojo::InterfaceRequest<TraceCollector> request) override;
 
   // mojo::InterfaceFactory<StartupPerformanceDataCollector> implementation.
   void Create(
-      mojo::ApplicationConnection* connection,
+      mojo::Connection* connection,
       mojo::InterfaceRequest<StartupPerformanceDataCollector> request) override;
 
   // tracing::TraceCollector implementation.
@@ -65,9 +65,9 @@ class TracingApp
 
   scoped_ptr<TraceDataSink> sink_;
   ScopedVector<TraceRecorderImpl> recorder_impls_;
-  mojo::WeakInterfacePtrSet<TraceProvider> provider_ptrs_;
+  mojo::InterfacePtrSet<TraceProvider> provider_ptrs_;
   mojo::Binding<TraceCollector> collector_binding_;
-  mojo::WeakBindingSet<StartupPerformanceDataCollector>
+  mojo::BindingSet<StartupPerformanceDataCollector>
       startup_performance_data_collector_bindings_;
   StartupPerformanceTimes startup_performance_times_;
   bool tracing_active_;

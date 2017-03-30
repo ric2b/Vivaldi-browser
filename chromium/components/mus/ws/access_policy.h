@@ -50,6 +50,7 @@ class AccessPolicy {
   virtual bool CanSetWindowBounds(const ServerWindow* window) const = 0;
   virtual bool CanSetWindowProperties(const ServerWindow* window) const = 0;
   virtual bool CanSetWindowTextInputState(const ServerWindow* window) const = 0;
+  virtual bool CanSetCapture(const ServerWindow* window) const = 0;
   virtual bool CanSetFocus(const ServerWindow* window) const = 0;
   virtual bool CanSetClientArea(const ServerWindow* window) const = 0;
   // Used for all cursor properties; which cursor should be displayed,
@@ -63,7 +64,7 @@ class AccessPolicy {
       const ServerWindow* window,
       const ServerWindow** new_parent,
       const ServerWindow** old_parent) const = 0;
-  virtual bool CanSetWindowManagerInternal() const = 0;
+  virtual bool CanSetWindowManager() const = 0;
 
   // Returns the window to supply to the client when focus changes to |focused|.
   virtual const ServerWindow* GetWindowForFocusChange(

@@ -32,12 +32,8 @@
 
 #include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ScriptController.h"
-#include "core/InspectorFrontend.h"
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
-#include "core/inspector/InjectedScriptHost.h"
-#include "core/inspector/InjectedScriptManager.h"
-#include "core/inspector/InspectorState.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/page/Page.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -49,20 +45,13 @@ namespace InspectorAgentState {
 static const char inspectorAgentEnabled[] = "inspectorAgentEnabled";
 }
 
-InspectorInspectorAgent::InspectorInspectorAgent(InjectedScriptManager* injectedScriptManager)
-    : InspectorBaseAgent<InspectorInspectorAgent, InspectorFrontend::Inspector>("Inspector")
-    , m_injectedScriptManager(injectedScriptManager)
+InspectorInspectorAgent::InspectorInspectorAgent()
+    : InspectorBaseAgent<InspectorInspectorAgent, protocol::Frontend::Inspector>("Inspector")
 {
 }
 
 InspectorInspectorAgent::~InspectorInspectorAgent()
 {
-}
-
-DEFINE_TRACE(InspectorInspectorAgent)
-{
-    visitor->trace(m_injectedScriptManager);
-    InspectorBaseAgent::trace(visitor);
 }
 
 void InspectorInspectorAgent::enable(ErrorString*)
@@ -77,21 +66,11 @@ void InspectorInspectorAgent::disable(ErrorString*)
 {
     m_state->setBoolean(InspectorAgentState::inspectorAgentEnabled, false);
     m_pendingEvaluateTestCommands.clear();
-    m_injectedScriptManager->injectedScriptHost()->clearInspectedObjects();
-    m_injectedScriptManager->discardInjectedScripts();
-}
-
-void InspectorInspectorAgent::didCommitLoadForLocalFrame(LocalFrame* frame)
-{
-    if (frame != frame->localFrameRoot())
-        return;
-
-    m_injectedScriptManager->injectedScriptHost()->clearInspectedObjects();
 }
 
 void InspectorInspectorAgent::restore()
 {
-    if (m_state->getBoolean(InspectorAgentState::inspectorAgentEnabled)) {
+    if (m_state->booleanProperty(InspectorAgentState::inspectorAgentEnabled, false)) {
         ErrorString error;
         enable(&error);
     }
@@ -99,7 +78,7 @@ void InspectorInspectorAgent::restore()
 
 void InspectorInspectorAgent::evaluateForTestInFrontend(long callId, const String& script)
 {
-    if (m_state->getBoolean(InspectorAgentState::inspectorAgentEnabled)) {
+    if (m_state->booleanProperty(InspectorAgentState::inspectorAgentEnabled, false)) {
         frontend()->evaluateForTestInFrontend(static_cast<int>(callId), script);
         frontend()->flush();
     } else {
@@ -107,9 +86,9 @@ void InspectorInspectorAgent::evaluateForTestInFrontend(long callId, const Strin
     }
 }
 
-void InspectorInspectorAgent::inspect(PassRefPtr<TypeBuilder::Runtime::RemoteObject> objectToInspect, PassRefPtr<JSONObject> hints)
+void InspectorInspectorAgent::inspect(PassOwnPtr<protocol::Runtime::RemoteObject> objectToInspect, PassRefPtr<protocol::DictionaryValue> hints)
 {
-    if (frontend() && m_state->getBoolean(InspectorAgentState::inspectorAgentEnabled))
+    if (frontend() && m_state->booleanProperty(InspectorAgentState::inspectorAgentEnabled, false))
         frontend()->inspect(objectToInspect, hints);
 }
 

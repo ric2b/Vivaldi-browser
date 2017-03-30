@@ -13,6 +13,7 @@
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
+#include "base/process/launch.h"
 #include "base/process/process.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/lock.h"
@@ -39,8 +40,10 @@
 #elif defined(OS_POSIX)
 #include "base/memory/singleton.h"
 #include "content/browser/renderer_host/render_sandbox_host_linux.h"
+#include "content/browser/zygote_host/zygote_communication_linux.h"
 #include "content/browser/zygote_host/zygote_host_impl_linux.h"
 #include "content/common/child_process_sandbox_support_impl_linux.h"
+#include "content/public/browser/zygote_handle_linux.h"
 #endif
 
 #if defined(OS_POSIX)
@@ -53,7 +56,7 @@ namespace content {
 
 namespace {
 
-typedef base::Callback<void(bool,
+typedef base::Callback<void(ZygoteHandle,
 #if defined(OS_ANDROID)
                             base::ScopedFD,
 #endif
@@ -87,7 +90,7 @@ void OnChildProcessStartedAndroid(const NotifyCallback& callback,
       base::Bind(&RecordHistogramsOnLauncherThread, launch_time));
 
   base::Closure callback_on_client_thread(
-      base::Bind(callback, false, base::Passed(&ipcfd),
+      base::Bind(callback, nullptr, base::Passed(&ipcfd),
                  base::Passed(base::Process(handle))));
   if (BrowserThread::CurrentlyOn(client_thread_id)) {
     callback_on_client_thread.Run();
@@ -108,15 +111,15 @@ void LaunchOnLauncherThread(const NotifyCallback& callback,
                             base::CommandLine* cmd_line) {
   DCHECK_CURRENTLY_ON(BrowserThread::PROCESS_LAUNCHER);
   scoped_ptr<SandboxedProcessLauncherDelegate> delegate_deleter(delegate);
+#if !defined(OS_ANDROID)
+  ZygoteHandle zygote = nullptr;
+#endif
 #if defined(OS_WIN)
-  bool use_zygote = false;
   bool launch_elevated = delegate->ShouldLaunchElevated();
 #elif defined(OS_MACOSX)
-  bool use_zygote = false;
   base::EnvironmentMap env = delegate->GetEnvironment();
   base::ScopedFD ipcfd = delegate->TakeIpcFd();
 #elif defined(OS_POSIX) && !defined(OS_ANDROID)
-  bool use_zygote = delegate->ShouldUseZygote();
   base::EnvironmentMap env = delegate->GetEnvironment();
   base::ScopedFD ipcfd = delegate->TakeIpcFd();
 #endif
@@ -130,7 +133,8 @@ void LaunchOnLauncherThread(const NotifyCallback& callback,
     options.start_hidden = true;
     process = base::LaunchElevatedProcess(*cmd_line, options);
   } else {
-    process = StartSandboxedProcess(delegate, cmd_line);
+    process = StartSandboxedProcess(
+        delegate, cmd_line, base::HandlesToInheritVector());
   }
 #elif defined(OS_POSIX)
   std::string process_type =
@@ -154,6 +158,31 @@ void LaunchOnLauncherThread(const NotifyCallback& callback,
 #endif
       );
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
+  bool snapshot_loaded = false;
+#if defined(OS_ANDROID)
+  base::MemoryMappedFile::Region region;
+  auto maybe_register = [&region, &regions, &files_to_register](int key,
+                                                                int fd) {
+    if (fd != -1) {
+      files_to_register->Share(key, fd);
+      regions.insert(std::make_pair(key, region));
+    }
+  };
+  maybe_register(
+      kV8NativesDataDescriptor32,
+      gin::V8Initializer::GetOpenNativesFileForChildProcesses(&region, true));
+  maybe_register(
+      kV8NativesDataDescriptor64,
+      gin::V8Initializer::GetOpenNativesFileForChildProcesses(&region, false));
+  maybe_register(
+      kV8SnapshotDataDescriptor32,
+      gin::V8Initializer::GetOpenSnapshotFileForChildProcesses(&region, true));
+  maybe_register(
+      kV8SnapshotDataDescriptor64,
+      gin::V8Initializer::GetOpenSnapshotFileForChildProcesses(&region, false));
+
+  snapshot_loaded = true;
+#else
   base::PlatformFile natives_pf =
       gin::V8Initializer::GetOpenNativesFileForChildProcesses(
           &regions[kV8NativesDataDescriptor]);
@@ -167,13 +196,15 @@ void LaunchOnLauncherThread(const NotifyCallback& callback,
   // Failure to load the V8 snapshot is not necessarily an error. V8 can start
   // up (slower) without the snapshot.
   if (snapshot_pf != -1) {
+    snapshot_loaded = true;
     files_to_register->Share(kV8SnapshotDataDescriptor, snapshot_pf);
     regions.insert(std::make_pair(kV8SnapshotDataDescriptor, snapshot_region));
   }
+#endif
 
   if (process_type != switches::kZygoteProcess) {
     cmd_line->AppendSwitch(::switches::kV8NativesPassedByFD);
-    if (snapshot_pf != -1) {
+    if (snapshot_loaded) {
       cmd_line->AppendSwitch(::switches::kV8SnapshotPassedByFD);
     }
   }
@@ -199,8 +230,16 @@ void LaunchOnLauncherThread(const NotifyCallback& callback,
   // child termination.
 
 #if !defined(OS_MACOSX)
-  if (use_zygote) {
-    base::ProcessHandle handle = ZygoteHostImpl::GetInstance()->ForkRequest(
+  ZygoteHandle* zygote_handle = delegate->GetZygote();
+  // If |zygote_handle| is null, a zygote should not be used.
+  if (zygote_handle) {
+    // This code runs on the PROCESS_LAUNCHER thread so race conditions are not
+    // an issue with the lazy initialization.
+    if (*zygote_handle == nullptr) {
+      *zygote_handle = CreateZygote();
+    }
+    zygote = *zygote_handle;
+    base::ProcessHandle handle = zygote->ForkRequest(
         cmd_line->argv(), std::move(files_to_register), process_type);
     process = base::Process(handle);
   } else
@@ -278,13 +317,11 @@ void LaunchOnLauncherThread(const NotifyCallback& callback,
                                      begin_launch_time);
   }
   BrowserThread::PostTask(client_thread_id, FROM_HERE,
-                          base::Bind(callback,
-                                     use_zygote,
-                                     base::Passed(&process)));
+                          base::Bind(callback, zygote, base::Passed(&process)));
 #endif  // !defined(OS_ANDROID)
 }
 
-void TerminateOnLauncherThread(bool zygote, base::Process process) {
+void TerminateOnLauncherThread(ZygoteHandle zygote, base::Process process) {
   DCHECK_CURRENTLY_ON(BrowserThread::PROCESS_LAUNCHER);
 #if defined(OS_ANDROID)
   VLOG(1) << "ChromeProcess: Stopping process with handle "
@@ -300,7 +337,7 @@ void TerminateOnLauncherThread(bool zygote, base::Process process) {
   if (zygote) {
     // If the renderer was created via a zygote, we have to proxy the reaping
     // through the zygote process.
-    ZygoteHostImpl::GetInstance()->EnsureProcessTerminated(process.Handle());
+    zygote->EnsureProcessTerminated(process.Handle());
   } else
 #endif  // !OS_MACOSX
     base::EnsureProcessTerminated(std::move(process));
@@ -330,7 +367,7 @@ ChildProcessLauncher::ChildProcessLauncher(
     : client_(client),
       termination_status_(base::TERMINATION_STATUS_NORMAL_TERMINATION),
       exit_code_(RESULT_CODE_NORMAL_EXIT),
-      zygote_(false),
+      zygote_(nullptr),
       starting_(true),
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) ||  \
     defined(MEMORY_SANITIZER) || defined(THREAD_SANITIZER) || \
@@ -400,8 +437,8 @@ void ChildProcessLauncher::UpdateTerminationStatus(bool known_dead) {
   DCHECK(CalledOnValidThread());
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
   if (zygote_) {
-    termination_status_ = ZygoteHostImpl::GetInstance()->
-        GetTerminationStatus(process_.Handle(), known_dead, &exit_code_);
+    termination_status_ = zygote_->GetTerminationStatus(
+        process_.Handle(), known_dead, &exit_code_);
   } else if (known_dead) {
     termination_status_ =
         base::GetKnownDeadTerminationStatus(process_.Handle(), &exit_code_);
@@ -434,7 +471,7 @@ void ChildProcessLauncher::SetProcessBackgrounded(bool background) {
 void ChildProcessLauncher::DidLaunch(
     base::WeakPtr<ChildProcessLauncher> instance,
     bool terminate_on_shutdown,
-    bool zygote,
+    ZygoteHandle zygote,
 #if defined(OS_ANDROID)
     base::ScopedFD ipcfd,
 #endif
@@ -459,12 +496,11 @@ void ChildProcessLauncher::DidLaunch(
   }
 }
 
-void ChildProcessLauncher::Notify(
-    bool zygote,
+void ChildProcessLauncher::Notify(ZygoteHandle zygote,
 #if defined(OS_ANDROID)
-    base::ScopedFD ipcfd,
+                                  base::ScopedFD ipcfd,
 #endif
-    base::Process process) {
+                                  base::Process process) {
   DCHECK(CalledOnValidThread());
   starting_ = false;
   process_ = std::move(process);

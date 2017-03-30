@@ -19,6 +19,7 @@
 namespace content {
 
 class DesktopNotificationDelegate;
+struct NotificationResources;
 struct PlatformNotificationData;
 
 // Responsible for tracking active notifications and allowed origins for the
@@ -33,6 +34,10 @@ class LayoutTestNotificationManager : public PlatformNotificationService {
   // clicked. Must be called on the UI thread.
   void SimulateClick(const std::string& title, int action_index);
 
+  // Simulates the closing a notification titled |title|. Must be called on
+  // the UI thread.
+  void SimulateClose(const std::string& title, bool by_user);
+
   // PlatformNotificationService implementation.
   blink::WebNotificationPermission CheckPermissionOnUIThread(
       BrowserContext* browser_context,
@@ -44,16 +49,16 @@ class LayoutTestNotificationManager : public PlatformNotificationService {
       int render_process_id) override;
   void DisplayNotification(BrowserContext* browser_context,
                            const GURL& origin,
-                           const SkBitmap& icon,
                            const PlatformNotificationData& notification_data,
+                           const NotificationResources& notification_resources,
                            scoped_ptr<DesktopNotificationDelegate> delegate,
                            base::Closure* cancel_callback) override;
   void DisplayPersistentNotification(
       BrowserContext* browser_context,
       int64_t persistent_notification_id,
       const GURL& origin,
-      const SkBitmap& icon,
-      const PlatformNotificationData& notification_data) override;
+      const PlatformNotificationData& notification_data,
+      const NotificationResources& notification_resources) override;
   void ClosePersistentNotification(
       BrowserContext* browser_context,
       int64_t persistent_notification_id) override;

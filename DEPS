@@ -282,7 +282,7 @@ hooks = [
       'vivaldi/chromium/build/get_syzygy_binaries.py',
       '--output-dir',
       'vivaldi/chromium/third_party/syzygy/binaries',
-      '--revision=24abcb05aa6cc35545111d244378ef37b5d5218c',
+      '--revision=2d774f05a05cbc2f0dd929170c7a62fd549b2c5f',
       '--overwrite'
       ],
     'pattern':

@@ -49,7 +49,7 @@
 #include "core/style/StyleGridData.h"
 #include "core/style/StyleGridItemData.h"
 #include "core/style/StyleInheritedData.h"
-#include "core/style/StyleMotionPath.h"
+#include "core/style/StyleMotionRotation.h"
 #include "core/style/StyleMultiColData.h"
 #include "core/style/StyleRareInheritedData.h"
 #include "core/style/StyleRareNonInheritedData.h"
@@ -90,6 +90,10 @@ template<typename T, typename U> inline bool compareEqual(const T& t, const U& u
     if (!compareEqual(group->variable, value)) \
         group.access()->variable = value
 
+#define SET_NESTED_VAR(group, base, variable, value)            \
+    if (!compareEqual(group->base->variable, value))            \
+        group.access()->base.access()->variable = value
+
 #define SET_VAR_WITH_SETTER(group, getter, setter, value)    \
     if (!compareEqual(group->getter(), value)) \
         group.access()->setter(value)
@@ -107,6 +111,7 @@ class FilterOperations;
 class AppliedTextDecoration;
 class BorderData;
 struct BorderEdge;
+class CSSVariableData;
 class CounterContent;
 class Font;
 class FontMetrics;
@@ -135,6 +140,7 @@ class CORE_EXPORT ComputedStyle: public RefCounted<ComputedStyle> {
     friend class CachedUAStyle; // Saves Border/Background information for later comparison.
     friend class ColorPropertyFunctions; // Reads initial style values and accesses visited and unvisited colors.
     friend class LengthPropertyFunctions; // Reads initial style values.
+    friend class LengthListPropertyFunctions; // Reads initial style values.
     friend class NumberPropertyFunctions; // Reads initial style values.
     friend class PaintPropertyFunctions; // Reads initial style values.
 
@@ -232,9 +238,9 @@ protected:
                 && tableLayout == other.tableLayout
                 && unicodeBidi == other.unicodeBidi
                 // hasViewportUnits
-                && pageBreakBefore == other.pageBreakBefore
-                && pageBreakAfter == other.pageBreakAfter
-                && pageBreakInside == other.pageBreakInside;
+                && breakBefore == other.breakBefore
+                && breakAfter == other.breakAfter
+                && breakInside == other.breakInside;
                 // styleType
                 // pseudoBits
                 // explicitInheritance
@@ -266,9 +272,9 @@ protected:
 
         // 32 bits
 
-        unsigned pageBreakBefore : 2; // EPageBreak
-        unsigned pageBreakAfter : 2; // EPageBreak
-        unsigned pageBreakInside : 2; // EPageBreak
+        unsigned breakBefore : 4; // EBreak
+        unsigned breakAfter : 4; // EBreak
+        unsigned breakInside : 2; // EBreak
 
         unsigned styleType : 6; // PseudoId
         unsigned pseudoBits : 8;
@@ -283,11 +289,13 @@ protected:
         unsigned affectedByActive : 1;
         unsigned affectedByDrag : 1;
 
+        // 64 bits
+
         unsigned isLink : 1;
 
         mutable unsigned hasRemUnits : 1;
         // If you add more style bits here, you will also need to update ComputedStyle::copyNonInheritedFromCached()
-        // 62 bits
+        // 66 bits
     } noninherited_flags;
 
 // !END SYNC!
@@ -323,9 +331,9 @@ protected:
         noninherited_flags.floating = initialFloating();
         noninherited_flags.tableLayout = initialTableLayout();
         noninherited_flags.unicodeBidi = initialUnicodeBidi();
-        noninherited_flags.pageBreakBefore = initialPageBreak();
-        noninherited_flags.pageBreakAfter = initialPageBreak();
-        noninherited_flags.pageBreakInside = initialPageBreak();
+        noninherited_flags.breakBefore = initialBreakBefore();
+        noninherited_flags.breakAfter = initialBreakAfter();
+        noninherited_flags.breakInside = initialBreakInside();
         noninherited_flags.styleType = NOPSEUDO;
         noninherited_flags.pseudoBits = 0;
         noninherited_flags.explicitInheritance = false;
@@ -362,10 +370,15 @@ public:
     static PassRefPtr<ComputedStyle> create();
     static PassRefPtr<ComputedStyle> createAnonymousStyleWithDisplay(const ComputedStyle& parentStyle, EDisplay);
     static PassRefPtr<ComputedStyle> clone(const ComputedStyle&);
+    static void invalidateInitialStyle();
 
     // Computes how the style change should be propagated down the tree.
     static StyleRecalcChange stylePropagationDiff(const ComputedStyle* oldStyle, const ComputedStyle* newStyle);
 
+    ContentPosition resolvedJustifyContentPosition(const StyleContentAlignmentData& normalValueBehavior) const;
+    ContentDistributionType resolvedJustifyContentDistribution(const StyleContentAlignmentData& normalValueBehavior) const;
+    ContentPosition resolvedAlignContentPosition(const StyleContentAlignmentData& normalValueBehavior) const;
+    ContentDistributionType resolvedAlignContentDistribution(const StyleContentAlignmentData& normalValueBehavior) const;
     const StyleSelfAlignmentData resolvedAlignment(const ComputedStyle& parentStyle, ItemPosition resolvedAutoPositionForLayoutObject) const;
     static ItemPosition resolveAlignment(const ComputedStyle& parentStyle, const ComputedStyle& childStyle, ItemPosition resolvedAutoPositionForLayoutObject);
     static ItemPosition resolveJustification(const ComputedStyle& parentStyle, const ComputedStyle& childStyle, ItemPosition resolvedAutoPositionForLayoutObject);
@@ -423,7 +436,14 @@ public:
 
     bool hasAppearance() const { return appearance() != NoControlPart; }
 
-    bool isBackgroundColorCurrentColor() const { return backgroundColor().isCurrentColor() || visitedLinkBackgroundColor().isCurrentColor(); }
+    bool hasBackgroundRelatedColorReferencingCurrentColor() const
+    {
+        if (backgroundColor().isCurrentColor() || visitedLinkBackgroundColor().isCurrentColor())
+            return true;
+        if (!boxShadow())
+            return false;
+        return shadowListHasCurrentColor(boxShadow());
+    }
 
     bool hasBackground() const
     {
@@ -734,9 +754,9 @@ public:
     short orphans() const { return rareInheritedData->orphans; }
     bool hasAutoWidows() const { return rareInheritedData->widows == 1; }
     bool hasAutoOrphans() const { return rareInheritedData->m_hasAutoOrphans; }
-    EPageBreak pageBreakInside() const { return static_cast<EPageBreak>(noninherited_flags.pageBreakInside); }
-    EPageBreak pageBreakBefore() const { return static_cast<EPageBreak>(noninherited_flags.pageBreakBefore); }
-    EPageBreak pageBreakAfter() const { return static_cast<EPageBreak>(noninherited_flags.pageBreakAfter); }
+    EBreak breakAfter() const { return static_cast<EBreak>(noninherited_flags.breakAfter); }
+    EBreak breakBefore() const { return static_cast<EBreak>(noninherited_flags.breakBefore); }
+    EBreak breakInside() const { return static_cast<EBreak>(noninherited_flags.breakInside); }
 
     // CSS3 Getter Methods
 
@@ -829,6 +849,7 @@ public:
 
     Containment contain() const { return static_cast<Containment>(rareNonInheritedData->m_contain); }
     bool containsPaint() const { return rareNonInheritedData->m_contain & ContainsPaint; }
+    bool containsStyle() const { return rareNonInheritedData->m_contain & ContainsStyle; }
 
     EBoxSizing boxSizing() const { return m_box->boxSizing(); }
     EUserModify userModify() const { return static_cast<EUserModify>(rareInheritedData->userModify); }
@@ -866,9 +887,6 @@ public:
     bool columnRuleIsTransparent() const { return rareNonInheritedData->m_multiCol->m_rule.isTransparent(); }
     bool columnRuleEquivalent(const ComputedStyle* otherStyle) const;
     ColumnSpan columnSpan() const { return static_cast<ColumnSpan>(rareNonInheritedData->m_multiCol->m_columnSpan); }
-    EPageBreak columnBreakBefore() const { return static_cast<EPageBreak>(rareNonInheritedData->m_multiCol->m_breakBefore); }
-    EPageBreak columnBreakInside() const { return static_cast<EPageBreak>(rareNonInheritedData->m_multiCol->m_breakInside); }
-    EPageBreak columnBreakAfter() const { return static_cast<EPageBreak>(rareNonInheritedData->m_multiCol->m_breakAfter); }
     bool hasInlineTransform() const { return rareNonInheritedData->m_hasInlineTransform; }
     bool hasCompositorProxy() const { return rareNonInheritedData->m_hasCompositorProxy; }
     const TransformOperations& transform() const { return rareNonInheritedData->m_transform->m_operations; }
@@ -884,11 +902,10 @@ public:
     bool hasTransformOperations() const { return !rareNonInheritedData->m_transform->m_operations.operations().isEmpty(); }
     bool transformDataEquivalent(const ComputedStyle& otherStyle) const { return rareNonInheritedData->m_transform == otherStyle.rareNonInheritedData->m_transform; }
 
-    StyleMotionPath* motionPath() const { return rareNonInheritedData->m_transform->m_motion.m_path.get(); }
+    StylePath* motionPath() const { return rareNonInheritedData->m_transform->m_motion.m_path.get(); }
     bool hasMotionPath() const { return rareNonInheritedData->m_transform->m_motion.m_path; }
     const Length& motionOffset() const { return rareNonInheritedData->m_transform->m_motion.m_offset; }
-    float motionRotation() const { return rareNonInheritedData->m_transform->m_motion.m_rotation; }
-    MotionRotationType motionRotationType() const { return rareNonInheritedData->m_transform->m_motion.m_rotationType; }
+    const StyleMotionRotation& motionRotation() const { return rareNonInheritedData->m_transform->m_motion.m_rotation; }
 
     TextEmphasisFill textEmphasisFill() const { return static_cast<TextEmphasisFill>(rareInheritedData->textEmphasisFill); }
     TextEmphasisMark textEmphasisMark() const;
@@ -918,6 +935,9 @@ public:
 
     TextCombine textCombine() const { return static_cast<TextCombine>(rareInheritedData->m_textCombine); }
     bool hasTextCombine() const { return textCombine() != TextCombineNone; }
+
+    uint8_t snapHeightPosition() const { return rareInheritedData->m_snapHeightPosition; }
+    uint8_t snapHeightUnit() const { return rareInheritedData->m_snapHeightUnit; }
 
     TabSize tabSize() const { return rareInheritedData->m_tabSize; }
 
@@ -1287,10 +1307,9 @@ public:
     void setHasAutoOrphans() { SET_VAR(rareInheritedData, m_hasAutoOrphans, true); SET_VAR(rareInheritedData, orphans, initialOrphans()); }
     void setOrphans(short o) { SET_VAR(rareInheritedData, m_hasAutoOrphans, false); SET_VAR(rareInheritedData, orphans, o); }
 
-    // For valid values of page-break-inside see http://www.w3.org/TR/CSS21/page.html#page-break-props
-    void setPageBreakInside(EPageBreak b) { ASSERT(b == PBAUTO || b == PBAVOID); noninherited_flags.pageBreakInside = b; }
-    void setPageBreakBefore(EPageBreak b) { noninherited_flags.pageBreakBefore = b; }
-    void setPageBreakAfter(EPageBreak b) { noninherited_flags.pageBreakAfter = b; }
+    void setBreakAfter(EBreak b) { ASSERT(b <= BreakValueLastAllowedForBreakAfterAndBefore); noninherited_flags.breakAfter = b; }
+    void setBreakBefore(EBreak b) { ASSERT(b <= BreakValueLastAllowedForBreakAfterAndBefore); noninherited_flags.breakBefore = b;  }
+    void setBreakInside(EBreak b) { ASSERT(b <= BreakValueLastAllowedForBreakInside); noninherited_flags.breakInside = b;  }
 
     // CSS3 Setters
     void setOutlineOffset(int v) { SET_VAR(m_background, m_outline.m_offset, v); }
@@ -1301,22 +1320,22 @@ public:
     void setOpacity(float f) { float v = clampTo<float>(f, 0, 1); SET_VAR(rareNonInheritedData, opacity, v); }
     void setAppearance(ControlPart a) { SET_VAR(rareNonInheritedData, m_appearance, a); }
     // For valid values of box-align see http://www.w3.org/TR/2009/WD-css3-flexbox-20090723/#alignment
-    void setBoxAlign(EBoxAlignment a) { SET_VAR(rareNonInheritedData.access()->m_deprecatedFlexibleBox, align, a); }
+    void setBoxAlign(EBoxAlignment a) { SET_NESTED_VAR(rareNonInheritedData, m_deprecatedFlexibleBox, align, a); }
     void setBoxDecorationBreak(EBoxDecorationBreak b) { SET_VAR(m_box, m_boxDecorationBreak, b); }
     void setBoxDirection(EBoxDirection d) { inherited_flags._box_direction = d; }
-    void setBoxFlex(float f) { SET_VAR(rareNonInheritedData.access()->m_deprecatedFlexibleBox, flex, f); }
-    void setBoxFlexGroup(unsigned fg) { SET_VAR(rareNonInheritedData.access()->m_deprecatedFlexibleBox, flexGroup, fg); }
-    void setBoxLines(EBoxLines l) { SET_VAR(rareNonInheritedData.access()->m_deprecatedFlexibleBox, lines, l); }
-    void setBoxOrdinalGroup(unsigned og) { SET_VAR(rareNonInheritedData.access()->m_deprecatedFlexibleBox, ordinalGroup, og); }
-    void setBoxOrient(EBoxOrient o) { SET_VAR(rareNonInheritedData.access()->m_deprecatedFlexibleBox, orient, o); }
-    void setBoxPack(EBoxPack p) { SET_VAR(rareNonInheritedData.access()->m_deprecatedFlexibleBox, pack, p); }
+    void setBoxFlex(float f) { SET_NESTED_VAR(rareNonInheritedData, m_deprecatedFlexibleBox, flex, f); }
+    void setBoxFlexGroup(unsigned fg) { SET_NESTED_VAR(rareNonInheritedData, m_deprecatedFlexibleBox, flexGroup, fg); }
+    void setBoxLines(EBoxLines l) { SET_NESTED_VAR(rareNonInheritedData, m_deprecatedFlexibleBox, lines, l); }
+    void setBoxOrdinalGroup(unsigned og) { SET_NESTED_VAR(rareNonInheritedData, m_deprecatedFlexibleBox, ordinalGroup, og); }
+    void setBoxOrient(EBoxOrient o) { SET_NESTED_VAR(rareNonInheritedData, m_deprecatedFlexibleBox, orient, o); }
+    void setBoxPack(EBoxPack p) { SET_NESTED_VAR(rareNonInheritedData, m_deprecatedFlexibleBox, pack, p); }
     void setBoxShadow(PassRefPtr<ShadowList>);
     void setBoxReflect(PassRefPtr<StyleReflection> reflect) { if (rareNonInheritedData->m_boxReflect != reflect) rareNonInheritedData.access()->m_boxReflect = reflect; }
     void setBoxSizing(EBoxSizing s) { SET_VAR(m_box, m_boxSizing, s); }
     void setContain(Containment contain) { SET_VAR(rareNonInheritedData, m_contain, contain); }
-    void setFlexGrow(float f) { SET_VAR(rareNonInheritedData.access()->m_flexibleBox, m_flexGrow, f); }
-    void setFlexShrink(float f) { SET_VAR(rareNonInheritedData.access()->m_flexibleBox, m_flexShrink, f); }
-    void setFlexBasis(const Length& length) { SET_VAR(rareNonInheritedData.access()->m_flexibleBox, m_flexBasis, length); }
+    void setFlexGrow(float f) { SET_NESTED_VAR(rareNonInheritedData, m_flexibleBox, m_flexGrow, f); }
+    void setFlexShrink(float f) { SET_NESTED_VAR(rareNonInheritedData, m_flexibleBox, m_flexShrink, f); }
+    void setFlexBasis(const Length& length) { SET_NESTED_VAR(rareNonInheritedData, m_flexibleBox, m_flexBasis, length); }
     // We restrict the smallest value to int min + 2 because we use int min and int min + 1 as special values in a hash set.
     void setOrder(int o) { SET_VAR(rareNonInheritedData, m_order, max(std::numeric_limits<int>::min() + 2, o)); }
     void addCallbackSelector(const String& selector);
@@ -1330,8 +1349,8 @@ public:
     void setAlignSelf(const StyleSelfAlignmentData& data) { SET_VAR(rareNonInheritedData, m_alignSelf, data); }
     void setAlignSelfPosition(ItemPosition position) { rareNonInheritedData.access()->m_alignSelf.setPosition(position); }
     void setAlignSelfOverflow(OverflowAlignment overflow) { rareNonInheritedData.access()->m_alignSelf.setOverflow(overflow); }
-    void setFlexDirection(EFlexDirection direction) { SET_VAR(rareNonInheritedData.access()->m_flexibleBox, m_flexDirection, direction); }
-    void setFlexWrap(EFlexWrap w) { SET_VAR(rareNonInheritedData.access()->m_flexibleBox, m_flexWrap, w); }
+    void setFlexDirection(EFlexDirection direction) { SET_NESTED_VAR(rareNonInheritedData, m_flexibleBox, m_flexDirection, direction); }
+    void setFlexWrap(EFlexWrap w) { SET_NESTED_VAR(rareNonInheritedData, m_flexibleBox, m_flexWrap, w); }
     void setJustifyContent(const StyleContentAlignmentData& data) { SET_VAR(rareNonInheritedData, m_justifyContent, data); }
     void setJustifyContentPosition(ContentPosition position) { rareNonInheritedData.access()->m_justifyContent.setPosition(position); }
     void setJustifyContentDistribution(ContentDistributionType distribution) { rareNonInheritedData.access()->m_justifyContent.setDistribution(distribution); }
@@ -1343,25 +1362,25 @@ public:
     void setJustifySelf(const StyleSelfAlignmentData& data) { SET_VAR(rareNonInheritedData, m_justifySelf, data); }
     void setJustifySelfPosition(ItemPosition position) { rareNonInheritedData.access()->m_justifySelf.setPosition(position); }
     void setJustifySelfOverflow(OverflowAlignment overflow) { rareNonInheritedData.access()->m_justifySelf.setOverflow(overflow); }
-    void setGridAutoColumns(const GridTrackSize& length) { SET_VAR(rareNonInheritedData.access()->m_grid, m_gridAutoColumns, length); }
-    void setGridAutoRows(const GridTrackSize& length) { SET_VAR(rareNonInheritedData.access()->m_grid, m_gridAutoRows, length); }
-    void setGridTemplateColumns(const Vector<GridTrackSize>& lengths) { SET_VAR(rareNonInheritedData.access()->m_grid, m_gridTemplateColumns, lengths); }
-    void setGridTemplateRows(const Vector<GridTrackSize>& lengths) { SET_VAR(rareNonInheritedData.access()->m_grid, m_gridTemplateRows, lengths); }
-    void setNamedGridColumnLines(const NamedGridLinesMap& namedGridColumnLines) { SET_VAR(rareNonInheritedData.access()->m_grid, m_namedGridColumnLines, namedGridColumnLines); }
-    void setNamedGridRowLines(const NamedGridLinesMap& namedGridRowLines) { SET_VAR(rareNonInheritedData.access()->m_grid, m_namedGridRowLines, namedGridRowLines); }
-    void setOrderedNamedGridColumnLines(const OrderedNamedGridLines& orderedNamedGridColumnLines) { SET_VAR(rareNonInheritedData.access()->m_grid, m_orderedNamedGridColumnLines, orderedNamedGridColumnLines); }
-    void setOrderedNamedGridRowLines(const OrderedNamedGridLines& orderedNamedGridRowLines) { SET_VAR(rareNonInheritedData.access()->m_grid, m_orderedNamedGridRowLines, orderedNamedGridRowLines); }
-    void setNamedGridArea(const NamedGridAreaMap& namedGridArea) { SET_VAR(rareNonInheritedData.access()->m_grid, m_namedGridArea, namedGridArea); }
-    void setNamedGridAreaRowCount(size_t rowCount) { SET_VAR(rareNonInheritedData.access()->m_grid, m_namedGridAreaRowCount, rowCount); }
-    void setNamedGridAreaColumnCount(size_t columnCount) { SET_VAR(rareNonInheritedData.access()->m_grid, m_namedGridAreaColumnCount, columnCount); }
-    void setGridAutoFlow(GridAutoFlow flow) { SET_VAR(rareNonInheritedData.access()->m_grid, m_gridAutoFlow, flow); }
+    void setGridAutoColumns(const GridTrackSize& length) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_gridAutoColumns, length); }
+    void setGridAutoRows(const GridTrackSize& length) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_gridAutoRows, length); }
+    void setGridTemplateColumns(const Vector<GridTrackSize>& lengths) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_gridTemplateColumns, lengths); }
+    void setGridTemplateRows(const Vector<GridTrackSize>& lengths) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_gridTemplateRows, lengths); }
+    void setNamedGridColumnLines(const NamedGridLinesMap& namedGridColumnLines) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_namedGridColumnLines, namedGridColumnLines); }
+    void setNamedGridRowLines(const NamedGridLinesMap& namedGridRowLines) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_namedGridRowLines, namedGridRowLines); }
+    void setOrderedNamedGridColumnLines(const OrderedNamedGridLines& orderedNamedGridColumnLines) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_orderedNamedGridColumnLines, orderedNamedGridColumnLines); }
+    void setOrderedNamedGridRowLines(const OrderedNamedGridLines& orderedNamedGridRowLines) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_orderedNamedGridRowLines, orderedNamedGridRowLines); }
+    void setNamedGridArea(const NamedGridAreaMap& namedGridArea) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_namedGridArea, namedGridArea); }
+    void setNamedGridAreaRowCount(size_t rowCount) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_namedGridAreaRowCount, rowCount); }
+    void setNamedGridAreaColumnCount(size_t columnCount) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_namedGridAreaColumnCount, columnCount); }
+    void setGridAutoFlow(GridAutoFlow flow) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_gridAutoFlow, flow); }
 
-    void setGridColumnStart(const GridPosition& columnStartPosition) { SET_VAR(rareNonInheritedData.access()->m_gridItem, m_gridColumnStart, columnStartPosition); }
-    void setGridColumnEnd(const GridPosition& columnEndPosition) { SET_VAR(rareNonInheritedData.access()->m_gridItem, m_gridColumnEnd, columnEndPosition); }
-    void setGridRowStart(const GridPosition& rowStartPosition) { SET_VAR(rareNonInheritedData.access()->m_gridItem, m_gridRowStart, rowStartPosition); }
-    void setGridRowEnd(const GridPosition& rowEndPosition) { SET_VAR(rareNonInheritedData.access()->m_gridItem, m_gridRowEnd, rowEndPosition); }
-    void setGridColumnGap(const Length& v) { SET_VAR(rareNonInheritedData.access()->m_grid, m_gridColumnGap, v); }
-    void setGridRowGap(const Length& v) { SET_VAR(rareNonInheritedData.access()->m_grid, m_gridRowGap, v); }
+    void setGridColumnStart(const GridPosition& columnStartPosition) { SET_NESTED_VAR(rareNonInheritedData, m_gridItem, m_gridColumnStart, columnStartPosition); }
+    void setGridColumnEnd(const GridPosition& columnEndPosition) { SET_NESTED_VAR(rareNonInheritedData, m_gridItem, m_gridColumnEnd, columnEndPosition); }
+    void setGridRowStart(const GridPosition& rowStartPosition) { SET_NESTED_VAR(rareNonInheritedData, m_gridItem, m_gridRowStart, rowStartPosition); }
+    void setGridRowEnd(const GridPosition& rowEndPosition) { SET_NESTED_VAR(rareNonInheritedData, m_gridItem, m_gridRowEnd, rowEndPosition); }
+    void setGridColumnGap(const Length& v) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_gridColumnGap, v); }
+    void setGridRowGap(const Length& v) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_gridRowGap, v); }
 
     void setUserModify(EUserModify u) { SET_VAR(rareInheritedData, userModify, u); }
     void setUserDrag(EUserDrag d) { SET_VAR(rareNonInheritedData, userDrag, d); }
@@ -1375,29 +1394,25 @@ public:
     void setHighlight(const AtomicString& h) { SET_VAR(rareInheritedData, highlight, h); }
     void setHyphenationString(const AtomicString& h) { SET_VAR(rareInheritedData, hyphenationString, h); }
     void setResize(EResize r) { SET_VAR(rareNonInheritedData, m_resize, r); }
-    void setColumnWidth(float f) { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_autoWidth, false); SET_VAR(rareNonInheritedData.access()->m_multiCol, m_width, f); }
-    void setHasAutoColumnWidth() { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_autoWidth, true); SET_VAR(rareNonInheritedData.access()->m_multiCol, m_width, 0); }
-    void setColumnCount(unsigned short c) { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_autoCount, false); SET_VAR(rareNonInheritedData.access()->m_multiCol, m_count, c); }
-    void setHasAutoColumnCount() { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_autoCount, true); SET_VAR(rareNonInheritedData.access()->m_multiCol, m_count, initialColumnCount()); }
-    void setColumnFill(ColumnFill columnFill) { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_fill, columnFill); }
-    void setColumnGap(float f) { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_normalGap, false); SET_VAR(rareNonInheritedData.access()->m_multiCol, m_gap, f); }
-    void setHasNormalColumnGap() { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_normalGap, true); SET_VAR(rareNonInheritedData.access()->m_multiCol, m_gap, 0); }
+    void setColumnWidth(float f) { SET_NESTED_VAR(rareNonInheritedData, m_multiCol, m_autoWidth, false); SET_NESTED_VAR(rareNonInheritedData, m_multiCol, m_width, f); }
+    void setHasAutoColumnWidth() { SET_NESTED_VAR(rareNonInheritedData, m_multiCol, m_autoWidth, true); SET_NESTED_VAR(rareNonInheritedData, m_multiCol, m_width, 0); }
+    void setColumnCount(unsigned short c) { SET_NESTED_VAR(rareNonInheritedData, m_multiCol, m_autoCount, false); SET_NESTED_VAR(rareNonInheritedData, m_multiCol, m_count, c); }
+    void setHasAutoColumnCount() { SET_NESTED_VAR(rareNonInheritedData, m_multiCol, m_autoCount, true); SET_NESTED_VAR(rareNonInheritedData, m_multiCol, m_count, initialColumnCount()); }
+    void setColumnFill(ColumnFill columnFill) { SET_NESTED_VAR(rareNonInheritedData, m_multiCol, m_fill, columnFill); }
+    void setColumnGap(float f) { SET_NESTED_VAR(rareNonInheritedData, m_multiCol, m_normalGap, false); SET_NESTED_VAR(rareNonInheritedData, m_multiCol, m_gap, f); }
+    void setHasNormalColumnGap() { SET_NESTED_VAR(rareNonInheritedData, m_multiCol, m_normalGap, true); SET_NESTED_VAR(rareNonInheritedData, m_multiCol, m_gap, 0); }
     void setColumnRuleColor(const StyleColor& c) { SET_BORDERVALUE_COLOR(rareNonInheritedData.access()->m_multiCol, m_rule, c); }
-    void setColumnRuleStyle(EBorderStyle b) { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_rule.m_style, b); }
-    void setColumnRuleWidth(unsigned short w) { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_rule.m_width, w); }
-    void setColumnSpan(ColumnSpan columnSpan) { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_columnSpan, columnSpan); }
-    void setColumnBreakBefore(EPageBreak p) { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_breakBefore, p); }
-    // For valid values of column-break-inside see http://www.w3.org/TR/css3-multicol/#break-before-break-after-break-inside
-    void setColumnBreakInside(EPageBreak p) { ASSERT(p == PBAUTO || p == PBAVOID); SET_VAR(rareNonInheritedData.access()->m_multiCol, m_breakInside, p); }
-    void setColumnBreakAfter(EPageBreak p) { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_breakAfter, p); }
+    void setColumnRuleStyle(EBorderStyle b) { SET_NESTED_VAR(rareNonInheritedData, m_multiCol, m_rule.m_style, b); }
+    void setColumnRuleWidth(unsigned short w) { SET_NESTED_VAR(rareNonInheritedData, m_multiCol, m_rule.m_width, w); }
+    void setColumnSpan(ColumnSpan columnSpan) { SET_NESTED_VAR(rareNonInheritedData, m_multiCol, m_columnSpan, columnSpan); }
     void inheritColumnPropertiesFrom(const ComputedStyle& parent) { rareNonInheritedData.access()->m_multiCol = parent.rareNonInheritedData->m_multiCol; }
     void setHasInlineTransform(bool b) { SET_VAR(rareNonInheritedData, m_hasInlineTransform, b); }
     void setHasCompositorProxy(bool b) { SET_VAR(rareNonInheritedData, m_hasCompositorProxy, b); }
-    void setTransform(const TransformOperations& ops) { SET_VAR(rareNonInheritedData.access()->m_transform, m_operations, ops); }
+    void setTransform(const TransformOperations& ops) { SET_NESTED_VAR(rareNonInheritedData, m_transform, m_operations, ops); }
     void setTransformOriginX(const Length& v) { setTransformOrigin(TransformOrigin(v, transformOriginY(), transformOriginZ())); }
     void setTransformOriginY(const Length& v) { setTransformOrigin(TransformOrigin(transformOriginX(), v, transformOriginZ())); }
     void setTransformOriginZ(float f) { setTransformOrigin(TransformOrigin(transformOriginX(), transformOriginY(), f)); }
-    void setTransformOrigin(const TransformOrigin& o) { SET_VAR(rareNonInheritedData.access()->m_transform, m_origin, o); }
+    void setTransformOrigin(const TransformOrigin& o) { SET_NESTED_VAR(rareNonInheritedData, m_transform, m_origin, o); }
     void setTranslate(PassRefPtr<TranslateTransformOperation> v) { rareNonInheritedData.access()->m_transform.access()->m_translate = v; }
     void setRotate(PassRefPtr<RotateTransformOperation> v) { rareNonInheritedData.access()->m_transform.access()->m_rotate = v; }
     void setScale(PassRefPtr<ScaleTransformOperation> v) { rareNonInheritedData.access()->m_transform.access()->m_scale = v; }
@@ -1412,19 +1427,20 @@ public:
     void setTextEmphasisPosition(TextEmphasisPosition position) { SET_VAR(rareInheritedData, textEmphasisPosition, position); }
     bool setTextOrientation(TextOrientation);
 
-    void setMotionPath(PassRefPtr<StyleMotionPath>);
-    void resetMotionPath();
-    void setMotionOffset(const Length& motionOffset) { SET_VAR(rareNonInheritedData.access()->m_transform, m_motion.m_offset, motionOffset); }
-    void setMotionRotation(float motionRotation) { SET_VAR(rareNonInheritedData.access()->m_transform, m_motion.m_rotation, motionRotation); }
-    void setMotionRotationType(MotionRotationType motionRotationType) { SET_VAR(rareNonInheritedData.access()->m_transform, m_motion.m_rotationType, motionRotationType); }
+    void setMotionPath(PassRefPtr<StylePath>);
+    void setMotionOffset(const Length& motionOffset) { SET_NESTED_VAR(rareNonInheritedData, m_transform, m_motion.m_offset, motionOffset); }
+    void setMotionRotation(const StyleMotionRotation& motionRotation) { SET_NESTED_VAR(rareNonInheritedData, m_transform, m_motion.m_rotation, motionRotation); }
 
     void setObjectFit(ObjectFit f) { SET_VAR(rareNonInheritedData, m_objectFit, f); }
     void setObjectPosition(LengthPoint position) { SET_VAR(rareNonInheritedData, m_objectPosition, position); }
 
     void setRubyPosition(RubyPosition position) { SET_VAR(rareInheritedData, m_rubyPosition, position); }
 
-    void setFilter(const FilterOperations& ops) { SET_VAR(rareNonInheritedData.access()->m_filter, m_operations, ops); }
-    void setBackdropFilter(const FilterOperations& ops) { SET_VAR(rareNonInheritedData.access()->m_backdropFilter, m_operations, ops); }
+    void setFilter(const FilterOperations& ops) { SET_NESTED_VAR(rareNonInheritedData, m_filter, m_operations, ops); }
+    void setBackdropFilter(const FilterOperations& ops) { SET_NESTED_VAR(rareNonInheritedData, m_backdropFilter, m_operations, ops); }
+
+    void setSnapHeightPosition(uint8_t position) { SET_VAR(rareInheritedData, m_snapHeightPosition, position); }
+    void setSnapHeightUnit(uint8_t unit) { SET_VAR(rareInheritedData, m_snapHeightUnit, unit); }
 
     void setTabSize(TabSize size) { SET_VAR(rareInheritedData, m_tabSize, size); }
 
@@ -1466,14 +1482,14 @@ public:
     void setScrollBehavior(ScrollBehavior b) { SET_VAR(rareNonInheritedData, m_scrollBehavior, b); }
 
     void setScrollSnapType(ScrollSnapType b) { SET_VAR(rareNonInheritedData, m_scrollSnapType, b); }
-    void setScrollSnapPointsX(const ScrollSnapPoints& b) { SET_VAR(rareNonInheritedData.access()->m_scrollSnap, m_xPoints, b); }
-    void setScrollSnapPointsY(const ScrollSnapPoints& b) { SET_VAR(rareNonInheritedData.access()->m_scrollSnap, m_yPoints, b); }
-    void setScrollSnapDestination(const LengthPoint& b) { SET_VAR(rareNonInheritedData.access()->m_scrollSnap, m_destination, b); }
-    void setScrollSnapCoordinate(const Vector<LengthPoint>& b) { SET_VAR(rareNonInheritedData.access()->m_scrollSnap, m_coordinates, b); }
+    void setScrollSnapPointsX(const ScrollSnapPoints& b) { SET_NESTED_VAR(rareNonInheritedData, m_scrollSnap, m_xPoints, b); }
+    void setScrollSnapPointsY(const ScrollSnapPoints& b) { SET_NESTED_VAR(rareNonInheritedData, m_scrollSnap, m_yPoints, b); }
+    void setScrollSnapDestination(const LengthPoint& b) { SET_NESTED_VAR(rareNonInheritedData, m_scrollSnap, m_destination, b); }
+    void setScrollSnapCoordinate(const Vector<LengthPoint>& b) { SET_NESTED_VAR(rareNonInheritedData, m_scrollSnap, m_coordinates, b); }
 
-    void setWillChangeProperties(const Vector<CSSPropertyID>& properties) { SET_VAR(rareNonInheritedData.access()->m_willChange, m_properties, properties); }
-    void setWillChangeContents(bool b) { SET_VAR(rareNonInheritedData.access()->m_willChange, m_contents, b); }
-    void setWillChangeScrollPosition(bool b) { SET_VAR(rareNonInheritedData.access()->m_willChange, m_scrollPosition, b); }
+    void setWillChangeProperties(const Vector<CSSPropertyID>& properties) { SET_NESTED_VAR(rareNonInheritedData, m_willChange, m_properties, properties); }
+    void setWillChangeContents(bool b) { SET_NESTED_VAR(rareNonInheritedData, m_willChange, m_contents, b); }
+    void setWillChangeScrollPosition(bool b) { SET_NESTED_VAR(rareNonInheritedData, m_willChange, m_scrollPosition, b); }
     void setSubtreeWillChangeContents(bool b) { SET_VAR(rareInheritedData, m_subtreeWillChangeContents, b); }
 
     bool requiresAcceleratedCompositingForExternalReasons(bool b) { return rareNonInheritedData->m_requiresAcceleratedCompositingForExternalReasons; }
@@ -1618,7 +1634,7 @@ public:
     bool hasChildDependentFlags() const { return emptyState() || hasExplicitlyInheritedProperties(); }
     void copyChildDependentFlagsFrom(const ComputedStyle&);
 
-    bool hasBoxDecorations() const { return hasBorderDecoration() || hasBorderRadius() || hasOutline() || hasAppearance() || boxShadow() || hasFilter() || resize() != RESIZE_NONE; }
+    bool hasBoxDecorations() const { return hasBorderDecoration() || hasBorderRadius() || hasOutline() || hasAppearance() || boxShadow() || hasFilter() || hasBackdropFilter() || resize() != RESIZE_NONE; }
 
     bool borderObscuresBackground() const;
     void getBorderEdgeInfo(BorderEdge edges[], bool includeLogicalLeftEdge = true, bool includeLogicalRightEdge = true) const;
@@ -1651,7 +1667,9 @@ public:
     static EListStyleType initialListStyleType() { return Disc; }
     static EOverflow initialOverflowX() { return OVISIBLE; }
     static EOverflow initialOverflowY() { return OVISIBLE; }
-    static EPageBreak initialPageBreak() { return PBAUTO; }
+    static EBreak initialBreakAfter() { return BreakAuto; }
+    static EBreak initialBreakBefore() { return BreakAuto; }
+    static EBreak initialBreakInside() { return BreakAuto; }
     static EPosition initialPosition() { return StaticPosition; }
     static ETableLayout initialTableLayout() { return TAUTO; }
     static EUnicodeBidi initialUnicodeBidi() { return UBNormal; }
@@ -1704,7 +1722,7 @@ public:
     static float initialFlexShrink() { return 1; }
     static Length initialFlexBasis() { return Length(Auto); }
     static int initialOrder() { return 0; }
-    static StyleContentAlignmentData initialContentAlignment() { return StyleContentAlignmentData(ContentPositionAuto, ContentDistributionDefault, OverflowAlignmentDefault); }
+    static StyleContentAlignmentData initialContentAlignment() { return StyleContentAlignmentData(ContentPositionNormal, ContentDistributionDefault, OverflowAlignmentDefault); }
     static StyleSelfAlignmentData initialSelfAlignment() { return StyleSelfAlignmentData(ItemPositionAuto, OverflowAlignmentDefault); }
     static EFlexDirection initialFlexDirection() { return FlowRow; }
     static EFlexWrap initialFlexWrap() { return FlexNoWrap; }
@@ -1737,10 +1755,9 @@ public:
     static TransformOrigin initialTransformOrigin() { return TransformOrigin(Length(50.0, Percent), Length(50.0, Percent), 0); }
     static EPointerEvents initialPointerEvents() { return PE_AUTO; }
     static ETransformStyle3D initialTransformStyle3D() { return TransformStyle3DFlat; }
-    static const StyleMotionPath* initialMotionPath() { return nullptr; }
+    static StylePath* initialMotionPath() { return nullptr; }
     static Length initialMotionOffset() { return Length(0, Fixed); }
-    static float initialMotionRotation() { return 0; }
-    static MotionRotationType initialMotionRotationType() { return MotionRotationAuto; }
+    static StyleMotionRotation initialMotionRotation() { return StyleMotionRotation(0, MotionRotationAuto); }
     static EBackfaceVisibility initialBackfaceVisibility() { return BackfaceVisibilityVisible; }
     static float initialPerspective() { return 0; }
     static Length initialPerspectiveOriginX() { return Length(50.0, Percent); }
@@ -1828,7 +1845,7 @@ private:
     void setVisitedLinkBorderBottomColor(const StyleColor& v) { SET_VAR(rareNonInheritedData, m_visitedLinkBorderBottomColor, v); }
     void setVisitedLinkBorderTopColor(const StyleColor& v) { SET_VAR(rareNonInheritedData, m_visitedLinkBorderTopColor, v); }
     void setVisitedLinkOutlineColor(const StyleColor& v) { SET_VAR(rareNonInheritedData, m_visitedLinkOutlineColor, v); }
-    void setVisitedLinkColumnRuleColor(const StyleColor& v) { SET_VAR(rareNonInheritedData.access()->m_multiCol, m_visitedLinkColumnRuleColor, v); }
+    void setVisitedLinkColumnRuleColor(const StyleColor& v) { SET_NESTED_VAR(rareNonInheritedData, m_multiCol, m_visitedLinkColumnRuleColor, v); }
     void setVisitedLinkTextDecorationColor(const StyleColor& v) { SET_VAR(rareNonInheritedData, m_visitedLinkTextDecorationColor, v); }
     void setVisitedLinkTextEmphasisColor(const StyleColor& v) { SET_VAR_WITH_SETTER(rareInheritedData, visitedLinkTextEmphasisColor, setVisitedLinkTextEmphasisColor, v); }
     void setVisitedLinkTextFillColor(const StyleColor& v) { SET_VAR_WITH_SETTER(rareInheritedData, visitedLinkTextFillColor, setVisitedLinkTextFillColor, v); }
@@ -1901,6 +1918,7 @@ private:
     void updatePropertySpecificDifferences(const ComputedStyle& other, StyleDifference&) const;
 
     bool requireTransformOrigin(ApplyTransformOrigin applyOrigin, ApplyMotionPath) const;
+    static bool shadowListHasCurrentColor(const ShadowList*);
 };
 
 // FIXME: Reduce/remove the dependency on zoom adjusted int values.
@@ -1938,7 +1956,7 @@ inline double adjustDoubleForAbsoluteZoom(double value, const ComputedStyle& sty
 
 inline LayoutUnit adjustLayoutUnitForAbsoluteZoom(LayoutUnit value, const ComputedStyle& style)
 {
-    return value / style.effectiveZoom();
+    return LayoutUnit(value / style.effectiveZoom());
 }
 
 inline double adjustScrollForAbsoluteZoom(double scrollOffset, float zoomFactor)

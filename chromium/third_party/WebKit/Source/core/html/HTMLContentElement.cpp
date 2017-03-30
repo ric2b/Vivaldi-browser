@@ -65,7 +65,7 @@ void HTMLContentElement::parseSelect()
 {
     ASSERT(m_shouldParseSelect);
 
-    m_selectorList = CSSParser::parseSelector(CSSParserContext(document(), 0), m_select);
+    m_selectorList = CSSParser::parseSelector(CSSParserContext(document(), 0), nullptr, m_select);
     m_shouldParseSelect = false;
     m_isValidSelector = validateSelect();
     if (!m_isValidSelector)
@@ -75,8 +75,10 @@ void HTMLContentElement::parseSelect()
 void HTMLContentElement::parseAttribute(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& value)
 {
     if (name == selectAttr) {
-        if (ShadowRoot* root = containingShadowRoot())
-            root->owner()->willAffectSelector();
+        if (ShadowRoot* root = containingShadowRoot()) {
+            if (root->owner())
+                root->owner()->willAffectSelector();
+        }
         m_shouldParseSelect = true;
         m_select = value;
     } else {
@@ -86,7 +88,7 @@ void HTMLContentElement::parseAttribute(const QualifiedName& name, const AtomicS
 
 static inline bool includesDisallowedPseudoClass(const CSSSelector& selector)
 {
-    if (selector.pseudoType() == CSSSelector::PseudoNot) {
+    if (selector.getPseudoType() == CSSSelector::PseudoNot) {
         const CSSSelector* subSelector = selector.selectorList()->first();
         return subSelector->match() == CSSSelector::PseudoClass;
     }
@@ -119,14 +121,16 @@ bool HTMLContentElement::validateSelect() const
 // dynamic restyle flags on elements.
 bool HTMLContentElement::matchSelector(Element& element) const
 {
-    SelectorChecker selectorChecker(SelectorChecker::QueryingRules);
+    SelectorChecker::Init init;
+    init.mode = SelectorChecker::QueryingRules;
+    SelectorChecker checker(init);
     SelectorChecker::SelectorCheckingContext context(&element, SelectorChecker::VisitedMatchDisabled);
     for (const CSSSelector* selector = selectorList().first(); selector; selector = CSSSelectorList::next(*selector)) {
         context.selector = selector;
-        if (selectorChecker.match(context))
+        if (checker.match(context))
             return true;
     }
     return false;
 }
 
-}
+} // namespace blink

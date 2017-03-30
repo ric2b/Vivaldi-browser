@@ -6,7 +6,6 @@
 #define IOS_WEB_PUBLIC_WEB_CONTROLLER_FACTORY_H_
 
 #include "base/memory/scoped_ptr.h"
-#include "ios/web/public/web_view_type.h"
 
 @class CRWWebController;
 
@@ -17,8 +16,7 @@ class WebStateImpl;
 
 // Returns a new instance of CRWWebViewController.
 // Note: Callers are responsible for releasing the returned web controller.
-CRWWebController* CreateWebController(WebViewType web_view_type,
-                                      scoped_ptr<WebStateImpl> web_state);
+CRWWebController* CreateWebController(scoped_ptr<WebStateImpl> web_state);
 
 // Returns a new instance of CRWWebViewController.
 // Temporary factory method for use in components that require a web controller.
@@ -27,8 +25,7 @@ CRWWebController* CreateWebController(WebViewType web_view_type,
 // Note: Callers are responsible for releasing the returned web controller.
 // TODO(crbug.com/546221): Move factory method to WebState once the ownership of
 // WebState and CRWWebController is reversed.
-CRWWebController* CreateWebController(WebViewType web_view_type,
-                                      BrowserState* browser_state);
+CRWWebController* CreateWebController(BrowserState* browser_state);
 
 }  // namespace web
 

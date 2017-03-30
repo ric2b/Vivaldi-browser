@@ -8,7 +8,6 @@
 
 #include "base/command_line.h"
 #include "base/memory/ref_counted.h"
-#include "base/prefs/pref_service.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_wallet_data_type_controller.h"
 #include "components/autofill/core/browser/webdata/autofill_data_type_controller.h"
@@ -23,17 +22,20 @@
 #include "components/history/core/browser/typed_url_data_type_controller.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/sync/browser/password_data_type_controller.h"
+#include "components/prefs/pref_service.h"
 #include "components/sync_bookmarks/bookmark_change_processor.h"
 #include "components/sync_bookmarks/bookmark_data_type_controller.h"
 #include "components/sync_bookmarks/bookmark_model_associator.h"
 #include "components/sync_driver/data_type_manager_impl.h"
 #include "components/sync_driver/device_info_data_type_controller.h"
+#include "components/sync_driver/device_info_model_type_controller.h"
 #include "components/sync_driver/glue/chrome_report_unrecoverable_error.h"
 #include "components/sync_driver/glue/sync_backend_host.h"
 #include "components/sync_driver/glue/sync_backend_host_impl.h"
 #include "components/sync_driver/local_device_info_provider_impl.h"
 #include "components/sync_driver/proxy_data_type_controller.h"
 #include "components/sync_driver/sync_client.h"
+#include "components/sync_driver/sync_driver_switches.h"
 #include "components/sync_driver/ui_data_type_controller.h"
 #include "components/sync_sessions/session_data_type_controller.h"
 #include "google_apis/gaia/oauth2_token_service.h"
@@ -64,6 +66,7 @@ using sync_driver::DataTypeManagerObserver;
 using sync_driver::DeviceInfoDataTypeController;
 using sync_driver::ProxyDataTypeController;
 using sync_driver::UIDataTypeController;
+using sync_driver_v2::DeviceInfoModelTypeController;
 
 namespace {
 
@@ -139,9 +142,16 @@ void ProfileSyncComponentsFactoryImpl::RegisterCommonDataTypes(
       base::Bind(&ChromeReportUnrecoverableError, channel_);
 
   // TODO(stanisc): can DEVICE_INFO be one of disabled datatypes?
-  sync_service->RegisterDataTypeController(new DeviceInfoDataTypeController(
-      ui_thread_, error_callback, sync_client_,
-      sync_service->GetLocalDeviceInfoProvider()));
+  if (channel_ == version_info::Channel::UNKNOWN &&
+      command_line_.HasSwitch(switches::kSyncEnableUSSDeviceInfo)) {
+    sync_service->RegisterDataTypeController(new DeviceInfoModelTypeController(
+        ui_thread_, error_callback, sync_client_,
+        sync_service->GetLocalDeviceInfoProvider()));
+  } else {
+    sync_service->RegisterDataTypeController(new DeviceInfoDataTypeController(
+        ui_thread_, error_callback, sync_client_,
+        sync_service->GetLocalDeviceInfoProvider()));
+  }
 
   // Autofill sync is enabled by default.  Register unless explicitly
   // disabled.
@@ -321,7 +331,7 @@ ProfileSyncComponentsFactoryImpl::CreateAttachmentService(
   scoped_ptr<syncer::AttachmentDownloader> attachment_downloader;
   // Only construct an AttachmentUploader and AttachmentDownload if we have sync
   // credentials. We may not have sync credentials because there may not be a
-  // signed in sync user (e.g. sync is running in "backup" mode).
+  // signed in sync user.
   if (!user_share.sync_credentials.account_id.empty() &&
       !user_share.sync_credentials.scope_set.empty()) {
     scoped_refptr<OAuth2TokenServiceRequest::TokenServiceProvider>

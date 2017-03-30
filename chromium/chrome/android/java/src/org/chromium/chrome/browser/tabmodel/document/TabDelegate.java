@@ -18,6 +18,7 @@ import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.document.DocumentMetricIds;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabIdManager;
+import org.chromium.chrome.browser.tabmodel.AsyncTabParamsManager;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.util.FeatureUtilities;
@@ -115,7 +116,7 @@ public class TabDelegate extends TabCreator {
         } else if (type == TabLaunchType.FROM_LONGPRESS_BACKGROUND
                 || type == TabLaunchType.FROM_LONGPRESS_FOREGROUND) {
             asyncParams.setDocumentStartedBy(DocumentMetricIds.STARTED_BY_CONTEXT_MENU);
-        } else if (type == TabLaunchType.FROM_MENU_OR_OVERVIEW) {
+        } else if (type == TabLaunchType.FROM_CHROME_UI) {
             asyncParams.setDocumentStartedBy(DocumentMetricIds.STARTED_BY_OPTIONS_MENU);
         }
 
@@ -149,7 +150,7 @@ public class TabDelegate extends TabCreator {
         } else {
             // TODO(dfalcantara): Is it possible to get rid of this conditional?
             int assignedTabId = TabIdManager.getInstance().generateValidId(Tab.INVALID_TAB_ID);
-            AsyncTabCreationParamsManager.add(assignedTabId, asyncParams);
+            AsyncTabParamsManager.add(assignedTabId, asyncParams);
 
             Intent intent = new Intent(
                     Intent.ACTION_VIEW, Uri.parse(asyncParams.getLoadUrlParams().getUrl()));

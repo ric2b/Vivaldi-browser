@@ -7,8 +7,10 @@
   'dependencies': [
     '../base/base.gyp:base',
     '../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
+    'cronet_features',
     'cronet_jni_headers',
-    'cronet_url_request_java',
+    'chromium_url_request_java',
+    'url_request_error_java',
     'cronet_version',
     'cronet_version_header',
     'metrics',
@@ -30,10 +32,14 @@
     'android/cronet_url_request_adapter.h',
     'android/cronet_url_request_context_adapter.cc',
     'android/cronet_url_request_context_adapter.h',
+    'android/io_buffer_with_byte_buffer.cc',
+    'android/io_buffer_with_byte_buffer.h',
     'android/url_request_adapter.cc',
     'android/url_request_adapter.h',
     'android/url_request_context_adapter.cc',
     'android/url_request_context_adapter.h',
+    'android/url_request_error.cc',
+    'android/url_request_error.h',
     'android/wrapped_channel_upload_element_reader.cc',
     'android/wrapped_channel_upload_element_reader.h',
     'histogram_manager.cc',
@@ -69,6 +75,16 @@
         'sources': [
           'android/cronet_data_reduction_proxy.cc',
           'android/cronet_data_reduction_proxy.h',
+        ],
+      }
+    ],
+    # If Bidirectional Stream support is enabled, add the following sources.
+    # Dependencies are target-specific and are not included here.
+    ['enable_bidirectional_stream==1',
+      {
+        'sources': [
+          'android/cronet_bidirectional_stream_adapter.cc',
+          'android/cronet_bidirectional_stream_adapter.h',
         ],
       }
     ],

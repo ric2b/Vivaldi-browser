@@ -13,6 +13,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.dom_distiller.DomDistillerServiceFactory;
 import org.chromium.chrome.browser.dom_distiller.DomDistillerTabUtils;
 import org.chromium.chrome.browser.ntp.NewTabPage;
+import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.toolbar.ToolbarModel.ToolbarModelDelegate;
 import org.chromium.components.dom_distiller.core.DomDistillerService;
@@ -78,10 +79,10 @@ class ToolbarModelImpl extends ToolbarModel implements ToolbarDataProvider, Tool
     public String getText() {
         String displayText = super.getText();
 
-        if (mTab == null) return displayText;
+        if (mTab == null || mTab.isFrozen()) return displayText;
 
         String url = mTab.getUrl().trim();
-        if (!mTab.isFrozen() && DomDistillerUrlUtils.isDistilledPage(url)) {
+        if (DomDistillerUrlUtils.isDistilledPage(url)) {
             if (isStoredArticle(url)) {
                 DomDistillerService domDistillerService =
                         DomDistillerServiceFactory.getForProfile(mTab.getProfile());
@@ -94,6 +95,10 @@ class ToolbarModelImpl extends ToolbarModel implements ToolbarDataProvider, Tool
                 displayText =
                         DomDistillerTabUtils.getFormattedUrlFromOriginalDistillerUrl(originalUrl);
             }
+        } else if (mTab.isOfflinePage()) {
+            String originalUrl = mTab.getOfflinePageOriginalUrl();
+            displayText = OfflinePageUtils.stripSchemeFromOnlineUrl(
+                  DomDistillerTabUtils.getFormattedUrlFromOriginalDistillerUrl(originalUrl));
         }
 
         return displayText;

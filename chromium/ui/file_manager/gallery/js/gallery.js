@@ -660,8 +660,7 @@ Gallery.prototype.delete_ = function() {
     this.document_.body.addEventListener('keydown', this.keyDownBound_);
   }.bind(this);
 
-
-  var confirm = new cr.ui.dialogs.ConfirmDialog(this.container_);
+  var confirm = new FilesConfirmDialog(this.container_);
   confirm.setOkLabel(str('DELETE_BUTTON_LABEL'));
   confirm.show(strf(plural ?
       'GALLERY_CONFIRM_DELETE_SOME' : 'GALLERY_CONFIRM_DELETE_ONE', param),
@@ -1059,8 +1058,7 @@ var loadTimeDataPromise = new Promise(function(fulfill, reject) {
  * @type {!Promise}
  */
 var volumeManagerPromise = new Promise(function(fulfill, reject) {
-  var volumeManager = new VolumeManagerWrapper(
-      VolumeManagerWrapper.NonNativeVolumeStatus.ENABLED);
+  var volumeManager = new VolumeManagerWrapper(AllowedPaths.ANY_PATH);
   volumeManager.ensureInitialized(fulfill.bind(null, volumeManager));
 });
 

@@ -46,6 +46,8 @@
         'bluetooth_channel_mac.h',
         'bluetooth_classic_device_mac.mm',
         'bluetooth_classic_device_mac.h',
+        'bluetooth_classic_win.cc',
+        'bluetooth_classic_win.h',
         'bluetooth_device.cc',
         'bluetooth_device.h',
         'bluetooth_device_android.h',
@@ -89,10 +91,14 @@
         'bluetooth_low_energy_win.h',
         'bluetooth_remote_gatt_characteristic_android.cc',
         'bluetooth_remote_gatt_characteristic_android.h',
+        'bluetooth_remote_gatt_characteristic_win.cc',
+        'bluetooth_remote_gatt_characteristic_win.h',
         'bluetooth_remote_gatt_descriptor_android.cc',
         'bluetooth_remote_gatt_descriptor_android.h',
         'bluetooth_remote_gatt_service_android.cc',
         'bluetooth_remote_gatt_service_android.h',
+        'bluetooth_remote_gatt_service_win.cc',
+        'bluetooth_remote_gatt_service_win.h',
         'bluetooth_rfcomm_channel_mac.mm',
         'bluetooth_rfcomm_channel_mac.h',
         'bluetooth_service_record_win.cc',
@@ -187,8 +193,6 @@
                 'dbus/bluez_dbus_client.h',
                 'dbus/bluez_dbus_manager.cc',
                 'dbus/bluez_dbus_manager.h',
-                'dbus/dbus_thread_manager_linux.cc',
-                'dbus/dbus_thread_manager_linux.h',
                 'dbus/fake_bluetooth_adapter_client.cc',
                 'dbus/fake_bluetooth_adapter_client.h',
                 'dbus/fake_bluetooth_le_advertising_manager_client.cc',
@@ -228,6 +232,16 @@
                 'dbus/fake_bluetooth_profile_service_provider.cc',
                 'dbus/fake_bluetooth_profile_service_provider.h',
               ],
+              'conditions': [
+                 ['OS=="linux"', {
+                   'sources': [
+                     'dbus/dbus_bluez_manager_wrapper_linux.cc',
+                     'dbus/dbus_bluez_manager_wrapper_linux.h',
+                     'dbus/dbus_thread_manager_linux.cc',
+                     'dbus/dbus_thread_manager_linux.h',
+                   ]
+                }]
+              ],
               'dependencies': [
                 '../../build/linux/system.gyp:dbus',
                 '../../dbus/dbus.gyp:dbus',
@@ -236,7 +250,15 @@
                 '../../build/linux/system.gyp:dbus'
               ]
             }, {  # !use_dbus
-              'sources': [ 'bluetooth_adapter_stub.cc' ]
+              'sources': [ 'bluetooth_adapter_stub.cc' ],
+              'conditions': [
+                ['OS=="linux"', {
+                  'sources': [
+                    'dbus/dbus_bluez_manager_wrapper_linux.h',
+                    'dbus/dbus_bluez_manager_wrapper_stub_linux.cc',
+                  ]
+               }],
+              ]
             }],
           ],
         }],

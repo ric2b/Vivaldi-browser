@@ -32,6 +32,7 @@ class VIEWS_EXPORT MenuButton : public LabelButton {
   class VIEWS_EXPORT PressedLock {
    public:
     explicit PressedLock(MenuButton* menu_button);
+    PressedLock(MenuButton* menu_button, bool is_sibling_menu_show);
     ~PressedLock();
 
    private:
@@ -47,8 +48,7 @@ class VIEWS_EXPORT MenuButton : public LabelButton {
   static const int kMenuMarkerPaddingRight;
 
   // Create a Button.
-  MenuButton(ButtonListener* listener,
-             const base::string16& text,
+  MenuButton(const base::string16& text,
              MenuButtonListener* menu_button_listener,
              bool show_menu_marker);
   ~MenuButton() override;
@@ -62,8 +62,15 @@ class VIEWS_EXPORT MenuButton : public LabelButton {
   const gfx::Point& menu_offset() const { return menu_offset_; }
   void set_menu_offset(int x, int y) { menu_offset_.SetPoint(x, y); }
 
-  // Activate the button (called when the button is pressed).
-  bool Activate();
+  // Activate the button (called when the button is pressed). |event| is the
+  // event triggering the activation, if any.
+  bool Activate(const ui::Event* event);
+
+  // Returns true if the event is of the proper type to potentially trigger an
+  // action. Since MenuButtons have properties other than event type (like
+  // last menu open time) to determine if an event is valid to activate the
+  // menu, this is distinct from IsTriggerableEvent().
+  virtual bool IsTriggerableEventType(const ui::Event& event);
 
   // Overridden from View:
   gfx::Size GetPreferredSize() const override;
@@ -77,7 +84,6 @@ class VIEWS_EXPORT MenuButton : public LabelButton {
   void OnGestureEvent(ui::GestureEvent* event) override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   bool OnKeyReleased(const ui::KeyEvent& event) override;
-  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
   void GetAccessibleState(ui::AXViewState* state) override;
 
  protected:
@@ -88,8 +94,10 @@ class VIEWS_EXPORT MenuButton : public LabelButton {
   gfx::Rect GetChildAreaBounds() override;
 
   // Overridden from CustomButton:
+  bool IsTriggerableEvent(const ui::Event& event) override;
   bool ShouldEnterPushedState(const ui::Event& event) override;
   void StateChanged() override;
+  void NotifyClick(const ui::Event& event) override;
 
   // Offset of the associated menu position.
   gfx::Point menu_offset_;
@@ -98,8 +106,10 @@ class VIEWS_EXPORT MenuButton : public LabelButton {
   friend class PressedLock;
 
   // Increment/decrement the number of "pressed" locks this button has, and
-  // set the state accordingly.
-  void IncrementPressedLocked();
+  // set the state accordingly. The ink drop is snapped to the final ACTIVATED
+  // state if |snap_ink_drop_to_activated| is true, otherwise the ink drop will
+  // be animated to the ACTIVATED state.
+  void IncrementPressedLocked(bool snap_ink_drop_to_activated);
   void DecrementPressedLocked();
 
   // Compute the maximum X coordinate for the current screen. MenuButtons
@@ -129,6 +139,9 @@ class VIEWS_EXPORT MenuButton : public LabelButton {
 
   // The current number of "pressed" locks this button has.
   int pressed_lock_count_;
+
+  // Used to let Activate() know if IncrementPressedLocked() was called.
+  bool* increment_pressed_lock_called_;
 
   // True if the button was in a disabled state when a menu was run, and should
   // return to it once the press is complete. This can happen if, e.g., we

@@ -33,7 +33,6 @@
 #include "core/fetch/FetchRequest.h"
 #include "core/fetch/Resource.h"
 #include "core/fetch/ResourceLoaderOptions.h"
-#include "core/fetch/ResourcePtr.h"
 #include "core/fetch/SubstituteData.h"
 #include "platform/Timer.h"
 #include "platform/network/ResourceError.h"
@@ -45,7 +44,7 @@
 
 namespace blink {
 
-class ArchiveResourceCollection;
+class ArchiveResource;
 class CSSStyleSheetResource;
 class DocumentResource;
 class FontResource;
@@ -74,7 +73,7 @@ public:
     virtual ~ResourceFetcher();
     DECLARE_VIRTUAL_TRACE();
 
-    ResourcePtr<Resource> requestResource(FetchRequest&, const ResourceFactory&, const SubstituteData& = SubstituteData());
+    PassRefPtrWillBeRawPtr<Resource> requestResource(FetchRequest&, const ResourceFactory&, const SubstituteData& = SubstituteData());
 
     Resource* cachedResource(const KURL&) const;
 
@@ -95,13 +94,15 @@ public:
 
     int requestCount() const;
 
+    enum ClearPreloadsPolicy { ClearAllPreloads, ClearSpeculativeMarkupPreloads };
+
     bool isPreloaded(const KURL&) const;
-    void clearPreloads();
+    void clearPreloads(ClearPreloadsPolicy = ClearAllPreloads);
     void preloadStarted(Resource*);
     void printPreloadStats();
 
-    void addAllArchiveResources(MHTMLArchive*);
-    ArchiveResourceCollection* archiveResourceCollection() const { return m_archiveResourceCollection.get(); }
+    MHTMLArchive* archive() const { return m_archive.get(); }
+    ArchiveResource* createArchive(Resource*);
 
     void setDefersLoading(bool);
     void stopFetching();
@@ -142,7 +143,6 @@ public:
 
     String getCacheIdentifier() const;
 
-    void scheduleDocumentResourcesGC();
     bool clientDefersImage(const KURL&) const;
     static void determineRequestContext(ResourceRequest&, Resource::Type, bool isMainFrame);
     void determineRequestContext(ResourceRequest&, Resource::Type);
@@ -151,8 +151,10 @@ public:
 
     void updateAllImageResourcePriorities();
 
+    void reloadLoFiImages();
+
     // This is only exposed for testing purposes.
-    WillBeHeapListHashSet<RawPtrWillBeMember<Resource>>* preloads() { return m_preloads.get(); }
+    WillBeHeapListHashSet<RefPtrWillBeMember<Resource>>* preloads() { return m_preloads.get(); }
 
 private:
     friend class ResourceCacheValidationSuppressor;
@@ -160,11 +162,12 @@ private:
     explicit ResourceFetcher(FetchContext*);
 
     void initializeRevalidation(const FetchRequest&, Resource*);
-    ResourcePtr<Resource> createResourceForLoading(FetchRequest&, const String& charset, const ResourceFactory&);
+    PassRefPtrWillBeRawPtr<Resource> createResourceForLoading(FetchRequest&, const String& charset, const ResourceFactory&);
     void storeResourceTimingInitiatorInformation(Resource*);
     bool scheduleArchiveLoad(Resource*, const ResourceRequest&);
-    ResourcePtr<Resource> preCacheData(const FetchRequest&, const ResourceFactory&, const SubstituteData&);
+    void preCacheData(const FetchRequest&, const ResourceFactory&, const SubstituteData&);
 
+    // RevalidationPolicy enum values are used in UMAs https://crbug.com/579496.
     enum RevalidationPolicy { Use, Revalidate, Reload, Load };
     RevalidationPolicy determineRevalidationPolicy(Resource::Type, const FetchRequest&, Resource* existingResource, bool isStaticData) const;
 
@@ -180,25 +183,16 @@ private:
 
     void willTerminateResourceLoader(ResourceLoader*);
 
-    ResourceLoadPriority modifyPriorityForExperiments(ResourceLoadPriority, Resource::Type, const FetchRequest&);
-
     Member<FetchContext> m_context;
 
     HashSet<String> m_validatedURLs;
     mutable DocumentResourceMap m_documentResources;
 
-    // We intentionally use a Member instead of a ResourcePtr.
-    // Using a ResourcePtrs can lead to a wrong behavior because
-    // the underlying Resource of the ResourcePtr is updated when the Resource
-    // is revalidated. What we really want to hold here is not the ResourcePtr
-    // but the underlying Resource.
-    OwnPtrWillBeMember<WillBeHeapListHashSet<RawPtrWillBeMember<Resource>>> m_preloads;
-    OwnPtrWillBeMember<ArchiveResourceCollection> m_archiveResourceCollection;
+    OwnPtrWillBeMember<WillBeHeapListHashSet<RefPtrWillBeMember<Resource>>> m_preloads;
+    RefPtrWillBeMember<MHTMLArchive> m_archive;
 
     Timer<ResourceFetcher> m_resourceTimingReportTimer;
 
-    // We intentionally use a Member instead of a ResourcePtr.
-    // See the comment on m_preloads.
     using ResourceTimingInfoMap = WillBeHeapHashMap<RawPtrWillBeMember<Resource>, OwnPtr<ResourceTimingInfo>>;
     ResourceTimingInfoMap m_resourceTimingInfoMap;
 

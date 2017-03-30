@@ -44,7 +44,7 @@ class WindowTreeTest;
 // internal state) as necessary.
 class WindowTreeImpl : public mojom::WindowTree,
                        public AccessPolicyDelegate,
-                       public mojom::WindowManagerInternalClient {
+                       public mojom::WindowManagerClient {
  public:
   WindowTreeImpl(ConnectionManager* connection_manager,
                  ServerWindow* root,
@@ -52,6 +52,10 @@ class WindowTreeImpl : public mojom::WindowTree,
   ~WindowTreeImpl() override;
 
   void Init(mojom::WindowTreeClient* client, mojom::WindowTreePtr tree);
+
+  // Called if this WindowTreeImpl hosts the WindowManager. This happens if
+  // this WindowTreeImpl serves as the root of a WindowTreeHost.
+  void ConfigureWindowManager();
 
   ConnectionSpecificId id() const { return id_; }
 
@@ -63,6 +67,23 @@ class WindowTreeImpl : public mojom::WindowTree,
         const_cast<const WindowTreeImpl*>(this)->GetWindow(id));
   }
   const ServerWindow* GetWindow(const WindowId& id) const;
+
+  // Returns the Window with the specified client id *only* if known to this
+  // client, returns null if not known.
+  ServerWindow* GetWindowByClientId(const ClientWindowId& id) {
+    return const_cast<ServerWindow*>(
+        const_cast<const WindowTreeImpl*>(this)->GetWindowByClientId(id));
+  }
+  const ServerWindow* GetWindowByClientId(const ClientWindowId& id) const;
+
+  bool IsWindowKnown(const ServerWindow* window) const {
+    return IsWindowKnown(window, nullptr);
+  }
+  // Returns whether |window| is known to this connection. If |window| is
+  // known and |client_window_id| is non-null |client_window_id| is set to
+  // the ClientWindowId of the window.
+  bool IsWindowKnown(const ServerWindow* window,
+                     ClientWindowId* client_window_id) const;
 
   // Returns true if |window| is one of this connections roots.
   bool HasRoot(const ServerWindow* window) const;
@@ -84,15 +105,16 @@ class WindowTreeImpl : public mojom::WindowTree,
 
   // These functions are synchronous variants of those defined in the mojom. The
   // WindowTree implementations all call into these. See the mojom for details.
-  bool NewWindow(const WindowId& window_id,
+  bool NewWindow(const ClientWindowId& client_window_id,
                  const std::map<std::string, std::vector<uint8_t>>& properties);
-  bool AddWindow(const WindowId& parent_id, const WindowId& child_id);
-  bool AddTransientWindow(const WindowId& window_id,
-                          const WindowId& transient_window_id);
+  bool AddWindow(const ClientWindowId& parent_id,
+                 const ClientWindowId& child_id);
+  bool AddTransientWindow(const ClientWindowId& window_id,
+                          const ClientWindowId& transient_window_id);
   std::vector<const ServerWindow*> GetWindowTree(
-      const WindowId& window_id) const;
-  bool SetWindowVisibility(const WindowId& window_id, bool visible);
-  bool Embed(const WindowId& window_id,
+      const ClientWindowId& window_id) const;
+  bool SetWindowVisibility(const ClientWindowId& window_id, bool visible);
+  bool Embed(const ClientWindowId& window_id,
              mojom::WindowTreeClientPtr client,
              uint32_t policy_bitmask,
              ConnectionSpecificId* connection_id);
@@ -101,21 +123,11 @@ class WindowTreeImpl : public mojom::WindowTree,
   bool IsWaitingForNewTopLevelWindow(uint32_t wm_change_id);
   void OnWindowManagerCreatedTopLevelWindow(uint32_t wm_change_id,
                                             uint32_t client_change_id,
-                                            const WindowId& window_id);
-
-  // Maps the window id from the client to the server. Normally the ids are the
-  // same, but there may be a different id at the embed point.
-  WindowId MapWindowIdFromClient(Id transport_window_id) const {
-    return MapWindowIdFromClient(WindowIdFromTransportId(transport_window_id));
-  }
-  WindowId MapWindowIdFromClient(const WindowId& id) const;
-
-  // Maps the window id to the client.
-  Id MapWindowIdToClient(const ServerWindow* window) const;
-  Id MapWindowIdToClient(const WindowId& id) const;
+                                            const ServerWindow* window);
 
   // Calls through to the client.
   void OnChangeCompleted(uint32_t change_id, bool success);
+  void OnAccelerator(uint32_t accelerator_id, mojom::EventPtr event);
 
   // The following methods are invoked after the corresponding change has been
   // processed. They do the appropriate bookkeeping and update the client as
@@ -157,6 +169,8 @@ class WindowTreeImpl : public mojom::WindowTree,
                             bool originated_change);
   void ProcessFocusChanged(const ServerWindow* old_focused_window,
                            const ServerWindow* new_focused_window);
+  void ProcessLostCapture(const ServerWindow* old_lost_capture,
+                          bool originated_change);
   void ProcessTransientWindowAdded(const ServerWindow* window,
                                    const ServerWindow* transient_window,
                                    bool originated_change);
@@ -165,17 +179,16 @@ class WindowTreeImpl : public mojom::WindowTree,
                                      bool originated_change);
 
  private:
-  using WindowIdSet = base::hash_set<Id>;
-  using WindowMap = std::map<ConnectionSpecificId, ServerWindow*>;
   friend class WindowTreeTest;
 
   struct WaitingForTopLevelWindowInfo {
-    WaitingForTopLevelWindowInfo(WindowId window_id, uint32_t wm_change_id)
-        : window_id(window_id), wm_change_id(wm_change_id) {}
+    WaitingForTopLevelWindowInfo(const ClientWindowId& client_window_id,
+                                 uint32_t wm_change_id)
+        : client_window_id(client_window_id), wm_change_id(wm_change_id) {}
     ~WaitingForTopLevelWindowInfo() {}
 
     // Id supplied from the client.
-    WindowId window_id;
+    ClientWindowId client_window_id;
 
     // Change id we created for the window manager.
     uint32_t wm_change_id;
@@ -194,10 +207,12 @@ class WindowTreeImpl : public mojom::WindowTree,
 
   bool ShouldRouteToWindowManager(const ServerWindow* window) const;
 
-  bool IsWindowKnown(const ServerWindow* window) const;
+  ClientWindowId ClientWindowIdForWindow(const ServerWindow* window) const;
 
   // Returns true if |id| is a valid WindowId for a new window.
-  bool IsValidIdForNewWindow(const WindowId& id) const;
+  bool IsValidIdForNewWindow(const ClientWindowId& id) const;
+
+  WindowId GenerateNewWindowId();
 
   // These functions return true if the corresponding mojom function is allowed
   // for this connection.
@@ -209,13 +224,17 @@ class WindowTreeImpl : public mojom::WindowTree,
   // |source| is the connection that originated the change.
   bool DeleteWindowImpl(WindowTreeImpl* source, ServerWindow* window);
 
-  // If |window| is known (in |known_windows_|) does nothing. Otherwise adds
-  // |window| to |windows|, marks |window| as known and recurses.
+  // If |window| is known does nothing. Otherwise adds |window| to |windows|,
+  // marks |window| as known and recurses.
   void GetUnknownWindowsFrom(const ServerWindow* window,
                              std::vector<const ServerWindow*>* windows);
 
-  // Removes |window| and all its descendants from |known_windows_|. This does
-  // not recurse through windows that were created by this connection. All
+  // Removes |window| from the appropriate maps. If |window| is known to this
+  // client true is returned.
+  bool RemoveFromMaps(const ServerWindow* window);
+
+  // Removes |window| and all its descendants from the necessary maps. This
+  // does not recurse through windows that were created by this connection. All
   // windows owned by this connection are added to |local_windows|.
   void RemoveFromKnown(const ServerWindow* window,
                        std::vector<ServerWindow*>* local_windows);
@@ -244,9 +263,9 @@ class WindowTreeImpl : public mojom::WindowTree,
   // Deletes all Windows we own.
   void DestroyWindows();
 
-  bool CanEmbed(const WindowId& window_id, uint32_t policy_bitmask) const;
-  void PrepareForEmbed(const WindowId& window_id);
-  void RemoveChildrenAsPartOfEmbed(const WindowId& window_id);
+  bool CanEmbed(const ClientWindowId& window_id, uint32_t policy_bitmask) const;
+  void PrepareForEmbed(ServerWindow* window);
+  void RemoveChildrenAsPartOfEmbed(ServerWindow* window);
 
   void DispatchInputEventImpl(ServerWindow* target, mojom::EventPtr event);
 
@@ -267,8 +286,8 @@ class WindowTreeImpl : public mojom::WindowTree,
   void AddWindow(uint32_t change_id, Id parent_id, Id child_id) override;
   void RemoveWindowFromParent(uint32_t change_id, Id window_id) override;
   void AddTransientWindow(uint32_t change_id,
-                          Id window_id,
-                          Id transient_window_id) override;
+                          Id window,
+                          Id transient_window) override;
   void RemoveTransientWindowFromParent(uint32_t change_id,
                                        Id transient_window_id) override;
   void ReorderWindow(uint32_t change_Id,
@@ -279,6 +298,8 @@ class WindowTreeImpl : public mojom::WindowTree,
       Id window_id,
       const mojo::Callback<void(mojo::Array<mojom::WindowDataPtr>)>& callback)
       override;
+  void SetCapture(uint32_t change_id, Id window_id) override;
+  void ReleaseCapture(uint32_t change_id, Id window_id) override;
   void SetWindowBounds(uint32_t change_id,
                        Id window_id,
                        mojo::RectPtr bounds) override;
@@ -312,13 +333,27 @@ class WindowTreeImpl : public mojom::WindowTree,
       Id transport_window_id,
       mojo::InsetsPtr insets,
       mojo::Array<mojo::RectPtr> transport_additional_client_areas) override;
-  void GetWindowManagerInternalClient(
-      mojo::AssociatedInterfaceRequest<mojom::WindowManagerInternalClient>
-          internal) override;
+  void GetWindowManagerClient(
+      mojo::AssociatedInterfaceRequest<mojom::WindowManagerClient> internal)
+      override;
 
-  // mojom::WindowManagerInternalClient:
+  // mojom::WindowManagerClient:
+  void AddAccelerator(uint32_t id,
+                      mojom::EventMatcherPtr event_matcher,
+                      const AddAcceleratorCallback& callback) override;
+  void RemoveAccelerator(uint32_t id) override;
+  void AddActivationParent(Id transport_window_id) override;
+  void RemoveActivationParent(Id transport_window_id) override;
+  void ActivateNextWindow() override;
+  void SetUnderlaySurfaceOffsetAndExtendedHitArea(
+      Id window_id,
+      int32_t x_offset,
+      int32_t y_offset,
+      mojo::InsetsPtr hit_area) override;
   void WmResponse(uint32_t change_id, bool response) override;
   void WmRequestClose(Id transport_window_id) override;
+  void WmSetFrameDecorationValues(
+      mojom::FrameDecorationValuesPtr values) override;
   void OnWmCreatedTopLevelWindow(uint32_t change_id,
                                  Id transport_window_id) override;
 
@@ -334,19 +369,24 @@ class WindowTreeImpl : public mojom::WindowTree,
   // Id of this connection as assigned by ConnectionManager.
   const ConnectionSpecificId id_;
 
+  ConnectionSpecificId next_window_id_;
+
   mojom::WindowTreeClient* client_;
 
   scoped_ptr<mus::ws::AccessPolicy> access_policy_;
 
-  // The windows created by this connection. This connection owns these objects.
-  WindowMap window_map_;
-
-  // The set of windows that has been communicated to the client.
-  WindowIdSet known_windows_;
-
   // The roots, or embed points, of this connection. A WindowTreeImpl may have
   // any number of roots, including 0.
   std::set<const ServerWindow*> roots_;
+
+  // The windows created by this connection. This connection owns these objects.
+  base::hash_map<WindowId, ServerWindow*> created_window_map_;
+
+  // The client is allowed to assign ids. These two maps providing the mapping
+  // from the ids native to the server (WindowId) to those understood by the
+  // client (ClientWindowId).
+  base::hash_map<ClientWindowId, WindowId> client_id_to_window_id_map_;
+  base::hash_map<WindowId, ClientWindowId> window_id_to_client_id_map_;
 
   uint32_t event_ack_id_;
 
@@ -357,11 +397,9 @@ class WindowTreeImpl : public mojom::WindowTree,
 
   std::queue<scoped_ptr<TargetedEvent>> event_queue_;
 
-  scoped_ptr<mojo::AssociatedBinding<mojom::WindowManagerInternalClient>>
+  scoped_ptr<mojo::AssociatedBinding<mojom::WindowManagerClient>>
       window_manager_internal_client_binding_;
-  mojom::WindowManagerInternal* window_manager_internal_;
-
-  std::map<WindowId, WindowId> embed_to_real_id_map_;
+  mojom::WindowManager* window_manager_internal_;
 
   scoped_ptr<WaitingForTopLevelWindowInfo> waiting_for_top_level_window_info_;
 

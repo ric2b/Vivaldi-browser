@@ -17,11 +17,14 @@
 #include "components/exo/surface_observer.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/aura/window_property.h"
+#include "ui/aura/window_targeter.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/hit_test.h"
 #include "ui/compositor/layer.h"
+#include "ui/events/event.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/gpu_memory_buffer.h"
+#include "ui/gfx/path.h"
 #include "ui/gfx/transform_util.h"
 
 DECLARE_WINDOW_PROPERTY_TYPE(exo::Surface*);
@@ -49,12 +52,10 @@ bool ListContainsEntry(T& list, U key) {
   return FindListEntry(list, key) != list.end();
 }
 
-// A window delegate which does nothing. Used to create a window that
-// is an event target, but do nothing.
-class EmptyWindowDelegate : public aura::WindowDelegate {
+class CustomWindowDelegate : public aura::WindowDelegate {
  public:
-  EmptyWindowDelegate() {}
-  ~EmptyWindowDelegate() override {}
+  explicit CustomWindowDelegate(Surface* surface) : surface_(surface) {}
+  ~CustomWindowDelegate() override {}
 
   // Overridden from aura::WindowDelegate:
   gfx::Size GetMinimumSize() const override { return gfx::Size(); }
@@ -62,7 +63,7 @@ class EmptyWindowDelegate : public aura::WindowDelegate {
   void OnBoundsChanged(const gfx::Rect& old_bounds,
                        const gfx::Rect& new_bounds) override {}
   gfx::NativeCursor GetCursor(const gfx::Point& point) override {
-    return gfx::kNullCursor;
+    return ui::kCursorNone;
   }
   int GetNonClientComponent(const gfx::Point& point) const override {
     return HTNOWHERE;
@@ -70,7 +71,7 @@ class EmptyWindowDelegate : public aura::WindowDelegate {
   bool ShouldDescendIntoChildForEventHandling(
       aura::Window* child,
       const gfx::Point& location) override {
-    return false;
+    return true;
   }
   bool CanFocus() override { return true; }
   void OnCaptureLost() override {}
@@ -79,11 +80,38 @@ class EmptyWindowDelegate : public aura::WindowDelegate {
   void OnWindowDestroying(aura::Window* window) override {}
   void OnWindowDestroyed(aura::Window* window) override { delete this; }
   void OnWindowTargetVisibilityChanged(bool visible) override {}
-  bool HasHitTestMask() const override { return false; }
-  void GetHitTestMask(gfx::Path* mask) const override {}
+  bool HasHitTestMask() const override { return surface_->HasHitTestMask(); }
+  void GetHitTestMask(gfx::Path* mask) const override {
+    surface_->GetHitTestMask(mask);
+  }
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(EmptyWindowDelegate);
+  Surface* const surface_;
+
+  DISALLOW_COPY_AND_ASSIGN(CustomWindowDelegate);
+};
+
+class CustomWindowTargeter : public aura::WindowTargeter {
+ public:
+  CustomWindowTargeter() {}
+  ~CustomWindowTargeter() override {}
+
+  // Overridden from aura::WindowTargeter:
+  bool EventLocationInsideBounds(aura::Window* window,
+                                 const ui::LocatedEvent& event) const override {
+    Surface* surface = Surface::AsSurface(window);
+    if (!surface)
+      return false;
+
+    gfx::Point local_point = event.location();
+    if (window->parent())
+      aura::Window::ConvertPointToTarget(window->parent(), window,
+                                         &local_point);
+    return surface->HitTestRect(gfx::Rect(local_point, gfx::Size(1, 1)));
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(CustomWindowTargeter);
 };
 
 }  // namespace
@@ -92,18 +120,22 @@ class EmptyWindowDelegate : public aura::WindowDelegate {
 // Surface, public:
 
 Surface::Surface()
-    : aura::Window(new EmptyWindowDelegate),
+    : aura::Window(new CustomWindowDelegate(this)),
       has_pending_contents_(false),
+      pending_input_region_(SkIRect::MakeLargest()),
       pending_buffer_scale_(1.0f),
+      input_region_(SkIRect::MakeLargest()),
       needs_commit_surface_hierarchy_(false),
       update_contents_after_successful_compositing_(false),
       compositor_(nullptr),
       delegate_(nullptr) {
   SetType(ui::wm::WINDOW_TYPE_CONTROL);
   SetName("ExoSurface");
-  Init(ui::LAYER_SOLID_COLOR);
   SetProperty(kSurfaceKey, this);
+  Init(ui::LAYER_SOLID_COLOR);
+  SetEventTargeter(make_scoped_ptr(new CustomWindowTargeter));
   set_owned_by_parent(false);
+  AddObserver(this);
 }
 
 Surface::~Surface() {
@@ -111,6 +143,7 @@ Surface::~Surface() {
 
   layer()->SetShowSolidColorContent();
 
+  RemoveObserver(this);
   if (compositor_)
     compositor_->RemoveObserver(this);
 
@@ -124,12 +157,13 @@ Surface::~Surface() {
 }
 
 // static
-Surface* Surface::AsSurface(aura::Window* window) {
+Surface* Surface::AsSurface(const aura::Window* window) {
   return window->GetProperty(kSurfaceKey);
 }
 
 void Surface::Attach(Buffer* buffer) {
-  TRACE_EVENT1("exo", "Surface::Attach", "buffer", buffer->AsTracedValue());
+  TRACE_EVENT1("exo", "Surface::Attach", "buffer",
+               buffer ? buffer->GetSize().ToString() : "null");
 
   has_pending_contents_ = true;
   pending_buffer_ = buffer ? buffer->AsWeakPtr() : base::WeakPtr<Buffer>();
@@ -138,7 +172,7 @@ void Surface::Attach(Buffer* buffer) {
 void Surface::Damage(const gfx::Rect& damage) {
   TRACE_EVENT1("exo", "Surface::Damage", "damage", damage.ToString());
 
-  pending_damage_.Union(damage);
+  pending_damage_.op(gfx::RectToSkIRect(damage), SkRegion::kUnion_Op);
 }
 
 void Surface::RequestFrameCallback(const FrameCallback& callback) {
@@ -154,6 +188,13 @@ void Surface::SetOpaqueRegion(const SkRegion& region) {
   pending_opaque_region_ = region;
 }
 
+void Surface::SetInputRegion(const SkRegion& region) {
+  TRACE_EVENT1("exo", "Surface::SetInputRegion", "region",
+               gfx::SkIRectToRect(region.getBounds()).ToString());
+
+  pending_input_region_ = region;
+}
+
 void Surface::SetBufferScale(float scale) {
   TRACE_EVENT1("exo", "Surface::SetBufferScale", "scale", scale);
 
@@ -166,7 +207,6 @@ void Surface::AddSubSurface(Surface* sub_surface) {
 
   DCHECK(!sub_surface->parent());
   DCHECK(!sub_surface->IsVisible());
-  DCHECK(sub_surface->bounds().origin() == gfx::Point());
   AddChild(sub_surface);
 
   DCHECK(!ListContainsEntry(pending_sub_surfaces_, sub_surface));
@@ -178,6 +218,8 @@ void Surface::RemoveSubSurface(Surface* sub_surface) {
                sub_surface->AsTracedValue());
 
   RemoveChild(sub_surface);
+  if (sub_surface->IsVisible())
+    sub_surface->Hide();
 
   DCHECK(ListContainsEntry(pending_sub_surfaces_, sub_surface));
   pending_sub_surfaces_.erase(
@@ -247,6 +289,12 @@ void Surface::PlaceSubSurfaceBelow(Surface* sub_surface, Surface* sibling) {
       FindListEntry(pending_sub_surfaces_, sub_surface));
 }
 
+void Surface::SetViewport(const gfx::Size& viewport) {
+  TRACE_EVENT1("exo", "Surface::SetViewport", "viewport", viewport.ToString());
+
+  pending_viewport_ = viewport;
+}
+
 void Surface::Commit() {
   TRACE_EVENT0("exo", "Surface::Commit");
 
@@ -273,24 +321,25 @@ void Surface::CommitSurfaceHierarchy() {
     scoped_ptr<cc::SingleReleaseCallback> texture_mailbox_release_callback;
     if (current_buffer_) {
       texture_mailbox_release_callback =
-          current_buffer_->ProduceTextureMailbox(&texture_mailbox);
+          current_buffer_->ProduceTextureMailbox(&texture_mailbox, false);
     }
 
     if (texture_mailbox_release_callback) {
-      // Update layer with the new contents.
+      // Update layer with the new contents. If a viewport has been set then
+      // use that to determine the size of the layer and the surface, otherwise
+      // buffer scale and buffer size determines the size.
+      gfx::Size contents_size =
+          pending_viewport_.IsEmpty()
+              ? gfx::ScaleToFlooredSize(texture_mailbox.size_in_pixels(),
+                                        1.0f / pending_buffer_scale_)
+              : pending_viewport_;
       layer()->SetTextureMailbox(texture_mailbox,
                                  std::move(texture_mailbox_release_callback),
-                                 texture_mailbox.size_in_pixels());
+                                 contents_size);
       layer()->SetTextureFlipped(false);
-      gfx::Size contents_size(gfx::ScaleToFlooredSize(
-          texture_mailbox.size_in_pixels(), 1.0f / pending_buffer_scale_));
       layer()->SetBounds(gfx::Rect(layer()->bounds().origin(), contents_size));
       layer()->SetFillsBoundsOpaquely(pending_opaque_region_.contains(
           gfx::RectToSkIRect(gfx::Rect(contents_size))));
-      layer()->SetTransform(gfx::GetScaleTransform(
-          gfx::Rect(texture_mailbox.size_in_pixels()).CenterPoint(),
-          static_cast<float>(contents_size.width()) /
-              texture_mailbox.size_in_pixels().width()));
     } else {
       // Show solid color content if no buffer is attached or we failed
       // to produce a texture mailbox for the currently attached buffer.
@@ -299,21 +348,18 @@ void Surface::CommitSurfaceHierarchy() {
     }
 
     // Schedule redraw of the damage region.
-    layer()->SchedulePaint(pending_damage_);
-    pending_damage_ = gfx::Rect();
+    for (SkRegion::Iterator it(pending_damage_); !it.done(); it.next())
+      layer()->SchedulePaint(gfx::SkIRectToRect(it.rect()));
+
+    // Reset damage.
+    pending_damage_.setEmpty();
   }
 
-  ui::Compositor* compositor = layer()->GetCompositor();
-  if (compositor && !pending_frame_callbacks_.empty()) {
-    // Start observing the compositor for frame callbacks.
-    if (!compositor_) {
-      compositor->AddObserver(this);
-      compositor_ = compositor;
-    }
+  // Update current input region.
+  input_region_ = pending_input_region_;
 
-    // Move pending frame callbacks to the end of |frame_callbacks_|.
-    frame_callbacks_.splice(frame_callbacks_.end(), pending_frame_callbacks_);
-  }
+  // Move pending frame callbacks to the end of |frame_callbacks_|.
+  frame_callbacks_.splice(frame_callbacks_.end(), pending_frame_callbacks_);
 
   // Synchronize window hierarchy. This will position and update the stacking
   // order of all sub-surfaces after committing all pending state of sub-surface
@@ -346,14 +392,34 @@ void Surface::CommitSurfaceHierarchy() {
   }
 }
 
-gfx::Size Surface::GetPreferredSize() const {
-  return pending_buffer_ ? gfx::ScaleToFlooredSize(pending_buffer_->GetSize(),
-                                                   1.0f / pending_buffer_scale_)
-                         : layer()->size();
+gfx::Rect Surface::GetVisibleBounds() const {
+  // Simple clients expect the visible bounds "geometry" of a surface to match
+  // the input region bounds. To accommodate that we return the intersection
+  // of the layer bounds and the input region bounds.
+  SkIRect visible_bounds = input_region_.getBounds();
+  if (!visible_bounds.intersect(gfx::RectToSkIRect(gfx::Rect(layer()->size()))))
+    return gfx::Rect();
+  return gfx::SkIRectToRect(visible_bounds);
 }
 
 bool Surface::IsSynchronized() const {
   return delegate_ ? delegate_->IsSurfaceSynchronized() : false;
+}
+
+bool Surface::HitTestRect(const gfx::Rect& rect) const {
+  if (HasHitTestMask())
+    return input_region_.intersects(gfx::RectToSkIRect(rect));
+
+  return rect.Intersects(gfx::Rect(layer()->size()));
+}
+
+bool Surface::HasHitTestMask() const {
+  return !input_region_.contains(
+      gfx::RectToSkIRect(gfx::Rect(layer()->size())));
+}
+
+void Surface::GetHitTestMask(gfx::Path* mask) const {
+  input_region_.getBoundaryPath(mask);
 }
 
 void Surface::SetSurfaceDelegate(SurfaceDelegate* delegate) {
@@ -385,6 +451,22 @@ scoped_refptr<base::trace_event::TracedValue> Surface::AsTracedValue() const {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// aura::WindowObserver overrides:
+
+void Surface::OnWindowAddedToRootWindow(aura::Window* window) {
+  DCHECK(!compositor_);
+  compositor_ = layer()->GetCompositor();
+  compositor_->AddObserver(this);
+}
+
+void Surface::OnWindowRemovingFromRootWindow(aura::Window* window,
+                                             aura::Window* new_root) {
+  DCHECK(compositor_);
+  compositor_->RemoveObserver(this);
+  compositor_ = nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // ui::CompositorObserver overrides:
 
 void Surface::OnCompositingDidCommit(ui::Compositor* compositor) {
@@ -395,15 +477,17 @@ void Surface::OnCompositingDidCommit(ui::Compositor* compositor) {
 
 void Surface::OnCompositingStarted(ui::Compositor* compositor,
                                    base::TimeTicks start_time) {
-  // Run all frame callbacks associated with the compositor's active tree.
-  while (!active_frame_callbacks_.empty()) {
-    active_frame_callbacks_.front().Run(start_time);
-    active_frame_callbacks_.pop_front();
-  }
+  last_compositing_start_time_ = start_time;
 }
 
 void Surface::OnCompositingEnded(ui::Compositor* compositor) {
-  // Nothing to do in here unless this has been set.
+  // Run all frame callbacks associated with the compositor's active tree.
+  while (!active_frame_callbacks_.empty()) {
+    active_frame_callbacks_.front().Run(last_compositing_start_time_);
+    active_frame_callbacks_.pop_front();
+  }
+
+  // Nothing more to do in here unless this has been set.
   if (!update_contents_after_successful_compositing_)
     return;
 
@@ -416,11 +500,11 @@ void Surface::OnCompositingEnded(ui::Compositor* compositor) {
   // Update contents by producing a new texture mailbox for the current buffer.
   cc::TextureMailbox texture_mailbox;
   scoped_ptr<cc::SingleReleaseCallback> texture_mailbox_release_callback =
-      current_buffer_->ProduceTextureMailbox(&texture_mailbox);
+      current_buffer_->ProduceTextureMailbox(&texture_mailbox, true);
   if (texture_mailbox_release_callback) {
     layer()->SetTextureMailbox(texture_mailbox,
                                std::move(texture_mailbox_release_callback),
-                               texture_mailbox.size_in_pixels());
+                               layer()->bounds().size());
     layer()->SetTextureFlipped(false);
     layer()->SchedulePaint(gfx::Rect(texture_mailbox.size_in_pixels()));
   }

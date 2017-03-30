@@ -47,6 +47,10 @@ enum SBThreatType {
   // Url detected by the client-side malware IP list. This IP list is part
   // of the client side detection model.
   SB_THREAT_TYPE_CLIENT_SIDE_MALWARE_URL,
+
+  // Url leads to a blacklisted resource script. Note that no warnings should be
+  // shown on this threat type, but an incident report might be sent.
+  SB_THREAT_TYPE_BLACKLISTED_RESOURCE,
 };
 
 
@@ -74,6 +78,7 @@ struct SBFullHashResult {
 struct SBCachedFullHashResult {
   SBCachedFullHashResult();
   explicit SBCachedFullHashResult(const base::Time& in_expire_after);
+  SBCachedFullHashResult(const SBCachedFullHashResult& other);
   ~SBCachedFullHashResult();
 
   base::Time expire_after;
@@ -97,9 +102,12 @@ extern const char kIPBlacklist[];
 extern const char kUnwantedUrlList[];
 // SafeBrowsing off-domain inclusion whitelist list name.
 extern const char kInclusionWhitelist[];
-// This array must contain all Safe Browsing lists.
-extern const char* kAllLists[9];
-
+// SafeBrowsing module whitelist list name.
+extern const char kModuleWhitelist[];
+// Blacklisted resource URLs list name.
+extern const char kResourceBlacklist[];
+/// This array must contain all Safe Browsing lists.
+extern const char* kAllLists[11];
 
 enum ListType {
   INVALID = -1,
@@ -123,8 +131,11 @@ enum ListType {
   // See above comment.  Leave 15 available.
   INCLUSIONWHITELIST = 16,
   // See above comment.  Leave 17 available.
+  MODULEWHITELIST = 18,
+  // See above comment. Leave 19 available.
+  RESOURCEBLACKLIST = 20,
+  // See above comment.  Leave 21 available.
 };
-
 
 inline bool SBFullHashEqual(const SBFullHash& a, const SBFullHash& b) {
   return !memcmp(a.full_hash, b.full_hash, sizeof(a.full_hash));

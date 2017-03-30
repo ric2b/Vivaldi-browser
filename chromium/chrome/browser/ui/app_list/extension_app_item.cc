@@ -7,16 +7,16 @@
 #include <stddef.h>
 
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/app_list/app_context_menu.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
+#include "chrome/browser/ui/app_list/extension_app_context_menu.h"
 #include "chrome/browser/ui/extensions/extension_enable_flow.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/extensions/extension_metrics.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/user_metrics.h"
 #include "extensions/browser/app_sorting.h"
 #include "extensions/browser/extension_prefs.h"
@@ -28,6 +28,7 @@
 #include "grit/theme_resources.h"
 #include "sync/api/string_ordinal.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/events/event_constants.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/canvas_image_source.h"
@@ -310,11 +311,11 @@ void ExtensionAppItem::Activate(int event_flags) {
 }
 
 ui::MenuModel* ExtensionAppItem::GetContextMenuModel() {
-  context_menu_.reset(new app_list::AppContextMenu(
-      this, profile(), extension_id(), GetController()));
+  context_menu_.reset(new app_list::ExtensionAppContextMenu(this,
+                                                            profile(),
+                                                            extension_id(),
+                                                            GetController()));
   context_menu_->set_is_platform_app(is_platform_app_);
-  if (IsInFolder())
-    context_menu_->set_is_in_folder(true);
   return context_menu_->GetMenuModel();
 }
 

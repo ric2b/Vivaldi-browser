@@ -1,15 +1,16 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-collapse/iron-collapse.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-item/paper-item.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_expand_button/cr_expand_button.html">
 <link rel="import" href="chrome://resources/html/assert.html">
 <link rel="import" href="chrome://resources/html/cr.html">
 <link rel="import" href="chrome://md-settings/settings_page/settings_animated_pages.html">
 <link rel="import" href="chrome://md-settings/settings_page/settings_subheader.html">
+<link rel="import" href="chrome://md-settings/settings_shared_css.html">
 <link rel="import" href="language_detail_page.html">
 <link rel="import" href="languages.html">
 <link rel="import" href="manage_languages_page.html">
@@ -19,70 +20,99 @@
 </if>
 
 <dom-module id="settings-languages-page">
-  <link rel="import" type="css"
-      href="chrome://md-settings/settings_shared.css">
-  <link rel="import" type="css" href="languages_page.css">
   <template>
+    <style include="settings-shared"></style>
     <settings-languages languages="{{languages}}"></settings-languages>
     <settings-animated-pages id="pages" current-route="{{currentRoute}}"
         section="languages">
       <neon-animatable id="main">
-        <div class="settings-box">
-          <h2 i18n-content="languagesListTitle"></h2>
-          <div>
-            <array-selector id="languageSelector" selected="{{detailLanguage}}"
+        <div class="settings-box first two-line">
+          <div class="start">
+            <div i18n-content="languagesListTitle"></div>
+            <div class="secondary">[[languagesSecondary_]]</div>
+          </div>
+          <cr-expand-button expanded="{{languagesOpened_}}">
+          </cr-expand-button>
+        </div>
+        <iron-collapse id="collapse" opened="[[languagesOpened_]]">
+          <div class="list-frame vertical-list">
+            <array-selector id="languageSelector"
+                selected="{{detailLanguage}}"
                 items="{{languages.enabledLanguages}}"></array-selector>
             <template is="dom-repeat" items="{{languages.enabledLanguages}}">
-              <paper-item class="split" on-tap="onLanguageTap_">
-                <div class="flex" title="[[item.language.nativeDisplayName]]"
-                    >[[item.language.displayName]]</div>
+              <div class="list-item" on-tap="onLanguageTap_">
+                <div class="start">
+                  <div title="[[item.language.nativeDisplayName]]">
+                      [[item.language.displayName]]
 <if expr="chromeos or is_win">
-                <iron-icon icon="done"
-                    hidden$="[[!isProspectiveUILanguage_(item.language.code, prefs.intl.app_locale.value)]]">
-                </iron-icon>
+                    <iron-icon icon="done"
+                        hidden$="[[!isProspectiveUILanguage_(item.language.code, prefs.intl.app_locale.value)]]">
+                    </iron-icon>
 </if>
+                  </div>
+                </div>
                 <paper-icon-button icon="settings"
                     on-tap="onShowLanguageDetailTap_"></paper-icon-button>
-              </paper-item>
+              </div>
             </template>
+            <div class="list-item list-button" i18n-content="manageLanguages"
+                on-tap="onManageLanguagesTap_">
+            </div>
           </div>
-          <div class="manage">
-            <paper-button i18n-content="manageLanguages"
-                on-tap="onManageLanguagesTap_"></paper-button>
-          </div>
+        </iron-collapse>
 <if expr="chromeos">
-          <h2 i18n-content="inputMethodsListTitle"></h2>
-          <div>
+        <div class="settings-box two-line">
+          <div class="start">
+            <div i18n-content="inputMethodsListTitle"></div>
+            <div class="secondary">[[inputMethodsSecondary_]]</div>
+          </div>
+          <cr-expand-button expanded="{{inputMethodsOpened_}}">
+          </cr-expand-button>
+        </div>
+        <iron-collapse id="collapse" opened="[[inputMethodsOpened_]]">
+          <div class="list-frame vertical-list">
             <template is="dom-repeat" items="{{languages.inputMethods}}">
-              <paper-item class="split">
-                <div class="flex">[[item.name]]</div>
-                <iron-icon icon="done"
-                    hidden$="[[!isCurrentInputMethod_(item.id, languages.currentInputMethod)]]">
-                </iron-icon>
+              <div class="list-item">
+                <div class="start">
+                  <div>[[item.name]]</div>
+                  <iron-icon icon="done"
+                      hidden$="[[!isCurrentInputMethod_(item.id, languages.currentInputMethod)]]">
+                  </iron-icon>
+                </div>
                 <paper-icon-button icon="settings"></paper-icon-button>
-              </paper-item>
+              </div>
             </template>
+            <div class="list-item list-button"
+                i18n-content="manageInputMethods">
+            </div>
           </div>
-          <div class="manage">
-            <paper-button i18n-content="manageInputMethods"></paper-button>
-          </div>
+        </iron-collapse>
 </if>
 <if expr="not is_macosx">
-          <h2 i18n-content="spellCheckListTitle"></h2>
-          <div class="layout vertical">
-            <template is="dom-repeat" items="{{languages.enabledLanguages}}">
-              <paper-checkbox hidden="[[!item.language.supportsSpellcheck]]"
-                  checked="[[item.state.spellCheckEnabled]]"
-                  on-change="onSpellCheckChange_"
-                  >[[item.language.displayName]]</paper-checkbox>
-            </template>
+        <div class="settings-box two-line">
+          <div class="start">
+            <div i18n-content="spellCheckListTitle"></div>
+            <div class="secondary">[[spellCheckSecondary_]]</div>
           </div>
-          <div class="manage">
-            <paper-button i18n-content="manageSpellCheck"
-                on-tap="onEditDictionaryTap_"></paper-button>
-          </div>
-</if>
+          <cr-expand-button expanded="{{spellCheckOpened_}}">
+          </cr-expand-button>
         </div>
+        <iron-collapse id="collapse" opened="[[spellCheckOpened_]]">
+          <div class="list-frame vertical-list">
+            <div class="list-item">
+              <template is="dom-repeat" items="{{languages.enabledLanguages}}">
+                <paper-checkbox hidden="[[!item.language.supportsSpellcheck]]"
+                    checked="[[item.state.spellCheckEnabled]]"
+                    on-change="onSpellCheckChange_"
+                    >[[item.language.displayName]]</paper-checkbox>
+              </template>
+            </div>
+            <div class="list-item list-button" i18n-content="manageSpellCheck"
+                on-tap="onEditDictionaryTap_">
+            </div>
+          </div>
+        </iron-collapse>
+</if>
       </neon-animatable>
       <neon-animatable id="manage-languages">
         <settings-subheader i18n-values="page-title:manageLanguagesPageTitle">

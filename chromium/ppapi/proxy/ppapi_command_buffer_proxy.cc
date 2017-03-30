@@ -20,7 +20,7 @@ PpapiCommandBufferProxy::PpapiCommandBufferProxy(
     PluginDispatcher* dispatcher,
     const gpu::Capabilities& capabilities,
     const SerializedHandle& shared_state,
-    uint64_t command_buffer_id)
+    gpu::CommandBufferId command_buffer_id)
     : command_buffer_id_(command_buffer_id),
       capabilities_(capabilities),
       resource_(resource),
@@ -195,7 +195,7 @@ gpu::CommandBufferNamespace PpapiCommandBufferProxy::GetNamespaceID() const {
   return gpu::CommandBufferNamespace::GPU_IO;
 }
 
-uint64_t PpapiCommandBufferProxy::GetCommandBufferID() const {
+gpu::CommandBufferId PpapiCommandBufferProxy::GetCommandBufferID() const {
   return command_buffer_id_;
 }
 
@@ -234,36 +234,6 @@ bool PpapiCommandBufferProxy::CanWaitUnverifiedSyncToken(
 
 int32_t PpapiCommandBufferProxy::GetExtraCommandBufferData() const {
   return 0;
-}
-
-uint32_t PpapiCommandBufferProxy::InsertSyncPoint() {
-  uint32_t sync_point = 0;
-  if (last_state_.error == gpu::error::kNoError) {
-    Send(new PpapiHostMsg_PPBGraphics3D_InsertSyncPoint(
-         ppapi::API_ID_PPB_GRAPHICS_3D, resource_, &sync_point));
-  }
-  return sync_point;
-}
-
-uint32_t PpapiCommandBufferProxy::InsertFutureSyncPoint() {
-  uint32_t sync_point = 0;
-  if (last_state_.error == gpu::error::kNoError) {
-    Send(new PpapiHostMsg_PPBGraphics3D_InsertFutureSyncPoint(
-        ppapi::API_ID_PPB_GRAPHICS_3D, resource_, &sync_point));
-  }
-  return sync_point;
-}
-
-void PpapiCommandBufferProxy::RetireSyncPoint(uint32_t sync_point) {
-  if (last_state_.error == gpu::error::kNoError) {
-    Send(new PpapiHostMsg_PPBGraphics3D_RetireSyncPoint(
-        ppapi::API_ID_PPB_GRAPHICS_3D, resource_, sync_point));
-  }
-}
-
-void PpapiCommandBufferProxy::SignalSyncPoint(uint32_t sync_point,
-                                              const base::Closure& callback) {
-  NOTREACHED();
 }
 
 void PpapiCommandBufferProxy::SignalQuery(uint32_t query,

@@ -70,15 +70,12 @@ void WebsiteSettingsPopupAndroid::Destroy(JNIEnv* env,
   delete this;
 }
 
-void WebsiteSettingsPopupAndroid::OnPermissionSettingChanged(
+void WebsiteSettingsPopupAndroid::RecordWebsiteSettingsAction(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
-    jint type,
-    jint setting) {
-  ContentSettingsType content_setting_type =
-      static_cast<ContentSettingsType>(type);
-  ContentSetting content_setting = static_cast<ContentSetting>(setting);
-  presenter_->OnSitePermissionChanged(content_setting_type, content_setting);
+    jint action) {
+  presenter_->RecordWebsiteSettingsAction(
+      static_cast<WebsiteSettings::WebsiteSettingsAction>(action));
 }
 
 void WebsiteSettingsPopupAndroid::SetIdentityInfo(

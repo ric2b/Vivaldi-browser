@@ -23,7 +23,7 @@ std::string WMFAudioDecoder::GetDisplayName() const {
 }
 
 void WMFAudioDecoder::Initialize(const AudioDecoderConfig& config,
-                                 const SetCdmReadyCB& set_cdm_ready_cb,
+                                 CdmContext* cdm_context,
                                  const InitCB& init_cb,
                                  const OutputCB& output_cb) {
   pipeline_stats::AddDecoderClass(GetDisplayName());

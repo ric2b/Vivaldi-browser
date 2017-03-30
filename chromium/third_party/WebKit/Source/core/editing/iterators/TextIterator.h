@@ -44,7 +44,7 @@ class LayoutTextFragment;
 
 CORE_EXPORT String plainText(const EphemeralRange&, TextIteratorBehaviorFlags = TextIteratorDefaultBehavior);
 
-String plainText(const EphemeralRangeInComposedTree&, TextIteratorBehaviorFlags = TextIteratorDefaultBehavior);
+String plainText(const EphemeralRangeInFlatTree&, TextIteratorBehaviorFlags = TextIteratorDefaultBehavior);
 
 // Iterates through the DOM range, returning all the text, and 0-length boundaries
 // at points where replaced elements break up the text flow.  The text comes back in
@@ -75,8 +75,17 @@ public:
 
     const TextIteratorTextState& text() const { return m_textState; }
     int length() const { return m_textState.length(); }
+    UChar characterAt(unsigned index) const { return m_textState.characterAt(index); }
 
     bool breaksAtReplacedElement() { return !(m_behavior & TextIteratorDoesNotBreakAtReplacedElement); }
+
+    // Calculate the minimum |actualLength >= minLength| such that code units
+    // with offset range [position, position + actualLength) are whole code
+    // points. Append these code points to |output| and return |actualLength|.
+    // TODO(xiaochengh): Use (start, end) instead of (start, length).
+    int copyTextTo(ForwardsTextBuffer* output, int position, int minLength) const;
+    // TODO(xiaochengh): Avoid default parameters.
+    int copyTextTo(ForwardsTextBuffer* output, int position = 0) const;
 
     // Computes the length of the given range using a text iterator. The default
     // iteration behavior is to always emit object replacement characters for
@@ -112,7 +121,7 @@ private:
     bool handleNonTextNode();
     void handleTextBox();
     void handleTextNodeFirstLetter(LayoutTextFragment*);
-    void emitCharacter(UChar, Node* textNode, Node* offsetBaseNode, int textStartOffset, int textEndOffset);
+    void spliceBuffer(UChar, Node* textNode, Node* offsetBaseNode, int textStartOffset, int textEndOffset);
     void emitText(Node* textNode, LayoutText* layoutObject, int textStartOffset, int textEndOffset);
 
     // Used by selection preservation code.  There should be one character emitted between every VisiblePosition
@@ -139,6 +148,12 @@ private:
     bool emitsObjectReplacementCharacter() const { return m_behavior & TextIteratorEmitsObjectReplacementCharacter; }
 
     bool excludesAutofilledValue() const { return m_behavior & TextIteratorExcludeAutofilledValue; }
+
+    bool isBetweenSurrogatePair(int position) const;
+
+    // Append code units with offset range [position, position + copyLength)
+    // to the output buffer.
+    void copyCodeUnitsTo(ForwardsTextBuffer* output, int position, int copyLength) const;
 
     // Current position, not necessarily of the text being returned, but position
     // as we walk through the DOM tree.
@@ -188,10 +203,10 @@ private:
 };
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT TextIteratorAlgorithm<EditingStrategy>;
-extern template class CORE_EXTERN_TEMPLATE_EXPORT TextIteratorAlgorithm<EditingInComposedTreeStrategy>;
+extern template class CORE_EXTERN_TEMPLATE_EXPORT TextIteratorAlgorithm<EditingInFlatTreeStrategy>;
 
 using TextIterator = TextIteratorAlgorithm<EditingStrategy>;
-using TextIteratorInComposedTree = TextIteratorAlgorithm<EditingInComposedTreeStrategy>;
+using TextIteratorInFlatTree = TextIteratorAlgorithm<EditingInFlatTreeStrategy>;
 
 } // namespace blink
 

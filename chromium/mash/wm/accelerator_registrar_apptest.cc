@@ -10,9 +10,7 @@
 #include "components/mus/public/cpp/event_matcher.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/interfaces/accelerator_registrar.mojom.h"
-#include "components/mus/public/interfaces/window_manager.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "mojo/shell/public/cpp/application_impl.h"
 #include "mojo/shell/public/cpp/application_test_base.h"
 
 using mus::mojom::AcceleratorHandler;
@@ -29,9 +27,7 @@ class TestAcceleratorHandler : public AcceleratorHandler {
       : binding_(this),
         registrar_(std::move(registrar)),
         add_accelerator_result_(false) {
-    AcceleratorHandlerPtr handler;
-    binding_.Bind(GetProxy(&handler));
-    registrar_->SetHandler(std::move(handler));
+    registrar_->SetHandler(binding_.CreateInterfacePtrAndBind());
   }
   ~TestAcceleratorHandler() override {}
 
@@ -76,7 +72,7 @@ class AcceleratorRegistrarTest : public mojo::test::ApplicationTestBase {
 
  protected:
   void ConnectToRegistrar(AcceleratorRegistrarPtr* registrar) {
-    application_impl()->ConnectToService("mojo:desktop_wm", registrar);
+    connector()->ConnectToInterface("mojo:desktop_wm", registrar);
   }
 
  private:
@@ -88,13 +84,13 @@ TEST_F(AcceleratorRegistrarTest, AcceleratorRegistrarBasic) {
   ConnectToRegistrar(&registrar_first);
   TestAcceleratorHandler handler_first(std::move(registrar_first));
   EXPECT_TRUE(handler_first.AttemptToInstallAccelerator(
-      1, mus::CreateKeyMatcher(mus::mojom::KEYBOARD_CODE_T,
-                               mus::mojom::EVENT_FLAGS_SHIFT_DOWN)));
+      1, mus::CreateKeyMatcher(mus::mojom::KeyboardCode::T,
+                               mus::mojom::kEventFlagShiftDown)));
   // Attempting to add an accelerator with the same accelerator id from the same
   // registrar should fail.
   EXPECT_FALSE(handler_first.AttemptToInstallAccelerator(
-      1, mus::CreateKeyMatcher(mus::mojom::KEYBOARD_CODE_N,
-                               mus::mojom::EVENT_FLAGS_SHIFT_DOWN)));
+      1, mus::CreateKeyMatcher(mus::mojom::KeyboardCode::N,
+                               mus::mojom::kEventFlagShiftDown)));
 
   // Attempting to add an accelerator with the same id from a different
   // registrar should be OK.
@@ -102,16 +98,16 @@ TEST_F(AcceleratorRegistrarTest, AcceleratorRegistrarBasic) {
   ConnectToRegistrar(&registrar_second);
   TestAcceleratorHandler handler_second(std::move(registrar_second));
   EXPECT_TRUE(handler_second.AttemptToInstallAccelerator(
-      1, mus::CreateKeyMatcher(mus::mojom::KEYBOARD_CODE_N,
-                               mus::mojom::EVENT_FLAGS_SHIFT_DOWN)));
+      1, mus::CreateKeyMatcher(mus::mojom::KeyboardCode::N,
+                               mus::mojom::kEventFlagShiftDown)));
 
   // But attempting to add an accelerator with the same matcher should fail.
   EXPECT_FALSE(handler_first.AttemptToInstallAccelerator(
-      3, mus::CreateKeyMatcher(mus::mojom::KEYBOARD_CODE_N,
-                               mus::mojom::EVENT_FLAGS_SHIFT_DOWN)));
+      3, mus::CreateKeyMatcher(mus::mojom::KeyboardCode::N,
+                               mus::mojom::kEventFlagShiftDown)));
   EXPECT_FALSE(handler_second.AttemptToInstallAccelerator(
-      3, mus::CreateKeyMatcher(mus::mojom::KEYBOARD_CODE_N,
-                               mus::mojom::EVENT_FLAGS_SHIFT_DOWN)));
+      3, mus::CreateKeyMatcher(mus::mojom::KeyboardCode::N,
+                               mus::mojom::kEventFlagShiftDown)));
 }
 
 }  // namespace wm

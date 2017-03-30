@@ -19,7 +19,7 @@
 #include "media/base/limits.h"
 #include "media/base/media_log.h"
 #include "media/base/media_switches.h"
-#include "media/base/pipeline.h"
+#include "media/base/pipeline_status.h"
 #include "media/base/video_frame.h"
 #include "media/renderers/gpu_video_accelerator_factories.h"
 #include "media/video/gpu_memory_buffer_video_frame_pool.h"
@@ -123,7 +123,7 @@ void VideoRendererImpl::StartPlayingFrom(base::TimeDelta timestamp) {
 void VideoRendererImpl::Initialize(
     DemuxerStream* stream,
     const PipelineStatusCB& init_cb,
-    const SetCdmReadyCB& set_cdm_ready_cb,
+    CdmContext* cdm_context,
     const StatisticsCB& statistics_cb,
     const BufferingStateCB& buffering_state_cb,
     const base::Closure& ended_cb,
@@ -168,7 +168,7 @@ void VideoRendererImpl::Initialize(
   video_frame_stream_->Initialize(
       stream, base::Bind(&VideoRendererImpl::OnVideoFrameStreamInitialized,
                          weak_factory_.GetWeakPtr()),
-      set_cdm_ready_cb, statistics_cb, waiting_for_decryption_key_cb);
+      cdm_context, statistics_cb, waiting_for_decryption_key_cb);
 }
 
 scoped_refptr<VideoFrame> VideoRendererImpl::Render(
@@ -388,32 +388,27 @@ void VideoRendererImpl::FrameReady(uint32_t sequence_token,
     //
     // Similarly, if we've paused for underflow, remove all frames which are
     // before the current media time.
+    //
+    // If we're paused for prerolling (current time is 0), don't expire any
+    // frames. It's possible that during preroll |have_nothing_and_paused| is
+    // false while |was_background_rendering_| is true. We differentiate this
+    // from actual background rendering by checking if current time is 0.
     const bool have_nothing = buffering_state_ != BUFFERING_HAVE_ENOUGH;
     const bool have_nothing_and_paused = have_nothing && !sink_started_;
     if (was_background_rendering_ ||
         (have_nothing_and_paused && drop_frames_)) {
-      base::TimeTicks expiry_time;
-      if (have_nothing_and_paused) {
-        // Use the current media wall clock time plus the frame duration since
-        // RemoveExpiredFrames() is expecting the end point of an interval (it
-        // will subtract from the given value).
-        std::vector<base::TimeTicks> current_time;
-        wall_clock_time_cb_.Run(std::vector<base::TimeDelta>(), &current_time);
-        expiry_time = current_time[0] + algorithm_->average_frame_duration();
-      } else {
-        expiry_time = tick_clock_->NowTicks();
-      }
-
-      // Prior to rendering the first frame, |have_nothing_and_paused| will be
-      // true, correspondingly the |expiry_time| will be null; in this case
-      // there's no reason to try and remove any frames.
-      if (!expiry_time.is_null()) {
-        const size_t removed_frames =
-            algorithm_->RemoveExpiredFrames(expiry_time);
-
-        // Frames removed during underflow should be counted as dropped.
-        if (have_nothing_and_paused && removed_frames)
-          frames_dropped_ += removed_frames;
+      base::TimeTicks current_time = GetCurrentMediaTimeAsWallClockTime();
+      if (!current_time.is_null()) {
+        if (have_nothing_and_paused) {
+          // Use the current media wall clock time plus the frame duration since
+          // RemoveExpiredFrames() is expecting the end point of an interval (it
+          // will subtract from the given value).
+          frames_dropped_ += algorithm_->RemoveExpiredFrames(
+              current_time + algorithm_->average_frame_duration());
+        } else {
+          // Don't count dropped frames when background rendering.
+          algorithm_->RemoveExpiredFrames(tick_clock_->NowTicks());
+        }
       }
     }
 
@@ -635,6 +630,12 @@ base::TimeTicks VideoRendererImpl::ConvertMediaTimestamp(
   if (!wall_clock_time_cb_.Run(media_times, &wall_clock_times))
     return base::TimeTicks();
   return wall_clock_times[0];
+}
+
+base::TimeTicks VideoRendererImpl::GetCurrentMediaTimeAsWallClockTime() {
+  std::vector<base::TimeTicks> current_time;
+  wall_clock_time_cb_.Run(std::vector<base::TimeDelta>(), &current_time);
+  return current_time[0];
 }
 
 bool VideoRendererImpl::IsBeforeStartTime(base::TimeDelta timestamp) {

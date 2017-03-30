@@ -10,6 +10,7 @@
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/dom/shadow/ShadowRoot.h"
+#include "core/html/HTMLSlotElement.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/layout/LayoutObject.h"
 
@@ -43,7 +44,7 @@ void StyleInvalidator::scheduleInvalidationSetsForElement(const InvalidationList
     ASSERT(element.inActiveDocument());
     bool requiresDescendantInvalidation = false;
 
-    if (element.styleChangeType() < SubtreeStyleChange) {
+    if (element.getStyleChangeType() < SubtreeStyleChange) {
         for (auto& invalidationSet : invalidationLists.descendants) {
             if (invalidationSet->wholeSubtreeInvalid()) {
                 element.setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::StyleInvalidator));
@@ -121,6 +122,8 @@ void StyleInvalidator::RecursionData::pushInvalidationSet(const DescendantInvali
         m_treeBoundaryCrossing = true;
     if (invalidationSet.insertionPointCrossing())
         m_insertionPointCrossing = true;
+    if (invalidationSet.invalidatesSlotted())
+        m_invalidatesSlotted = true;
     m_invalidationSets.append(&invalidationSet);
     m_invalidateCustomPseudo = invalidationSet.customPseudoInvalid();
 }
@@ -140,6 +143,19 @@ ALWAYS_INLINE bool StyleInvalidator::RecursionData::matchesCurrentInvalidationSe
             return true;
     }
 
+    return false;
+}
+
+bool StyleInvalidator::RecursionData::matchesCurrentInvalidationSetsAsSlotted(Element& element) const
+{
+    ASSERT(m_invalidatesSlotted);
+
+    for (const auto& invalidationSet : m_invalidationSets) {
+        if (!invalidationSet->invalidatesSlotted())
+            continue;
+        if (invalidationSet->invalidatesElement(element))
+            return true;
+    }
     return false;
 }
 
@@ -168,27 +184,23 @@ bool StyleInvalidator::SiblingData::matchCurrentInvalidationSets(Element& elemen
         }
 
         const SiblingInvalidationSet& invalidationSet = *m_invalidationEntries[index].m_invalidationSet;
+        ++index;
+        if (!invalidationSet.invalidatesElement(element))
+            continue;
 
-        if (invalidationSet.invalidatesElement(element)) {
-            const DescendantInvalidationSet& descendants = invalidationSet.descendants();
-            if (descendants.wholeSubtreeInvalid()) {
-                // Avoid directly setting SubtreeStyleChange on element, or ContainerNode::checkForChildrenAdjacentRuleChanges()
-                // may propagate the SubtreeStyleChange to our own siblings' subtrees.
+        if (invalidationSet.invalidatesSelf())
+            thisElementNeedsStyleRecalc = true;
 
-                for (Element* child = ElementTraversal::firstChild(element); child; child = ElementTraversal::nextSibling(*child)) {
-                    child->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::SiblingSelector));
-                }
+        if (const DescendantInvalidationSet* descendants = invalidationSet.siblingDescendants()) {
+            if (descendants->wholeSubtreeInvalid()) {
+                element.setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::StyleInvalidator));
                 return true;
             }
 
-            if (descendants.invalidatesSelf())
-                thisElementNeedsStyleRecalc = true;
-
-            if (!descendants.isEmpty())
-                recursionData.pushInvalidationSet(descendants);
+            if (!descendants->isEmpty())
+                recursionData.pushInvalidationSet(*descendants);
         }
 
-        ++index;
     }
     return thisElementNeedsStyleRecalc;
 }
@@ -200,6 +212,9 @@ void StyleInvalidator::pushInvalidationSetsForElement(Element& element, Recursio
 
     for (const auto& invalidationSet : pendingInvalidations->siblings())
         siblingData.pushInvalidationSet(toSiblingInvalidationSet(*invalidationSet));
+
+    if (element.getStyleChangeType() >= SubtreeStyleChange)
+        return;
 
     if (!pendingInvalidations->descendants().isEmpty()) {
         for (const auto& invalidationSet : pendingInvalidations->descendants())
@@ -215,17 +230,21 @@ void StyleInvalidator::pushInvalidationSetsForElement(Element& element, Recursio
 
 ALWAYS_INLINE bool StyleInvalidator::checkInvalidationSetsAgainstElement(Element& element, RecursionData& recursionData, SiblingData& siblingData)
 {
-    if (element.styleChangeType() >= SubtreeStyleChange || recursionData.wholeSubtreeInvalid()) {
-        recursionData.setWholeSubtreeInvalid();
+    if (recursionData.wholeSubtreeInvalid())
         return false;
-    }
 
-    bool thisElementNeedsStyleRecalc = recursionData.matchesCurrentInvalidationSets(element);
-    if (UNLIKELY(!siblingData.isEmpty()))
-        thisElementNeedsStyleRecalc |= siblingData.matchCurrentInvalidationSets(element, recursionData);
+    bool thisElementNeedsStyleRecalc = false;
+    if (element.getStyleChangeType() >= SubtreeStyleChange) {
+        recursionData.setWholeSubtreeInvalid();
+    } else {
+        thisElementNeedsStyleRecalc = recursionData.matchesCurrentInvalidationSets(element);
+        if (UNLIKELY(!siblingData.isEmpty()))
+            thisElementNeedsStyleRecalc |= siblingData.matchCurrentInvalidationSets(element, recursionData);
+    }
 
     if (UNLIKELY(element.needsStyleInvalidation()))
         pushInvalidationSetsForElement(element, recursionData, siblingData);
+
     return thisElementNeedsStyleRecalc;
 }
 
@@ -287,11 +306,25 @@ bool StyleInvalidator::invalidate(Element& element, RecursionData& recursionData
 
     if (recursionData.insertionPointCrossing() && element.isInsertionPoint())
         element.setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::StyleInvalidator));
+    if (recursionData.invalidatesSlotted() && isHTMLSlotElement(element))
+        invalidateSlotDistributedElements(toHTMLSlotElement(element), recursionData);
 
     element.clearChildNeedsStyleInvalidation();
     element.clearNeedsStyleInvalidation();
 
     return thisElementNeedsStyleRecalc;
+}
+
+void StyleInvalidator::invalidateSlotDistributedElements(HTMLSlotElement& slot, const RecursionData& recursionData) const
+{
+    for (auto& distributedNode : slot.getDistributedNodes()) {
+        if (distributedNode->needsStyleRecalc())
+            continue;
+        if (!distributedNode->isElementNode())
+            continue;
+        if (recursionData.matchesCurrentInvalidationSetsAsSlotted(toElement(*distributedNode)))
+            distributedNode->setNeedsStyleRecalc(LocalStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::StyleInvalidator));
+    }
 }
 
 DEFINE_TRACE(StyleInvalidator)

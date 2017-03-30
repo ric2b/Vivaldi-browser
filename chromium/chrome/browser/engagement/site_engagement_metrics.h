@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_ENGAGEMENT_SITE_ENGAGEMENT_METRICS_H_
 
 #include <map>
+#include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "url/gurl.h"
@@ -25,6 +26,7 @@ class SiteEngagementMetrics {
     ENGAGEMENT_MEDIA_HIDDEN,
     ENGAGEMENT_MEDIA_VISIBLE,
     ENGAGEMENT_WEBAPP_SHORTCUT_LAUNCH,
+    ENGAGEMENT_FIRST_DAILY_ENGAGEMENT,
     ENGAGEMENT_LAST,
   };
 
@@ -38,10 +40,13 @@ class SiteEngagementMetrics {
   static void RecordPercentOriginsWithMaxEngagement(double percentage);
   static void RecordEngagement(EngagementType type);
   static void RecordDaysSinceLastShortcutLaunch(int days);
+  static void RecordScoreDecayedFrom(double score);
+  static void RecordScoreDecayedTo(double score);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, CheckHistograms);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, LastShortcutLaunch);
+  FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, ScoreDecayHistograms);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementHelperTest,
                            MixedInputEngagementAccumulation);
   static const char kTotalEngagementHistogram[];
@@ -49,11 +54,18 @@ class SiteEngagementMetrics {
   static const char kMeanEngagementHistogram[];
   static const char kMedianEngagementHistogram[];
   static const char kEngagementScoreHistogram[];
+  static const char kEngagementScoreHistogramHTTP[];
+  static const char kEngagementScoreHistogramHTTPS[];
   static const char kOriginsWithMaxEngagementHistogram[];
   static const char kOriginsWithMaxDailyEngagementHistogram[];
   static const char kPercentOriginsWithMaxEngagementHistogram[];
   static const char kEngagementTypeHistogram[];
+  static const char kEngagementBucketHistogramBase[];
   static const char kDaysSinceLastShortcutLaunchHistogram[];
+  static const char kScoreDecayedFromHistogram[];
+  static const char kScoreDecayedToHistogram[];
+
+  static std::vector<std::string> GetEngagementBucketHistogramNames();
 };
 
 #endif  // CHROME_BROWSER_ENGAGEMENT_SITE_ENGAGEMENT_METRICS_H_

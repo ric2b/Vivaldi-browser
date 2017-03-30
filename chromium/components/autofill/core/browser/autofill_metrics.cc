@@ -272,7 +272,7 @@ void LogTypeQualityMetric(const std::string& base_name,
 void AutofillMetrics::LogCardUploadDecisionMetric(
     CardUploadDecisionMetric metric) {
   DCHECK_LT(metric, NUM_CARD_UPLOAD_DECISION_METRICS);
-  UMA_HISTOGRAM_ENUMERATION("Autofill.CardUploadDecision", metric,
+  UMA_HISTOGRAM_ENUMERATION("Autofill.CardUploadDecisionExpanded", metric,
                             NUM_CARD_UPLOAD_DECISION_METRICS);
 }
 
@@ -681,22 +681,6 @@ void AutofillMetrics::LogAutofillFormSubmittedState(
     AutofillFormSubmittedState state) {
   UMA_HISTOGRAM_ENUMERATION("Autofill.FormSubmittedState", state,
                             AUTOFILL_FORM_SUBMITTED_STATE_ENUM_SIZE);
-}
-
-// static
-void AutofillMetrics::LogPayloadCompressionRatio(
-    int compression_ratio,
-    AutofillDownloadManager::RequestType type) {
-  switch (type) {
-    case AutofillDownloadManager::REQUEST_QUERY:
-      UMA_HISTOGRAM_PERCENTAGE("Autofill.PayloadCompressionRatio.Query",
-                               compression_ratio);
-      break;
-    case AutofillDownloadManager::REQUEST_UPLOAD:
-      UMA_HISTOGRAM_PERCENTAGE("Autofill.PayloadCompressionRatio.Upload",
-                               compression_ratio);
-      break;
-  }
 }
 
 AutofillMetrics::FormEventLogger::FormEventLogger(bool is_for_credit_card)

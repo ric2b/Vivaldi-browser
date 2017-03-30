@@ -60,6 +60,7 @@ class WebSettings;
 class WebSpellCheckClient;
 class WebString;
 class WebViewClient;
+class WebViewScheduler;
 struct WebActiveWheelFlingParameters;
 struct WebDeviceEmulationParams;
 struct WebFloatPoint;
@@ -107,21 +108,6 @@ public:
     // encoding may cause the main frame to reload.
     virtual WebString pageEncoding() const = 0;
     virtual void setPageEncoding(const WebString&) = 0;
-
-    // Makes the WebView transparent.  This is useful if you want to have
-    // some custom background rendered behind it.
-    virtual bool isTransparent() const = 0;
-    virtual void setIsTransparent(bool) = 0;
-
-    // Sets the base color used for this WebView's background. This is in effect
-    // the default background color used for pages with no background-color
-    // style in effect, or used as the alpha-blended basis for any pages with
-    // translucent background-color style. (For pages with opaque
-    // background-color style, this property is effectively ignored).
-    // Setting this takes effect for the currently loaded page, if any, and
-    // persists across subsequent navigations. Defaults to white prior to the
-    // first call to this method.
-    virtual void setBaseBackgroundColor(WebColor) = 0;
 
     // Controls whether pressing Tab key advances focus to links.
     virtual bool tabsToLinks() const = 0;
@@ -458,9 +444,16 @@ public:
     // Cancels an active fling, returning true if a fling was active.
     virtual bool endActiveFlingAnimation() = 0;
 
+    // Returns true if there's an active fling animation.
+    virtual bool isFlinging() const = 0;
+
     virtual void setShowPaintRects(bool) = 0;
     virtual void setShowFPSCounter(bool) = 0;
     virtual void setShowScrollBottleneckRects(bool) = 0;
+
+    // Scheduling -----------------------------------------------------------
+
+    virtual WebViewScheduler* scheduler() const = 0;
 
     // Visibility -----------------------------------------------------------
 

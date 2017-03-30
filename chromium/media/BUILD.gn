@@ -9,6 +9,7 @@ import("//build/config/features.gni")
 import("//build/config/linux/pkg_config.gni")
 import("//build/config/ui.gni")
 import("//media/media_options.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
 
 buildflag_header("media_features") {
@@ -31,7 +32,7 @@ config("media_config") {
   if (!media_use_ffmpeg) {
     defines += [ "MEDIA_DISABLE_FFMPEG" ]
   }
-  if (current_cpu == "arm" && arm_use_neon) {
+  if (current_cpu == "arm64" || (current_cpu == "arm" && arm_use_neon)) {
     defines += [ "USE_NEON" ]
   }
   if (use_pulseaudio) {
@@ -100,82 +101,12 @@ if (use_ozone) {
 
 component("media") {
   sources = [
-    "capture/content/animated_content_sampler.cc",
-    "capture/content/animated_content_sampler.h",
-    "capture/content/capture_resolution_chooser.cc",
-    "capture/content/capture_resolution_chooser.h",
-    "capture/content/feedback_signal_accumulator.cc",
-    "capture/content/feedback_signal_accumulator.h",
-    "capture/content/screen_capture_device_core.cc",
-    "capture/content/screen_capture_device_core.h",
-    "capture/content/smooth_event_sampler.cc",
-    "capture/content/smooth_event_sampler.h",
-    "capture/content/thread_safe_capture_oracle.cc",
-    "capture/content/thread_safe_capture_oracle.h",
-    "capture/content/video_capture_oracle.cc",
-    "capture/content/video_capture_oracle.h",
-    "capture/video/fake_video_capture_device.cc",
-    "capture/video/fake_video_capture_device.h",
-    "capture/video/fake_video_capture_device_factory.cc",
-    "capture/video/fake_video_capture_device_factory.h",
-    "capture/video/file_video_capture_device.cc",
-    "capture/video/file_video_capture_device.h",
-    "capture/video/file_video_capture_device_factory.cc",
-    "capture/video/file_video_capture_device_factory.h",
-    "capture/video/linux/v4l2_capture_delegate.cc",
-    "capture/video/linux/v4l2_capture_delegate.h",
-    "capture/video/linux/v4l2_capture_delegate_multi_plane.cc",
-    "capture/video/linux/v4l2_capture_delegate_multi_plane.h",
-    "capture/video/linux/v4l2_capture_delegate_single_plane.cc",
-    "capture/video/linux/v4l2_capture_delegate_single_plane.h",
-    "capture/video/linux/video_capture_device_chromeos.cc",
-    "capture/video/linux/video_capture_device_chromeos.h",
-    "capture/video/linux/video_capture_device_factory_linux.cc",
-    "capture/video/linux/video_capture_device_factory_linux.h",
-    "capture/video/linux/video_capture_device_linux.cc",
-    "capture/video/linux/video_capture_device_linux.h",
-    "capture/video/mac/platform_video_capturing_mac.h",
-    "capture/video/mac/video_capture_device_avfoundation_mac.h",
-    "capture/video/mac/video_capture_device_avfoundation_mac.mm",
-    "capture/video/mac/video_capture_device_decklink_mac.h",
-    "capture/video/mac/video_capture_device_decklink_mac.mm",
-    "capture/video/mac/video_capture_device_factory_mac.h",
-    "capture/video/mac/video_capture_device_factory_mac.mm",
-    "capture/video/mac/video_capture_device_mac.h",
-    "capture/video/mac/video_capture_device_mac.mm",
-    "capture/video/mac/video_capture_device_qtkit_mac.h",
-    "capture/video/mac/video_capture_device_qtkit_mac.mm",
-    "capture/video/video_capture_device.cc",
-    "capture/video/video_capture_device.h",
-    "capture/video/video_capture_device_factory.cc",
-    "capture/video/video_capture_device_factory.h",
-    "capture/video/video_capture_device_info.cc",
-    "capture/video/video_capture_device_info.h",
-    "capture/video/win/capability_list_win.cc",
-    "capture/video/win/capability_list_win.h",
-    "capture/video/win/filter_base_win.cc",
-    "capture/video/win/filter_base_win.h",
-    "capture/video/win/pin_base_win.cc",
-    "capture/video/win/pin_base_win.h",
-    "capture/video/win/sink_filter_observer_win.h",
-    "capture/video/win/sink_filter_win.cc",
-    "capture/video/win/sink_filter_win.h",
-    "capture/video/win/sink_input_pin_win.cc",
-    "capture/video/win/sink_input_pin_win.h",
-    "capture/video/win/video_capture_device_factory_win.cc",
-    "capture/video/win/video_capture_device_factory_win.h",
-    "capture/video/win/video_capture_device_mf_win.cc",
-    "capture/video/win/video_capture_device_mf_win.h",
-    "capture/video/win/video_capture_device_win.cc",
-    "capture/video/win/video_capture_device_win.h",
-    "capture/webm_muxer.cc",
-    "capture/webm_muxer.h",
     "cdm/aes_decryptor.cc",
     "cdm/aes_decryptor.h",
     "cdm/cdm_adapter.cc",
     "cdm/cdm_adapter.h",
-    "cdm/cdm_buffer_impl.cc",
-    "cdm/cdm_buffer_impl.h",
+    "cdm/cdm_allocator.cc",
+    "cdm/cdm_allocator.h",
     "cdm/cdm_helpers.cc",
     "cdm/cdm_helpers.h",
     "cdm/default_cdm_factory.cc",
@@ -186,8 +117,6 @@ component("media") {
     "cdm/key_system_names.h",
     "cdm/player_tracker_impl.cc",
     "cdm/player_tracker_impl.h",
-    "cdm/proxy_decryptor.cc",
-    "cdm/proxy_decryptor.h",
     "cdm/supported_cdm_versions.cc",
     "cdm/supported_cdm_versions.h",
     "ffmpeg/ffmpeg_deleters.h",
@@ -277,6 +206,8 @@ component("media") {
     "formats/webm/webm_video_client.h",
     "formats/webm/webm_webvtt_parser.cc",
     "formats/webm/webm_webvtt_parser.h",
+    "muxers/webm_muxer.cc",
+    "muxers/webm_muxer.h",
     "renderers/audio_renderer_impl.cc",
     "renderers/audio_renderer_impl.h",
     "renderers/default_renderer_factory.cc",
@@ -390,10 +321,8 @@ component("media") {
       ]
     }
     sources += [
-      "capture/video/android/video_capture_device_android.cc",
-      "capture/video/android/video_capture_device_android.h",
-      "capture/video/android/video_capture_device_factory_android.cc",
-      "capture/video/android/video_capture_device_factory_android.h",
+      "filters/android/media_codec_audio_decoder.cc",
+      "filters/android/media_codec_audio_decoder.h",
     ]
     sources -= [
       "filters/decrypting_audio_decoder.cc",
@@ -404,7 +333,8 @@ component("media") {
     deps += [
       "//media/base/android",
       "//media/base/android:media_jni_headers",
-      "//media/base/android:video_capture_jni_headers",
+      "//media/capture/video/android:capture_java",
+      "//media/capture/video/android:capture_jni_headers",
     ]
 
     # Only 64 bit builds are using android-21 NDK library, check common.gypi
@@ -451,21 +381,10 @@ component("media") {
   }
 
   if (is_mac) {
-    deps += [
-      "//media/base/mac",
-      "//third_party/decklink",
-    ]
+    deps += [ "//media/base/mac" ]
     libs += [
       "CoreVideo.framework",
       "OpenGL.framework",
-      "QTKit.framework",
-    ]
-  }
-
-  if (is_openbsd) {
-    sources -= [
-      "capture/video/linux/v4l2_capture_delegate_multi_plane.cc",
-      "capture/video/linux/v4l2_capture_delegate_multi_plane.h",
     ]
   }
 
@@ -567,6 +486,7 @@ component("media") {
     ":shared_memory_support",
     "//media/audio",
     "//media/base",
+    "//media/capture",
     "//third_party/opus",
   ]
 
@@ -610,29 +530,17 @@ if (is_ios) {
   }
 }
 
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("media_unittests_run") {
-  testonly = true
-  deps = [
-    ":media_unittests",
-  ]
-}
-
 test("media_unittests") {
   sources = [
-    "capture/content/animated_content_sampler_unittest.cc",
-    "capture/content/capture_resolution_chooser_unittest.cc",
-    "capture/content/feedback_signal_accumulator_unittest.cc",
-    "capture/content/smooth_event_sampler_unittest.cc",
-    "capture/content/video_capture_oracle_unittest.cc",
-    "capture/video/fake_video_capture_device_unittest.cc",
-    "capture/video/video_capture_device_unittest.cc",
-    "capture/webm_muxer_unittest.cc",
     "cdm/aes_decryptor_unittest.cc",
     "cdm/external_clear_key_test_helper.cc",
     "cdm/external_clear_key_test_helper.h",
     "cdm/json_web_key_unittest.cc",
+    "cdm/simple_cdm_allocator.cc",
+    "cdm/simple_cdm_allocator.h",
+    "cdm/simple_cdm_allocator_unittest.cc",
+    "cdm/simple_cdm_buffer.cc",
+    "cdm/simple_cdm_buffer.h",
     "filters/audio_clock_unittest.cc",
     "filters/audio_decoder_selector_unittest.cc",
     "filters/audio_renderer_algorithm_unittest.cc",
@@ -670,6 +578,7 @@ test("media_unittests") {
     "formats/webm/webm_parser_unittest.cc",
     "formats/webm/webm_tracks_parser_unittest.cc",
     "formats/webm/webm_webvtt_parser_unittest.cc",
+    "muxers/webm_muxer_unittest.cc",
     "renderers/audio_renderer_impl_unittest.cc",
     "renderers/renderer_impl_unittest.cc",
     "renderers/skcanvas_video_renderer_unittest.cc",
@@ -689,7 +598,6 @@ test("media_unittests") {
   deps = [
     ":media",
     ":test_support",
-    "//base/allocator",
     "//base/test:test_support",
     "//gpu:test_support",
     "//gpu/command_buffer/common",
@@ -697,6 +605,7 @@ test("media_unittests") {
     "//media/audio:unittests",
     "//media/base:test_support",
     "//media/base:unittests",
+    "//media/capture:unittests",
     "//media/test:pipeline_integration_tests",
     "//skia",  # Direct dependency required to inherit config.
     "//testing/gmock",
@@ -708,6 +617,8 @@ test("media_unittests") {
     "//url",
   ]
 
+  data_deps = []
+
   if (is_android) {
     isolate_file = "media_unittests.isolate"
     sources -= [
@@ -717,6 +628,7 @@ test("media_unittests") {
     deps += [
       "//media/base/android:media_java",
       "//media/base/android:unittests",
+      "//media/capture/video/android:capture_java",
       "//ui/android:ui_java",
     ]
   }
@@ -724,7 +636,7 @@ test("media_unittests") {
   # If ExternalClearKey is built, we can test CdmAdapter.
   if (enable_pepper_cdms) {
     sources += [ "cdm/cdm_adapter_unittest.cc" ]
-    deps += [ "//media/cdm/ppapi:clearkeycdm" ]
+    data_deps += [ "//media/cdm/ppapi:clearkeycdm" ]
   }
 
   if (media_use_ffmpeg) {
@@ -797,11 +709,6 @@ test("media_unittests") {
     deps += [ "//media/base/mac" ]
   }
 
-  if (is_mac) {
-    sources +=
-        [ "capture/video/mac/video_capture_device_factory_mac_unittest.mm" ]
-  }
-
   #      include_dirs += [
   #        # Needed by media_drm_bridge.cc.
   #        target_gen_dir,
@@ -838,15 +745,6 @@ test("media_perftests") {
   if (media_use_ffmpeg) {
     deps += [ "//third_party/ffmpeg" ]  # Direct dependency required to inherit config.
   }
-}
-
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("audio_unittests_run") {
-  testonly = true
-  deps = [
-    ":audio_unittests",
-  ]
 }
 
 # For running the subset of media_unittests that might require audio hardware
@@ -932,6 +830,17 @@ if (media_use_ffmpeg && !is_android) {
       "//third_party/ffmpeg",
       "//ui/gfx:test_support",
       "//ui/gfx/geometry",
+    ]
+  }
+}
+
+if (proprietary_codecs) {
+  fuzzer_test("media_cenc_utils_fuzzer") {
+    sources = [
+      "cdm/cenc_utils_fuzzertest.cc",
+    ]
+    deps = [
+      ":media",
     ]
   }
 }

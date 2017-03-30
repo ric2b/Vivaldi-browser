@@ -95,6 +95,7 @@ WebInspector.TimelineUIUtils._initEventStyles = function()
     eventStyles[recordTypes.MarkFirstPaint] = new WebInspector.TimelineRecordStyle(WebInspector.UIString("First paint"), categories["painting"], true);
     eventStyles[recordTypes.TimeStamp] = new WebInspector.TimelineRecordStyle(WebInspector.UIString("Timestamp"), categories["scripting"]);
     eventStyles[recordTypes.ConsoleTime] = new WebInspector.TimelineRecordStyle(WebInspector.UIString("Console Time"), categories["scripting"]);
+    eventStyles[recordTypes.UserTiming] = new WebInspector.TimelineRecordStyle(WebInspector.UIString("User Timing"), categories["scripting"]);
     eventStyles[recordTypes.ResourceSendRequest] = new WebInspector.TimelineRecordStyle(WebInspector.UIString("Send Request"), categories["loading"]);
     eventStyles[recordTypes.ResourceReceiveResponse] = new WebInspector.TimelineRecordStyle(WebInspector.UIString("Receive Response"), categories["loading"]);
     eventStyles[recordTypes.ResourceFinish] = new WebInspector.TimelineRecordStyle(WebInspector.UIString("Finish Loading"), categories["loading"]);
@@ -119,6 +120,11 @@ WebInspector.TimelineUIUtils._initEventStyles = function()
     eventStyles[recordTypes.ResizeImage] = new WebInspector.TimelineRecordStyle(WebInspector.UIString("Image Resize"), categories["painting"]);
     eventStyles[recordTypes.GPUTask] = new WebInspector.TimelineRecordStyle(WebInspector.UIString("GPU"), categories["gpu"]);
     eventStyles[recordTypes.LatencyInfo] = new WebInspector.TimelineRecordStyle(WebInspector.UIString("Input Latency"), categories["scripting"]);
+
+    eventStyles[recordTypes.GCIdleLazySweep] = new WebInspector.TimelineRecordStyle(WebInspector.UIString("DOM GC"), categories["scripting"]);
+    eventStyles[recordTypes.GCCompleteSweep] = new WebInspector.TimelineRecordStyle(WebInspector.UIString("DOM GC"), categories["scripting"]);
+    eventStyles[recordTypes.GCCollectGarbage] = new WebInspector.TimelineRecordStyle(WebInspector.UIString("DOM GC"), categories["scripting"]);
+
     WebInspector.TimelineUIUtils._eventStylesMap = eventStyles;
     return eventStyles;
 }
@@ -150,6 +156,7 @@ WebInspector.TimelineUIUtils.categoryForRecord = function(record)
     return WebInspector.TimelineUIUtils.eventStyle(record.traceEvent()).category;
 }
 
+
 /**
  * @param {!WebInspector.TracingModel.Event} event
  * @return {!{title: string, category: !WebInspector.TimelineCategory}}
@@ -157,9 +164,15 @@ WebInspector.TimelineUIUtils.categoryForRecord = function(record)
 WebInspector.TimelineUIUtils.eventStyle = function(event)
 {
     var eventStyles = WebInspector.TimelineUIUtils._initEventStyles();
-    if (event.hasCategory(WebInspector.TimelineModel.Category.Console) || event.hasCategory(WebInspector.TimelineModel.Category.LatencyInfo))
+    if (event.hasCategory(WebInspector.TimelineModel.Category.Console) || event.hasCategory(WebInspector.TimelineModel.Category.UserTiming))
         return { title: event.name, category: WebInspector.TimelineUIUtils.categories()["scripting"] };
 
+    if (event.hasCategory(WebInspector.TimelineModel.Category.LatencyInfo)) {
+        /** @const */
+        var prefix = "InputLatency::";
+        var name = event.name.startsWith(prefix) ? event.name.substr(prefix.length) : event.name;
+        return { title: name, category: WebInspector.TimelineUIUtils.categories()["scripting"] };
+    }
     var result = eventStyles[event.name];
     if (!result) {
         result = new WebInspector.TimelineRecordStyle(event.name,  WebInspector.TimelineUIUtils.categories()["other"], true);
@@ -174,9 +187,12 @@ WebInspector.TimelineUIUtils.eventStyle = function(event)
  */
 WebInspector.TimelineUIUtils.eventColor = function(event)
 {
-    if (event.name === WebInspector.TimelineModel.RecordType.JSFrame)
-        return WebInspector.TimelineUIUtils.colorForURL(event.args["data"]["url"]);
-    return WebInspector.TimelineUIUtils.eventStyle(event).category.fillColorStop1;
+    if (event.name === WebInspector.TimelineModel.RecordType.JSFrame) {
+        var frame = event.args["data"];
+        if (WebInspector.TimelineUIUtils.isUserFrame(frame))
+            return WebInspector.TimelineUIUtils.colorForURL(frame.url);
+    }
+    return WebInspector.TimelineUIUtils.eventStyle(event).category.color;
 }
 
 /**
@@ -193,6 +209,45 @@ WebInspector.TimelineUIUtils.eventTitle = function(event)
     if (event.name === WebInspector.TimelineModel.RecordType.Animation && event.args["data"] && event.args["data"]["name"])
         return WebInspector.UIString("%s: %s", title, event.args["data"]["name"]);
     return title;
+}
+
+
+/**
+ * !Map<!WebInspector.TimelineIRModel.Phases, !{color: string, label: string}>
+ */
+WebInspector.TimelineUIUtils._interactionPhaseStyles = function()
+{
+    var map = WebInspector.TimelineUIUtils._interactionPhaseStylesMap;
+    if (!map) {
+         map = new Map([
+            [WebInspector.TimelineIRModel.Phases.Idle, {color: "white", label: "Idle"}],
+            [WebInspector.TimelineIRModel.Phases.Response, {color: "hsl(43, 83%, 64%)", label: WebInspector.UIString("Response")}],
+            [WebInspector.TimelineIRModel.Phases.Scroll, {color: "hsl(256, 67%, 70%)", label: WebInspector.UIString("Scroll")}],
+            [WebInspector.TimelineIRModel.Phases.Fling, {color: "hsl(256, 67%, 70%)", label: WebInspector.UIString("Fling")}],
+            [WebInspector.TimelineIRModel.Phases.Drag, {color: "hsl(256, 67%, 70%)", label: WebInspector.UIString("Drag")}],
+            [WebInspector.TimelineIRModel.Phases.Animation, {color: "hsl(256, 67%, 70%)", label: WebInspector.UIString("Animation")}]
+        ]);
+        WebInspector.TimelineUIUtils._interactionPhaseStylesMap = map;
+    }
+    return map;
+}
+
+/**
+ * @param {!WebInspector.TimelineIRModel.Phases} phase
+ * @return {string}
+ */
+WebInspector.TimelineUIUtils.interactionPhaseColor = function(phase)
+{
+    return WebInspector.TimelineUIUtils._interactionPhaseStyles().get(phase).color;
+}
+
+/**
+ * @param {!WebInspector.TimelineIRModel.Phases} phase
+ * @return {string}
+ */
+WebInspector.TimelineUIUtils.interactionPhaseLabel = function(phase)
+{
+    return WebInspector.TimelineUIUtils._interactionPhaseStyles().get(phase).label;
 }
 
 /**
@@ -212,6 +267,25 @@ WebInspector.TimelineUIUtils.isMarkerEvent = function(event)
     default:
         return false;
     }
+}
+
+/**
+ * @param {!RuntimeAgent.CallFrame} frame
+ * @return {boolean}
+ */
+WebInspector.TimelineUIUtils.isUserFrame = function(frame)
+{
+    return frame.scriptId !== "0" && !frame.url.startsWith("native ");
+}
+
+/**
+ * @param {!WebInspector.TracingModel.Event} event
+ * @return {?RuntimeAgent.CallFrame}
+ */
+WebInspector.TimelineUIUtils.topStackFrame = function(event)
+{
+    var stackTrace = event.stackTrace || event.initiator && event.initiator.stackTrace;
+    return stackTrace && stackTrace.length ? stackTrace[0] : null;
 }
 
 /**
@@ -350,6 +424,18 @@ WebInspector.TimelineUIUtils.buildDetailsTextForTraceEvent = function(event, tar
         detailsText = eventData && eventData["name"];
         break;
 
+    case recordType.GCIdleLazySweep:
+        detailsText = WebInspector.UIString("idle sweep");
+        break;
+
+    case recordType.GCCompleteSweep:
+        detailsText = WebInspector.UIString("complete sweep");
+        break;
+
+    case recordType.GCCollectGarbage:
+        detailsText = WebInspector.UIString("collect");
+        break;
+
     default:
         if (event.hasCategory(WebInspector.TimelineModel.Category.Console))
             detailsText = null;
@@ -382,16 +468,8 @@ WebInspector.TimelineUIUtils.buildDetailsTextForTraceEvent = function(event, tar
      */
     function linkifyTopCallFrameAsText()
     {
-        var stackTrace = event.stackTrace;
-        if (!stackTrace) {
-            var initiator = event.initiator;
-            if (initiator)
-                stackTrace = initiator.stackTrace;
-        }
-        if (!stackTrace || !stackTrace.length)
-            return null;
-        var callFrame = stackTrace[0];
-        return linkifyLocationAsText(callFrame.scriptId, callFrame.lineNumber, callFrame.columnNumber);
+        var frame = WebInspector.TimelineUIUtils.topStackFrame(event);
+        return frame ? linkifyLocationAsText(frame.scriptId, frame.lineNumber, frame.columnNumber) : null;
     }
 }
 
@@ -420,6 +498,9 @@ WebInspector.TimelineUIUtils.buildDetailsNodeForTraceEvent = function(event, tar
     case recordType.WebSocketSendHandshakeRequest:
     case recordType.WebSocketReceiveHandshakeResponse:
     case recordType.WebSocketDestroy:
+    case recordType.GCIdleLazySweep:
+    case recordType.GCCompleteSweep:
+    case recordType.GCCollectGarbage:
         detailsText = WebInspector.TimelineUIUtils.buildDetailsTextForTraceEvent(event, target);
         break;
     case recordType.PaintImage:
@@ -486,15 +567,8 @@ WebInspector.TimelineUIUtils.buildDetailsNodeForTraceEvent = function(event, tar
      */
     function linkifyTopCallFrame()
     {
-        var stackTrace = event.stackTrace;
-        if (!stackTrace) {
-            var initiator = event.initiator;
-            if (initiator)
-                stackTrace = initiator.stackTrace;
-        }
-        if (!stackTrace || !stackTrace.length)
-            return null;
-        return linkifier.linkifyConsoleCallFrame(target, stackTrace[0], "timeline-details");
+        var frame = WebInspector.TimelineUIUtils.topStackFrame(event);
+        return frame ? linkifier.linkifyConsoleCallFrame(target, frame, "timeline-details") : null;
     }
 }
 
@@ -912,6 +986,15 @@ WebInspector.TimelineUIUtils.buildNetworkRequestDetails = function(request, mode
 }
 
 /**
+ * @param {!Array<!RuntimeAgent.CallFrame>} callFrames
+ * @return {!RuntimeAgent.StackTrace}
+ */
+WebInspector.TimelineUIUtils._stackTraceFromCallFrames = function(callFrames)
+{
+    return /** @type {!RuntimeAgent.StackTrace} */ ({ callFrames: callFrames });
+}
+
+/**
  * @param {!WebInspector.TracingModel.Event} event
  * @param {?WebInspector.Target} target
  * @param {?Map<number, ?WebInspector.DOMNode>} relatedNodesMap
@@ -948,7 +1031,7 @@ WebInspector.TimelineUIUtils._generateCauses = function(event, target, relatedNo
     // Direct cause.
     if (event.stackTrace && event.stackTrace.length) {
         contentHelper.addSection(WebInspector.UIString("Call Stacks"));
-        contentHelper.appendStackTrace(stackLabel || WebInspector.UIString("Stack Trace"), event.stackTrace);
+        contentHelper.appendStackTrace(stackLabel || WebInspector.UIString("Stack Trace"), WebInspector.TimelineUIUtils._stackTraceFromCallFrames(event.stackTrace));
     }
 
     // Indirect causes.
@@ -956,7 +1039,7 @@ WebInspector.TimelineUIUtils._generateCauses = function(event, target, relatedNo
         contentHelper.addSection(WebInspector.UIString("Invalidations"));
         WebInspector.TimelineUIUtils._generateInvalidations(event, target, relatedNodesMap, contentHelper);
     } else if (initiator && initiator.stackTrace) { // Partial invalidation tracking.
-        contentHelper.appendStackTrace(callSiteStackLabel || WebInspector.UIString("First Invalidated"), initiator.stackTrace);
+        contentHelper.appendStackTrace(callSiteStackLabel || WebInspector.UIString("First Invalidated"), WebInspector.TimelineUIUtils._stackTraceFromCallFrames(initiator.stackTrace));
     }
 }
 
@@ -1124,7 +1207,7 @@ WebInspector.TimelineUIUtils.InvalidationsGroupElement.prototype = {
         if (first.cause.stackTrace) {
             var stack = content.createChild("div");
             stack.createTextChild(WebInspector.UIString("Stack trace:"));
-            this._contentHelper.createChildStackTraceElement(stack, first.cause.stackTrace);
+            this._contentHelper.createChildStackTraceElement(stack, WebInspector.TimelineUIUtils._stackTraceFromCallFrames(first.cause.stackTrace));
         }
 
         content.createTextChild(this._invalidations.length > 1 ? WebInspector.UIString("Nodes:") : WebInspector.UIString("Node:"));
@@ -1330,7 +1413,7 @@ WebInspector.TimelineUIUtils.createEventDivider = function(recordType, title, po
         eventDivider.className += " resources-red-divider";
     else if (recordType === recordTypes.MarkFirstPaint)
         eventDivider.className += " resources-green-divider";
-    else if (recordType === recordTypes.TimeStamp || recordType === recordTypes.ConsoleTime)
+    else if (recordType === recordTypes.TimeStamp || recordType === recordTypes.ConsoleTime || recordType === recordTypes.UserTiming)
         eventDivider.className += " resources-orange-divider";
     else if (recordType === recordTypes.BeginFrame)
         eventDivider.className += " timeline-frame-divider";
@@ -1384,13 +1467,13 @@ WebInspector.TimelineUIUtils.categories = function()
     if (WebInspector.TimelineUIUtils._categories)
         return WebInspector.TimelineUIUtils._categories;
     WebInspector.TimelineUIUtils._categories = {
-        loading: new WebInspector.TimelineCategory("loading", WebInspector.UIString("Loading"), true, "hsl(214, 53%, 58%)", "hsl(214, 67%, 90%)", "hsl(214, 67%, 74%)", "hsl(214, 67%, 66%)"),
-        scripting: new WebInspector.TimelineCategory("scripting", WebInspector.UIString("Scripting"), true, "hsl(43, 90%, 45%)", "hsl(43, 83%, 90%)", "hsl(43, 83%, 72%)", "hsl(43, 83%, 64%) "),
-        rendering: new WebInspector.TimelineCategory("rendering", WebInspector.UIString("Rendering"), true, "hsl(256, 50%, 60%)", "hsl(256, 67%, 90%)", "hsl(256, 67%, 76%)", "hsl(256, 67%, 70%)"),
-        painting: new WebInspector.TimelineCategory("painting", WebInspector.UIString("Painting"), true, "hsl(109, 33%, 47%)", "hsl(109, 33%, 90%)", "hsl(109, 33%, 64%)", "hsl(109, 33%, 55%)"),
-        gpu: new WebInspector.TimelineCategory("gpu", WebInspector.UIString("GPU"), false, "hsl(240, 24%, 45%)", "hsl(240, 24%, 90%)", "hsl(240, 24%, 73%)", "hsl(240, 24%, 66%)"),
-        other: new WebInspector.TimelineCategory("other", WebInspector.UIString("Other"), false, "hsl(0, 0%, 73%)", "hsl(0, 0%, 90%)", "hsl(0, 0%, 87%)", "hsl(0, 0%, 79%)"),
-        idle: new WebInspector.TimelineCategory("idle", WebInspector.UIString("Idle"), false, "hsl(0, 0%, 87%)", "hsl(0, 100%, 100%)", "hsl(0, 100%, 100%)", "hsl(0, 100%, 100%)")
+        loading: new WebInspector.TimelineCategory("loading", WebInspector.UIString("Loading"), true, "hsl(214, 67%, 74%)", "hsl(214, 67%, 66%)"),
+        scripting: new WebInspector.TimelineCategory("scripting", WebInspector.UIString("Scripting"), true, "hsl(43, 83%, 72%)", "hsl(43, 83%, 64%) "),
+        rendering: new WebInspector.TimelineCategory("rendering", WebInspector.UIString("Rendering"), true, "hsl(256, 67%, 76%)", "hsl(256, 67%, 70%)"),
+        painting: new WebInspector.TimelineCategory("painting", WebInspector.UIString("Painting"), true, "hsl(109, 33%, 64%)", "hsl(109, 33%, 55%)"),
+        gpu: new WebInspector.TimelineCategory("gpu", WebInspector.UIString("GPU"), false, "hsl(240, 24%, 73%)", "hsl(240, 24%, 66%)"),
+        other: new WebInspector.TimelineCategory("other", WebInspector.UIString("Other"), false, "hsl(0, 0%, 87%)", "hsl(0, 0%, 79%)"),
+        idle: new WebInspector.TimelineCategory("idle", WebInspector.UIString("Idle"), false, "hsl(0, 100%, 100%)", "hsl(0, 100%, 100%)")
     };
     return WebInspector.TimelineUIUtils._categories;
 };
@@ -1412,7 +1495,9 @@ WebInspector.TimelineUIUtils.asyncEventGroups = function()
     if (WebInspector.TimelineUIUtils._asyncEventGroups)
         return WebInspector.TimelineUIUtils._asyncEventGroups;
     WebInspector.TimelineUIUtils._asyncEventGroups = {
+        animation: new WebInspector.AsyncEventGroup(WebInspector.UIString("Animation")),
         console: new WebInspector.AsyncEventGroup(WebInspector.UIString("Console")),
+        userTiming: new WebInspector.AsyncEventGroup(WebInspector.UIString("User Timing")),
         input: new WebInspector.AsyncEventGroup(WebInspector.UIString("Input Events"))
     };
     return WebInspector.TimelineUIUtils._asyncEventGroups;
@@ -1452,19 +1537,19 @@ WebInspector.TimelineUIUtils.generatePieChart = function(aggregatedStats, selfCa
          pieChart.addSlice(value, color);
          var rowElement = footerElement.createChild("div");
          rowElement.createChild("span", "timeline-aggregated-legend-value").textContent = Number.preciseMillisToString(value, 1);
-         rowElement.createChild("span", "timeline-aggregated-legend-swatch timeline-" + name);
+         rowElement.createChild("span", "timeline-aggregated-legend-swatch").style.backgroundColor = color;
          rowElement.createChild("span", "timeline-aggregated-legend-title").textContent = title;
     }
 
     // In case of self time, first add self, then children of the same category.
     if (selfCategory) {
         if (selfTime)
-            appendLegendRow(selfCategory.name, WebInspector.UIString("%s (self)", selfCategory.title), selfTime, selfCategory.fillColorStop1);
+            appendLegendRow(selfCategory.name, WebInspector.UIString("%s (self)", selfCategory.title), selfTime, selfCategory.color);
         // Children of the same category.
         var categoryTime = aggregatedStats[selfCategory.name];
         var value = categoryTime - selfTime;
         if (value > 0)
-            appendLegendRow(selfCategory.name, WebInspector.UIString("%s (children)", selfCategory.title), value, selfCategory.fillColorStop0);
+            appendLegendRow(selfCategory.name, WebInspector.UIString("%s (children)", selfCategory.title), value, selfCategory.childColor);
     }
 
     // Add other categories.
@@ -1472,7 +1557,7 @@ WebInspector.TimelineUIUtils.generatePieChart = function(aggregatedStats, selfCa
         var category = WebInspector.TimelineUIUtils.categories()[categoryName];
         if (category === selfCategory)
             continue;
-        appendLegendRow(category.name, category.title, aggregatedStats[category.name], category.fillColorStop0);
+        appendLegendRow(category.name, category.title, aggregatedStats[category.name], category.childColor);
     }
     return element;
 }
@@ -1566,34 +1651,6 @@ WebInspector.TimelineUIUtils.createFillStyle = function(context, width, height, 
 }
 
 /**
- * @param {!CanvasRenderingContext2D} context
- * @param {number} width
- * @param {number} height
- * @param {!WebInspector.TimelineCategory} category
- * @return {!CanvasGradient}
- */
-WebInspector.TimelineUIUtils.createFillStyleForCategory = function(context, width, height, category)
-{
-    return WebInspector.TimelineUIUtils.createFillStyle(context, width, height, category.fillColorStop0, category.fillColorStop1, category.borderColor);
-}
-
-/**
- * @param {!WebInspector.TimelineCategory} category
- * @return {string}
- */
-WebInspector.TimelineUIUtils.createStyleRuleForCategory = function(category)
-{
-    var selector = ".timeline-category-" + category.name + " .timeline-graph-bar, " +
-        ".timeline-details-view .timeline-" + category.name + ", " +
-        ".timeline-category-" + category.name + " .timeline-tree-icon";
-
-    return selector + " { background-image: linear-gradient(" +
-       category.fillColorStop0 + ", " + category.fillColorStop1 + " 25%, " + category.fillColorStop1 + " 25%, " + category.fillColorStop1 + ");" +
-       " border-color: " + category.borderColor +
-       "}";
-}
-
-/**
  * @param {!Array.<number>} quad
  * @return {number}
  */
@@ -1653,20 +1710,16 @@ WebInspector.TimelineUIUtils.eventDispatchDesciptors = function()
  * @param {string} name
  * @param {string} title
  * @param {boolean} visible
- * @param {string} borderColor
- * @param {string} backgroundColor
- * @param {string} fillColorStop0
- * @param {string} fillColorStop1
+ * @param {string} childColor
+ * @param {string} color
  */
-WebInspector.TimelineCategory = function(name, title, visible, borderColor, backgroundColor, fillColorStop0, fillColorStop1)
+WebInspector.TimelineCategory = function(name, title, visible, childColor, color)
 {
     this.name = name;
     this.title = title;
     this.visible = visible;
-    this.borderColor = borderColor;
-    this.backgroundColor = backgroundColor;
-    this.fillColorStop0 = fillColorStop0;
-    this.fillColorStop1 = fillColorStop1;
+    this.childColor = childColor;
+    this.color = color;
     this.hidden = false;
 }
 
@@ -1718,7 +1771,7 @@ WebInspector.TimelineUIUtils.markerStyleForEvent = function(event)
 
     var title = WebInspector.TimelineUIUtils.eventTitle(event)
 
-    if (event.hasCategory(WebInspector.TimelineModel.Category.Console)) {
+    if (event.hasCategory(WebInspector.TimelineModel.Category.Console) || event.hasCategory(WebInspector.TimelineModel.Category.UserTiming)) {
         return {
             title: title,
             dashStyle: tallMarkerDashStyle,
@@ -1781,7 +1834,7 @@ WebInspector.TimelineUIUtils.colorForURL = function(url)
 {
     if (!WebInspector.TimelineUIUtils.colorForURL._colorGenerator) {
         WebInspector.TimelineUIUtils.colorForURL._colorGenerator = new WebInspector.FlameChart.ColorGenerator(
-            { min: 40, max: 310, count: 10 },
+            { min: 30, max: 330 },
             { min: 50, max: 80, count: 3 },
             85);
     }
@@ -1893,7 +1946,7 @@ WebInspector.TimelineDetailsContentHelper.prototype = {
         if (title) {
             var titleElement = this.element.createChild("div", "timeline-details-chip-title");
             if (category)
-                titleElement.createChild("div", "timeline-" + category.name);
+                titleElement.createChild("div").style.backgroundColor = category.color;
             titleElement.createTextChild(title);
         }
 
@@ -1975,7 +2028,7 @@ WebInspector.TimelineDetailsContentHelper.prototype = {
 
     /**
      * @param {string} title
-     * @param {!Array.<!ConsoleAgent.CallFrame>} stackTrace
+     * @param {!RuntimeAgent.StackTrace} stackTrace
      */
     appendStackTrace: function(title, stackTrace)
     {
@@ -1989,7 +2042,7 @@ WebInspector.TimelineDetailsContentHelper.prototype = {
 
     /**
      * @param {!Element} parentElement
-     * @param {!Array.<!ConsoleAgent.CallFrame>} stackTrace
+     * @param {!RuntimeAgent.StackTrace} stackTrace
      */
     createChildStackTraceElement: function(parentElement, stackTrace)
     {

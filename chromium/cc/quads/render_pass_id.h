@@ -6,10 +6,11 @@
 #define CC_QUADS_RENDER_PASS_ID_H_
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include <tuple>
 
-#include "base/containers/hash_tables.h"
+#include "base/hash.h"
 #include "cc/base/cc_export.h"
 
 namespace cc {
@@ -17,10 +18,11 @@ namespace cc {
 class CC_EXPORT RenderPassId {
  public:
   int layer_id;
-  size_t index;
+  uint32_t index;
 
   RenderPassId() : layer_id(-1), index(0) {}
-  RenderPassId(int layer_id, size_t index) : layer_id(layer_id), index(index) {}
+  RenderPassId(int layer_id, uint32_t index)
+      : layer_id(layer_id), index(index) {}
   void* AsTracingId() const;
 
   bool IsValid() const { return layer_id >= 0; }
@@ -31,6 +33,12 @@ class CC_EXPORT RenderPassId {
   bool operator!=(const RenderPassId& other) const { return !(*this == other); }
   bool operator<(const RenderPassId& other) const {
     return std::tie(layer_id, index) < std::tie(other.layer_id, other.index);
+  }
+};
+
+struct RenderPassIdHash {
+  size_t operator()(RenderPassId key) const {
+    return base::HashInts(key.layer_id, static_cast<int>(key.index));
   }
 };
 

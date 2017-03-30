@@ -34,6 +34,7 @@
 #include "core/events/ScopedEventQueue.h"
 #include "core/layout/LayoutText.h"
 #include "core/layout/LayoutTextCombine.h"
+#include "core/layout/api/LayoutTextItem.h"
 #include "core/layout/svg/LayoutSVGInlineText.h"
 #include "core/svg/SVGForeignObjectElement.h"
 #include "wtf/text/CString.h"
@@ -65,7 +66,7 @@ PassRefPtrWillBeRawPtr<Node> Text::mergeNextSiblingNodesIfPossible()
 
     // Merge text nodes.
     while (Node* nextSibling = this->nextSibling()) {
-        if (nextSibling->nodeType() != TEXT_NODE)
+        if (nextSibling->getNodeType() != TEXT_NODE)
             break;
 
         RefPtrWillBeRawPtr<Text> nextText = toText(nextSibling);
@@ -134,7 +135,7 @@ PassRefPtrWillBeRawPtr<Text> Text::splitText(unsigned offset, ExceptionState& ex
 static const Text* earliestLogicallyAdjacentTextNode(const Text* t)
 {
     for (const Node* n = t->previousSibling(); n; n = n->previousSibling()) {
-        Node::NodeType type = n->nodeType();
+        Node::NodeType type = n->getNodeType();
         if (type == Node::TEXT_NODE || type == Node::CDATA_SECTION_NODE) {
             t = toText(n);
             continue;
@@ -148,7 +149,7 @@ static const Text* earliestLogicallyAdjacentTextNode(const Text* t)
 static const Text* latestLogicallyAdjacentTextNode(const Text* t)
 {
     for (const Node* n = t->nextSibling(); n; n = n->nextSibling()) {
-        Node::NodeType type = n->nodeType();
+        Node::NodeType type = n->getNodeType();
         if (type == Node::TEXT_NODE || type == Node::CDATA_SECTION_NODE) {
             t = toText(n);
             continue;
@@ -226,7 +227,7 @@ String Text::nodeName() const
     return "#text";
 }
 
-Node::NodeType Text::nodeType() const
+Node::NodeType Text::getNodeType() const
 {
     return TEXT_NODE;
 }
@@ -368,7 +369,7 @@ void Text::reattachIfNeeded(const AttachContext& context)
     AttachContext reattachContext(context);
     reattachContext.performingReattach = true;
 
-    if (styleChangeType() < NeedsReattachStyleChange)
+    if (getStyleChangeType() < NeedsReattachStyleChange)
         detach(reattachContext);
     if (layoutObjectIsNeeded)
         LayoutTreeBuilderForText(*this, layoutParent->layoutObject()).createLayoutObject();
@@ -377,11 +378,11 @@ void Text::reattachIfNeeded(const AttachContext& context)
 
 void Text::recalcTextStyle(StyleRecalcChange change, Text* nextTextSibling)
 {
-    if (LayoutText* layoutObject = this->layoutObject()) {
+    if (LayoutTextItem layoutItem = LayoutTextItem(this->layoutObject())) {
         if (change != NoChange || needsStyleRecalc())
-            layoutObject->setStyle(document().ensureStyleResolver().styleForText(this));
+            layoutItem.setStyle(document().ensureStyleResolver().styleForText(this));
         if (needsStyleRecalc())
-            layoutObject->setText(dataImpl());
+            layoutItem.setText(dataImpl());
         clearNeedsStyleRecalc();
     } else if (needsStyleRecalc() || needsWhitespaceLayoutObject()) {
         reattach();
@@ -409,7 +410,7 @@ void Text::updateTextLayoutObject(unsigned offsetOfReplacedData, unsigned length
         lazyReattachIfAttached();
         // FIXME: Editing should be updated so this is not neccesary.
         if (recalcStyleBehavior == DeprecatedRecalcStyleImmediatlelyForEditing)
-            document().updateLayoutTreeIfNeeded();
+            document().updateLayoutTree();
         return;
     }
     textLayoutObject->setTextWithOffset(dataImpl(), offsetOfReplacedData, lengthOfReplacedData);

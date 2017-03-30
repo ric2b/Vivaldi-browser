@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include "base/metrics/field_trial.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -21,6 +22,7 @@
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search/suggestions/suggestions_service_factory.h"
 #include "chrome/browser/search/suggestions/suggestions_source.h"
+#include "chrome/browser/search/suggestions/suggestions_utils.h"
 #include "chrome/browser/search/thumbnail_source.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
@@ -38,11 +40,13 @@
 #include "components/search/search.h"
 #include "components/search_engines/template_url_service.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/common/url_constants.h"
+#include "extensions/common/constants.h"
 #include "grit/theme_resources.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/color_utils.h"
@@ -60,6 +64,22 @@
 #endif  // defined(ENABLE_THEMES)
 
 namespace {
+
+// Used in a histogram; don't reorder, insert new values only at the end, and
+// keep in sync with "NtpMostVisitedScheme" in histograms.xml.
+enum class HistogramScheme {
+  OTHER,
+  OTHER_WEBSAFE,
+  HTTP,
+  HTTPS,
+  FTP,
+  FILE,
+  CHROME,
+  EXTENSION,
+  JAVASCRIPT,
+  // Insert new values here.
+  COUNT
+};
 
 const char kLocalNTPSuggestionService[] = "LocalNTPSuggestionsService";
 const char kLocalNTPSuggestionServiceEnabled[] = "Enabled";
@@ -111,8 +131,12 @@ InstantService::InstantService(Profile* profile)
 
   scoped_refptr<history::TopSites> top_sites =
       TopSitesFactory::GetForProfile(profile_);
-  if (top_sites)
+  if (top_sites) {
     top_sites->AddObserver(this);
+    // Immediately query the TopSites state.
+    TopSitesChanged(top_sites.get(),
+                    history::TopSitesObserver::ChangeReason::MOST_VISITED);
+  }
 
   if (profile_ && profile_->GetResourceContext()) {
     content::BrowserThread::PostTask(
@@ -161,7 +185,7 @@ InstantService::InstantService(Profile* profile)
 
   if (suggestions_service_) {
     suggestions_service_->FetchSuggestionsData(
-        suggestions::INITIALIZED_ENABLED_HISTORY,
+        suggestions::GetSyncState(profile_),
         base::Bind(&InstantService::OnSuggestionsAvailable,
                    weak_ptr_factory_.GetWeakPtr()));
   }
@@ -299,6 +323,29 @@ void InstantService::SendSearchURLsToRenderer(content::RenderProcessHost* rph) {
 }
 
 bool InstantService::IsValidURLForNavigation(const GURL& url) const {
+  HistogramScheme scheme = HistogramScheme::OTHER;
+  if (url.SchemeIs(url::kHttpScheme)) {
+    scheme = HistogramScheme::HTTP;
+  } else if (url.SchemeIs(url::kHttpsScheme)) {
+    scheme = HistogramScheme::HTTPS;
+  } else if (url.SchemeIs(url::kFtpScheme)) {
+    scheme = HistogramScheme::FTP;
+  } else if (url.SchemeIsFile()) {
+    scheme = HistogramScheme::FILE;
+  } else if (url.SchemeIs(content::kChromeUIScheme)) {
+    scheme = HistogramScheme::CHROME;
+  } else if (url.SchemeIs(extensions::kExtensionScheme)) {
+    scheme = HistogramScheme::EXTENSION;
+  } else if (url.SchemeIs(url::kJavaScriptScheme)) {
+    scheme = HistogramScheme::JAVASCRIPT;
+  } else if (content::ChildProcessSecurityPolicy::GetInstance()
+                 ->IsWebSafeScheme(url.scheme())) {
+    scheme = HistogramScheme::OTHER_WEBSAFE;
+  }
+  UMA_HISTOGRAM_ENUMERATION("NewTabPage.MostVisitedScheme",
+                            static_cast<int32_t>(scheme),
+                            static_cast<int32_t>(HistogramScheme::COUNT));
+
   // Certain URLs are privileged and should never be considered valid
   // navigation targets.
   // TODO(treib): Ideally this should deny by default and only allow if the

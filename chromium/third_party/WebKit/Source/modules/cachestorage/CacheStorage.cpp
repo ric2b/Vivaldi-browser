@@ -12,6 +12,7 @@
 #include "modules/cachestorage/CacheStorageError.h"
 #include "modules/fetch/Request.h"
 #include "modules/fetch/Response.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCacheError.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCacheStorage.h"
 
@@ -41,7 +42,7 @@ bool commonChecks(ScriptState* scriptState, ExceptionState& exceptionState)
 
 void checkCacheQueryOptions(const CacheQueryOptions& options, ExecutionContext* context)
 {
-    if (options.ignoreSearch())
+    if (!RuntimeEnabledFeatures::cacheIgnoreSearchOptionEnabled() && options.ignoreSearch())
         context->addConsoleMessage(ConsoleMessage::create(JSMessageSource, WarningMessageLevel, "Cache.match() does not support 'ignoreSearch' option yet. See http://crbug.com/520784"));
     if (options.ignoreMethod())
         context->addConsoleMessage(ConsoleMessage::create(JSMessageSource, WarningMessageLevel, "Cache.match() does not support 'ignoreMethod' option yet. See http://crbug.com/482256"));
@@ -49,7 +50,7 @@ void checkCacheQueryOptions(const CacheQueryOptions& options, ExecutionContext* 
         context->addConsoleMessage(ConsoleMessage::create(JSMessageSource, WarningMessageLevel, "Cache.match() does not support 'ignoreVary' option yet. See http://crbug.com/499216"));
 }
 
-}
+} // namespace
 
 // FIXME: Consider using CallbackPromiseAdapter.
 class CacheStorage::Callbacks final : public WebServiceWorkerCacheStorage::CacheStorageCallbacks {

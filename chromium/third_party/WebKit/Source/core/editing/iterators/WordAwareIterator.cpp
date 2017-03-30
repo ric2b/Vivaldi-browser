@@ -61,12 +61,12 @@ void WordAwareIterator::advance()
 
     while (1) {
         // If this chunk ends in whitespace we can just use it as our chunk.
-        if (isSpaceOrNewline(m_textIterator.text().characterAt(m_textIterator.length() - 1)))
+        if (isSpaceOrNewline(m_textIterator.characterAt(m_textIterator.length() - 1)))
             return;
 
         // If this is the first chunk that failed, save it in m_buffer before look ahead.
         if (m_buffer.isEmpty())
-            m_textIterator.text().appendTextTo(m_buffer);
+            m_textIterator.copyTextTo(&m_buffer);
 
         // Look ahead to next chunk. If it is whitespace or a break, we can use the previous stuff
         m_textIterator.advance();
@@ -76,7 +76,7 @@ void WordAwareIterator::advance()
         }
 
         // Start gobbling chunks until we get to a suitable stopping point
-        m_textIterator.text().appendTextTo(m_buffer);
+        m_textIterator.copyTextTo(&m_buffer);
     }
 }
 

@@ -102,8 +102,7 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
 
   void BindFramebufferToOutputSurface(DrawingFrame* frame) override;
   bool BindFramebufferToTexture(DrawingFrame* frame,
-                                const ScopedResource* resource,
-                                const gfx::Rect& target_rect) override;
+                                const ScopedResource* resource) override;
   void SetScissorTestRect(const gfx::Rect& scissor_rect) override;
   void PrepareSurfaceForPass(DrawingFrame* frame,
                              SurfaceInitializationMode initialization_mode,
@@ -176,7 +175,8 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
   skia::RefPtr<SkImage> ApplyBackgroundFilters(
       DrawingFrame* frame,
       const RenderPassDrawQuad* quad,
-      ScopedResource* background_texture);
+      ScopedResource* background_texture,
+      const gfx::RectF& rect);
 
   void DrawRenderPassQuad(DrawingFrame* frame,
                           const RenderPassDrawQuad* quadi,
@@ -234,10 +234,6 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
                         const gfx::RectF& quad_rect,
                         int matrix_location);
   void SetUseProgram(unsigned program);
-
-  bool UseScopedTexture(DrawingFrame* frame,
-                        const ScopedResource* resource,
-                        const gfx::Rect& viewport_rect);
 
   bool MakeContextCurrent();
 

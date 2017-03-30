@@ -120,7 +120,7 @@ appWindow.registerCustomHook(function(bindingsAPI) {
     // When window creation fails, |windowParams| will be undefined.
     if (windowParams && windowParams.frameId) {
       view = appWindowNatives.GetFrame(
-          windowParams.frameId, windowParams.injectTitlebar);
+          windowParams.frameId, true /* notifyBrowser */);
     }
 
     if (!view) {

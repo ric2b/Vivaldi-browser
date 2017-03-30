@@ -81,7 +81,7 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
   // Returns the request id.
   virtual int StartAsync(const RequestInfo& request_info,
                          ResourceRequestBody* request_body,
-                         RequestPeer* peer);
+                         scoped_ptr<RequestPeer> peer);
 
   // Removes a request from the |pending_requests_| list, returning true if the
   // request was found and removed.
@@ -142,16 +142,17 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
 
   typedef std::deque<IPC::Message*> MessageQueue;
   struct PendingRequestInfo {
-    PendingRequestInfo(RequestPeer* peer,
-                       ResourceType resource_type,
-                       int origin_pid,
-                       const GURL& frame_origin,
-                       const GURL& request_url,
-                       bool download_to_file);
+    PendingRequestInfo(
+        scoped_ptr<RequestPeer> peer,
+        ResourceType resource_type,
+        int origin_pid,
+        const GURL& frame_origin,
+        const GURL& request_url,
+        bool download_to_file);
 
     ~PendingRequestInfo();
 
-    RequestPeer* peer;
+    scoped_ptr<RequestPeer> peer;
     ThreadedDataProvider* threaded_data_provider = nullptr;
     ResourceType resource_type;
     // The PID of the original process which issued this request. This gets
@@ -175,9 +176,6 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
     scoped_refptr<SharedMemoryReceivedDataFactory> received_data_factory;
     scoped_ptr<SiteIsolationResponseMetaData> site_isolation_metadata;
     int buffer_size;
-
-    // Debugging for https://code.google.com/p/chromium/issues/detail?id=527588.
-    int data_offset = -1;
   };
   using PendingRequestMap = std::map<int, scoped_ptr<PendingRequestInfo>>;
 
@@ -199,7 +197,9 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
                        base::SharedMemoryHandle shm_handle,
                        int shm_size,
                        base::ProcessId renderer_pid);
-  void OnReceivedDataDebug(int request_id, int data_offset);
+  void OnReceivedInlinedDataChunk(int request_id,
+                                  const std::vector<char>& data,
+                                  int encoded_data_length);
   void OnReceivedData(int request_id,
                       int data_offset,
                       int data_length,

@@ -10,15 +10,16 @@
 #include "content/public/renderer/document_state.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
 #include "third_party/WebKit/public/web/WebElementCollection.h"
+#include "third_party/WebKit/public/web/WebFrameWidget.h"
 #include "third_party/WebKit/public/web/WebHitTestResult.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebMeaningfulLayout.h"
 #include "third_party/WebKit/public/web/WebNode.h"
-#include "third_party/WebKit/public/web/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "url/url_canon.h"
 #include "url/url_constants.h"
@@ -253,21 +254,21 @@ void AwRenderFrameExt::OnSetInitialPageScale(double page_scale_factor) {
 }
 
 void AwRenderFrameExt::OnSetBackgroundColor(SkColor c) {
-  blink::WebView* webview = GetWebView();
-  if (!webview)
+  blink::WebFrameWidget* web_frame_widget = GetWebFrameWidget();
+  if (!web_frame_widget)
     return;
 
-  webview->setBaseBackgroundColor(c);
+  web_frame_widget->setBaseBackgroundColor(c);
 }
 
 void AwRenderFrameExt::OnSmoothScroll(int target_x,
                                       int target_y,
-                                      long duration_ms) {
+                                      int duration_ms) {
   blink::WebView* webview = GetWebView();
   if (!webview)
     return;
 
-  webview->smoothScroll(target_x, target_y, duration_ms);
+  webview->smoothScroll(target_x, target_y, static_cast<long>(duration_ms));
 }
 
 blink::WebView* AwRenderFrameExt::GetWebView() {
@@ -276,6 +277,13 @@ blink::WebView* AwRenderFrameExt::GetWebView() {
     return nullptr;
 
   return render_frame()->GetRenderView()->GetWebView();
+}
+
+blink::WebFrameWidget* AwRenderFrameExt::GetWebFrameWidget() {
+  if (!render_frame() || !render_frame()->GetRenderView())
+    return nullptr;
+
+  return render_frame()->GetRenderView()->GetWebFrameWidget();
 }
 
 }  // namespace android_webview

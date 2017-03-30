@@ -303,12 +303,12 @@
     }],
     ['enable_topchrome_md==1', {
       'mac_bundle_resources': [
-      '<(SHARED_INTERMEDIATE_DIR)/repack/chrome_material_100_percent.pak',
+      '<(SHARED_INTERMEDIATE_DIR)/repack/vivaldi_material_100_percent.pak',
       ],
     }],
     ['enable_topchrome_md==1 and enable_hidpi==1', {
       'mac_bundle_resources': [
-        '<(SHARED_INTERMEDIATE_DIR)/repack/chrome_material_200_percent.pak',
+        '<(SHARED_INTERMEDIATE_DIR)/repack/vivaldi_material_200_percent.pak',
       ],
     }],
     ['icu_use_data_file_flag==1', {

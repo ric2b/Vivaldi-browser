@@ -3,7 +3,6 @@
 <translationbundle lang="it">
 <translation id="1001534784610492198">Il file del programma di installazione è danneggiato oppure non è valido. Scarica nuovamente Google Chrome.</translation>
 <translation id="1013290471399003443">Chrome ha verificato che <ph name="ISSUER" /> ha rilasciato il certificato del sito web. Le informazioni su Certificate Transparency fornite dal server sono valide.</translation>
-<translation id="1016765312371154165">Chrome non si è chiuso correttamente.</translation>
 <translation id="103396972844768118">Informazioni importanti relative ai tuoi dati Chrome</translation>
 <translation id="1035334672863811645">accedi a Chrome</translation>
 <translation id="1061441684050139317">Chrome deve avere accesso al microfono per condividerla con questo sito.</translation>
@@ -51,7 +50,6 @@ Se esegui comunque l'accesso, le informazioni di Chrome come Preferiti, cronolog
 <translation id="2397416548179033562">Mostra il menu Chrome</translation>
 <translation id="2429317896000329049">Impossibile sincronizzare i dati in Google Chrome perché la sincronizzazione non è disponibile per il tuo dominio.</translation>
 <translation id="2485422356828889247">Disinstalla</translation>
-<translation id="2576431527583832481">Chrome è stato migliorato. È disponibile una nuova versione.</translation>
 <translation id="2580411288591421699">Impossibile installare la stessa versione di Google Chrome attualmente in esecuzione. Chiudi Google Chrome e riprova.</translation>
 <translation id="2582790009689336987">A breve questo computer non riceverà più gli aggiornamenti di Google Chrome perché questo sistema Linux non sarà più supportato.</translation>
 <translation id="2588322182880276190">Logo di Chrome</translation>
@@ -111,7 +109,6 @@ Se esegui comunque l'accesso, le informazioni di Chrome come Preferiti, cronolog
 <translation id="4633000520311261472">Per rendere Chrome più sicuro, abbiamo disattivato alcune estensioni che non sono elencate nel <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> e potrebbero essere state aggiunte a tua insaputa.</translation>
 <translation id="4700157086864140907">Google Chrome può offrire una funzione di controllo ortografico migliore inviando il testo digitato nel browser ai server di Google, consentendo così di usufruire della stessa tecnologia di controllo ortografico utilizzata da Ricerca Google.</translation>
 <translation id="4728575227883772061">Installazione non riuscita a causa di un errore non specificato. Se Google Chrome è attivo, chiudilo e riprova.</translation>
-<translation id="473775607612524610">Aggiorna</translation>
 <translation id="4743926867934016338">Accetta e cerca</translation>
 <translation id="4751441238232965030">A breve questo computer non riceverà più gli aggiornamenti di Google Chrome a 32 bit. Esegui l'upgrade a Google Chrome a 64 bit.</translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
@@ -208,7 +205,6 @@ Se esegui comunque l'accesso, le informazioni di Chrome come Preferiti, cronolog
 <translation id="7808348361785373670">Rimuovi da Chrome...</translation>
 <translation id="7825851276765848807">Installazione non riuscita a causa di un errore non specificato. Scarica nuovamente Google Chrome.</translation>
 <translation id="7890208801193284374">Se condividi un computer, i tuoi amici e la tua famiglia possono navigare separatamente e configurare Chrome in base alle proprie esigenze.</translation>
-<translation id="8000275528373650868">Google Chrome richiede Windows Vista o Windows XP con SP2 o versioni successive.</translation>
 <translation id="8005540215158006229">Chrome è quasi pronto.</translation>
 <translation id="8008534537613507642">Reinstalla Chrome</translation>
 <translation id="8030318113982266900">Aggiornamento del dispositivo al canale <ph name="CHANNEL_NAME" />...</translation>
@@ -237,6 +233,7 @@ Se esegui comunque l'accesso, le informazioni di Chrome come Preferiti, cronolog
 <translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">Non disponi dei diritti appropriati per l'installazione a livello di sistema. Prova a eseguire nuovamente il programma di installazione come Amministratore.</translation>
 <translation id="9026991721384951619">Impossibile sincronizzare i dati in Chrome OS perché i dati di accesso dell'account sono obsoleti.</translation>
+<translation id="9067395829937117663">Google Chrome richiede Windows 7 o versioni successive.</translation>
 <translation id="9102715433345326100">Il file è dannoso ed è stato bloccato da Chrome.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Avviso.<ph name="END_BOLD" /> Google Chrome non è in grado di impedire alle estensioni di registrare la tua cronologia di navigazione. Per disattivare questa estensione in modalità di navigazione in incognito, deseleziona questa opzione.</translation>
 <translation id="911206726377975832">Eliminare anche i tuoi dati di navigazione?</translation>

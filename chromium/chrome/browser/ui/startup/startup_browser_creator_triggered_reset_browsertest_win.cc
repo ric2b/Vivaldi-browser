@@ -16,7 +16,7 @@
 #include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_iterator.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -32,13 +32,12 @@ namespace {
 // Check that there are two browsers. Find the one that is not |browser|.
 Browser* FindOneOtherBrowser(Browser* browser) {
   // There should only be one other browser.
-  EXPECT_EQ(2u, chrome::GetBrowserCount(browser->profile(),
-                                        browser->host_desktop_type()));
+  EXPECT_EQ(2u, chrome::GetBrowserCount(browser->profile()));
 
   // Find the new browser.
-  for (chrome::BrowserIterator it; !it.done(); it.Next()) {
-    if (*it != browser)
-      return *it;
+  for (auto* b : *BrowserList::GetInstance()) {
+    if (b != browser)
+      return b;
   }
 
   return nullptr;
@@ -104,7 +103,6 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTriggeredResetTest,
   urls.push_back(embedded_test_server()->GetURL("/title2.html"));
 
   Profile* profile = browser()->profile();
-  chrome::HostDesktopType host_desktop_type = browser()->host_desktop_type();
 
   // Set the startup preference to open these URLs.
   SessionStartupPref pref(SessionStartupPref::URLS);
@@ -124,8 +122,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTriggeredResetTest,
   base::CommandLine dummy(base::CommandLine::NO_PROGRAM);
   StartupBrowserCreatorImpl launch(base::FilePath(), dummy,
                                    chrome::startup::IS_NOT_FIRST_RUN);
-  ASSERT_TRUE(
-      launch.Launch(profile, std::vector<GURL>(), false, host_desktop_type));
+  ASSERT_TRUE(launch.Launch(profile, std::vector<GURL>(), false));
 
   // This should have created a new browser window.  |browser()| is still
   // around at this point, even though we've closed its window.
@@ -164,8 +161,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTriggeredResetTest,
   base::CommandLine dummy(base::CommandLine::NO_PROGRAM);
   StartupBrowserCreatorImpl launch(base::FilePath(), dummy, &browser_creator,
                                    chrome::startup::IS_FIRST_RUN);
-  ASSERT_TRUE(launch.Launch(browser()->profile(), std::vector<GURL>(), true,
-                            browser()->host_desktop_type()));
+  ASSERT_TRUE(launch.Launch(browser()->profile(), std::vector<GURL>(), true));
 
   // This should have created a new browser window.
   Browser* new_browser = FindOneOtherBrowser(browser());
@@ -206,8 +202,8 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTriggeredResetTest,
   {
     StartupBrowserCreatorImpl launch(base::FilePath(), dummy,
                                      chrome::startup::IS_NOT_FIRST_RUN);
-    ASSERT_TRUE(launch.Launch(browser()->profile(), std::vector<GURL>(), false,
-                              browser()->host_desktop_type()));
+    ASSERT_TRUE(
+        launch.Launch(browser()->profile(), std::vector<GURL>(), false));
   }
 
   // This should have created a new browser window.  |browser()| is still
@@ -241,13 +237,11 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTriggeredResetTest,
   {
     StartupBrowserCreatorImpl launch(base::FilePath(), dummy,
                                      chrome::startup::IS_NOT_FIRST_RUN);
-    ASSERT_TRUE(launch.Launch(other_profile, std::vector<GURL>(), false,
-                              new_browser->host_desktop_type()));
+    ASSERT_TRUE(launch.Launch(other_profile, std::vector<GURL>(), false));
   }
 
   Browser* other_profile_browser =
-      chrome::FindBrowserWithProfile(other_profile,
-                                     new_browser->host_desktop_type());
+      chrome::FindBrowserWithProfile(other_profile);
   ASSERT_NE(nullptr, other_profile_browser);
 
   // Check for the expected reset dialog in the second browser too.

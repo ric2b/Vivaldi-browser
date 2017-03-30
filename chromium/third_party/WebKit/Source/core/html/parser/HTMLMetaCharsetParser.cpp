@@ -55,8 +55,8 @@ bool HTMLMetaCharsetParser::processMeta()
     const HTMLToken::AttributeList& tokenAttributes = m_token.attributes();
     HTMLAttributeList attributes;
     for (const HTMLToken::Attribute& tokenAttribute : tokenAttributes) {
-        String attributeName = attemptStaticStringCreation(tokenAttribute.name, Likely8Bit);
-        String attributeValue = StringImpl::create8BitIfPossible(tokenAttribute.value);
+        String attributeName = tokenAttribute.nameAttemptStaticStringCreation();
+        String attributeValue = tokenAttribute.value8BitIfNecessary();
         attributes.append(std::make_pair(attributeName, attributeValue));
     }
 
@@ -125,4 +125,4 @@ bool HTMLMetaCharsetParser::checkForMetaCharset(const char* data, size_t length)
     return false;
 }
 
-}
+} // namespace blink

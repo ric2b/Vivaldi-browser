@@ -135,6 +135,12 @@ class StreamSequencerBufferPeer {
     return &(buffer_->frame_arrival_time_map_);
   }
 
+  void set_total_bytes_read(QuicStreamOffset total_bytes_read) {
+    buffer_->total_bytes_read_ = total_bytes_read;
+  }
+
+  void set_gaps(const std::list<Gap>& gaps) { buffer_->gaps_ = gaps; }
+
  private:
   StreamSequencerBuffer* buffer_;
 };

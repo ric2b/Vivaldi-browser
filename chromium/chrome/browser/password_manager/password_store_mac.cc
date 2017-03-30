@@ -225,7 +225,7 @@ const PasswordForm* BestKeychainFormForForm(
 }
 
 // Iterates over all elements in |forms|, passes the pointed to objects to
-// |move_form|, and clears |forms| efficiently. FormMover needs to be a callable
+// |mover|, and clears |forms| efficiently. FormMover needs to be a callable
 // entity, accepting scoped_ptr<autofill::PasswordForm> as its sole argument.
 template <typename FormMover>
 inline void MoveAllFormsOut(ScopedVector<autofill::PasswordForm>* forms,
@@ -243,7 +243,7 @@ inline void MoveAllFormsOut(ScopedVector<autofill::PasswordForm>* forms,
 
 // True if the form has no password to be stored in Keychain.
 bool IsLoginDatabaseOnlyForm(const autofill::PasswordForm& form) {
-  return form.blacklisted_by_user || !form.federation_url.is_empty() ||
+  return form.blacklisted_by_user || !form.federation_origin.unique() ||
          form.scheme == autofill::PasswordForm::SCHEME_USERNAME_ONLY;
 }
 
@@ -1198,6 +1198,18 @@ PasswordStoreChangeList PasswordStoreMac::RemoveLoginsSyncedBetweenImpl(
   return changes;
 }
 
+PasswordStoreChangeList PasswordStoreMac::DisableAutoSignInForAllLoginsImpl() {
+  ScopedVector<PasswordForm> forms;
+  PasswordStoreChangeList list;
+  if (login_metadata_db_ && login_metadata_db_->GetAutoSignInLogins(&forms) &&
+      login_metadata_db_->DisableAutoSignInForAllLogins()) {
+    for (const auto& form : forms)
+      list.push_back(PasswordStoreChange(PasswordStoreChange::UPDATE, *form));
+  }
+
+  return list;
+}
+
 bool PasswordStoreMac::RemoveStatisticsCreatedBetweenImpl(
     base::Time delete_begin,
     base::Time delete_end) {
@@ -1207,10 +1219,9 @@ bool PasswordStoreMac::RemoveStatisticsCreatedBetweenImpl(
 }
 
 ScopedVector<autofill::PasswordForm> PasswordStoreMac::FillMatchingLogins(
-    const autofill::PasswordForm& form,
-    AuthorizationPromptPolicy prompt_policy) {
+    const autofill::PasswordForm& form) {
   chrome::ScopedSecKeychainSetUserInteractionAllowed user_interaction_allowed(
-      prompt_policy == ALLOW_PROMPT);
+      false);
 
   ScopedVector<PasswordForm> database_forms;
   if (!login_metadata_db_ ||

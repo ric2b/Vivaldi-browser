@@ -125,6 +125,7 @@ void DesktopWindowTreeHostWin::Init(aura::Window* content_window,
                                     const Widget::InitParams& params) {
   // TODO(beng): SetInitParams().
   content_window_ = content_window;
+  wants_mouse_events_when_inactive_ = params.wants_mouse_events_when_inactive;
 
   aura::client::SetAnimationHost(content_window_, this);
 
@@ -626,7 +627,7 @@ bool DesktopWindowTreeHostWin::CanActivate() const {
 }
 
 bool DesktopWindowTreeHostWin::WantsMouseEventsWhenInactive() const {
-  return false;
+  return wants_mouse_events_when_inactive_;
 }
 
 bool DesktopWindowTreeHostWin::WidgetSizeIsClientSize() const {
@@ -911,9 +912,11 @@ void DesktopWindowTreeHostWin::HandleWindowSizeChanged() {
   // changed (can occur on Windows 10 when snapping a window to the side of
   // the screen). In that case do a resize to the current size to reenable
   // swaps.
-  if (compositor())
-    compositor()->SetScaleAndSize(compositor()->device_scale_factor(),
-                                  compositor()->size());
+  if (compositor()) {
+    compositor()->SetScaleAndSize(
+        compositor()->device_scale_factor(),
+        message_handler_->GetClientAreaBounds().size());
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

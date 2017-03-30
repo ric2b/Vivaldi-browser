@@ -39,6 +39,7 @@ namespace blink {
 class HTMLFormElement;
 class ImageCandidate;
 class ShadowRoot;
+class ImageBitmapOptions;
 
 class CORE_EXPORT HTMLImageElement final : public HTMLElement, public CanvasImageSource, public ImageBitmapSource {
     DEFINE_WRAPPERTYPEINFO();
@@ -86,9 +87,6 @@ public:
 
     bool canContainRangeEndPoint() const override { return false; }
 
-    void addClient(ImageLoaderClient* client) { imageLoader().addClient(client); }
-    void removeClient(ImageLoaderClient* client) { imageLoader().removeClient(client); }
-
     const AtomicString imageSourceURL() const override;
 
     HTMLFormElement* formOwner() const override;
@@ -98,7 +96,7 @@ public:
     virtual void ensurePrimaryContent();
 
     // CanvasImageSource implementation
-    PassRefPtr<Image> getSourceImageForCanvas(SourceImageStatus*, AccelerationHint) const override;
+    PassRefPtr<Image> getSourceImageForCanvas(SourceImageStatus*, AccelerationHint, SnapshotReason) const override;
     bool isSVGSource() const override;
     bool wouldTaintOrigin(SecurityOrigin*) const override;
     FloatSize elementSize() const override;
@@ -112,14 +110,14 @@ public:
     void setUseFallbackContent();
     void setIsFallbackImage() { m_isFallbackImage = true; }
 
-    FetchRequest::ResourceWidth resourceWidth();
+    FetchRequest::ResourceWidth getResourceWidth();
     float sourceSize(Element&);
 
     void forceReload() const;
 
     // ImageBitmapSource implementation
     IntSize bitmapSourceSize() const override;
-    ScriptPromise createImageBitmap(ScriptState*, EventTarget&, int sx, int sy, int sw, int sh, ExceptionState&) override;
+    ScriptPromise createImageBitmap(ScriptState*, EventTarget&, int sx, int sy, int sw, int sh, const ImageBitmapOptions&, ExceptionState&) override;
 
 protected:
     explicit HTMLImageElement(Document&, HTMLFormElement* = 0, bool createdByParser = false);
@@ -169,8 +167,6 @@ private:
     RefPtrWillBeMember<HTMLSourceElement> m_source;
     unsigned m_formWasSetByParser : 1;
     unsigned m_elementCreatedByParser : 1;
-    // Intrinsic sizing is viewport dependant if the 'w' descriptor was used for the picked resource.
-    unsigned m_intrinsicSizingViewportDependant : 1;
     unsigned m_useFallbackContent : 1;
     unsigned m_isFallbackImage : 1;
 

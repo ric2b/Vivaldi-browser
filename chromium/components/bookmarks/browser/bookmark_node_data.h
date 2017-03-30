@@ -59,6 +59,7 @@ struct BookmarkNodeData {
   struct Element {
     Element();
     explicit Element(const BookmarkNode* node);
+    Element(const Element& other);
     ~Element();
 
     // If true, this element represents a URL.
@@ -114,6 +115,7 @@ struct BookmarkNodeData {
   static const char kClipboardFormatString[];
 
   BookmarkNodeData();
+  BookmarkNodeData(const BookmarkNodeData& other);
 
   // Created a BookmarkNodeData populated from the arguments.
   explicit BookmarkNodeData(const BookmarkNode* node);

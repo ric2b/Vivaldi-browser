@@ -15,23 +15,6 @@
 
 namespace mojo {
 
-// blink::WebSyngRegistration::Periodicity <=>
-//    content::BackgroundSyncPeriodicity
-
-template <>
-struct CONTENT_EXPORT TypeConverter<blink::WebSyncRegistration::Periodicity,
-                     content::BackgroundSyncPeriodicity> {
-  static blink::WebSyncRegistration::Periodicity Convert(
-      content::BackgroundSyncPeriodicity input);
-};
-
-template <>
-struct CONTENT_EXPORT TypeConverter<content::BackgroundSyncPeriodicity,
-                     blink::WebSyncRegistration::Periodicity> {
-  static content::BackgroundSyncPeriodicity Convert(
-      blink::WebSyncRegistration::Periodicity input);
-};
-
 // blink::WebSyncRegistration::NetworkState <=>
 //     content::BackgroundSyncNetworkState
 
@@ -47,23 +30,6 @@ struct CONTENT_EXPORT TypeConverter<content::BackgroundSyncNetworkState,
                      blink::WebSyncRegistration::NetworkState> {
   static content::BackgroundSyncNetworkState Convert(
       blink::WebSyncRegistration::NetworkState input);
-};
-
-// blink::WebSyncRegistration::PowerState <=>
-//     content::BackgroundSyncPowerState
-
-template <>
-struct CONTENT_EXPORT TypeConverter<blink::WebSyncRegistration::PowerState,
-                     content::BackgroundSyncPowerState> {
-  static blink::WebSyncRegistration::PowerState Convert(
-      content::BackgroundSyncPowerState input);
-};
-
-template <>
-struct CONTENT_EXPORT TypeConverter<content::BackgroundSyncPowerState,
-                     blink::WebSyncRegistration::PowerState> {
-  static content::BackgroundSyncPowerState Convert(
-      blink::WebSyncRegistration::PowerState input);
 };
 
 // blink::WebSyncRegistration <=>

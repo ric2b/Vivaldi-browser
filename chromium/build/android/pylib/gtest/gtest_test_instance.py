@@ -133,16 +133,23 @@ class GtestTestInstance(test_instance.TestInstance):
     # TODO(jbudorick): Support multiple test suites.
     if len(args.suite_name) > 1:
       raise ValueError('Platform mode currently supports only 1 gtest suite')
+    self._extract_test_list_from_filter = args.extract_test_list_from_filter
+    self._shard_timeout = args.shard_timeout
+    self._skip_clear_data = args.skip_clear_data
     self._suite = args.suite_name[0]
 
-    self._shard_timeout = args.shard_timeout
+    self._exe_path = os.path.join(constants.GetOutDirectory(),
+                                  self._suite)
 
-    incremental_part = '_incremental' if args.incremental_install else ''
+    incremental_part = ''
+    if args.test_apk_incremental_install_script:
+      incremental_part = '_incremental'
+
     apk_path = os.path.join(
         constants.GetOutDirectory(), '%s_apk' % self._suite,
         '%s-debug%s.apk' % (self._suite, incremental_part))
-    self._exe_path = os.path.join(constants.GetOutDirectory(),
-                                  self._suite)
+    self._test_apk_incremental_install_script = (
+        args.test_apk_incremental_install_script)
     if not os.path.exists(apk_path):
       self._apk_helper = None
     else:
@@ -248,12 +255,24 @@ class GtestTestInstance(test_instance.TestInstance):
     return self._shard_timeout
 
   @property
+  def skip_clear_data(self):
+    return self._skip_clear_data
+
+  @property
   def suite(self):
     return self._suite
 
   @property
+  def test_apk_incremental_install_script(self):
+    return self._test_apk_incremental_install_script
+
+  @property
   def test_arguments(self):
     return self._test_arguments
+
+  @property
+  def extract_test_list_from_filter(self):
+    return self._extract_test_list_from_filter
 
   #override
   def TestType(self):

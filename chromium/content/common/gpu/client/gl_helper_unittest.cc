@@ -20,6 +20,7 @@
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -28,22 +29,15 @@
 #include "base/test/test_suite.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
-#include "build/build_config.h"
 #include "content/common/gpu/client/gl_helper.h"
 #include "content/common/gpu/client/gl_helper_readback_support.h"
 #include "content/common/gpu/client/gl_helper_scaling.h"
-#include "content/public/test/unittest_test_suite.h"
-#include "content/test/content_test_suite.h"
 #include "gpu/blink/webgraphicscontext3d_in_process_command_buffer_impl.h"
 #include "media/base/video_frame.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkTypes.h"
 #include "ui/gl/gl_implementation.h"
-
-#if defined(OS_MACOSX)
-#include "base/mac/scoped_nsautorelease_pool.h"
-#endif
 
 namespace content {
 
@@ -1856,69 +1850,80 @@ INSTANTIATE_TEST_CASE_P(
          ::testing::Range<unsigned int>(0, arraysize(kYUVReadBackSizes))));
 
 
+int kRGBReadBackSizes[] = {3, 6, 16};
+
+class GLHelperPixelReadbackTest :
+    public GLHelperPixelTest,
+    public ::testing::WithParamInterface<
+        std::tr1::tuple<unsigned int,
+                        unsigned int,
+                        unsigned int,
+                        unsigned int,
+                        unsigned int>> {};
+
 // Per pixel tests, all sizes are small so that we can print
 // out the generated bitmaps.
-TEST_F(GLHelperPixelTest, ScaleTest) {
-  int sizes[] = {3, 6, 16};
+TEST_P(GLHelperPixelReadbackTest, ScaleTest) {
+  unsigned int q_index = std::tr1::get<0>(GetParam());
+  unsigned int x = std::tr1::get<1>(GetParam());
+  unsigned int y = std::tr1::get<2>(GetParam());
+  unsigned int dst_x = std::tr1::get<3>(GetParam());
+  unsigned int dst_y = std::tr1::get<4>(GetParam());
+
   for (int flip = 0; flip <= 1; flip++) {
-    for (size_t q_index = 0; q_index < arraysize(kQualities); q_index++) {
-      for (int x = 0; x < 3; x++) {
-        for (int y = 0; y < 3; y++) {
-          for (int dst_x = 0; dst_x < 3; dst_x++) {
-            for (int dst_y = 0; dst_y < 3; dst_y++) {
-              for (int pattern = 0; pattern < 3; pattern++) {
-                TestScale(sizes[x],
-                          sizes[y],
-                          sizes[dst_x],
-                          sizes[dst_y],
-                          pattern,
-                          q_index,
-                          flip == 1);
-                if (HasFailure()) {
-                  return;
-                }
-              }
-            }
-          }
-        }
+    for (int pattern = 0; pattern < 3; pattern++) {
+      TestScale(kRGBReadBackSizes[x],
+                kRGBReadBackSizes[y],
+                kRGBReadBackSizes[dst_x],
+                kRGBReadBackSizes[dst_y],
+                pattern,
+                q_index,
+                flip == 1);
+      if (HasFailure()) {
+        return;
       }
     }
   }
 }
 
+
 // Per pixel tests, all sizes are small so that we can print
 // out the generated bitmaps.
-TEST_F(GLHelperPixelTest, CropScaleReadbackAndCleanTextureTest) {
-  const int kSizes[] = {3, 6, 16};
+TEST_P(GLHelperPixelReadbackTest, CropScaleReadbackAndCleanTextureTest) {
+  unsigned int q_index = std::tr1::get<0>(GetParam());
+  unsigned int x = std::tr1::get<1>(GetParam());
+  unsigned int y = std::tr1::get<2>(GetParam());
+  unsigned int dst_x = std::tr1::get<3>(GetParam());
+  unsigned int dst_y = std::tr1::get<4>(GetParam());
+
   const SkColorType kColorTypes[] = {
       kAlpha_8_SkColorType, kRGBA_8888_SkColorType, kBGRA_8888_SkColorType};
   for (size_t color_type = 0; color_type < arraysize(kColorTypes);
        color_type++) {
-    // Test BEST and FAST qualities, skip GOOD
-    for (size_t q_index = 0; q_index < arraysize(kQualities); q_index += 2) {
-      for (size_t x = 0; x < arraysize(kSizes); x++) {
-        for (size_t y = 0; y < arraysize(kSizes); y++) {
-          for (size_t dst_x = 0; dst_x < arraysize(kSizes); dst_x++) {
-            for (size_t dst_y = 0; dst_y < arraysize(kSizes); dst_y++) {
-              for (int pattern = 0; pattern < 3; pattern++) {
-                TestCropScaleReadbackAndCleanTexture(kSizes[x],
-                                                     kSizes[y],
-                                                     kSizes[dst_x],
-                                                     kSizes[dst_y],
-                                                     pattern,
-                                                     kColorTypes[color_type],
-                                                     false,
-                                                     q_index);
-                if (HasFailure())
-                  return;
-              }
-            }
-          }
-        }
-      }
+    for (int pattern = 0; pattern < 3; pattern++) {
+      TestCropScaleReadbackAndCleanTexture(kRGBReadBackSizes[x],
+                                           kRGBReadBackSizes[y],
+                                           kRGBReadBackSizes[dst_x],
+                                           kRGBReadBackSizes[dst_y],
+                                           pattern,
+                                           kColorTypes[color_type],
+                                           false,
+                                           q_index);
+      if (HasFailure())
+        return;
     }
   }
 }
+
+INSTANTIATE_TEST_CASE_P(
+    ,
+    GLHelperPixelReadbackTest,
+    ::testing::Combine(
+         ::testing::Range<unsigned int>(0, arraysize(kQualities)),
+         ::testing::Range<unsigned int>(0, arraysize(kRGBReadBackSizes)),
+         ::testing::Range<unsigned int>(0, arraysize(kRGBReadBackSizes)),
+         ::testing::Range<unsigned int>(0, arraysize(kRGBReadBackSizes)),
+         ::testing::Range<unsigned int>(0, arraysize(kRGBReadBackSizes))));
 
 // Validate that all scaling generates valid pipelines.
 TEST_F(GLHelperTest, ValidateScalerPipelines) {
@@ -1989,28 +1994,3 @@ TEST_F(GLHelperTest, CheckOptimizations) {
 }
 
 }  // namespace content
-
-namespace {
-
-int RunHelper(base::TestSuite* test_suite) {
-  content::UnitTestTestSuite runner(test_suite);
-  base::MessageLoopForIO message_loop;
-  return runner.Run();
-}
-
-}  // namespace
-
-// These tests needs to run against a proper GL environment, so we
-// need to set it up before we can run the tests.
-int main(int argc, char** argv) {
-  base::CommandLine::Init(argc, argv);
-  base::TestSuite* suite = new content::ContentTestSuite(argc, argv);
-#if defined(OS_MACOSX)
-  base::mac::ScopedNSAutoreleasePool pool;
-#endif
-
-  return base::LaunchUnitTestsSerially(
-    argc,
-    argv,
-    base::Bind(&RunHelper, base::Unretained(suite)));
-}

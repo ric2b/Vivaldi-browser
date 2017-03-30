@@ -27,6 +27,7 @@ class GaiaAuthConsumer {
                       const std::string& new_lsid,
                       const std::string& new_token,
                       const std::string& new_data);
+    ClientLoginResult(const ClientLoginResult& other);
     ~ClientLoginResult();
 
     bool operator==(const ClientLoginResult &b) const;
@@ -69,6 +70,7 @@ class GaiaAuthConsumer {
   virtual void OnIssueAuthTokenFailure(const std::string& service,
                                        const GoogleServiceAuthError& error) {}
 
+  virtual void OnClientOAuthCode(const std::string& auth_code) {}
   virtual void OnClientOAuthSuccess(const ClientOAuthResult& result) {}
   virtual void OnClientOAuthFailure(const GoogleServiceAuthError& error) {}
 

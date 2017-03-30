@@ -47,6 +47,7 @@ function createTestSuite(domAutomationController)
 function TestSuite()
 {
     WebInspector.TestBase.call(this, domAutomationController);
+    this._asyncInvocationId = 0;
 };
 
 TestSuite.prototype = {
@@ -413,8 +414,25 @@ TestSuite.prototype.testPauseInSharedWorkerInitialization2 = function()
 
 TestSuite.prototype.enableTouchEmulation = function()
 {
-    WebInspector.overridesSupport._emulateTouchEventsInTarget(WebInspector.targetManager.mainTarget(), true, "mobile");
+    var deviceModeModel = new WebInspector.DeviceModeModel(function() {});
+    deviceModeModel._target = WebInspector.targetManager.mainTarget();
+    deviceModeModel._applyTouch(true, true);
 };
+
+TestSuite.prototype.enableAutoAttachToCreatedPages = function()
+{
+    WebInspector.settingForTest("autoAttachToCreatedPages").set(true);
+}
+
+TestSuite.prototype.waitForDebuggerPaused = function()
+{
+    var debuggerModel = WebInspector.DebuggerModel.fromTarget(WebInspector.targetManager.mainTarget());
+    if (debuggerModel.debuggerPausedDetails)
+        return;
+
+    this.takeControl();
+    this._waitForScriptPause(this.releaseControl.bind(this));
+}
 
 TestSuite.prototype.switchToPanel = function(panelName)
 {
@@ -477,9 +495,8 @@ TestSuite.prototype.testDeviceMetricsOverrides = function()
         test.releaseControl();
     }
 
-    WebInspector.overridesSupport._deviceMetricsChangedListenerMuted = true;
     test.takeControl();
-    this.waitForThrottler(WebInspector.overridesSupport._deviceMetricsThrottler, step1);
+    step1();
 };
 
 TestSuite.prototype.testScreenshotRecording = function()
@@ -635,10 +652,9 @@ TestSuite.prototype.waitForTestResultsInConsole = function()
     this.takeControl();
 };
 
-TestSuite.prototype.invokeAsyncWithTimeline_ = function(functionName, callback)
+TestSuite.prototype.startTimeline = function(callback)
 {
-    var test = this;
-    test.showPanel("timeline").then(function() {
+    this.showPanel("timeline").then(function() {
         WebInspector.panels.timeline._model.addEventListener(WebInspector.TimelineModel.Events.RecordingStarted, onRecordingStarted);
         WebInspector.panels.timeline._toggleRecording();
     });
@@ -646,31 +662,76 @@ TestSuite.prototype.invokeAsyncWithTimeline_ = function(functionName, callback)
     function onRecordingStarted()
     {
         WebInspector.panels.timeline._model.removeEventListener(WebInspector.TimelineModel.Events.RecordingStarted, onRecordingStarted);
-        test.evaluateInConsole_(functionName + "(function() { console.log('DONE'); });", function() {});
-        WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.MessageAdded, onConsoleMessage);
+        callback();
     }
+}
 
-    function onConsoleMessage(event)
-    {
-        var text = event.data.messageText;
-        if (text === "DONE") {
-            WebInspector.multitargetConsoleModel.removeEventListener(WebInspector.ConsoleModel.Events.MessageAdded, onConsoleMessage);
-            pageActionsDone();
-        }
-    }
-
-    function pageActionsDone()
-    {
-        WebInspector.panels.timeline._model.addEventListener(WebInspector.TimelineModel.Events.RecordingStopped, onRecordingStopped);
-        WebInspector.panels.timeline._toggleRecording();
-    }
-
+TestSuite.prototype.stopTimeline = function(callback)
+{
+    WebInspector.panels.timeline._model.addEventListener(WebInspector.TimelineModel.Events.RecordingStopped, onRecordingStopped);
+    WebInspector.panels.timeline._toggleRecording();
     function onRecordingStopped()
     {
         WebInspector.panels.timeline._model.removeEventListener(WebInspector.TimelineModel.Events.RecordingStopped, onRecordingStopped);
         callback();
     }
+}
+
+TestSuite.prototype.invokePageFunctionAsync = function(functionName, opt_args, callback_is_always_last)
+{
+    var callback = arguments[arguments.length - 1];
+    var doneMessage = `DONE: ${functionName}.${++this._asyncInvocationId}`;
+    var argsString = arguments.length < 3 ? "" : Array.prototype.slice.call(arguments, 1, -1).map(arg => JSON.stringify(arg)).join(",") + ",";
+    this.evaluateInConsole_(`${functionName}(${argsString} function() { console.log('${doneMessage}'); });`, function() {});
+    WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.MessageAdded, onConsoleMessage);
+
+    function onConsoleMessage(event)
+    {
+        var text = event.data.messageText;
+        if (text === doneMessage) {
+            WebInspector.multitargetConsoleModel.removeEventListener(WebInspector.ConsoleModel.Events.MessageAdded, onConsoleMessage);
+            callback();
+        }
+    }
+}
+
+TestSuite.prototype.invokeAsyncWithTimeline_ = function(functionName, callback)
+{
+    var test = this;
+
+    this.startTimeline(onRecordingStarted);
+
+    function onRecordingStarted()
+    {
+        test.invokePageFunctionAsync(functionName, pageActionsDone);
+    }
+
+    function pageActionsDone()
+    {
+        test.stopTimeline(callback);
+    }
 };
+
+TestSuite.prototype.enableExperiment = function(name)
+{
+    Runtime.experiments.enableForTest(name);
+}
+
+TestSuite.prototype.checkInputEventsPresent = function()
+{
+    var expectedEvents = new Set(arguments);
+    var model = WebInspector.panels.timeline._model;
+    var asyncEvents = model.mainThreadAsyncEvents();
+    var input = asyncEvents.get(WebInspector.TimelineUIUtils.asyncEventGroups().input) || [];
+    var prefix = "InputLatency::";
+    for (var e of input) {
+        if (!e.name.startsWith(prefix))
+            continue;
+        expectedEvents.delete(e.name.substr(prefix.length));
+    }
+    if (expectedEvents.size)
+        throw "Some expected events are not found: " + Array.from(expectedEvents.keys()).join(",");
+}
 
 /**
  * Serializes array of uiSourceCodes to string.
@@ -719,7 +780,7 @@ TestSuite.prototype.evaluateInConsole_ = function(code, callback)
     function innerEvaluate()
     {
         WebInspector.context.removeFlavorChangeListener(WebInspector.ExecutionContext, showConsoleAndEvaluate, this);
-        var consoleView = WebInspector.ConsolePanel._view();
+        var consoleView = WebInspector.ConsoleView.instance();
         consoleView._prompt.setText(code);
         consoleView._promptElement.dispatchEvent(TestSuite.createKeyEvent("Enter"));
 

@@ -32,13 +32,6 @@ WebContentsViewDelegate* ContentBrowserClient::GetWebContentsViewDelegate(
   return nullptr;
 }
 
-WebContents* ContentBrowserClient::GetGuestWebContentsByTabId(
-      int tab_id,
-      content::BrowserContext* browser_context,
-      bool include_incognito) {
-  return NULL;
-};
-
 GURL ContentBrowserClient::GetEffectiveURL(BrowserContext* browser_context,
                                            const GURL& url) {
   return url;
@@ -168,6 +161,10 @@ bool ContentBrowserClient::AllowServiceWorker(const GURL& scope,
   return true;
 }
 
+bool ContentBrowserClient::IsDataSaverEnabled(BrowserContext* context) {
+  return false;
+}
+
 bool ContentBrowserClient::AllowGetCookie(const GURL& url,
                                           const GURL& first_party,
                                           const net::CookieList& cookie_list,
@@ -195,7 +192,6 @@ bool ContentBrowserClient::AllowWorkerDatabase(
     const GURL& url,
     const base::string16& name,
     const base::string16& display_name,
-    unsigned long estimated_size,
     ResourceContext* context,
     const std::vector<std::pair<int, int> >& render_frames) {
   return true;
@@ -227,6 +223,13 @@ bool ContentBrowserClient::AllowWebRTCIdentityCache(const GURL& url,
 
 bool ContentBrowserClient::AllowKeygen(const GURL& url,
                                        content::ResourceContext* context) {
+  return true;
+}
+
+bool ContentBrowserClient::AllowWebBluetooth(
+    content::BrowserContext* browser_context,
+    const url::Origin& requesting_origin,
+    const url::Origin& embedding_origin) {
   return true;
 }
 

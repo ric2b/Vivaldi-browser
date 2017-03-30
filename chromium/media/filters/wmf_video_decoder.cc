@@ -24,7 +24,7 @@ std::string WMFVideoDecoder::GetDisplayName() const {
 
 void WMFVideoDecoder::Initialize(const VideoDecoderConfig& config,
                                  bool low_delay,
-                                 const SetCdmReadyCB& set_cdm_ready_cb,
+                                 CdmContext* cdm_context,
                                  const InitCB& init_cb,
                                  const OutputCB& output_cb) {
   pipeline_stats::AddDecoderClass(GetDisplayName());

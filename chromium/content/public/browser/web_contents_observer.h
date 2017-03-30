@@ -125,9 +125,10 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
 
   // Called when a navigation started in the WebContents. |navigation_handle|
   // is unique to a specific navigation. The same |navigation_handle| will be
-  // provided on subsequent calls to
-  // DidRedirect/FinishNavigation/ReadyToCommitNavigation related to this
-  // navigation.
+  // provided on subsequent calls to DidRedirectNavigation, DidFinishNavigation,
+  // and ReadyToCommitNavigation when related to this navigation. Observers
+  // should clear any references to |navigation_handle| in DidFinishNavigation,
+  // just before it is destroyed.
   //
   // Note that this is fired by navigations in any frame of the WebContents,
   // not just the main frame.
@@ -319,22 +320,19 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   // failure methods will also be invoked.
   virtual void NavigationStopped() {}
 
-  // This indicates that the next navigation was triggered by a user gesture.
-  // TODO(dominickn): remove this method in favor of DidGetUserInteraction,
-  // with the appropriate filtering by input event type.
-  virtual void DidGetUserGesture() {}
-
   // Called when there has been direct user interaction with the WebContents.
   // The type argument specifies the kind of interaction. Direct user input
   // signalled through this callback includes:
   // 1) any mouse down event (blink::WebInputEvent::MouseDown);
   // 2) the start of a mouse wheel scroll (blink::WebInputEvent::MouseWheel);
-  // 3) any raw key down event (blink::WebInputEvent::RawKeyDown); and
-  // 4) any gesture tap event (blink::WebInputEvent::GestureTapDown).
+  // 3) any raw key down event (blink::WebInputEvent::RawKeyDown);
+  // 4) any gesture tap event (blink::WebInputEvent::GestureTapDown); and
+  // 5) a browser navigation or reload (blink::WebInputEvent::Undefined).
   // The start of a mouse wheel scroll is heuristically detected: a mouse
   // wheel event fired at least 0.1 seconds after any other wheel event is
   // regarded as the beginning of a scroll. This matches the interval used by
   // the Blink EventHandler to detect the end of scrolls.
+  // TODO(dominickn): replace MouseWheel with GestureScrollBegin.
   virtual void DidGetUserInteraction(const blink::WebInputEvent::Type type) {}
 
   // This method is invoked when a RenderViewHost of this WebContents was
@@ -410,7 +408,8 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
 
   // Invoked when the renderer process has toggled the tab into/out of
   // fullscreen mode.
-  virtual void DidToggleFullscreenModeForTab(bool entered_fullscreen) {}
+  virtual void DidToggleFullscreenModeForTab(bool entered_fullscreen,
+                                             bool will_cause_resize) {}
 
   // Invoked when an interstitial page is attached or detached.
   virtual void DidAttachInterstitialPage() {}
@@ -438,7 +437,7 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   // and subsequently within a WebContents.  MediaStartedPlaying() will always
   // be followed by MediaStoppedPlaying() after player teardown.  Observers must
   // release all stored copies of |id| when MediaStoppedPlaying() is received.
-  using MediaPlayerId = std::pair<RenderFrameHost*, int64_t>;
+  using MediaPlayerId = std::pair<RenderFrameHost*, int>;
   virtual void MediaStartedPlaying(const MediaPlayerId& id) {}
   virtual void MediaStoppedPlaying(const MediaPlayerId& id) {}
 

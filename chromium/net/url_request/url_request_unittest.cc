@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <limits>
 
+#include "base/base64url.h"
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
@@ -51,13 +52,13 @@
 #include "net/base/load_timing_info_test_util.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_module.h"
-#include "net/base/net_util.h"
 #include "net/base/network_quality_estimator.h"
 #include "net/base/request_priority.h"
 #include "net/base/test_data_directory.h"
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/base/upload_data_stream.h"
 #include "net/base/upload_file_element_reader.h"
+#include "net/base/url_util.h"
 #include "net/cert/ev_root_ca_metadata.h"
 #include "net/cert/mock_cert_verifier.h"
 #include "net/cert/test_root_certs.h"
@@ -79,9 +80,12 @@
 #include "net/log/test_net_log_util.h"
 #include "net/proxy/proxy_service.h"
 #include "net/socket/ssl_client_socket.h"
+#include "net/ssl/channel_id_service.h"
+#include "net/ssl/default_channel_id_store.h"
 #include "net/ssl/ssl_cipher_suite_names.h"
 #include "net/ssl/ssl_connection_status_flags.h"
 #include "net/ssl/ssl_server_config.h"
+#include "net/ssl/token_binding.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
@@ -2646,7 +2650,7 @@ TEST_F(URLRequestTest, DoNotSaveCookies_ViaPolicy_Async) {
   }
 }
 
-TEST_F(URLRequestTest, FirstPartyOnlyCookiesEnabled) {
+TEST_F(URLRequestTest, SameSiteCookiesEnabled) {
   LocalHttpTestServer test_server;
   ASSERT_TRUE(test_server.Start());
 
@@ -2654,13 +2658,12 @@ TEST_F(URLRequestTest, FirstPartyOnlyCookiesEnabled) {
   network_delegate.set_experimental_cookie_features_enabled(true);
   default_context_.set_network_delegate(&network_delegate);
 
-  // Set up a 'First-Party-Only' cookie (on '127.0.0.1', as that's where
+  // Set up a 'SameSite' cookie (on '127.0.0.1', as that's where
   // LocalHttpTestServer points).
   {
     TestDelegate d;
     scoped_ptr<URLRequest> req(default_context_.CreateRequest(
-        test_server.GetURL(
-            "/set-cookie?FirstPartyCookieToSet=1;First-Party-Only"),
+        test_server.GetURL("/set-cookie?SameSiteCookieToSet=1;SameSite"),
         DEFAULT_PRIORITY, &d));
     req->Start();
     base::RunLoop().Run();
@@ -2669,7 +2672,7 @@ TEST_F(URLRequestTest, FirstPartyOnlyCookiesEnabled) {
     EXPECT_EQ(1, network_delegate.set_cookie_count());
   }
 
-  // Verify that the cookie is sent for first-party requests.
+  // Verify that the cookie is sent for same-site requests.
   {
     TestDelegate d;
     scoped_ptr<URLRequest> req(default_context_.CreateRequest(
@@ -2679,69 +2682,69 @@ TEST_F(URLRequestTest, FirstPartyOnlyCookiesEnabled) {
     req->Start();
     base::RunLoop().Run();
 
-    EXPECT_TRUE(d.data_received().find("FirstPartyCookieToSet=1") !=
+    EXPECT_TRUE(d.data_received().find("SameSiteCookieToSet=1") !=
                 std::string::npos);
     EXPECT_EQ(0, network_delegate.blocked_get_cookies_count());
     EXPECT_EQ(0, network_delegate.blocked_set_cookie_count());
   }
 
-  // Verify that the cookie is not sent for non-first-party requests.
+  // Verify that the cookie is not sent for cross-site requests.
   {
     TestDelegate d;
     scoped_ptr<URLRequest> req(default_context_.CreateRequest(
         test_server.GetURL("/echoheader?Cookie"), DEFAULT_PRIORITY, &d));
-    req->set_first_party_for_cookies(GURL("http://third-party.test/"));
-    req->set_initiator(url::Origin(GURL("http://third-party.test/")));
+    req->set_first_party_for_cookies(GURL("http://cross-site.test/"));
+    req->set_initiator(url::Origin(GURL("http://cross-site.test/")));
     req->Start();
     base::RunLoop().Run();
 
-    EXPECT_TRUE(d.data_received().find("FirstPartyCookieToSet=1") ==
+    EXPECT_TRUE(d.data_received().find("SameSiteCookieToSet=1") ==
                 std::string::npos);
     EXPECT_EQ(0, network_delegate.blocked_get_cookies_count());
     EXPECT_EQ(0, network_delegate.blocked_set_cookie_count());
   }
 
-  // Verify that the cookie is sent for non-first-party initiators when the
+  // Verify that the cookie is sent for cross-site initiators when the
   // method is "safe".
   {
     TestDelegate d;
     scoped_ptr<URLRequest> req(default_context_.CreateRequest(
         test_server.GetURL("/echoheader?Cookie"), DEFAULT_PRIORITY, &d));
     req->set_first_party_for_cookies(test_server.GetURL("/"));
-    req->set_initiator(url::Origin(GURL("http://third-party.test/")));
+    req->set_initiator(url::Origin(GURL("http://cross-site.test/")));
     req->Start();
     base::RunLoop().Run();
 
-    EXPECT_FALSE(d.data_received().find("FirstPartyCookieToSet=1") ==
+    EXPECT_FALSE(d.data_received().find("SameSiteCookieToSet=1") ==
                  std::string::npos);
     EXPECT_EQ(0, network_delegate.blocked_get_cookies_count());
     EXPECT_EQ(0, network_delegate.blocked_set_cookie_count());
   }
 
-  // Verify that the cookie is not sent for non-first-party initiators when the
+  // Verify that the cookie is not sent for cross-site initiators when the
   // method is unsafe (e.g. POST).
   {
     TestDelegate d;
     scoped_ptr<URLRequest> req(default_context_.CreateRequest(
         test_server.GetURL("/echoheader?Cookie"), DEFAULT_PRIORITY, &d));
     req->set_first_party_for_cookies(test_server.GetURL("/"));
-    req->set_initiator(url::Origin(GURL("http://third-party.test/")));
+    req->set_initiator(url::Origin(GURL("http://cross-site.test/")));
     req->set_method("POST");
     req->Start();
     base::RunLoop().Run();
 
-    EXPECT_TRUE(d.data_received().find("FirstPartyCookieToSet=1") ==
+    EXPECT_TRUE(d.data_received().find("SameSiteCookieToSet=1") ==
                 std::string::npos);
     EXPECT_EQ(0, network_delegate.blocked_get_cookies_count());
     EXPECT_EQ(0, network_delegate.blocked_set_cookie_count());
   }
 }
 
-TEST_F(URLRequestTest, FirstPartyOnlyCookiesDisabled) {
+TEST_F(URLRequestTest, SameSiteCookiesDisabled) {
   LocalHttpTestServer test_server;
   ASSERT_TRUE(test_server.Start());
 
-  // Set up a 'First-Party-Only' cookie (on '127.0.0.1', as that's where
+  // Set up a 'SameSite' cookie (on '127.0.0.1', as that's where
   // LocalHttpTestServer points).
   {
     TestNetworkDelegate network_delegate;
@@ -2750,8 +2753,7 @@ TEST_F(URLRequestTest, FirstPartyOnlyCookiesDisabled) {
 
     TestDelegate d;
     scoped_ptr<URLRequest> req(default_context_.CreateRequest(
-        test_server.GetURL(
-            "/set-cookie?FirstPartyCookieToSet=1;First-Party-Only"),
+        test_server.GetURL("/set-cookie?SameSiteCookieToSet=1;SameSite"),
         DEFAULT_PRIORITY, &d));
     req->Start();
     base::RunLoop().Run();
@@ -2760,7 +2762,7 @@ TEST_F(URLRequestTest, FirstPartyOnlyCookiesDisabled) {
     EXPECT_EQ(1, network_delegate.set_cookie_count());
   }
 
-  // Verify that the cookie is sent for first-party requests.
+  // Verify that the cookie is sent for same-site requests.
   {
     TestNetworkDelegate network_delegate;
     network_delegate.set_experimental_cookie_features_enabled(false);
@@ -2772,13 +2774,13 @@ TEST_F(URLRequestTest, FirstPartyOnlyCookiesDisabled) {
     req->Start();
     base::RunLoop().Run();
 
-    EXPECT_TRUE(d.data_received().find("FirstPartyCookieToSet=1") !=
+    EXPECT_TRUE(d.data_received().find("SameSiteCookieToSet=1") !=
                 std::string::npos);
     EXPECT_EQ(0, network_delegate.blocked_get_cookies_count());
     EXPECT_EQ(0, network_delegate.blocked_set_cookie_count());
   }
 
-  // Verify that the cookie is also sent for non-first-party requests.
+  // Verify that the cookie is also sent for cross-site requests.
   {
     TestNetworkDelegate network_delegate;
     network_delegate.set_experimental_cookie_features_enabled(false);
@@ -2786,11 +2788,11 @@ TEST_F(URLRequestTest, FirstPartyOnlyCookiesDisabled) {
     TestDelegate d;
     scoped_ptr<URLRequest> req(default_context_.CreateRequest(
         test_server.GetURL("/echoheader?Cookie"), DEFAULT_PRIORITY, &d));
-    req->set_first_party_for_cookies(GURL("http://third-party.test/"));
+    req->set_first_party_for_cookies(GURL("http://cross-site.test/"));
     req->Start();
     base::RunLoop().Run();
 
-    EXPECT_NE(d.data_received().find("FirstPartyCookieToSet=1"),
+    EXPECT_NE(d.data_received().find("SameSiteCookieToSet=1"),
               std::string::npos);
     EXPECT_EQ(0, network_delegate.blocked_get_cookies_count());
     EXPECT_EQ(0, network_delegate.blocked_set_cookie_count());
@@ -3370,7 +3372,113 @@ scoped_ptr<test_server::HttpResponse> HandleRedirectConnect(
 
 }  // namespace
 
-// In this unit test, we're using the EmbeddedTestServer as a proxy server and
+class TestSSLConfigService : public SSLConfigService {
+ public:
+  TestSSLConfigService(bool ev_enabled,
+                       bool online_rev_checking,
+                       bool rev_checking_required_local_anchors,
+                       bool token_binding_enabled)
+      : ev_enabled_(ev_enabled),
+        online_rev_checking_(online_rev_checking),
+        rev_checking_required_local_anchors_(
+            rev_checking_required_local_anchors),
+        token_binding_enabled_(token_binding_enabled),
+        min_version_(kDefaultSSLVersionMin),
+        fallback_min_version_(kDefaultSSLVersionFallbackMin) {}
+
+  void set_min_version(uint16_t version) { min_version_ = version; }
+
+  void set_fallback_min_version(uint16_t version) {
+    fallback_min_version_ = version;
+  }
+
+  // SSLConfigService:
+  void GetSSLConfig(SSLConfig* config) override {
+    *config = SSLConfig();
+    config->rev_checking_enabled = online_rev_checking_;
+    config->verify_ev_cert = ev_enabled_;
+    config->rev_checking_required_local_anchors =
+        rev_checking_required_local_anchors_;
+    if (fallback_min_version_) {
+      config->version_fallback_min = fallback_min_version_;
+    }
+    if (min_version_) {
+      config->version_min = min_version_;
+    }
+    if (token_binding_enabled_) {
+      config->token_binding_params.push_back(TB_PARAM_ECDSAP256);
+    }
+  }
+
+ protected:
+  ~TestSSLConfigService() override {}
+
+ private:
+  const bool ev_enabled_;
+  const bool online_rev_checking_;
+  const bool rev_checking_required_local_anchors_;
+  const bool token_binding_enabled_;
+  uint16_t min_version_;
+  uint16_t fallback_min_version_;
+};
+
+// TODO(svaldez): Update tests to use EmbeddedTestServer.
+#if !defined(OS_IOS)
+class TokenBindingURLRequestTest : public URLRequestTestHTTP {
+ public:
+  void SetUp() override {
+    default_context_.set_ssl_config_service(
+        new TestSSLConfigService(false, false, false, true));
+    channel_id_service_.reset(new ChannelIDService(
+        new DefaultChannelIDStore(NULL), base::ThreadTaskRunnerHandle::Get()));
+    default_context_.set_channel_id_service(channel_id_service_.get());
+    URLRequestTestHTTP::SetUp();
+  }
+
+ protected:
+  scoped_ptr<ChannelIDService> channel_id_service_;
+};
+
+TEST_F(TokenBindingURLRequestTest, TokenBindingTest) {
+  SpawnedTestServer::SSLOptions ssl_options;
+  ssl_options.supported_token_binding_params.push_back(TB_PARAM_ECDSAP256);
+  SpawnedTestServer https_test_server(SpawnedTestServer::TYPE_HTTPS,
+                                      ssl_options,
+                                      base::FilePath(kTestFilePath));
+  ASSERT_TRUE(https_test_server.Start());
+
+  TestDelegate d;
+  {
+    scoped_ptr<URLRequest> r(default_context_.CreateRequest(
+        https_test_server.GetURL("tokbind-ekm"), DEFAULT_PRIORITY, &d));
+    r->Start();
+    EXPECT_TRUE(r->is_pending());
+
+    base::RunLoop().Run();
+
+    EXPECT_EQ(URLRequestStatus::SUCCESS, r->status().status());
+
+    HttpRequestHeaders headers;
+    std::string token_binding_header, token_binding_message;
+    EXPECT_TRUE(r->GetFullRequestHeaders(&headers));
+    EXPECT_TRUE(headers.GetHeader(HttpRequestHeaders::kTokenBinding,
+                                  &token_binding_header));
+    EXPECT_TRUE(base::Base64UrlDecode(
+        token_binding_header, base::Base64UrlDecodePolicy::REQUIRE_PADDING,
+        &token_binding_message));
+    base::StringPiece ec_point, signature;
+    EXPECT_TRUE(
+        ParseTokenBindingMessage(token_binding_message, &ec_point, &signature));
+
+    EXPECT_GT(d.bytes_received(), 0);
+    std::string ekm = d.data_received();
+
+    EXPECT_TRUE(VerifyEKMSignature(ec_point, signature, ekm));
+  }
+}
+#endif  // !defined(OS_IOS)
+
+// In this unit test, we're using the HTTPTestServer as a proxy server and
 // issuing a CONNECT request with the magic host name "www.redirect.com".
 // The EmbeddedTestServer will return a 302 response, which we should not
 // follow.
@@ -6459,6 +6567,20 @@ TEST_F(URLRequestTestHTTP, RedirectJobWithReferenceFragment) {
   EXPECT_EQ(redirect_url, r->url());
 }
 
+TEST_F(URLRequestTestHTTP, UnsupportedReferrerScheme) {
+  ASSERT_TRUE(http_test_server()->Start());
+
+  const std::string referrer("foobar://totally.legit.referrer");
+  TestDelegate d;
+  scoped_ptr<URLRequest> req(default_context_.CreateRequest(
+      http_test_server()->GetURL("/echoheader?Referer"), DEFAULT_PRIORITY, &d));
+  req->SetReferrer(referrer);
+  req->Start();
+  base::RunLoop().Run();
+
+  EXPECT_EQ(std::string("None"), d.data_received());
+}
+
 TEST_F(URLRequestTestHTTP, NoUserPassInReferrer) {
   ASSERT_TRUE(http_test_server()->Start());
 
@@ -8289,7 +8411,8 @@ class SSLClientAuthTestDelegate : public TestDelegate {
 TEST_F(HTTPSRequestTest, ClientAuthTest) {
   EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   net::SSLServerConfig ssl_config;
-  ssl_config.require_client_cert = true;
+  ssl_config.client_cert_type =
+      SSLServerConfig::ClientCertType::OPTIONAL_CLIENT_CERT;
   test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK, ssl_config);
   test_server.AddDefaultHandlers(
       base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
@@ -8528,61 +8651,17 @@ TEST_F(HTTPSRequestTest, DisableECDSAOnXP) {
 
 #endif  // OS_WIN
 
-class TestSSLConfigService : public SSLConfigService {
- public:
-  TestSSLConfigService(bool ev_enabled,
-                       bool online_rev_checking,
-                       bool rev_checking_required_local_anchors)
-      : ev_enabled_(ev_enabled),
-        online_rev_checking_(online_rev_checking),
-        rev_checking_required_local_anchors_(
-            rev_checking_required_local_anchors),
-        min_version_(kDefaultSSLVersionMin),
-        fallback_min_version_(kDefaultSSLVersionFallbackMin) {}
-
-  void set_min_version(uint16_t version) { min_version_ = version; }
-
-  void set_fallback_min_version(uint16_t version) {
-    fallback_min_version_ = version;
-  }
-
-  // SSLConfigService:
-  void GetSSLConfig(SSLConfig* config) override {
-    *config = SSLConfig();
-    config->rev_checking_enabled = online_rev_checking_;
-    config->verify_ev_cert = ev_enabled_;
-    config->rev_checking_required_local_anchors =
-        rev_checking_required_local_anchors_;
-    if (fallback_min_version_) {
-      config->version_fallback_min = fallback_min_version_;
-    }
-    if (min_version_) {
-      config->version_min = min_version_;
-    }
-  }
-
- protected:
-  ~TestSSLConfigService() override {}
-
- private:
-  const bool ev_enabled_;
-  const bool online_rev_checking_;
-  const bool rev_checking_required_local_anchors_;
-  uint16_t min_version_;
-  uint16_t fallback_min_version_;
-};
-
 class FallbackTestURLRequestContext : public TestURLRequestContext {
  public:
   explicit FallbackTestURLRequestContext(bool delay_initialization)
       : TestURLRequestContext(delay_initialization) {}
 
   void set_fallback_min_version(uint16_t version) {
-    TestSSLConfigService *ssl_config_service =
-        new TestSSLConfigService(true /* check for EV */,
-                                 false /* online revocation checking */,
-                                 false /* require rev. checking for local
-                                          anchors */);
+    TestSSLConfigService* ssl_config_service = new TestSSLConfigService(
+        true /* check for EV */, false /* online revocation checking */,
+        false /* require rev. checking for local
+                                          anchors */,
+        false /* token binding enabled */);
     ssl_config_service->set_fallback_min_version(version);
     set_ssl_config_service(ssl_config_service);
   }
@@ -8646,21 +8725,33 @@ TEST_F(HTTPSFallbackTest, TLSv1NoFallback) {
       SpawnedTestServer::SSLOptions::TLS_INTOLERANT_TLS1_1;
 
   ASSERT_NO_FATAL_FAILURE(DoFallbackTest(ssl_options));
-  ExpectFailure(ERR_SSL_FALLBACK_BEYOND_MINIMUM_VERSION);
+  ExpectFailure(ERR_SSL_VERSION_OR_CIPHER_MISMATCH);
 }
 
-// Tests the TLS 1.1 fallback.
-TEST_F(HTTPSFallbackTest, TLSv1_1Fallback) {
+// Tests the TLS 1.1 fallback doesn't happen but 1.2-intolerance is detected.
+TEST_F(HTTPSFallbackTest, TLSv1_1NoFallback) {
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_OK);
   ssl_options.tls_intolerant =
       SpawnedTestServer::SSLOptions::TLS_INTOLERANT_TLS1_2;
 
   ASSERT_NO_FATAL_FAILURE(DoFallbackTest(ssl_options));
+  ExpectFailure(ERR_SSL_FALLBACK_BEYOND_MINIMUM_VERSION);
+}
+
+// Tests the TLS 1.1 fallback when explicitly enabled.
+TEST_F(HTTPSFallbackTest, TLSv1_1Fallback) {
+  SpawnedTestServer::SSLOptions ssl_options(
+      SpawnedTestServer::SSLOptions::CERT_OK);
+  ssl_options.tls_intolerant =
+      SpawnedTestServer::SSLOptions::TLS_INTOLERANT_TLS1_2;
+
+  set_fallback_min_version(SSL_PROTOCOL_VERSION_TLS1_1);
+  ASSERT_NO_FATAL_FAILURE(DoFallbackTest(ssl_options));
   ExpectConnection(SSL_CONNECTION_VERSION_TLS1_1);
 }
 
-// Tests that the TLS 1.1 fallback triggers on closed connections.
+// Tests that the TLS 1.1 fallback, if enabled, triggers on closed connections.
 TEST_F(HTTPSFallbackTest, TLSv1_1FallbackClosed) {
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_OK);
@@ -8669,6 +8760,7 @@ TEST_F(HTTPSFallbackTest, TLSv1_1FallbackClosed) {
   ssl_options.tls_intolerance_type =
       SpawnedTestServer::SSLOptions::TLS_INTOLERANCE_CLOSE;
 
+  set_fallback_min_version(SSL_PROTOCOL_VERSION_TLS1_1);
   ASSERT_NO_FATAL_FAILURE(DoFallbackTest(ssl_options));
   ExpectConnection(SSL_CONNECTION_VERSION_TLS1_1);
 }
@@ -8676,7 +8768,7 @@ TEST_F(HTTPSFallbackTest, TLSv1_1FallbackClosed) {
 // This test is disabled on Android because the remote test server doesn't cause
 // a TCP reset.
 #if !defined(OS_ANDROID)
-// Tests fallback to TLS 1.1 on connection reset.
+// Tests fallback to TLS 1.1, if enabled, on connection reset.
 TEST_F(HTTPSFallbackTest, TLSv1_1FallbackReset) {
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_OK);
@@ -8685,13 +8777,15 @@ TEST_F(HTTPSFallbackTest, TLSv1_1FallbackReset) {
   ssl_options.tls_intolerance_type =
       SpawnedTestServer::SSLOptions::TLS_INTOLERANCE_RESET;
 
+  set_fallback_min_version(SSL_PROTOCOL_VERSION_TLS1_1);
   ASSERT_NO_FATAL_FAILURE(DoFallbackTest(ssl_options));
   ExpectConnection(SSL_CONNECTION_VERSION_TLS1_1);
 }
 #endif  // !OS_ANDROID
 
-// Tests that we don't fallback on handshake failure with servers that implement
-// TLS_FALLBACK_SCSV. Also ensure that the original error code is reported.
+// Tests that we don't fallback, even if enabled, on handshake failure with
+// servers that implement TLS_FALLBACK_SCSV. Also ensure that the original error
+// code is reported.
 TEST_F(HTTPSFallbackTest, FallbackSCSV) {
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_OK);
@@ -8703,6 +8797,7 @@ TEST_F(HTTPSFallbackTest, FallbackSCSV) {
   // connections are rejected.
   ssl_options.fallback_scsv_enabled = true;
 
+  set_fallback_min_version(SSL_PROTOCOL_VERSION_TLS1_1);
   ASSERT_NO_FATAL_FAILURE(DoFallbackTest(ssl_options));
 
   // ERR_SSL_VERSION_OR_CIPHER_MISMATCH is how the server simulates version
@@ -8712,8 +8807,9 @@ TEST_F(HTTPSFallbackTest, FallbackSCSV) {
   ExpectFailure(ERR_SSL_VERSION_OR_CIPHER_MISMATCH);
 }
 
-// Tests that we don't fallback on connection closed with servers that implement
-// TLS_FALLBACK_SCSV. Also ensure that the original error code is reported.
+// Tests that we don't fallback, even if enabled, on connection closed with
+// servers that implement TLS_FALLBACK_SCSV. Also ensure that the original error
+// code is reported.
 TEST_F(HTTPSFallbackTest, FallbackSCSVClosed) {
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_OK);
@@ -8727,6 +8823,7 @@ TEST_F(HTTPSFallbackTest, FallbackSCSVClosed) {
   // connections are rejected.
   ssl_options.fallback_scsv_enabled = true;
 
+  set_fallback_min_version(SSL_PROTOCOL_VERSION_TLS1_1);
   ASSERT_NO_FATAL_FAILURE(DoFallbackTest(ssl_options));
 
   // The original error should be replayed on rejected fallback.
@@ -8738,7 +8835,7 @@ TEST_F(HTTPSRequestTest, FallbackProbeNoCache) {
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_OK);
   ssl_options.tls_intolerant =
-      SpawnedTestServer::SSLOptions::TLS_INTOLERANT_TLS1_1;
+      SpawnedTestServer::SSLOptions::TLS_INTOLERANT_TLS1_2;
   ssl_options.tls_intolerance_type =
       SpawnedTestServer::SSLOptions::TLS_INTOLERANCE_CLOSE;
   ssl_options.record_resume = true;
@@ -8751,14 +8848,13 @@ TEST_F(HTTPSRequestTest, FallbackProbeNoCache) {
 
   SSLClientSocket::ClearSessionCache();
 
-  // Make a connection that does a probe fallback to TLSv1 but fails because
-  // TLSv1 fallback is disabled. We don't wish a session for this connection to
-  // be inserted locally.
+  // Make a connection that does a probe fallback to TLSv1.1 but fails because
+  // fallback is disabled. We don't wish a session for this connection to be
+  // inserted locally.
   {
     TestDelegate delegate;
     FallbackTestURLRequestContext context(true);
 
-    context.set_fallback_min_version(SSL_PROTOCOL_VERSION_TLS1_2);
     context.Init();
     scoped_ptr<URLRequest> request(context.CreateRequest(
         test_server.GetURL("/"), DEFAULT_PRIORITY, &delegate));
@@ -8773,11 +8869,11 @@ TEST_F(HTTPSRequestTest, FallbackProbeNoCache) {
               request->status().error());
   }
 
-  // Now allow TLSv1 fallback connections and request the session cache log.
+  // Now allow TLSv1.1 fallback connections and request the session cache log.
   {
     TestDelegate delegate;
     FallbackTestURLRequestContext context(true);
-    context.set_fallback_min_version(SSL_PROTOCOL_VERSION_TLS1);
+    context.set_fallback_min_version(SSL_PROTOCOL_VERSION_TLS1_1);
 
     context.Init();
     scoped_ptr<URLRequest> request(context.CreateRequest(
@@ -8789,7 +8885,7 @@ TEST_F(HTTPSRequestTest, FallbackProbeNoCache) {
     EXPECT_EQ(1, delegate.response_started_count());
     EXPECT_NE(0, delegate.bytes_received());
     EXPECT_EQ(
-        SSL_CONNECTION_VERSION_TLS1,
+        SSL_CONNECTION_VERSION_TLS1_1,
         SSLConnectionStatusToVersion(request->ssl_info().connection_status));
     EXPECT_TRUE(request->ssl_info().connection_status &
                 SSL_CONNECTION_VERSION_FALLBACK);
@@ -8957,11 +9053,11 @@ class HTTPSOCSPTest : public HTTPSRequestTest {
   // connetions to testserver. This can be overridden in test subclasses for
   // different behaviour.
   virtual void SetupContext(URLRequestContext* context) {
-    context->set_ssl_config_service(
-        new TestSSLConfigService(true /* check for EV */,
-                                 true /* online revocation checking */,
-                                 false /* require rev. checking for local
-                                          anchors */));
+    context->set_ssl_config_service(new TestSSLConfigService(
+        true /* check for EV */, true /* online revocation checking */,
+        false /* require rev. checking for local
+                                          anchors */,
+        false /* token binding enabled */));
   }
 
   scoped_ptr<ScopedTestRoot> test_root_;
@@ -9152,11 +9248,11 @@ TEST_F(HTTPSOCSPTest, MAYBE_RevokedStapled) {
 class HTTPSHardFailTest : public HTTPSOCSPTest {
  protected:
   void SetupContext(URLRequestContext* context) override {
-    context->set_ssl_config_service(
-        new TestSSLConfigService(false /* check for EV */,
-                                 false /* online revocation checking */,
-                                 true /* require rev. checking for local
-                                         anchors */));
+    context->set_ssl_config_service(new TestSSLConfigService(
+        false /* check for EV */, false /* online revocation checking */,
+        true /* require rev. checking for local
+                                         anchors */,
+        false /* token binding enabled */));
   }
 };
 
@@ -9189,11 +9285,11 @@ TEST_F(HTTPSHardFailTest, FailsOnOCSPInvalid) {
 class HTTPSEVCRLSetTest : public HTTPSOCSPTest {
  protected:
   void SetupContext(URLRequestContext* context) override {
-    context->set_ssl_config_service(
-        new TestSSLConfigService(true /* check for EV */,
-                                 false /* online revocation checking */,
-                                 false /* require rev. checking for local
-                                          anchors */));
+    context->set_ssl_config_service(new TestSSLConfigService(
+        true /* check for EV */, false /* online revocation checking */,
+        false /* require rev. checking for local
+                                          anchors */,
+        false /* token binding enabled */));
   }
 };
 
@@ -9374,11 +9470,11 @@ TEST_F(HTTPSEVCRLSetTest, ExpiredCRLSetAndRevokedNonEVCert) {
 class HTTPSCRLSetTest : public HTTPSOCSPTest {
  protected:
   void SetupContext(URLRequestContext* context) override {
-    context->set_ssl_config_service(
-        new TestSSLConfigService(false /* check for EV */,
-                                 false /* online revocation checking */,
-                                 false /* require rev. checking for local
-                                          anchors */));
+    context->set_ssl_config_service(new TestSSLConfigService(
+        false /* check for EV */, false /* online revocation checking */,
+        false /* require rev. checking for local
+                                          anchors */,
+        false /* token binding enabled */));
   }
 };
 

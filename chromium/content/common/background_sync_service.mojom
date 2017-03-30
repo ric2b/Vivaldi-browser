@@ -5,7 +5,6 @@
 module content;
 
 import "content/public/common/background_sync.mojom";
-import "content/public/common/permission_status.mojom";
 import "content/public/common/service_worker_event_status.mojom";
 
 enum BackgroundSyncError {
@@ -20,11 +19,7 @@ enum BackgroundSyncError {
 enum BackgroundSyncState {
   PENDING,
   FIRING,
-  UNREGISTERED_WHILE_FIRING,
   REREGISTERED_WHILE_FIRING,
-  FAILED,
-  SUCCESS,
-  UNREGISTERED
 };
 
 enum BackgroundSyncEventLastChance {
@@ -36,21 +31,11 @@ interface BackgroundSyncService {
   Register(SyncRegistration options, int64 service_worker_registration_id,
            bool requested_from_service_worker)
       => (BackgroundSyncError err, SyncRegistration options);
-  GetRegistration(BackgroundSyncPeriodicity periodicity, string tag,
-                  int64 service_worker_registration_id)
-      => (BackgroundSyncError err, SyncRegistration? registration);
-  GetRegistrations(BackgroundSyncPeriodicity periodicity,
-                   int64 service_worker_registration_id)
+  GetRegistrations(int64 service_worker_registration_id)
       => (BackgroundSyncError err, array<SyncRegistration> registrations);
-  Unregister(int64 handle_id, int64 service_worker_registration_id)
-      => (BackgroundSyncError err);
-  GetPermissionStatus(BackgroundSyncPeriodicity periodicity,
-                      int64 service_worker_registration_id)
-      => (BackgroundSyncError err, PermissionStatus status);
   DuplicateRegistrationHandle(int64 handle_id)
       => (BackgroundSyncError err, SyncRegistration? registration);
   ReleaseRegistration(int64 handle_id);
-  NotifyWhenFinished(int64 handle_id) => (BackgroundSyncError err, BackgroundSyncState final_status);
 };
 
 interface BackgroundSyncServiceClient {

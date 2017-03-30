@@ -42,27 +42,29 @@ enum UserAbortType {
   // without committing, either without error or with net::ERR_ABORTED.
   ABORT_OTHER,
 
+  // The load aborted due to another navigation, but it isn't clear what type of
+  // navigation it was.
+  ABORT_UNKNOWN_NAVIGATION,
+
   // Add values before this final count.
   ABORT_LAST_ENTRY
 };
 
 struct PageLoadExtraInfo {
-  PageLoadExtraInfo(const base::TimeDelta& first_background_time,
-                    const base::TimeDelta& first_foreground_time,
+  PageLoadExtraInfo(base::TimeDelta first_background_time,
+                    base::TimeDelta first_foreground_time,
                     bool started_in_foreground,
                     const GURL& committed_url,
-                    const base::TimeDelta& time_to_commit,
+                    base::TimeDelta time_to_commit,
                     UserAbortType abort_type,
-                    const base::TimeDelta& time_to_abort);
+                    base::TimeDelta time_to_abort);
 
-  // Returns the time to first background if the page load started in the
-  // foreground. If the page has not been backgrounded, or the page started in
-  // the background, this will be base::TimeDelta().
+  // The first time that the page was backgrounded since the navigation started.
+  // If the page has not been backgrounded this will be base::TimeDelta().
   const base::TimeDelta first_background_time;
 
-  // Returns the time to first foreground if the page load started in the
-  // background. If the page has not been foregrounded, or the page started in
-  // the foreground, this will be base::TimeDelta().
+  // The first time that the page was foregrounded since the navigation started.
+  // If the page has not been foregrounded this will be base::TimeDelta().
   const base::TimeDelta first_foreground_time;
 
   // True if the page load started in the foreground.
@@ -103,7 +105,14 @@ class PageLoadMetricsObserver {
   // first data for the request. The navigation handle holds relevant data for
   // the navigation, but will be destroyed soon after this call. Don't hold a
   // reference to it.
+  // Note that this does not get called for same page navigations.
   virtual void OnCommit(content::NavigationHandle* navigation_handle) {}
+
+  // OnFailedProvisionalLoad is triggered when a provisional load failed and did
+  // not commit. Note that provisional loads that result in downloads or 204s
+  // are aborted by the system, and thus considered failed provisional loads.
+  virtual void OnFailedProvisionalLoad(
+      content::NavigationHandle* navigation_handle) {}
 
   // OnComplete is triggered when we are ready to record metrics for this page
   // load. This will happen some time after commit. The PageLoadTiming struct

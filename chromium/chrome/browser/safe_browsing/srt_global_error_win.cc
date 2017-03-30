@@ -9,7 +9,6 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
-#include "base/prefs/pref_service.h"
 #include "base/process/launch.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
@@ -20,6 +19,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/global_error/global_error_service.h"
 #include "components/component_updater/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "grit/chromium_strings.h"
 #include "grit/generated_resources.h"
@@ -198,8 +198,7 @@ void SRTGlobalError::MaybeExecuteSRT() {
 void SRTGlobalError::FallbackToDownloadPage() {
   RecordSRTPromptHistogram(SRT_PROMPT_FALLBACK);
 
-  chrome::HostDesktopType desktop_type = chrome::GetActiveDesktop();
-  Browser* browser = chrome::FindLastActiveWithHostDesktopType(desktop_type);
+  Browser* browser = chrome::FindLastActive();
   if (browser) {
     browser->OpenURL(content::OpenURLParams(
         GURL(kSRTDownloadURL), content::Referrer(), NEW_FOREGROUND_TAB,

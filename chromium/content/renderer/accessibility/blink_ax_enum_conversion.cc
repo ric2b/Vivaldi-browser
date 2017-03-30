@@ -24,9 +24,6 @@ uint32_t AXStateFromBlink(const blink::WebAXObject& o) {
   if (o.canSetFocusAttribute())
     state |= (1 << ui::AX_STATE_FOCUSABLE);
 
-  if (o.isFocused())
-    state |= (1 << ui::AX_STATE_FOCUSED);
-
   if (o.role() == blink::WebAXRolePopUpButton ||
       o.ariaHasPopup())
     state |= (1 << ui::AX_STATE_HASPOPUP);
@@ -92,6 +89,8 @@ uint32_t AXStateFromBlink(const blink::WebAXObject& o) {
 
 ui::AXRole AXRoleFromBlink(blink::WebAXRole role) {
   switch (role) {
+    case blink::WebAXRoleAbbr:
+      return ui::AX_ROLE_ABBR;
     case blink::WebAXRoleAlert:
       return ui::AX_ROLE_ALERT;
     case blink::WebAXRoleAlertDialog:
@@ -355,6 +354,8 @@ ui::AXEvent AXEventFromBlink(blink::WebAXEvent event) {
       return ui::AX_EVENT_CHECKED_STATE_CHANGED;
     case blink::WebAXEventChildrenChanged:
       return ui::AX_EVENT_CHILDREN_CHANGED;
+    case blink::WebAXEventClicked:
+      return ui::AX_EVENT_CLICKED;
     case blink::WebAXEventDocumentSelectionChanged:
       return ui::AX_EVENT_DOCUMENT_SELECTION_CHANGED;
     case blink::WebAXEventFocus:

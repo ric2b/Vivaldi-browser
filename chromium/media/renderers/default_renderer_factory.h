@@ -7,22 +7,29 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/scoped_vector.h"
 #include "media/base/media_export.h"
 #include "media/base/renderer_factory.h"
 
 namespace media {
 
+class AudioDecoder;
 class AudioHardwareConfig;
 class AudioRendererSink;
+class DecoderFactory;
 class GpuVideoAcceleratorFactories;
 class MediaLog;
+class VideoDecoder;
 class VideoRendererSink;
 
 // The default factory class for creating RendererImpl.
 class MEDIA_EXPORT DefaultRendererFactory : public RendererFactory {
  public:
+  using GetGpuFactoriesCB = base::Callback<GpuVideoAcceleratorFactories*()>;
+
   DefaultRendererFactory(const scoped_refptr<MediaLog>& media_log,
-                         GpuVideoAcceleratorFactories* gpu_factories,
+                         DecoderFactory* decoder_factory,
+                         const GetGpuFactoriesCB& get_gpu_factories_cb,
                          const AudioHardwareConfig& audio_hardware_config);
   ~DefaultRendererFactory() final;
 
@@ -31,14 +38,28 @@ class MEDIA_EXPORT DefaultRendererFactory : public RendererFactory {
       const scoped_refptr<base::TaskRunner>& worker_task_runner,
       AudioRendererSink* audio_renderer_sink,
       VideoRendererSink* video_renderer_sink,
+      const RequestSurfaceCB& request_surface_cb,
       bool use_platform_media_pipeline,
       bool platform_pipeline_enlarges_buffers_on_underflow) final;
 
  private:
+  ScopedVector<AudioDecoder> CreateAudioDecoders(
+      const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+      bool use_platform_media_pipeline);
+  ScopedVector<VideoDecoder> CreateVideoDecoders(
+      const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+      const RequestSurfaceCB& request_surface_cb,
+      GpuVideoAcceleratorFactories* gpu_factories,
+      bool use_platform_media_pipeline);
+
   scoped_refptr<MediaLog> media_log_;
 
-  // Factories for supporting video accelerators. May be null.
-  GpuVideoAcceleratorFactories* gpu_factories_;
+  // Factory to create extra audio and video decoders.
+  // Could be nullptr if not extra decoders are available.
+  DecoderFactory* decoder_factory_;
+
+  // Creates factories for supporting video accelerators. May be null.
+  GetGpuFactoriesCB get_gpu_factories_cb_;
 
   const AudioHardwareConfig& audio_hardware_config_;
 

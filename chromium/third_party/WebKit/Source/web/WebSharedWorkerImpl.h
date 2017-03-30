@@ -86,9 +86,9 @@ public:
     void willDestroyWorkerGlobalScope() override { }
 
     // WebFrameClient methods to support resource loading thru the 'shadow page'.
-    WebApplicationCacheHost* createApplicationCacheHost(WebLocalFrame*, WebApplicationCacheHostClient*) override;
+    WebApplicationCacheHost* createApplicationCacheHost(WebApplicationCacheHostClient*) override;
     void willSendRequest(WebLocalFrame*, unsigned identifier, WebURLRequest&, const WebURLResponse& redirectResponse) override;
-    void didFinishDocumentLoad(WebLocalFrame*, bool documentIsEmpty) override;
+    void didFinishDocumentLoad(WebLocalFrame*) override;
     bool isControlledByServiceWorker(WebDataSource&) override;
     int64_t serviceWorkerID(WebDataSource&) override;
 

@@ -44,6 +44,8 @@ struct CrxUpdateItem;
 
 // Builds a protocol request string by creating the outer envelope for
 // the request and including the request body specified as a parameter.
+// If present, the |download_preference| specifies a group policy that
+// affects the list of download URLs returned in the update response.
 // If specified, |additional_attributes| are appended as attributes of the
 // request element. The additional attributes have to be well-formed for
 // insertion in the request element.
@@ -51,6 +53,7 @@ std::string BuildProtocolRequest(const std::string& browser_version,
                                  const std::string& channel,
                                  const std::string& lang,
                                  const std::string& os_long_name,
+                                 const std::string& download_preference,
                                  const std::string& request_body,
                                  const std::string& additional_attributes);
 
@@ -86,6 +89,11 @@ bool DeleteFileAndEmptyParentDirectory(const base::FilePath& filepath);
 // Returns the component id of the |component|. The component id is in a
 // format similar with the format of an extension id.
 std::string GetCrxComponentID(const CrxComponent& component);
+
+// Returns true if the actual SHA-256 hash of the |filepath| matches the
+// |expected_hash|.
+bool VerifyFileHash256(const base::FilePath& filepath,
+                       const std::string& expected_hash);
 
 }  // namespace update_client
 

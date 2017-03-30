@@ -15,20 +15,19 @@ namespace blink {
 
 class ResolvedVariableChecker : public InterpolationType::ConversionChecker {
 public:
-    static PassOwnPtr<ResolvedVariableChecker> create(const InterpolationType& type, CSSPropertyID property, PassRefPtrWillBeRawPtr<CSSVariableReferenceValue> variableReference, PassRefPtrWillBeRawPtr<CSSValue> resolvedValue)
+    static PassOwnPtr<ResolvedVariableChecker> create(CSSPropertyID property, PassRefPtrWillBeRawPtr<CSSVariableReferenceValue> variableReference, PassRefPtrWillBeRawPtr<CSSValue> resolvedValue)
     {
-        return adoptPtr(new ResolvedVariableChecker(type, property, variableReference, resolvedValue));
+        return adoptPtr(new ResolvedVariableChecker(property, variableReference, resolvedValue));
     }
 
 private:
-    ResolvedVariableChecker(const InterpolationType& type, CSSPropertyID property, PassRefPtrWillBeRawPtr<CSSVariableReferenceValue> variableReference, PassRefPtrWillBeRawPtr<CSSValue> resolvedValue)
-        : ConversionChecker(type)
-        , m_property(property)
+    ResolvedVariableChecker(CSSPropertyID property, PassRefPtrWillBeRawPtr<CSSVariableReferenceValue> variableReference, PassRefPtrWillBeRawPtr<CSSValue> resolvedValue)
+        : m_property(property)
         , m_variableReference(variableReference)
         , m_resolvedValue(resolvedValue)
     { }
 
-    bool isValid(const InterpolationEnvironment& environment, const UnderlyingValue&) const final
+    bool isValid(const InterpolationEnvironment& environment, const InterpolationValue& underlying) const final
     {
         // TODO(alancutter): Just check the variables referenced instead of doing a full CSSValue resolve.
         RefPtrWillBeRawPtr<CSSValue> resolvedValue = CSSVariableResolver::resolveVariableReferences(environment.state().style()->variables(), m_property, *m_variableReference);
@@ -40,17 +39,17 @@ private:
     RefPtrWillBePersistent<CSSValue> m_resolvedValue;
 };
 
-PassOwnPtr<InterpolationValue> CSSInterpolationType::maybeConvertSingle(const PropertySpecificKeyframe& keyframe, const InterpolationEnvironment& environment, const UnderlyingValue& underlyingValue, ConversionCheckers& conversionCheckers) const
+InterpolationValue CSSInterpolationType::maybeConvertSingle(const PropertySpecificKeyframe& keyframe, const InterpolationEnvironment& environment, const InterpolationValue& underlying, ConversionCheckers& conversionCheckers) const
 {
     RefPtrWillBeRawPtr<CSSValue> resolvedCSSValueOwner;
     const CSSValue* value = toCSSPropertySpecificKeyframe(keyframe).value();
 
     if (!value)
-        return maybeConvertNeutral(underlyingValue, conversionCheckers);
+        return maybeConvertNeutral(underlying, conversionCheckers);
 
     if (value->isVariableReferenceValue() && !isShorthandProperty(cssProperty())) {
         resolvedCSSValueOwner = CSSVariableResolver::resolveVariableReferences(environment.state().style()->variables(), cssProperty(), toCSSVariableReferenceValue(*value));
-        conversionCheckers.append(ResolvedVariableChecker::create(*this, cssProperty(), toCSSVariableReferenceValue(const_cast<CSSValue*>(value)), resolvedCSSValueOwner));
+        conversionCheckers.append(ResolvedVariableChecker::create(cssProperty(), toCSSVariableReferenceValue(const_cast<CSSValue*>(value)), resolvedCSSValueOwner));
         value = resolvedCSSValueOwner.get();
     }
 

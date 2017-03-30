@@ -7,10 +7,10 @@
 #include <ostream>
 
 #include "base/metrics/field_trial.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/testing_pref_service.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/testing_pref_service.h"
 #include "components/sync_driver/fake_sync_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -47,8 +47,8 @@ std::ostream& operator<<(std::ostream& os,
     case SmartLockBranding::FULL:
       os << "FULL, ";
       break;
-    case SmartLockBranding::SAVE_BUBBLE_ONLY:
-      os << "SAVE_BUBBLE_ONLY, ";
+    case SmartLockBranding::SAVE_PROMPT_ONLY:
+      os << "SAVE_PROMPT_ONLY, ";
       break;
   }
   os << (testcase.expected_user_type == UserType::SMARTLOCK ? "SMARTLOCK}"
@@ -72,7 +72,7 @@ class TestSyncService : public sync_driver::FakeSyncService {
   // FakeSyncService overrides.
   bool IsSyncAllowed() const override { return true; }
 
-  bool HasSyncSetupCompleted() const override { return true; }
+  bool IsFirstSetupComplete() const override { return true; }
 
   bool IsSyncActive() const override { return true; }
 
@@ -202,14 +202,14 @@ TEST_F(PasswordManagerPasswordBubbleExperimentTest,
 }
 
 TEST_F(PasswordManagerPasswordBubbleExperimentTest,
-       IsSmartLockBrandingEnabledTest_SAVE_BUBBLE_ONLY) {
+       IsSmartLockBrandingEnabledTest_SAVE_PROMPT_ONLY) {
   const IsSmartLockBrandingEnabledTestcase kTestData[] = {
       {CustomPassphraseState::SET, syncer::PASSWORDS, SmartLockBranding::NONE,
        UserType::NOT_SMARTLOCK},
       {CustomPassphraseState::SET, syncer::BOOKMARKS, SmartLockBranding::NONE,
        UserType::NOT_SMARTLOCK},
       {CustomPassphraseState::NONE, syncer::PASSWORDS,
-       SmartLockBranding::SAVE_BUBBLE_ONLY, UserType::SMARTLOCK},
+       SmartLockBranding::SAVE_PROMPT_ONLY, UserType::SMARTLOCK},
       {CustomPassphraseState::NONE, syncer::BOOKMARKS, SmartLockBranding::NONE,
        UserType::NOT_SMARTLOCK},
   };

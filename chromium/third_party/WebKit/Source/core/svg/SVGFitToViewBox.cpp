@@ -49,10 +49,10 @@ protected:
 
 SVGParsingError SVGAnimatedViewBoxRect::setBaseValueAsString(const String& value)
 {
-    SVGParsingError parseStatus = baseValue()->setValueAsString(value);
+    SVGParsingError parseStatus = SVGAnimatedRect::setBaseValueAsString(value);
 
-    if (parseStatus == NoError && (baseValue()->width() < 0 || baseValue()->height() < 0)) {
-        parseStatus = NegativeValueForbiddenError;
+    if (parseStatus == SVGParseStatus::NoError && (baseValue()->width() < 0 || baseValue()->height() < 0)) {
+        parseStatus = SVGParseStatus::NegativeValue;
         baseValue()->setInvalid();
     }
     return parseStatus;
@@ -94,4 +94,4 @@ void SVGFitToViewBox::updateViewBox(const FloatRect& rect)
     m_viewBox->baseValue()->setValue(rect);
 }
 
-}
+} // namespace blink

@@ -25,8 +25,6 @@
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_member.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
@@ -37,7 +35,6 @@
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/ui/accessibility_focus_ring_controller.h"
@@ -56,6 +53,8 @@
 #include "chrome/grit/browser_resources.h"
 #include "chromeos/audio/chromeos_sounds.h"
 #include "chromeos/login/login_state.h"
+#include "components/prefs/pref_member.h"
+#include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/browser_thread.h"
@@ -68,6 +67,7 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_api_frame_id_map.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/file_reader.h"
@@ -128,20 +128,21 @@ void ExecuteScriptHelper(
     return;
   if (!extensions::TabHelper::FromWebContents(web_contents))
     extensions::TabHelper::CreateForWebContents(web_contents);
-  extensions::TabHelper::FromWebContents(web_contents)->script_executor()->
-      ExecuteScript(HostID(HostID::EXTENSIONS, extension_id),
-                    extensions::ScriptExecutor::JAVASCRIPT,
-                    code,
-                    extensions::ScriptExecutor::ALL_FRAMES,
-                    extensions::ScriptExecutor::DONT_MATCH_ABOUT_BLANK,
-                    extensions::UserScript::DOCUMENT_IDLE,
-                    extensions::ScriptExecutor::ISOLATED_WORLD,
-                    extensions::ScriptExecutor::DEFAULT_PROCESS,
-                    GURL(),  // No webview src.
-                    GURL(),  // No file url.
-                    false,  // Not user gesture.
-                    extensions::ScriptExecutor::NO_RESULT,
-                    extensions::ScriptExecutor::ExecuteScriptCallback());
+  extensions::TabHelper::FromWebContents(web_contents)
+      ->script_executor()
+      ->ExecuteScript(HostID(HostID::EXTENSIONS, extension_id),
+                      extensions::ScriptExecutor::JAVASCRIPT, code,
+                      extensions::ScriptExecutor::INCLUDE_SUB_FRAMES,
+                      extensions::ExtensionApiFrameIdMap::kTopFrameId,
+                      extensions::ScriptExecutor::DONT_MATCH_ABOUT_BLANK,
+                      extensions::UserScript::DOCUMENT_IDLE,
+                      extensions::ScriptExecutor::ISOLATED_WORLD,
+                      extensions::ScriptExecutor::DEFAULT_PROCESS,
+                      GURL(),  // No webview src.
+                      GURL(),  // No file url.
+                      false,   // Not user gesture.
+                      extensions::ScriptExecutor::NO_RESULT,
+                      extensions::ScriptExecutor::ExecuteScriptCallback());
 }
 
 // Helper class that directly loads an extension's content scripts into
@@ -637,7 +638,7 @@ void AccessibilityManager::LoadChromeVoxToUserScreen(
   content::WebUI* login_web_ui = NULL;
 
   if (ProfileHelper::IsSigninProfile(profile_)) {
-    LoginDisplayHost* login_display_host = LoginDisplayHostImpl::default_host();
+    LoginDisplayHost* login_display_host = LoginDisplayHost::default_host();
     if (login_display_host) {
       WebUILoginView* web_ui_login_view =
           login_display_host->GetWebUILoginView();

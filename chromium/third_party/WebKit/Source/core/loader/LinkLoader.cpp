@@ -45,6 +45,7 @@
 #include "core/loader/LinkHeader.h"
 #include "core/loader/NetworkHintsInterface.h"
 #include "core/loader/PrerenderHandle.h"
+#include "platform/MIMETypeRegistry.h"
 #include "platform/Prerender.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/network/NetworkHints.h"
@@ -90,15 +91,19 @@ void LinkLoader::linkLoadingErrorTimerFired(Timer<LinkLoader>* timer)
     m_client->linkLoadingErrored();
 }
 
-void LinkLoader::notifyFinished(Resource* resource)
+void LinkLoader::triggerEvents(const Resource* resource)
 {
-    ASSERT(this->resource() == resource);
-
     if (resource->errorOccurred())
         m_linkLoadingErrorTimer.startOneShot(0, BLINK_FROM_HERE);
     else
         m_linkLoadTimer.startOneShot(0, BLINK_FROM_HERE);
+}
 
+void LinkLoader::notifyFinished(Resource* resource)
+{
+    ASSERT(this->resource() == resource);
+
+    triggerEvents(resource);
     clearResource();
 }
 
@@ -164,54 +169,124 @@ static void preconnectIfNeeded(const LinkRelAttribute& relAttribute, const KURL&
     }
 }
 
-Resource::Type LinkLoader::getTypeFromAsAttribute(const String& as, Document* document)
+bool LinkLoader::getResourceTypeFromAsAttribute(const String& as, Resource::Type& type)
 {
-    if (equalIgnoringCase(as, "image"))
-        return Resource::Image;
-    if (equalIgnoringCase(as, "script"))
-        return Resource::Script;
-    if (equalIgnoringCase(as, "style"))
-        return Resource::CSSStyleSheet;
-    if (equalIgnoringCase(as, "audio") || equalIgnoringCase(as, "video"))
-        return Resource::Media;
-    if (equalIgnoringCase(as, "font"))
-        return Resource::Font;
-    if (equalIgnoringCase(as, "track"))
-        return Resource::TextTrack;
-    if (document && !as.isEmpty())
-        document->addConsoleMessage(ConsoleMessage::create(OtherMessageSource, WarningMessageLevel, String("<link rel=preload> must have a valid `as` value")));
-    // TODO(yoav): Is this correct? If as is missing or invalid, it should be subject to "connect-src" CSP directives.
-    return Resource::LinkSubresource;
+    if (equalIgnoringCase(as, "image")) {
+        type = Resource::Image;
+    } else if (equalIgnoringCase(as, "script")) {
+        type = Resource::Script;
+    } else if (equalIgnoringCase(as, "style")) {
+        type = Resource::CSSStyleSheet;
+    } else if (equalIgnoringCase(as, "audio") || equalIgnoringCase(as, "video")) {
+        type = Resource::Media;
+    } else if (equalIgnoringCase(as, "font")) {
+        type = Resource::Font;
+    } else if (equalIgnoringCase(as, "track")) {
+        type = Resource::TextTrack;
+    } else {
+        type = Resource::LinkPreload;
+        if (!as.isEmpty())
+            return false;
+    }
+    return true;
 }
 
-static void preloadIfNeeded(const LinkRelAttribute& relAttribute, const KURL& href, Document& document, const String& as)
+void LinkLoader::createLinkPreloadResourceClient(Resource* resource)
 {
-    if (!document.loader())
+    if (!resource)
         return;
-
-    if (relAttribute.isLinkPreload()) {
-        UseCounter::count(document, UseCounter::LinkRelPreload);
-        ASSERT(RuntimeEnabledFeatures::linkPreloadEnabled());
-        if (!href.isValid() || href.isEmpty()) {
-            document.addConsoleMessage(ConsoleMessage::create(OtherMessageSource, WarningMessageLevel, String("<link rel=preload> has an invalid `href` value")));
-            return;
-        }
-        Resource::Type type = LinkLoader::getTypeFromAsAttribute(as, &document);
-        ResourceRequest resourceRequest(document.completeURL(href));
-        ResourceFetcher::determineRequestContext(resourceRequest, type, false);
-        FetchRequest linkRequest(resourceRequest, FetchInitiatorTypeNames::link);
-
-        linkRequest.setPriority(document.fetcher()->loadPriority(type, linkRequest));
-        Settings* settings = document.settings();
-        if (settings && settings->logPreload())
-            document.addConsoleMessage(ConsoleMessage::create(OtherMessageSource, DebugMessageLevel, String("Preload triggered for " + href.host() + href.path())));
-        linkRequest.setForPreload(true);
-        linkRequest.setAvoidBlockingOnLoad(true);
-        document.loader()->startPreload(type, linkRequest);
+    switch (resource->getType()) {
+    case Resource::Image:
+        m_linkPreloadResourceClient = LinkPreloadImageResourceClient::create(this, toImageResource(resource));
+        break;
+    case Resource::Script:
+        m_linkPreloadResourceClient = LinkPreloadScriptResourceClient::create(this, toScriptResource(resource));
+        break;
+    case Resource::CSSStyleSheet:
+        m_linkPreloadResourceClient = LinkPreloadStyleResourceClient::create(this, toCSSStyleSheetResource(resource));
+        break;
+    case Resource::Font:
+        m_linkPreloadResourceClient = LinkPreloadFontResourceClient::create(this, toFontResource(resource));
+        break;
+    case Resource::Media:
+    case Resource::TextTrack:
+    case Resource::Raw:
+    case Resource::LinkPreload:
+        m_linkPreloadResourceClient = LinkPreloadRawResourceClient::create(this, toRawResource(resource));
+        break;
+    default:
+        ASSERT_NOT_REACHED();
     }
 }
 
-bool LinkLoader::loadLinkFromHeader(const String& headerValue, Document* document, const NetworkHintsInterface& networkHintsInterface, CanLoadResources canLoadResources)
+static bool isSupportedType(Resource::Type resourceType, const String& mimeType)
+{
+    if (mimeType.isEmpty())
+        return true;
+    switch (resourceType) {
+    case Resource::Image:
+        return MIMETypeRegistry::isSupportedImagePrefixedMIMEType(mimeType);
+    case Resource::Script:
+        return MIMETypeRegistry::isSupportedJavaScriptMIMEType(mimeType);
+    case Resource::CSSStyleSheet:
+        return MIMETypeRegistry::isSupportedStyleSheetMIMEType(mimeType);
+    case Resource::Font:
+        return MIMETypeRegistry::isSupportedFontMIMEType(mimeType);
+    case Resource::Media:
+        return MIMETypeRegistry::isSupportedMediaSourceMIMEType(mimeType, String());
+    case Resource::TextTrack:
+        return MIMETypeRegistry::isSupportedTextTrackMIMEType(mimeType);
+    case Resource::Raw:
+    case Resource::LinkPreload:
+        return true;
+    default:
+        ASSERT_NOT_REACHED();
+    }
+    return false;
+}
+
+static Resource* preloadIfNeeded(const LinkRelAttribute& relAttribute, const KURL& href, Document& document, const String& as, const String& mimeType,
+    CrossOriginAttributeValue crossOrigin, LinkCaller caller, bool& errorOccurred)
+{
+    if (!document.loader() || !relAttribute.isLinkPreload())
+        return nullptr;
+
+    UseCounter::count(document, UseCounter::LinkRelPreload);
+    ASSERT(RuntimeEnabledFeatures::linkPreloadEnabled());
+    if (!href.isValid() || href.isEmpty()) {
+        document.addConsoleMessage(ConsoleMessage::create(OtherMessageSource, WarningMessageLevel, String("<link rel=preload> has an invalid `href` value")));
+        return nullptr;
+    }
+
+    if (caller == LinkCalledFromHeader)
+        UseCounter::count(document, UseCounter::LinkHeaderPreload);
+    Resource::Type resourceType;
+    if (!LinkLoader::getResourceTypeFromAsAttribute(as, resourceType)) {
+        document.addConsoleMessage(ConsoleMessage::create(OtherMessageSource, WarningMessageLevel, String("<link rel=preload> must have a valid `as` value")));
+        errorOccurred = true;
+        return nullptr;
+    }
+
+    if (!isSupportedType(resourceType, mimeType)) {
+        document.addConsoleMessage(ConsoleMessage::create(OtherMessageSource, WarningMessageLevel, String("<link rel=preload> has an unsupported `type` value")));
+        return nullptr;
+    }
+    ResourceRequest resourceRequest(document.completeURL(href));
+    ResourceFetcher::determineRequestContext(resourceRequest, resourceType, false);
+    FetchRequest linkRequest(resourceRequest, FetchInitiatorTypeNames::link);
+
+    linkRequest.setPriority(document.fetcher()->loadPriority(resourceType, linkRequest));
+    if (crossOrigin != CrossOriginAttributeNotSet)
+        linkRequest.setCrossOriginAccessControl(document.securityOrigin(), crossOrigin);
+    Settings* settings = document.settings();
+    if (settings && settings->logPreload())
+        document.addConsoleMessage(ConsoleMessage::create(OtherMessageSource, DebugMessageLevel, String("Preload triggered for " + href.host() + href.path())));
+    linkRequest.setForPreload(true);
+    linkRequest.setLinkPreload(true);
+    return document.loader()->startPreload(resourceType, linkRequest);
+}
+
+bool LinkLoader::loadLinkFromHeader(const String& headerValue, const KURL& baseURL, Document* document, const NetworkHintsInterface& networkHintsInterface, CanLoadResources canLoadResources)
 {
     if (!document)
         return false;
@@ -221,16 +296,18 @@ bool LinkLoader::loadLinkFromHeader(const String& headerValue, Document* documen
             return false;
 
         LinkRelAttribute relAttribute(header.rel());
-        KURL url = document->completeURL(header.url());
-        if (canLoadResources == DoNotLoadResources) {
+        KURL url(baseURL, header.url());
+        if (canLoadResources != OnlyLoadResources) {
             if (RuntimeEnabledFeatures::linkHeaderEnabled())
                 dnsPrefetchIfNeeded(relAttribute, url, *document, networkHintsInterface, LinkCalledFromHeader);
 
             if (RuntimeEnabledFeatures::linkPreconnectEnabled())
                 preconnectIfNeeded(relAttribute, url, *document, header.crossOrigin(), networkHintsInterface, LinkCalledFromHeader);
-        } else {
+        }
+        if (canLoadResources != DoNotLoadResources) {
+            bool errorOccurred = false;
             if (RuntimeEnabledFeatures::linkPreloadEnabled())
-                preloadIfNeeded(relAttribute, url, *document, header.as());
+                preloadIfNeeded(relAttribute, url, *document, header.as(), header.mimeType(), header.crossOrigin(), LinkCalledFromHeader, errorOccurred);
         }
         // TODO(yoav): Add more supported headers as needed.
     }
@@ -242,30 +319,30 @@ bool LinkLoader::loadLink(const LinkRelAttribute& relAttribute, CrossOriginAttri
     // TODO(yoav): Do all links need to load only after they're in document???
 
     // TODO(yoav): Convert all uses of the CrossOriginAttribute to CrossOriginAttributeValue. crbug.com/486689
-    // FIXME(crbug.com/463266): We're ignoring type here. Maybe we shouldn't.
+    // FIXME(crbug.com/463266): We're ignoring type here, for everything but preload. Maybe we shouldn't.
     dnsPrefetchIfNeeded(relAttribute, href, document, networkHintsInterface, LinkCalledFromMarkup);
 
     preconnectIfNeeded(relAttribute, href, document, crossOrigin, networkHintsInterface, LinkCalledFromMarkup);
 
+    bool errorOccurred = false;
     if (m_client->shouldLoadLink())
-        preloadIfNeeded(relAttribute, href, document, as);
+        createLinkPreloadResourceClient(preloadIfNeeded(relAttribute, href, document, as, type, crossOrigin, LinkCalledFromMarkup, errorOccurred));
+    if (errorOccurred)
+        m_linkLoadingErrorTimer.startOneShot(0, BLINK_FROM_HERE);
+
+    if (href.isEmpty() || !href.isValid())
+        released();
 
     // FIXME(crbug.com/323096): Should take care of import.
-    if ((relAttribute.isLinkPrefetch() || relAttribute.isLinkSubresource()) && href.isValid() && document.frame()) {
+    if (relAttribute.isLinkPrefetch() && href.isValid() && document.frame()) {
         if (!m_client->shouldLoadLink())
             return false;
-        Resource::Type type = Resource::LinkPrefetch;
-        if (relAttribute.isLinkSubresource()) {
-            type = Resource::LinkSubresource;
-            UseCounter::count(document, UseCounter::LinkRelSubresource);
-        } else {
-            UseCounter::count(document, UseCounter::LinkRelPrefetch);
-        }
+        UseCounter::count(document, UseCounter::LinkRelPrefetch);
 
         FetchRequest linkRequest(ResourceRequest(document.completeURL(href)), FetchInitiatorTypeNames::link);
         if (crossOrigin != CrossOriginAttributeNotSet)
             linkRequest.setCrossOriginAccessControl(document.securityOrigin(), crossOrigin);
-        setResource(LinkFetchResource::fetch(type, linkRequest, document.fetcher()));
+        setResource(LinkFetchResource::fetch(Resource::LinkPrefetch, linkRequest, document.fetcher()));
     }
 
     if (const unsigned prerenderRelTypes = prerenderRelTypesFromRelAttribute(relAttribute, document)) {
@@ -291,11 +368,16 @@ void LinkLoader::released()
         m_prerender->cancel();
         m_prerender.clear();
     }
+    if (m_linkPreloadResourceClient)
+        m_linkPreloadResourceClient->clear();
 }
 
 DEFINE_TRACE(LinkLoader)
 {
+    visitor->trace(m_client);
     visitor->trace(m_prerender);
+    visitor->trace(m_linkPreloadResourceClient);
+    ResourceOwner<Resource, ResourceClient>::trace(visitor);
 }
 
-}
+} // namespace blink

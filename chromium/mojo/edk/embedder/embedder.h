@@ -10,8 +10,10 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/command_line.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/memory/shared_memory_handle.h"
 #include "base/process/process_handle.h"
 #include "base/task_runner.h"
 #include "mojo/edk/embedder/scoped_platform_handle.h"
@@ -31,12 +33,6 @@ class ProcessDelegate;
 
 // Allows changing the default max message size. Must be called before Init.
 MOJO_SYSTEM_IMPL_EXPORT void SetMaxMessageSize(size_t bytes);
-
-// Must be called before Init in the parent (unsandboxed) process.
-MOJO_SYSTEM_IMPL_EXPORT void PreInitializeParentProcess();
-
-// Must be called before Init in the child (sandboxed) process.
-MOJO_SYSTEM_IMPL_EXPORT void PreInitializeChildProcess();
 
 // Called in the parent process for each child process that is launched. The
 // returned handle must be sent to the child process which then calls
@@ -85,41 +81,84 @@ MOJO_SYSTEM_IMPL_EXPORT MojoResult
 PassWrappedPlatformHandle(MojoHandle platform_handle_wrapper_handle,
                           ScopedPlatformHandle* platform_handle);
 
+// Creates a |MojoHandle| that wraps the given |SharedMemoryHandle| (taking
+// ownership of it). |num_bytes| is the size of the shared memory object, and
+// |read_only| is whether the handle is a read-only handle to shared memory.
+// This |MojoHandle| is a Mojo shared buffer and can be manipulated using the
+// shared buffer functions and transferred over a message pipe.
+// TODO(crbug.com/556587): Support read-only handles. Currently, |read_only|
+// must be false.
+MOJO_SYSTEM_IMPL_EXPORT MojoResult
+CreateSharedBufferWrapper(base::SharedMemoryHandle shared_memory_handle,
+                          size_t num_bytes,
+                          bool read_only,
+                          MojoHandle* mojo_wrapper_handle);
+
+// Retrieves the underlying |SharedMemoryHandle| from a shared buffer
+// |MojoHandle| and closes the handle. If successful, |num_bytes| will contain
+// the size of the shared memory buffer and |read_only| will contain whether the
+// buffer handle is read-only. Both |num_bytes| and |read_only| may be null.
+// Note: The value of |shared_memory_handle| may be
+// base::SharedMemory::NULLHandle(), even if this function returns success.
+// Callers should perform appropriate checks.
+// TODO(crbug.com/556587): Support read-only handles. Currently, |read_only|
+// will always return |false|.
+MOJO_SYSTEM_IMPL_EXPORT MojoResult
+PassSharedMemoryHandle(MojoHandle mojo_handle,
+                       base::SharedMemoryHandle* shared_memory_handle,
+                       size_t* num_bytes,
+                       bool* read_only);
+
 // Initialialization/shutdown for interprocess communication (IPC) -------------
 
 // |InitIPCSupport()| sets up the subsystem for interprocess communication,
 // making the IPC functions (in the following section) available and functional.
 // (This may only be done after |Init()|.)
 //
-// This subsystem may be shut down, using |ShutdownIPCSupportOnIOThread()| or
-// |ShutdownIPCSupport()|. None of the IPC functions may be called while or
-// after either of these is called.
+// This subsystem may be shut down using |ShutdownIPCSupport()|. None of the IPC
+// functions may be called after this is called.
 
 // Initializes a process of the given type; to be called after |Init()|.
 //   - |process_delegate| must be a process delegate of the appropriate type
 //     corresponding to |process_type|; its methods will be called on the same
 //     thread as Shutdown.
 //   - |process_delegate|, and |io_thread_task_runner| should live at least
-//     until |ShutdownIPCSupport()|'s callback has been run or
-//     |ShutdownIPCSupportOnIOThread()| has completed.
+//     until |ShutdownIPCSupport()|'s callback has been run.
 MOJO_SYSTEM_IMPL_EXPORT void InitIPCSupport(
     ProcessDelegate* process_delegate,
     scoped_refptr<base::TaskRunner> io_thread_task_runner);
 
-// Shuts down the subsystem initialized by |InitIPCSupport()|. This must be
-// called on the I/O thread (given to |InitIPCSupport()|). This completes
-// synchronously and does not result in a call to the process delegate's
-// |OnShutdownComplete()|.
-MOJO_SYSTEM_IMPL_EXPORT void ShutdownIPCSupportOnIOThread();
-
-// Like |ShutdownIPCSupportOnIOThread()|, but may be called from any thread,
-// signalling shutdown completion via the process delegate's
-// |OnShutdownComplete()|.
+// Shuts down the subsystem initialized by |InitIPCSupport()|. It be called from
+// any thread and will attempt to complete shutdown on the I/O thread with which
+// the system was initialized. Upon completion the ProcessDelegate's
+// |OnShutdownComplete()| method is invoked.
 MOJO_SYSTEM_IMPL_EXPORT void ShutdownIPCSupport();
 
-// Creates a message pipe from a platform handle. Safe to call from any thread.
+// Creates a message pipe over an arbitrary platform channel. The other end of
+// the channel must also be passed to this function. Either endpoint can be in
+// any process.
+//
+// Note that the channel is only used to negotiate pipe connection, not as the
+// transport for messages on the pipe.
 MOJO_SYSTEM_IMPL_EXPORT ScopedMessagePipeHandle
 CreateMessagePipe(ScopedPlatformHandle platform_handle);
+
+// Creates a message pipe from a token. A child embedder must also have this
+// token and call CreateChildMessagePipe() with it in order for the pipe to get
+// connected.
+MOJO_SYSTEM_IMPL_EXPORT ScopedMessagePipeHandle
+CreateParentMessagePipe(const std::string& token);
+
+// Creates a message pipe from a token in a child process. The parent must also
+// have this token and call CreateParentMessagePipe() with it in order for the
+// pipe to get connected.
+MOJO_SYSTEM_IMPL_EXPORT ScopedMessagePipeHandle
+CreateChildMessagePipe(const std::string& token);
+
+// Generates a random ASCII token string for use with CreateParentMessagePipe()
+// and CreateChildMessagePipe() above. The generated token is suitably random so
+// as to not have to worry about collisions with other generated tokens.
+MOJO_SYSTEM_IMPL_EXPORT std::string GenerateRandomToken();
 
 }  // namespace edk
 }  // namespace mojo

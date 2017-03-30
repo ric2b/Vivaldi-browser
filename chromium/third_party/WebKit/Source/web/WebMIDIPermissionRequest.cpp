@@ -28,7 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "public/web/WebMIDIPermissionRequest.h"
+#include "public/web/modules/webmidi/WebMIDIPermissionRequest.h"
 
 #include "modules/webmidi/MIDIAccessInitializer.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -63,7 +63,7 @@ WebSecurityOrigin WebMIDIPermissionRequest::securityOrigin() const
 
 void WebMIDIPermissionRequest::setIsAllowed(bool allowed)
 {
-    m_private->resolveSysexPermission(allowed);
+    m_private->resolvePermission(allowed);
 }
 
 } // namespace blink

@@ -104,7 +104,6 @@
 <translation id="457845228957001925">Información importante sobre tus datos de Chromium</translation>
 <translation id="459535195905078186">Aplicaciones de Chromium</translation>
 <translation id="4677944499843243528">Parece que otro proceso de Chromium (<ph name="PROCESS_ID" />) está utilizando el perfil en otra computadora (<ph name="HOST_NAME" />). Chromium bloqueó el perfil para que no se dañe. Si puedes confirmar que ningún otro proceso está utilizando este perfil, puedes desbloquearlo y volver a iniciar Chromium.</translation>
-<translation id="473775607612524610">Actualizar</translation>
 <translation id="4743926867934016338">Aceptar y buscar</translation>
 <translation id="4888717733111232871">Regla de entrada para que Chromium permita el tráfico mDNS.</translation>
 <translation id="4943838377383847465">Chromium está en modo de segundo plano</translation>
@@ -118,6 +117,7 @@
 <translation id="549669000822060376">Espera mientras Chromium instala las últimas actualizaciones del sistema.</translation>
 <translation id="5563479599352954471">Buscar con un toque</translation>
 <translation id="5620765574781326016">Obtén información sobre los temas en sitios web sin salir de la página.</translation>
+<translation id="5634636535844844681">Para usar Chromium, se requiere Windows 7 o versiones superiores.</translation>
 <translation id="5680901439334282664">acceder a Chromium</translation>
 <translation id="5772805321386874569">(Es necesario <ph name="BEGIN_BUTTON" />reiniciar<ph name="END_BUTTON" /> Chromium).</translation>
 <translation id="5796460469508169315">Chromium está casi listo.</translation>
@@ -126,7 +126,6 @@
 <translation id="5859963531214966875">Las futuras versiones de Chromium ya no serán compatibles con este sistema Linux.</translation>
 <translation id="5862307444128926510">Bienvenido a Chromium</translation>
 <translation id="5877064549588274448">Se cambió el canal. Reinicia el dispositivo para aplicar los cambios.</translation>
-<translation id="5909170354645388250">No se utiliza en Chromium. Marcador de posición para mantener los mapas de recursos sincronizados. Se espera un argumento: $1.</translation>
 <translation id="5942225298871134766">Chromium la almacenará con <ph name="SAVED_PASSWORD_LINK" /> y la recordará la próxima vez que la necesites.</translation>
 <translation id="5942520288919337908"><ph name="EXTENSION_NAME" /> se agregó a Chromium.</translation>
 <translation id="59625444380784159">Los detalles de tus contactos pueden ayudar a completar los formularios de forma más rápida en Chromium.</translation>
@@ -138,7 +137,6 @@
 <translation id="6334986366598267305">Ahora es más sencillo utilizar Chromium con la cuenta de Google y en computadoras compartidas.</translation>
 <translation id="6373523479360886564">¿Estás seguro de que deseas desinstalar Chromium?</translation>
 <translation id="6403826409255603130">Chromium es un navegador web que ejecuta páginas web y aplicaciones con la velocidad de la luz. Es rápido, estable y fácil de usar. Navega por la Web con seguridad y protección integrada contra software mailicioso y suplantación de identidad.</translation>
-<translation id="6424492062988593837">¡Chromium mejoró! Hay una nueva versión disponible.</translation>
 <translation id="6475912303565314141">También controla qué página se muestra al iniciar Chromium.</translation>
 <translation id="6485906693002546646">Estás utilizando <ph name="PROFILE_EMAIL" /> para sincronizar los datos de Chromium. Si quieres actualizar las preferencias de sincronización o utilizar Chromium sin una cuenta de Google, accede a <ph name="SETTINGS_LINK" />.</translation>
 <translation id="6510925080656968729">Desinstalar Chromium</translation>
@@ -203,7 +201,6 @@
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> Los autores de Chromium. Todos los derechos reservados.</translation>
 <translation id="8621669128220841554">La instalación falló debido a un error no especificado. Descarga Chromium otra vez.</translation>
 <translation id="8628626585870903697">Chromium no incluye el visor de PDF que se requiere para la vista previa de impresión.</translation>
-<translation id="8684913864886094367">Chromium no se cerró correctamente.</translation>
 <translation id="8697124171261953979">También controla qué página se muestra al iniciar Chromium o al realizar búsquedas desde el cuadro multifunción.</translation>
 <translation id="8704119203788522458">Este es tu Chromium</translation>
 <translation id="872034308864968620">Permitir que Chromium se ejecute en segundo plano</translation>
@@ -220,7 +217,6 @@
 
 Si accedes de todos modos, se fusionará la información de Chromium, como los marcadores, el historial y otros parámetros de configuración en <ph name="ACCOUNT_EMAIL_NEW" />.</translation>
 <translation id="9013087743919948559">Agregar a Chromium</translation>
-<translation id="9013262824292842194">Para usar Chromium Frame, se necesita Windows Vista o Windows XP con SP2 o superior.</translation>
 <translation id="9019929317751753759">Para que Chromium sea más seguro, inhabilitamos algunas extensiones que no aparecen en <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> y que posiblemente se hayan agregado sin tu conocimiento.</translation>
 <translation id="9022552996538154597">Iniciar sesión en Chromium</translation>
 <translation id="9036189287518468038">Selector de aplicaciones de Chromium</translation>

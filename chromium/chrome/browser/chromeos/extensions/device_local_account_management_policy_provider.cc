@@ -37,12 +37,17 @@ const char* const kPublicSessionWhitelist[] = {
     "gbchcmhmhahfdphkhkmpfmihenigjmpp",  // Chrome Remote Desktop
     "cjanmonomjogheabiocdamfpknlpdehm",  // HP printer driver
     "pmnllmkmjilbojkpgplbdmckghmaocjh",  // Scan app by François Beaufort
+    "khpfeaanjngmcnplbdlpegiifgpfgdco",  // SmartCard Manager App
+    "dojmlffgommefdofbfdajjpgjgjoffjo",  // Charismathics Smart Card Middleware
 
     // Libraries:
     "aclofikceldphonlfmghmimkodjdmhck",  // Ancoris login component
     "eilbnahdgoddoedakcmfkcgfoegeloil",  // Ancoris proxy component
     "ceehlgckkmkaoggdnjhibffkphfnphmg",  // Libdata login
     "fnhgfoccpcjdnjcobejogdnlnidceemb",  // OverDrive
+
+    // Education:
+    "cmeclblmdmffdgpdlifgepjddoplmmal",  //  Imagine Learning
 
     // Retail mode:
     "bjfeaefhaooblkndnoabbkkkenknkemb",  // 500 px demo

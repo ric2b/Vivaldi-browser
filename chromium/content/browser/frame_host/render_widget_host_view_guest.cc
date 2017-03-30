@@ -40,20 +40,6 @@
 
 namespace content {
 
-namespace {
-
-#if defined(USE_AURA)
-blink::WebGestureEvent CreateFlingCancelEvent(double time_stamp) {
-  blink::WebGestureEvent gesture_event;
-  gesture_event.timeStampSeconds = time_stamp;
-  gesture_event.type = blink::WebGestureEvent::GestureFlingCancel;
-  gesture_event.sourceDevice = blink::WebGestureDeviceTouchscreen;
-  return gesture_event;
-}
-#endif  // defined(USE_AURA)
-
-}  // namespace
-
 RenderWidgetHostViewGuest::RenderWidgetHostViewGuest(
     RenderWidgetHost* widget_host,
     BrowserPluginGuest* guest,
@@ -62,6 +48,8 @@ RenderWidgetHostViewGuest::RenderWidgetHostViewGuest(
       // |guest| is NULL during test.
       guest_(guest ? guest->AsWeakPtr() : base::WeakPtr<BrowserPluginGuest>()),
       platform_view_(platform_view) {
+  // Inputs for guest view are already scaled.
+  host_->set_scale_input_to_viewport(false);
 }
 
 RenderWidgetHostViewGuest::~RenderWidgetHostViewGuest() {
@@ -235,13 +223,6 @@ void RenderWidgetHostViewGuest::OnSwapCompositorFrame(
     uint32_t output_surface_id,
     scoped_ptr<cc::CompositorFrame> frame) {
   last_scroll_offset_ = frame->metadata.root_scroll_offset;
-  // When not using surfaces, the frame just gets proxied to
-  // the embedder's renderer to be composited.
-  if (!frame->delegated_frame_data || !use_surfaces_) {
-    guest_->SwapCompositorFrame(output_surface_id, host_->GetProcess()->GetID(),
-                                host_->GetRoutingID(), std::move(frame));
-    return;
-  }
 
   cc::RenderPass* root_pass =
       frame->delegated_frame_data->render_pass_list.back().get();
@@ -292,6 +273,9 @@ void RenderWidgetHostViewGuest::OnSwapCompositorFrame(
   DCHECK(ack_pending_count_ < 1000);
   surface_factory_->SubmitCompositorFrame(surface_id_, std::move(frame),
                                           ack_callback);
+
+  ProcessFrameSwappedCallbacks();
+
   // If after detaching we are sent a frame, we should finish processing it, and
   // then we should clear the surface so that we are not holding resources we
   // no longer need.
@@ -558,55 +542,10 @@ gfx::NativeViewId RenderWidgetHostViewGuest::GetParentForWindowlessPlugin()
 #endif
 
 void RenderWidgetHostViewGuest::DestroyGuestView() {
+  UnregisterSurfaceNamespaceId();
   host_->SetView(NULL);
   host_ = NULL;
   base::MessageLoop::current()->DeleteSoon(FROM_HERE, this);
-}
-
-bool RenderWidgetHostViewGuest::ForwardGestureEventToRenderer(
-    ui::GestureEvent* gesture) {
-#if defined(USE_AURA)
-  if (!host_)
-    return false;
-
-  if ((gesture->type() == ui::ET_GESTURE_PINCH_BEGIN ||
-      gesture->type() == ui::ET_GESTURE_PINCH_UPDATE ||
-      gesture->type() == ui::ET_GESTURE_PINCH_END) && !pinch_zoom_enabled_) {
-    return true;
-  }
-
-  blink::WebGestureEvent web_gesture =
-      MakeWebGestureEventFromUIEvent(*gesture);
-  const gfx::Point& client_point = gesture->location();
-  const gfx::Point& screen_point = gesture->location();
-
-  web_gesture.x = client_point.x();
-  web_gesture.y = client_point.y();
-  web_gesture.globalX = screen_point.x();
-  web_gesture.globalY = screen_point.y();
-
-  if (web_gesture.type == blink::WebGestureEvent::Undefined)
-    return false;
-  if (web_gesture.type == blink::WebGestureEvent::GestureTapDown) {
-    host_->ForwardGestureEvent(
-        CreateFlingCancelEvent(gesture->time_stamp().InSecondsF()));
-  }
-  host_->ForwardGestureEvent(web_gesture);
-  return true;
-#else
-  return false;
-#endif
-}
-
-void RenderWidgetHostViewGuest::ProcessGestures(
-    ui::GestureRecognizer::Gestures* gestures) {
-  if ((gestures == NULL) || gestures->empty())
-    return;
-  for (ui::GestureRecognizer::Gestures::iterator g_it = gestures->begin();
-      g_it != gestures->end();
-      ++g_it) {
-    ForwardGestureEventToRenderer(*g_it);
-  }
 }
 
 RenderWidgetHostViewBase*
@@ -638,7 +577,6 @@ void RenderWidgetHostViewGuest::GestureEventAck(
 void RenderWidgetHostViewGuest::OnHandleInputEvent(
     RenderWidgetHostImpl* embedder,
     int browser_plugin_instance_id,
-    const gfx::Rect& guest_window_rect,
     const blink::WebInputEvent* event) {
   if (blink::WebInputEvent::isMouseEventType(event->type)) {
     // The mouse events for BrowserPlugin are modified by all

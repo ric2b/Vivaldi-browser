@@ -435,7 +435,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_accFocus(VARIANT* focus_child) {
     return E_INVALIDARG;
 
   BrowserAccessibilityWin* focus = static_cast<BrowserAccessibilityWin*>(
-      manager()->GetFocus(this));
+      manager()->GetFocus());
   if (focus == this) {
     focus_child->vt = VT_I4;
     focus_child->lVal = CHILDID_SELF;
@@ -487,8 +487,16 @@ STDMETHODIMP BrowserAccessibilityWin::get_accName(VARIANT var_id, BSTR* name) {
     return E_INVALIDARG;
 
   base::string16 name_str = target->name();
-  if (name_str.empty())
-    return S_FALSE;
+  if (name_str.empty()) {
+    if (target->ia2_role() == ROLE_SYSTEM_DOCUMENT && GetParent()) {
+      // Hack: Some versions of JAWS crash if they get an empty name on
+      // a document that's the child of an iframe, so always return a
+      // nonempty string for this role.  https://crbug.com/583057
+      name_str = L" ";
+    } else {
+      return S_FALSE;
+    }
+  }
 
   *name = SysAllocString(name_str.c_str());
 
@@ -562,7 +570,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_accState(VARIANT var_id,
 
   state->vt = VT_I4;
   state->lVal = target->ia_state();
-  if (manager()->GetFocus(NULL) == this)
+  if (manager()->GetFocus() == this)
     state->lVal |= STATE_SYSTEM_FOCUSED;
 
   return S_OK;
@@ -669,7 +677,7 @@ STDMETHODIMP BrowserAccessibilityWin::accSelect(
     return E_FAIL;
 
   if (flags_sel & SELFLAG_TAKEFOCUS) {
-    manager()->SetFocus(this, true);
+    manager()->SetFocus(*this);
     return S_OK;
   }
 
@@ -3308,6 +3316,13 @@ void BrowserAccessibilityWin::UpdateStep1ComputeWinAttributes() {
   BoolAttributeToIA2(ui::AX_ATTR_CONTAINER_LIVE_BUSY,
                      "container-busy");
 
+  // Expose the non-standard explicit-name IA2 attribute.
+  int name_from;
+  if (GetIntAttribute(ui::AX_ATTR_NAME_FROM, &name_from) &&
+      name_from != ui::AX_NAME_FROM_CONTENTS) {
+    win_attributes_->ia2_attributes.push_back(L"explicit-name:true");
+  }
+
   // Expose table cell index.
   if (IsCellOrTableHeaderRole()) {
     BrowserAccessibility* table = GetParent();
@@ -4420,8 +4435,6 @@ void BrowserAccessibilityWin::InitRoleAndState() {
       ia_role = ROLE_SYSTEM_LISTITEM;
       if (ia_state & STATE_SYSTEM_SELECTABLE) {
         ia_state |= STATE_SYSTEM_FOCUSABLE;
-        if (HasState(ui::AX_STATE_FOCUSED))
-          ia_state |= STATE_SYSTEM_FOCUSED;
       }
       break;
     case ui::AX_ROLE_LIST_ITEM:
@@ -4470,8 +4483,6 @@ void BrowserAccessibilityWin::InitRoleAndState() {
       ia2_state &= ~(IA2_STATE_EDITABLE);
       if (ia_state & STATE_SYSTEM_SELECTABLE) {
         ia_state |= STATE_SYSTEM_FOCUSABLE;
-        if (HasState(ui::AX_STATE_FOCUSED))
-          ia_state |= STATE_SYSTEM_FOCUSED;
       }
       break;
     case ui::AX_ROLE_METER:
@@ -4616,6 +4627,7 @@ void BrowserAccessibilityWin::InitRoleAndState() {
         ia2_state |= IA2_STATE_SINGLE_LINE;
       ia2_state |= IA2_STATE_SELECTABLE_TEXT;
       break;
+    case ui::AX_ROLE_ABBR:
     case ui::AX_ROLE_TIME:
       role_name = html_tag;
       ia_role = ROLE_SYSTEM_TEXT;

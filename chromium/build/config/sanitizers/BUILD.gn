@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/chrome_build.gni")
+import("//build/config/chromecast_build.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 
 # Contains the dependencies needed for sanitizers to link into executables and
@@ -10,7 +11,14 @@ import("//build/config/sanitizers/sanitizers.gni")
 # |is_asan|, |is_lsan|, |is_tsan|, |is_msan| and |use_custom_libcxx| are false.
 group("deps") {
   if (using_sanitizer) {
-    public_configs = [ ":sanitizer_options_link_helper" ]
+    public_configs = [
+      ":sanitizer_options_link_helper",
+
+      # Even when a target removes default_sanitizer_flags, it may be depending
+      # on a library that did not remove default_sanitizer_flags. Thus, we need
+      # to add the ldflags here as well as in default_sanitizer_flags.
+      ":default_sanitizer_ldflags",
+    ]
     deps = [
       ":options_sources",
     ]
@@ -26,24 +34,6 @@ group("deps") {
 
 config("sanitizer_options_link_helper") {
   ldflags = [ "-Wl,-u_sanitizer_options_link_helper" ]
-  if (is_asan) {
-    ldflags += [ "-fsanitize=address" ]
-  }
-  if (is_lsan) {
-    ldflags += [ "-fsanitize=leak" ]
-  }
-  if (is_tsan) {
-    ldflags += [ "-fsanitize=thread" ]
-  }
-  if (is_msan) {
-    ldflags += [ "-fsanitize=memory" ]
-  }
-  if (is_ubsan) {
-    ldflags += [ "-fsanitize=undefined" ]
-  }
-  if (is_ubsan_vptr) {
-    ldflags += [ "-fsanitize=vptr" ]
-  }
 }
 
 source_set("options_sources") {
@@ -74,23 +64,93 @@ source_set("options_sources") {
   }
 }
 
+# Applies linker flags necessary when either :deps or :default_sanitizer_flags
+# are used.
+config("default_sanitizer_ldflags") {
+  visibility = [
+    ":default_sanitizer_flags",
+    ":deps",
+  ]
+
+  if (is_posix) {
+    ldflags = []
+    if (is_asan) {
+      ldflags += [ "-fsanitize=address" ]
+    }
+    if (is_lsan) {
+      ldflags += [ "-fsanitize=leak" ]
+    }
+    if (is_tsan) {
+      ldflags += [ "-fsanitize=thread" ]
+    }
+    if (is_msan) {
+      ldflags += [ "-fsanitize=memory" ]
+    }
+    if (is_ubsan) {
+      ldflags += [ "-fsanitize=undefined" ]
+    }
+    if (is_ubsan_vptr) {
+      ldflags += [ "-fsanitize=vptr" ]
+    }
+    if (is_lto && !is_nacl) {
+      ldflags += [ "-flto" ]
+
+      # Apply a lower LTO optimization level as the default is too slow.
+      if (is_linux) {
+        ldflags += [ "-Wl,-plugin-opt,O1" ]
+      } else if (is_mac) {
+        ldflags += [ "-Wl,-mllvm,-O1" ]
+      }
+
+      # Work-around for http://openradar.appspot.com/20356002
+      if (is_mac) {
+        ldflags += [ "-Wl,-all_load" ]
+      }
+
+      # Without this flag, LTO produces a .text section that is larger
+      # than the maximum call displacement, preventing the linker from
+      # relocating calls (http://llvm.org/PR22999).
+      if (current_cpu == "arm") {
+        ldflags += [ "-Wl,-plugin-opt,-function-sections" ]
+      }
+
+      if (is_cfi) {
+        ldflags += [
+          "-fsanitize=cfi-vcall",
+          "-fsanitize=cfi-derived-cast",
+          "-fsanitize=cfi-unrelated-cast",
+        ]
+      }
+
+      if (use_cfi_diag) {
+        ldflags += [
+          "-fno-sanitize-trap=cfi",
+          "-fsanitize-recover=cfi",
+        ]
+      }
+    }
+  }
+}
+
 # This config is applied by default to all targets. It sets the compiler flags
 # for sanitizer usage, or, if no sanitizer is set, does nothing.
 #
 # This needs to be in a separate config so that targets can opt out of
-# sanitizers if they desire.
+# sanitizers (by removing the config) if they desire. Even if a target
+# removes this config, executables & shared libraries should still depend on
+# :deps if any of their dependencies have not opted out of sanitizers.
 config("default_sanitizer_flags") {
   cflags = []
   cflags_cc = []
-  ldflags = []
   defines = []
+  configs = [ ":default_sanitizer_ldflags" ]
 
   # Only works on Posix-like platforms.
   # FIXME: this is not true, remove the conditional.
   if (is_posix) {
     # Common options for AddressSanitizer, LeakSanitizer, ThreadSanitizer,
     # MemorySanitizer and non-official CFI builds.
-    if (using_sanitizer || (is_cfi && !is_official_build)) {
+    if (using_sanitizer || (is_lto && !is_official_build)) {
       cflags += [
         "-fno-omit-frame-pointer",
         "-gline-tables-only",
@@ -159,18 +219,24 @@ config("default_sanitizer_flags") {
         "-fsanitize=unreachable",
         "-fsanitize=vla-bound",
         "-fsanitize-blacklist=$ubsan_blacklist_path",
-
-        # Employ the experimental PBQP register allocator to avoid slow
-        # compilation on files with too many basic blocks.
-        # See http://crbug.com/426271.
-        "-mllvm",
-        "-regalloc=pbqp",
-
-        # Speculatively use coalescing to slightly improve the code generated
-        # by PBQP regallocator. May increase compile time.
-        "-mllvm",
-        "-pbqp-coalescing",
       ]
+
+      # Chromecast ubsan builds fail to compile with these
+      # experimental flags, so only add them to non-chromecast ubsan builds.
+      if (!is_chromecast) {
+        cflags += [
+          # Employ the experimental PBQP register allocator to avoid slow
+          # compilation on files with too many basic blocks.
+          # See http://crbug.com/426271.
+          "-mllvm",
+          "-regalloc=pbqp",
+
+          # Speculatively use coalescing to slightly improve the code generated
+          # by PBQP regallocator. May increase compile time.
+          "-mllvm",
+          "-pbqp-coalescing",
+        ]
+      }
     }
     if (is_ubsan_vptr) {
       ubsan_vptr_blacklist_path =
@@ -180,50 +246,28 @@ config("default_sanitizer_flags") {
         "-fsanitize-blacklist=$ubsan_vptr_blacklist_path",
       ]
     }
-    if (is_cfi && !is_nacl) {
-      cfi_blacklist_path =
-          rebase_path("//tools/cfi/blacklist.txt", root_build_dir)
-      cflags += [
-        "-flto",
-        "-fsanitize=cfi-vcall",
-        "-fsanitize=cfi-derived-cast",
-        "-fsanitize=cfi-unrelated-cast",
-        "-fsanitize-blacklist=$cfi_blacklist_path",
-      ]
-      ldflags += [
-        "-flto",
-        "-fsanitize=cfi-vcall",
-        "-fsanitize=cfi-derived-cast",
-        "-fsanitize=cfi-unrelated-cast",
-      ]
+    if (is_lto && !is_nacl) {
+      cflags += [ "-flto" ]
 
-      # Apply a lower LTO optimization level as the default is too slow.
-      if (is_linux) {
-        ldflags += [ "-Wl,-plugin-opt,O1" ]
-      } else if (is_mac) {
-        ldflags += [ "-Wl,-mllvm,-O1" ]
-      }
-
-      # Work-around for http://openradar.appspot.com/20356002
-      if (is_mac) {
-        ldflags += [ "-Wl,-all_load" ]
-      }
-
-      # Without this flag, LTO produces a .text section that is larger
-      # than the maximum call displacement, preventing the linker from
-      # relocating calls (http://llvm.org/PR22999).
-      if (current_cpu == "arm") {
-        ldflags += [ "-Wl,-plugin-opt,-function-sections" ]
+      if (is_cfi) {
+        cfi_blacklist_path =
+            rebase_path("//tools/cfi/blacklist.txt", root_build_dir)
+        cflags += [
+          "-fsanitize=cfi-vcall",
+          "-fsanitize=cfi-derived-cast",
+          "-fsanitize=cfi-unrelated-cast",
+          "-fsanitize-blacklist=$cfi_blacklist_path",
+        ]
       }
 
       if (use_cfi_diag) {
         cflags += [
           "-fno-sanitize-trap=cfi",
           "-fsanitize-recover=cfi",
-        ]
-        ldflags += [
-          "-fno-sanitize-trap=cfi",
-          "-fsanitize-recover=cfi",
+          "-fno-inline-functions",
+          "-fno-inline",
+          "-fno-omit-frame-pointer",
+          "-O1",
         ]
       } else {
         defines += [ "CFI_ENFORCEMENT" ]
@@ -231,10 +275,12 @@ config("default_sanitizer_flags") {
     }
 
     if (use_custom_libcxx) {
-      cflags_cc += [ "-nostdinc++" ]
-      include_dirs = [
-        "//buildtools/third_party/libc++/trunk/include",
-        "//buildtools/third_party/libc++abi/trunk/include",
+      prefix = "//buildtools/third_party"
+      include = "trunk/include"
+      cflags_cc += [
+        "-nostdinc++",
+        "-isystem" + rebase_path("$prefix/libc++/$include", root_build_dir),
+        "-isystem" + rebase_path("$prefix/libc++abi/$include", root_build_dir),
       ]
     }
   }

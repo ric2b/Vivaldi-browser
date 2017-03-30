@@ -306,6 +306,17 @@
             'src/common/simple_string_dictionary.cc',
             'src/common/string_conversion.cc',
           ],
+          'conditions': [
+            ['OS=="ios"', {
+              'xcode_settings' : {
+                'WARNING_CFLAGS': [
+                  # See https://bugs.chromium.org/p/google-breakpad/issues/detail?id=675.
+                  # TODO(crbug.com/569158): remove when fixed.
+                  '-Wno-deprecated-declarations',
+                ],
+              },
+            }],
+          ],
         },
         {
           # GN version: //breakpad:crash_inspector
@@ -859,6 +870,13 @@
           'direct_dependent_settings': {
             'include_dirs': [
               'src',
+            ],
+          },
+          'xcode_settings' : {
+            'WARNING_CFLAGS': [
+              # See https://bugs.chromium.org/p/google-breakpad/issues/detail?id=675.
+              # TODO(crbug.com/569158): remove when fixed.
+              '-Wno-deprecated-declarations',
             ],
           },
         }

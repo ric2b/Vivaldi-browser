@@ -36,7 +36,6 @@
 #include "content/public/common/page_zoom.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/renderer_preferences.h"
-#include "content/public/common/stop_find_action.h"
 #include "content/public/common/top_controls_state.h"
 #include "content/public/common/web_preferences.h"
 #include "content/public/renderer/render_view.h"
@@ -47,6 +46,7 @@
 #include "ipc/ipc_platform_file.h"
 #include "third_party/WebKit/public/platform/WebGraphicsContext3D.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/web/WebAXObject.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
 #include "third_party/WebKit/public/web/WebDataSource.h"
@@ -57,7 +57,6 @@
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebNavigationType.h"
 #include "third_party/WebKit/public/web/WebNode.h"
-#include "third_party/WebKit/public/web/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/web/WebViewClient.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/rect.h"
@@ -80,7 +79,6 @@
 class SkBitmap;
 struct PP_NetAddress_Private;
 struct ViewMsg_New_Params;
-struct ViewMsg_Resize_Params;
 struct ViewMsg_StopFinding_Params;
 
 namespace base {
@@ -109,7 +107,6 @@ class WebURLRequest;
 struct WebActiveWheelFlingParameters;
 struct WebDateTimeChooserParams;
 struct WebFileChooserParams;
-struct WebFindOptions;
 struct WebMediaPlayerAction;
 struct WebPluginAction;
 struct WebPoint;
@@ -139,6 +136,7 @@ struct FaviconURL;
 struct FileChooserParams;
 struct FileChooserFileInfo;
 struct RenderViewImplParams;
+struct ResizeParams;
 
 #if defined(OS_ANDROID)
 class WebMediaPlayerProxyAndroid;
@@ -243,19 +241,11 @@ class CONTENT_EXPORT RenderViewImpl
   // FocusController.
   void SetFocus(bool enable);
 
-  void AttachWebFrameWidget(blink::WebWidget* frame_widget);
+  void AttachWebFrameWidget(blink::WebFrameWidget* frame_widget);
 
   // Plugin-related functions --------------------------------------------------
 
 #if defined(ENABLE_PLUGINS)
-  // Get/set the plugin which will be used as to handle document find requests.
-  void set_plugin_find_handler(PepperPluginInstanceImpl* plugin) {
-    plugin_find_handler_ = plugin;
-  }
-  PepperPluginInstanceImpl* plugin_find_handler() {
-    return plugin_find_handler_;
-  }
-
   PepperPluginInstanceImpl* focused_pepper_plugin() {
     return focused_pepper_plugin_;
   }
@@ -446,6 +436,7 @@ class CONTENT_EXPORT RenderViewImpl
   WebPreferences& GetWebkitPreferences() override;
   void SetWebkitPreferences(const WebPreferences& preferences) override;
   blink::WebView* GetWebView() override;
+  blink::WebFrameWidget* GetWebFrameWidget() override;
   bool ShouldDisplayScrollbars(int width, int height) const override;
   int GetEnabledBindings() const override;
   bool GetContentStateImmediately() const override;
@@ -467,6 +458,8 @@ class CONTENT_EXPORT RenderViewImpl
   gfx::RectF ElementBoundsInWindow(const blink::WebElement& element) override;
   float GetDeviceScaleFactorForTest() const override;
 
+  gfx::Point ConvertWindowPointToViewport(const gfx::Point& point);
+
   bool uses_temporary_zoom_level() const { return uses_temporary_zoom_level_; }
 
   // Please do not add your stuff randomly to the end here. If there is an
@@ -477,7 +470,7 @@ class CONTENT_EXPORT RenderViewImpl
   // RenderWidget overrides:
   void CloseForFrame() override;
   void Close() override;
-  void OnResize(const ViewMsg_Resize_Params& params) override;
+  void OnResize(const ResizeParams& params) override;
   void DidInitiatePaint() override;
   void DidFlushPaint() override;
   gfx::Vector2d GetScrollOffset() override;
@@ -489,6 +482,7 @@ class CONTENT_EXPORT RenderViewImpl
   void OnImeSetComposition(
       const base::string16& text,
       const std::vector<blink::WebCompositionUnderline>& underlines,
+      const gfx::Range& replacement_range,
       int selection_start,
       int selection_end) override;
   void OnImeConfirmComposition(const base::string16& text,
@@ -506,7 +500,6 @@ class CONTENT_EXPORT RenderViewImpl
   void DidCompletePageScaleAnimation() override;
   void OnDeviceScaleFactorChanged() override;
 
- protected:
   RenderViewImpl(CompositorDependencies* compositor_deps,
                  const ViewMsg_New_Params& params);
 
@@ -556,7 +549,10 @@ class CONTENT_EXPORT RenderViewImpl
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest,
                            GetCompositionCharacterBoundsTest);
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, OnNavigationHttpPost);
-  FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, ScreenMetricsEmulation);
+  FRIEND_TEST_ALL_PREFIXES(RenderViewImplScaleFactorTest,
+                           ScreenMetricsEmulationWithOriginalDSF1);
+  FRIEND_TEST_ALL_PREFIXES(RenderViewImplScaleFactorTest,
+                           ScreenMetricsEmulationWithOriginalDSF2);
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest,
                            DecideNavigationPolicyHandlesAllTopLevel);
 #if defined(OS_MACOSX)
@@ -657,9 +653,6 @@ class CONTENT_EXPORT RenderViewImpl
                                     const std::vector<base::FilePath>& paths);
   void OnFileChooserResponse(
       const std::vector<content::FileChooserFileInfo>& files);
-  void OnFind(int request_id,
-              const base::string16&,
-              const blink::WebFindOptions&);
   void OnMediaPlayerActionAt(const gfx::Point& location,
                              const blink::WebMediaPlayerAction& action);
   void OnPluginActionAt(const gfx::Point& location,
@@ -677,7 +670,6 @@ class CONTENT_EXPORT RenderViewImpl
   void OnSetWebUIProperty(const std::string& name, const std::string& value);
   void OnSetZoomLevelForLoadingURL(const GURL& url, double zoom_level);
   void OnSetZoomLevelForView(bool uses_temporary_zoom_level, double level);
-  void OnStopFinding(StopFindAction action);
   void OnSuppressDialogsUntilSwapOut();
   void OnThemeChanged();
   void OnUpdateTargetURLAck();
@@ -688,8 +680,6 @@ class CONTENT_EXPORT RenderViewImpl
   void OnForceRedraw(int request_id);
   void OnSelectWordAroundCaret();
 #if defined(OS_ANDROID)
-  void OnActivateNearestFindResult(int request_id, float x, float y);
-  void OnFindMatchRects(int current_version);
   void OnUndoScrollFocusedEditableNodeIntoRect();
   void OnUpdateTopControlsState(bool enable_hiding,
                                 bool enable_showing,
@@ -717,24 +707,12 @@ class CONTENT_EXPORT RenderViewImpl
   // Gets the currently focused element, if any.
   blink::WebElement GetFocusedElement() const;
 
-  // Called to get the WebPlugin to handle find requests in the document.
-  // Returns NULL if there is no such WebPlugin.
-  blink::WebPlugin* GetWebPluginForFind();
-
 #if defined(OS_ANDROID)
   // Launch an Android content intent with the given URL.
   void LaunchAndroidContentIntent(const GURL& intent_url,
                                   size_t request_id,
                                   bool is_main_frame);
 #endif
-
-  // Sends a reply to the current find operation handling if it was a
-  // synchronous find request.
-  void SendFindReply(int request_id,
-                     int match_count,
-                     int ordinal,
-                     const blink::WebRect& selection_rect,
-                     bool final_status_update);
 
 #if defined(OS_WIN) || (defined(OS_POSIX) && !defined(OS_MACOSX))
   void UpdateFontRenderingFromRendererPrefs();
@@ -833,11 +811,6 @@ class CONTENT_EXPORT RenderViewImpl
 
   // Used for popups.
   bool opened_by_user_gesture_;
-
-  // Whether this RenderView was created by a frame that was suppressing its
-  // opener. If so, we may want to load pages in a separate process.  See
-  // decidePolicyForNavigation for details.
-  bool opener_suppressed_;
 
   // Whether we must stop creating nested message loops for modal dialogs until
   // OnSwapOut is called.  This is necessary because modal dialogs have a
@@ -939,7 +912,7 @@ class CONTENT_EXPORT RenderViewImpl
 
   // Note: RenderViewImpl is pulling double duty: it's the RenderWidget for the
   // "view", but it's also the RenderWidget for the main frame.
-  blink::WebWidget* frame_widget_;
+  blink::WebFrameWidget* frame_widget_;
 
   // The next group of objects all implement RenderViewObserver, so are deleted
   // along with the RenderView automatically.  This is why we just store
@@ -981,8 +954,6 @@ class CONTENT_EXPORT RenderViewImpl
 #endif
 
 #if defined(ENABLE_PLUGINS)
-  PepperPluginInstanceImpl* plugin_find_handler_;
-
   typedef std::set<PepperPluginInstanceImpl*> PepperPluginSet;
   PepperPluginSet active_pepper_instances_;
 

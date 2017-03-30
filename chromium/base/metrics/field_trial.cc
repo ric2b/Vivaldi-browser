@@ -105,6 +105,16 @@ bool ParseFieldTrialsString(const std::string& trials_string,
   return true;
 }
 
+void CheckTrialGroup(const std::string& trial_name,
+                     const std::string& trial_group,
+                     std::map<std::string, std::string>* seen_states) {
+  if (ContainsKey(*seen_states, trial_name)) {
+    CHECK_EQ((*seen_states)[trial_name], trial_group) << trial_name;
+  } else {
+    (*seen_states)[trial_name] = trial_group;
+  }
+}
+
 }  // namespace
 
 // statics
@@ -121,6 +131,8 @@ FieldTrial::EntropyProvider::~EntropyProvider() {
 }
 
 FieldTrial::State::State() : activated(false) {}
+
+FieldTrial::State::State(const State& other) = default;
 
 FieldTrial::State::~State() {}
 
@@ -475,6 +487,9 @@ void FieldTrialList::AllStatesToString(std::string* output) {
     output->append(1, kPersistentStringSeparator);
     trial.group_name.AppendToString(output);
     output->append(1, kPersistentStringSeparator);
+
+    CheckTrialGroup(trial.trial_name.as_string(), trial.group_name.as_string(),
+                    &global_->seen_states_);
   }
 }
 
@@ -515,7 +530,6 @@ void FieldTrialList::GetActiveFieldTrialGroupsFromString(
 // static
 bool FieldTrialList::CreateTrialsFromString(
     const std::string& trials_string,
-    FieldTrialActivationMode mode,
     const std::set<std::string>& ignored_trial_names) {
   DCHECK(global_);
   if (trials_string.empty() || !global_)
@@ -535,7 +549,7 @@ bool FieldTrialList::CreateTrialsFromString(
     FieldTrial* trial = CreateFieldTrial(trial_name, group_name);
     if (!trial)
       return false;
-    if (mode == ACTIVATE_TRIALS || entry.activated) {
+    if (entry.activated) {
       // Call |group()| to mark the trial as "used" and notify observers, if
       // any. This is useful to ensure that field trials created in child
       // processes are properly reported in crash reports.
@@ -600,6 +614,11 @@ void FieldTrialList::NotifyFieldTrialGroupSelection(FieldTrial* field_trial) {
   if (!field_trial->enable_field_trial_)
     return;
 
+  {
+    AutoLock auto_lock(global_->lock_);
+    CheckTrialGroup(field_trial->trial_name(),
+                    field_trial->group_name_internal(), &global_->seen_states_);
+  }
   global_->observer_list_->Notify(
       FROM_HERE, &FieldTrialList::Observer::OnFieldTrialGroupFinalized,
       field_trial->trial_name(), field_trial->group_name_internal());
@@ -638,7 +657,7 @@ void FieldTrialList::Register(FieldTrial* trial) {
     return;
   }
   AutoLock auto_lock(global_->lock_);
-  DCHECK(!global_->PreLockedFind(trial->trial_name()));
+  CHECK(!global_->PreLockedFind(trial->trial_name())) << trial->trial_name();
   trial->AddRef();
   trial->SetTrialRegistered();
   global_->registered_[trial->trial_name()] = trial;

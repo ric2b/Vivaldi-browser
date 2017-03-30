@@ -128,16 +128,9 @@ bool V4L2VideoEncodeAccelerator::Initialize(
   const __u32 kCapsRequired = V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING;
   IOCTL_OR_ERROR_RETURN_FALSE(VIDIOC_QUERYCAP, &caps);
   if ((caps.capabilities & kCapsRequired) != kCapsRequired) {
-    // This cap combination is deprecated, but some older drivers may still be
-    // returning it.
-    const __u32 kCapsRequiredCompat = V4L2_CAP_VIDEO_CAPTURE_MPLANE |
-                                      V4L2_CAP_VIDEO_OUTPUT_MPLANE |
-                                      V4L2_CAP_STREAMING;
-    if ((caps.capabilities & kCapsRequiredCompat) != kCapsRequiredCompat) {
-      LOG(ERROR) << "Initialize(): ioctl() failed: VIDIOC_QUERYCAP: "
-                    "caps check failed: 0x" << std::hex << caps.capabilities;
-      return false;
-    }
+    LOG(ERROR) << "Initialize(): ioctl() failed: VIDIOC_QUERYCAP: "
+                  "caps check failed: 0x" << std::hex << caps.capabilities;
+    return false;
   }
 
   if (!SetFormats(input_format, output_profile)) {
@@ -1031,6 +1024,23 @@ bool V4L2VideoEncodeAccelerator::InitControls() {
     ctrls.push_back(ctrl);
   }
 
+  // Enable macroblock-level bitrate control.
+  memset(&ctrl, 0, sizeof(ctrl));
+  ctrl.id = V4L2_CID_MPEG_VIDEO_MB_RC_ENABLE;
+  ctrl.value = 1;
+  ctrls.push_back(ctrl);
+
+  // Disable periodic key frames.
+  memset(&ctrl, 0, sizeof(ctrl));
+  ctrl.id = V4L2_CID_MPEG_VIDEO_GOP_SIZE;
+  ctrl.value = 0;
+  ctrls.push_back(ctrl);
+
+  // Ignore return value as these controls are optional.
+  SetExtCtrls(ctrls);
+
+  // Optional Exynos specific controls.
+  ctrls.clear();
   // Enable "tight" bitrate mode. For this to work properly, frame- and mb-level
   // bitrate controls have to be enabled as well.
   memset(&ctrl, 0, sizeof(ctrl));
@@ -1043,18 +1053,6 @@ bool V4L2VideoEncodeAccelerator::InitControls() {
   memset(&ctrl, 0, sizeof(ctrl));
   ctrl.id = V4L2_CID_MPEG_MFC51_VIDEO_RC_FIXED_TARGET_BIT;
   ctrl.value = 1;
-  ctrls.push_back(ctrl);
-
-  // Enable macroblock-level bitrate control.
-  memset(&ctrl, 0, sizeof(ctrl));
-  ctrl.id = V4L2_CID_MPEG_VIDEO_MB_RC_ENABLE;
-  ctrl.value = 1;
-  ctrls.push_back(ctrl);
-
-  // Disable periodic key frames.
-  memset(&ctrl, 0, sizeof(ctrl));
-  ctrl.id = V4L2_CID_MPEG_VIDEO_GOP_SIZE;
-  ctrl.value = 0;
   ctrls.push_back(ctrl);
 
   // Ignore return value as these controls are optional.

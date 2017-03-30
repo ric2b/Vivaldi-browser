@@ -163,6 +163,17 @@ class MockPresentationServiceClient :
                void(const presentation::PresentationSessionInfo& connection,
                     presentation::PresentationConnectionState new_state));
 
+  void OnConnectionClosed(
+      presentation::PresentationSessionInfoPtr connection,
+      presentation::PresentationConnectionCloseReason reason,
+      const mojo::String& message) override {
+    OnConnectionClosed(*connection, reason, message);
+  }
+  MOCK_METHOD3(OnConnectionClosed,
+               void(const presentation::PresentationSessionInfo& connection,
+                    presentation::PresentationConnectionCloseReason reason,
+                    const mojo::String& message));
+
   MOCK_METHOD1(OnScreenAvailabilityNotSupported, void(const mojo::String& url));
 
   void OnSessionMessagesReceived(
@@ -308,12 +319,11 @@ class PresentationServiceImplTest : public RenderViewHostImplTestHarness {
                                    bool pass_ownership) {
     mojo::Array<presentation::SessionMessagePtr> expected_msgs(2);
     expected_msgs[0] = presentation::SessionMessage::New();
-    expected_msgs[0]->type =
-        presentation::PresentationMessageType::PRESENTATION_MESSAGE_TYPE_TEXT;
+    expected_msgs[0]->type = presentation::PresentationMessageType::TEXT;
     expected_msgs[0]->message = text_msg;
     expected_msgs[1] = presentation::SessionMessage::New();
-    expected_msgs[1]->type = presentation::PresentationMessageType::
-        PRESENTATION_MESSAGE_TYPE_ARRAY_BUFFER;
+    expected_msgs[1]->type =
+        presentation::PresentationMessageType::ARRAY_BUFFER;
     expected_msgs[1]->data = mojo::Array<uint8_t>::From(binary_data);
 
     presentation::PresentationSessionInfoPtr session(
@@ -473,14 +483,48 @@ TEST_F(PresentationServiceImplTest, ListenForConnectionStateChange) {
   presentation::PresentationSessionInfo presentation_connection;
   presentation_connection.url = kPresentationUrl;
   presentation_connection.id = kPresentationId;
-  base::RunLoop run_loop;
-  EXPECT_CALL(mock_client_,
-              OnConnectionStateChanged(
-                  Equals(presentation_connection),
-                  presentation::PRESENTATION_CONNECTION_STATE_CLOSED))
-      .WillOnce(InvokeWithoutArgs(&run_loop, &base::RunLoop::Quit));
-  state_changed_cb.Run(content::PRESENTATION_CONNECTION_STATE_CLOSED);
-  run_loop.Run();
+  {
+    base::RunLoop run_loop;
+    EXPECT_CALL(mock_client_,
+                OnConnectionStateChanged(
+                    Equals(presentation_connection),
+                    presentation::PresentationConnectionState::TERMINATED))
+        .WillOnce(InvokeWithoutArgs(&run_loop, &base::RunLoop::Quit));
+    state_changed_cb.Run(PresentationConnectionStateChangeInfo(
+        PRESENTATION_CONNECTION_STATE_TERMINATED));
+    run_loop.Run();
+  }
+}
+
+TEST_F(PresentationServiceImplTest, ListenForConnectionClose) {
+  content::PresentationSessionInfo connection(kPresentationUrl,
+                                              kPresentationId);
+  content::PresentationConnectionStateChangedCallback state_changed_cb;
+  EXPECT_CALL(mock_delegate_, ListenForConnectionStateChange(_, _, _, _))
+      .WillOnce(SaveArg<3>(&state_changed_cb));
+  service_impl_->ListenForConnectionStateChange(connection);
+
+  // Trigger connection close. It should be propagated back up to
+  // |mock_client_|.
+  presentation::PresentationSessionInfo presentation_connection;
+  presentation_connection.url = kPresentationUrl;
+  presentation_connection.id = kPresentationId;
+  {
+    base::RunLoop run_loop;
+    PresentationConnectionStateChangeInfo closed_info(
+        PRESENTATION_CONNECTION_STATE_CLOSED);
+    closed_info.close_reason = PRESENTATION_CONNECTION_CLOSE_REASON_WENT_AWAY;
+    closed_info.message = "Foo";
+
+    EXPECT_CALL(mock_client_,
+                OnConnectionClosed(
+                    Equals(presentation_connection),
+                    presentation::PresentationConnectionCloseReason::WENT_AWAY,
+                    mojo::String("Foo")))
+        .WillOnce(InvokeWithoutArgs(&run_loop, &base::RunLoop::Quit));
+    state_changed_cb.Run(closed_info);
+    run_loop.Run();
+  }
 }
 
 TEST_F(PresentationServiceImplTest, SetSameDefaultPresentationUrl) {
@@ -636,8 +680,7 @@ TEST_F(PresentationServiceImplTest, SendStringMessage) {
   session->id = kPresentationId;
   presentation::SessionMessagePtr message_request(
       presentation::SessionMessage::New());
-  message_request->type = presentation::PresentationMessageType::
-                          PRESENTATION_MESSAGE_TYPE_TEXT;
+  message_request->type = presentation::PresentationMessageType::TEXT;
   message_request->message = message;
   service_ptr_->SendSessionMessage(
       std::move(session), std::move(message_request),
@@ -675,8 +718,7 @@ TEST_F(PresentationServiceImplTest, SendArrayBuffer) {
   session->id = kPresentationId;
   presentation::SessionMessagePtr message_request(
       presentation::SessionMessage::New());
-  message_request->type = presentation::PresentationMessageType::
-                          PRESENTATION_MESSAGE_TYPE_ARRAY_BUFFER;
+  message_request->type = presentation::PresentationMessageType::ARRAY_BUFFER;
   message_request->data = mojo::Array<uint8_t>::From(data);
   service_ptr_->SendSessionMessage(
       std::move(session), std::move(message_request),
@@ -720,8 +762,7 @@ TEST_F(PresentationServiceImplTest, SendArrayBufferWithExceedingLimit) {
   session->id = kPresentationId;
   presentation::SessionMessagePtr message_request(
       presentation::SessionMessage::New());
-  message_request->type = presentation::PresentationMessageType::
-                          PRESENTATION_MESSAGE_TYPE_ARRAY_BUFFER;
+  message_request->type = presentation::PresentationMessageType::ARRAY_BUFFER;
   message_request->data = mojo::Array<uint8_t>::From(data);
   service_ptr_->SendSessionMessage(
       std::move(session), std::move(message_request),
@@ -752,8 +793,7 @@ TEST_F(PresentationServiceImplTest, SendBlobData) {
   session->id = kPresentationId;
   presentation::SessionMessagePtr message_request(
       presentation::SessionMessage::New());
-  message_request->type =
-      presentation::PresentationMessageType::PRESENTATION_MESSAGE_TYPE_BLOB;
+  message_request->type = presentation::PresentationMessageType::BLOB;
   message_request->data = mojo::Array<uint8_t>::From(data);
   service_ptr_->SendSessionMessage(
       std::move(session), std::move(message_request),
@@ -808,10 +848,12 @@ TEST_F(PresentationServiceImplTest, MaxPendingJoinSessionRequests) {
 
 TEST_F(PresentationServiceImplTest, ScreenAvailabilityNotSupported) {
   mock_delegate_.set_screen_availability_listening_supported(false);
+  base::RunLoop run_loop;
   EXPECT_CALL(mock_client_,
-              OnScreenAvailabilityNotSupported(Eq(kPresentationUrl)));
-
+              OnScreenAvailabilityNotSupported(Eq(kPresentationUrl)))
+      .WillOnce(InvokeWithoutArgs(&run_loop, &base::RunLoop::Quit));
   ListenForScreenAvailabilityAndWait(kPresentationUrl, false);
+  run_loop.Run();
 }
 
 }  // namespace content

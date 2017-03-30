@@ -410,11 +410,15 @@ public:
     // layoutObjectIsFocusable(), this method may be called when layout is not up to
     // date, so it must not use the layoutObject to determine focusability.
     virtual bool supportsFocus() const;
-    // Whether the node can actually be focused.
+    // isFocusable(), isKeyboardFocusable(), and isMouseFocusable() check
+    // whether the element can actually be focused. Callers should ensure
+    // ComputedStyle is up to date;
+    // e.g. by calling Document::updateLayoutTreeIgnorePendingStylesheets().
     bool isFocusable() const;
-    bool isFocusedElementInDocument() const;
     virtual bool isKeyboardFocusable() const;
     virtual bool isMouseFocusable() const;
+    bool isFocusedElementInDocument() const;
+
     virtual void dispatchFocusEvent(Element* oldFocusedElement, WebFocusType, InputDeviceCapabilities* sourceCapabilities = nullptr);
     virtual void dispatchBlurEvent(Element* newFocusedElement, WebFocusType, InputDeviceCapabilities* sourceCapabilities = nullptr);
     virtual void dispatchFocusInEvent(const AtomicString& eventType, Element* oldFocusedElement, WebFocusType, InputDeviceCapabilities* sourceCapabilities = nullptr);
@@ -434,6 +438,7 @@ public:
     String textFromChildren();
 
     virtual String title() const { return String(); }
+    virtual String defaultToolTip() const { return String(); }
 
     virtual const AtomicString& shadowPseudoId() const;
     void setShadowPseudoId(const AtomicString&);
@@ -583,11 +588,13 @@ protected:
 
     void clearTabIndexExplicitlyIfNeeded();
     void setTabIndexExplicitly(short);
-    // Subclasses may override this method to affect focusability. Unlike
-    // supportsFocus, this method must be called on an up-to-date layout, so it
-    // may use the layoutObject to reason about focusability. This method cannot be
-    // moved to LayoutObject because some focusable nodes don't have layoutObjects,
-    // e.g., HTMLOptionElement.
+    // Subclasses may override this method to affect focusability. This method
+    // must be called on an up-to-date ComputedStyle, so it may use existence of
+    // layoutObject and the LayoutObject::style() to reason about focusability.
+    // However, it must not retrieve layout information like position and size.
+    // This method cannot be moved to LayoutObject because some focusable nodes
+    // don't have layoutObjects. e.g., HTMLOptionElement.
+    // TODO(tkent): Rename this to isFocusableStyle.
     virtual bool layoutObjectIsFocusable() const;
 
     // classAttributeChanged() exists to share code between
@@ -656,7 +663,7 @@ private:
     void updateId(TreeScope&, const AtomicString& oldId, const AtomicString& newId);
     void updateName(const AtomicString& oldName, const AtomicString& newName);
 
-    NodeType nodeType() const final;
+    NodeType getNodeType() const final;
     bool childTypeAllowed(NodeType) const final;
 
     void setAttributeInternal(size_t index, const QualifiedName&, const AtomicString& value, SynchronizationOfLazyAttribute);
@@ -943,6 +950,6 @@ inline bool isAtShadowBoundary(const Element* element)
         return adoptRefWillBeNoop(new T(tagName, document)); \
     }
 
-} // namespace
+} // namespace blink
 
 #endif // Element_h

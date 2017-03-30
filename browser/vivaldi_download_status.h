@@ -8,8 +8,6 @@ class AppWindow;
 
 namespace vivaldi {
 
-extern  extensions::AppWindow* current_vivaldi_window_;
-
 void UpdateTaskbarProgressBarForVivaldiWindows(int download_count,
                                                bool progress_known,
                                                float progress);

@@ -11,11 +11,15 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/scoped_vector.h"
-#include "base/prefs/pref_value_map.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "chrome/browser/net/disk_cache_dir_policy_handler.h"
+#include "chrome/browser/policy/file_selection_dialogs_policy_handler.h"
+#include "chrome/browser/policy/javascript_policy_handler.h"
 #include "chrome/browser/policy/managed_bookmarks_policy_handler.h"
+#include "chrome/browser/policy/network_prediction_policy_handler.h"
 #include "chrome/browser/profiles/incognito_mode_policy_handler.h"
+#include "chrome/browser/sessions/restore_on_startup_policy_handler.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
@@ -33,24 +37,17 @@
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/policy/core/common/schema.h"
+#include "components/prefs/pref_value_map.h"
 #include "components/search_engines/default_search_policy_handler.h"
 #include "components/signin/core/common/signin_pref_names.h"
 #include "components/ssl_config/ssl_config_prefs.h"
+#include "components/sync_driver/sync_policy_handler.h"
 #include "components/translate/core/common/translate_pref_names.h"
 #include "components/variations/pref_names.h"
 #include "policy/policy_constants.h"
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
 #include "chrome/browser/search/contextual_search_policy_handler_android.h"
-#endif
-
-#if !defined(OS_IOS)
-#include "chrome/browser/net/disk_cache_dir_policy_handler.h"
-#include "chrome/browser/policy/file_selection_dialogs_policy_handler.h"
-#include "chrome/browser/policy/javascript_policy_handler.h"
-#include "chrome/browser/policy/network_prediction_policy_handler.h"
-#include "chrome/browser/sessions/restore_on_startup_policy_handler.h"
-#include "components/sync_driver/sync_policy_handler.h"
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -64,7 +61,7 @@
 #include "ui/chromeos/accessibility_types.h"
 #endif
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 #include "chrome/browser/download/download_dir_policy_handler.h"
 #endif
 
@@ -332,6 +329,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kRestrictSigninToPattern,
     prefs::kGoogleServicesUsernamePattern,
     base::Value::TYPE_STRING },
+  { key::kDefaultWebBluetoothGuardSetting,
+    prefs::kManagedDefaultWebBluetoothGuardSetting,
+    base::Value::TYPE_INTEGER },
   { key::kDefaultMediaStreamSetting,
     prefs::kManagedDefaultMediaStreamSetting,
     base::Value::TYPE_INTEGER },
@@ -391,7 +391,7 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     ssl_config::prefs::kRC4Enabled,
     base::Value::TYPE_BOOLEAN },
 
-#if !defined(OS_MACOSX) && !defined(OS_IOS)
+#if !defined(OS_MACOSX)
   { key::kFullscreenAllowed,
     prefs::kFullscreenAllowed,
     base::Value::TYPE_BOOLEAN },
@@ -400,7 +400,7 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     extensions::pref_names::kAppFullscreenAllowed,
     base::Value::TYPE_BOOLEAN },
 #endif  // defined(ENABLE_EXTENSIONS)
-#endif  // !defined(OS_MACOSX) && !defined(OS_IOS)
+#endif  // !defined(OS_MACOSX)
 
 #if defined(OS_CHROMEOS)
   { key::kChromeOsLockOnIdleSuspend,
@@ -530,7 +530,7 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     base::Value::TYPE_STRING },
 #endif  // BUILDFLAG(ANDROID_JAVA_UI)
 
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
   { key::kNativeMessagingUserLevelHosts,
     extensions::pref_names::kNativeMessagingUserLevelHosts,
     base::Value::TYPE_BOOLEAN },
@@ -540,7 +540,7 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kBrowserAddPersonEnabled,
     prefs::kBrowserAddPersonEnabled,
     base::Value::TYPE_BOOLEAN },
-#endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_IOS)
+#endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
 
 #if defined(OS_WIN)
   { key::kWelcomePageOnOSUpgradeEnabled,
@@ -594,13 +594,11 @@ void GetExtensionAllowedTypesMap(
 }
 #endif
 
-#if !defined(OS_IOS)
 void GetDeprecatedFeaturesMap(
     ScopedVector<StringMappingListPolicyHandler::MappingEntry>* result) {
   // Maps feature tags as specified in policy to the corresponding switch to
   // re-enable them.
 }
-#endif  // !defined(OS_IOS)
 
 }  // namespace
 
@@ -641,7 +639,6 @@ scoped_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       make_scoped_ptr(new ContextualSearchPolicyHandlerAndroid()));
 #endif
 
-#if !defined(OS_IOS)
   handlers->AddHandler(
       make_scoped_ptr(new FileSelectionDialogsPolicyHandler()));
   handlers->AddHandler(make_scoped_ptr(new JavascriptPolicyHandler()));
@@ -653,7 +650,6 @@ scoped_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       key::kEnableDeprecatedWebPlatformFeatures,
       prefs::kEnableDeprecatedWebPlatformFeatures,
       base::Bind(GetDeprecatedFeaturesMap))));
-#endif  // !defined(OS_IOS)
 
 #if defined(ENABLE_EXTENSIONS)
   handlers->AddHandler(
@@ -677,7 +673,7 @@ scoped_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       new extensions::ExtensionSettingsPolicyHandler(chrome_schema)));
 #endif
 
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
   handlers->AddHandler(make_scoped_ptr(new DiskCacheDirPolicyHandler()));
 
   handlers->AddHandler(
@@ -688,9 +684,9 @@ scoped_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       make_scoped_ptr(new extensions::NativeMessagingHostListPolicyHandler(
           key::kNativeMessagingBlacklist,
           extensions::pref_names::kNativeMessagingBlacklist, true)));
-#endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_IOS)
+#endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
   handlers->AddHandler(make_scoped_ptr(new DownloadDirPolicyHandler));
 
   handlers->AddHandler(make_scoped_ptr(new SimpleSchemaValidatingPolicyHandler(

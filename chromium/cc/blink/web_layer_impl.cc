@@ -16,18 +16,14 @@
 #include "base/threading/thread_checker.h"
 #include "base/trace_event/trace_event_impl.h"
 #include "cc/animation/animation.h"
-#include "cc/animation/mutable_properties.h"
 #include "cc/base/region.h"
 #include "cc/base/switches.h"
-#include "cc/blink/web_animation_impl.h"
 #include "cc/blink/web_blend_mode.h"
-#include "cc/blink/web_filter_operations_impl.h"
 #include "cc/blink/web_to_cc_animation_delegate_adapter.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_position_constraint.h"
 #include "cc/layers/layer_settings.h"
 #include "cc/trees/layer_tree_host.h"
-#include "third_party/WebKit/public/platform/WebCompositorMutableProperties.h"
 #include "third_party/WebKit/public/platform/WebFloatPoint.h"
 #include "third_party/WebKit/public/platform/WebFloatRect.h"
 #include "third_party/WebKit/public/platform/WebLayerPositionConstraint.h"
@@ -45,7 +41,6 @@ using blink::WebVector;
 using blink::WebRect;
 using blink::WebSize;
 using blink::WebColor;
-using blink::WebFilterOperations;
 
 namespace cc_blink {
 namespace {
@@ -221,7 +216,7 @@ void WebLayerImpl::setRenderingContext(int context) {
 
 void WebLayerImpl::setUseParentBackfaceVisibility(
     bool use_parent_backface_visibility) {
-  layer_->set_use_parent_backface_visibility(use_parent_backface_visibility);
+  layer_->SetUseParentBackfaceVisibility(use_parent_backface_visibility);
 }
 
 void WebLayerImpl::setBackgroundColor(WebColor color) {
@@ -232,16 +227,12 @@ WebColor WebLayerImpl::backgroundColor() const {
   return layer_->background_color();
 }
 
-void WebLayerImpl::setFilters(const WebFilterOperations& filters) {
-  const WebFilterOperationsImpl& filters_impl =
-      static_cast<const WebFilterOperationsImpl&>(filters);
-  layer_->SetFilters(filters_impl.AsFilterOperations());
+void WebLayerImpl::setFilters(const cc::FilterOperations& filters) {
+  layer_->SetFilters(filters);
 }
 
-void WebLayerImpl::setBackgroundFilters(const WebFilterOperations& filters) {
-  const WebFilterOperationsImpl& filters_impl =
-      static_cast<const WebFilterOperationsImpl&>(filters);
-  layer_->SetBackgroundFilters(filters_impl.AsFilterOperations());
+void WebLayerImpl::setBackgroundFilters(const cc::FilterOperations& filters) {
+  layer_->SetBackgroundFilters(filters);
 }
 
 void WebLayerImpl::setAnimationDelegate(
@@ -256,22 +247,12 @@ void WebLayerImpl::setAnimationDelegate(
   layer_->set_layer_animation_delegate(animation_delegate_adapter_.get());
 }
 
-bool WebLayerImpl::addAnimation(blink::WebCompositorAnimation* animation) {
-  bool result = layer_->AddAnimation(
-      static_cast<WebCompositorAnimationImpl*>(animation)->PassAnimation());
-  delete animation;
-  return result;
+bool WebLayerImpl::addAnimation(cc::Animation* animation) {
+  return layer_->AddAnimation(make_scoped_ptr(animation));
 }
 
 void WebLayerImpl::removeAnimation(int animation_id) {
   layer_->RemoveAnimation(animation_id);
-}
-
-void WebLayerImpl::removeAnimation(
-    int animation_id,
-    blink::WebCompositorAnimation::TargetProperty target_property) {
-  layer_->RemoveAnimation(
-      animation_id, static_cast<Animation::TargetProperty>(target_property));
 }
 
 void WebLayerImpl::pauseAnimation(int animation_id, double time_offset) {
@@ -329,25 +310,24 @@ bool WebLayerImpl::userScrollableVertical() const {
   return layer_->user_scrollable_vertical();
 }
 
-void WebLayerImpl::setHaveWheelEventHandlers(bool have_wheel_event_handlers) {
-  layer_->SetHaveWheelEventHandlers(have_wheel_event_handlers);
+void WebLayerImpl::addMainThreadScrollingReasons(
+    uint32_t main_thread_scrolling_reasons) {
+  // WebLayerImpl should only know about non-transient scrolling
+  // reasons. Transient scrolling reasons are computed per hit test.
+  DCHECK(main_thread_scrolling_reasons);
+  DCHECK(cc::MainThreadScrollingReason::MainThreadCanSetScrollReasons(
+      main_thread_scrolling_reasons));
+  layer_->AddMainThreadScrollingReasons(main_thread_scrolling_reasons);
 }
 
-bool WebLayerImpl::haveWheelEventHandlers() const {
-  return layer_->have_wheel_event_handlers();
+void WebLayerImpl::clearMainThreadScrollingReasons(
+    uint32_t main_thread_scrolling_reasons_to_clear) {
+  layer_->ClearMainThreadScrollingReasons(
+      main_thread_scrolling_reasons_to_clear);
 }
 
-void WebLayerImpl::setHaveScrollEventHandlers(bool have_scroll_event_handlers) {
-  layer_->SetHaveScrollEventHandlers(have_scroll_event_handlers);
-}
-
-bool WebLayerImpl::haveScrollEventHandlers() const {
-  return layer_->have_scroll_event_handlers();
-}
-
-void WebLayerImpl::setShouldScrollOnMainThread(
-    bool should_scroll_on_main_thread) {
-  layer_->SetShouldScrollOnMainThread(should_scroll_on_main_thread);
+uint32_t WebLayerImpl::mainThreadScrollingReasons() {
+  return layer_->main_thread_scrolling_reasons();
 }
 
 bool WebLayerImpl::shouldScrollOnMainThread() const {
@@ -429,28 +409,6 @@ WebVector<WebRect> WebLayerImpl::touchEventHandlerRegion() const {
   return result;
 }
 
-static_assert(static_cast<ScrollBlocksOn>(blink::WebScrollBlocksOnNone) ==
-                  SCROLL_BLOCKS_ON_NONE,
-              "ScrollBlocksOn and WebScrollBlocksOn enums must match");
-static_assert(static_cast<ScrollBlocksOn>(blink::WebScrollBlocksOnStartTouch) ==
-                  SCROLL_BLOCKS_ON_START_TOUCH,
-              "ScrollBlocksOn and WebScrollBlocksOn enums must match");
-static_assert(static_cast<ScrollBlocksOn>(blink::WebScrollBlocksOnWheelEvent) ==
-                  SCROLL_BLOCKS_ON_WHEEL_EVENT,
-              "ScrollBlocksOn and WebScrollBlocksOn enums must match");
-static_assert(
-    static_cast<ScrollBlocksOn>(blink::WebScrollBlocksOnScrollEvent) ==
-        SCROLL_BLOCKS_ON_SCROLL_EVENT,
-    "ScrollBlocksOn and WebScrollBlocksOn enums must match");
-
-void WebLayerImpl::setScrollBlocksOn(blink::WebScrollBlocksOn blocks) {
-  layer_->SetScrollBlocksOn(static_cast<ScrollBlocksOn>(blocks));
-}
-
-blink::WebScrollBlocksOn WebLayerImpl::scrollBlocksOn() const {
-  return static_cast<blink::WebScrollBlocksOn>(layer_->scroll_blocks_on());
-}
-
 void WebLayerImpl::setIsContainerForFixedPositionLayers(bool enable) {
   layer_->SetIsContainerForFixedPositionLayers(enable);
 }
@@ -496,10 +454,6 @@ void WebLayerImpl::setScrollClient(blink::WebLayerScrollClient* scroll_client) {
   }
 }
 
-bool WebLayerImpl::isOrphan() const {
-  return !layer_->layer_tree_host();
-}
-
 void WebLayerImpl::setLayerClient(cc::LayerClient* client) {
   layer_->SetLayerClient(client);
 }
@@ -515,35 +469,6 @@ void WebLayerImpl::setElementId(uint64_t id) {
 uint64_t WebLayerImpl::elementId() const {
   return layer_->element_id();
 }
-
-static_assert(
-    static_cast<cc::MutableProperty>(blink::WebCompositorMutablePropertyNone) ==
-        cc::kMutablePropertyNone,
-    "MutableProperty and WebCompositorMutableProperty enums must match");
-
-static_assert(
-    static_cast<cc::MutableProperty>(
-        blink::WebCompositorMutablePropertyOpacity) ==
-        cc::kMutablePropertyOpacity,
-    "MutableProperty and WebCompositorMutableProperty enums must match");
-
-static_assert(
-    static_cast<cc::MutableProperty>(
-        blink::WebCompositorMutablePropertyScrollLeft) ==
-        cc::kMutablePropertyScrollLeft,
-    "MutableProperty and WebCompositorMutableProperty enums must match");
-
-static_assert(
-    static_cast<cc::MutableProperty>(
-        blink::WebCompositorMutablePropertyScrollTop) ==
-        cc::kMutablePropertyScrollTop,
-    "MutableProperty and WebCompositorMutableProperty enums must match");
-
-static_assert(
-    static_cast<cc::MutableProperty>(
-        blink::WebCompositorMutablePropertyTransform) ==
-        cc::kMutablePropertyTransform,
-    "MutableProperty and WebCompositorMutableProperty enums must match");
 
 void WebLayerImpl::setCompositorMutableProperties(uint32_t properties) {
   layer_->SetMutableProperties(properties);

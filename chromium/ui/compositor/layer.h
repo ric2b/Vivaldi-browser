@@ -27,6 +27,7 @@
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer_animation_delegate.h"
 #include "ui/compositor/layer_delegate.h"
+#include "ui/compositor/layer_threaded_animation_delegate.h"
 #include "ui/compositor/layer_type.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image_skia.h"
@@ -37,8 +38,6 @@ class SkCanvas;
 namespace cc {
 class ContentLayer;
 class CopyOutputRequest;
-class DelegatedFrameProvider;
-class DelegatedRendererLayer;
 class Layer;
 class NinePatchLayer;
 class ResourceUpdateQueue;
@@ -67,6 +66,7 @@ class LayerOwner;
 // NULL, but the children are not deleted.
 class COMPOSITOR_EXPORT Layer
     : public LayerAnimationDelegate,
+      public LayerThreadedAnimationDelegate,
       NON_EXPORTED_BASE(public cc::ContentLayerClient),
       NON_EXPORTED_BASE(public cc::TextureLayerClient),
       NON_EXPORTED_BASE(public cc::LayerClient) {
@@ -284,10 +284,6 @@ class COMPOSITOR_EXPORT Layer
   void SetTextureFlipped(bool flipped);
   bool TextureFlipped() const;
 
-  // Begins showing delegated frames from the |frame_provider|.
-  void SetShowDelegatedContent(cc::DelegatedFrameProvider* frame_provider,
-                               gfx::Size frame_size_in_dip);
-
   // Begins showing content from a surface with a particular id.
   void SetShowSurface(cc::SurfaceId surface_id,
                       const cc::SurfaceLayer::SatisfyCallback& satisfy_callback,
@@ -297,8 +293,7 @@ class COMPOSITOR_EXPORT Layer
                       gfx::Size frame_size_in_dip);
 
   bool has_external_content() {
-    return texture_layer_.get() || delegated_renderer_layer_.get() ||
-           surface_layer_.get();
+    return texture_layer_.get() || surface_layer_.get();
   }
 
   // Show a solid color instead of delegated or surface contents.
@@ -373,9 +368,7 @@ class COMPOSITOR_EXPORT Layer
       cc::Layer* layer) override;
 
   // Whether this layer has animations waiting to get sent to its cc::Layer.
-  bool HasPendingThreadedAnimations() {
-    return pending_threaded_animations_.size() != 0;
-  }
+  bool HasPendingThreadedAnimationsForTesting() const;
 
   // Triggers a call to SwitchToLayer.
   void SwitchCCLayerForTest();
@@ -409,10 +402,13 @@ class COMPOSITOR_EXPORT Layer
   float GetGrayscaleForAnimation() const override;
   SkColor GetColorForAnimation() const override;
   float GetDeviceScaleFactor() const override;
+  cc::Layer* GetCcLayer() const override;
+  LayerThreadedAnimationDelegate* GetThreadedAnimationDelegate() override;
+  LayerAnimatorCollection* GetLayerAnimatorCollection() override;
+
+  // Implementation of LayerThreadedAnimationDelegate.
   void AddThreadedAnimation(scoped_ptr<cc::Animation> animation) override;
   void RemoveThreadedAnimation(int animation_id) override;
-  LayerAnimatorCollection* GetLayerAnimatorCollection() override;
-  cc::Layer* GetCcLayer() const override;
 
   // Creates a corresponding composited layer for |type_|.
   void CreateCcLayer();
@@ -507,7 +503,6 @@ class COMPOSITOR_EXPORT Layer
   scoped_refptr<cc::NinePatchLayer> nine_patch_layer_;
   scoped_refptr<cc::TextureLayer> texture_layer_;
   scoped_refptr<cc::SolidColorLayer> solid_color_layer_;
-  scoped_refptr<cc::DelegatedRendererLayer> delegated_renderer_layer_;
   scoped_refptr<cc::SurfaceLayer> surface_layer_;
   cc::Layer* cc_layer_;
 

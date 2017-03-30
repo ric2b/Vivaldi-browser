@@ -29,6 +29,7 @@
 #include "crypto/mock_apple_keychain.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/origin.h"
 
 using autofill::PasswordForm;
 using base::ASCIIToUTF16;
@@ -143,12 +144,13 @@ void CheckFormsAgainstExpectations(
           wcscmp(expectation->password_value,
                  password_manager::kTestingFederatedLoginMarker) == 0) {
         EXPECT_TRUE(form->password_value.empty());
-        EXPECT_EQ(GURL(password_manager::kTestingFederationUrlSpec),
-                  form->federation_url);
+        EXPECT_EQ(
+            url::Origin(GURL(password_manager::kTestingFederationUrlSpec)),
+            form->federation_origin);
       } else {
         EXPECT_EQ(WideToUTF16(expectation->password_value),
                   form->password_value);
-        EXPECT_TRUE(form->federation_url.is_empty());
+        EXPECT_TRUE(form->federation_origin.unique());
       }
     } else {
       EXPECT_TRUE(form->blacklisted_by_user);
@@ -221,6 +223,7 @@ void PasswordStoreMacTestDelegate::Initialize() {
                                 base::ThreadTaskRunnerHandle::Get(),
                                 make_scoped_ptr(new MockAppleKeychain));
   store_->set_login_metadata_db(login_db_.get());
+  store_->login_metadata_db()->set_clear_password_values(false);
 }
 
 void PasswordStoreMacTestDelegate::ClosePasswordStore() {
@@ -875,7 +878,8 @@ TEST_F(PasswordStoreMacInternalsTest, TestFormMatch) {
   // Federated login forms should never match for merging either.
   {
     PasswordForm form_b(base_form);
-    form_b.federation_url = GURL(password_manager::kTestingFederationUrlSpec);
+    form_b.federation_origin =
+        url::Origin(GURL(password_manager::kTestingFederationUrlSpec));
     EXPECT_FALSE(FormsMatchForMerge(base_form, form_b, STRICT_FORM_MATCH));
     EXPECT_FALSE(FormsMatchForMerge(form_b, base_form, STRICT_FORM_MATCH));
     EXPECT_FALSE(FormsMatchForMerge(form_b, form_b, STRICT_FORM_MATCH));
@@ -1341,8 +1345,7 @@ class PasswordStoreMacTest : public testing::Test {
       EXPECT_CALL(mock_consumer, OnGetPasswordStoreResultsConstRef(SizeIs(1u)))
           .WillOnce(
               DoAll(SaveACopyOfFirstForm(&returned_form), QuitUIMessageLoop()));
-      store()->GetLogins(query_form, PasswordStore::ALLOW_PROMPT,
-                         &mock_consumer);
+      store()->GetLogins(query_form, &mock_consumer);
       base::MessageLoop::current()->Run();
       ::testing::Mock::VerifyAndClearExpectations(&mock_consumer);
       EXPECT_EQ(form, returned_form);
@@ -1511,7 +1514,7 @@ TEST_F(PasswordStoreMacTest, TestDBKeychainAssociation) {
   m_form.origin = GURL("http://m.facebook.com/index.html");
 
   MockPasswordStoreConsumer consumer;
-  store_->GetLogins(m_form, PasswordStore::ALLOW_PROMPT, &consumer);
+  store_->GetLogins(m_form, &consumer);
   PasswordForm returned_form;
   EXPECT_CALL(consumer, OnGetPasswordStoreResultsConstRef(SizeIs(1u)))
       .WillOnce(
@@ -1681,6 +1684,42 @@ TEST_F(PasswordStoreMacTest, TestRemoveLoginsSyncedBetween) {
   CheckRemoveLoginsBetween(this, false);
 }
 
+TEST_F(PasswordStoreMacTest, TestDisableAutoSignInForAllLogins) {
+  PasswordFormData www_form_data_facebook = {
+      PasswordForm::SCHEME_HTML,
+      "http://www.facebook.com/",
+      "http://www.facebook.com/index.html",
+      "login",
+      L"submit",
+      L"username",
+      L"password",
+      L"joe_user",
+      L"sekrit",
+      true,
+      false,
+      0};
+  scoped_ptr<PasswordForm> form_facebook =
+      CreatePasswordFormFromDataForTesting(www_form_data_facebook);
+  form_facebook->skip_zero_click = false;
+
+  // Add the zero-clickable form to the database.
+  PasswordsChangeObserver observer(store());
+  store()->AddLogin(*form_facebook);
+  EXPECT_CALL(observer, OnLoginsChanged(GetAddChangeList(*form_facebook)));
+  observer.WaitAndVerify(this);
+
+  ScopedVector<autofill::PasswordForm> forms;
+  EXPECT_TRUE(login_db()->GetAutoSignInLogins(&forms));
+  EXPECT_EQ(1u, forms.size());
+  EXPECT_FALSE(forms[0]->skip_zero_click);
+
+  store()->DisableAutoSignInForAllLogins(base::Closure());
+  FinishAsyncProcessing();
+
+  EXPECT_TRUE(login_db()->GetAutoSignInLogins(&forms));
+  EXPECT_EQ(0u, forms.size());
+}
+
 TEST_F(PasswordStoreMacTest, TestRemoveLoginsMultiProfile) {
   // Make sure that RemoveLoginsCreatedBetween does affect only the correct
   // profile.
@@ -1769,7 +1808,7 @@ TEST_F(PasswordStoreMacTest, SilentlyRemoveOrphanedForm) {
   // The PSL-matched form isn't returned because there is no actual password in
   // the keychain.
   EXPECT_CALL(consumer, OnGetPasswordStoreResultsConstRef(IsEmpty()));
-  store_->GetLogins(m_form, PasswordStore::ALLOW_PROMPT, &consumer);
+  store_->GetLogins(m_form, &consumer);
   base::MessageLoop::current()->Run();
   ScopedVector<autofill::PasswordForm> all_forms;
   EXPECT_TRUE(login_db()->GetAutofillableLogins(&all_forms));
@@ -1783,7 +1822,7 @@ TEST_F(PasswordStoreMacTest, SilentlyRemoveOrphanedForm) {
       password_manager::PasswordStoreChange::REMOVE, *www_form));
   EXPECT_CALL(mock_observer, OnLoginsChanged(list));
   EXPECT_CALL(consumer, OnGetPasswordStoreResultsConstRef(IsEmpty()));
-  store_->GetLogins(*www_form, PasswordStore::ALLOW_PROMPT, &consumer);
+  store_->GetLogins(*www_form, &consumer);
   base::MessageLoop::current()->Run();
   EXPECT_TRUE(login_db()->GetAutofillableLogins(&all_forms));
   EXPECT_EQ(0u, all_forms.size());
@@ -1804,7 +1843,8 @@ TEST_F(PasswordStoreMacTest, StoringAndRetrievingAndroidCredentials) {
 TEST_F(PasswordStoreMacTest, StoringAndRetrievingFederatedCredentials) {
   PasswordForm form;
   form.signon_realm = "android://7x7IDboo8u9YKraUsbmVkuf1@net.rateflix.app/";
-  form.federation_url = GURL(password_manager::kTestingFederationUrlSpec);
+  form.federation_origin =
+      url::Origin(GURL(password_manager::kTestingFederationUrlSpec));
   form.username_value = base::UTF8ToUTF16("randomusername");
   form.password_value = base::UTF8ToUTF16("");  // No password.
 
@@ -1874,7 +1914,7 @@ TEST_F(PasswordStoreMacTest, ImportFederatedFromLockedKeychain) {
   form1.origin = GURL("http://example.com/Login");
   form1.signon_realm = "http://example.com/";
   form1.username_value = ASCIIToUTF16("my_username");
-  form1.federation_url = GURL("https://accounts.google.com/");
+  form1.federation_origin = url::Origin(GURL("https://accounts.google.com/"));
 
   store()->AddLogin(form1);
   FinishAsyncProcessing();

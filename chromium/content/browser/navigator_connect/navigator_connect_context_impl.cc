@@ -154,11 +154,11 @@ void NavigatorConnectContextImpl::GotServiceWorkerRegistration(
       registration->pattern().GetOrigin();
 
   active_version->RunAfterStartWorker(
-      base::Bind(&NavigatorConnectContextImpl::OnConnectError, this, callback,
-                 client_port_id, service_port_id),
       base::Bind(&NavigatorConnectContextImpl::DispatchConnectEvent, this,
                  callback, client_port_id, service_port_id, registration,
-                 make_scoped_refptr(active_version)));
+                 make_scoped_refptr(active_version)),
+      base::Bind(&NavigatorConnectContextImpl::OnConnectError, this, callback,
+                 client_port_id, service_port_id));
 }
 
 void NavigatorConnectContextImpl::DispatchConnectEvent(
@@ -223,10 +223,11 @@ void NavigatorConnectContextImpl::OnConnectResult(
     const mojo::String& data) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  if (!worker->FinishRequest(request_id))
+  if (!worker->FinishRequest(request_id,
+                             result == ServicePortConnectResult::ACCEPT))
     return;
 
-  if (result != SERVICE_PORT_CONNECT_RESULT_ACCEPT) {
+  if (result != ServicePortConnectResult::ACCEPT) {
     OnConnectError(callback, client_port_id, service_port_id,
                    SERVICE_WORKER_ERROR_FAILED);
     return;

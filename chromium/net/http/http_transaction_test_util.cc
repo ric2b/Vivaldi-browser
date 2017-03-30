@@ -390,12 +390,7 @@ bool MockNetworkTransaction::GetLoadTimingInfo(
 }
 
 bool MockNetworkTransaction::GetRemoteEndpoint(IPEndPoint* endpoint) const {
-  IPAddressNumber number;
-  number.push_back(127);
-  number.push_back(0);
-  number.push_back(0);
-  number.push_back(1);
-  *endpoint = IPEndPoint(number, 80);
+  *endpoint = IPEndPoint(IPAddress(127, 0, 0, 1), 80);
   return true;
 }
 

@@ -405,8 +405,8 @@ V4L2SliceVideoDecodeAccelerator::V4L2SliceVideoDecodeAccelerator(
       decoder_resetting_(false),
       surface_set_change_pending_(false),
       picture_clearing_count_(0),
-      pictures_assigned_(false, false),
       make_context_current_(make_context_current),
+      pictures_assigned_(false, false),
       egl_display_(egl_display),
       egl_context_(egl_context),
       weak_this_factory_(this) {
@@ -1184,6 +1184,14 @@ void V4L2SliceVideoDecodeAccelerator::Decode(
             << ", size=" << bitstream_buffer.size();
   DCHECK(io_task_runner_->BelongsToCurrentThread());
 
+  if (bitstream_buffer.id() < 0) {
+    LOG(ERROR) << "Invalid bitstream_buffer, id: " << bitstream_buffer.id();
+    if (base::SharedMemory::IsHandleValid(bitstream_buffer.handle()))
+      base::SharedMemory::CloseHandle(bitstream_buffer.handle());
+    NOTIFY_ERROR(INVALID_ARGUMENT);
+    return;
+  }
+
   decoder_thread_task_runner_->PostTask(
       FROM_HERE, base::Bind(&V4L2SliceVideoDecodeAccelerator::DecodeTask,
                             base::Unretained(this), bitstream_buffer));
@@ -1481,13 +1489,9 @@ void V4L2SliceVideoDecodeAccelerator::AssignPictureBuffers(
     DCHECK_EQ(output_record.picture_id, -1);
     DCHECK_EQ(output_record.cleared, false);
 
-    EGLImageKHR egl_image = device_->CreateEGLImage(egl_display_,
-                                                    egl_context_,
-                                                    buffers[i].texture_id(),
-                                                    coded_size_,
-                                                    i,
-                                                    output_format_fourcc_,
-                                                    output_planes_count_);
+    EGLImageKHR egl_image = device_->CreateEGLImage(
+        egl_display_, egl_context_, buffers[i].texture_id(),
+        buffers[i].size(), i, output_format_fourcc_, output_planes_count_);
     if (egl_image == EGL_NO_IMAGE_KHR) {
       LOGF(ERROR) << "Could not create EGLImageKHR";
       // Ownership of EGLImages allocated in previous iterations of this loop

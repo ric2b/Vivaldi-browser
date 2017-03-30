@@ -44,14 +44,14 @@ public:
         return adoptRef(new SVGImageForContainer(image, containerSizeWithoutZoom, zoom, url));
     }
 
+    bool isTextureBacked() override;
     IntSize size() const override;
 
     bool usesContainerSize() const override { return m_image->usesContainerSize(); }
-    bool hasRelativeWidth() const override { return m_image->hasRelativeWidth(); }
-    bool hasRelativeHeight() const override { return m_image->hasRelativeHeight(); }
-    void computeIntrinsicDimensions(Length& intrinsicWidth, Length& intrinsicHeight, FloatSize& intrinsicRatio) override
+    bool hasRelativeSize() const override { return m_image->hasRelativeSize(); }
+    void computeIntrinsicDimensions(FloatSize& intrinsicSize, FloatSize& intrinsicRatio) override
     {
-        m_image->computeIntrinsicDimensions(intrinsicWidth, intrinsicHeight, intrinsicRatio);
+        m_image->computeIntrinsicDimensions(intrinsicSize, intrinsicRatio);
     }
 
     void draw(SkCanvas*, const SkPaint&, const FloatRect&, const FloatRect&, RespectImageOrientationEnum, ImageClampingMode) override;
@@ -79,6 +79,6 @@ private:
     const float m_zoom;
     const KURL m_url;
 };
-}
+} // namespace blink
 
 #endif // SVGImageForContainer_h

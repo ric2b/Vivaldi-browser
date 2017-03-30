@@ -11,6 +11,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.drawable.BitmapDrawable;
 import android.test.InstrumentationTestCase;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.util.DisplayMetrics;
@@ -42,25 +43,29 @@ public class CustomNotificationBuilderTest extends InstrumentationTestCase {
 
         Bitmap largeIcon = Bitmap.createBitmap(
                 new int[] {Color.RED}, 1 /* width */, 1 /* height */, Bitmap.Config.ARGB_8888);
+        largeIcon = largeIcon.copy(Bitmap.Config.ARGB_8888, true /* isMutable */);
 
-        Notification notification = new CustomNotificationBuilder(context)
-                                            .setSmallIcon(R.drawable.ic_chrome)
-                                            .setLargeIcon(largeIcon)
-                                            .setTitle("title")
-                                            .setBody("body")
-                                            .setOrigin("origin")
-                                            .setTicker("ticker")
-                                            .setDefaults(Notification.DEFAULT_ALL)
-                                            .setVibrate(new long[] {100L})
-                                            .setContentIntent(contentIntent)
-                                            .setDeleteIntent(deleteIntent)
-                                            .addAction(0 /* iconId */, "button",
-                                                    createIntent(context, "ActionButtonOne"))
-                                            .addAction(0 /* iconId */, "button",
-                                                    createIntent(context, "ActionButtonTwo"))
-                                            .addSettingsAction(0 /* iconId */, "settings",
-                                                    createIntent(context, "SettingsButton"))
-                                            .build();
+        Bitmap actionIcon = Bitmap.createBitmap(
+                new int[] {Color.WHITE}, 1 /* width */, 1 /* height */, Bitmap.Config.ARGB_8888);
+        actionIcon = actionIcon.copy(Bitmap.Config.ARGB_8888, true /* isMutable */);
+
+        Notification notification =
+                new CustomNotificationBuilder(context)
+                        .setSmallIcon(R.drawable.ic_chrome)
+                        .setLargeIcon(largeIcon)
+                        .setTitle("title")
+                        .setBody("body")
+                        .setOrigin("origin")
+                        .setTicker("ticker")
+                        .setDefaults(Notification.DEFAULT_ALL)
+                        .setVibrate(new long[] {100L})
+                        .setContentIntent(contentIntent)
+                        .setDeleteIntent(deleteIntent)
+                        .addAction(actionIcon, "button", createIntent(context, "ActionButtonOne"))
+                        .addAction(actionIcon, "button", createIntent(context, "ActionButtonTwo"))
+                        .addSettingsAction(
+                                0 /* iconId */, "settings", createIntent(context, "SettingsButton"))
+                        .build();
         View compactView = notification.contentView.apply(context, new LinearLayout(context));
         View bigView = notification.bigContentView.apply(context, new LinearLayout(context));
 
@@ -110,25 +115,55 @@ public class CustomNotificationBuilderTest extends InstrumentationTestCase {
     @Feature({"Browser", "Notifications"})
     public void testMaxActionButtons() {
         Context context = getInstrumentation().getTargetContext();
-        NotificationBuilder builder = new CustomNotificationBuilder(context)
-                                              .addAction(0 /* iconId */, "button",
-                                                      createIntent(context, "ActionButtonOne"))
-                                              .addAction(0 /* iconId */, "button",
-                                                      createIntent(context, "ActionButtonTwo"))
-                                              .addAction(0 /* iconId */, "button",
-                                                      createIntent(context, "ActionButtonThree"));
+        NotificationBuilderBase builder = new CustomNotificationBuilder(context)
+                                                  .addAction(null /* iconBitmap */, "button",
+                                                          createIntent(context, "ActionButtonOne"))
+                                                  .addAction(null /* iconBitmap */, "button",
+                                                          createIntent(context, "ActionButtonTwo"));
         try {
-            builder.addAction(0 /* iconId */, "button", createIntent(context, "ActionButtonFour"));
+            builder.addAction(
+                    null /* iconBitmap */, "button", createIntent(context, "ActionButtonThree"));
             fail("This statement should not be reached as the previous statement should throw.");
         } catch (IllegalStateException e) {
-            assertEquals("Cannot add more than 3 actions.", e.getMessage());
+            assertEquals("Cannot add more than 2 actions.", e.getMessage());
         }
         Notification notification = builder.build();
         View bigView = notification.bigContentView.apply(context, new LinearLayout(context));
         ArrayList<View> buttons = new ArrayList<>();
         bigView.findViewsWithText(buttons, "button", View.FIND_VIEWS_WITH_TEXT);
 
-        assertEquals("There is a maximum of 3 buttons", 3, buttons.size());
+        assertEquals("There is a maximum of 2 buttons", 2, buttons.size());
+    }
+
+    @SmallTest
+    @Feature({"Browser", "Notifications"})
+    public void testPaintIcons() {
+        Context context = getInstrumentation().getTargetContext();
+
+        Bitmap largeIcon = Bitmap.createBitmap(
+                new int[] {Color.RED}, 1 /* width */, 1 /* height */, Bitmap.Config.ARGB_8888);
+        largeIcon = largeIcon.copy(Bitmap.Config.ARGB_8888, true /* isMutable */);
+
+        Bitmap actionIcon = Bitmap.createBitmap(
+                new int[] {Color.RED}, 1 /* width */, 1 /* height */, Bitmap.Config.ARGB_8888);
+        actionIcon = actionIcon.copy(Bitmap.Config.ARGB_8888, true /* isMutable */);
+
+        Notification notification =
+                new CustomNotificationBuilder(context)
+                        .setLargeIcon(largeIcon)
+                        .addAction(actionIcon, "button", createIntent(context, "ActionButton"))
+                        .build();
+
+        // The large icon should not be painted white.
+        assertNotNull(notification.largeIcon);
+        assertEquals(Color.RED, notification.largeIcon.getPixel(0, 0));
+
+        // Action icons should be painted white.
+        assertEquals(1, notification.actions.length);
+        View bigView = notification.bigContentView.apply(context, new LinearLayout(context));
+        ImageView actionIconView = (ImageView) bigView.findViewById(R.id.button_icon);
+        Bitmap actionIconBitmap = ((BitmapDrawable) actionIconView.getDrawable()).getBitmap();
+        assertEquals(Color.WHITE, actionIconBitmap.getPixel(0, 0));
     }
 
     @SmallTest
@@ -142,7 +177,7 @@ public class CustomNotificationBuilderTest extends InstrumentationTestCase {
                         .setBody(createString('b', maxLength + 1))
                         .setOrigin(createString('c', maxLength + 1))
                         .setTicker(createString('d', maxLength + 1))
-                        .addAction(0 /* iconId */, createString('e', maxLength + 1),
+                        .addAction(null /* iconBitmap */, createString('e', maxLength + 1),
                                 createIntent(context, "ActionButtonOne"))
                         .build();
         View compactView = notification.contentView.apply(context, new LinearLayout(context));

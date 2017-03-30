@@ -9,9 +9,9 @@
 
 #include <string>
 
+#include "base/logging.h"
 #include "mojo/public/cpp/bindings/lib/array_internal.h"
 #include "mojo/public/cpp/bindings/type_converter.h"
-#include "mojo/public/cpp/environment/logging.h"
 
 namespace mojo {
 
@@ -22,7 +22,8 @@ class String {
  public:
   typedef internal::String_Data Data_;
 
-  String() : is_null_(true) {}
+  // Constructs an empty string.
+  String() : is_null_(false) {}
   String(const std::string& str) : value_(str), is_null_(false) {}
   String(const char* chars) : is_null_(!chars) {
     if (chars)
@@ -65,11 +66,6 @@ class String {
       value_.clear();
     }
     return *this;
-  }
-
-  void reset() {
-    value_.clear();
-    is_null_ = true;
   }
 
   bool is_null() const { return is_null_; }
@@ -152,7 +148,7 @@ struct TypeConverter<std::string, String> {
 template <size_t N>
 struct TypeConverter<String, char[N]> {
   static String Convert(const char input[N]) {
-    MOJO_DCHECK(input);
+    DCHECK(input);
     return String(input, N - 1);
   }
 };
@@ -161,7 +157,7 @@ struct TypeConverter<String, char[N]> {
 template <size_t N>
 struct TypeConverter<String, const char[N]> {
   static String Convert(const char input[N]) {
-    MOJO_DCHECK(input);
+    DCHECK(input);
     return String(input, N - 1);
   }
 };

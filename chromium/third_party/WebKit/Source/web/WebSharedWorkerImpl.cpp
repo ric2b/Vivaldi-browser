@@ -144,7 +144,7 @@ void WebSharedWorkerImpl::initializeLoader()
     loadShadowPage();
 }
 
-WebApplicationCacheHost* WebSharedWorkerImpl::createApplicationCacheHost(WebLocalFrame*, WebApplicationCacheHostClient* appcacheHostClient)
+WebApplicationCacheHost* WebSharedWorkerImpl::createApplicationCacheHost(WebApplicationCacheHostClient* appcacheHostClient)
 {
     return m_client->createApplicationCacheHost(appcacheHostClient);
 }
@@ -166,7 +166,7 @@ void WebSharedWorkerImpl::willSendRequest(
         m_networkProvider->willSendRequest(frame->dataSource(), request);
 }
 
-void WebSharedWorkerImpl::didFinishDocumentLoad(WebLocalFrame* frame, bool)
+void WebSharedWorkerImpl::didFinishDocumentLoad(WebLocalFrame* frame)
 {
     ASSERT(!m_loadingDocument);
     ASSERT(!m_mainScriptLoader);

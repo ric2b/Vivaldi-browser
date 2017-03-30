@@ -17,6 +17,7 @@
 #include "content/common/dom_storage/dom_storage_types.h"
 #include "content/common/frame_messages.h"
 #include "content/common/input_messages.h"
+#include "content/common/resize_params.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/content_browser_client.h"
@@ -368,12 +369,9 @@ void RenderViewTest::SetUp() {
 
 #if !defined(OS_IOS)
   InitializeMojo();
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch("use-new-edk")) {
-    test_io_thread_.reset(new base::TestIOThread(
-        base::TestIOThread::kAutoStart));
-    ipc_support_.reset(new mojo::test::ScopedIPCSupport(
-        test_io_thread_->task_runner()));
-  }
+  test_io_thread_.reset(new base::TestIOThread(base::TestIOThread::kAutoStart));
+  ipc_support_.reset(
+      new mojo::edk::test::ScopedIPCSupport(test_io_thread_->task_runner()));
 #endif
 
   // This needs to pass the mock render thread to the view.
@@ -391,7 +389,7 @@ void RenderViewTest::TearDown() {
   scoped_ptr<blink::WebLeakDetector> leak_detector =
       make_scoped_ptr(blink::WebLeakDetector::create(this));
 
-  leak_detector->prepareForLeakDetection();
+  leak_detector->prepareForLeakDetection(view_->GetWebView()->mainFrame());
 
   view_ = NULL;
   mock_process_.reset();
@@ -407,6 +405,8 @@ void RenderViewTest::TearDown() {
 #endif
 
   leak_detector->collectGarbageAndReport();
+
+  base::RunLoop().RunUntilIdle();
 
   blink_platform_impl_.Shutdown();
   blink::shutdown();
@@ -441,14 +441,16 @@ void RenderViewTest::SendWebKeyboardEvent(
     const blink::WebKeyboardEvent& key_event) {
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
   impl->OnMessageReceived(
-      InputMsg_HandleInputEvent(0, &key_event, ui::LatencyInfo()));
+      InputMsg_HandleInputEvent(0, &key_event, ui::LatencyInfo(),
+                                InputEventDispatchType::DISPATCH_TYPE_NORMAL));
 }
 
 void RenderViewTest::SendWebMouseEvent(
     const blink::WebMouseEvent& mouse_event) {
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
   impl->OnMessageReceived(
-      InputMsg_HandleInputEvent(0, &mouse_event, ui::LatencyInfo()));
+      InputMsg_HandleInputEvent(0, &mouse_event, ui::LatencyInfo(),
+                                InputEventDispatchType::DISPATCH_TYPE_NORMAL));
 }
 
 const char* const kGetCoordinatesScript =
@@ -515,10 +517,12 @@ void RenderViewTest::SimulatePointClick(const gfx::Point& point) {
   mouse_event.clickCount = 1;
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
   impl->OnMessageReceived(
-      InputMsg_HandleInputEvent(0, &mouse_event, ui::LatencyInfo()));
+      InputMsg_HandleInputEvent(0, &mouse_event, ui::LatencyInfo(),
+                                InputEventDispatchType::DISPATCH_TYPE_NORMAL));
   mouse_event.type = WebInputEvent::MouseUp;
   impl->OnMessageReceived(
-      InputMsg_HandleInputEvent(0, &mouse_event, ui::LatencyInfo()));
+      InputMsg_HandleInputEvent(0, &mouse_event, ui::LatencyInfo(),
+                                InputEventDispatchType::DISPATCH_TYPE_NORMAL));
 }
 
 
@@ -539,10 +543,12 @@ void RenderViewTest::SimulatePointRightClick(const gfx::Point& point) {
   mouse_event.clickCount = 1;
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
   impl->OnMessageReceived(
-      InputMsg_HandleInputEvent(0, &mouse_event, ui::LatencyInfo()));
+      InputMsg_HandleInputEvent(0, &mouse_event, ui::LatencyInfo(),
+                                InputEventDispatchType::DISPATCH_TYPE_NORMAL));
   mouse_event.type = WebInputEvent::MouseUp;
   impl->OnMessageReceived(
-      InputMsg_HandleInputEvent(0, &mouse_event, ui::LatencyInfo()));
+      InputMsg_HandleInputEvent(0, &mouse_event, ui::LatencyInfo(),
+                                InputEventDispatchType::DISPATCH_TYPE_NORMAL));
 }
 
 void RenderViewTest::SimulateRectTap(const gfx::Rect& rect) {
@@ -556,7 +562,8 @@ void RenderViewTest::SimulateRectTap(const gfx::Rect& rect) {
   gesture_event.sourceDevice = blink::WebGestureDeviceTouchpad;
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
   impl->OnMessageReceived(
-      InputMsg_HandleInputEvent(0, &gesture_event, ui::LatencyInfo()));
+      InputMsg_HandleInputEvent(0, &gesture_event, ui::LatencyInfo(),
+                                InputEventDispatchType::DISPATCH_TYPE_NORMAL));
   impl->FocusChangeComplete();
 }
 
@@ -586,7 +593,7 @@ uint32_t RenderViewTest::GetNavigationIPCType() {
 void RenderViewTest::Resize(gfx::Size new_size,
                             gfx::Rect resizer_rect,
                             bool is_fullscreen_granted) {
-  ViewMsg_Resize_Params params;
+  ResizeParams params;
   params.screen_info = blink::WebScreenInfo();
   params.new_size = new_size;
   params.physical_backing_size = new_size;
@@ -688,8 +695,8 @@ ContentRendererClient* RenderViewTest::CreateContentRendererClient() {
   return new ContentRendererClient;
 }
 
-scoped_ptr<ViewMsg_Resize_Params> RenderViewTest::InitialSizeParams() {
-  return make_scoped_ptr(new ViewMsg_Resize_Params());
+scoped_ptr<ResizeParams> RenderViewTest::InitialSizeParams() {
+  return make_scoped_ptr(new ResizeParams());
 }
 
 void RenderViewTest::GoToOffset(int offset, const PageState& state) {

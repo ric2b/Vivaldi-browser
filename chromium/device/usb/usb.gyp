@@ -11,6 +11,7 @@
       'target_name': 'device_usb',
       'type': 'static_library',
       'dependencies': [
+        'device_usb_mojo_bindings',
         '../../components/components.gyp:device_event_log_component',
         '../../net/net.gyp:net',
         '../../third_party/libusb/libusb.gyp:libusb',
@@ -22,6 +23,12 @@
       'sources': [
         'android/usb_jni_registrar.cc',
         'android/usb_jni_registrar.h',
+        'mojo/device_impl.cc',
+        'mojo/device_impl.h',
+        'mojo/device_manager_impl.cc',
+        'mojo/device_manager_impl.h',
+        'mojo/type_converters.cc',
+        'mojo/type_converters.h',
         'usb_configuration_android.cc',
         'usb_configuration_android.h',
         'usb_context.cc',
@@ -114,6 +121,18 @@
           ],
         }],
       ]
+    },
+    {
+      'target_name': 'device_usb_mojo_bindings',
+      'type': 'static_library',
+      'sources': [
+        'public/interfaces/device.mojom',
+        'public/interfaces/device_manager.mojom',
+        'public/interfaces/permission_provider.mojom',
+      ],
+      'includes': [
+        '../../mojo/mojom_bindings_generator.gypi',
+      ],
     },
     {
       'target_name': 'device_usb_mocks',

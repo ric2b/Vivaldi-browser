@@ -7,20 +7,19 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/browser/extension_registry.h"
@@ -93,7 +92,7 @@ AppShortcutManager::AppShortcutManager(Profile* profile)
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   // profile_manager might be NULL in testing environments.
   if (profile_manager) {
-    profile_manager->GetProfileInfoCache().AddObserver(this);
+    profile_manager->GetProfileAttributesStorage().AddObserver(this);
     is_profile_info_cache_observer_ = true;
   }
 }
@@ -103,7 +102,7 @@ AppShortcutManager::~AppShortcutManager() {
     ProfileManager* profile_manager = g_browser_process->profile_manager();
     // profile_manager might be NULL in testing environments or during shutdown.
     if (profile_manager)
-      profile_manager->GetProfileInfoCache().RemoveObserver(this);
+      profile_manager->GetProfileAttributesStorage().RemoveObserver(this);
   }
 }
 

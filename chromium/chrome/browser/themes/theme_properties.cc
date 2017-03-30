@@ -11,7 +11,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/themes/browser_theme_pack.h"
 #include "grit/theme_resources.h"
-#include "ui/base/resource/material_design/material_design_controller.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/resources/grit/ui_resources.h"
 
@@ -20,15 +20,15 @@ namespace {
 // ----------------------------------------------------------------------------
 // Defaults for properties which are stored in the browser theme pack. If you
 // change these defaults, you must increment the version number in
-// browser_theme_pack.h
+// browser_theme_pack.cc.
 
 // Default colors.
 #if defined(OS_CHROMEOS)
 // Used for theme fallback colors.
 const SkColor kDefaultColorFrame[] = {
-    SkColorSetRGB(109, 109, 109), SkColorSetRGB(204, 204, 204)};
+    SkColorSetRGB(0xC3, 0xC3, 0xC4), SkColorSetRGB(204, 204, 204)};
 const SkColor kDefaultColorFrameInactive[] = {
-    SkColorSetRGB(176, 176, 176), SkColorSetRGB(220, 220, 220)};
+    SkColorSetRGB(0xCD, 0xCD, 0xCE), SkColorSetRGB(220, 220, 220)};
 #elif defined(OS_MACOSX)
 const SkColor kDefaultColorFrame = SkColorSetRGB(224, 224, 224);
 const SkColor kDefaultColorFrameInactive = SkColorSetRGB(246, 246, 246);
@@ -37,10 +37,19 @@ const SkColor kDefaultColorFrame = SkColorSetRGB(66, 116, 201);
 const SkColor kDefaultColorFrameInactive = SkColorSetRGB(161, 182, 228);
 #endif  // OS_CHROMEOS
 
-const SkColor kDefaultColorFrameIncognito[] = {
-    SkColorSetRGB(83, 106, 139), SkColorSetRGB(160, 160, 162)};
+// These colors are the same between CrOS and !CrOS for MD, so this ifdef can be
+// removed when we stop supporting pre-MD.
+#if defined(OS_CHROMEOS)
+const SkColor kDefaultColorFrameIncognito[] = {SkColorSetRGB(0xA0, 0xA0, 0xA4),
+                                               SkColorSetRGB(0x28, 0x2B, 0x2D)};
 const SkColor kDefaultColorFrameIncognitoInactive[] = {
-    SkColorSetRGB(126, 139, 156), SkColorSetRGB(120, 120, 122)};
+    SkColorSetRGB(0xAA, 0xAA, 0xAE), SkColorSetRGB(0x38, 0x3B, 0x3D)};
+#else
+const SkColor kDefaultColorFrameIncognito[] = {SkColorSetRGB(83, 106, 139),
+                                               SkColorSetRGB(0x28, 0x2B, 0x2D)};
+const SkColor kDefaultColorFrameIncognitoInactive[] = {
+    SkColorSetRGB(126, 139, 156), SkColorSetRGB(0x38, 0x3B, 0x3D)};
+#endif
 
 #if defined(OS_MACOSX)
 const SkColor kDefaultColorToolbar = SkColorSetRGB(230, 230, 230);
@@ -56,12 +65,15 @@ const SkColor kDefaultDetachedBookmarkBarBackgroundIncognito[] = {
     SkColorSetRGB(0xF1, 0xF1, 0xF1), SkColorSetRGB(0x32, 0x32, 0x32)};
 
 const SkColor kDefaultColorTabText = SK_ColorBLACK;
+const SkColor kDefaultColorTabTextIncognito[] = {SK_ColorBLACK, SK_ColorWHITE};
 
 #if defined(OS_MACOSX)
 const SkColor kDefaultColorBackgroundTabText = SK_ColorBLACK;
 #else
 const SkColor kDefaultColorBackgroundTabText[] = {
     SkColorSetRGB(64, 64, 64), SK_ColorBLACK };
+const SkColor kDefaultColorBackgroundTabTextIncognito[] = {
+    SkColorSetRGB(64, 64, 64), SK_ColorWHITE };
 #endif  // OS_MACOSX
 
 const SkColor kDefaultColorBookmarkText = SK_ColorBLACK;
@@ -89,13 +101,15 @@ const SkColor kDefaultColorNTPSectionLink = SkColorSetRGB(6, 55, 116);
 const SkColor kDefaultColorButtonBackground = SkColorSetARGB(0, 0, 0, 0);
 
 // Default tints.
-const color_utils::HSL kDefaultTintButtons = { -1, -1, -1 };
-const color_utils::HSL kDefaultTintButtonsIncognito = { -1, -1, 0.85 };
-const color_utils::HSL kDefaultTintFrame = { -1, -1, -1 };
-const color_utils::HSL kDefaultTintFrameInactive = { -1, -1, 0.75 };
-const color_utils::HSL kDefaultTintFrameIncognito = { -1, 0.2, 0.35 };
-const color_utils::HSL kDefaultTintFrameIncognitoInactive = { -1, 0.3, 0.6 };
-const color_utils::HSL kDefaultTintBackgroundTab = { -1, -1, 0.75 };
+const color_utils::HSL kDefaultTintButtons = {-1, -1, -1};
+// In pre-md, reuse the normal tint for incognito.
+const color_utils::HSL kDefaultTintButtonsIncognito[] = {{-1, -1, -1},
+                                                         {-1, -1, 0.85}};
+const color_utils::HSL kDefaultTintFrame = {-1, -1, -1};
+const color_utils::HSL kDefaultTintFrameInactive = {-1, -1, 0.75};
+const color_utils::HSL kDefaultTintFrameIncognito = {-1, 0.2, 0.35};
+const color_utils::HSL kDefaultTintFrameIncognitoInactive = {-1, 0.3, 0.6};
+const color_utils::HSL kDefaultTintBackgroundTab = {-1, -1, 0.75};
 
 // ----------------------------------------------------------------------------
 // Defaults for properties which are not stored in the browser theme pack.
@@ -233,15 +247,16 @@ const std::set<int>& ThemeProperties::GetTintableToolbarButtons() {
 
 // static
 color_utils::HSL ThemeProperties::GetDefaultTint(int id, bool otr) {
-  bool otr_tint = otr && ui::MaterialDesignController::IsModeMaterial();
   switch (id) {
     case TINT_FRAME:
-      return otr_tint ? kDefaultTintFrameIncognito : kDefaultTintFrame;
+      return otr ? kDefaultTintFrameIncognito : kDefaultTintFrame;
     case TINT_FRAME_INACTIVE:
-      return otr_tint ? kDefaultTintFrameIncognitoInactive
-                      : kDefaultTintFrameInactive;
-    case TINT_BUTTONS:
-      return otr_tint ? kDefaultTintButtonsIncognito : kDefaultTintButtons;
+      return otr ? kDefaultTintFrameIncognitoInactive
+                 : kDefaultTintFrameInactive;
+    case TINT_BUTTONS: {
+      const int mode = ui::MaterialDesignController::IsModeMaterial();
+      return otr ? kDefaultTintButtonsIncognito[mode] : kDefaultTintButtons;
+    }
     case TINT_BACKGROUND_TAB:
       return kDefaultTintBackgroundTab;
     case TINT_FRAME_INCOGNITO:
@@ -284,12 +299,14 @@ SkColor ThemeProperties::GetDefaultColor(int id, bool otr) {
                  : kDefaultColorToolbar[mode];
 #endif  // OS_MACOSX
     case COLOR_TAB_TEXT:
-      return kDefaultColorTabText;
+      return otr ? kDefaultColorTabTextIncognito[mode]
+                 : kDefaultColorTabText;
     case COLOR_BACKGROUND_TAB_TEXT:
 #if defined(OS_MACOSX)
       return kDefaultColorBackgroundTabText;
 #else
-      return kDefaultColorBackgroundTabText[mode];
+      return otr ? kDefaultColorBackgroundTabTextIncognito[mode]
+                 : kDefaultColorBackgroundTabText[mode];
 #endif  // OS_MACOSX
     case COLOR_BOOKMARK_TEXT:
       return otr ? kDefaultColorBookmarkTextIncognito[mode]

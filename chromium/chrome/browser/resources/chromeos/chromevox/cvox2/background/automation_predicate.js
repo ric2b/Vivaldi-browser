@@ -143,6 +143,7 @@ AutomationPredicate.leaf = function(node) {
       node.role == RoleType.popUpButton ||
       node.role == RoleType.slider ||
       node.role == RoleType.textField ||
+      node.state.invisible ||
       node.children.every(function(n) {
         return n.state.invisible;
       });
@@ -176,7 +177,8 @@ AutomationPredicate.leafDomNode = function(node) {
  * @return {boolean}
  */
 AutomationPredicate.element = function(node) {
-  return node.role == RoleType.staticText || node.state.focusable;
+  return (node.state .focusable && node.role != RoleType.rootWebArea) ||
+      AutomationPredicate.leafDomNode(node);
 };
 
 /**
@@ -198,8 +200,9 @@ AutomationPredicate.linebreak = function(first, second) {
  * @return {boolean}
  */
 AutomationPredicate.container = function(node) {
-  return node.state.focusable &&
-      node.role == RoleType.toolbar;
+  return node.role == RoleType.toolbar ||
+      node.role == RoleType.rootWebArea ||
+      node.role == RoleType.window;
 };
 
 /**

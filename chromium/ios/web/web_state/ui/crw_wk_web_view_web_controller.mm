@@ -1015,7 +1015,7 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
 }
 
 - (void)handleSSLCertError:(NSError*)error {
-  DCHECK(web::IsWKWebViewSSLCertError(error));
+  CHECK(web::IsWKWebViewSSLCertError(error));
 
   net::SSLInfo info;
   web::GetSSLInfoFromWKWebViewSSLCertError(error, &info);
@@ -1023,8 +1023,12 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
   web::SSLStatus status;
   status.security_style = web::SECURITY_STYLE_AUTHENTICATION_BROKEN;
   status.cert_status = info.cert_status;
-  status.cert_id = web::CertStore::GetInstance()->StoreCert(
-      info.cert.get(), self.certGroupID);
+  // |info.cert| can be null if certChain in NSError is empty or can not be
+  // parsed.
+  if (info.cert) {
+    status.cert_id = web::CertStore::GetInstance()->StoreCert(info.cert.get(),
+                                                              self.certGroupID);
+  }
 
   // Retrieve verification results from _certVerificationErrors cache to avoid
   // unnecessary recalculations. Verification results are cached for the leaf
@@ -1801,9 +1805,15 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
     // TODO(crbug.com/546347): Extract necessary tasks for app specific URL
     // navigation rather than restarting the load.
     if (web::GetWebClient()->IsAppSpecificURL(webViewURL)) {
-      [self abortWebLoad];
-      web::WebLoadParams params(webViewURL);
-      [self loadWithParams:params];
+      // Renderer-initiated loads of WebUI can be done only from other WebUI
+      // pages. WebUI pages may have increased power and using the same web
+      // process (which may potentially be controller by an attacker) is
+      // dangerous.
+      if (web::GetWebClient()->IsAppSpecificURL(_documentURL)) {
+        [self abortWebLoad];
+        web::WebLoadParams params(webViewURL);
+        [self loadWithParams:params];
+      }
       return;
     } else {
       [self registerLoadRequest:webViewURL];
@@ -1850,9 +1860,11 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
     return;
   }
 
-  // Directly cancelled navigations are simply discarded without handling
-  // their potential errors.
-  if (![_pendingNavigationInfo cancelled]) {
+  // Handle load cancellation for directly cancelled navigations without
+  // handling their potential errors. Otherwise, handle the error.
+  if ([_pendingNavigationInfo cancelled]) {
+    [self loadCancelled];
+  } else {
     error = WKWebViewErrorWithSource(error, PROVISIONAL_LOAD);
 
     if (web::IsWKWebViewSSLCertError(error))
@@ -2002,6 +2014,10 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
   // owns a separate shallow copy of WKWebViewConfiguration.
   [child ensureWebViewCreatedWithConfiguration:configuration];
   return [child webView];
+}
+
+- (void)webViewDidClose:(WKWebView*)webView {
+  [self orderClose];
 }
 
 - (void)webView:(WKWebView*)webView

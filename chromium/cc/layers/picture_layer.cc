@@ -178,7 +178,7 @@ bool PictureLayer::HasDrawableContent() const {
 }
 
 void PictureLayer::SetTypeForProtoSerialization(proto::LayerNode* proto) const {
-  proto->set_type(proto::LayerType::PICTURE_LAYER);
+  proto->set_type(proto::LayerNode::PICTURE_LAYER);
 }
 
 void PictureLayer::LayerSpecificPropertiesToProto(
@@ -187,7 +187,9 @@ void PictureLayer::LayerSpecificPropertiesToProto(
   DropRecordingSourceContentIfInvalid();
 
   proto::PictureLayerProperties* picture = proto->mutable_picture();
-  recording_source_->ToProtobuf(picture->mutable_recording_source());
+  recording_source_->ToProtobuf(
+      picture->mutable_recording_source(),
+      layer_tree_host()->image_serialization_processor());
   RegionToProto(last_updated_invalidation_, picture->mutable_invalidation());
   RectToProto(last_updated_visible_layer_rect_,
               picture->mutable_last_updated_visible_layer_rect());
@@ -203,7 +205,15 @@ void PictureLayer::FromLayerSpecificPropertiesProto(
     const proto::LayerProperties& proto) {
   Layer::FromLayerSpecificPropertiesProto(proto);
   const proto::PictureLayerProperties& picture = proto.picture();
-  recording_source_->FromProtobuf(picture.recording_source());
+  // If this is a new layer, ensure it has a recording source. During layer
+  // hierarchy deserialization, ::SetLayerTreeHost(...) is not called, but
+  // instead the member is set directly, so it needs to be set here explicitly.
+  if (!recording_source_)
+    recording_source_.reset(new DisplayListRecordingSource);
+
+  recording_source_->FromProtobuf(
+      picture.recording_source(),
+      layer_tree_host()->image_serialization_processor());
 
   Region new_invalidation = RegionFromProto(picture.invalidation());
   last_updated_invalidation_.Swap(&new_invalidation);

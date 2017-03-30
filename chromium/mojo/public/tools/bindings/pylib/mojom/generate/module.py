@@ -47,6 +47,9 @@ class ReferenceKind(Kind):
     if self == SHAREDBUFFER:
       return NULLABLE_SHAREDBUFFER
 
+    if IsStructKind(self) and self.native_only:
+      raise Exception('Native-only structs cannot be nullable.')
+
     nullable_kind = type(self)()
     nullable_kind.shared_definition = self.shared_definition
     if self.spec is not None:
@@ -131,6 +134,8 @@ PRIMITIVES = (
 
 
 ATTRIBUTE_MIN_VERSION = 'MinVersion'
+ATTRIBUTE_EXTENSIBLE = 'Extensible'
+ATTRIBUTE_SYNC = 'Sync'
 
 
 class NamedValue(object):
@@ -372,6 +377,11 @@ class Method(object):
     return self.attributes.get(ATTRIBUTE_MIN_VERSION) \
         if self.attributes else None
 
+  @property
+  def sync(self):
+    return self.attributes.get(ATTRIBUTE_SYNC) \
+        if self.attributes else None
+
 
 class Interface(ReferenceKind):
   ReferenceKind.AddSharedProperty('module')
@@ -444,6 +454,11 @@ class Enum(Kind):
     Kind.__init__(self, spec)
     self.fields = []
     self.attributes = attributes
+
+  @property
+  def extensible(self):
+    return self.attributes.get(ATTRIBUTE_EXTENSIBLE, False) \
+        if self.attributes else False
 
 
 class Module(object):
@@ -655,4 +670,11 @@ def PassesAssociatedKinds(interface):
       for param in method.response_parameters:
         if _ContainsAssociatedKinds(param.kind, visited_kinds):
           return True
+  return False
+
+
+def HasSyncMethods(interface):
+  for method in interface.methods:
+    if method.sync:
+      return True
   return False

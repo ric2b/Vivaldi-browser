@@ -18,14 +18,13 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/prefs/pref_member.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
+#include "components/prefs/pref_member.h"
 #include "components/ssl_config/ssl_config_service_manager.h"
 #include "ios/web/public/web_thread_delegate.h"
 #include "net/base/network_change_notifier.h"
 #include "net/http/http_network_session.h"
-#include "net/socket/next_proto.h"
 
 class PrefProxyConfigTracker;
 class PrefService;
@@ -135,12 +134,10 @@ class IOSChromeIOThread : public web::WebThreadDelegate {
     uint16_t testing_fixed_https_port;
     Optional<bool> enable_tcp_fast_open_for_ssl;
 
-    Optional<size_t> initial_max_spdy_concurrent_streams;
-    Optional<bool> enable_spdy_compression;
-    Optional<bool> enable_spdy_ping_based_connection_checking;
-    net::NextProtoVector next_protos;
-    std::set<net::HostPortPair> forced_spdy_exclusions;
-    Optional<bool> use_alternative_services;
+    Optional<bool> enable_spdy31;
+    Optional<bool> enable_http2;
+    Optional<bool> parse_alternative_services;
+    Optional<bool> enable_alternative_service_with_different_host;
     Optional<double> alternative_service_probability_threshold;
 
     Optional<bool> enable_npn;
@@ -211,7 +208,6 @@ class IOSChromeIOThread : public web::WebThreadDelegate {
   // This handles initialization and destruction of state that must
   // live on the IO thread.
   void Init() override;
-  void InitAsync() override;
   void CleanUp() override;
 
   // Initializes |params| based on the settings in |globals|.
@@ -230,6 +226,11 @@ class IOSChromeIOThread : public web::WebThreadDelegate {
   static void ConfigureSpdyGlobals(base::StringPiece quic_trial_group,
                                    const VariationParameters& quic_trial_params,
                                    Globals* globals);
+
+  // Configures Alternative Services in |globals| based on the field trial
+  // group.
+  static void ConfigureAltSvcGlobals(base::StringPiece altsvc_trial_group,
+                                     IOSChromeIOThread::Globals* globals);
 
   // Configures NPN in |globals| based on the field trial group.
   static void ConfigureNPNGlobals(base::StringPiece npn_trial_group,
@@ -300,8 +301,8 @@ class IOSChromeIOThread : public web::WebThreadDelegate {
   // Returns true if QUIC should prefer AES-GCN even without hardware support.
   static bool ShouldQuicPreferAes(const VariationParameters& quic_trial_params);
 
-  // Returns true if QUIC should enable alternative services.
-  static bool ShouldQuicEnableAlternativeServices(
+  // Returns true if QUIC should enable alternative services for different host.
+  static bool ShouldQuicEnableAlternativeServicesForDifferentHost(
       const VariationParameters& quic_trial_params);
 
   // Returns the maximum number of QUIC connections with high packet loss in a

@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <vector>
 
+#include "base/macros.h"
 #include "tools/battor_agent/battor_protocol_types.h"
 
 namespace battor {
@@ -32,6 +33,12 @@ class BattOrSampleConverter {
   BattOrSample ToSample(const RawBattOrSample& sample,
                         size_t sample_number) const;
 
+  // Returns the lowest magnitude sample that the BattOr can collect.
+  BattOrSample MinSample() const;
+
+  // Returns the highest magnitude sample that the BattOr can collect.
+  BattOrSample MaxSample() const;
+
  private:
   // The BattOr's EEPROM, which stores some conversion parameters we need.
   BattOrEEPROM eeprom_;
@@ -39,6 +46,8 @@ class BattOrSampleConverter {
   // The baseline current and voltage calculated from the calibration frame.
   double baseline_current_;
   double baseline_voltage_;
+
+  DISALLOW_COPY_AND_ASSIGN(BattOrSampleConverter);
 };
 
 }  // namespace battor

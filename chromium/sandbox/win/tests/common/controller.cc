@@ -18,6 +18,17 @@ namespace {
 
 static const int kDefaultTimeout = 60000;
 
+bool IsProcessRunning(HANDLE process) {
+  DWORD exit_code = 0;
+  if (::GetExitCodeProcess(process, &exit_code))
+    return exit_code == STILL_ACTIVE;
+  return false;
+}
+
+}  // namespace
+
+namespace sandbox {
+
 // Constructs a full path to a file inside the system32 folder.
 base::string16 MakePathToSys32(const wchar_t* name, bool is_obj_man_path) {
   wchar_t windows_path[MAX_PATH] = {0};
@@ -54,17 +65,6 @@ base::string16 MakePathToSysWow64(const wchar_t* name, bool is_obj_man_path) {
   return full_path;
 }
 
-bool IsProcessRunning(HANDLE process) {
-  DWORD exit_code = 0;
-  if (::GetExitCodeProcess(process, &exit_code))
-    return exit_code == STILL_ACTIVE;
-  return false;
-}
-
-}  // namespace
-
-namespace sandbox {
-
 base::string16 MakePathToSys(const wchar_t* name, bool is_obj_man_path) {
   return (base::win::OSInfo::GetInstance()->wow64_status() ==
       base::win::OSInfo::WOW64_ENABLED) ?
@@ -90,20 +90,28 @@ BrokerServices* GetBroker() {
   return broker;
 }
 
-TestRunner::TestRunner(JobLevel job_level, TokenLevel startup_token,
+TestRunner::TestRunner(JobLevel job_level,
+                       TokenLevel startup_token,
                        TokenLevel main_token)
-    : is_init_(false), is_async_(false), no_sandbox_(false),
+    : is_init_(false),
+      is_async_(false),
+      no_sandbox_(false),
+      disable_csrss_(true),
       target_process_id_(0) {
   Init(job_level, startup_token, main_token);
 }
 
 TestRunner::TestRunner()
-    : is_init_(false), is_async_(false), no_sandbox_(false),
+    : is_init_(false),
+      is_async_(false),
+      no_sandbox_(false),
+      disable_csrss_(true),
       target_process_id_(0) {
   Init(JOB_LOCKDOWN, USER_RESTRICTED_SAME_ACCESS, USER_LOCKDOWN);
 }
 
-void TestRunner::Init(JobLevel job_level, TokenLevel startup_token,
+void TestRunner::Init(JobLevel job_level,
+                      TokenLevel startup_token,
                       TokenLevel main_token) {
   broker_ = NULL;
   policy_ = NULL;
@@ -123,11 +131,6 @@ void TestRunner::Init(JobLevel job_level, TokenLevel startup_token,
 
   policy_->SetJobLevel(job_level, 0);
   policy_->SetTokenLevel(startup_token, main_token);
-
-  // Close all ALPC ports.
-  if (base::win::GetVersion() >= base::win::VERSION_WIN8) {
-    policy_->AddKernelObjectToClose(L"ALPC Port", NULL);
-  }
 
   is_init_ = true;
 }
@@ -209,6 +212,9 @@ int TestRunner::InternalRunTest(const wchar_t* command) {
     target_process_.Close();
     target_process_id_ = 0;
   }
+
+  if (disable_csrss_)
+    policy_->SetDisconnectCsrss();
 
   // Get the path to the sandboxed process.
   wchar_t prog_name[MAX_PATH];

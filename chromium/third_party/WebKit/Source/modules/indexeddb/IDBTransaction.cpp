@@ -32,7 +32,6 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/EventQueue.h"
-#include "core/inspector/ScriptCallStack.h"
 #include "modules/IndexedDBNames.h"
 #include "modules/indexeddb/IDBDatabase.h"
 #include "modules/indexeddb/IDBEventDispatcher.h"
@@ -345,12 +344,12 @@ ExecutionContext* IDBTransaction::executionContext() const
     return ActiveDOMObject::executionContext();
 }
 
-bool IDBTransaction::dispatchEventInternal(PassRefPtrWillBeRawPtr<Event> event)
+DispatchEventResult IDBTransaction::dispatchEventInternal(PassRefPtrWillBeRawPtr<Event> event)
 {
     IDB_TRACE("IDBTransaction::dispatchEvent");
     if (m_contextStopped || !executionContext()) {
         m_state = Finished;
-        return false;
+        return DispatchEventResult::CanceledBeforeDispatch;
     }
     ASSERT(m_state != Finished);
     ASSERT(m_hasPendingActivity);
@@ -372,7 +371,7 @@ bool IDBTransaction::dispatchEventInternal(PassRefPtrWillBeRawPtr<Event> event)
 
     // FIXME: When we allow custom event dispatching, this will probably need to change.
     ASSERT(event->type() == EventTypeNames::complete || event->type() == EventTypeNames::abort);
-    bool returnValue = IDBEventDispatcher::dispatch(event.get(), targets);
+    DispatchEventResult dispatchResult = IDBEventDispatcher::dispatch(event.get(), targets);
     // FIXME: Try to construct a test where |this| outlives openDBRequest and we
     // get a crash.
     if (m_openDBRequest) {
@@ -380,7 +379,7 @@ bool IDBTransaction::dispatchEventInternal(PassRefPtrWillBeRawPtr<Event> event)
         m_openDBRequest->transactionDidFinishAndDispatch();
     }
     m_hasPendingActivity = false;
-    return returnValue;
+    return dispatchResult;
 }
 
 void IDBTransaction::stop()

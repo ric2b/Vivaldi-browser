@@ -39,40 +39,50 @@ namespace IPC {
 template <>
 struct ParamTraits<scoped_refptr<net::HttpResponseHeaders> > {
   typedef scoped_refptr<net::HttpResponseHeaders> param_type;
-  static void Write(Message* m, const param_type& p);
-  static bool Read(const Message* m, base::PickleIterator* iter, param_type* r);
+  static void Write(base::Pickle* m, const param_type& p);
+  static bool Read(const base::Pickle* m,
+                   base::PickleIterator* iter,
+                   param_type* r);
   static void Log(const param_type& p, std::string* l);
 };
 
 template <>
 struct CONTENT_EXPORT ParamTraits<storage::DataElement> {
   typedef storage::DataElement param_type;
-  static void Write(Message* m, const param_type& p);
-  static bool Read(const Message* m, base::PickleIterator* iter, param_type* r);
+  static void Write(base::Pickle* m, const param_type& p);
+  static bool Read(const base::Pickle* m,
+                   base::PickleIterator* iter,
+                   param_type* r);
   static void Log(const param_type& p, std::string* l);
 };
 
 template <>
 struct ParamTraits<scoped_refptr<content::ResourceDevToolsInfo> > {
   typedef scoped_refptr<content::ResourceDevToolsInfo> param_type;
-  static void Write(Message* m, const param_type& p);
-  static bool Read(const Message* m, base::PickleIterator* iter, param_type* r);
+  static void Write(base::Pickle* m, const param_type& p);
+  static bool Read(const base::Pickle* m,
+                   base::PickleIterator* iter,
+                   param_type* r);
   static void Log(const param_type& p, std::string* l);
 };
 
 template <>
 struct ParamTraits<net::LoadTimingInfo> {
   typedef net::LoadTimingInfo param_type;
-  static void Write(Message* m, const param_type& p);
-  static bool Read(const Message* m, base::PickleIterator* iter, param_type* r);
+  static void Write(base::Pickle* m, const param_type& p);
+  static bool Read(const base::Pickle* m,
+                   base::PickleIterator* iter,
+                   param_type* r);
   static void Log(const param_type& p, std::string* l);
 };
 
 template <>
 struct ParamTraits<scoped_refptr<content::ResourceRequestBody> > {
   typedef scoped_refptr<content::ResourceRequestBody> param_type;
-  static void Write(Message* m, const param_type& p);
-  static bool Read(const Message* m, base::PickleIterator* iter, param_type* r);
+  static void Write(base::Pickle* m, const param_type& p);
+  static bool Read(const base::Pickle* m,
+                   base::PickleIterator* iter,
+                   param_type* r);
   static void Log(const param_type& p, std::string* l);
 };
 
@@ -213,6 +223,10 @@ IPC_STRUCT_BEGIN(ResourceHostMsg_Request)
   // or kInvalidServiceWorkerProviderId.
   IPC_STRUCT_MEMBER(int, service_worker_provider_id)
 
+  // True if the request originated from a Service Worker, e.g. due to a
+  // fetch() in the Service Worker script.
+  IPC_STRUCT_MEMBER(bool, originated_from_service_worker)
+
   // True if the request should not be handled by the ServiceWorker.
   IPC_STRUCT_MEMBER(bool, skip_service_worker)
 
@@ -284,6 +298,11 @@ IPC_STRUCT_BEGIN(ResourceHostMsg_Request)
   // Whether or not to request a LoFi version of the resource or let the browser
   // decide.
   IPC_STRUCT_MEMBER(content::LoFiState, lofi_state)
+
+  // PlzNavigate: the stream url associated with a navigation. Used to get
+  // access to the body of the response that has already been fetched by the
+  // browser.
+  IPC_STRUCT_MEMBER(GURL, resource_body_stream_url)
 IPC_STRUCT_END()
 
 // Parameters for a ResourceMsg_RequestComplete
@@ -355,6 +374,19 @@ IPC_MESSAGE_CONTROL4(ResourceMsg_SetDataBuffer,
 IPC_MESSAGE_CONTROL2(ResourceMsg_DataReceivedDebug,
                      int /* request_id */,
                      int /* data_offset */)
+IPC_MESSAGE_CONTROL4(ResourceMsg_DataReceivedDebug2,
+                     int /* request_id */,
+                     int /* data_offset */,
+                     int /* data_length */,
+                     int /* encoded_data_length */)
+
+// Sent when a chunk of data from a resource request is ready, and the resource
+// is expected to be small enough to fit in the inlined buffer.
+// The data is sent as a part of IPC message.
+IPC_MESSAGE_CONTROL3(ResourceMsg_InlinedDataChunkReceived,
+                     int /* request_id */,
+                     std::vector<char> /* data */,
+                     int /* encoded_data_length */)
 
 // Sent when some data from a resource request is ready.  The data offset and
 // length specify a byte range into the shared memory buffer provided by the

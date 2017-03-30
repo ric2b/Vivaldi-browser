@@ -32,7 +32,6 @@
 #include "bindings/core/v8/V8DOMError.h"
 #include "bindings/core/v8/V8Element.h"
 #include "bindings/core/v8/V8EventTarget.h"
-#include "bindings/core/v8/V8MediaKeyError.h"
 #include "bindings/core/v8/V8MessagePort.h"
 #include "bindings/core/v8/V8TextTrack.h"
 #include "bindings/core/v8/V8Uint8Array.h"
@@ -311,99 +310,5 @@ CORE_EXPORT bool DictionaryHelper::get(const Dictionary& dictionary, const Strin
 }
 
 template CORE_EXPORT bool DictionaryHelper::get(const Dictionary&, const String& key, RefPtr<DOMUint8Array>& value);
-
-template <typename T>
-struct IntegralTypeTraits {
-};
-
-template <>
-struct IntegralTypeTraits<uint8_t> {
-    static inline uint8_t toIntegral(v8::Isolate* isolate, v8::Local<v8::Value> value, IntegerConversionConfiguration configuration, ExceptionState& exceptionState)
-    {
-        return toUInt8(isolate, value, configuration, exceptionState);
-    }
-    static const String typeName() { return "UInt8"; }
-};
-
-template <>
-struct IntegralTypeTraits<int8_t> {
-    static inline int8_t toIntegral(v8::Isolate* isolate, v8::Local<v8::Value> value, IntegerConversionConfiguration configuration, ExceptionState& exceptionState)
-    {
-        return toInt8(isolate, value, configuration, exceptionState);
-    }
-    static const String typeName() { return "Int8"; }
-};
-
-template <>
-struct IntegralTypeTraits<unsigned short> {
-    static inline uint16_t toIntegral(v8::Isolate* isolate, v8::Local<v8::Value> value, IntegerConversionConfiguration configuration, ExceptionState& exceptionState)
-    {
-        return toUInt16(isolate, value, configuration, exceptionState);
-    }
-    static const String typeName() { return "UInt16"; }
-};
-
-template <>
-struct IntegralTypeTraits<short> {
-    static inline int16_t toIntegral(v8::Isolate* isolate, v8::Local<v8::Value> value, IntegerConversionConfiguration configuration, ExceptionState& exceptionState)
-    {
-        return toInt16(isolate, value, configuration, exceptionState);
-    }
-    static const String typeName() { return "Int16"; }
-};
-
-template <>
-struct IntegralTypeTraits<unsigned> {
-    static inline uint32_t toIntegral(v8::Isolate* isolate, v8::Local<v8::Value> value, IntegerConversionConfiguration configuration, ExceptionState& exceptionState)
-    {
-        return toUInt32(isolate, value, configuration, exceptionState);
-    }
-    static const String typeName() { return "UInt32"; }
-};
-
-template <>
-struct IntegralTypeTraits<unsigned long> {
-    static inline uint32_t toIntegral(v8::Isolate* isolate, v8::Local<v8::Value> value, IntegerConversionConfiguration configuration, ExceptionState& exceptionState)
-    {
-        return toUInt32(isolate, value, configuration, exceptionState);
-    }
-    static const String typeName() { return "UInt32"; }
-};
-
-template <>
-struct IntegralTypeTraits<int> {
-    static inline int32_t toIntegral(v8::Isolate* isolate, v8::Local<v8::Value> value, IntegerConversionConfiguration configuration, ExceptionState& exceptionState)
-    {
-        return toInt32(isolate, value, configuration, exceptionState);
-    }
-    static const String typeName() { return "Int32"; }
-};
-
-template <>
-struct IntegralTypeTraits<long> {
-    static inline int32_t toIntegral(v8::Isolate* isolate, v8::Local<v8::Value> value, IntegerConversionConfiguration configuration, ExceptionState& exceptionState)
-    {
-        return toInt32(isolate, value, configuration, exceptionState);
-    }
-    static const String typeName() { return "Int32"; }
-};
-
-template <>
-struct IntegralTypeTraits<unsigned long long> {
-    static inline unsigned long long toIntegral(v8::Isolate* isolate, v8::Local<v8::Value> value, IntegerConversionConfiguration configuration, ExceptionState& exceptionState)
-    {
-        return toUInt64(isolate, value, configuration, exceptionState);
-    }
-    static const String typeName() { return "UInt64"; }
-};
-
-template <>
-struct IntegralTypeTraits<long long> {
-    static inline long long toIntegral(v8::Isolate* isolate, v8::Local<v8::Value> value, IntegerConversionConfiguration configuration, ExceptionState& exceptionState)
-    {
-        return toInt64(isolate, value, configuration, exceptionState);
-    }
-    static const String typeName() { return "Int64"; }
-};
 
 } // namespace blink

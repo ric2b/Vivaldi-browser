@@ -15,14 +15,12 @@
 #include "bindings/core/v8/V8ObjectConstructor.h"
 #include "bindings/core/v8/V8TestInterface.h"
 #include "bindings/tests/idls/modules/TestPartialInterfaceImplementation3.h"
-#include "core/dom/ContextFeatures.h"
 #include "core/dom/Document.h"
-#include "core/experiments/ExperimentalFeatures.h"
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/origin_trials/OriginTrials.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/ScriptForbiddenScope.h"
-#include "platform/TraceEvent.h"
 #include "wtf/GetPtr.h"
 #include "wtf/RefPtr.h"
 
@@ -244,16 +242,16 @@ static void partialVoidTestEnumModulesArgMethodMethod(const v8::FunctionCallback
 
 static void partialVoidTestEnumModulesArgMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     ExecutionContext* executionContext = currentExecutionContext(info.GetIsolate());
     String errorMessage;
-    if (!ExperimentalFeatures::featureNameEnabled(executionContext, errorMessage)) {
+    if (!OriginTrials::featureNameEnabled(executionContext, errorMessage)) {
          v8SetReturnValue(info, v8::Undefined(info.GetIsolate()));
-         toDocument(executionContext)->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage));
+         if (!errorMessage.isEmpty()) {
+             toDocument(executionContext)->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage));
+         }
          return;
     }
     TestInterfaceImplementationPartialV8Internal::partialVoidTestEnumModulesArgMethodMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void partial2StaticVoidMethod2Method(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -295,16 +293,16 @@ static void unscopeableVoidMethodMethod(const v8::FunctionCallbackInfo<v8::Value
 
 static void unscopeableVoidMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     ExecutionContext* executionContext = currentExecutionContext(info.GetIsolate());
     String errorMessage;
-    if (!ExperimentalFeatures::featureNameEnabled(executionContext, errorMessage)) {
+    if (!OriginTrials::featureNameEnabled(executionContext, errorMessage)) {
          v8SetReturnValue(info, v8::Undefined(info.GetIsolate()));
-         toDocument(executionContext)->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage));
+         if (!errorMessage.isEmpty()) {
+             toDocument(executionContext)->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage));
+         }
          return;
     }
     TestInterfaceImplementationPartialV8Internal::unscopeableVoidMethodMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 } // namespace TestInterfaceImplementationPartialV8Internal
@@ -319,7 +317,7 @@ void V8TestInterfacePartial::installV8TestInterfaceTemplate(v8::Local<v8::Functi
     V8TestInterface::installV8TestInterfaceTemplate(functionTemplate, isolate);
 
     v8::Local<v8::Signature> defaultSignature;
-    defaultSignature = V8DOMConfiguration::installDOMClassTemplate(isolate, functionTemplate, "TestInterface", v8::Local<v8::FunctionTemplate>(), V8TestInterface::internalFieldCount,
+    defaultSignature = V8DOMConfiguration::installDOMClassTemplate(isolate, functionTemplate, V8TestInterface::wrapperTypeInfo.interfaceName, v8::Local<v8::FunctionTemplate>(), V8TestInterface::internalFieldCount,
         0, 0,
         0, 0,
         V8TestInterfaceMethods, WTF_ARRAY_LENGTH(V8TestInterfaceMethods));

@@ -140,7 +140,7 @@ void TableLayoutAlgorithmAuto::fullRecalc()
     m_hasPercent = false;
     m_effectiveLogicalWidthDirty = true;
 
-    unsigned nEffCols = m_table->numEffCols();
+    unsigned nEffCols = m_table->numEffectiveColumns();
     m_layoutStruct.resize(nEffCols);
     m_layoutStruct.fill(Layout());
     m_spanCells.fill(0);
@@ -158,9 +158,9 @@ void TableLayoutAlgorithmAuto::fullRecalc()
             // TODO(alancutter): Make this work correctly for calc lengths.
             if ((colLogicalWidth.isFixed() || colLogicalWidth.hasPercent()) && colLogicalWidth.isZero())
                 colLogicalWidth = Length();
-            unsigned effCol = m_table->colToEffCol(currentColumn);
+            unsigned effCol = m_table->absoluteColumnToEffectiveColumn(currentColumn);
             unsigned span = column->span();
-            if (!colLogicalWidth.isAuto() && span == 1 && effCol < nEffCols && m_table->spanOfEffCol(effCol) == 1) {
+            if (!colLogicalWidth.isAuto() && span == 1 && effCol < nEffCols && m_table->spanOfEffectiveColumn(effCol) == 1) {
                 m_layoutStruct[effCol].logicalWidth = colLogicalWidth;
                 if (colLogicalWidth.isFixed() && m_layoutStruct[effCol].maxLogicalWidth < colLogicalWidth.value())
                     m_layoutStruct[effCol].maxLogicalWidth = colLogicalWidth.value();
@@ -195,7 +195,7 @@ static bool shouldScaleColumns(LayoutTable* table)
             if (cb && cb->isTableCell()
                 && (cb->style()->width().isAuto() || cb->style()->width().hasPercent())) {
                 LayoutTableCell* cell = toLayoutTableCell(cb);
-                if (cell->colSpan() > 1 || cell->table()->style()->width().isAuto())
+                if (cell->colSpan() > 1 || cell->table()->isLogicalWidthAuto())
                     scale = false;
                 else
                     table = cell->table();
@@ -214,8 +214,8 @@ void TableLayoutAlgorithmAuto::computeIntrinsicLogicalWidths(LayoutUnit& minWidt
     fullRecalc();
 
     int spanMaxLogicalWidth = calcEffectiveLogicalWidth();
-    minWidth = 0;
-    maxWidth = 0;
+    minWidth = LayoutUnit();
+    maxWidth = LayoutUnit();
     float maxPercent = 0;
     float maxNonPercent = 0;
     bool scaleColumns = shouldScaleColumns(m_table);
@@ -242,11 +242,11 @@ void TableLayoutAlgorithmAuto::computeIntrinsicLogicalWidths(LayoutUnit& minWidt
 
     if (scaleColumns) {
         maxNonPercent = maxNonPercent * 100 / std::max(remainingPercent, epsilon);
-        maxWidth = std::max<int>(maxWidth, static_cast<int>(std::min(maxNonPercent, static_cast<float>(tableMaxWidth))));
-        maxWidth = std::max<int>(maxWidth, static_cast<int>(std::min(maxPercent, static_cast<float>(tableMaxWidth))));
+        maxWidth = std::max(maxWidth, LayoutUnit(std::min(maxNonPercent, static_cast<float>(tableMaxWidth))));
+        maxWidth = std::max(maxWidth, LayoutUnit(std::min(maxPercent, static_cast<float>(tableMaxWidth))));
     }
 
-    maxWidth = std::max<int>(maxWidth, spanMaxLogicalWidth);
+    maxWidth = LayoutUnit(std::max(maxWidth.floor(), spanMaxLogicalWidth));
 }
 
 void TableLayoutAlgorithmAuto::applyPreferredLogicalWidthQuirks(LayoutUnit& minWidth, LayoutUnit& maxWidth) const
@@ -259,11 +259,11 @@ void TableLayoutAlgorithmAuto::applyPreferredLogicalWidthQuirks(LayoutUnit& minW
         // FIXME: This line looks REALLY suspicious as it could allow the minimum
         // preferred logical width to be smaller than the table content. This has
         // to be cross-checked against other browsers.
-        minWidth = maxWidth = std::max<int>(minWidth, tableLogicalWidth.value());
+        minWidth = maxWidth = LayoutUnit(std::max<int>(minWidth.floor(), tableLogicalWidth.value()));
 
         const Length& styleMaxLogicalWidth = m_table->style()->logicalMaxWidth();
         if (styleMaxLogicalWidth.isFixed() && !styleMaxLogicalWidth.isNegative()) {
-            minWidth = std::min<int>(minWidth, styleMaxLogicalWidth.value());
+            minWidth = LayoutUnit(std::min<int>(minWidth.floor(), styleMaxLogicalWidth.value()));
             minWidth = std::max(minWidth, minContentWidth);
             maxWidth = minWidth;
         }
@@ -299,7 +299,7 @@ int TableLayoutAlgorithmAuto::calcEffectiveLogicalWidth()
         if (cellLogicalWidth.isZero() || cellLogicalWidth.isCalculated())
             cellLogicalWidth = Length(); // Make it Auto
 
-        unsigned effCol = m_table->colToEffCol(cell->col());
+        unsigned effCol = m_table->absoluteColumnToEffectiveColumn(cell->absoluteColumnIndex());
         size_t lastCol = effCol;
         int cellMinLogicalWidth = cell->minPreferredLogicalWidth() + spacingInRowDirection;
         int cellMaxLogicalWidth = cell->maxPreferredLogicalWidth() + spacingInRowDirection;
@@ -349,7 +349,7 @@ int TableLayoutAlgorithmAuto::calcEffectiveLogicalWidth()
             }
             if (!columnLayout.emptyCellsOnly)
                 spanHasEmptyCellsOnly = false;
-            span -= m_table->spanOfEffCol(lastCol);
+            span -= m_table->spanOfEffectiveColumn(lastCol);
             spanMinLogicalWidth += columnLayout.effectiveMinLogicalWidth;
             spanMaxLogicalWidth += columnLayout.effectiveMaxLogicalWidth;
             lastCol++;
@@ -500,14 +500,14 @@ void TableLayoutAlgorithmAuto::layout()
     // table layout based on the values collected in the layout structure.
     int tableLogicalWidth = m_table->logicalWidth() - m_table->bordersPaddingAndSpacingInRowDirection();
     int available = tableLogicalWidth;
-    size_t nEffCols = m_table->numEffCols();
+    size_t nEffCols = m_table->numEffectiveColumns();
 
     // FIXME: It is possible to be called without having properly updated our internal representation.
     // This means that our preferred logical widths were not recomputed as expected.
     if (nEffCols != m_layoutStruct.size()) {
         fullRecalc();
         // FIXME: Table layout shouldn't modify our table structure (but does due to columns and column-groups).
-        nEffCols = m_table->numEffCols();
+        nEffCols = m_table->numEffectiveColumns();
     }
 
     if (m_effectiveLogicalWidthDirty)
@@ -558,7 +558,8 @@ void TableLayoutAlgorithmAuto::layout()
         for (size_t i = 0; i < nEffCols; ++i) {
             Length& logicalWidth = m_layoutStruct[i].effectiveLogicalWidth;
             if (logicalWidth.hasPercent()) {
-                int cellLogicalWidth = std::max<int>(m_layoutStruct[i].effectiveMinLogicalWidth, minimumValueForLength(logicalWidth, tableLogicalWidth));
+                int cellLogicalWidth = std::max<int>(m_layoutStruct[i].effectiveMinLogicalWidth,
+                    minimumValueForLength(logicalWidth, LayoutUnit(tableLogicalWidth)));
                 available += m_layoutStruct[i].computedLogicalWidth - cellLogicalWidth;
                 m_layoutStruct[i].computedLogicalWidth = cellLogicalWidth;
             }
@@ -624,19 +625,21 @@ void TableLayoutAlgorithmAuto::layout()
     if (available < 0)
         shrinkColumnWidth(Percent, available);
 
+    ASSERT(m_table->effectiveColumnPositions().size() == nEffCols + 1);
     int pos = 0;
     for (size_t i = 0; i < nEffCols; ++i) {
-        m_table->setColumnPosition(i, pos);
+        m_table->setEffectiveColumnPosition(i, pos);
         pos += m_layoutStruct[i].computedLogicalWidth + m_table->hBorderSpacing();
     }
-    m_table->setColumnPosition(m_table->columnPositions().size() - 1, pos);
+    // The extra position is for the imaginary column after the last column.
+    m_table->setEffectiveColumnPosition(nEffCols, pos);
 }
 
 template<typename Total, LengthType lengthType, CellsToProcess cellsToProcess, DistributionMode distributionMode, DistributionDirection distributionDirection>
 void TableLayoutAlgorithmAuto::distributeWidthToColumns(int& available, Total total)
 {
     // TODO(alancutter): Make this work correctly for calc lengths.
-    int nEffCols = static_cast<int>(m_table->numEffCols());
+    int nEffCols = static_cast<int>(m_table->numEffectiveColumns());
     bool startToEnd = distributionDirection == StartToEnd;
     for (int i = startToEnd ? 0 : nEffCols - 1; startToEnd ? i < nEffCols : i > -1; startToEnd ? ++i : --i) {
         const Length& logicalWidth = m_layoutStruct[i].effectiveLogicalWidth;
@@ -674,7 +677,7 @@ void TableLayoutAlgorithmAuto::distributeWidthToColumns(int& available, Total to
 
 void TableLayoutAlgorithmAuto::shrinkColumnWidth(const LengthType& lengthType, int& available)
 {
-    size_t nEffCols = m_table->numEffCols();
+    size_t nEffCols = m_table->numEffectiveColumns();
     int logicalWidthBeyondMin = 0;
     for (unsigned i = nEffCols; i; ) {
         --i;
@@ -697,4 +700,4 @@ void TableLayoutAlgorithmAuto::shrinkColumnWidth(const LengthType& lengthType, i
         }
     }
 }
-}
+} // namespace blink

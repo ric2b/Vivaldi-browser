@@ -26,7 +26,7 @@
 #include "components/gcm_driver/crypto/gcm_crypto_test_helpers.h"
 #include "components/gcm_driver/fake_gcm_client_factory.h"
 #include "components/gcm_driver/gcm_profile_service.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/common/push_event_payload.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -95,10 +95,6 @@ class PushMessagingServiceTest : public ::testing::Test {
     // Override the GCM Profile service so that we can send fake messages.
     gcm::GCMProfileServiceFactory::GetInstance()->SetTestingFactory(
         &profile_, &BuildFakeGCMProfileService);
-
-    // Force-enable encrypted payloads for incoming push messages.
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kEnableExperimentalWebPlatformFeatures);
   }
 
   ~PushMessagingServiceTest() override {}
@@ -123,15 +119,15 @@ class PushMessagingServiceTest : public ::testing::Test {
   void DidDispatchMessage(std::string* app_id_out,
                           GURL* origin_out,
                           int64_t* service_worker_registration_id_out,
-                          std::string* message_data_out,
+                          content::PushEventPayload* payload_out,
                           const std::string& app_id,
                           const GURL& origin,
                           int64_t service_worker_registration_id,
-                          const std::string& message_data) {
+                          const content::PushEventPayload& payload) {
     *app_id_out = app_id;
     *origin_out = origin;
     *service_worker_registration_id_out = service_worker_registration_id;
-    *message_data_out = message_data;
+    *payload_out = payload;
   }
 
  protected:
@@ -150,7 +146,7 @@ TEST_F(PushMessagingServiceTest, PayloadEncryptionTest) {
 
   // (1) Make sure that |kExampleOrigin| has access to use Push Messaging.
   ASSERT_EQ(blink::WebPushPermissionStatusGranted,
-            push_service->GetPermissionStatus(origin, origin, true));
+            push_service->GetPermissionStatus(origin, true));
 
   std::string subscription_id;
   std::vector<uint8_t> p256dh, auth;
@@ -193,17 +189,17 @@ TEST_F(PushMessagingServiceTest, PayloadEncryptionTest) {
 
   ASSERT_FALSE(app_identifier.is_null());
 
-  std::string app_id, message_data;
+  std::string app_id;
   GURL dispatched_origin;
   int64_t service_worker_registration_id;
+  content::PushEventPayload payload;
 
   // (5) Observe message dispatchings from the Push Messaging service, and then
   // dispatch the |message| on the GCM driver as if it had actually been
   // received by Google Cloud Messaging.
-  push_service->SetMessageDispatchedCallbackForTesting(
-      base::Bind(&PushMessagingServiceTest::DidDispatchMessage,
-                 base::Unretained(this), &app_id, &dispatched_origin,
-                 &service_worker_registration_id, &message_data));
+  push_service->SetMessageDispatchedCallbackForTesting(base::Bind(
+      &PushMessagingServiceTest::DidDispatchMessage, base::Unretained(this),
+      &app_id, &dispatched_origin, &service_worker_registration_id, &payload));
 
   gcm::FakeGCMProfileService* fake_profile_service =
       static_cast<gcm::FakeGCMProfileService*>(
@@ -220,5 +216,6 @@ TEST_F(PushMessagingServiceTest, PayloadEncryptionTest) {
   EXPECT_EQ(origin, dispatched_origin);
   EXPECT_EQ(service_worker_registration_id, kTestServiceWorkerId);
 
-  EXPECT_EQ(kTestPayload, message_data);
+  EXPECT_FALSE(payload.is_null);
+  EXPECT_EQ(kTestPayload, payload.data);
 }

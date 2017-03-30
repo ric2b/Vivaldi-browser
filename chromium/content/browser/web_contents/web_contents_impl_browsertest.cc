@@ -27,6 +27,7 @@
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
+#include "content/test/content_browser_test_utils_internal.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -108,8 +109,13 @@ class NavigateOnCommitObserver : public WebContentsObserver {
       const LoadCommittedDetails& load_details) override {
     if (!done_) {
       done_ = true;
-      shell_->Stop();
       shell_->LoadURL(url_);
+
+      // There should be a pending entry.
+      CHECK(shell_->web_contents()->GetController().GetPendingEntry());
+
+      // Now that there is a pending entry, stop the load.
+      shell_->Stop();
     }
   }
 
@@ -189,16 +195,8 @@ class LoadingStateChangedDelegate : public WebContentsDelegate {
   int loadingStateToDifferentDocumentCount_;
 };
 
-// See: http://crbug.com/298193
-#if defined(OS_WIN) || defined(OS_LINUX)
-#define MAYBE_DidStopLoadingDetails DISABLED_DidStopLoadingDetails
-#else
-#define MAYBE_DidStopLoadingDetails DidStopLoadingDetails
-#endif
-
 // Test that DidStopLoading includes the correct URL in the details.
-IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
-                       MAYBE_DidStopLoadingDetails) {
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, DidStopLoadingDetails) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   LoadStopNotificationObserver load_observer(
@@ -212,20 +210,15 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
             load_observer.controller_);
 }
 
-// See: http://crbug.com/298193
-#if defined(OS_WIN) || defined(OS_LINUX)
-#define MAYBE_DidStopLoadingDetailsWithPending \
-  DISABLED_DidStopLoadingDetailsWithPending
-#else
-#define MAYBE_DidStopLoadingDetailsWithPending DidStopLoadingDetailsWithPending
-#endif
-
 // Test that DidStopLoading includes the correct URL in the details when a
 // pending entry is present.
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
-                       MAYBE_DidStopLoadingDetailsWithPending) {
+                       DidStopLoadingDetailsWithPending) {
   ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url("data:text/html,<div>test</div>");
+  // TODO(clamy): Add a cross-process navigation case as well once
+  // crbug.com/581024 is fixed.
+  GURL url1 = embedded_test_server()->GetURL("/title1.html");
+  GURL url2 = embedded_test_server()->GetURL("/title2.html");
 
   // Listen for the first load to stop.
   LoadStopNotificationObserver load_observer(
@@ -233,12 +226,11 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   // Start a new pending navigation as soon as the first load commits.
   // We will hear a DidStopLoading from the first load as the new load
   // is started.
-  NavigateOnCommitObserver commit_observer(
-      shell(), embedded_test_server()->GetURL("/title2.html"));
-  NavigateToURL(shell(), url);
+  NavigateOnCommitObserver commit_observer(shell(), url2);
+  NavigateToURL(shell(), url1);
   load_observer.Wait();
 
-  EXPECT_EQ(url, load_observer.url_);
+  EXPECT_EQ(url1, load_observer.url_);
   EXPECT_EQ(0, load_observer.session_index_);
   EXPECT_EQ(&shell()->web_contents()->GetController(),
             load_observer.controller_);
@@ -816,6 +808,52 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, NewNamedWindow) {
               static_cast<WebContentsImpl*>(new_shell->web_contents())
                   ->GetFrameTree()->root()->frame_name());
   }
+}
+
+// TODO(clamy): Make the test work on Windows and on Mac. On Mac and Windows,
+// there seem to be an issue with the ShellJavascriptDialogManager.
+#if defined(OS_WIN) || defined(OS_MACOSX)
+#define MAYBE_NoResetOnBeforeUnloadCanceledOnCommit \
+  DISABLED_NoResetOnBeforeUnloadCanceledOnCommit
+#else
+#define MAYBE_NoResetOnBeforeUnloadCanceledOnCommit \
+  NoResetOnBeforeUnloadCanceledOnCommit
+#endif
+// Test that if a BeforeUnload dialog is destroyed due to the commit of a
+// cross-site navigation, it will not reset the loading state.
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       MAYBE_NoResetOnBeforeUnloadCanceledOnCommit) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL kStartURL(
+      embedded_test_server()->GetURL("/hang_before_unload.html"));
+  const GURL kCrossSiteURL(
+      embedded_test_server()->GetURL("bar.com", "/title1.html"));
+
+  // Navigate to a first web page with a BeforeUnload event listener.
+  EXPECT_TRUE(NavigateToURL(shell(), kStartURL));
+
+  // Start a cross-site navigation that will not commit for the moment.
+  TestNavigationManager cross_site_delayer(shell()->web_contents(),
+                                           kCrossSiteURL);
+  shell()->LoadURL(kCrossSiteURL);
+  cross_site_delayer.WaitForWillStartRequest();
+
+  // Click on a link in the page. This will show the BeforeUnload dialog.
+  // Ensure the dialog is not dismissed, which will cause it to still be
+  // present when the cross-site navigation later commits.
+  // Note: the javascript function executed will not do the link click but
+  // schedule it for afterwards. Since the BeforeUnload event is synchronous,
+  // clicking on the link right away would cause the ExecuteScript to never
+  // return.
+  SetShouldProceedOnBeforeUnload(shell(), false);
+  EXPECT_TRUE(ExecuteScript(shell()->web_contents(), "clickLinkSoon()"));
+  WaitForAppModalDialog(shell());
+
+  // Have the cross-site navigation commit. The main RenderFrameHost should
+  // still be loading after that.
+  cross_site_delayer.ResumeNavigation();
+  cross_site_delayer.WaitForNavigationFinished();
+  EXPECT_TRUE(shell()->web_contents()->IsLoading());
 }
 
 }  // namespace content

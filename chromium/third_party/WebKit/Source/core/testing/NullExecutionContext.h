@@ -5,11 +5,11 @@
 #ifndef NullExecutionContext_h
 #define NullExecutionContext_h
 
+#include "bindings/core/v8/ScriptCallStack.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/SecurityContext.h"
 #include "core/events/EventQueue.h"
 #include "core/inspector/ConsoleMessage.h"
-#include "core/inspector/ScriptCallStack.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/RefCounted.h"
@@ -38,7 +38,7 @@ public:
     DOMTimerCoordinator* timers() override { return nullptr; }
 
     void addConsoleMessage(PassRefPtrWillBeRawPtr<ConsoleMessage>) override { }
-    void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtrWillBeRawPtr<ScriptCallStack>) override { }
+    void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack>) override { }
 
     bool isSecureContext(String& errorMessage, const SecureContextCheck = StandardSecureContextCheck) const override;
 

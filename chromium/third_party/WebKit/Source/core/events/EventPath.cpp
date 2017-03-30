@@ -34,6 +34,7 @@
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/events/TouchEvent.h"
 #include "core/events/TouchEventContext.h"
+#include "core/html/HTMLSlotElement.h"
 
 namespace blink {
 
@@ -54,15 +55,7 @@ static inline bool shouldStopAtShadowRoot(Event& event, ShadowRoot& shadowRoot, 
     // See https://bugs.webkit.org/show_bug.cgi?id=52195 for details.
     const AtomicString eventType = event.type();
     return target.toNode() && target.toNode()->shadowHost() == shadowRoot.host()
-        && (eventType == EventTypeNames::abort
-            || eventType == EventTypeNames::change
-            || eventType == EventTypeNames::error
-            || eventType == EventTypeNames::load
-            || eventType == EventTypeNames::reset
-            || eventType == EventTypeNames::resize
-            || eventType == EventTypeNames::scroll
-            || eventType == EventTypeNames::select
-            || eventType == EventTypeNames::selectstart);
+        && event.scoped();
 }
 
 EventPath::EventPath(Node& node, Event* event)
@@ -127,6 +120,13 @@ void EventPath::calculatePath()
             current = insertionPoints.last();
             continue;
         }
+        if (current->isChildOfV1ShadowHost()) {
+            if (HTMLSlotElement* slot = current->assignedSlot()) {
+                current = slot;
+                nodesInPath.append(current);
+                continue;
+            }
+        }
         if (current->isShadowRoot()) {
             if (m_event && shouldStopAtShadowRoot(*m_event, *toShadowRoot(current), *m_node))
                 break;
@@ -157,7 +157,7 @@ void EventPath::calculatePath()
 void EventPath::calculateTreeOrderAndSetNearestAncestorClosedTree()
 {
     // Precondition:
-    //   - TreeScopes in m_treeScopeEventContexts must be *connected* in the same tree of trees.
+    //   - TreeScopes in m_treeScopeEventContexts must be *connected* in the same composed tree.
     //   - The root tree must be included.
     WillBeHeapHashMap<RawPtrWillBeMember<const TreeScope>, RawPtrWillBeMember<TreeScopeEventContext>> treeScopeEventContextMap;
     for (const auto& treeScopeEventContext : m_treeScopeEventContexts)
@@ -385,4 +385,4 @@ DEFINE_TRACE(EventPath)
 #endif
 }
 
-} // namespace
+} // namespace blink

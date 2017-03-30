@@ -75,7 +75,13 @@ public:
     // Get the highest-level LocalFrame in this frame's in-process subtree.
     virtual WebLocalFrame* localRoot() = 0;
 
+    // Returns the previous/next local frame in "frame traversal order",
+    // optionally wrapping around.
+    virtual WebLocalFrame* traversePreviousLocal(bool wrap) const = 0;
+    virtual WebLocalFrame* traverseNextLocal(bool wrap) const = 0;
+
     // Navigation Ping --------------------------------------------------------
+
     virtual void sendPings(const WebNode& contextNode, const WebURL& destinationURL) = 0;
 
     // Navigation ----------------------------------------------------------
@@ -95,7 +101,27 @@ public:
     // loadRequest functions in WebFrame once RenderFrame only calls loadRequest.
     virtual void load(const WebURLRequest&, WebFrameLoadType = WebFrameLoadType::Standard,
         const WebHistoryItem& = WebHistoryItem(),
-        WebHistoryLoadType = WebHistoryDifferentDocumentLoad) = 0;
+        WebHistoryLoadType = WebHistoryDifferentDocumentLoad,
+        bool isClientRedirect = false)
+        = 0;
+
+    // Loads the given data with specific mime type and optional text
+    // encoding.  For HTML data, baseURL indicates the security origin of
+    // the document and is used to resolve links.  If specified,
+    // unreachableURL is reported via WebDataSource::unreachableURL.  If
+    // replace is false, then this data will be loaded as a normal
+    // navigation.  Otherwise, the current history item will be replaced.
+    virtual void loadData(const WebData&,
+        const WebString& mimeType,
+        const WebString& textEncoding,
+        const WebURL& baseURL,
+        const WebURL& unreachableURL = WebURL(),
+        bool replace = false,
+        WebFrameLoadType = WebFrameLoadType::Standard,
+        const WebHistoryItem& = WebHistoryItem(),
+        WebHistoryLoadType = WebHistoryDifferentDocumentLoad,
+        bool isClientRedirect = false)
+        = 0;
 
     // Navigation State -------------------------------------------------------
 
@@ -186,6 +212,10 @@ public:
     // If the provided node is an image, reload the image disabling Lo-Fi.
     virtual void reloadImage(const WebNode&) = 0;
 
+    // Reloads all the Lo-Fi images in this WebLocalFrame. Ignores the cache and
+    // reloads from the network.
+    virtual void reloadLoFiImages() = 0;
+
     // Feature usage logging --------------------------------------------------
 
     virtual void didCallAddSearchProvider() = 0;
@@ -201,8 +231,108 @@ public:
     // Returns the effective sandbox flags which are inherited from their parent frame.
     virtual WebSandboxFlags effectiveSandboxFlags() const = 0;
 
+    // Set sandbox flags that will always be forced on this frame.  This is
+    // used to inherit sandbox flags from cross-process opener frames in popups.
+    //
+    // TODO(dcheng): Remove this once we have WebLocalFrame::createMainFrame.
+    virtual void forceSandboxFlags(WebSandboxFlags) = 0;
+
+    // Find-in-page -----------------------------------------------------------
+
+    // Searches a frame for a given string.
+    //
+    // If a match is found, this function will select it (scrolling down to
+    // make it visible if needed) and fill in selectionRect with the
+    // location of where the match was found (in window coordinates).
+    //
+    // If no match is found, this function clears all tickmarks and
+    // highlighting.
+    //
+    // Returns true if the search string was found, false otherwise.
+    virtual bool find(int identifier,
+        const WebString& searchText,
+        const WebFindOptions&,
+        bool wrapWithinFrame,
+        WebRect* selectionRect,
+        bool* activeNow = nullptr) = 0;
+
+    // Notifies the frame that we are no longer interested in searching.
+    // This will abort any asynchronous scoping effort already under way
+    // (see the function scopeStringMatches for details) and erase all
+    // tick-marks and highlighting from the previous search.  If
+    // clearSelection is true, it will also make sure the end state for the
+    // find operation does not leave a selection.  This can occur when the
+    // user clears the search string but does not close the find box.
+    virtual void stopFinding(bool clearSelection) = 0;
+
+    // Counts how many times a particular string occurs within the frame.
+    // It also retrieves the location of the string and updates a vector in
+    // the frame so that tick-marks and highlighting can be drawn.  This
+    // function does its work asynchronously, by running for a certain
+    // time-slice and then scheduling itself (co-operative multitasking) to
+    // be invoked later (repeating the process until all matches have been
+    // found).  This allows multiple frames to be searched at the same time
+    // and provides a way to cancel at any time (see
+    // cancelPendingScopingEffort).  The parameter searchText specifies
+    // what to look for and |reset| signals whether this is a brand new
+    // request or a continuation of the last scoping effort.
+    virtual void scopeStringMatches(int identifier,
+        const WebString& searchText,
+        const WebFindOptions&,
+        bool reset) = 0;
+
+    // Cancels any outstanding requests for scoping string matches on a frame.
+    virtual void cancelPendingScopingEffort() = 0;
+
+    // This function is called on the main frame during the scoping effort
+    // to keep a running tally of the accumulated total match-count for all
+    // frames.  After updating the count it will notify the WebViewClient
+    // about the new count.
+    virtual void increaseMatchCount(int count, int identifier) = 0;
+
+    // This function is called on the main frame to reset the total number
+    // of matches found during the scoping effort.
+    virtual void resetMatchCount() = 0;
+
+    // Returns a counter that is incremented when the find-in-page markers are
+    // changed on any frame. Switching the active marker doesn't change the
+    // current version. Should be called only on the main frame.
+    virtual int findMatchMarkersVersion() const = 0;
+
+    // Returns the bounding box of the active find-in-page match marker or an
+    // empty rect if no such marker exists. The rect is returned in find-in-page
+    // coordinates whatever frame the active marker is.
+    // Should be called only on the main frame.
+    virtual WebFloatRect activeFindMatchRect() = 0;
+
+    // Swaps the contents of the provided vector with the bounding boxes of the
+    // find-in-page match markers from all frames. The bounding boxes are returned
+    // in find-in-page coordinates. This method should be called only on the main frame.
+    virtual void findMatchRects(WebVector<WebFloatRect>&) = 0;
+
+    // Selects the find-in-page match in the appropriate frame closest to the
+    // provided point in find-in-page coordinates. Returns the ordinal of such
+    // match or -1 if none could be found. If not null, selectionRect is set to
+    // the bounding box of the selected match in window coordinates.
+    // This method should be called only on the main frame.
+    virtual int selectNearestFindMatch(const WebFloatPoint&,
+        WebRect* selectionRect)
+        = 0;
+
+    // Set the tickmarks for the frame. This will override the default tickmarks
+    // generated by find results. If this is called with an empty array, the
+    // default behavior will be restored.
+    virtual void setTickmarks(const WebVector<WebRect>&) = 0;
+
 protected:
     explicit WebLocalFrame(WebTreeScopeType scope) : WebFrame(scope) { }
+
+    // Inherited from WebFrame, but intentionally hidden: it never makes sense
+    // to call these on a WebLocalFrame.
+    bool isWebLocalFrame() const override = 0;
+    WebLocalFrame* toWebLocalFrame() override = 0;
+    bool isWebRemoteFrame() const override = 0;
+    WebRemoteFrame* toWebRemoteFrame() override = 0;
 };
 
 } // namespace blink

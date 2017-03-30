@@ -5,12 +5,12 @@
 #ifndef WorkletGlobalScope_h
 #define WorkletGlobalScope_h
 
+#include "bindings/core/v8/ScriptCallStack.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/ExecutionContextTask.h"
 #include "core/dom/SecurityContext.h"
 #include "core/inspector/ConsoleMessage.h"
-#include "core/inspector/ScriptCallStack.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
 #include "platform/heap/Handle.h"
 
@@ -28,9 +28,9 @@ public:
     using RefCounted<WorkletGlobalScope>::deref;
 #endif
 
-    // The url and userAgent arguments are inherited from the parent
-    // ExecutionContext for Worklets.
-    static PassRefPtrWillBeRawPtr<WorkletGlobalScope> create(const KURL&, const String& userAgent, v8::Isolate*);
+    // The url, userAgent and securityOrigin arguments are inherited from the
+    // parent ExecutionContext for Worklets.
+    static PassRefPtrWillBeRawPtr<WorkletGlobalScope> create(const KURL&, const String& userAgent, PassRefPtr<SecurityOrigin>, v8::Isolate*);
     ~WorkletGlobalScope() override;
 
     bool isWorkletGlobalScope() const final { return true; }
@@ -38,7 +38,7 @@ public:
 
     // WorkerOrWorkletGlobalScope
     ScriptWrappable* scriptWrappable() const final { return const_cast<WorkletGlobalScope*>(this); }
-    WorkerOrWorkletScriptController* script() final { return m_script.get(); }
+    WorkerOrWorkletScriptController* scriptController() final { return m_scriptController.get(); }
 
     // ScriptWrappable
     v8::Local<v8::Object> wrap(v8::Isolate*, v8::Local<v8::Object> creationContext) final;
@@ -64,7 +64,7 @@ public:
     // TODO(ikilpatrick): implement when we implement devtools support.
     void reportBlockedScriptExecutionToInspector(const String& directiveText) final { }
     void addConsoleMessage(PassRefPtrWillBeRawPtr<ConsoleMessage>) final { }
-    void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtrWillBeRawPtr<ScriptCallStack>) final { }
+    void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack>) final { }
 
     DECLARE_VIRTUAL_TRACE();
 
@@ -74,7 +74,7 @@ private:
     void derefExecutionContext() final { deref(); }
 #endif
 
-    WorkletGlobalScope(const KURL&, const String& userAgent, v8::Isolate*);
+    WorkletGlobalScope(const KURL&, const String& userAgent, PassRefPtr<SecurityOrigin>, v8::Isolate*);
 
     const KURL& virtualURL() const final { return m_url; }
     KURL virtualCompleteURL(const String&) const final;
@@ -84,7 +84,7 @@ private:
 
     KURL m_url;
     String m_userAgent;
-    OwnPtrWillBeMember<WorkerOrWorkletScriptController> m_script;
+    OwnPtrWillBeMember<WorkerOrWorkletScriptController> m_scriptController;
 };
 
 DEFINE_TYPE_CASTS(WorkletGlobalScope, ExecutionContext, context, context->isWorkletGlobalScope(), context.isWorkletGlobalScope());

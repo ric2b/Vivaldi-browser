@@ -94,11 +94,11 @@ function DialogActionController(
   this.fileTypes_ = launchParam.typeList || [];
 
   /**
-   * @type {boolean}
+   * @type {!AllowedPaths}
    * @const
    * @private
    */
-  this.shouldReturnLocalPath_ = launchParam.shouldReturnLocalPath;
+  this.allowedPaths_ = launchParam.allowedPaths;
 
   /**
    * Bound function for onCancel_.
@@ -111,6 +111,8 @@ function DialogActionController(
       'click', this.processOKAction_.bind(this));
   dialogFooter.cancelButton.addEventListener(
       'click', this.onCancelBound_);
+  dialogFooter.newFolderButton.addEventListener(
+      'click', this.processNewFolderAction_.bind(this));
   dialogFooter.fileTypeSelector.addEventListener(
       'change', this.onFileTypeFilterChanged_.bind(this));
   dialogFooter.filenameInput.addEventListener(
@@ -122,6 +124,10 @@ function DialogActionController(
   dialogFooter.initFileTypeFilter(
       this.fileTypes_, launchParam.includeAllFiles);
   this.onFileTypeFilterChanged_();
+
+  this.newFolderCommand_ = document.getElementById('new-folder');
+  this.newFolderCommand_.addEventListener(
+      'disabledChange', this.updateNewFolderButton_.bind(this));
 }
 
 /**
@@ -246,6 +252,23 @@ DialogActionController.prototype.processCancelAction_ = function() {
 };
 
 /**
+ * Creates a new folder using new-folder command.
+ * @private
+ */
+DialogActionController.prototype.processNewFolderAction_ = function() {
+  this.newFolderCommand_.canExecuteChange(this.dialogFooter_.newFolderButton);
+  this.newFolderCommand_.execute(this.dialogFooter_.newFolderButton);
+};
+
+/**
+ * Handles disabledChange event to update the new-folder button's avaliability.
+ * @private
+ */
+DialogActionController.prototype.updateNewFolderButton_ = function() {
+  this.dialogFooter_.newFolderButton.disabled = this.newFolderCommand_.disabled;
+};
+
+/**
  * Tries to close this modal dialog with some files selected.
  * Performs preprocessing if needed (e.g. for Drive).
  * @param {Object} selection Contains urls, filterIndex and multiple fields.
@@ -264,14 +287,14 @@ DialogActionController.prototype.selectFilesAndClose_ = function(selection) {
     if (selection.multiple) {
       chrome.fileManagerPrivate.selectFiles(
           selection.urls,
-          this.shouldReturnLocalPath_,
+          this.allowedPaths_ === AllowedPaths.NATIVE_PATH,
           onFileSelected);
     } else {
       chrome.fileManagerPrivate.selectFile(
           selection.urls[0],
           selection.filterIndex,
           this.dialogType_ !== DialogType.SELECT_SAVEAS_FILE /* for opening */,
-          this.shouldReturnLocalPath_,
+          this.allowedPaths_ === AllowedPaths.NATIVE_PATH,
           onFileSelected);
     }
   }.bind(this);

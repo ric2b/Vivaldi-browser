@@ -171,6 +171,39 @@ BluetoothDevice::DeviceType BluetoothDevice::GetDeviceType() const {
       break;
   }
 
+  // Some bluetooth devices, e.g., Microsoft Universal Foldable Keyboard,
+  // do not expose its bluetooth class. Use its appearance as a work-around.
+  // https://developer.bluetooth.org/gatt/characteristics/Pages/CharacteristicViewer.aspx?u=org.bluetooth.characteristic.gap.appearance.xml
+  uint16_t appearance = GetAppearance();
+  // appearance: 10-bit category and 6-bit sub-category
+  switch ((appearance & 0xffc0) >> 6) {
+    case 0x01:
+      // Generic phone
+      return DEVICE_PHONE;
+    case 0x02:
+      // Generic computer
+      return DEVICE_COMPUTER;
+    case 0x0f:
+      // HID subtype
+      switch (appearance & 0x3f) {
+        case 0x01:
+          // Keyboard.
+          return DEVICE_KEYBOARD;
+        case 0x02:
+          // Mouse
+          return DEVICE_MOUSE;
+        case 0x03:
+          // Joystick
+          return DEVICE_JOYSTICK;
+        case 0x04:
+          // Gamepad
+          return DEVICE_GAMEPAD;
+        case 0x05:
+          // Digitizer tablet
+          return DEVICE_TABLET;
+      }
+  }
+
   return DEVICE_UNKNOWN;
 }
 
@@ -303,6 +336,10 @@ void BluetoothDevice::DidConnectGatt() {
 }
 
 void BluetoothDevice::DidFailToConnectGatt(ConnectErrorCode error) {
+  // Connection request should only be made if there are no active
+  // connections.
+  DCHECK(gatt_connections_.empty());
+
   for (const auto& error_callback : create_gatt_connection_error_callbacks_)
     error_callback.Run(error);
   create_gatt_connection_success_callbacks_.clear();
@@ -311,13 +348,8 @@ void BluetoothDevice::DidFailToConnectGatt(ConnectErrorCode error) {
 
 void BluetoothDevice::DidDisconnectGatt() {
   // Pending calls to connect GATT are not expected, if they were then
-  // DidFailToConnectGatt should be called. But in case callbacks exist
-  // flush them to ensure a consistent state.
-  if (create_gatt_connection_error_callbacks_.size() > 0) {
-    VLOG(1) << "Unexpected / unexplained DidDisconnectGatt call while "
-               "create_gatt_connection_error_callbacks_ are pending.";
-  }
-  DidFailToConnectGatt(ERROR_FAILED);
+  // DidFailToConnectGatt should have been called.
+  DCHECK(create_gatt_connection_error_callbacks_.empty());
 
   // Invalidate all BluetoothGattConnection objects.
   for (BluetoothGattConnection* connection : gatt_connections_) {

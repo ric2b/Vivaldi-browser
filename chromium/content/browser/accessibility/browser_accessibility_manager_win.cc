@@ -47,6 +47,7 @@ BrowserAccessibilityManagerWin::BrowserAccessibilityManagerWin(
       inside_on_window_focused_(false) {
   ui::win::CreateATLModuleIfNeeded();
   Initialize(initial_tree);
+  ui::GetIAccessible2UsageObserverList().AddObserver(this);
 }
 
 BrowserAccessibilityManagerWin::~BrowserAccessibilityManagerWin() {
@@ -59,6 +60,7 @@ BrowserAccessibilityManagerWin::~BrowserAccessibilityManagerWin() {
     tracked_scroll_object_->Release();
     tracked_scroll_object_ = NULL;
   }
+  ui::GetIAccessible2UsageObserverList().RemoveObserver(this);
 }
 
 // static
@@ -151,6 +153,10 @@ void BrowserAccessibilityManagerWin::MaybeCallNotifyWinEvent(
   ::NotifyWinEvent(event, hwnd, OBJID_CLIENT, child_id);
 }
 
+void BrowserAccessibilityManagerWin::OnIAccessible2Used() {
+  BrowserAccessibilityStateImpl::GetInstance()->OnScreenReaderDetected();
+}
+
 void BrowserAccessibilityManagerWin::OnWindowFocused() {
   // Make sure we don't call this recursively.
   if (inside_on_window_focused_)
@@ -173,7 +179,7 @@ void BrowserAccessibilityManagerWin::OnWindowFocused() {
 
   // Try to fire a focus event on the root first and then the focused node.
   // This will clear focus_event_on_root_needed_ if successful.
-  if (focus_ != tree_->root() && GetRoot())
+  if (GetFocus() != GetRoot() && GetRoot())
     NotifyAccessibilityEvent(ui::AX_EVENT_FOCUS, GetRoot());
   BrowserAccessibilityManager::OnWindowFocused();
   inside_on_window_focused_ = false;

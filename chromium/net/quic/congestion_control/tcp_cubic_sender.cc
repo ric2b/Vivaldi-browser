@@ -11,6 +11,7 @@
 #include "net/quic/congestion_control/rtt_stats.h"
 #include "net/quic/crypto/crypto_protocol.h"
 #include "net/quic/proto/cached_network_parameters.pb.h"
+#include "net/quic/quic_bug_tracker.h"
 #include "net/quic/quic_flags.h"
 
 using std::max;
@@ -165,8 +166,9 @@ void TcpCubicSender::OnPacketAcked(QuicPacketNumber acked_packet_number,
     return;
   }
   MaybeIncreaseCwnd(acked_packet_number, bytes_in_flight);
-  // TODO(ianswett): Should this even be called when not in slow start?
-  hybrid_slow_start_.OnPacketAcked(acked_packet_number, InSlowStart());
+  if (InSlowStart()) {
+    hybrid_slow_start_.OnPacketAcked(acked_packet_number);
+  }
 }
 
 void TcpCubicSender::OnPacketLost(QuicPacketNumber packet_number,
@@ -196,7 +198,7 @@ void TcpCubicSender::OnPacketLost(QuicPacketNumber packet_number,
   prr_.OnPacketLost(bytes_in_flight);
 
   // TODO(jri): Separate out all of slow start into a separate class.
-  if (slow_start_large_reduction_) {
+  if (slow_start_large_reduction_ && InSlowStart()) {
     DCHECK_LT(1u, congestion_window_);
     congestion_window_ = congestion_window_ - 1;
   } else if (reno_) {
@@ -327,7 +329,7 @@ bool TcpCubicSender::InRecovery() const {
 // represents, but quic has a separate ack for each packet.
 void TcpCubicSender::MaybeIncreaseCwnd(QuicPacketNumber acked_packet_number,
                                        QuicByteCount bytes_in_flight) {
-  LOG_IF(DFATAL, InRecovery()) << "Never increase the CWND during recovery.";
+  QUIC_BUG_IF(InRecovery()) << "Never increase the CWND during recovery.";
   // Do not increase the congestion window unless the sender is close to using
   // the current window.
   if (!IsCwndLimited(bytes_in_flight)) {

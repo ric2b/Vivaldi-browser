@@ -40,7 +40,6 @@ class DataReductionProxyConfig;
 class DataReductionProxyConfigServiceClient;
 class DataReductionProxyConfigurator;
 class DataReductionProxyEventCreator;
-class DataReductionProxyExperimentsStats;
 class DataReductionProxyService;
 
 // Contains and initializes all Data Reduction Proxy objects that operate on
@@ -82,6 +81,8 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
   scoped_ptr<DataReductionProxyNetworkDelegate> CreateNetworkDelegate(
       scoped_ptr<net::NetworkDelegate> wrapped_network_delegate,
       bool track_proxy_bypass_statistics);
+
+  scoped_ptr<DataReductionProxyDelegate> CreateProxyDelegate() const;
 
   // Sets user defined preferences for how the Data Reduction Proxy
   // configuration should be set. |at_startup| is true only
@@ -139,10 +140,6 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
 
   DataReductionProxyConfigServiceClient* config_client() const {
     return config_client_.get();
-  }
-
-  DataReductionProxyExperimentsStats* experiments_stats() const {
-    return experiments_stats_.get();
   }
 
   net::ProxyDelegate* proxy_delegate() const {
@@ -248,9 +245,6 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
 
   // Requests new Data Reduction Proxy configurations from a remote service.
   scoped_ptr<DataReductionProxyConfigServiceClient> config_client_;
-
-  // Used to track stats for experiments.
-  scoped_ptr<DataReductionProxyExperimentsStats> experiments_stats_;
 
   // A net log.
   net::NetLog* net_log_;

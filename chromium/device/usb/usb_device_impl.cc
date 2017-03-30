@@ -94,47 +94,37 @@ UsbUsageType GetUsageType(const libusb_endpoint_descriptor* descriptor) {
 
 void ConvertConfigDescriptor(const libusb_config_descriptor* platform_config,
                              UsbConfigDescriptor* configuration) {
-  configuration->configuration_value = platform_config->bConfigurationValue;
-  configuration->self_powered = (platform_config->bmAttributes & 0x40) != 0;
-  configuration->remote_wakeup = (platform_config->bmAttributes & 0x20) != 0;
-  configuration->maximum_power = platform_config->MaxPower * 2;
-
   for (size_t i = 0; i < platform_config->bNumInterfaces; ++i) {
     const struct libusb_interface* platform_interface =
         &platform_config->interface[i];
     for (int j = 0; j < platform_interface->num_altsetting; ++j) {
       const struct libusb_interface_descriptor* platform_alt_setting =
           &platform_interface->altsetting[j];
-      UsbInterfaceDescriptor interface;
-
-      interface.interface_number = platform_alt_setting->bInterfaceNumber;
-      interface.alternate_setting = platform_alt_setting->bAlternateSetting;
-      interface.interface_class = platform_alt_setting->bInterfaceClass;
-      interface.interface_subclass = platform_alt_setting->bInterfaceSubClass;
-      interface.interface_protocol = platform_alt_setting->bInterfaceProtocol;
+      UsbInterfaceDescriptor interface(
+          platform_alt_setting->bInterfaceNumber,
+          platform_alt_setting->bAlternateSetting,
+          platform_alt_setting->bInterfaceClass,
+          platform_alt_setting->bInterfaceSubClass,
+          platform_alt_setting->bInterfaceProtocol);
 
       interface.endpoints.reserve(platform_alt_setting->bNumEndpoints);
       for (size_t k = 0; k < platform_alt_setting->bNumEndpoints; ++k) {
         const struct libusb_endpoint_descriptor* platform_endpoint =
             &platform_alt_setting->endpoint[k];
-        UsbEndpointDescriptor endpoint;
-
-        endpoint.address = platform_endpoint->bEndpointAddress;
-        endpoint.direction = GetDirection(platform_endpoint);
-        endpoint.maximum_packet_size = platform_endpoint->wMaxPacketSize;
-        endpoint.synchronization_type =
-            GetSynchronizationType(platform_endpoint);
-        endpoint.transfer_type = GetTransferType(platform_endpoint);
-        endpoint.usage_type = GetUsageType(platform_endpoint);
-        endpoint.polling_interval = platform_endpoint->bInterval;
-        endpoint.extra_data = std::vector<uint8_t>(
+        UsbEndpointDescriptor endpoint(
+            platform_endpoint->bEndpointAddress,
+            GetDirection(platform_endpoint), platform_endpoint->wMaxPacketSize,
+            GetSynchronizationType(platform_endpoint),
+            GetTransferType(platform_endpoint), GetUsageType(platform_endpoint),
+            platform_endpoint->bInterval);
+        endpoint.extra_data.assign(
             platform_endpoint->extra,
             platform_endpoint->extra + platform_endpoint->extra_length);
 
         interface.endpoints.push_back(endpoint);
       }
 
-      interface.extra_data = std::vector<uint8_t>(
+      interface.extra_data.assign(
           platform_alt_setting->extra,
           platform_alt_setting->extra + platform_alt_setting->extra_length);
 
@@ -142,7 +132,7 @@ void ConvertConfigDescriptor(const libusb_config_descriptor* platform_config,
     }
   }
 
-  configuration->extra_data = std::vector<uint8_t>(
+  configuration->extra_data.assign(
       platform_config->extra,
       platform_config->extra + platform_config->extra_length);
 }
@@ -196,7 +186,8 @@ void UsbDeviceImpl::Open(const OpenCallback& callback) {
   DCHECK(client) << "Could not get permission broker client.";
   client->OpenPath(
       device_path_,
-      base::Bind(&UsbDeviceImpl::OnOpenRequestComplete, this, callback));
+      base::Bind(&UsbDeviceImpl::OnOpenRequestComplete, this, callback),
+      base::Bind(&UsbDeviceImpl::OnOpenRequestError, this, callback));
 #else
   blocking_task_runner_->PostTask(
       FROM_HERE,
@@ -250,7 +241,11 @@ void UsbDeviceImpl::ReadAllConfigurations() {
         continue;
       }
 
-      UsbConfigDescriptor config_descriptor;
+      UsbConfigDescriptor config_descriptor(
+          platform_config->bConfigurationValue,
+          (platform_config->bmAttributes & 0x40) != 0,
+          (platform_config->bmAttributes & 0x20) != 0,
+          platform_config->MaxPower * 2);
       ConvertConfigDescriptor(platform_config, &config_descriptor);
       configurations_.push_back(config_descriptor);
       libusb_free_config_descriptor(platform_config);
@@ -291,14 +286,18 @@ void UsbDeviceImpl::OnOpenRequestComplete(const OpenCallback& callback,
                             base::Passed(&fd), callback));
 }
 
+void UsbDeviceImpl::OnOpenRequestError(const OpenCallback& callback,
+                                       const std::string& error_name,
+                                       const std::string& error_message) {
+  USB_LOG(EVENT) << "Permission broker failed to open the device: "
+                 << error_name << ": " << error_message;
+  callback.Run(nullptr);
+}
+
 void UsbDeviceImpl::OpenOnBlockingThreadWithFd(dbus::FileDescriptor fd,
                                                const OpenCallback& callback) {
   fd.CheckValidity();
-  if (!fd.is_valid()) {
-    USB_LOG(EVENT) << "Did not get valid device handle from permission broker.";
-    task_runner_->PostTask(FROM_HERE, base::Bind(callback, nullptr));
-    return;
-  }
+  DCHECK(fd.is_valid());
 
   PlatformUsbDeviceHandle handle;
   const int rv = libusb_open_fd(platform_device_, fd.TakeValue(), &handle);

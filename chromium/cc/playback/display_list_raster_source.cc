@@ -6,16 +6,187 @@
 
 #include <stddef.h>
 
+#include "base/containers/adapters.h"
+#include "base/strings/stringprintf.h"
+#include "base/thread_task_runner_handle.h"
+#include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/base/region.h"
 #include "cc/debug/debug_colors.h"
+#include "cc/playback/discardable_image_map.h"
 #include "cc/playback/display_item_list.h"
+#include "cc/tiles/image_decode_controller.h"
 #include "skia/ext/analysis_canvas.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
+#include "third_party/skia/include/core/SkTLazy.h"
+#include "third_party/skia/include/utils/SkNWayCanvas.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
 namespace cc {
+
+namespace {
+
+SkIRect RoundOutRect(const SkRect& rect) {
+  SkIRect result;
+  rect.roundOut(&result);
+  return result;
+}
+
+class ImageHijackCanvas : public SkNWayCanvas {
+ public:
+  ImageHijackCanvas(int width,
+                    int height,
+                    ImageDecodeController* image_decode_controller)
+      : SkNWayCanvas(width, height),
+        image_decode_controller_(image_decode_controller) {}
+
+ protected:
+  // Ensure that pictures are unpacked by this canvas, instead of being
+  // forwarded to the raster canvas.
+  void onDrawPicture(const SkPicture* picture,
+                     const SkMatrix* matrix,
+                     const SkPaint* paint) override {
+    SkCanvas::onDrawPicture(picture, matrix, paint);
+  }
+
+  void onDrawImage(const SkImage* image,
+                   SkScalar x,
+                   SkScalar y,
+                   const SkPaint* paint) override {
+    if (!image->isLazyGenerated()) {
+      SkNWayCanvas::onDrawImage(image, x, y, paint);
+      return;
+    }
+
+    SkMatrix ctm = getTotalMatrix();
+
+    SkSize scale;
+    bool is_decomposable = ExtractScale(ctm, &scale);
+    ScopedDecodedImageLock scoped_lock(
+        image_decode_controller_, image,
+        SkRect::MakeIWH(image->width(), image->height()), scale,
+        is_decomposable, ctm.hasPerspective(), paint);
+    const DecodedDrawImage& decoded_image = scoped_lock.decoded_image();
+    if (!decoded_image.image())
+      return;
+
+    DCHECK_EQ(0, static_cast<int>(decoded_image.src_rect_offset().width()));
+    DCHECK_EQ(0, static_cast<int>(decoded_image.src_rect_offset().height()));
+    const SkPaint* decoded_paint = scoped_lock.decoded_paint();
+
+    bool need_scale = !decoded_image.is_scale_adjustment_identity();
+    if (need_scale) {
+      SkNWayCanvas::save();
+      SkNWayCanvas::scale(1.f / (decoded_image.scale_adjustment().width()),
+                          1.f / (decoded_image.scale_adjustment().height()));
+    }
+    SkNWayCanvas::onDrawImage(decoded_image.image(), x, y, decoded_paint);
+    if (need_scale)
+      SkNWayCanvas::restore();
+  }
+
+  void onDrawImageRect(const SkImage* image,
+                       const SkRect* src,
+                       const SkRect& dst,
+                       const SkPaint* paint,
+                       SrcRectConstraint constraint) override {
+    if (!image->isLazyGenerated()) {
+      SkNWayCanvas::onDrawImageRect(image, src, dst, paint, constraint);
+      return;
+    }
+
+    SkRect src_storage;
+    if (!src) {
+      src_storage = SkRect::MakeIWH(image->width(), image->height());
+      src = &src_storage;
+    }
+    SkMatrix matrix;
+    matrix.setRectToRect(*src, dst, SkMatrix::kFill_ScaleToFit);
+    matrix.postConcat(getTotalMatrix());
+
+    SkSize scale;
+    bool is_decomposable = ExtractScale(matrix, &scale);
+    ScopedDecodedImageLock scoped_lock(image_decode_controller_, image, *src,
+                                       scale, is_decomposable,
+                                       matrix.hasPerspective(), paint);
+    const DecodedDrawImage& decoded_image = scoped_lock.decoded_image();
+    if (!decoded_image.image())
+      return;
+
+    const SkPaint* decoded_paint = scoped_lock.decoded_paint();
+
+    SkRect adjusted_src =
+        src->makeOffset(decoded_image.src_rect_offset().width(),
+                        decoded_image.src_rect_offset().height());
+    if (!decoded_image.is_scale_adjustment_identity()) {
+      float x_scale = decoded_image.scale_adjustment().width();
+      float y_scale = decoded_image.scale_adjustment().height();
+      adjusted_src = SkRect::MakeXYWH(
+          adjusted_src.x() * x_scale, adjusted_src.y() * y_scale,
+          adjusted_src.width() * x_scale, adjusted_src.height() * y_scale);
+    }
+    SkNWayCanvas::onDrawImageRect(decoded_image.image(), &adjusted_src, dst,
+                                  decoded_paint, constraint);
+  }
+
+  void onDrawImageNine(const SkImage* image,
+                       const SkIRect& center,
+                       const SkRect& dst,
+                       const SkPaint* paint) override {
+    // No cc embedder issues image nine calls.
+    NOTREACHED();
+  }
+
+ private:
+  class ScopedDecodedImageLock {
+   public:
+    ScopedDecodedImageLock(ImageDecodeController* image_decode_controller,
+                           const SkImage* image,
+                           const SkRect& src_rect,
+                           const SkSize& scale,
+                           bool is_decomposable,
+                           bool has_perspective,
+                           const SkPaint* paint)
+        : image_decode_controller_(image_decode_controller),
+          draw_image_(image,
+                      RoundOutRect(src_rect),
+                      scale,
+                      paint ? paint->getFilterQuality() : kNone_SkFilterQuality,
+                      has_perspective,
+                      is_decomposable),
+          decoded_draw_image_(
+              image_decode_controller_->GetDecodedImageForDraw(draw_image_)) {
+      DCHECK(image->isLazyGenerated());
+      if (paint)
+        decoded_paint_.set(*paint)->setFilterQuality(
+            decoded_draw_image_.filter_quality());
+    }
+
+    ~ScopedDecodedImageLock() {
+      image_decode_controller_->DrawWithImageFinished(draw_image_,
+                                                      decoded_draw_image_);
+    }
+
+    const DecodedDrawImage& decoded_image() const {
+      return decoded_draw_image_;
+    }
+    const SkPaint* decoded_paint() const {
+      return decoded_paint_.getMaybeNull();
+    }
+
+   private:
+    ImageDecodeController* image_decode_controller_;
+    DrawImage draw_image_;
+    DecodedDrawImage decoded_draw_image_;
+    // TODO(fmalita): use base::Optional when it becomes available
+    SkTLazy<SkPaint> decoded_paint_;
+  };
+
+  ImageDecodeController* image_decode_controller_;
+};
+
+}  // namespace
 
 scoped_refptr<DisplayListRasterSource>
 DisplayListRasterSource::CreateFromDisplayListRecordingSource(
@@ -40,7 +211,17 @@ DisplayListRasterSource::DisplayListRasterSource(
       clear_canvas_with_debug_color_(other->clear_canvas_with_debug_color_),
       slow_down_raster_scale_factor_for_debug_(
           other->slow_down_raster_scale_factor_for_debug_),
-      should_attempt_to_use_distance_field_text_(false) {}
+      should_attempt_to_use_distance_field_text_(false),
+      image_decode_controller_(nullptr) {
+  // In certain cases, ThreadTaskRunnerHandle isn't set (Android Webview).
+  // Don't register a dump provider in these cases.
+  // TODO(ericrk): Get this working in Android Webview. crbug.com/517156
+  if (base::ThreadTaskRunnerHandle::IsSet()) {
+    base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
+        this, "cc::DisplayListRasterSource",
+        base::ThreadTaskRunnerHandle::Get());
+  }
+}
 
 DisplayListRasterSource::DisplayListRasterSource(
     const DisplayListRasterSource* other,
@@ -58,16 +239,44 @@ DisplayListRasterSource::DisplayListRasterSource(
       slow_down_raster_scale_factor_for_debug_(
           other->slow_down_raster_scale_factor_for_debug_),
       should_attempt_to_use_distance_field_text_(
-          other->should_attempt_to_use_distance_field_text_) {}
+          other->should_attempt_to_use_distance_field_text_),
+      image_decode_controller_(other->image_decode_controller_) {
+  // In certain cases, ThreadTaskRunnerHandle isn't set (Android Webview).
+  // Don't register a dump provider in these cases.
+  // TODO(ericrk): Get this working in Android Webview. crbug.com/517156
+  if (base::ThreadTaskRunnerHandle::IsSet()) {
+    base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
+        this, "cc::DisplayListRasterSource",
+        base::ThreadTaskRunnerHandle::Get());
+  }
+}
 
 DisplayListRasterSource::~DisplayListRasterSource() {
+  // For MemoryDumpProvider deregistration to work correctly, this must happen
+  // on the same thread that the DisplayListRasterSource was created on.
+  DCHECK(memory_dump_thread_checker_.CalledOnValidThread());
+  base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
+      this);
 }
 
 void DisplayListRasterSource::PlaybackToSharedCanvas(
-    SkCanvas* canvas,
+    SkCanvas* raster_canvas,
     const gfx::Rect& canvas_rect,
     float contents_scale) const {
-  RasterCommon(canvas, NULL, canvas_rect, canvas_rect, contents_scale);
+  // TODO(vmpstr): This can be improved by plumbing whether the tile itself has
+  // discardable images. This way we would only pay for the hijack canvas if the
+  // tile actually needed it.
+  if (display_list_->MayHaveDiscardableImages()) {
+    const SkImageInfo& info = raster_canvas->imageInfo();
+    ImageHijackCanvas canvas(info.width(), info.height(),
+                             image_decode_controller_);
+    canvas.addCanvas(raster_canvas);
+
+    RasterCommon(&canvas, nullptr, canvas_rect, canvas_rect, contents_scale);
+  } else {
+    RasterCommon(raster_canvas, nullptr, canvas_rect, canvas_rect,
+                 contents_scale);
+  }
 }
 
 void DisplayListRasterSource::RasterForAnalysis(skia::AnalysisCanvas* canvas,
@@ -77,13 +286,18 @@ void DisplayListRasterSource::RasterForAnalysis(skia::AnalysisCanvas* canvas,
 }
 
 void DisplayListRasterSource::PlaybackToCanvas(
-    SkCanvas* canvas,
+    SkCanvas* raster_canvas,
     const gfx::Rect& canvas_bitmap_rect,
     const gfx::Rect& canvas_playback_rect,
     float contents_scale) const {
-  PrepareForPlaybackToCanvas(canvas, canvas_bitmap_rect, canvas_playback_rect,
-                             contents_scale);
-  RasterCommon(canvas, NULL, canvas_bitmap_rect, canvas_playback_rect,
+  PrepareForPlaybackToCanvas(raster_canvas, canvas_bitmap_rect,
+                             canvas_playback_rect, contents_scale);
+
+  SkImageInfo info = raster_canvas->imageInfo();
+  ImageHijackCanvas canvas(info.width(), info.height(),
+                           image_decode_controller_);
+  canvas.addCanvas(raster_canvas);
+  RasterCommon(&canvas, NULL, canvas_bitmap_rect, canvas_playback_rect,
                contents_scale);
 }
 
@@ -204,8 +418,11 @@ skia::RefPtr<SkPicture> DisplayListRasterSource::GetFlattenedPicture() {
   SkPictureRecorder recorder;
   SkCanvas* canvas = recorder.beginRecording(display_list_rect.width(),
                                              display_list_rect.height());
-  if (!display_list_rect.IsEmpty())
-    PlaybackToCanvas(canvas, display_list_rect, display_list_rect, 1.0);
+  if (!display_list_rect.IsEmpty()) {
+    PrepareForPlaybackToCanvas(canvas, display_list_rect, display_list_rect,
+                               1.f);
+    RasterCommon(canvas, nullptr, display_list_rect, display_list_rect, 1.f);
+  }
   skia::RefPtr<SkPicture> picture =
       skia::AdoptRef(recorder.endRecordingAsPicture());
 
@@ -304,6 +521,34 @@ DisplayListRasterSource::CreateCloneWithoutLCDText() const {
   bool can_use_lcd_text = false;
   return scoped_refptr<DisplayListRasterSource>(
       new DisplayListRasterSource(this, can_use_lcd_text));
+}
+
+void DisplayListRasterSource::SetImageDecodeController(
+    ImageDecodeController* image_decode_controller) {
+  DCHECK(image_decode_controller);
+  // Note that although this function should only be called once, tests tend to
+  // call it several times using the same controller.
+  DCHECK(!image_decode_controller_ ||
+         image_decode_controller_ == image_decode_controller);
+  image_decode_controller_ = image_decode_controller;
+}
+
+bool DisplayListRasterSource::OnMemoryDump(
+    const base::trace_event::MemoryDumpArgs& args,
+    base::trace_event::ProcessMemoryDump* pmd) {
+  DCHECK(memory_dump_thread_checker_.CalledOnValidThread());
+
+  uint64_t memory_usage = GetPictureMemoryUsage();
+  if (memory_usage > 0) {
+    std::string dump_name = base::StringPrintf(
+        "cc/display_lists/display_list_raster_source_%p", this);
+    base::trace_event::MemoryAllocatorDump* dump =
+        pmd->CreateAllocatorDump(dump_name);
+    dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                    base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                    memory_usage);
+  }
+  return true;
 }
 
 }  // namespace cc

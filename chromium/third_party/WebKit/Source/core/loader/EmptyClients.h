@@ -40,12 +40,14 @@
 #include "core/page/SpellCheckerClient.h"
 #include "platform/DragImage.h"
 #include "platform/geometry/FloatPoint.h"
+#include "platform/geometry/FloatRect.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/heap/Handle.h"
 #include "platform/network/ResourceError.h"
 #include "platform/text/TextCheckerClient.h"
 #include "public/platform/WebFocusType.h"
 #include "public/platform/WebFrameScheduler.h"
+#include "public/platform/WebMediaPlayer.h"
 #include "public/platform/WebScreenInfo.h"
 #include "wtf/Forward.h"
 #include <v8.h>
@@ -131,6 +133,7 @@ public:
     void scheduleAnimation(Widget*) override {}
 
     IntRect viewportToScreen(const IntRect& r) const override { return r; }
+    float windowToViewportScalar(const float s) const override { return s; }
     WebScreenInfo screenInfo() const override { return WebScreenInfo(); }
     void contentsSizeChanged(LocalFrame*, const IntSize&) const override {}
 
@@ -153,7 +156,11 @@ public:
 
     void attachRootGraphicsLayer(GraphicsLayer*, LocalFrame* localRoot) override {}
 
-    void needTouchEvents(bool) override {}
+    void setEventListenerProperties(WebEventListenerClass, WebEventListenerProperties) override {}
+    WebEventListenerProperties eventListenerProperties(WebEventListenerClass) const override { return WebEventListenerProperties::Nothing; }
+    void setHaveScrollEventHandlers(bool) override {}
+    bool haveScrollEventHandlers() const override { return false; }
+
     void setTouchAction(TouchAction) override {}
 
     void didAssociateFormControls(const WillBeHeapVector<RefPtrWillBeMember<Element>>&, LocalFrame*) override {}
@@ -205,11 +212,11 @@ public:
     void dispatchDidCommitLoad(HistoryItem*, HistoryCommitType) override {}
     void dispatchDidFailProvisionalLoad(const ResourceError&, HistoryCommitType) override {}
     void dispatchDidFailLoad(const ResourceError&, HistoryCommitType) override {}
-    void dispatchDidFinishDocumentLoad(bool) override {}
+    void dispatchDidFinishDocumentLoad() override {}
     void dispatchDidFinishLoad() override {}
     void dispatchDidChangeThemeColor() override {}
 
-    NavigationPolicy decidePolicyForNavigation(const ResourceRequest&, DocumentLoader*, NavigationType, NavigationPolicy, bool) override;
+    NavigationPolicy decidePolicyForNavigation(const ResourceRequest&, DocumentLoader*, NavigationType, NavigationPolicy, bool, bool) override;
     bool hasPendingNavigation() override;
 
     void dispatchWillSendSubmitEvent(HTMLFormElement*) override;
@@ -240,7 +247,7 @@ public:
     PassRefPtrWillBeRawPtr<LocalFrame> createFrame(const FrameLoadRequest&, const AtomicString&, HTMLFrameOwnerElement*) override;
     PassRefPtrWillBeRawPtr<Widget> createPlugin(HTMLPlugInElement*, const KURL&, const Vector<String>&, const Vector<String>&, const String&, bool, DetachedPluginPolicy) override;
     bool canCreatePluginWithoutRenderer(const String& mimeType) const override { return false; }
-    PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, const WebURL&, WebMediaPlayerClient*) override;
+    PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, WebMediaPlayer::LoadType, const WebURL&, WebMediaPlayerClient*) override;
     PassOwnPtr<WebMediaSession> createWebMediaSession() override;
 
     ObjectContentType objectContentType(const KURL&, const String&, bool) override { return ObjectContentType(); }
@@ -248,6 +255,8 @@ public:
     void didCreateNewDocument() override {}
     void dispatchDidClearWindowObjectInMainWorld() override {}
     void documentElementAvailable() override {}
+    void runScriptsAtDocumentElementAvailable() override {}
+    void runScriptsAtDocumentReady(bool) override {}
 
     void didCreateScriptContext(v8::Local<v8::Context>, int extensionGroup, int worldId) override {}
     void willReleaseScriptContext(v8::Local<v8::Context>, int worldId) override {}

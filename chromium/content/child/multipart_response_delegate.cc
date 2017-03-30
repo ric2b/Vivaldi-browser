@@ -9,7 +9,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "net/base/net_util.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
 #include "third_party/WebKit/public/platform/WebHTTPHeaderVisitor.h"
@@ -176,7 +175,7 @@ void MultipartResponseDelegate::OnReceivedData(const char* data,
     // If the last character is a new line character, go ahead and just send
     // everything we have buffered.  This matches an optimization in Gecko.
     int send_length = data_.length() - boundary_.length();
-    if (data_[data_.length() - 1] == '\n')
+    if (data_.back() == '\n')
       send_length = data_.length();
     if (client_)
       client_->didReceiveData(loader_,
@@ -249,7 +248,7 @@ bool MultipartResponseDelegate::ParseHeaders() {
   for (size_t i = 0; i < arraysize(kReplaceHeaders); ++i) {
     std::string name(kReplaceHeaders[i]);
     std::string value;
-    void* iterator = nullptr;
+    size_t iterator = 0;
     while (response_headers->EnumerateHeader(&iterator, name, &value)) {
       response.addHTTPHeaderField(WebString::fromLatin1(name),
                                   WebString::fromLatin1(value));
@@ -284,111 +283,6 @@ size_t MultipartResponseDelegate::FindBoundary() {
     }
   }
   return boundary_pos;
-}
-
-bool MultipartResponseDelegate::ReadMultipartBoundary(
-    const WebURLResponse& response,
-    std::string* multipart_boundary) {
-  std::string content_type =
-      response.httpHeaderField(WebString::fromUTF8("Content-Type")).utf8();
-
-  size_t boundary_start_offset = content_type.find("boundary=");
-  if (boundary_start_offset == std::string::npos)
-    return false;
-
-  boundary_start_offset += strlen("boundary=");
-
-  size_t boundary_end_offset = content_type.find(';', boundary_start_offset);
-
-  if (boundary_end_offset == std::string::npos)
-    boundary_end_offset = content_type.length();
-
-  size_t boundary_length = boundary_end_offset - boundary_start_offset;
-
-  *multipart_boundary =
-      content_type.substr(boundary_start_offset, boundary_length);
-  // The byte range response can have quoted boundary strings. This is legal
-  // as per MIME specifications. Individual data fragements however don't
-  // contain quoted boundary strings.
-  base::TrimString(*multipart_boundary, "\"", multipart_boundary);
-  return true;
-}
-
-bool MultipartResponseDelegate::ReadContentRanges(
-    const WebURLResponse& response,
-    int64_t* content_range_lower_bound,
-    int64_t* content_range_upper_bound,
-    int64_t* content_range_instance_size) {
-  std::string content_range = response.httpHeaderField("Content-Range").utf8();
-  if (content_range.empty()) {
-    content_range = response.httpHeaderField("Range").utf8();
-  }
-
-  if (content_range.empty()) {
-    DLOG(WARNING) << "Failed to read content range from response.";
-    return false;
-  }
-
-  size_t byte_range_lower_bound_start_offset = content_range.find(" ");
-  if (byte_range_lower_bound_start_offset == std::string::npos) {
-    return false;
-  }
-
-  // Skip over the initial space.
-  byte_range_lower_bound_start_offset++;
-
-  // Find the lower bound.
-  size_t byte_range_lower_bound_end_offset =
-      content_range.find("-", byte_range_lower_bound_start_offset);
-  if (byte_range_lower_bound_end_offset == std::string::npos) {
-    return false;
-  }
-
-  size_t byte_range_lower_bound_characters =
-      byte_range_lower_bound_end_offset - byte_range_lower_bound_start_offset;
-  std::string byte_range_lower_bound =
-      content_range.substr(byte_range_lower_bound_start_offset,
-                           byte_range_lower_bound_characters);
-
-  // Find the upper bound.
-  size_t byte_range_upper_bound_start_offset =
-      byte_range_lower_bound_end_offset + 1;
-
-  size_t byte_range_upper_bound_end_offset =
-      content_range.find("/", byte_range_upper_bound_start_offset);
-  if (byte_range_upper_bound_end_offset == std::string::npos) {
-    return false;
-  }
-
-  size_t byte_range_upper_bound_characters =
-      byte_range_upper_bound_end_offset - byte_range_upper_bound_start_offset;
-  std::string byte_range_upper_bound =
-      content_range.substr(byte_range_upper_bound_start_offset,
-                           byte_range_upper_bound_characters);
-
-  // Find the instance size.
-  size_t byte_range_instance_size_start_offset =
-      byte_range_upper_bound_end_offset + 1;
-
-  size_t byte_range_instance_size_end_offset =
-      content_range.length();
-
-  size_t byte_range_instance_size_characters =
-      byte_range_instance_size_end_offset -
-      byte_range_instance_size_start_offset;
-  std::string byte_range_instance_size =
-      content_range.substr(byte_range_instance_size_start_offset,
-                           byte_range_instance_size_characters);
-
-  if (!base::StringToInt64(byte_range_lower_bound, content_range_lower_bound))
-    return false;
-  if (!base::StringToInt64(byte_range_upper_bound, content_range_upper_bound))
-    return false;
-  if (!base::StringToInt64(byte_range_instance_size,
-                           content_range_instance_size)) {
-    return false;
-  }
-  return true;
 }
 
 }  // namespace content

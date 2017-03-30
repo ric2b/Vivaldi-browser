@@ -34,7 +34,6 @@ namespace {
 const CastAudioDecoder::OutputFormat kDecoderSampleFormat =
     CastAudioDecoder::kOutputPlanarFloat;
 
-const int kInvalidSampleRate = -1;
 const int64_t kInvalidDelayTimestamp = std::numeric_limits<int64_t>::min();
 
 AudioDecoderAlsa::RenderingDelay kInvalidRenderingDelay() {
@@ -76,6 +75,7 @@ bool AudioDecoderAlsa::Initialize() {
   DCHECK(delegate_);
   stats_ = Statistics();
   is_eos_ = false;
+  last_buffer_pts_ = std::numeric_limits<int64_t>::min();
 
   struct timespec now;
   if (clock_gettime(CLOCK_MONOTONIC, &now) == 0) {
@@ -93,7 +93,7 @@ bool AudioDecoderAlsa::Initialize() {
 bool AudioDecoderAlsa::Start(int64_t start_pts) {
   TRACE_FUNCTION_ENTRY0();
   current_pts_ = start_pts;
-  DCHECK_NE(config_.samples_per_second, kInvalidSampleRate);
+  DCHECK(IsValidConfig(config_));
   mixer_input_.reset(new StreamMixerAlsaInput(
       this, config_.samples_per_second, backend_->Primary()));
   mixer_input_->SetVolumeMultiplier(volume_multiplier_);
@@ -136,8 +136,10 @@ AudioDecoderAlsa::BufferStatus AudioDecoderAlsa::PushBuffer(
   uint64_t input_bytes = buffer->end_of_stream() ? 0 : buffer->data_size();
   scoped_refptr<DecoderBufferBase> buffer_base(
       static_cast<DecoderBufferBase*>(buffer));
-  if (!buffer->end_of_stream())
+  if (!buffer->end_of_stream()) {
     last_buffer_pts_ = buffer->timestamp();
+    current_pts_ = std::min(current_pts_, last_buffer_pts_);
+  }
 
   // If the buffer is already decoded, do not attempt to decode. Call
   // OnBufferDecoded asynchronously on the main thread.
@@ -231,7 +233,8 @@ AudioDecoderAlsa::RenderingDelay AudioDecoderAlsa::GetRenderingDelay() {
 void AudioDecoderAlsa::OnDecoderInitialized(bool success) {
   TRACE_FUNCTION_ENTRY0();
   DCHECK(task_runner_->BelongsToCurrentThread());
-  LOG(INFO) << "Decoder initialization returned with success = " << success;
+  LOG(INFO) << "Decoder initialization was "
+            << (success ? "successful" : "unsuccessful");
   if (!success)
     delegate_->OnDecoderError();
 }
@@ -278,7 +281,7 @@ void AudioDecoderAlsa::OnWritePcmCompletion(BufferStatus status,
                                             const RenderingDelay& delay) {
   TRACE_FUNCTION_ENTRY0();
   DCHECK(task_runner_->BelongsToCurrentThread());
-  if (status == MediaPipelineBackendAlsa::kBufferSuccess)
+  if (status == MediaPipelineBackendAlsa::kBufferSuccess && !is_eos_)
     current_pts_ = last_buffer_pts_;
   if (delay.timestamp_microseconds != kInvalidDelayTimestamp)
     last_known_delay_ = delay;
@@ -290,7 +293,8 @@ void AudioDecoderAlsa::OnWritePcmCompletion(BufferStatus status,
 void AudioDecoderAlsa::OnMixerError() {
   TRACE_FUNCTION_ENTRY0();
   DCHECK(task_runner_->BelongsToCurrentThread());
-  LOG(ERROR) << "Mixer error occured.";
+  // TODO(jyw): properly avoid outputting this message when it isn't needed
+  LOG(ERROR) << "Mixer error occurred. Did the sample rate just change?";
   error_ = true;
   delegate_->OnDecoderError();
 }

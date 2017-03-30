@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.infobar;
 import android.content.Context;
 import android.view.Gravity;
 import android.view.View;
-import android.view.View.OnLayoutChangeListener;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
@@ -78,34 +77,13 @@ public class InfoBarContainer extends SwipableOverlayView {
          * @param isLast Whether the infobar container is going to be empty
          */
         void onRemoveInfoBar(InfoBarContainer container, InfoBar infoBar, boolean isLast);
-    }
 
-    /** Toggles visibility of the InfoBarContainer when the keyboard appears. */
-    private OnLayoutChangeListener mParentLayoutListener = new OnLayoutChangeListener() {
-        @Override
-        public void onLayoutChange(View v, int left, int top, int right, int bottom, int oldLeft,
-                int oldTop, int oldRight, int oldBottom) {
-            // This check is posted because this is triggered during the layout pass of the parent.
-            // Setting the visibility on this View (its child) immediately results in Android giving
-            // warnings about triggering another layout (via setVisibility) during the current one.
-            post(new Runnable() {
-                @Override
-                public void run() {
-                    // Hide the View when the keyboard is showing.
-                    boolean isShowing = (getVisibility() == View.VISIBLE);
-                    if (UiUtils.isKeyboardShowing(getContext(), InfoBarContainer.this)) {
-                        if (isShowing) {
-                            setVisibility(View.GONE);
-                        }
-                    } else {
-                        if (!isShowing && !mIsObscured) {
-                            setVisibility(View.VISIBLE);
-                        }
-                    }
-                }
-            });
-        }
-    };
+        /**
+         * Called when the InfobarContainer is attached to the window.
+         * @param hasInfobars True if infobar container has infobars to show.
+         */
+        void onInfoBarContainerAttachedToWindow(boolean hasInfobars);
+    }
 
     /** Resets the state of the InfoBarContainer when the user navigates. */
     private final TabObserver mTabObserver = new EmptyTabObserver() {
@@ -159,7 +137,8 @@ public class InfoBarContainer extends SwipableOverlayView {
         mParentView = parentView;
 
         mLayout = new InfoBarContainerLayout(context);
-        addView(mLayout);
+        addView(mLayout, new FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT,
+                LayoutParams.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL));
 
         // Chromium's InfoBarContainer may add an InfoBar immediately during this initialization
         // call, so make sure everything in the InfoBarContainer is completely ready beforehand.
@@ -205,9 +184,6 @@ public class InfoBarContainer extends SwipableOverlayView {
 
     private void addToParentView() {
         super.addToParentView(mParentView);
-        if (mParentView != null) {
-            mParentView.addOnLayoutChangeListener(mParentLayoutListener);
-        }
     }
 
     /**
@@ -222,20 +198,12 @@ public class InfoBarContainer extends SwipableOverlayView {
         addToParentView();
     }
 
-    @Override
-    public boolean removeFromParentView() {
-        if (mParentView != null) {
-            mParentView.addOnLayoutChangeListener(mParentLayoutListener);
-        }
-        return super.removeFromParentView();
-    }
-
     /**
      * Adds an InfoBar to the view hierarchy.
      * @param infoBar InfoBar to add to the View hierarchy.
      */
     @CalledByNative
-    public void addInfoBar(InfoBar infoBar) {
+    private void addInfoBar(InfoBar infoBar) {
         assert !mDestroyed;
         if (infoBar == null) {
             return;
@@ -272,10 +240,11 @@ public class InfoBarContainer extends SwipableOverlayView {
     }
 
     /**
-     * Removes an InfoBar from the view hierarchy.
+     * Called by {@link InfoBar} to remove itself from the view hierarchy.
+     *
      * @param infoBar InfoBar to remove from the View hierarchy.
      */
-    public void removeInfoBar(InfoBar infoBar) {
+    void removeInfoBar(InfoBar infoBar) {
         assert !mDestroyed;
 
         if (!mInfoBars.remove(infoBar)) {
@@ -297,21 +266,6 @@ public class InfoBarContainer extends SwipableOverlayView {
      */
     public boolean hasBeenDestroyed() {
         return mDestroyed;
-    }
-
-    // Called by the tab when it has started loading a new page.
-    public void onPageStarted() {
-        ArrayList<InfoBar> barsToRemove = new ArrayList<>();
-
-        for (InfoBar infoBar : mInfoBars) {
-            if (infoBar.shouldExpire()) {
-                barsToRemove.add(infoBar);
-            }
-        }
-
-        for (InfoBar infoBar : barsToRemove) {
-            infoBar.dismissJavaOnlyInfoBar();
-        }
     }
 
     public void destroy() {
@@ -367,6 +321,29 @@ public class InfoBarContainer extends SwipableOverlayView {
             setAlpha(0f);
             animate().alpha(1f).setDuration(REATTACH_FADE_IN_MS);
         }
+        // Notify observers that the container has attached to the window.
+        for (InfoBarContainerObserver observer : mObservers) {
+            observer.onInfoBarContainerAttachedToWindow(!mInfoBars.isEmpty());
+        }
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        // Hide the View when the keyboard is showing.
+        boolean isShowing = (getVisibility() == View.VISIBLE);
+        if (UiUtils.isKeyboardShowing(getContext(), InfoBarContainer.this)) {
+            if (isShowing) {
+                // Set to invisible (instead of gone) so that onLayout() will be called when the
+                // keyboard is dismissed.
+                setVisibility(View.INVISIBLE);
+            }
+        } else {
+            if (!isShowing && !mIsObscured) {
+                setVisibility(View.VISIBLE);
+            }
+        }
+
+        super.onLayout(changed, l, t, r, b);
     }
 
     private native long nativeInit();

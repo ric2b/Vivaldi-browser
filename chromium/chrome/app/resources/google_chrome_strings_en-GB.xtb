@@ -3,7 +3,6 @@
 <translationbundle lang="en-GB">
 <translation id="1001534784610492198">The installer archive is corrupted or invalid. Please download Google Chrome again.</translation>
 <translation id="1013290471399003443">Chrome verified that <ph name="ISSUER" /> issued this website's certificate. The server supplied valid Certificate Transparency information.</translation>
-<translation id="1016765312371154165">Chrome didn't shut down correctly.</translation>
 <translation id="103396972844768118">Important information regarding your Chrome data</translation>
 <translation id="1035334672863811645">sign in to Chrome</translation>
 <translation id="1061441684050139317">Chrome needs microphone access to share it with this site.</translation>
@@ -55,7 +54,6 @@ Signing in anyway will merge Chrome information like bookmarks, history and othe
 <translation id="2397416548179033562">Show Chrome menu</translation>
 <translation id="2429317896000329049">Google Chrome could not sync your data because Sync is not available for your domain.</translation>
 <translation id="2485422356828889247">Uninstall</translation>
-<translation id="2576431527583832481">Chrome just got better! A new version is available.</translation>
 <translation id="2580411288591421699">Cannot install the same Google Chrome version that is currently running. Please close Google Chrome and try again.</translation>
 <translation id="2582790009689336987">This computer will soon stop receiving Google Chrome updates because this Linux system will no longer be supported.</translation>
 <translation id="2588322182880276190">Chrome logo</translation>
@@ -115,7 +113,6 @@ Signing in anyway will merge Chrome information like bookmarks, history and othe
 <translation id="4633000520311261472">To make Chrome safer, we disabled some extensions that aren't listed in the <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> and may have been added without your knowledge.</translation>
 <translation id="4700157086864140907">Google Chrome can provide smarter spell-checking by sending what you type in the browser to Google servers, allowing you to use the same spell-checking technology used by Google search.</translation>
 <translation id="4728575227883772061">Installation failed due to unspecified error. If Google Chrome is currently running, please close it and try again.</translation>
-<translation id="473775607612524610">Update</translation>
 <translation id="4743926867934016338">Accept &amp; Search</translation>
 <translation id="4751441238232965030">This computer will soon stop receiving 32-bit Google Chrome updates. Please upgrade to 64-bit Google Chrome.</translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
@@ -216,7 +213,6 @@ Google Chrome is unable to recover your settings.</translation>
 <translation id="7808348361785373670">Remove from Chrome...</translation>
 <translation id="7825851276765848807">Installation failed due to unspecified error. Please download Google Chrome again.</translation>
 <translation id="7890208801193284374">If you share a computer, friends and family can browse separately and set up Chrome just the way they want.</translation>
-<translation id="8000275528373650868">Google Chrome requires Windows Vista or Windows XP with SP2 or higher.</translation>
 <translation id="8005540215158006229">Chrome is almost ready.</translation>
 <translation id="8008534537613507642">Reinstall Chrome</translation>
 <translation id="8030318113982266900">Updating your device to <ph name="CHANNEL_NAME" /> channel...</translation>
@@ -245,6 +241,7 @@ Google Chrome is unable to recover your settings.</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">You do not have appropriate rights for system-level installation. Try running the installer again as Administrator.</translation>
 <translation id="9026991721384951619">Chrome OS could not sync your data because your account sign-in details are out of date.</translation>
+<translation id="9067395829937117663">Google Chrome requires Windows 7 or higher.</translation>
 <translation id="9102715433345326100">This file is malicious and Chrome has blocked it.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Warning:<ph name="END_BOLD" /> Google Chrome cannot prevent extensions from recording your browsing history. To disable this extension in incognito mode, unselect this option.</translation>
 <translation id="911206726377975832">Also delete your browsing data?</translation>

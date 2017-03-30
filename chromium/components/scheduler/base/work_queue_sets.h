@@ -10,6 +10,7 @@
 #include <map>
 #include <vector>
 
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "components/scheduler/base/task_queue_impl.h"
@@ -21,14 +22,17 @@ class TaskQueueImpl;
 
 class SCHEDULER_EXPORT WorkQueueSets {
  public:
-  explicit WorkQueueSets(size_t num_sets);
+  WorkQueueSets(size_t num_sets, const char* name);
   ~WorkQueueSets();
+
+  // O(log num queues)
+  void AddQueue(WorkQueue* queue, size_t set_index);
 
   // O(log num queues)
   void RemoveQueue(WorkQueue* work_queue);
 
   // O(log num queues)
-  void AssignQueueToSet(WorkQueue* queue, size_t set_index);
+  void ChangeSetIndex(WorkQueue* queue, size_t set_index);
 
   // O(log num queues)
   void OnPushQueue(WorkQueue* work_queue);
@@ -42,9 +46,18 @@ class SCHEDULER_EXPORT WorkQueueSets {
   // O(1)
   bool IsSetEmpty(size_t set_index) const;
 
+#if DCHECK_IS_ON() || !defined(NDEBUG)
+  // Note this iterates over everything in |enqueue_order_to_work_queue_maps_|.
+  // It's intended for use with DCHECKS and for testing
+  bool ContainsWorkQueueForTest(const WorkQueue* queue) const;
+#endif
+
+  const char* name() const { return name_; }
+
  private:
   typedef std::map<EnqueueOrder, WorkQueue*> EnqueueOrderToWorkQueueMap;
   std::vector<EnqueueOrderToWorkQueueMap> enqueue_order_to_work_queue_maps_;
+  const char* name_;
 
   DISALLOW_COPY_AND_ASSIGN(WorkQueueSets);
 };

@@ -39,9 +39,9 @@ scoped_ptr<SurfaceOzoneCanvas> SurfaceFactoryOzone::CreateCanvasForWidget(
   return nullptr;
 }
 
-const int32_t* SurfaceFactoryOzone::GetEGLSurfaceProperties(
-    const int32_t* desired_attributes) {
-  return desired_attributes;
+std::vector<gfx::BufferFormat> SurfaceFactoryOzone::GetScanoutFormats(
+    gfx::AcceleratedWidget widget) {
+  return std::vector<gfx::BufferFormat>();
 }
 
 scoped_refptr<ui::NativePixmap> SurfaceFactoryOzone::CreateNativePixmap(

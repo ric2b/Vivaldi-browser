@@ -35,7 +35,6 @@
 #include "core/fetch/ClientHintsPreferences.h"
 #include "core/fetch/RawResource.h"
 #include "core/fetch/ResourceLoaderOptions.h"
-#include "core/fetch/ResourcePtr.h"
 #include "core/fetch/SubstituteData.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/loader/DocumentLoadTiming.h"
@@ -56,7 +55,6 @@ class ResourceFetcher;
 class DocumentInit;
 class LocalFrame;
 class FrameLoader;
-class MHTMLArchive;
 class ResourceLoader;
 class ThreadedDataReceiver;
 
@@ -123,7 +121,6 @@ public:
 
     ApplicationCacheHost* applicationCacheHost() const { return m_applicationCacheHost.get(); }
 
-    bool isRedirect() const { return m_redirectChain.size() > 1; }
     void clearRedirectChain();
     void appendRedirect(const KURL&);
 
@@ -146,7 +143,7 @@ public:
 
     bool loadingMultipartContent() const;
 
-    void startPreload(Resource::Type, FetchRequest&);
+    Resource* startPreload(Resource::Type, FetchRequest&);
 
     DECLARE_VIRTUAL_TRACE();
 
@@ -171,9 +168,6 @@ private:
 
     bool maybeCreateArchive();
 
-    void prepareSubframeArchiveLoadIfNeeded();
-
-    void willSendRequest(ResourceRequest&, const ResourceResponse&);
     void finishedLoading(double finishTime);
     void mainReceivedError(const ResourceError&);
     void cancelLoadAfterXFrameOptionsOrCSPDenied(const ResourceResponse&);
@@ -194,7 +188,7 @@ private:
     RawPtrWillBeMember<LocalFrame> m_frame;
     PersistentWillBeMember<ResourceFetcher> m_fetcher;
 
-    ResourcePtr<RawResource> m_mainResource;
+    RefPtrWillBeMember<RawResource> m_mainResource;
 
     RefPtrWillBeMember<DocumentWriter> m_writer;
 
@@ -216,8 +210,6 @@ private:
     bool m_replacesCurrentHistoryItem;
 
     NavigationType m_navigationType;
-
-    RefPtrWillBeMember<MHTMLArchive> m_archive;
 
     DocumentLoadTiming m_documentLoadTiming;
 

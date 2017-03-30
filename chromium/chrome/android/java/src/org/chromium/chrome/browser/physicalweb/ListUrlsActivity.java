@@ -4,8 +4,12 @@
 
 package org.chromium.chrome.browser.physicalweb;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.AnimationDrawable;
@@ -13,6 +17,7 @@ import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.SystemClock;
+import android.preference.PreferenceManager;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.view.Menu;
@@ -23,40 +28,56 @@ import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.widget.FadingShadow;
+import org.chromium.chrome.browser.widget.FadingShadowView;
 
 import java.util.Collection;
-import java.util.HashSet;
 
 /**
  * This activity displays a list of nearby URLs as stored in the {@link UrlManager}.
  * This activity does not and should not rely directly or indirectly on the native library.
  */
-public class ListUrlsActivity extends AppCompatActivity
-        implements AdapterView.OnItemClickListener, SwipeRefreshWidget.OnRefreshListener {
+public class ListUrlsActivity extends AppCompatActivity implements AdapterView.OnItemClickListener,
+        SwipeRefreshWidget.OnRefreshListener, UrlManager.Listener {
     public static final String REFERER_KEY = "referer";
     public static final int NOTIFICATION_REFERER = 1;
     public static final int OPTIN_REFERER = 2;
+    public static final int PREFERENCE_REFERER = 3;
     private static final String TAG = "PhysicalWeb";
+    private static final String PREFS_VERSION_KEY =
+            "org.chromium.chrome.browser.physicalweb.VERSION";
+    private static final String PREFS_BOTTOM_BAR_KEY =
+            "org.chromium.chrome.browser.physicalweb.BOTTOM_BAR_DISPLAY_COUNT";
+    private static final int PREFS_VERSION = 1;
+    private static final int BOTTOM_BAR_DISPLAY_LIMIT = 1;
+    private static final int DURATION_SLIDE_UP_MS = 250;
+    private static final int DURATION_SLIDE_DOWN_MS = 250;
 
     private Context mContext;
+    private SharedPreferences mSharedPrefs;
     private NearbyUrlsAdapter mAdapter;
     private PwsClient mPwsClient;
     private ListView mListView;
     private TextView mEmptyListText;
     private ImageView mScanningImageView;
     private SwipeRefreshWidget mSwipeRefreshWidget;
+    private View mBottomBar;
     private boolean mIsInitialDisplayRecorded;
     private boolean mIsRefreshing;
     private boolean mIsRefreshUserInitiated;
+    private PhysicalWebBleClient mPhysicalWebBleClient;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         mContext = this;
         setContentView(R.layout.physical_web_list_urls_activity);
+
+        initSharedPreferences();
 
         mAdapter = new NearbyUrlsAdapter(this);
 
@@ -74,6 +95,22 @@ public class ListUrlsActivity extends AppCompatActivity
                 (SwipeRefreshWidget) findViewById(R.id.physical_web_swipe_refresh_widget);
         mSwipeRefreshWidget.setOnRefreshListener(this);
 
+        mBottomBar = findViewById(R.id.physical_web_bottom_bar);
+
+        int shadowColor = ApiCompatibilityUtils.getColor(getResources(),
+                R.color.bottom_bar_shadow_color);
+        FadingShadowView shadow =
+                (FadingShadowView) findViewById(R.id.physical_web_bottom_bar_shadow);
+        shadow.init(shadowColor, FadingShadow.POSITION_BOTTOM);
+
+        View bottomBarClose = (View) findViewById(R.id.physical_web_bottom_bar_close);
+        bottomBarClose.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                hideBottomBar();
+            }
+        });
+
         mPwsClient = new PwsClientImpl();
         int referer = getIntent().getIntExtra(REFERER_KEY, 0);
         if (savedInstanceState == null  // Ensure this is a newly-created activity.
@@ -83,6 +120,8 @@ public class ListUrlsActivity extends AppCompatActivity
         mIsInitialDisplayRecorded = false;
         mIsRefreshing = false;
         mIsRefreshUserInitiated = false;
+        mPhysicalWebBleClient =
+            PhysicalWebBleClient.getInstance((ChromeApplication) getApplicationContext());
     }
 
     @Override
@@ -116,15 +155,48 @@ public class ListUrlsActivity extends AppCompatActivity
         return true;
     }
 
+    private void foregroundSubscribe() {
+        mPhysicalWebBleClient.foregroundSubscribe(this);
+    }
+
+    private void foregroundUnsubscribe() {
+        mPhysicalWebBleClient.foregroundUnsubscribe();
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        UrlManager.getInstance(this).addObserver(this);
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
+        foregroundSubscribe();
         startRefresh(false, false);
+
+        int bottomBarDisplayCount = getBottomBarDisplayCount();
+        if (bottomBarDisplayCount < BOTTOM_BAR_DISPLAY_LIMIT) {
+            showBottomBar();
+            setBottomBarDisplayCount(bottomBarDisplayCount + 1);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        foregroundUnsubscribe();
+        super.onPause();
     }
 
     @Override
     public void onRefresh() {
         startRefresh(true, true);
+    }
+
+    @Override
+    protected void onStop() {
+        UrlManager.getInstance(this).removeObserver(this);
+        super.onStop();
     }
 
     private void resolve(Collection<String> urls) {
@@ -136,13 +208,11 @@ public class ListUrlsActivity extends AppCompatActivity
                 PhysicalWebUma.onForegroundPwsResolution(ListUrlsActivity.this, duration);
 
                 // filter out duplicate site URLs.
-                Collection<String> siteUrls = new HashSet<>();
                 for (PwsResult pwsResult : pwsResults) {
                     String siteUrl = pwsResult.siteUrl;
                     String iconUrl = pwsResult.iconUrl;
 
-                    if (siteUrl != null && !siteUrls.contains(siteUrl)) {
-                        siteUrls.add(siteUrl);
+                    if (siteUrl != null && !mAdapter.hasSiteUrl(siteUrl)) {
                         mAdapter.add(pwsResult);
 
                         if (iconUrl != null && !mAdapter.hasIcon(iconUrl)) {
@@ -170,6 +240,15 @@ public class ListUrlsActivity extends AppCompatActivity
         mContext.startActivity(intent);
     }
 
+    /**
+     * Called when new nearby URLs are found.
+     * @param urls The set of newly-found nearby URLs.
+     */
+    @Override
+    public void onDisplayableUrlsAdded(Collection<String> urls) {
+        resolve(urls);
+    }
+
     private void startRefresh(boolean isUserInitiated, boolean isSwipeInitiated) {
         if (mIsRefreshing) {
             return;
@@ -182,7 +261,12 @@ public class ListUrlsActivity extends AppCompatActivity
         mAdapter.clear();
 
         Collection<String> urls = UrlManager.getInstance(this).getUrls(true);
-        if (urls.isEmpty()) {
+
+        // Check the Physical Web preference to ensure we do not resolve URLs when Physical Web is
+        // off or onboarding. Normally the user will not reach this activity unless the preference
+        // is explicitly enabled, but there is a button on the diagnostics page that launches into
+        // the activity without checking the preference state.
+        if (urls.isEmpty() || !PhysicalWeb.isPhysicalWebPreferenceEnabled(this)) {
             finishRefresh();
         } else {
             // Show the swipe-to-refresh busy indicator for refreshes initiated by a swipe.
@@ -202,9 +286,6 @@ public class ListUrlsActivity extends AppCompatActivity
 
             resolve(urls);
         }
-
-        // Clear stored URLs and resubscribe to Nearby.
-        PhysicalWeb.startPhysicalWeb((ChromeApplication) getApplicationContext());
     }
 
     private void finishRefresh() {
@@ -236,6 +317,55 @@ public class ListUrlsActivity extends AppCompatActivity
                 mAdapter.setIcon(url, bitmap);
             }
         });
+    }
+
+    private void showBottomBar() {
+        mBottomBar.setTranslationY(mBottomBar.getHeight());
+        mBottomBar.setVisibility(View.VISIBLE);
+        Animator animator = createTranslationYAnimator(mBottomBar, 0f, DURATION_SLIDE_UP_MS);
+        animator.start();
+    }
+
+    private void hideBottomBar() {
+        Animator animator = createTranslationYAnimator(mBottomBar, mBottomBar.getHeight(),
+                DURATION_SLIDE_DOWN_MS);
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                mBottomBar.setVisibility(View.GONE);
+            }
+        });
+        animator.start();
+    }
+
+    private static Animator createTranslationYAnimator(View view, float endValue,
+                long durationMillis) {
+        return ObjectAnimator.ofFloat(view, "translationY", view.getTranslationY(), endValue)
+                .setDuration(durationMillis);
+    }
+
+    private void initSharedPreferences() {
+        mSharedPrefs = PreferenceManager.getDefaultSharedPreferences(this);
+        int prefsVersion = mSharedPrefs.getInt(PREFS_VERSION_KEY, 0);
+
+        if (prefsVersion == PREFS_VERSION) {
+            return;
+        }
+
+        // Stored preferences are old, upgrade to the current version.
+        SharedPreferences.Editor editor = mSharedPrefs.edit();
+        editor.putInt(PREFS_VERSION_KEY, PREFS_VERSION);
+        editor.apply();
+    }
+
+    private int getBottomBarDisplayCount() {
+        return mSharedPrefs.getInt(PREFS_BOTTOM_BAR_KEY, 0);
+    }
+
+    private void setBottomBarDisplayCount(int count) {
+        SharedPreferences.Editor editor = mSharedPrefs.edit();
+        editor.putInt(PREFS_BOTTOM_BAR_KEY, count);
+        editor.apply();
     }
 
     private static Intent createNavigateToUrlIntent(PwsResult pwsResult) {

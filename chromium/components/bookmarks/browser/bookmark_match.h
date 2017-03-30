@@ -25,6 +25,7 @@ struct BookmarkMatch {
   enum match_type {kTitle, kNick, kDescription};
 
   BookmarkMatch(match_type kind = kTitle);
+  BookmarkMatch(const BookmarkMatch& other);
   ~BookmarkMatch();
 
   // Extracts and returns the offsets from |match_positions|.

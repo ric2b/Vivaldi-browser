@@ -37,6 +37,7 @@
 #include "platform/heap/ThreadingTraits.h"
 #include "public/platform/WebThread.h"
 #include "wtf/AddressSanitizer.h"
+#include "wtf/Allocator.h"
 #include "wtf/Forward.h"
 #include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
@@ -119,6 +120,7 @@ using UsingPreFinalizerMacroNeedsTrailingSemiColon = char
 #endif
 
 class PLATFORM_EXPORT ThreadState {
+    USING_FAST_MALLOC(ThreadState);
     WTF_MAKE_NONCOPYABLE(ThreadState);
 public:
     typedef std::pair<void*, PreFinalizerCallback> PreFinalizer;
@@ -141,6 +143,7 @@ public:
     // The NoAllocationScope class is used in debug mode to catch unwanted
     // allocations. E.g. allocations during GC.
     class NoAllocationScope final {
+        STACK_ALLOCATED();
     public:
         explicit NoAllocationScope(ThreadState* state) : m_state(state)
         {
@@ -155,6 +158,7 @@ public:
     };
 
     class SweepForbiddenScope final {
+        STACK_ALLOCATED();
     public:
         explicit SweepForbiddenScope(ThreadState* state) : m_state(state)
         {
@@ -244,7 +248,7 @@ public:
     void schedulePageNavigationGCIfNeeded(float estimatedRemovalRatio);
     void schedulePageNavigationGC();
     void scheduleGCIfNeeded();
-    void willStartV8GC();
+    void willStartV8GC(BlinkGC::V8GCType);
     void setGCState(GCState);
     GCState gcState() const { return m_gcState; }
     bool isInGC() const { return gcState() == GCRunning; }
@@ -379,6 +383,7 @@ public:
     void visitPersistents(Visitor*);
 
     struct GCSnapshotInfo {
+        STACK_ALLOCATED();
         GCSnapshotInfo(size_t numObjectTypes);
 
         // Map from gcInfoIndex (vector-index) to count/size.
@@ -515,6 +520,11 @@ public:
     void leaveStaticReferenceRegistrationDisabledScope();
 #endif
 
+    void resetHeapCounters();
+    void increaseAllocatedObjectSize(size_t);
+    void decreaseAllocatedObjectSize(size_t);
+    void increaseMarkedObjectSize(size_t);
+
 private:
     enum SnapshotType {
         HeapSnapshot,
@@ -592,6 +602,8 @@ private:
     void takeSnapshot(SnapshotType);
     void clearHeapAges();
     int heapIndexOfVectorHeapLeastRecentlyExpanded(int beginHeapIndex, int endHeapIndex);
+
+    void reportMemoryToV8();
 
     // Should only be called under protection of threadAttachMutex().
     const Vector<OwnPtr<BlinkGCInterruptor>>& interruptors() const { return m_interruptors; }
@@ -673,11 +685,17 @@ private:
     static const int likelyToBePromptlyFreedArraySize = (1 << 8);
     static const int likelyToBePromptlyFreedArrayMask = likelyToBePromptlyFreedArraySize - 1;
     OwnPtr<int[]> m_likelyToBePromptlyFreed;
+
+    // Stats for heap memory of this thread.
+    size_t m_allocatedObjectSize;
+    size_t m_markedObjectSize;
+    size_t m_reportedMemoryToV8;
 };
 
 template<ThreadAffinity affinity> class ThreadStateFor;
 
 template<> class ThreadStateFor<MainThreadOnly> {
+    STATIC_ONLY(ThreadStateFor);
 public:
     static ThreadState* state()
     {
@@ -688,6 +706,7 @@ public:
 };
 
 template<> class ThreadStateFor<AnyThread> {
+    STATIC_ONLY(ThreadStateFor);
 public:
     static ThreadState* state() { return ThreadState::current(); }
 };

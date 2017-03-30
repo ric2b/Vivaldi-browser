@@ -50,6 +50,7 @@
 #include "core/paint/PaintLayer.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/plugins/PluginData.h"
+#include "platform/text/CompressibleString.h"
 #include "public/platform/Platform.h"
 
 namespace blink {
@@ -136,6 +137,7 @@ Page::Page(PageClients& pageClients)
     , m_isPainting(false)
 #endif
     , m_frameHost(FrameHost::create(*this))
+    , m_timerForCompressStrings(this, &Page::compressStrings)
 {
     ASSERT(m_editorClient);
 
@@ -239,19 +241,7 @@ void Page::setNeedsRecalcStyleInAllFrames()
 {
     for (Frame* frame = mainFrame(); frame; frame = frame->tree().traverseNext()) {
         if (frame->isLocalFrame())
-            toLocalFrame(frame)->document()->styleResolverChanged();
-    }
-}
-
-void Page::setNeedsLayoutInAllFrames()
-{
-    for (Frame* frame = mainFrame(); frame; frame = frame->tree().traverseNext()) {
-        if (!frame->isLocalFrame())
-            continue;
-        if (FrameView* view = toLocalFrame(frame)->view()) {
-            view->setNeedsLayout();
-            view->scheduleRelayout();
-        }
+            toLocalFrame(frame)->document()->styleEngine().resolverChanged(FullStyleUpdate);
     }
 }
 
@@ -363,6 +353,8 @@ void Page::visitedStateChanged(LinkHash linkHash)
 
 void Page::setVisibilityState(PageVisibilityState visibilityState, bool isInitialState)
 {
+    static const double waitingTimeBeforeCompressingString = 10;
+
     if (m_visibilityState == visibilityState)
         return;
     m_visibilityState = visibilityState;
@@ -372,11 +364,25 @@ void Page::setVisibilityState(PageVisibilityState visibilityState, bool isInitia
 
     if (!isInitialState && m_mainFrame && m_mainFrame->isLocalFrame())
         deprecatedLocalMainFrame()->didChangeVisibilityState();
+
+    // Compress CompressibleStrings when 10 seconds have passed since the page
+    // went to background.
+    if (m_visibilityState == PageVisibilityStateHidden) {
+        if (!m_timerForCompressStrings.isActive())
+            m_timerForCompressStrings.startOneShot(waitingTimeBeforeCompressingString, BLINK_FROM_HERE);
+    } else if (m_timerForCompressStrings.isActive()) {
+        m_timerForCompressStrings.stop();
+    }
 }
 
 PageVisibilityState Page::visibilityState() const
 {
     return m_visibilityState;
+}
+
+bool Page::isPageVisible() const
+{
+    return visibilityState() == PageVisibilityStateVisible;
 }
 
 bool Page::isCursorVisible() const
@@ -492,6 +498,7 @@ void Page::didCommitLoad(LocalFrame* frame)
     if (m_mainFrame == frame) {
         frame->console().clearMessages();
         useCounter().didCommitLoad();
+        deprecation().clearSuppression();
         frameHost().visualViewport().sendUMAMetrics();
         m_originsUsingFeatures.updateMeasurementsAndClear();
         UserGestureIndicator::clearProcessedUserGestureSinceLoad();
@@ -583,6 +590,13 @@ void Page::willBeDestroyed()
     m_mainFrame = nullptr;
 
     PageLifecycleNotifier::notifyContextDestroyed();
+}
+
+void Page::compressStrings(Timer<Page>* timer)
+{
+    ASSERT_UNUSED(timer, timer == &m_timerForCompressStrings);
+    if (m_visibilityState == PageVisibilityStateHidden)
+        CompressibleStringImpl::compressAll();
 }
 
 Page::PageClients::PageClients()

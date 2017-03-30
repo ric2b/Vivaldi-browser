@@ -30,13 +30,13 @@ source_set("app_shell_lib") {
     ":resources",
     ":version_header",
     "//base",
-    "//base:prefs",
     "//components/devtools_discovery",
     "//components/devtools_http_handler",
     "//components/guest_view/browser",
     "//components/guest_view/common",
     "//components/guest_view/renderer",
     "//components/pref_registry",
+    "//components/prefs",
     "//components/update_client",
     "//components/user_prefs",
     "//components/web_cache/renderer",
@@ -54,10 +54,10 @@ source_set("app_shell_lib") {
     "//extensions/shell/common/api",
     "//extensions/shell/common/api:api_registration",
     "//extensions/utility",
+    "//mojo/edk/system",
     "//mojo/environment:chromium",
     "//skia",
     "//third_party/WebKit/public:blink",
-    "//third_party/mojo/src/mojo/edk/system",
     "//ui/base",
     "//ui/base/ime",
     "//v8",
@@ -132,7 +132,6 @@ if (!(is_chromeos && !use_ozone)) {
     if (is_win) {
       configs += [ "//build/config/win:windowed" ]
       configs -= [ "//build/config/win:console" ]
-      deps += [ "//base/allocator" ]
     }
 
     if (is_mac) {
@@ -144,15 +143,6 @@ if (!(is_chromeos && !use_ozone)) {
       # TODO(GYP): Mac app_shell_helper stuff.
     }
   }
-}
-
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("app_shell_unittests_run") {
-  testonly = true
-  deps = [
-    ":app_shell_unittests",
-  ]
 }
 
 test("app_shell_unittests") {
@@ -212,10 +202,6 @@ test("app_shell_unittests") {
                       "//extensions/shell")
       sources += nacl_sources
     }
-  }
-
-  if (is_win) {
-    deps += [ "//base/allocator" ]
   }
 }
 

@@ -46,10 +46,10 @@
 #include "ui/events/latency_info.h"
 #include "ui/gfx/native_widget_types.h"
 
+struct FrameHostMsg_HittestData_Params;
 struct ViewHostMsg_SelectionBounds_Params;
 struct ViewHostMsg_TextInputState_Params;
 struct ViewHostMsg_UpdateRect_Params;
-struct ViewMsg_Resize_Params;
 
 namespace blink {
 class WebInputEvent;
@@ -81,6 +81,7 @@ class TimeoutMonitor;
 class TouchEmulator;
 class WebCursor;
 struct EditCommand;
+struct ResizeParams;
 
 // This implements the RenderWidgetHost interface that is exposed to
 // embedders of content, and adds things only visible to content.
@@ -338,6 +339,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   void ImeSetComposition(
       const base::string16& text,
       const std::vector<blink::WebCompositionUnderline>& underlines,
+      const gfx::Range& replacement_range,
       int selection_start,
       int selection_end);
 
@@ -485,11 +487,11 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
 
   // Fills in the |resize_params| struct.
   // Returns |false| if the update is redundant, |true| otherwise.
-  bool GetResizeParams(ViewMsg_Resize_Params* resize_params);
+  bool GetResizeParams(ResizeParams* resize_params);
 
   // Sets the |resize_params| that were sent to the renderer bundled with the
   // request to create a new RenderWidget.
-  void SetInitialRenderSizeParams(const ViewMsg_Resize_Params& resize_params);
+  void SetInitialRenderSizeParams(const ResizeParams& resize_params);
 
   // Called when we receive a notification indicating that the renderer process
   // is gone. This will reset our state so that our state will be consistent if
@@ -505,6 +507,11 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   }
 
   bool renderer_initialized() const { return renderer_initialized_; }
+
+  bool scale_input_to_viewport() const { return scale_input_to_viewport_; }
+  void set_scale_input_to_viewport(bool scale_input_to_viewport) {
+    scale_input_to_viewport_ = scale_input_to_viewport;
+  }
 
  protected:
   // Retrieves an id the renderer can use to refer to its view.
@@ -585,11 +592,12 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
       gfx::NativeViewId dummy_activation_window);
 #endif
   void OnSelectionChanged(const base::string16& text,
-                          size_t offset,
+                          uint32_t offset,
                           const gfx::Range& range);
   void OnSelectionBoundsChanged(
       const ViewHostMsg_SelectionBounds_Params& params);
   void OnForwardCompositorProto(const std::vector<uint8_t>& proto);
+  void OnHittestData(const FrameHostMsg_HittestData_Params& params);
 
   // Called (either immediately or asynchronously) after we're done with our
   // BackingStore and can send an ACK to the renderer so it can paint onto it
@@ -684,7 +692,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   gfx::Size current_size_;
 
   // Resize information that was previously sent to the renderer.
-  scoped_ptr<ViewMsg_Resize_Params> old_resize_params_;
+  scoped_ptr<ResizeParams> old_resize_params_;
 
   // The next auto resize to send.
   gfx::Size new_auto_size_;
@@ -812,6 +820,10 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // causing HasFocus to return false when is_focused_ is true.
   bool is_focused_;
 
+  // When true, the host will scale the input to viewport.
+  // TODO(oshima): Remove this once crbug.com/563730 is addressed.
+  bool scale_input_to_viewport_;
+
   // This value indicates how long to wait before we consider a renderer hung.
   base::TimeDelta hung_renderer_delay_;
 
@@ -822,6 +834,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // Timer used to batch together mouse wheel events for the delegate
   // OnUserInteraction method. A wheel event is only dispatched when a wheel
   // event has not been seen for kMouseWheelCoalesceInterval seconds prior.
+  // TODO(dominickn): remove this when GestureScrollBegin has landed.
   scoped_ptr<base::ElapsedTimer> mouse_wheel_coalesce_timer_;
 
   base::WeakPtrFactory<RenderWidgetHostImpl> weak_factory_;

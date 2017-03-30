@@ -15,7 +15,6 @@
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
 #include "base/run_loop.h"
 #include "base/scoped_observer.h"
 #include "base/stl_util.h"
@@ -77,6 +76,7 @@
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
+#include "components/prefs/pref_service.h"
 #include "components/safe_browsing_db/database_manager.h"
 #include "components/safe_browsing_db/test_database_manager.h"
 #include "components/variations/entropy_provider.h"
@@ -1068,8 +1068,8 @@ class NeverRunsExternalProtocolHandlerDelegate
     : public ExternalProtocolHandler::Delegate {
  public:
   // ExternalProtocolHandler::Delegate implementation.
-  ShellIntegration::DefaultProtocolClientWorker* CreateShellWorker(
-      ShellIntegration::DefaultWebClientObserver* observer,
+  shell_integration::DefaultProtocolClientWorker* CreateShellWorker(
+      shell_integration::DefaultWebClientObserver* observer,
       const std::string& protocol) override {
     NOTREACHED();
     // This will crash, but it shouldn't get this far with BlockState::BLOCK
@@ -1512,7 +1512,7 @@ class PrerenderBrowserTest : virtual public InProcessBrowserTest {
     // Debug build bots occasionally run against the default limit, and tests
     // were failing because the prerender was canceled due to memory exhaustion.
     // http://crbug.com/93076
-    GetPrerenderManager()->mutable_config().max_bytes = 1000 * 1024 * 1024;
+    GetPrerenderManager()->mutable_config().max_bytes = 2000 * 1024 * 1024;
   }
 
   bool DidPrerenderPass(WebContents* web_contents) const {
@@ -2906,7 +2906,8 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
               base::Bind(&CreateCertStore));
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   net::SSLServerConfig ssl_config;
-  ssl_config.require_client_cert = true;
+  ssl_config.client_cert_type =
+      net::SSLServerConfig::ClientCertType::REQUIRE_CLIENT_CERT;
   https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK, ssl_config);
   https_server.ServeFilesFromSourceDirectory("chrome/test/data");
   ASSERT_TRUE(https_server.Start());
@@ -2924,7 +2925,8 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
               base::Bind(&CreateCertStore));
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   net::SSLServerConfig ssl_config;
-  ssl_config.require_client_cert = true;
+  ssl_config.client_cert_type =
+      net::SSLServerConfig::ClientCertType::REQUIRE_CLIENT_CERT;
   https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK, ssl_config);
   https_server.ServeFilesFromSourceDirectory("chrome/test/data");
   ASSERT_TRUE(https_server.Start());
@@ -2950,7 +2952,8 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderSSLClientCertIframe) {
               base::Bind(&CreateCertStore));
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   net::SSLServerConfig ssl_config;
-  ssl_config.require_client_cert = true;
+  ssl_config.client_cert_type =
+      net::SSLServerConfig::ClientCertType::REQUIRE_CLIENT_CERT;
   https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK, ssl_config);
   https_server.ServeFilesFromSourceDirectory("chrome/test/data");
   ASSERT_TRUE(https_server.Start());
@@ -3953,7 +3956,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderOmniboxBrowserTest,
 }
 
 // Can't run tests with NaCl plugins if built with DISABLE_NACL.
-#if !defined(DISABLE_NACL) && !defined(DISABLE_NACL_BROWSERTESTS)
+#if !defined(DISABLE_NACL)
 class PrerenderBrowserTestWithNaCl : public PrerenderBrowserTest {
  public:
   PrerenderBrowserTestWithNaCl() {}
@@ -3965,9 +3968,16 @@ class PrerenderBrowserTestWithNaCl : public PrerenderBrowserTest {
   }
 };
 
+// PrerenderNaClPluginEnabled crashes on ARM: http://crbug.com/585251
+#if defined(ARCH_CPU_ARM_FAMILY)
+#define MAYBE_PrerenderNaClPluginEnabled DISABLED_PrerenderNaClPluginEnabled
+#else
+#define MAYBE_PrerenderNaClPluginEnabled PrerenderNaClPluginEnabled
+#endif
+
 // Check that NaCl plugins work when enabled, with prerendering.
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTestWithNaCl,
-                       PrerenderNaClPluginEnabled) {
+                       MAYBE_PrerenderNaClPluginEnabled) {
 #if defined(OS_WIN) && defined(USE_ASH)
   // Disable this test in Metro+Ash for now (http://crbug.com/262796).
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(

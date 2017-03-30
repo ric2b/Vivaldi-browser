@@ -14,15 +14,14 @@
 
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "courgette/disassembler.h"
+#include "courgette/courgette.h"
 #include "courgette/image_utils.h"
+#include "courgette/label_manager.h"
 #include "courgette/memory_allocator.h"
 
 namespace courgette {
 
 class EncodedProgram;
-
-typedef std::map<RVA, Label*> RVAToLabel;
 
 // Opcodes of simple assembly language
 enum OP {
@@ -133,7 +132,7 @@ class AssemblyProgram {
   void UnassignIndexes();
   void AssignRemainingIndexes();
 
-  EncodedProgram* Encode() const;
+  scoped_ptr<EncodedProgram> Encode() const;
 
   // Accessor for instruction list.
   const InstructionVector& instructions() const {
@@ -152,7 +151,8 @@ class AssemblyProgram {
   // otherwise returns NULL.
   Label* InstructionRel32Label(const Instruction* instruction) const;
 
-  // Trim underused labels
+  // Removes underused Labels. Thresholds used (may be 0, i.e., no trimming) is
+  // dependent on architecture. Returns true on success, and false otherwise.
   CheckBool TrimLabels();
 
  private:
@@ -191,5 +191,12 @@ class AssemblyProgram {
   DISALLOW_COPY_AND_ASSIGN(AssemblyProgram);
 };
 
+// Converts |program| into encoded form, returning it as |*output|.
+// Returns C_OK if succeeded, otherwise returns an error status and sets
+// |*output| to null.
+Status Encode(const AssemblyProgram& program,
+              scoped_ptr<EncodedProgram>* output);
+
 }  // namespace courgette
+
 #endif  // COURGETTE_ASSEMBLY_PROGRAM_H_

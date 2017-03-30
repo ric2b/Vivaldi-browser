@@ -152,3 +152,50 @@ void DevToolsWindowTesting::CloseDevToolsWindowSync(
   CloseDevToolsWindow(window);
   runner->Run();
 }
+
+// DevToolsWindowCreationObserver ---------------------------------------------
+
+DevToolsWindowCreationObserver::DevToolsWindowCreationObserver()
+    : creation_callback_(base::Bind(
+          &DevToolsWindowCreationObserver::DevToolsWindowCreated,
+          base::Unretained(this))) {
+  DevToolsWindow::AddCreationCallbackForTest(creation_callback_);
+}
+
+DevToolsWindowCreationObserver::~DevToolsWindowCreationObserver() {
+  DevToolsWindow::RemoveCreationCallbackForTest(creation_callback_);
+}
+
+void DevToolsWindowCreationObserver::Wait() {
+  if (devtools_windows_.size())
+    return;
+  runner_ = new content::MessageLoopRunner();
+  runner_->Run();
+}
+
+void DevToolsWindowCreationObserver::WaitForLoad() {
+  Wait();
+  if (devtools_window())
+    DevToolsWindowTesting::WaitForDevToolsWindowLoad(devtools_window());
+}
+
+void DevToolsWindowCreationObserver::DevToolsWindowCreated(
+    DevToolsWindow* devtools_window) {
+  devtools_windows_.push_back(devtools_window);
+  if (runner_.get()) {
+    runner_->QuitClosure().Run();
+    runner_ = nullptr;
+  }
+}
+
+DevToolsWindow* DevToolsWindowCreationObserver::devtools_window() {
+  if (!devtools_windows_.size())
+    return nullptr;
+  return devtools_windows_[devtools_windows_.size() - 1];
+}
+
+void DevToolsWindowCreationObserver::CloseAllSync() {
+  for (DevToolsWindow* window : devtools_windows_)
+    DevToolsWindowTesting::CloseDevToolsWindowSync(window);
+  devtools_windows_.clear();
+}

@@ -32,6 +32,10 @@
 namespace blink {
 namespace AudioUtilities {
 
+// Rendering quantum size.  This is how many frames are processed at a time for each node in the
+// audio graph.
+static const unsigned kRenderQuantumFrames = 128;
+
 // Standard functions for converting to and from decibel values from linear.
 PLATFORM_EXPORT float linearToDecibels(float);
 PLATFORM_EXPORT float decibelsToLinear(float);
@@ -50,7 +54,7 @@ PLATFORM_EXPORT bool isValidAudioBufferSampleRate(float sampleRate);
 // Return max/min sample rate supported by AudioBuffers.
 PLATFORM_EXPORT float minAudioBufferSampleRate();
 PLATFORM_EXPORT float maxAudioBufferSampleRate();
-} // AudioUtilites
+} // namespace AudioUtilities
 } // namespace blink
 
 #endif // AudioUtilities_h

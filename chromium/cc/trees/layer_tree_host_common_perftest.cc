@@ -81,7 +81,7 @@ class LayerTreeHostCommonPerfTest : public LayerTreeTest {
 
 class CalcDrawPropsTest : public LayerTreeHostCommonPerfTest {
  public:
-  void RunCalcDrawProps() { RunTest(CompositorMode::SingleThreaded, false); }
+  void RunCalcDrawProps() { RunTest(CompositorMode::SINGLE_THREADED, false); }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
@@ -108,9 +108,6 @@ class CalcDrawPropsTest : public LayerTreeHostCommonPerfTest {
                                 LayerTreeImpl* active_tree,
                                 LayerTreeHostImpl* host_impl) {
     LayerImplList update_list;
-    PropertyTrees property_trees;
-    bool verify_property_trees = false;
-    bool use_property_trees = false;
     active_tree->IncrementRenderSurfaceListIdForTesting();
     LayerTreeHostCommon::CalcDrawPropsImplInputs inputs(
         active_tree->root_layer(), active_tree->DrawViewportSize(),
@@ -125,8 +122,8 @@ class CalcDrawPropsTest : public LayerTreeHostCommonPerfTest {
         host_impl->settings().layers_always_allowed_lcd_text,
         can_render_to_separate_surface,
         host_impl->settings().layer_transforms_should_scale_layer_contents,
-        verify_property_trees, use_property_trees, &update_list,
-        active_tree->current_render_surface_list_id(), &property_trees);
+        &update_list, active_tree->current_render_surface_list_id(),
+        active_tree->property_trees());
     LayerTreeHostCommon::CalculateDrawProperties(&inputs);
   }
 };
@@ -134,7 +131,7 @@ class CalcDrawPropsTest : public LayerTreeHostCommonPerfTest {
 class BspTreePerfTest : public CalcDrawPropsTest {
  public:
   BspTreePerfTest() : num_duplicates_(1) {}
-  void RunSortLayers() { RunTest(CompositorMode::SingleThreaded, false); }
+  void RunSortLayers() { RunTest(CompositorMode::SINGLE_THREADED, false); }
 
   void SetNumberOfDuplicates(int num_duplicates) {
     num_duplicates_ = num_duplicates;
@@ -182,7 +179,7 @@ class BspTreePerfTest : public CalcDrawPropsTest {
   }
 
   void BuildLayerImplList(LayerImpl* layer, LayerImplList* list) {
-    if (layer->Is3dSorted()) {
+    if (layer->Is3dSorted() && !layer->bounds().IsEmpty()) {
       list->push_back(layer);
     }
 
@@ -229,12 +226,7 @@ TEST_F(BspTreePerfTest, LayerSorterCubes) {
 TEST_F(BspTreePerfTest, LayerSorterRubik) {
   SetTestName("layer_sort_rubik");
   ReadTestFile("layer_sort_rubik");
-  // TODO(vollick): Remove verify_property_trees setting after
-  // crbug.com/444219 is fixed.
-  bool old_verify_property_trees = verify_property_trees();
-  set_verify_property_trees(false);
   RunSortLayers();
-  set_verify_property_trees(old_verify_property_trees);
 }
 
 TEST_F(BspTreePerfTest, BspTreeCubes) {
@@ -248,12 +240,7 @@ TEST_F(BspTreePerfTest, BspTreeRubik) {
   SetTestName("bsp_tree_rubik");
   SetNumberOfDuplicates(1);
   ReadTestFile("layer_sort_rubik");
-  // TODO(vollick): Remove verify_property_trees setting after
-  // crbug.com/444219 is fixed.
-  bool old_verify_property_trees = verify_property_trees();
-  set_verify_property_trees(false);
   RunSortLayers();
-  set_verify_property_trees(old_verify_property_trees);
 }
 
 TEST_F(BspTreePerfTest, BspTreeCubes_2) {

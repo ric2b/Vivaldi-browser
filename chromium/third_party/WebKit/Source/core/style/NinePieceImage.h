@@ -120,11 +120,11 @@ public:
         m_data.access()->borderSlices = BorderImageLengthBox(Length(Auto));
     }
 
-    static LayoutUnit computeOutset(const BorderImageLength& outsetSide, LayoutUnit borderSide)
+    static LayoutUnit computeOutset(const BorderImageLength& outsetSide, int borderSide)
     {
         if (outsetSide.isNumber())
-            return outsetSide.number() * borderSide;
-        return outsetSide.length().value();
+            return LayoutUnit(outsetSide.number() * borderSide);
+        return LayoutUnit(outsetSide.length().value());
     }
 
 private:

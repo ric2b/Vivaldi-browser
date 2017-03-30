@@ -33,16 +33,14 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/EventQueue.h"
-#include "core/inspector/ScriptCallStack.h"
 #include "modules/indexeddb/IDBAny.h"
 #include "modules/indexeddb/IDBEventDispatcher.h"
-#include "modules/indexeddb/IDBHistograms.h"
 #include "modules/indexeddb/IDBIndex.h"
 #include "modules/indexeddb/IDBKeyPath.h"
 #include "modules/indexeddb/IDBTracing.h"
 #include "modules/indexeddb/IDBVersionChangeEvent.h"
 #include "modules/indexeddb/WebIDBDatabaseCallbacksImpl.h"
-#include "public/platform/Platform.h"
+#include "platform/Histogram.h"
 #include "public/platform/modules/indexeddb/WebIDBKeyPath.h"
 #include "public/platform/modules/indexeddb/WebIDBTypes.h"
 #include "wtf/Atomics.h"
@@ -170,18 +168,11 @@ PassRefPtrWillBeRawPtr<DOMStringList> IDBDatabase::objectStoreNames() const
     return objectStoreNames.release();
 }
 
-void IDBDatabase::version(UnsignedLongLongOrString& result) const
-{
-    if (m_metadata.intVersion == IDBDatabaseMetadata::NoIntVersion)
-        result.setString(m_metadata.version);
-    else
-        result.setUnsignedLongLong(m_metadata.intVersion);
-}
-
 IDBObjectStore* IDBDatabase::createObjectStore(const String& name, const IDBKeyPath& keyPath, bool autoIncrement, ExceptionState& exceptionState)
 {
     IDB_TRACE("IDBDatabase::createObjectStore");
-    Platform::current()->histogramEnumeration("WebCore.IndexedDB.FrontEndAPICalls", IDBCreateObjectStoreCall, IDBMethodsMax);
+    recordApiCallsHistogram(IDBCreateObjectStoreCall);
+
     if (!m_versionChangeTransaction) {
         exceptionState.throwDOMException(InvalidStateError, IDBDatabase::notVersionChangeTransactionErrorMessage);
         return nullptr;
@@ -230,7 +221,7 @@ IDBObjectStore* IDBDatabase::createObjectStore(const String& name, const IDBKeyP
 void IDBDatabase::deleteObjectStore(const String& name, ExceptionState& exceptionState)
 {
     IDB_TRACE("IDBDatabase::deleteObjectStore");
-    Platform::current()->histogramEnumeration("WebCore.IndexedDB.FrontEndAPICalls", IDBDeleteObjectStoreCall, IDBMethodsMax);
+    recordApiCallsHistogram(IDBDeleteObjectStoreCall);
     if (!m_versionChangeTransaction) {
         exceptionState.throwDOMException(InvalidStateError, IDBDatabase::notVersionChangeTransactionErrorMessage);
         return;
@@ -263,7 +254,7 @@ void IDBDatabase::deleteObjectStore(const String& name, ExceptionState& exceptio
 IDBTransaction* IDBDatabase::transaction(ScriptState* scriptState, const StringOrStringSequenceOrDOMStringList& storeNames, const String& modeString, ExceptionState& exceptionState)
 {
     IDB_TRACE("IDBDatabase::transaction");
-    Platform::current()->histogramEnumeration("WebCore.IndexedDB.FrontEndAPICalls", IDBTransactionCall, IDBMethodsMax);
+    recordApiCallsHistogram(IDBTransactionCall);
 
     HashSet<String> scope;
     if (storeNames.isString()) {
@@ -360,7 +351,7 @@ void IDBDatabase::closeConnection()
     EventQueue* eventQueue = executionContext()->eventQueue();
     // Remove any pending versionchange events scheduled to fire on this
     // connection. They would have been scheduled by the backend when another
-    // connection called setVersion, but the frontend connection is being
+    // connection attempted an upgrade, but the frontend connection is being
     // closed before they could fire.
     for (size_t i = 0; i < m_enqueuedEvents.size(); ++i) {
         bool removed = eventQueue->cancelEvent(m_enqueuedEvents[i].get());
@@ -382,7 +373,7 @@ void IDBDatabase::onVersionChange(int64_t oldVersion, int64_t newVersion)
         return;
     }
 
-    Nullable<unsigned long long> newVersionNullable = (newVersion == IDBDatabaseMetadata::NoIntVersion) ? Nullable<unsigned long long>() : Nullable<unsigned long long>(newVersion);
+    Nullable<unsigned long long> newVersionNullable = (newVersion == IDBDatabaseMetadata::NoVersion) ? Nullable<unsigned long long>() : Nullable<unsigned long long>(newVersion);
     enqueueEvent(IDBVersionChangeEvent::create(EventTypeNames::versionchange, oldVersion, newVersionNullable));
 }
 
@@ -396,21 +387,21 @@ void IDBDatabase::enqueueEvent(PassRefPtrWillBeRawPtr<Event> event)
     m_enqueuedEvents.append(event);
 }
 
-bool IDBDatabase::dispatchEventInternal(PassRefPtrWillBeRawPtr<Event> event)
+DispatchEventResult IDBDatabase::dispatchEventInternal(PassRefPtrWillBeRawPtr<Event> event)
 {
     IDB_TRACE("IDBDatabase::dispatchEvent");
     if (m_contextStopped || !executionContext())
-        return false;
+        return DispatchEventResult::CanceledBeforeDispatch;
     ASSERT(event->type() == EventTypeNames::versionchange || event->type() == EventTypeNames::close);
     for (size_t i = 0; i < m_enqueuedEvents.size(); ++i) {
         if (m_enqueuedEvents[i].get() == event.get())
             m_enqueuedEvents.remove(i);
     }
 
-    bool result = EventTarget::dispatchEventInternal(event.get());
+    DispatchEventResult dispatchResult = EventTarget::dispatchEventInternal(event.get());
     if (event->type() == EventTypeNames::versionchange && !m_closePending && m_backend)
         m_backend->versionChangeIgnored();
-    return result;
+    return dispatchResult;
 }
 
 int64_t IDBDatabase::findObjectStoreId(const String& name) const
@@ -452,6 +443,12 @@ const AtomicString& IDBDatabase::interfaceName() const
 ExecutionContext* IDBDatabase::executionContext() const
 {
     return ActiveDOMObject::executionContext();
+}
+
+void IDBDatabase::recordApiCallsHistogram(IndexedDatabaseMethods method)
+{
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(EnumerationHistogram, apiCallsHistogram, new EnumerationHistogram("WebCore.IndexedDB.FrontEndAPICalls", IDBMethodsMax));
+    apiCallsHistogram.count(method);
 }
 
 } // namespace blink

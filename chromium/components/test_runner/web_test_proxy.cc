@@ -21,6 +21,7 @@
 #include "base/trace_event/trace_event.h"
 #include "components/test_runner/accessibility_controller.h"
 #include "components/test_runner/event_sender.h"
+#include "components/test_runner/layout_dump.h"
 #include "components/test_runner/mock_color_chooser.h"
 #include "components/test_runner/mock_credential_manager_client.h"
 #include "components/test_runner/mock_screen_orientation_client.h"
@@ -289,90 +290,6 @@ const char* WebNavigationPolicyToString(blink::WebNavigationPolicy policy) {
   }
 }
 
-std::string DumpFrameHeaderIfNeeded(blink::WebFrame* frame) {
-  std::string result;
-
-  // Add header for all but the main frame. Skip empty frames.
-  if (frame->parent() && !frame->document().documentElement().isNull()) {
-    result.append("\n--------\nFrame: '");
-    result.append(frame->uniqueName().utf8().data());
-    result.append("'\n--------\n");
-  }
-
-  return result;
-}
-
-std::string DumpFramesAsMarkup(blink::WebFrame* frame, bool recursive) {
-  std::string result = DumpFrameHeaderIfNeeded(frame);
-  result.append(frame->contentAsMarkup().utf8());
-  result.append("\n");
-
-  if (recursive) {
-    for (blink::WebFrame* child = frame->firstChild(); child;
-         child = child->nextSibling())
-      result.append(DumpFramesAsMarkup(child, recursive));
-  }
-
-  return result;
-}
-
-std::string DumpDocumentText(blink::WebFrame* frame) {
-  return frame->document().contentAsTextForTesting().utf8();
-}
-
-std::string DumpFramesAsText(blink::WebFrame* frame, bool recursive) {
-  std::string result = DumpFrameHeaderIfNeeded(frame);
-  result.append(DumpDocumentText(frame));
-  result.append("\n");
-
-  if (recursive) {
-    for (blink::WebFrame* child = frame->firstChild(); child;
-         child = child->nextSibling())
-      result.append(DumpFramesAsText(child, recursive));
-  }
-
-  return result;
-}
-
-std::string DumpFramesAsPrintedText(blink::WebFrame* frame, bool recursive) {
-  // Cannot do printed format for anything other than HTML
-  if (!frame->document().isHTMLDocument())
-    return std::string();
-
-  std::string result = DumpFrameHeaderIfNeeded(frame);
-  result.append(
-      frame->layoutTreeAsText(blink::WebFrame::LayoutAsTextPrinting).utf8());
-  result.append("\n");
-
-  if (recursive) {
-    for (blink::WebFrame* child = frame->firstChild(); child;
-         child = child->nextSibling())
-      result.append(DumpFramesAsPrintedText(child, recursive));
-  }
-
-  return result;
-}
-
-std::string DumpFrameScrollPosition(blink::WebFrame* frame, bool recursive) {
-  std::string result;
-  blink::WebSize offset = frame->scrollOffset();
-  if (offset.width > 0 || offset.height > 0) {
-    if (frame->parent()) {
-      result =
-          std::string("frame '") + frame->uniqueName().utf8().data() + "' ";
-    }
-    base::StringAppendF(
-        &result, "scrolled to %d,%d\n", offset.width, offset.height);
-  }
-
-  if (!recursive)
-    return result;
-  for (blink::WebFrame* child = frame->firstChild(); child;
-       child = child->nextSibling())
-    result += DumpFrameScrollPosition(child, recursive);
-  return result;
-}
-
 std::string DumpAllBackForwardLists(TestInterfaces* interfaces,
                                     WebTestDelegate* delegate) {
   std::string result;
@@ -485,51 +402,8 @@ void WebTestProxyBase::ShowValidationMessage(
                           base::UTF16ToUTF8(wrapped_sub_text) + "\n");
 }
 
-std::string WebTestProxyBase::CaptureTree(
-    bool debug_render_tree,
-    bool dump_line_box_trees) {
-  bool should_dump_custom_text =
-      test_interfaces_->GetTestRunner()->shouldDumpAsCustomText();
-  bool should_dump_as_text =
-      test_interfaces_->GetTestRunner()->shouldDumpAsText();
-  bool should_dump_as_markup =
-      test_interfaces_->GetTestRunner()->shouldDumpAsMarkup();
-  bool should_dump_as_printed = test_interfaces_->GetTestRunner()->isPrinting();
-  blink::WebFrame* frame = GetWebView()->mainFrame();
-  std::string data_utf8;
-  if (should_dump_custom_text) {
-    // Append a newline for the test driver.
-    data_utf8 = test_interfaces_->GetTestRunner()->customDumpText() + "\n";
-  } else if (should_dump_as_text) {
-    bool recursive =
-        test_interfaces_->GetTestRunner()->shouldDumpChildFramesAsText();
-    data_utf8 = should_dump_as_printed ?
-        DumpFramesAsPrintedText(frame, recursive) :
-        DumpFramesAsText(frame, recursive);
-  } else if (should_dump_as_markup) {
-    bool recursive =
-        test_interfaces_->GetTestRunner()->shouldDumpChildFramesAsMarkup();
-    // Append a newline for the test driver.
-    data_utf8 = DumpFramesAsMarkup(frame, recursive);
-  } else {
-    bool recursive = test_interfaces_->GetTestRunner()
-                         ->shouldDumpChildFrameScrollPositions();
-    blink::WebFrame::LayoutAsTextControls layout_text_behavior =
-        blink::WebFrame::LayoutAsTextNormal;
-    if (should_dump_as_printed)
-      layout_text_behavior |= blink::WebFrame::LayoutAsTextPrinting;
-    if (debug_render_tree)
-      layout_text_behavior |= blink::WebFrame::LayoutAsTextDebug;
-    if (dump_line_box_trees)
-      layout_text_behavior |= blink::WebFrame::LayoutAsTextWithLineTrees;
-    data_utf8 = frame->layoutTreeAsText(layout_text_behavior).utf8();
-    data_utf8 += DumpFrameScrollPosition(frame, recursive);
-  }
-
-  if (test_interfaces_->GetTestRunner()->ShouldDumpBackForwardList())
-    data_utf8 += DumpAllBackForwardLists(test_interfaces_, delegate_);
-
-  return data_utf8;
+std::string WebTestProxyBase::DumpBackForwardLists() {
+  return DumpAllBackForwardLists(test_interfaces_, delegate_);
 }
 
 void WebTestProxyBase::DrawSelectionRect(SkCanvas* canvas) {
@@ -718,7 +592,7 @@ void WebTestProxyBase::LayoutAndPaintAsyncThen(const base::Closure& callback) {
 
 void WebTestProxyBase::GetScreenOrientationForTesting(
     blink::WebScreenInfo& screen_info) {
-  if (!screen_orientation_client_)
+  if (!screen_orientation_client_ || screen_orientation_client_->IsDisabled())
     return;
   // Override screen orientation information with mock data.
   screen_info.orientationType =
@@ -785,9 +659,6 @@ void WebTestProxyBase::PostAccessibilityEvent(const blink::WebAXObject& obj,
   if (!test_interfaces_->GetTestRunner()->TestIsRunning())
     return;
 
-  if (event == blink::WebAXEventFocus)
-    test_interfaces_->GetAccessibilityController()->SetFocusedElement(obj);
-
   const char* event_name = NULL;
   switch (event) {
     case blink::WebAXEventActiveDescendantChanged:
@@ -810,6 +681,9 @@ void WebTestProxyBase::PostAccessibilityEvent(const blink::WebAXObject& obj,
       break;
     case blink::WebAXEventChildrenChanged:
       event_name = "ChildrenChanged";
+      break;
+    case blink::WebAXEventClicked:
+      event_name = "Clicked";
       break;
     case blink::WebAXEventDocumentSelectionChanged:
       event_name = "DocumentSelectionChanged";
@@ -1159,8 +1033,7 @@ void WebTestProxyBase::DidDetectXSS(const blink::WebURL& insecure_url,
     delegate_->PrintMessage("didDetectXSS\n");
 }
 
-void WebTestProxyBase::DidDispatchPingLoader(blink::WebLocalFrame* frame,
-                                             const blink::WebURL& url) {
+void WebTestProxyBase::DidDispatchPingLoader(const blink::WebURL& url) {
   if (test_interfaces_->GetTestRunner()->shouldDumpPingLoaderCallbacks())
     delegate_->PrintMessage(std::string("PingLoader dispatched to '") +
                             URLDescription(url).c_str() + "'.\n");
@@ -1243,7 +1116,6 @@ void WebTestProxyBase::WillSendRequest(
 }
 
 void WebTestProxyBase::DidReceiveResponse(
-    blink::WebLocalFrame* frame,
     unsigned identifier,
     const blink::WebURLResponse& response) {
   if (test_interfaces_->GetTestRunner()->shouldDumpResourceLoadCallbacks()) {
@@ -1271,7 +1143,6 @@ void WebTestProxyBase::DidReceiveResponse(
 }
 
 void WebTestProxyBase::DidChangeResourcePriority(
-    blink::WebLocalFrame* frame,
     unsigned identifier,
     const blink::WebURLRequest::Priority& priority,
     int intra_priority_value) {

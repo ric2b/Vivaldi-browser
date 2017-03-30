@@ -14,6 +14,7 @@ namespace blink {
 
 class StyleSheetContents;
 
+// A specialization of Keyframe that associates user specified keyframe properties with either CSS properties or SVG attributes.
 class StringKeyframe : public Keyframe {
 public:
     static PassRefPtr<StringKeyframe> create()
@@ -49,7 +50,10 @@ public:
 
     class CSSPropertySpecificKeyframe : public Keyframe::PropertySpecificKeyframe {
     public:
-        CSSPropertySpecificKeyframe(double offset, PassRefPtr<TimingFunction> easing, CSSValue*, EffectModel::CompositeOperation);
+        static PassRefPtr<CSSPropertySpecificKeyframe> create(double offset, PassRefPtr<TimingFunction> easing, CSSValue* value, EffectModel::CompositeOperation composite)
+        {
+            return adoptRef(new CSSPropertySpecificKeyframe(offset, easing, value, composite));
+        }
 
         CSSValue* value() const { return m_value.get(); }
 
@@ -58,13 +62,16 @@ public:
         void setAnimatableValue(PassRefPtr<AnimatableValue> value) { m_animatableValueCache = value; }
 
         bool isNeutral() const final { return !m_value; }
-        PassOwnPtr<Keyframe::PropertySpecificKeyframe> neutralKeyframe(double offset, PassRefPtr<TimingFunction> easing) const final;
+        PassRefPtr<Keyframe::PropertySpecificKeyframe> neutralKeyframe(double offset, PassRefPtr<TimingFunction> easing) const final;
         PassRefPtr<Interpolation> maybeCreateInterpolation(PropertyHandle, Keyframe::PropertySpecificKeyframe& end, Element*, const ComputedStyle* baseStyle) const final;
 
     private:
-        CSSPropertySpecificKeyframe(double offset, PassRefPtr<TimingFunction> easing, CSSValue*);
+        CSSPropertySpecificKeyframe(double offset, PassRefPtr<TimingFunction> easing, CSSValue* value, EffectModel::CompositeOperation composite)
+            : Keyframe::PropertySpecificKeyframe(offset, easing, composite)
+            , m_value(value)
+        { }
 
-        virtual PassOwnPtr<Keyframe::PropertySpecificKeyframe> cloneWithOffset(double offset) const;
+        virtual PassRefPtr<Keyframe::PropertySpecificKeyframe> cloneWithOffset(double offset) const;
         bool isCSSPropertySpecificKeyframe() const override { return true; }
 
         PassRefPtr<Interpolation> createLegacyStyleInterpolation(CSSPropertyID, Keyframe::PropertySpecificKeyframe& end, Element*, const ComputedStyle* baseStyle) const;
@@ -78,20 +85,26 @@ public:
 
     class SVGPropertySpecificKeyframe : public Keyframe::PropertySpecificKeyframe {
     public:
-        SVGPropertySpecificKeyframe(double offset, PassRefPtr<TimingFunction> easing, const String&, EffectModel::CompositeOperation);
+        static PassRefPtr<SVGPropertySpecificKeyframe> create(double offset, PassRefPtr<TimingFunction> easing, const String& value, EffectModel::CompositeOperation composite)
+        {
+            return adoptRef(new SVGPropertySpecificKeyframe(offset, easing, value, composite));
+        }
 
         const String& value() const { return m_value; }
 
-        PassOwnPtr<PropertySpecificKeyframe> cloneWithOffset(double offset) const final;
+        PassRefPtr<PropertySpecificKeyframe> cloneWithOffset(double offset) const final;
 
         const PassRefPtr<AnimatableValue> getAnimatableValue() const final { return nullptr; }
 
         bool isNeutral() const final { return m_value.isNull(); }
-        PassOwnPtr<PropertySpecificKeyframe> neutralKeyframe(double offset, PassRefPtr<TimingFunction> easing) const final;
+        PassRefPtr<PropertySpecificKeyframe> neutralKeyframe(double offset, PassRefPtr<TimingFunction> easing) const final;
         PassRefPtr<Interpolation> maybeCreateInterpolation(PropertyHandle, Keyframe::PropertySpecificKeyframe& end, Element*, const ComputedStyle* baseStyle) const final;
 
     private:
-        SVGPropertySpecificKeyframe(double offset, PassRefPtr<TimingFunction> easing, const String&);
+        SVGPropertySpecificKeyframe(double offset, PassRefPtr<TimingFunction> easing, const String& value, EffectModel::CompositeOperation composite)
+            : Keyframe::PropertySpecificKeyframe(offset, easing, composite)
+            , m_value(value)
+        { }
 
         bool isSVGPropertySpecificKeyframe() const override { return true; }
 
@@ -107,7 +120,7 @@ private:
     StringKeyframe(const StringKeyframe& copyFrom);
 
     PassRefPtr<Keyframe> clone() const override;
-    PassOwnPtr<Keyframe::PropertySpecificKeyframe> createPropertySpecificKeyframe(PropertyHandle) const override;
+    PassRefPtr<Keyframe::PropertySpecificKeyframe> createPropertySpecificKeyframe(PropertyHandle) const override;
 
     bool isStringKeyframe() const override { return true; }
 
@@ -123,6 +136,6 @@ DEFINE_TYPE_CASTS(StringKeyframe, Keyframe, value, value->isStringKeyframe(), va
 DEFINE_TYPE_CASTS(CSSPropertySpecificKeyframe, Keyframe::PropertySpecificKeyframe, value, value->isCSSPropertySpecificKeyframe(), value.isCSSPropertySpecificKeyframe());
 DEFINE_TYPE_CASTS(SVGPropertySpecificKeyframe, Keyframe::PropertySpecificKeyframe, value, value->isSVGPropertySpecificKeyframe(), value.isSVGPropertySpecificKeyframe());
 
-}
+} // namespace blink
 
 #endif

@@ -4,10 +4,12 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-checkbox/paper-checkbox.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-dialog/paper-dialog.html">
+<link rel="import" href="chrome://md-settings/controls/settings_checkbox.html">
 <link rel="import" href="chrome://md-settings/people_page/sync_page.html">
 <link rel="import" href="chrome://md-settings/people_page/sync_private_api.html">
 <link rel="import" href="chrome://md-settings/settings_page/settings_animated_pages.html">
 <link rel="import" href="chrome://md-settings/settings_page/settings_subheader.html">
+<link rel="import" href="chrome://md-settings/settings_shared_css.html">
 
 <if expr="chromeos">
 <link rel="import" href="chrome://md-settings/people_page/change_picture.html">
@@ -18,47 +20,50 @@
 </if>
 
 <dom-module id="settings-people-page">
-  <link rel="import" type="css" href="chrome://md-settings/settings_shared.css">
   <link rel="import" type="css" href="people_page.css">
   <template>
+    <style include="settings-shared"></style>
     <settings-animated-pages id="pages" current-route="{{currentRoute}}"
         section="people">
       <neon-animatable id="main">
-        <div class="settings-box">
-          <div class="split">
-            <span class="start">
-              <img id="account-picture" src="[[profileIconUrl_]]"
-                  on-tap="onPictureTap_">
+        <div class="settings-box first two-line">
+          <img id="account-picture" src="[[profileIconUrl_]]"
+              on-tap="onPictureTap_">
+          <div class="middle">
 <if expr="chromeos">
-              <span id="profile-name" on-tap="onProfileNameTap_">
-                [[profileName_]]
-              </span>
+            <span id="profile-name" on-tap="onProfileNameTap_">
+              [[profileName_]]
+            </span>
 </if>
 <if expr="not chromeos">
-              <span id="profile-name">
-                [[profileName_]]
-              </span>
+            <span id="profile-name">
+              [[profileName_]]
+            </span>
 </if>
-            </span>
-            <span>
-              <template is="dom-if" if="[[!syncStatus.signedIn]]">
-                <paper-button on-tap="onSigninTap_" raised
-                    disabled="[[syncStatus.setupInProgress]]">
-                    [[i18n('syncSignin')]]
-                </paper-button>
-              </template>
-              <template is="dom-if" if="[[syncStatus.signedIn]]">
-                <paper-button on-tap="onDisconnectTap_"
-                    disabled="[[syncStatus.setupInProgress]]">
-                    [[i18n('syncDisconnect')]]
-                </paper-button>
-              </template>
-            </span>
           </div>
-          <div hidden="[[syncStatus.signedIn]]">[[i18n('syncOverview')]]</div>
+<if expr="not chromeos">
+          <template is="dom-if" if="[[!syncStatus.signedIn]]">
+            <paper-button class="secondary-button" on-tap="onSigninTap_"
+                disabled="[[syncStatus.setupInProgress]]">
+                [[i18n('syncSignin')]]
+            </paper-button>
+          </template>
+          <template is="dom-if" if="[[syncStatus.signedIn]]">
+            <span class="secondary-action">
+              <paper-button on-tap="onDisconnectTap_"
+                  disabled="[[syncStatus.setupInProgress]]">
+                  [[i18n('syncDisconnect')]]
+              </paper-button>
+            </span>
+          </template>
+</if>
+        </div>
+        <div class="settings-box first two-line"
+            hidden="[[syncStatus.signedIn]]">
+          [[i18n('syncOverview')]]
         </div>
 
-        <div class="settings-box split"
+        <div class="settings-box"
             hidden="[[!isStatusTextSet_(syncStatus)]]">
           <span id="syncStatusText"></span>
           <paper-button on-tap="onActionLinkTap_">
@@ -69,14 +74,22 @@
         <template is="dom-if"
             if="[[isAdvancedSyncSettingsVisible_(syncStatus)]]">
           <div class="settings-box">
-            <paper-button on-tap="onSyncTap_" raised>
+            <paper-button on-tap="onSyncTap_" class="primary-button">
               [[i18n('syncPageTitle')]]
             </paper-button>
           </div>
         </template>
 
+<if expr="chromeos">
         <div class="settings-box">
-          <paper-button i18n-content="manageOtherPeople"
+          <settings-checkbox pref="{{prefs.settings.enable_screen_lock}}"
+              i18n-values="label:enableScreenlock">
+          </settings-checkbox>
+        </div>
+</if>
+
+        <div class="settings-box">
+          <paper-button class="primary-button" i18n-content="manageOtherPeople"
               on-tap="onManageOtherPeople_">
           </paper-button>
         </div>

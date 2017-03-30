@@ -15,6 +15,9 @@
             "params": {
                 "limit": "3"
             }
+        },
+        {
+            "group_name": "Enabled"
         }
     ],
     "CaptivePortalInterstitial": [
@@ -53,7 +56,22 @@
             "group_name": "Enabled"
         }
     ],
+    "LocalNTPSuggestionsService": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
     "MaterialDesignDownloads": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
+    "OfferUploadCreditCards": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
+    "PageRevisitInstrumentation": [
         {
             "group_name": "Enabled"
         }
@@ -65,10 +83,12 @@
     ],
     "QUIC": [
         {
-            "group_name": "Enabled",
-            "params": {
-                "alternate_protocol_probability_threshold": "0.01"
-            }
+            "group_name": "Enabled"
+        }
+    ],
+    "RenderingPipelineThrottling": [
+        {
+            "group_name": "Enabled"
         }
     ],
     "ReportCertificateErrors": [
@@ -102,10 +122,17 @@
     ],
     "SafeBrowsingUnverifiedDownloads": [
         {
-            "group_name": "DisableByParameterExe",
+            "group_name": "DisableByParameterMostSbTypes2",
             "params": {
-                "blacklist": ".exe"
+                "blacklist": ".exe-,.zip-",
+                "block_sb_types": "true",
+                "whitelist": ".rar,.svg,.url,.xml,.zip"
             }
+        }
+    ],
+    "SchedulerExpensiveTaskBlocking": [
+        {
+            "group_name": "Enabled"
         }
     ],
     "SdchPersistence": [
@@ -156,6 +183,14 @@
     ],
     "WebRTC-PeerConnectionDTLS1.2": [
         {
+            "group_name": "Enabled"
+        }
+    ],
+    "use-new-media-cache": [
+        {
+            "enable_features": [
+                "use-new-media-cache"
+            ],
             "group_name": "Enabled"
         }
     ]

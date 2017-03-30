@@ -21,15 +21,9 @@
 #include "net/cookies/cookie_store.h"
 #include "url/gurl.h"
 
-#if defined(__OBJC__)
 @class NSHTTPCookie;
 @class NSHTTPCookieStorage;
 @class NSArray;
-#else
-class NSHTTPCookie;
-class NSHTTPCookieStorage;
-class NSArray;
-#endif
 
 namespace net {
 
@@ -103,10 +97,6 @@ class CookieStoreIOS : public net::CookieStore,
   // |NSHTTPCookieStorage sharedHTTPCookieStorage|.
   static void NotifySystemCookiesChanged();
 
-  // Saves the cookies to the cookie monster.
-  // Note: ignores the write cookie operation if |write_on_flush_| is false.
-  void Flush(const base::Closure& callback);
-
   // Unsynchronizes the cookie store if it is currently synchronized.
   void UnSynchronize();
 
@@ -123,15 +113,34 @@ class CookieStoreIOS : public net::CookieStore,
                                  const std::string& cookie_line,
                                  const net::CookieOptions& options,
                                  const SetCookiesCallback& callback) override;
+  void SetCookieWithDetailsAsync(const GURL& url,
+                                 const std::string& name,
+                                 const std::string& value,
+                                 const std::string& domain,
+                                 const std::string& path,
+                                 base::Time creation_time,
+                                 base::Time expiration_time,
+                                 base::Time last_access_time,
+                                 bool secure,
+                                 bool http_only,
+                                 bool same_site,
+                                 bool enforce_strict_secure,
+                                 CookiePriority priority,
+                                 const SetCookiesCallback& callback) override;
   void GetCookiesWithOptionsAsync(const GURL& url,
                                   const net::CookieOptions& options,
                                   const GetCookiesCallback& callback) override;
-  void GetAllCookiesForURLAsync(const GURL& url,
-                                const GetCookieListCallback& callback) override;
+  void GetCookieListWithOptionsAsync(
+      const GURL& url,
+      const net::CookieOptions& options,
+      const GetCookieListCallback& callback) override;
+  void GetAllCookiesAsync(const GetCookieListCallback& callback) override;
   void DeleteCookieAsync(const GURL& url,
                          const std::string& cookie_name,
                          const base::Closure& callback) override;
-  net::CookieMonster* GetCookieMonster() override;
+  void DeleteCanonicalCookieAsync(
+      const CanonicalCookie& cookie,
+      const DeleteCallback& callback) override;
   void DeleteAllCreatedBetweenAsync(const base::Time& delete_begin,
                                     const base::Time& delete_end,
                                     const DeleteCallback& callback) override;
@@ -141,6 +150,7 @@ class CookieStoreIOS : public net::CookieStore,
       const GURL& url,
       const DeleteCallback& callback) override;
   void DeleteSessionCookiesAsync(const DeleteCallback& callback) override;
+  void FlushStore(const base::Closure& callback) override;
 
   scoped_ptr<CookieChangedSubscription> AddCallbackForCookie(
       const GURL& url,
@@ -289,6 +299,11 @@ class CookieStoreIOS : public net::CookieStore,
   void UpdateCachesAfterSet(const SetCookiesCallback& callback, bool success);
   void UpdateCachesAfterDelete(const DeleteCallback& callback, int num_deleted);
   void UpdateCachesAfterClosure(const base::Closure& callback);
+
+  // Takes an NSArray of NSHTTPCookies as returns a net::CookieList.
+  // The returned cookies are ordered by longest path, then earliest
+  // creation date.
+  net::CookieList CanonicalCookieListFromSystemCookies(NSArray* cookies);
 
   // These three functions are used for wrapping user-supplied callbacks given
   // to CookieStoreIOS mutator methods. Given a callback, they return a new

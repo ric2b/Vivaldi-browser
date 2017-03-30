@@ -17,6 +17,7 @@
 #include "build/build_config.h"
 #include "content/common/gpu/gpu_channel.h"
 #include "content/common/gpu/gpu_messages.h"
+#include "content/common/gpu/media_messages.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/message_filter.h"
 #include "media/filters/jpeg_parser.h"
@@ -41,22 +42,11 @@ void DecodeFinished(scoped_ptr<base::SharedMemory> shm) {
 }
 
 bool VerifyDecodeParams(const AcceleratedJpegDecoderMsg_Decode_Params& params) {
-  if (params.input_buffer_id < 0) {
-    LOG(ERROR) << "BitstreamBuffer id " << params.input_buffer_id
-               << " out of range";
-    return false;
-  }
-
   const int kJpegMaxDimension = UINT16_MAX;
   if (params.coded_size.IsEmpty() ||
       params.coded_size.width() > kJpegMaxDimension ||
       params.coded_size.height() > kJpegMaxDimension) {
     LOG(ERROR) << "invalid coded_size " << params.coded_size.ToString();
-    return false;
-  }
-
-  if (!base::SharedMemory::IsHandleValid(params.input_buffer_handle)) {
-    LOG(ERROR) << "invalid input_buffer_handle";
     return false;
   }
 
@@ -168,7 +158,7 @@ class GpuJpegDecodeAccelerator::MessageFilter : public IPC::MessageFilter {
     DCHECK(client_map_.count(route_id) == 0);
 
     client_map_[route_id] = client;
-    GpuMsg_CreateJpegDecoder::WriteReplyParams(reply_msg, true);
+    GpuChannelMsg_CreateJpegDecoder::WriteReplyParams(reply_msg, true);
     SendOnIOThread(reply_msg);
   }
 
@@ -350,7 +340,7 @@ void GpuJpegDecodeAccelerator::AddClient(int32_t route_id,
 
   if (!accelerator) {
     DLOG(ERROR) << "JPEG accelerator Initialize failed";
-    GpuMsg_CreateJpegDecoder::WriteReplyParams(reply_msg, false);
+    GpuChannelMsg_CreateJpegDecoder::WriteReplyParams(reply_msg, false);
     Send(reply_msg);
     return;
   }

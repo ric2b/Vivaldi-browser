@@ -5,8 +5,8 @@
 #include "components/signin/core/browser/fake_signin_manager.h"
 
 #include "base/callback_helpers.h"
-#include "base/prefs/pref_service.h"
 #include "build/build_config.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/signin_metrics.h"
 
@@ -42,6 +42,9 @@ void FakeSigninManager::StartSignInWithRefreshToken(
   set_password(password);
   username_ = username;
 
+  possibly_invalid_gaia_id_.assign(gaia_id);
+  possibly_invalid_email_.assign(username);
+
   if (!oauth_fetched_callback.is_null())
     oauth_fetched_callback.Run(refresh_token);
 }
@@ -64,7 +67,8 @@ void FakeSigninManager::SignIn(const std::string& gaia_id,
 
 void FakeSigninManager::ForceSignOut() {
   prohibit_signout_ = false;
-  SignOut(signin_metrics::SIGNOUT_TEST);
+  SignOut(signin_metrics::SIGNOUT_TEST,
+          signin_metrics::SignoutDelete::IGNORE_METRIC);
 }
 
 void FakeSigninManager::FailSignin(const GoogleServiceAuthError& error) {
@@ -73,7 +77,8 @@ void FakeSigninManager::FailSignin(const GoogleServiceAuthError& error) {
 }
 
 void FakeSigninManager::SignOut(
-    signin_metrics::ProfileSignout signout_source_metric) {
+    signin_metrics::ProfileSignout signout_source_metric,
+    signin_metrics::SignoutDelete signout_delete_metric) {
   if (IsSignoutProhibited())
     return;
   set_auth_in_progress(std::string());

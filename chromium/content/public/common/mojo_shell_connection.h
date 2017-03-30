@@ -8,8 +8,8 @@
 #include "content/common/content_export.h"
 
 namespace mojo {
-class ApplicationConnection;
-class ApplicationImpl;
+class Connection;
+class Connector;
 }
 
 namespace content {
@@ -24,10 +24,10 @@ namespace content {
 class CONTENT_EXPORT MojoShellConnection {
  public:
   // Override to add additional services to inbound connections.
+  // TODO(beng): This should just be ShellClient.
   class Listener {
    public:
-    virtual bool ConfigureIncomingConnection(
-        mojo::ApplicationConnection* connection) = 0;
+    virtual bool AcceptConnection(mojo::Connection* connection) = 0;
 
     virtual ~Listener() {}
   };
@@ -41,11 +41,14 @@ class CONTENT_EXPORT MojoShellConnection {
   // created on.
   static void Destroy();
 
-  // Returns an Initialized() ApplicationImpl.
-  virtual mojo::ApplicationImpl* GetApplication() = 0;
+  virtual mojo::Connector* GetConnector() = 0;
+
+  // Indicates whether the shell connection is to an external shell (true) or
+  // a shell embedded in the browser process (false).
+  virtual bool UsingExternalShell() const = 0;
 
   // [De]Register an impl of Listener that will be consulted when the wrapped
-  // ApplicationImpl exposes services to inbound connections.
+  // ShellConnection exposes services to inbound connections.
   // Registered listeners are owned by this MojoShellConnection.
   virtual void AddListener(Listener* listener) = 0;
   virtual void RemoveListener(Listener* listener) = 0;

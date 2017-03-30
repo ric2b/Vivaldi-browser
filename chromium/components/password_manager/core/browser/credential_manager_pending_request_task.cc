@@ -8,10 +8,12 @@
 
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/affiliated_match_helper.h"
+#include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace password_manager {
 
@@ -20,16 +22,18 @@ CredentialManagerPendingRequestTask::CredentialManagerPendingRequestTask(
     int request_id,
     bool request_zero_click_only,
     const GURL& request_origin,
+    bool include_passwords,
     const std::vector<GURL>& request_federations,
     const std::vector<std::string>& affiliated_realms)
     : delegate_(delegate),
       id_(request_id),
       zero_click_only_(request_zero_click_only),
       origin_(request_origin),
+      include_passwords_(include_passwords),
       affiliated_realms_(affiliated_realms.begin(), affiliated_realms.end()) {
   CHECK(!delegate_->client()->DidLastPageLoadEncounterSSLErrors());
-  for (const GURL& origin : request_federations)
-    federations_.insert(origin.spec());
+  for (const GURL& federation : request_federations)
+    federations_.insert(url::Origin(federation.GetOrigin()).Serialize());
 }
 
 CredentialManagerPendingRequestTask::~CredentialManagerPendingRequestTask() =
@@ -45,8 +49,15 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
   ScopedVector<autofill::PasswordForm> local_results;
   ScopedVector<autofill::PasswordForm> affiliated_results;
   ScopedVector<autofill::PasswordForm> federated_results;
-  const autofill::PasswordForm* zero_click_form_to_return = nullptr;
   for (auto& form : results) {
+    // Ensure that the form we're looking at matches the password and
+    // federation filters provided.
+    if (!((form->federation_origin.unique() && include_passwords_) ||
+          (!form->federation_origin.unique() &&
+           federations_.count(form->federation_origin.Serialize())))) {
+      continue;
+    }
+
     // PasswordFrom and GURL have different definition of origin.
     // PasswordForm definition: scheme, host, port and path.
     // GURL definition: scheme, host, and port.
@@ -70,9 +81,6 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
   }
 
   if (!affiliated_results.empty()) {
-    // TODO(mkwst): This doesn't create a PasswordForm that we can use to create
-    // a FederatedCredential (via CreatePasswordFormFromCredentialInfo). We need
-    // to fix that.
     password_manager_util::TrimUsernameOnlyCredentials(&affiliated_results);
     local_results.insert(local_results.end(), affiliated_results.begin(),
                          affiliated_results.end());
@@ -85,36 +93,46 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
   }
 
   // We only perform zero-click sign-in when the result is completely
-  // unambigious. If the user could theoretically choose from more than one
-  // option, cancel zero-click.
-  if (local_results.size() == 1u && !local_results[0]->skip_zero_click)
-    zero_click_form_to_return = local_results[0];
-
-  if (zero_click_form_to_return && delegate_->IsZeroClickAllowed()) {
-    // TODO(mkwst): This is all too complex now. We should just be able to check
-    // the first item in the list, since we're now only doing any of this work
-    // when there's only one item. Kill it all with fire in a future CL.
-    auto it = std::find(local_results.begin(), local_results.end(),
-                        zero_click_form_to_return);
-    CredentialInfo info(*zero_click_form_to_return,
-                        zero_click_form_to_return->federation_url.is_empty()
+  // unambigious. If there is one and only one entry, and zero-click is
+  // enabled for that entry, return it.
+  //
+  // Moreover, we only return such a credential if the user has opted-in via the
+  // first-run experience.
+  bool can_use_autosignin = local_results.size() == 1u &&
+                            delegate_->IsZeroClickAllowed();
+  if (can_use_autosignin && !local_results[0]->skip_zero_click &&
+      !password_bubble_experiment::ShouldShowAutoSignInPromptFirstRunExperience(
+          delegate_->client()->GetPrefs())) {
+    CredentialInfo info(*local_results[0],
+                        local_results[0]->federation_origin.unique()
                             ? CredentialType::CREDENTIAL_TYPE_PASSWORD
                             : CredentialType::CREDENTIAL_TYPE_FEDERATED);
-    DCHECK(it != local_results.end());
-    std::swap(*it, local_results[0]);
-    // Clear the form pointer since its owner is being passed.
-    zero_click_form_to_return = nullptr;
     delegate_->client()->NotifyUserAutoSignin(std::move(local_results));
     delegate_->SendCredential(id_, info);
     return;
   }
 
+  // Otherwise, return an empty credential if we're in zero-click-only mode
+  // or if the user chooses not to return a credential, and the credential the
+  // user chooses if they pick one.
+  scoped_ptr<autofill::PasswordForm> potential_autosignin_form(
+      new autofill::PasswordForm(*local_results[0]));
   if (zero_click_only_ ||
       !delegate_->client()->PromptUserToChooseCredentials(
           std::move(local_results), std::move(federated_results), origin_,
           base::Bind(
               &CredentialManagerPendingRequestTaskDelegate::SendCredential,
               base::Unretained(delegate_), id_))) {
+    if (can_use_autosignin) {
+      // The user had credentials, but either chose not to share them with the
+      // site, or was prevented from doing so by lack of zero-click (or the
+      // first-run experience). So, notify the client that we could potentially
+      // have used zero-click; if the user signs in with the same form via
+      // autofill, we'll toggle the flag for them.
+      delegate_->client()->NotifyUserCouldBeAutoSignedIn(
+          std::move(potential_autosignin_form));
+    }
+
     delegate_->SendCredential(id_, CredentialInfo());
   }
 }

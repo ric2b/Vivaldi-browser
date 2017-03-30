@@ -6,16 +6,19 @@
 #define InspectorHighlight_h
 
 #include "core/CoreExport.h"
-#include "core/InspectorTypeBuilder.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/Color.h"
 #include "platform/heap/Handle.h"
+#include "platform/inspector_protocol/TypeBuilder.h"
 
 namespace blink {
 
 class Color;
-class JSONValue;
+
+namespace protocol {
+class Value;
+}
 
 struct CORE_EXPORT InspectorHighlightConfig {
     USING_FAST_MALLOC(InspectorHighlightConfig);
@@ -46,21 +49,21 @@ public:
     InspectorHighlight();
     ~InspectorHighlight();
 
-    static bool getBoxModel(Node*, RefPtr<TypeBuilder::DOM::BoxModel>&);
+    static bool getBoxModel(Node*, OwnPtr<protocol::DOM::BoxModel>*);
     static InspectorHighlightConfig defaultConfig();
     static bool buildNodeQuads(Node*, FloatQuad* content, FloatQuad* padding, FloatQuad* border, FloatQuad* margin);
 
-    void appendPath(PassRefPtr<JSONArrayBase> path, const Color& fillColor, const Color& outlineColor, const String& name = String());
+    void appendPath(PassRefPtr<protocol::ListValue> path, const Color& fillColor, const Color& outlineColor, const String& name = String());
     void appendQuad(const FloatQuad&, const Color& fillColor, const Color& outlineColor = Color::transparent, const String& name = String());
     void appendEventTargetQuads(Node* eventTargetNode, const InspectorHighlightConfig&);
-    PassRefPtr<JSONObject> asJSONObject() const;
+    PassRefPtr<protocol::DictionaryValue> asProtocolValue() const;
 
 private:
     void appendNodeHighlight(Node*, const InspectorHighlightConfig&);
     void appendPathsForShapeOutside(Node*, const InspectorHighlightConfig&);
 
-    RefPtr<JSONObject> m_elementInfo;
-    RefPtr<JSONArray> m_highlightPaths;
+    RefPtr<protocol::DictionaryValue> m_elementInfo;
+    RefPtr<protocol::ListValue> m_highlightPaths;
     bool m_showRulers;
     bool m_showExtensionLines;
     bool m_displayAsMaterial;

@@ -34,18 +34,18 @@ import gyp_environment
 
 URL_PREFIX = 'http://commondatastorage.googleapis.com'
 URL_PATH = 'chrome-linux-sysroot/toolchain'
-REVISION_AMD64 = '81463d905d9f7aa0153bae9f703728632ce8b0f6'
-REVISION_ARM = '81463d905d9f7aa0153bae9f703728632ce8b0f6'
-REVISION_I386 = '81463d905d9f7aa0153bae9f703728632ce8b0f6'
-REVISION_MIPS = '81463d905d9f7aa0153bae9f703728632ce8b0f6'
+REVISION_AMD64 = 'c52471d9dec240c8d0a88fa98aa1eefeee32e22f'
+REVISION_ARM = 'c52471d9dec240c8d0a88fa98aa1eefeee32e22f'
+REVISION_I386 = 'c52471d9dec240c8d0a88fa98aa1eefeee32e22f'
+REVISION_MIPS = 'c52471d9dec240c8d0a88fa98aa1eefeee32e22f'
 TARBALL_AMD64 = 'debian_wheezy_amd64_sysroot.tgz'
 TARBALL_ARM = 'debian_wheezy_arm_sysroot.tgz'
 TARBALL_I386 = 'debian_wheezy_i386_sysroot.tgz'
 TARBALL_MIPS = 'debian_wheezy_mips_sysroot.tgz'
-TARBALL_AMD64_SHA1SUM = 'a5a2483123f6bd63f3f029996451426168606697'
-TARBALL_ARM_SHA1SUM = 'fd70dfa1bde44142b17e5b400be3b9ce6625bf2e'
-TARBALL_I386_SHA1SUM = 'bc8d70311edcbdce8f70af779333dc35ca139777'
-TARBALL_MIPS_SHA1SUM = 'ac60722b79bce906768911192329607393090c4a'
+TARBALL_AMD64_SHA1SUM = 'ca4ed6e7c9e333b046be19d38584a11f6785eea6'
+TARBALL_ARM_SHA1SUM = '1fab0c2b1e93a933ddc593df3b43872b0ba5ded2'
+TARBALL_I386_SHA1SUM = '80c48c303319af2284e4a104c882d888af75ba81'
+TARBALL_MIPS_SHA1SUM = '01da32a35288627e05cfca193b7f3659531c6f7d'
 SYSROOT_DIR_AMD64 = 'debian_wheezy_amd64-sysroot'
 SYSROOT_DIR_ARM = 'debian_wheezy_arm-sysroot'
 SYSROOT_DIR_I386 = 'debian_wheezy_i386-sysroot'
@@ -135,7 +135,14 @@ def InstallDefaultSysroots():
     InstallSysroot(target_arch)
 
 
-def main():
+def main(args):
+  parser = optparse.OptionParser('usage: %prog [OPTIONS]', description=__doc__)
+  parser.add_option('--running-as-hook', action='store_true',
+                    default=False, help='Used when running from gclient hooks.'
+                                        ' Installs default sysroot images.')
+  parser.add_option('--arch', type='choice', choices=valid_archs,
+                    help='Sysroot architecture: %s' % ', '.join(valid_archs))
+  options, _ = parser.parse_args(args)
   if options.running_as_hook and not sys.platform.startswith('linux'):
     return 0
 
@@ -196,7 +203,8 @@ def InstallSysroot(target_arch):
   print 'Downloading %s' % url
   sys.stdout.flush()
   sys.stderr.flush()
-  subprocess.check_call(['curl', '--fail', '-L', url, '-o', tarball])
+  subprocess.check_call(
+      ['curl', '--fail', '--retry', '3', '-L', url, '-o', tarball])
   sha1sum = GetSha1(tarball)
   if sha1sum != tarball_sha1sum:
     raise Error('Tarball sha1sum is wrong.'
@@ -209,11 +217,8 @@ def InstallSysroot(target_arch):
 
 
 if __name__ == '__main__':
-  parser = optparse.OptionParser('usage: %prog [OPTIONS]', description=__doc__)
-  parser.add_option('--running-as-hook', action='store_true',
-                    default=False, help='Used when running from gclient hooks.'
-                                        ' Installs default sysroot images.')
-  parser.add_option('--arch', type='choice', choices=valid_archs,
-                    help='Sysroot architecture: %s' % ', '.join(valid_archs))
-  options, _ = parser.parse_args()
-  sys.exit(main())
+  try:
+    sys.exit(main(sys.argv[1:]))
+  except Error as e:
+    sys.stderr.write(str(e) + '\n')
+    sys.exit(1)

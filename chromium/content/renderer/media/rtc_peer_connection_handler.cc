@@ -45,7 +45,7 @@
 #include "third_party/WebKit/public/platform/WebRTCSessionDescriptionRequest.h"
 #include "third_party/WebKit/public/platform/WebRTCVoidRequest.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/libjingle/source/talk/session/media/mediasession.h"
+#include "third_party/webrtc/pc/mediasession.h"
 
 using webrtc::DataChannelInterface;
 using webrtc::IceCandidateInterface;
@@ -892,8 +892,8 @@ bool RTCPeerConnectionHandler::initialize(
   }
 
   if (peer_connection_tracker_) {
-    peer_connection_tracker_->RegisterPeerConnection(
-        this, config, constraints, frame_);
+    peer_connection_tracker_->RegisterPeerConnection(this, config, options,
+                                                     frame_);
   }
 
   uma_observer_ = new rtc::RefCountedObject<PeerConnectionUMAObserver>();
@@ -938,7 +938,7 @@ void RTCPeerConnectionHandler::createOffer(
   native_peer_connection_->CreateOffer(description_request.get(), &constraints);
 
   if (peer_connection_tracker_)
-    peer_connection_tracker_->TrackCreateOffer(this, constraints);
+    peer_connection_tracker_->TrackCreateOffer(this, options);
 }
 
 void RTCPeerConnectionHandler::createOffer(
@@ -959,7 +959,7 @@ void RTCPeerConnectionHandler::createOffer(
   native_peer_connection_->CreateOffer(description_request.get(), &constraints);
 
   if (peer_connection_tracker_)
-    peer_connection_tracker_->TrackCreateOffer(this, constraints);
+    peer_connection_tracker_->TrackCreateOffer(this, options);
 }
 
 void RTCPeerConnectionHandler::createAnswer(
@@ -978,7 +978,7 @@ void RTCPeerConnectionHandler::createAnswer(
                                         &constraints);
 
   if (peer_connection_tracker_)
-    peer_connection_tracker_->TrackCreateAnswer(this, constraints);
+    peer_connection_tracker_->TrackCreateAnswer(this, options);
 }
 
 bool IsOfferOrAnswer(const webrtc::SessionDescriptionInterface* native_desc) {
@@ -1141,7 +1141,7 @@ bool RTCPeerConnectionHandler::updateICE(
   RTCMediaConstraints constraints(options);
 
   if (peer_connection_tracker_)
-    peer_connection_tracker_->TrackUpdateIce(this, config, constraints);
+    peer_connection_tracker_->TrackUpdateIce(this, config, options);
 
   return native_peer_connection_->UpdateIce(config.servers, &constraints);
 }
@@ -1480,7 +1480,7 @@ void RTCPeerConnectionHandler::OnIceGatheringChange(
       GetWebKitIceGatheringState(new_state);
   if (peer_connection_tracker_)
     peer_connection_tracker_->TrackIceGatheringStateChange(this, state);
-  if (client_)
+  if (!is_closed_)
     client_->didChangeICEGatheringState(state);
 }
 
@@ -1489,7 +1489,7 @@ void RTCPeerConnectionHandler::OnRenegotiationNeeded() {
   TRACE_EVENT0("webrtc", "RTCPeerConnectionHandler::OnRenegotiationNeeded");
   if (peer_connection_tracker_)
     peer_connection_tracker_->TrackOnRenegotiationNeeded(this);
-  if (client_)
+  if (!is_closed_)
     client_->negotiationNeeded();
 }
 

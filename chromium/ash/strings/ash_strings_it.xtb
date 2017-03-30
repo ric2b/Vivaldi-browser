@@ -52,6 +52,7 @@ Premi Maiusc+Alt per cambiare metodo.</translation>
 <translation id="252373100621549798">Display sconosciuto</translation>
 <translation id="2532589005999780174">Modalità ad alto contrasto</translation>
 <translation id="2562916301614567480">Rete privata</translation>
+<translation id="2661637000095600270">Impossibile duplicare i display perché non sono state trovate risoluzioni supportate. È stato attivato il desktop esteso. Fai clic per inviare un rapporto di feedback.</translation>
 <translation id="2692809339924654275"><ph name="BLUETOOTH" />: connessione...</translation>
 <translation id="2700058918926273959">La sessione terminerà tra <ph name="SESSION_TIME_REMAINING" />. Verrà eseguita la disconnessione.</translation>
 <translation id="2727977024730340865">Collegato a un caricabatterie a basso consumo. La carica della batteria potrebbe non essere affidabile.</translation>
@@ -113,7 +114,6 @@ Premi il tasto per la ricerca o Maiusc per annullare.</translation>
 <translation id="4250680216510889253">No</translation>
 <translation id="4279490309300973883">Mirroring</translation>
 <translation id="4321179778687042513">ctrl</translation>
-<translation id="4379753398862151997">Caro monitor, non funziona tra di noi (il monitor non è supportato).</translation>
 <translation id="4421231901400348175">Condividi il controllo dello schermo con <ph name="HELPER_NAME" /> tramite Assistenza remota.</translation>
 <translation id="4430019312045809116">Volume</translation>
 <translation id="4527045527269911712">Il dispositivo Bluetooth "<ph name="DEVICE_NAME" />" chiede l'autorizzazione per essere accoppiato.</translation>
@@ -182,7 +182,6 @@ Premi Maiusc+Alt per cambiare metodo.</translation>
 <translation id="6650933572246256093">Il dispositivo Bluetooth "<ph name="DEVICE_NAME" />" chiede l'autorizzazione per essere accoppiato. Inserisci questa passkey sul dispositivo: <ph name="PASSKEY" /></translation>
 <translation id="6713285437468012787">Il dispositivo Bluetooth "<ph name="DEVICE_NAME" />" è stato accoppiato ed è ora disponibile per tutti gli utenti. Puoi rimuovere tale accoppiamento utilizzando il menu Impostazioni.</translation>
 <translation id="6785414152754474415">Percentuale di caricamento batteria: <ph name="PERCENTAGE" />%. La batteria è in carica.</translation>
-<translation id="6803622936009808957">Impossibile duplicare i display perché non sono state trovate risoluzioni supportate. È stato attivato il desktop esteso.</translation>
 <translation id="683971173229319003">Tasto di ricerca+L</translation>
 <translation id="68610848741840742">ChromeVox (lettura vocale)</translation>
 <translation id="6911468394164995108">Connetti a un'altra...</translation>
@@ -237,6 +236,7 @@ Premi Alt+tasto per la ricerca o Maiusc per annullare.</translation>
 <translation id="8878886163241303700">Estensione schermo</translation>
 <translation id="8938800817013097409">Dispositivo USB-C (porta posteriore destra)</translation>
 <translation id="8940956008527784070">Batteria in esaurimento (<ph name="PERCENTAGE" />%)</translation>
+<translation id="9008540565042607572">Caro monitor, tra di noi non funziona (il monitor non è supportato; fai clic per inviare un rapporto di feedback).</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9080206825613744995">Il microfono è in uso.</translation>
 <translation id="9089416786594320554">Metodi di immissione</translation>

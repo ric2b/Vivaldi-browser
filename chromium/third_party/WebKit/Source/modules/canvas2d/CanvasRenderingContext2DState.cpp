@@ -8,12 +8,16 @@
 #include "core/css/resolver/FilterOperationResolver.h"
 #include "core/css/resolver/StyleBuilder.h"
 #include "core/css/resolver/StyleResolverState.h"
+#include "core/html/HTMLCanvasElement.h"
 #include "core/paint/FilterEffectBuilder.h"
 #include "core/style/ComputedStyle.h"
+#include "core/svg/SVGFilterElement.h"
 #include "modules/canvas2d/CanvasGradient.h"
 #include "modules/canvas2d/CanvasPattern.h"
+#include "modules/canvas2d/CanvasRenderingContext2D.h"
 #include "modules/canvas2d/CanvasStyle.h"
 #include "platform/graphics/DrawLooperBuilder.h"
+#include "platform/graphics/filters/FilterOperation.h"
 #include "platform/graphics/filters/SkiaImageFilterBuilder.h"
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "third_party/skia/include/effects/SkDashPathEffect.h"
@@ -341,7 +345,25 @@ void CanvasRenderingContext2DState::resetTransform()
     m_isTransformInvertible = true;
 }
 
-SkImageFilter* CanvasRenderingContext2DState::getFilter(Element* styleResolutionHost, const Font& font) const
+static void updateFilterReferences(HTMLCanvasElement* canvasElement, CanvasRenderingContext2D* context, const FilterOperations& filters)
+{
+    context->clearFilterReferences();
+    for (RefPtrWillBeRawPtr<FilterOperation> filterOperation : filters.operations()) {
+        if (filterOperation->type() != FilterOperation::REFERENCE)
+            continue;
+
+        ReferenceFilterOperation* referenceFilterOperation = toReferenceFilterOperation(filterOperation.get());
+
+        // TODO(ajuma): Handle the case of filters defined in external documents
+        // (crbug.com/581135).
+        Element* filter = canvasElement->document().getElementById(referenceFilterOperation->fragment());
+        if (!isSVGFilterElement(filter))
+            continue;
+        context->addFilterReference(toSVGFilterElement(filter));
+    }
+}
+
+SkImageFilter* CanvasRenderingContext2DState::getFilter(Element* styleResolutionHost, const Font& font, IntSize canvasSize, CanvasRenderingContext2D* context) const
 {
     if (!m_filterValue)
         return nullptr;
@@ -365,15 +387,30 @@ SkImageFilter* CanvasRenderingContext2DState::getFilter(Element* styleResolution
         m_strokeStyle->applyToPaint(strokePaintForFilter);
         fillPaintForFilter.setColor(m_fillStyle->paintColor());
         strokePaintForFilter.setColor(m_strokeStyle->paintColor());
+        FloatSize floatCanvasSize(canvasSize);
         const double effectiveZoom = 1.0; // Deliberately ignore zoom on the canvas element
-        filterEffectBuilder->build(styleResolutionHost, filterStyle->filter(), effectiveZoom, &fillPaintForFilter, &strokePaintForFilter);
+        filterEffectBuilder->build(styleResolutionHost, filterStyle->filter(), effectiveZoom, &floatCanvasSize, &fillPaintForFilter, &strokePaintForFilter);
 
         SkiaImageFilterBuilder imageFilterBuilder;
         RefPtrWillBeRawPtr<FilterEffect> lastEffect = filterEffectBuilder->lastEffect();
         m_resolvedFilter = imageFilterBuilder.build(lastEffect.get(), ColorSpaceDeviceRGB);
+        if (m_resolvedFilter)
+            updateFilterReferences(toHTMLCanvasElement(styleResolutionHost), context, filterStyle->filter());
     }
 
     return m_resolvedFilter.get();
+}
+
+bool CanvasRenderingContext2DState::hasFilter(Element* styleResolutionHost, const Font& font, IntSize canvasSize, CanvasRenderingContext2D* context) const
+{
+    // Checking for a non-null m_filterValue isn't sufficient, since this value
+    // might refer to a non-existent filter.
+    return !!getFilter(styleResolutionHost, font, canvasSize, context);
+}
+
+void CanvasRenderingContext2DState::clearResolvedFilter() const
+{
+    m_resolvedFilter.clear();
 }
 
 SkDrawLooper* CanvasRenderingContext2DState::emptyDrawLooper() const
@@ -595,4 +632,4 @@ const SkPaint* CanvasRenderingContext2DState::getPaint(PaintType paintType, Shad
     return paint;
 }
 
-} // blink
+} // namespace blink

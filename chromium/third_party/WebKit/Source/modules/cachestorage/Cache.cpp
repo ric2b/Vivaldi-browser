@@ -21,7 +21,8 @@
 #include "modules/fetch/Request.h"
 #include "modules/fetch/Response.h"
 #include "platform/HTTPNames.h"
-#include "public/platform/Platform.h"
+#include "platform/Histogram.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "public/platform/WebPassOwnPtr.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCache.h"
 
@@ -31,7 +32,7 @@ namespace {
 
 void checkCacheQueryOptions(const CacheQueryOptions& options, ExecutionContext* context)
 {
-    if (options.ignoreSearch())
+    if (!RuntimeEnabledFeatures::cacheIgnoreSearchOptionEnabled() && options.ignoreSearch())
         context->addConsoleMessage(ConsoleMessage::create(JSMessageSource, WarningMessageLevel, "Cache.match() does not support 'ignoreSearch' option yet. See http://crbug.com/520784"));
     if (options.ignoreMethod())
         context->addConsoleMessage(ConsoleMessage::create(JSMessageSource, WarningMessageLevel, "Cache.match() does not support 'ignoreMethod' option yet. See http://crbug.com/482256"));
@@ -193,8 +194,26 @@ void RecordResponseTypeForAdd(const Member<Response>& response)
         type = ResponseType::OpaqueRedirectType;
         break;
     }
-    Platform::current()->histogramEnumeration("ServiceWorkerCache.Cache.AddResponseType", static_cast<int>(type), static_cast<int>(ResponseType::EnumMax));
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(EnumerationHistogram, responseTypeHistogram, new EnumerationHistogram("ServiceWorkerCache.Cache.AddResponseType", static_cast<int>(ResponseType::EnumMax)));
+    responseTypeHistogram.count(static_cast<int>(type));
 };
+
+bool varyHeaderContainsAsterisk(const Response* response)
+{
+    const FetchHeaderList* headers = response->headers()->headerList();
+    for (size_t i = 0; i < headers->size(); ++i) {
+        const FetchHeaderList::Header& header = headers->entry(i);
+        if (header.first == "vary") {
+            Vector<String> fields;
+            header.second.split(',', fields);
+            for (size_t j = 0; j < fields.size(); ++j) {
+                if (fields[j].stripWhiteSpace() == "*")
+                    return true;
+            }
+        }
+    }
+    return false;
+}
 
 } // namespace
 
@@ -212,6 +231,17 @@ public:
     {
         NonThrowableExceptionState exceptionState;
         HeapVector<Member<Response>> responses = toMemberNativeArray<Response, V8Response>(value.v8Value(), m_requests.size(), scriptState()->isolate(), exceptionState);
+
+        for (const auto& response : responses) {
+            if (!response->ok()) {
+                ScriptPromise rejection = ScriptPromise::reject(scriptState(), V8ThrowException::createTypeError(scriptState()->isolate(), "Request failed"));
+                return ScriptValue(scriptState(), rejection.v8Value());
+            }
+            if (varyHeaderContainsAsterisk(response)) {
+                ScriptPromise rejection = ScriptPromise::reject(scriptState(), V8ThrowException::createTypeError(scriptState()->isolate(), "Vary header contains *"));
+                return ScriptValue(scriptState(), rejection.v8Value());
+            }
+        }
 
         for (const auto& response : responses)
             RecordResponseTypeForAdd(response);
@@ -435,7 +465,7 @@ ScriptPromise Cache::keys(ScriptState* scriptState, const RequestInfo& request, 
 WebServiceWorkerCache::QueryParams Cache::toWebQueryParams(const CacheQueryOptions& options)
 {
     WebServiceWorkerCache::QueryParams webQueryParams;
-    webQueryParams.ignoreSearch = options.ignoreSearch();
+    webQueryParams.ignoreSearch = options.ignoreSearch() && RuntimeEnabledFeatures::cacheIgnoreSearchOptionEnabled();
     webQueryParams.ignoreMethod = options.ignoreMethod();
     webQueryParams.ignoreVary = options.ignoreVary();
     webQueryParams.cacheName = options.cacheName();
@@ -538,6 +568,11 @@ ScriptPromise Cache::putImpl(ScriptState* scriptState, const HeapVector<Member<R
             return promise;
         }
         ASSERT(!requests[i]->hasBody());
+
+        if (varyHeaderContainsAsterisk(responses[i])) {
+            barrierCallback->onError("Vary header contains *");
+            return promise;
+        }
 
         if (responses[i]->isBodyLocked() || responses[i]->bodyUsed()) {
             barrierCallback->onError("Response body is already used");

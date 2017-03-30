@@ -11,8 +11,8 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/prefs/pref_member.h"
 #include "build/build_config.h"
+#include "components/prefs/pref_member.h"
 #include "content/public/browser/browser_message_filter.h"
 
 #if defined(OS_WIN)
@@ -51,12 +51,6 @@ class PrintingMessageFilter : public content::BrowserMessageFilter {
 
  private:
   ~PrintingMessageFilter() override;
-
-#if defined(OS_WIN)
-  // Used to pass resulting EMF from renderer to browser in printing.
-  void OnDuplicateSection(base::SharedMemoryHandle renderer_handle,
-                          base::SharedMemoryHandle* browser_handle);
-#endif
 
 #if defined(OS_CHROMEOS) || defined(OS_ANDROID)
   // Used to ask the browser allocate a temporary file for the renderer

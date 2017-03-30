@@ -6,7 +6,7 @@
 '''Bundles the Blimp Engine and its runtime dependencies into a tarball.
 
    The created bundle can be passed as input to docker build.  E.g.
-   docker build - < ../../out-linux/Debug/blimp_engine_deps.tar
+   docker build - < ../../out-linux/Debug/blimp_engine_deps.tar.gz
 '''
 
 
@@ -15,7 +15,6 @@ import errno
 import os
 import subprocess
 import sys
-import tarfile
 
 def ReadDependencies(manifest):
   """Read the manifest and return the list of dependencies.
@@ -41,6 +40,10 @@ def main():
                       help=('Dockerfile to add to the bundle'),
                       required=True,
                       metavar='FILE')
+  parser.add_argument('--startup-script',
+                      help=('Engine startup script to add to the bundle'),
+                      required=True,
+                      metavar='FILE')
   parser.add_argument('--manifest',
                       help=('engine manifest'),
                       required=True)
@@ -52,17 +55,31 @@ def main():
 
   deps = ReadDependencies(args.manifest)
 
-  # Add the deps to the tarball along with the Dockerfile.
-  with tarfile.open(args.output, 'w') as tarball:
-    tarball.add(args.dockerfile, arcname='Dockerfile')
-    os.chdir(args.build_dir)
-    for dep in deps:
-      try:
-        tarball.add(dep)
-      except OSError as e:
-        if e.errno == errno.ENOENT:
-          print >> sys.stderr, dep + " not found (did you build the engine?)"
-          exit(1)
+  dockerfile_dirname, dockerfile_basename = os.path.split(args.dockerfile)
+  startup_script_dirname, startup_script_basename = os.path.split(
+      args.startup_script)
+
+  try:
+    env = os.environ.copy()
+    # Use fastest possible mode when gzipping.
+    env["GZIP"] = "-1"
+    subprocess.check_output(
+        ["tar",
+         "-zcf", args.output,
+         # Ensure tarball content group permissions are appropriately set for
+         # use as part of a "docker build". That is group readable with
+         # executable files also being group executable.
+         "--mode=g+rX",
+         "-C", dockerfile_dirname, dockerfile_basename,
+         "-C", startup_script_dirname, startup_script_basename,
+         "-C", args.build_dir] + deps,
+        # Redirect stderr to stdout, so that its output is captured.
+        stderr=subprocess.STDOUT,
+        env=env)
+  except subprocess.CalledProcessError as e:
+    print >> sys.stderr, "Failed to create tarball:"
+    print >> sys.stderr, e.output
+    sys.exit(1)
 
 if __name__ == "__main__":
   main()

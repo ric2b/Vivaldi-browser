@@ -21,6 +21,9 @@ namespace safe_browsing {
 SafeBrowsingProtocolConfig::SafeBrowsingProtocolConfig()
     : disable_auto_update(false) {}
 
+SafeBrowsingProtocolConfig::SafeBrowsingProtocolConfig(
+    const SafeBrowsingProtocolConfig& other) = default;
+
 SafeBrowsingProtocolConfig::~SafeBrowsingProtocolConfig() {}
 
 // static
@@ -70,27 +73,6 @@ std::string SafeBrowsingProtocolManagerHelper::ComposeUrl(
     url.append("&ext=1");
   } else {
     url.append("&ext=0");
-  }
-  return url;
-}
-
-// static
-std::string SafeBrowsingProtocolManagerHelper::ComposePver4Url(
-    const std::string& prefix,
-    const std::string& method,
-    const std::string& request_base64,
-    const std::string& client_id,
-    const std::string& version) {
-  DCHECK(!prefix.empty() && !method.empty() &&
-         !client_id.empty() && !version.empty());
-  std::string url = base::StringPrintf(
-      "%s/%s/%s?alt=proto&client_id=%s&client_version=%s",
-      prefix.c_str(), method.c_str(), request_base64.c_str(),
-      client_id.c_str(), version.c_str());
-  std::string api_key = google_apis::GetAPIKey();
-  if (!api_key.empty()) {
-    base::StringAppendF(&url, "&key=%s",
-                        net::EscapeQueryParamValue(api_key, true).c_str());
   }
   return url;
 }

@@ -21,6 +21,7 @@
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_sender.h"
+#include "skia/ext/refptr.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 #include "url/gurl.h"
@@ -124,7 +125,7 @@ class WebPluginDelegateProxy
     ~SharedBitmap();
 
     scoped_ptr<SharedMemoryBitmap> bitmap;
-    scoped_ptr<SkCanvas> canvas;
+    skia::RefPtr<SkCanvas> canvas;
   };
 
   // Message handlers for messages that proxy WebPlugin methods, which
@@ -133,7 +134,6 @@ class WebPluginDelegateProxy
   void OnCompleteURL(const std::string& url_in, std::string* url_out,
                      bool* result);
   void OnHandleURLRequest(const PluginHostMsg_URLRequest_Params& params);
-  void OnCancelResource(int id);
   void OnInvalidateRect(const gfx::Rect& rect);
   void OnGetWindowScriptNPObject(int route_id, bool* success);
   void OnResolveProxy(const GURL& url, bool* result, std::string* proxy_list);
@@ -149,9 +149,6 @@ class WebPluginDelegateProxy
                                   int range_request_id);
   void OnDidStartLoading();
   void OnDidStopLoading();
-  void OnDeferResourceLoading(unsigned long resource_id, bool defer);
-  void OnURLRedirectResponse(bool allow, int resource_id);
-  void OnCheckIfRunInsecureContent(const GURL& url, bool* result);
 #if defined(OS_MACOSX)
   void OnFocusChanged(bool focused);
   void OnStartIme();
@@ -209,12 +206,12 @@ class WebPluginDelegateProxy
   // Creates a process-local memory section and canvas. PlatformCanvas on
   // Windows only works with a DIB, not arbitrary memory.
   bool CreateLocalBitmap(std::vector<uint8_t>* memory,
-                         scoped_ptr<SkCanvas>* canvas);
+                         skia::RefPtr<SkCanvas>* canvas);
 #endif
 
   // Creates a shared memory section and canvas.
   bool CreateSharedBitmap(scoped_ptr<SharedMemoryBitmap>* memory,
-                          scoped_ptr<SkCanvas>* canvas);
+                          skia::RefPtr<SkCanvas>* canvas);
 
   // Called for cleanup during plugin destruction. Normally right before the
   // plugin window gets destroyed, or when the plugin has crashed (at which

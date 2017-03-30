@@ -13,7 +13,6 @@
 #include "components/nacl/renderer/plugin/plugin_error.h"
 #include "components/nacl/renderer/plugin/pnacl_translate_thread.h"
 #include "components/nacl/renderer/plugin/service_runtime.h"
-#include "components/nacl/renderer/plugin/temporary_file.h"
 #include "ppapi/c/pp_bool.h"
 #include "ppapi/c/pp_errors.h"
 
@@ -23,7 +22,7 @@ namespace {
 
 std::string GetArchitectureAttributes(Plugin* plugin) {
   pp::Var attrs_var(pp::PASS_REF,
-                    plugin->nacl_interface()->GetCpuFeatureAttrs());
+                    nacl::PPBNaClPrivate::GetCpuFeatureAttrs());
   return attrs_var.AsString();
 }
 
@@ -63,15 +62,13 @@ PnaclCoordinator* PnaclCoordinator::BitcodeToNative(
     const std::string& pexe_url,
     const PP_PNaClOptions& pnacl_options,
     const pp::CompletionCallback& translate_notify_callback) {
-  PLUGIN_PRINTF(("PnaclCoordinator::BitcodeToNative (plugin=%p, pexe=%s)\n",
-                 static_cast<void*>(plugin), pexe_url.c_str()));
   PnaclCoordinator* coordinator =
       new PnaclCoordinator(plugin, pexe_url,
                            pnacl_options,
                            translate_notify_callback);
 
-  GetNaClInterface()->SetPNaClStartTime(plugin->pp_instance());
-  int cpus = plugin->nacl_interface()->GetNumberOfProcessors();
+  nacl::PPBNaClPrivate::SetPNaClStartTime(plugin->pp_instance());
+  int cpus = nacl::PPBNaClPrivate::GetNumberOfProcessors();
   coordinator->num_threads_ = std::min(4, std::max(1, cpus));
   if (pnacl_options.use_subzero) {
     coordinator->split_module_count_ = 1;
@@ -95,8 +92,6 @@ PnaclCoordinator::PnaclCoordinator(
       plugin_(plugin),
       translate_notify_callback_(translate_notify_callback),
       translation_finished_reported_(false),
-      compiler_subprocess_("compiler.nexe", NULL),
-      ld_subprocess_("linker.nexe", NULL),
       pexe_url_(pexe_url),
       pnacl_options_(pnacl_options),
       architecture_attributes_(GetArchitectureAttributes(plugin)),
@@ -110,9 +105,6 @@ PnaclCoordinator::PnaclCoordinator(
 }
 
 PnaclCoordinator::~PnaclCoordinator() {
-  PLUGIN_PRINTF(("PnaclCoordinator::~PnaclCoordinator (this=%p, "
-                 "translate_thread=%p\n",
-                 static_cast<void*>(this), translate_thread_.get()));
   // Stopping the translate thread will cause the translate thread to try to
   // run translation_complete_callback_ on the main thread.  This destructor is
   // running from the main thread, and by the time it exits, callback_factory_
@@ -121,7 +113,7 @@ PnaclCoordinator::~PnaclCoordinator() {
   if (translate_thread_.get() != NULL)
     translate_thread_->AbortSubprocesses();
   if (!translation_finished_reported_) {
-    plugin_->nacl_interface()->ReportTranslationFinished(
+    nacl::PPBNaClPrivate::ReportTranslationFinished(
         plugin_->pp_instance(), PP_FALSE, pnacl_options_.opt_level,
         pnacl_options_.use_subzero, 0, 0, 0);
   }
@@ -130,13 +122,11 @@ PnaclCoordinator::~PnaclCoordinator() {
   // since the thread may be accessing those fields.
   // It will also be accessing obj_files_.
   translate_thread_.reset(NULL);
-  for (size_t i = 0; i < obj_files_.size(); i++)
-    delete obj_files_[i];
 }
 
 PP_FileHandle PnaclCoordinator::TakeTranslatedFileHandle() {
-  DCHECK(temp_nexe_file_ != NULL);
-  return temp_nexe_file_->TakeFileHandle();
+  DCHECK(temp_nexe_file_.IsValid());
+  return temp_nexe_file_.TakePlatformFile();
 }
 
 void PnaclCoordinator::ReportNonPpapiError(PP_NaClError err_code,
@@ -147,19 +137,7 @@ void PnaclCoordinator::ReportNonPpapiError(PP_NaClError err_code,
   ExitWithError();
 }
 
-void PnaclCoordinator::ReportPpapiError(PP_NaClError err_code,
-                                        int32_t pp_error,
-                                        const std::string& message) {
-  std::stringstream ss;
-  ss << "PnaclCoordinator: " << message << " (pp_error=" << pp_error << ").";
-  ErrorInfo error_info;
-  error_info.SetReport(err_code, ss.str());
-  plugin_->ReportLoadError(error_info);
-  ExitWithError();
-}
-
 void PnaclCoordinator::ExitWithError() {
-  PLUGIN_PRINTF(("PnaclCoordinator::ExitWithError\n"));
   // Free all the intermediate callbacks we ever created.
   // Note: this doesn't *cancel* the callbacks from the factories attached
   // to the various helper classes (e.g., pnacl_resources). Thus, those
@@ -170,7 +148,7 @@ void PnaclCoordinator::ExitWithError() {
   if (!error_already_reported_) {
     error_already_reported_ = true;
     translation_finished_reported_ = true;
-    plugin_->nacl_interface()->ReportTranslationFinished(
+    nacl::PPBNaClPrivate::ReportTranslationFinished(
         plugin_->pp_instance(), PP_FALSE, pnacl_options_.opt_level,
         pnacl_options_.use_subzero, 0, 0, 0);
     translate_notify_callback_.Run(PP_ERROR_FAILED);
@@ -179,8 +157,6 @@ void PnaclCoordinator::ExitWithError() {
 
 // Signal that Pnacl translation completed normally.
 void PnaclCoordinator::TranslateFinished(int32_t pp_error) {
-  PLUGIN_PRINTF(("PnaclCoordinator::TranslateFinished (pp_error=%"
-                 NACL_PRId32 ")\n", pp_error));
   // Bail out if there was an earlier error (e.g., pexe load failure),
   // or if there is an error from the translation thread.
   if (translate_finish_error_ != PP_OK || pp_error != PP_OK) {
@@ -193,48 +169,33 @@ void PnaclCoordinator::TranslateFinished(int32_t pp_error) {
   // that were delayed (see the delay inserted in BitcodeGotCompiled).
   if (expected_pexe_size_ != -1) {
     pexe_bytes_compiled_ = expected_pexe_size_;
-    GetNaClInterface()->DispatchEvent(plugin_->pp_instance(),
-                                      PP_NACL_EVENT_PROGRESS,
-                                      pexe_url_.c_str(),
-                                      PP_TRUE,
-                                      pexe_bytes_compiled_,
-                                      expected_pexe_size_);
+    nacl::PPBNaClPrivate::DispatchEvent(plugin_->pp_instance(),
+                                        PP_NACL_EVENT_PROGRESS,
+                                        pexe_url_.c_str(),
+                                        PP_TRUE,
+                                        pexe_bytes_compiled_,
+                                        expected_pexe_size_);
   }
-  int64_t nexe_size = temp_nexe_file_->GetLength();
-  // The nexe is written to the temp_nexe_file_.  We must Reset() the file
+  int64_t nexe_size = temp_nexe_file_.GetLength();
+  // The nexe is written to the temp_nexe_file_.  We must reset the file
   // pointer to be able to read it again from the beginning.
-  temp_nexe_file_->Reset();
+  temp_nexe_file_.Seek(base::File::FROM_BEGIN, 0);
 
   // Report to the browser that translation finished. The browser will take
   // care of storing the nexe in the cache.
   translation_finished_reported_ = true;
-  plugin_->nacl_interface()->ReportTranslationFinished(
+  nacl::PPBNaClPrivate::ReportTranslationFinished(
       plugin_->pp_instance(), PP_TRUE, pnacl_options_.opt_level,
       pnacl_options_.use_subzero, nexe_size, pexe_size_,
       translate_thread_->GetCompileTime());
 
-  NexeReadDidOpen(PP_OK);
+  NexeReadDidOpen();
 }
 
-void PnaclCoordinator::NexeReadDidOpen(int32_t pp_error) {
-  PLUGIN_PRINTF(("PnaclCoordinator::NexeReadDidOpen (pp_error=%"
-                 NACL_PRId32 ")\n", pp_error));
-  if (pp_error != PP_OK) {
-    if (pp_error == PP_ERROR_FILENOTFOUND) {
-      ReportPpapiError(PP_NACL_ERROR_PNACL_CACHE_FETCH_NOTFOUND,
-                       pp_error,
-                       "Failed to open translated nexe (not found).");
-      return;
-    }
-    if (pp_error == PP_ERROR_NOACCESS) {
-      ReportPpapiError(PP_NACL_ERROR_PNACL_CACHE_FETCH_NOACCESS,
-                       pp_error,
-                       "Failed to open translated nexe (no access).");
-      return;
-    }
-    ReportPpapiError(PP_NACL_ERROR_PNACL_CACHE_FETCH_OTHER,
-                     pp_error,
-                     "Failed to open translated nexe.");
+void PnaclCoordinator::NexeReadDidOpen() {
+  if (!temp_nexe_file_.IsValid()) {
+    ReportNonPpapiError(PP_NACL_ERROR_PNACL_CACHE_FETCH_OTHER,
+                        "Failed to open translated nexe.");
     return;
   }
 
@@ -254,7 +215,7 @@ void PnaclCoordinator::OpenBitcodeStream() {
     return;
   }
 
-  GetNaClInterface()->StreamPexe(
+  nacl::PPBNaClPrivate::StreamPexe(
       plugin_->pp_instance(), pexe_url_.c_str(), pnacl_options_.opt_level,
       pnacl_options_.use_subzero, &kPexeStreamHandler, this);
 }
@@ -268,9 +229,8 @@ void PnaclCoordinator::BitcodeStreamCacheHit(PP_FileHandle handle) {
     BitcodeStreamDidFinish(PP_ERROR_FAILED);
     return;
   }
-  temp_nexe_file_.reset(new TempFile(plugin_, handle));
-  // Open it for reading as the cached nexe file.
-  NexeReadDidOpen(temp_nexe_file_->CheckValidity());
+  temp_nexe_file_ = base::File(handle);
+  NexeReadDidOpen();
 }
 
 void PnaclCoordinator::BitcodeStreamCacheMiss(int64_t expected_pexe_size,
@@ -305,25 +265,20 @@ void PnaclCoordinator::BitcodeStreamCacheMiss(int64_t expected_pexe_size,
   expected_pexe_size_ = expected_pexe_size;
 
   for (int i = 0; i < split_module_count_; i++) {
-    PP_FileHandle obj_handle =
-        plugin_->nacl_interface()->CreateTemporaryFile(plugin_->pp_instance());
-    scoped_ptr<TempFile> temp_file(new TempFile(plugin_, obj_handle));
-    int32_t pp_error = temp_file->CheckValidity();
-    if (pp_error != PP_OK) {
-      ReportPpapiError(PP_NACL_ERROR_PNACL_CREATE_TEMP,
-                       pp_error,
-                       "Failed to open scratch object file.");
+    base::File temp_file(
+        nacl::PPBNaClPrivate::CreateTemporaryFile(plugin_->pp_instance()));
+    if (!temp_file.IsValid()) {
+      ReportNonPpapiError(PP_NACL_ERROR_PNACL_CREATE_TEMP,
+                          "Failed to open scratch object file.");
       return;
-    } else {
-      obj_files_.push_back(temp_file.release());
     }
+    obj_files_.push_back(std::move(temp_file));
   }
 
-  temp_nexe_file_.reset(new TempFile(plugin_, nexe_handle));
+  temp_nexe_file_ = base::File(nexe_handle);
   // Open the nexe file for connecting ld and sel_ldr.
   // Start translation when done with this last step of setup!
-  int32_t pp_error = temp_nexe_file_->CheckValidity();
-  if (pp_error != PP_OK) {
+  if (!temp_nexe_file_.IsValid()) {
     ReportNonPpapiError(
         PP_NACL_ERROR_PNACL_CREATE_TEMP,
         std::string(
@@ -342,8 +297,6 @@ void PnaclCoordinator::BitcodeStreamGotData(const void* data, int32_t length) {
 }
 
 void PnaclCoordinator::BitcodeStreamDidFinish(int32_t pp_error) {
-  PLUGIN_PRINTF(("PnaclCoordinator::BitcodeStreamDidFinish (pp_error=%"
-                 NACL_PRId32 ")\n", pp_error));
   if (pp_error != PP_OK) {
     // Defer reporting the error and cleanup until after the translation
     // thread returns, because it may be accessing the coordinator's
@@ -368,7 +321,7 @@ void PnaclCoordinator::BitcodeStreamDidFinish(int32_t pp_error) {
       TranslateFinished(pp_error);
   } else {
     // Compare download completion pct (100% now), to compile completion pct.
-    GetNaClInterface()->LogBytesCompiledVsDownloaded(
+    nacl::PPBNaClPrivate::LogBytesCompiledVsDownloaded(
         pnacl_options_.use_subzero, pexe_bytes_compiled_, pexe_size_);
     translate_thread_->EndStream();
   }
@@ -383,20 +336,20 @@ void PnaclCoordinator::BitcodeGotCompiled(int32_t pp_error,
   // that bytes were sent to the compiler.
   if (expected_pexe_size_ != -1) {
     if (!ShouldDelayProgressEvent()) {
-      GetNaClInterface()->DispatchEvent(plugin_->pp_instance(),
-                                        PP_NACL_EVENT_PROGRESS,
-                                        pexe_url_.c_str(),
-                                        PP_TRUE,
-                                        pexe_bytes_compiled_,
-                                        expected_pexe_size_);
+      nacl::PPBNaClPrivate::DispatchEvent(plugin_->pp_instance(),
+                                          PP_NACL_EVENT_PROGRESS,
+                                          pexe_url_.c_str(),
+                                          PP_TRUE,
+                                          pexe_bytes_compiled_,
+                                          expected_pexe_size_);
     }
   } else {
-    GetNaClInterface()->DispatchEvent(plugin_->pp_instance(),
-                                      PP_NACL_EVENT_PROGRESS,
-                                      pexe_url_.c_str(),
-                                      PP_FALSE,
-                                      pexe_bytes_compiled_,
-                                      expected_pexe_size_);
+    nacl::PPBNaClPrivate::DispatchEvent(plugin_->pp_instance(),
+                                        PP_NACL_EVENT_PROGRESS,
+                                        pexe_url_.c_str(),
+                                        PP_FALSE,
+                                        pexe_bytes_compiled_,
+                                        expected_pexe_size_);
   }
 }
 
@@ -407,8 +360,7 @@ pp::CompletionCallback PnaclCoordinator::GetCompileProgressCallback(
 }
 
 void PnaclCoordinator::LoadCompiler() {
-  PLUGIN_PRINTF(("PnaclCoordinator::LoadCompiler"));
-  int64_t compiler_load_start_time = NaClGetTimeOfDayMicroseconds();
+  base::TimeTicks compiler_load_start_time = base::TimeTicks::Now();
   pp::CompletionCallback load_finished = callback_factory_.NewCallback(
       &PnaclCoordinator::RunCompile, compiler_load_start_time);
   PnaclResources::ResourceType compiler_type = pnacl_options_.use_subzero
@@ -422,9 +374,7 @@ void PnaclCoordinator::LoadCompiler() {
 }
 
 void PnaclCoordinator::RunCompile(int32_t pp_error,
-                                  int64_t compiler_load_start_time) {
-  PLUGIN_PRINTF(
-      ("PnaclCoordinator::RunCompile (pp_error=%" NACL_PRId32 ")\n", pp_error));
+                                  base::TimeTicks compiler_load_start_time) {
   if (pp_error != PP_OK) {
     ReportNonPpapiError(
         PP_NACL_ERROR_PNACL_LLC_SETUP,
@@ -432,10 +382,10 @@ void PnaclCoordinator::RunCompile(int32_t pp_error,
     return;
   }
   int64_t compiler_load_time_total =
-      NaClGetTimeOfDayMicroseconds() - compiler_load_start_time;
-  GetNaClInterface()->LogTranslateTime("NaCl.Perf.PNaClLoadTime.LoadCompiler",
-                                       compiler_load_time_total);
-  GetNaClInterface()->LogTranslateTime(
+      (base::TimeTicks::Now() - compiler_load_start_time).InMicroseconds();
+  nacl::PPBNaClPrivate::LogTranslateTime("NaCl.Perf.PNaClLoadTime.LoadCompiler",
+                                         compiler_load_time_total);
+  nacl::PPBNaClPrivate::LogTranslateTime(
       pnacl_options_.use_subzero
           ? "NaCl.Perf.PNaClLoadTime.LoadCompiler.Subzero"
           : "NaCl.Perf.PNaClLoadTime.LoadCompiler.LLC",
@@ -450,14 +400,12 @@ void PnaclCoordinator::RunCompile(int32_t pp_error,
   CHECK(translate_thread_ != NULL);
   translate_thread_->SetupState(
       report_translate_finished, &compiler_subprocess_, &ld_subprocess_,
-      &obj_files_, num_threads_, temp_nexe_file_.get(),
+      &obj_files_, num_threads_, &temp_nexe_file_,
       &error_info_, &pnacl_options_, architecture_attributes_, this);
   translate_thread_->RunCompile(compile_finished);
 }
 
 void PnaclCoordinator::LoadLinker(int32_t pp_error) {
-  PLUGIN_PRINTF(
-      ("PnaclCoordinator::LoadLinker (pp_error=%" NACL_PRId32 ")\n", pp_error));
   // Errors in the previous step would have skipped to TranslateFinished
   // so we only expect PP_OK here.
   DCHECK(pp_error == PP_OK);
@@ -465,7 +413,7 @@ void PnaclCoordinator::LoadLinker(int32_t pp_error) {
     return;
   }
   ErrorInfo error_info;
-  int64_t ld_load_start_time = NaClGetTimeOfDayMicroseconds();
+  base::TimeTicks ld_load_start_time = base::TimeTicks::Now();
   pp::CompletionCallback load_finished = callback_factory_.NewCallback(
       &PnaclCoordinator::RunLink, ld_load_start_time);
   // Transfer file_info ownership to the sel_ldr launcher.
@@ -474,18 +422,17 @@ void PnaclCoordinator::LoadLinker(int32_t pp_error) {
                                 ld_file_info, &ld_subprocess_, load_finished);
 }
 
-void PnaclCoordinator::RunLink(int32_t pp_error, int64_t ld_load_start_time) {
-  PLUGIN_PRINTF(
-      ("PnaclCoordinator::RunLink (pp_error=%" NACL_PRId32 ")\n", pp_error));
+void PnaclCoordinator::RunLink(int32_t pp_error,
+                               base::TimeTicks ld_load_start_time) {
   if (pp_error != PP_OK) {
     ReportNonPpapiError(
         PP_NACL_ERROR_PNACL_LD_SETUP,
         "PnaclCoordinator: Linker process could not be created.");
     return;
   }
-  GetNaClInterface()->LogTranslateTime(
+  nacl::PPBNaClPrivate::LogTranslateTime(
       "NaCl.Perf.PNaClLoadTime.LoadLinker",
-      NaClGetTimeOfDayMicroseconds() - ld_load_start_time);
+      (base::TimeTicks::Now() - ld_load_start_time).InMicroseconds());
   translate_thread_->RunLink();
 }
 

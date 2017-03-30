@@ -26,9 +26,6 @@
 #include "ui/views/controls/menu/menu_delegate.h"
 #include "ui/views/widget/widget_observer.h"
 
-namespace base {
-class MessagePumpDispatcher;
-}
 namespace gfx {
 class Screen;
 }
@@ -46,10 +43,12 @@ class MouseEvent;
 class SubmenuView;
 class View;
 
+#if defined(USE_AURA)
+class MenuKeyEventHandler;
+#endif
+
 namespace internal {
 class MenuControllerDelegate;
-class MenuEventDispatcher;
-class MenuMessagePumpDispatcher;
 class MenuRunnerImpl;
 }
 
@@ -201,8 +200,6 @@ class VIEWS_EXPORT MenuController : public WidgetObserver {
   static void TurnOffMenuSelectionHoldForTest();
 
  private:
-  friend class internal::MenuEventDispatcher;
-  friend class internal::MenuMessagePumpDispatcher;
   friend class internal::MenuRunnerImpl;
   friend class test::MenuControllerTest;
   friend class MenuKeyEventHandler;
@@ -242,6 +239,7 @@ class VIEWS_EXPORT MenuController : public WidgetObserver {
   // Tracks selection information.
   struct State {
     State();
+    State(const State& other);
     ~State();
 
     // The selected menu item.
@@ -499,20 +497,11 @@ class VIEWS_EXPORT MenuController : public WidgetObserver {
   // the title.
   void SelectByChar(base::char16 key);
 
-  // For Windows and Aura we repost an event for some events that dismiss
-  // the context menu. The event is then reprocessed to cause its result
-  // if the context menu had not been present.
-  // On non-aura Windows, a new mouse event is generated and posted to
-  // the window (if there is one) at the location of the event. On
-  // aura, the event is reposted on the RootWindow.
-  void RepostEvent(SubmenuView* source,
-                   const ui::LocatedEvent* event,
-                   const gfx::Point& screen_loc,
-                   gfx::NativeView native_view,
-                   gfx::NativeWindow window);
-
   // For Windows and Aura we repost an event which dismisses the |source| menu.
-  // The menu is also canceled dependent on the target of the event.
+  // The menu may also be canceled depending on the target of the event. |event|
+  // is then processed without the menu present. On non-aura Windows, a new
+  // mouse event is generated and posted to the window (if there is one) at the
+  // location of the event. On aura, the event is reposted on the RootWindow.
   void RepostEventAndCancel(SubmenuView* source, const ui::LocatedEvent* event);
 
   // Sets the drop target to new_item.
@@ -567,8 +556,9 @@ class VIEWS_EXPORT MenuController : public WidgetObserver {
   void HandleMouseLocation(SubmenuView* source,
                            const gfx::Point& mouse_location);
 
-  // Retrieve an appropriate Screen.
-  gfx::Screen* GetScreen();
+  // Sets hot-tracked state to the first focusable descendant view of |item|.
+  void SetInitialHotTrackedView(MenuItemView* item,
+                                SelectionIncrementDirectionType direction);
 
   // The active instance.
   static MenuController* active_instance_;
@@ -705,6 +695,10 @@ class VIEWS_EXPORT MenuController : public WidgetObserver {
   int current_mouse_pressed_state_;
 
   scoped_ptr<MenuMessageLoop> message_loop_;
+
+#if defined(USE_AURA)
+  scoped_ptr<MenuKeyEventHandler> key_event_handler_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(MenuController);
 };

@@ -40,14 +40,17 @@ bool g_updated_from_variations = false;
 // Keys used in the variations params. Order matches
 // SiteEngagementScore::Variation enum.
 const char* kVariationNames[] = {
-  "max_points_per_day",
-  "decay_period_in_days",
-  "decay_points",
-  "navigation_points",
-  "user_input_points",
-  "visible_media_playing_points",
-  "hidden_media_playing_points",
-  "web_app_installed_points"
+    "max_points_per_day",
+    "decay_period_in_days",
+    "decay_points",
+    "navigation_points",
+    "user_input_points",
+    "visible_media_playing_points",
+    "hidden_media_playing_points",
+    "web_app_installed_points",
+    "first_daily_engagement_points",
+    "medium_engagement_boundary",
+    "high_engagement_boundary",
 };
 
 // Length of time between metrics logging.
@@ -120,10 +123,14 @@ double SiteEngagementScore::param_values[] = {
     7,     // DECAY_PERIOD_IN_DAYS
     5,     // DECAY_POINTS
     0.5,   // NAVIGATION_POINTS
-    0.05,  // USER_INPUT_POINTS
+    0.2,   // USER_INPUT_POINTS
     0.02,  // VISIBLE_MEDIA_POINTS
     0.01,  // HIDDEN_MEDIA_POINTS
     5,     // WEB_APP_INSTALLED_POINTS
+    0.5,   // FIRST_DAILY_ENGAGEMENT
+    8,     // BOOTSTRAP_POINTS
+    5,     // MEDIUM_ENGAGEMENT_BOUNDARY
+    50,    // HIGH_ENGAGEMENT_BOUNDARY
 };
 
 const char* SiteEngagementScore::kRawScoreKey = "rawScore";
@@ -162,6 +169,22 @@ double SiteEngagementScore::GetHiddenMediaPoints() {
 
 double SiteEngagementScore::GetWebAppInstalledPoints() {
   return param_values[WEB_APP_INSTALLED_POINTS];
+}
+
+double SiteEngagementScore::GetFirstDailyEngagementPoints() {
+  return param_values[FIRST_DAILY_ENGAGEMENT];
+}
+
+double SiteEngagementScore::GetBootstrapPoints() {
+  return param_values[BOOTSTRAP_POINTS];
+}
+
+double SiteEngagementScore::GetMediumEngagementBoundary() {
+  return param_values[MEDIUM_ENGAGEMENT_BOUNDARY];
+}
+
+double SiteEngagementScore::GetHighEngagementBoundary() {
+  return param_values[HIGH_ENGAGEMENT_BOUNDARY];
 }
 
 void SiteEngagementScore::UpdateFromVariations() {
@@ -208,14 +231,30 @@ double SiteEngagementScore::Score() const {
 }
 
 void SiteEngagementScore::AddPoints(double points) {
+  DCHECK_NE(0, points);
+  double decayed_score = DecayedScore();
+
+  // Record the original and decayed scores after a decay event.
+  if (decayed_score < raw_score_) {
+    SiteEngagementMetrics::RecordScoreDecayedFrom(raw_score_);
+    SiteEngagementMetrics::RecordScoreDecayedTo(decayed_score);
+  }
+
   // As the score is about to be updated, commit any decay that has happened
   // since the last update.
-  raw_score_ = DecayedScore();
+  raw_score_ = decayed_score;
 
   base::Time now = clock_->Now();
   if (!last_engagement_time_.is_null() &&
       now.LocalMidnight() != last_engagement_time_.LocalMidnight()) {
     points_added_today_ = 0;
+  }
+
+  if (points_added_today_ == 0) {
+    // Award bonus engagement for the first engagement of the day for a site.
+    points += GetFirstDailyEngagementPoints();
+    SiteEngagementMetrics::RecordEngagement(
+        SiteEngagementMetrics::ENGAGEMENT_FIRST_DAILY_ENGAGEMENT);
   }
 
   double to_add = std::min(kMaxPoints - raw_score_,
@@ -228,7 +267,15 @@ void SiteEngagementScore::AddPoints(double points) {
   last_engagement_time_ = now;
 }
 
-bool SiteEngagementScore::MaxPointsPerDayAdded() {
+void SiteEngagementScore::Reset(double points) {
+  raw_score_ = points;
+  points_added_today_ = 0;
+
+  // This must be set in order to prevent the score from decaying when read.
+  last_engagement_time_ = clock_->Now();
+}
+
+bool SiteEngagementScore::MaxPointsPerDayAdded() const {
   if (!last_engagement_time_.is_null() &&
       clock_->Now().LocalMidnight() != last_engagement_time_.LocalMidnight()) {
     return false;
@@ -290,8 +337,7 @@ double SiteEngagementScore::DecayedScore() const {
     return raw_score_;
 
   int periods = days_since_engagement / GetDecayPeriodInDays();
-  double decayed_score = raw_score_ - periods * GetDecayPoints();
-  return std::max(0.0, decayed_score);
+  return std::max(0.0, raw_score_ - periods * GetDecayPoints());
 }
 
 double SiteEngagementScore::BonusScore() const {
@@ -301,6 +347,24 @@ double SiteEngagementScore::BonusScore() const {
     return GetWebAppInstalledPoints();
 
   return 0;
+}
+
+void SiteEngagementScore::SetParamValuesForTesting() {
+  param_values[MAX_POINTS_PER_DAY] = 5;
+  param_values[DECAY_PERIOD_IN_DAYS] = 7;
+  param_values[DECAY_POINTS] = 5;
+  param_values[NAVIGATION_POINTS] = 0.5;
+  param_values[USER_INPUT_POINTS] = 0.05;
+  param_values[VISIBLE_MEDIA_POINTS] = 0.02;
+  param_values[HIDDEN_MEDIA_POINTS] = 0.01;
+  param_values[WEB_APP_INSTALLED_POINTS] = 5;
+  param_values[BOOTSTRAP_POINTS] = 8;
+  param_values[MEDIUM_ENGAGEMENT_BOUNDARY] = 5;
+  param_values[HIGH_ENGAGEMENT_BOUNDARY] = 50;
+
+  // This is set to zero to avoid interference with tests and is set when
+  // testing this functionality.
+  param_values[FIRST_DAILY_ENGAGEMENT] = 0;
 }
 
 const char SiteEngagementService::kEngagementParams[] = "SiteEngagement";
@@ -379,6 +443,25 @@ void SiteEngagementService::HandleMediaPlaying(const GURL& url,
   RecordMetrics();
 }
 
+void SiteEngagementService::ResetScoreForURL(const GURL& url, double score) {
+  DCHECK(url.is_valid());
+  DCHECK_GE(score, 0);
+  DCHECK_LE(score, SiteEngagementScore::kMaxPoints);
+
+  HostContentSettingsMap* settings_map =
+    HostContentSettingsMapFactory::GetForProfile(profile_);
+  scoped_ptr<base::DictionaryValue> score_dict =
+      GetScoreDictForOrigin(settings_map, url);
+  SiteEngagementScore engagement_score(clock_.get(), *score_dict);
+
+  engagement_score.Reset(score);
+  if (engagement_score.UpdateScoreDict(score_dict.get())) {
+    settings_map->SetWebsiteSettingDefaultScope(
+        url, GURL(), CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT, std::string(),
+        score_dict.release());
+  }
+}
+
 void SiteEngagementService::OnURLsDeleted(
     history::HistoryService* history_service,
     bool all_history,
@@ -422,7 +505,7 @@ void SiteEngagementService::SetLastShortcutLaunchTime(const GURL& url) {
   }
 }
 
-double SiteEngagementService::GetScore(const GURL& url) {
+double SiteEngagementService::GetScore(const GURL& url) const {
   HostContentSettingsMap* settings_map =
     HostContentSettingsMapFactory::GetForProfile(profile_);
   scoped_ptr<base::DictionaryValue> score_dict =
@@ -432,7 +515,7 @@ double SiteEngagementService::GetScore(const GURL& url) {
   return score.Score();
 }
 
-double SiteEngagementService::GetTotalEngagementPoints() {
+double SiteEngagementService::GetTotalEngagementPoints() const {
   std::map<GURL, double> score_map = GetScoreMap();
 
   double total_score = 0;
@@ -442,7 +525,7 @@ double SiteEngagementService::GetTotalEngagementPoints() {
   return total_score;
 }
 
-std::map<GURL, double> SiteEngagementService::GetScoreMap() {
+std::map<GURL, double> SiteEngagementService::GetScoreMap() const {
   HostContentSettingsMap* settings_map =
       HostContentSettingsMapFactory::GetForProfile(profile_);
   scoped_ptr<ContentSettingsForOneType> engagement_settings =
@@ -461,6 +544,53 @@ std::map<GURL, double> SiteEngagementService::GetScoreMap() {
   }
 
   return score_map;
+}
+
+bool SiteEngagementService::IsBootstrapped() {
+  return GetTotalEngagementPoints() >=
+         SiteEngagementScore::GetBootstrapPoints();
+}
+
+SiteEngagementService::EngagementLevel
+SiteEngagementService::GetEngagementLevel(const GURL& url) const {
+  DCHECK_LT(SiteEngagementScore::GetMediumEngagementBoundary(),
+            SiteEngagementScore::GetHighEngagementBoundary());
+  double score = GetScore(url);
+  if (score == 0)
+    return ENGAGEMENT_LEVEL_NONE;
+
+  if (score < SiteEngagementScore::GetMediumEngagementBoundary())
+    return ENGAGEMENT_LEVEL_LOW;
+
+  if (score < SiteEngagementScore::GetHighEngagementBoundary())
+    return ENGAGEMENT_LEVEL_MEDIUM;
+
+  if (score < SiteEngagementScore::kMaxPoints)
+    return ENGAGEMENT_LEVEL_HIGH;
+
+  return ENGAGEMENT_LEVEL_MAX;
+}
+
+bool SiteEngagementService::IsEngagementAtLeast(
+    const GURL& url,
+    EngagementLevel level) const {
+  DCHECK_LT(SiteEngagementScore::GetMediumEngagementBoundary(),
+            SiteEngagementScore::GetHighEngagementBoundary());
+  double score = GetScore(url);
+  switch (level) {
+    case ENGAGEMENT_LEVEL_NONE:
+      return true;
+    case ENGAGEMENT_LEVEL_LOW:
+      return score > 0;
+    case ENGAGEMENT_LEVEL_MEDIUM:
+      return score >= SiteEngagementScore::GetMediumEngagementBoundary();
+    case ENGAGEMENT_LEVEL_HIGH:
+      return score >= SiteEngagementScore::GetHighEngagementBoundary();
+    case ENGAGEMENT_LEVEL_MAX:
+      return score == SiteEngagementScore::kMaxPoints;
+  }
+  NOTREACHED();
+  return false;
 }
 
 SiteEngagementService::SiteEngagementService(Profile* profile,
@@ -549,7 +679,7 @@ void SiteEngagementService::RecordMetrics() {
 }
 
 double SiteEngagementService::GetMedianEngagement(
-    std::map<GURL, double>& score_map) {
+    std::map<GURL, double>& score_map) const {
   if (score_map.size() == 0)
     return 0;
 
@@ -569,7 +699,7 @@ double SiteEngagementService::GetMedianEngagement(
     return (scores[mid - 1] + scores[mid]) / 2;
 }
 
-int SiteEngagementService::OriginsWithMaxDailyEngagement() {
+int SiteEngagementService::OriginsWithMaxDailyEngagement() const {
   HostContentSettingsMap* settings_map =
       HostContentSettingsMapFactory::GetForProfile(profile_);
   scoped_ptr<ContentSettingsForOneType> engagement_settings =
@@ -594,7 +724,7 @@ int SiteEngagementService::OriginsWithMaxDailyEngagement() {
 }
 
 int SiteEngagementService::OriginsWithMaxEngagement(
-    std::map<GURL, double>& score_map) {
+    std::map<GURL, double>& score_map) const {
   int total_origins = 0;
 
   for (const auto& value : score_map)

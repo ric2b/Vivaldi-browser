@@ -6,13 +6,13 @@ import("//testing/test.gni")
 
 test("mojo_public_application_unittests") {
   sources = [
-    "service_registry_unittest.cc",
+    "interface_registry_unittest.cc",
   ]
 
   deps = [
     "//base",
+    "//mojo/edk/test:run_all_unittests",
     "//mojo/shell/public/cpp",
     "//testing/gtest",
-    "//third_party/mojo/src/mojo/edk/test:run_all_unittests",
   ]
 }

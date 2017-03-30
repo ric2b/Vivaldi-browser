@@ -107,7 +107,6 @@ struct CONTENT_EXPORT WebPreferences {
   bool hyperlink_auditing_enabled;
   bool allow_universal_access_from_file_urls;
   bool allow_file_access_from_file_urls;
-  bool webaudio_enabled;
   bool experimental_webgl_enabled;
   bool pepper_3d_enabled;
   bool flash_3d_enabled;
@@ -136,9 +135,11 @@ struct CONTENT_EXPORT WebPreferences {
   // requested (thereby preventing user override).
   bool strict_mixed_content_checking;
   // Strict powerful feature restrictions block insecure usage of powerful
-  // features (like geolocation) that we haven't yet disabled for the web at
-  // large.
+  // features (like device orientation) that we haven't yet disabled for the web
+  // at large.
   bool strict_powerful_feature_restrictions;
+  // TODO(jww): Remove when WebView no longer needs this exception.
+  bool allow_geolocation_on_insecure_origins;
   // Disallow user opt-in for blockable mixed content.
   bool strictly_block_blockable_mixed_content;
   bool block_mixed_plugin_content;
@@ -190,6 +191,8 @@ struct CONTENT_EXPORT WebPreferences {
 
   ImageAnimationPolicy animation_policy;
 
+  bool user_gesture_required_for_presentation;
+
 #if defined(OS_ANDROID)
   bool text_autosizing_enabled;
   float font_scale_factor;
@@ -225,6 +228,7 @@ struct CONTENT_EXPORT WebPreferences {
   // chrome, except for the cases where it would require lots of extra work for
   // the embedder to use the same default value.
   WebPreferences();
+  WebPreferences(const WebPreferences& other);
   ~WebPreferences();
 };
 

@@ -6,13 +6,6 @@
   'variables': {
     'content_shell_product_name': 'Content Shell',
     'content_shell_version': '99.77.34.5',
-    'conditions': [
-      ['OS=="linux"', {
-       'use_custom_freetype%': 1,
-      }, {
-       'use_custom_freetype%': 0,
-      }],
-    ],
   },
   'targets': [
     {
@@ -89,6 +82,11 @@
         'shell/android/shell_jni_registrar.h',
         'shell/android/shell_manager.cc',
         'shell/android/shell_manager.h',
+        'shell/app/blink_test_platform_support.h',
+        'shell/app/blink_test_platform_support_android.cc',
+        'shell/app/blink_test_platform_support_linux.cc',
+        'shell/app/blink_test_platform_support_mac.mm',
+        'shell/app/blink_test_platform_support_win.cc',
         'shell/app/paths_mac.h',
         'shell/app/paths_mac.mm',
         'shell/app/shell_crash_reporter_client.cc',
@@ -97,8 +95,8 @@
         'shell/app/shell_main_delegate.h',
         'shell/app/shell_main_delegate_mac.h',
         'shell/app/shell_main_delegate_mac.mm',
-        'shell/browser/blink_test_controller.cc',
-        'shell/browser/blink_test_controller.h',
+        'shell/browser/layout_test/blink_test_controller.cc',
+        'shell/browser/layout_test/blink_test_controller.h',
         'shell/browser/layout_test/layout_test_android.cc',
         'shell/browser/layout_test/layout_test_android.h',
         'shell/browser/layout_test/layout_test_bluetooth_adapter_provider.cc',
@@ -133,8 +131,10 @@
         'shell/browser/layout_test/layout_test_resource_dispatcher_host_delegate.h',
         'shell/browser/layout_test/layout_test_url_request_context_getter.cc',
         'shell/browser/layout_test/layout_test_url_request_context_getter.h',
-        'shell/browser/notify_done_forwarder.cc',
-        'shell/browser/notify_done_forwarder.h',
+        'shell/browser/layout_test/notify_done_forwarder.cc',
+        'shell/browser/layout_test/notify_done_forwarder.h',
+        'shell/browser/layout_test/test_info_extractor.cc',
+        'shell/browser/layout_test/test_info_extractor.h',
         'shell/browser/shell.cc',
         'shell/browser/shell.h',
         'shell/browser/shell_access_token_store.cc',
@@ -235,11 +235,6 @@
         },
       },
       'conditions': [
-        ['OS=="win" and win_use_allocator_shim==1', {
-          'dependencies': [
-            '../base/allocator/allocator.gyp:allocator',
-          ],
-        }],
         ['OS=="win"', {
           'resource_include_dirs': [
             '<(SHARED_INTERMEDIATE_DIR)/content/app/strings',
@@ -262,6 +257,7 @@
         ['OS=="linux"', {
           'dependencies': [
             '../build/linux/system.gyp:fontconfig',
+            '../third_party/freetype2/freetype2.gyp:freetype2',
           ],
         }],
         ['use_x11 == 1', {
@@ -281,10 +277,9 @@
             '../components/components.gyp:breakpad_host',
           ],
         }],
-        ['(OS=="linux" or OS=="android") and use_allocator!="none"', {
-          'dependencies': [
-            # This is needed by content/app/content_main_runner.cc
-            '../base/allocator/allocator.gyp:allocator',
+        ['debug_devtools==1', {
+          'defines': [
+            'DEBUG_DEVTOOLS=1',
           ],
         }],
         ['use_aura==1', {
@@ -324,11 +319,6 @@
             '../ui/wm/wm.gyp:wm_test_support',
            ],
         }], # chromeos==1
-        ['use_custom_freetype==1', {
-          'dependencies': [
-             '../third_party/freetype2/freetype2.gyp:freetype2',
-          ],
-        }],
         ['enable_plugins==0', {
           'sources!': [
             'shell/browser/shell_plugin_service_filter.cc',
@@ -470,11 +460,6 @@
         },
       },
       'conditions': [
-        ['OS=="win" and win_use_allocator_shim==1', {
-          'dependencies': [
-            '../base/allocator/allocator.gyp:allocator',
-          ],
-        }],
         ['OS=="win"', {
           'sources': [
             'shell/app/shell.rc',
@@ -488,19 +473,21 @@
               },
             },
           },
-        }],  # OS=="win"
-        ['OS == "win"', {
           'dependencies': [
             '../sandbox/sandbox.gyp:sandbox',
           ],
+          'conditions': [
+            ['win_console_app==1', {
+              'defines': ['WIN_CONSOLE_APP'],
+            }, { # else win_console_app==0
+              'msvs_settings': {
+                'VCLinkerTool': {
+                  'SubSystem': '2',  # Set /SUBSYSTEM:WINDOWS
+                },
+              },
+            }],
+          ],
         }],  # OS=="win"
-        ['OS=="win" and asan==0', {
-          'msvs_settings': {
-            'VCLinkerTool': {
-              'SubSystem': '2',  # Set /SUBSYSTEM:WINDOWS
-            },
-          },
-        }],  # OS=="win" and asan==0
         ['OS=="mac"', {
           'product_name': '<(content_shell_product_name)',
           'dependencies!': [
@@ -563,7 +550,6 @@
           'sources': [
             'shell/tools/plugin/PluginObject.cpp',
             'shell/tools/plugin/PluginObject.h',
-            'shell/tools/plugin/PluginObjectMac.mm',
             'shell/tools/plugin/PluginTest.cpp',
             'shell/tools/plugin/PluginTest.h',
             'shell/tools/plugin/TestObject.cpp',
@@ -929,7 +915,7 @@
               }],
             ],
           },
-          'includes': [ 
+          'includes': [
             '../build/android/v8_external_startup_data_arch_suffix.gypi',
             '../build/java_apk.gypi',
           ],

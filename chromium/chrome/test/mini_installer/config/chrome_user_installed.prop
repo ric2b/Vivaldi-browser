@@ -1,6 +1,7 @@
 {
   "Files": {
     "$LOCAL_APPDATA\\$CHROME_DIR\\Application\\chrome.exe": {"exists": true},
+    "$LOCAL_APPDATA\\$CHROME_DIR\\Application\\chrome.VisualElementsManifest.xml": {"exists": true},
     "$LOCAL_APPDATA\\$CHROME_DIR\\Application\\$MINI_INSTALLER_FILE_VERSION\\vivaldi.dll":
         {"exists": true},
     "$LOCAL_APPDATA\\$CHROME_DIR\\Application\\$MINI_INSTALLER_FILE_VERSION\\chrome_elf.dll":
@@ -43,8 +44,7 @@
       }
     },
     "HKEY_CURRENT_USER\\Software\\Classes\\$CHROME_SHORT_NAME$USER_SPECIFIC_REGISTRY_SUFFIX": {
-      "condition": "$WINDOWS_VERSION >= $VERSION_WIN8",
-      "exists": "required"
+      "exists": "forbidden"
     }
   }
 }

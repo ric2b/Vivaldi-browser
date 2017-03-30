@@ -14,23 +14,13 @@ import("//third_party/protobuf/proto_library.gni")
 import("channel.gni")
 
 manifest_package = "org.chromium.chrome"
-if (enable_configuration_policy) {
-  configuration_policy = 1
-} else {
-  configuration_policy = 0
-}
 
-chrome_public_jinja_variables = [
-  "channel=$android_channel",
-  "manifest_package=$manifest_package",
-  "configuration_policy=$configuration_policy",
-]
+chrome_public_jinja_variables = default_chrome_public_jinja_variables +
+                                [ "manifest_package=$manifest_package" ]
 
-chrome_sync_shell_jinja_variables = [
-  "channel=$android_channel",
-  "manifest_package=org.chromium.chrome.sync_shell",
-  "configuration_policy=$configuration_policy",
-]
+chrome_sync_shell_jinja_variables =
+    default_chrome_public_jinja_variables +
+    [ "manifest_package=org.chromium.chrome.sync_shell" ]
 
 chrome_apk_gypi = exec_script("//build/gypi_to_gn.py",
                               [ rebase_path("chrome_apk.gyp") ],
@@ -134,9 +124,10 @@ android_library("chrome_java") {
     "//components/safe_json/android:safe_json_java",
     "//components/variations/android:variations_java",
     "//components/web_contents_delegate_android:web_contents_delegate_android_java",
-    "//components/web_restriction:web_restriction_java",
+    "//components/web_restrictions:web_restrictions_java",
     "//content/public/android:content_java",
     "//media/base/android:media_java",
+    "//media/capture/video/android:capture_java",
     "//media/midi:midi_java",
     "//net/android:net_java",
     "//printing:printing_java",
@@ -155,6 +146,7 @@ android_library("chrome_java") {
     "//third_party/cacheinvalidation:cacheinvalidation_proto_java",
     "//third_party/gif_player:gif_player_java",
     "//third_party/jsr-305:jsr_305_javalib",
+    "//third_party/leakcanary:leakcanary_java",
     "//ui/android:ui_java",
     "//ui/android:ui_java_resources",
     google_play_services_library,
@@ -165,10 +157,15 @@ android_library("chrome_java") {
     ":chrome_android_java_google_api_keys_srcjar",
     ":chrome_version_srcjar",
     ":resource_id_javagen",
+    "//base:base_build_config_gen",
     "//chrome:content_setting_javagen",
     "//chrome:content_settings_type_javagen",
+    "//chrome:data_use_ui_message_enum_javagen",
     "//chrome:signin_metrics_enum_javagen",
   ]
+
+  # New versions of BuildConfig.java will be created when creating an apk.
+  jar_excluded_patterns = [ "*/BuildConfig.class" ]
 
   # TODO(sievers): Split java code into components. Not everything
   # is really all that UI related here.
@@ -178,11 +175,14 @@ android_library("chrome_java") {
     srcjar_deps += [
       ":custom_tabs_service_aidl",
       "//chrome:page_info_connection_type_javagen",
-      "//components/enhanced_bookmarks:enhanced_bookmarks_java_enums_srcjar",
+      "//chrome:website_settings_action_javagen",
+      "//components/infobars/core:infobar_enums_java",
       "//components/offline_pages:offline_page_feature_enums_java",
       "//components/offline_pages:offline_page_model_enums_java",
+      "//components/omnibox/browser:autocomplete_match_javagen",
       "//components/omnibox/browser:autocomplete_match_type_javagen",
       "//components/security_state:security_state_enums_java",
+      "//components/signin/core/browser:investigated_scenario_java",
     ]
 
     deps += [
@@ -230,6 +230,8 @@ java_cpp_enum("chrome_android_java_enums_srcjar") {
     "//chrome/browser/android/most_visited_sites.cc",
     "//chrome/browser/android/shortcut_info.h",
     "//chrome/browser/android/tab_android.h",
+    "//chrome/browser/browsing_data/browsing_data_counter_utils.h",
+    "//chrome/browser/browsing_data/browsing_data_remover.h",
     "//chrome/browser/profiles/profile_metrics.h",
     "//chrome/browser/ui/android/infobars/infobar_android.h",
   ]
@@ -259,19 +261,27 @@ junit_binary("chrome_junit_tests") {
   java_files = [
     "junit/src/org/chromium/chrome/browser/SSLClientCertificateRequestTest.java",
     "junit/src/org/chromium/chrome/browser/crash/LogcatExtractionCallableTest.java",
+    "junit/src/org/chromium/chrome/browser/bookmarks/BookmarkUtilsTest.java",
     "junit/src/org/chromium/chrome/browser/externalauth/ExternalAuthUtilsTest.java",
     "junit/src/org/chromium/chrome/browser/firstrun/FirstRunFlowSequencerTest.java",
-    "junit/src/org/chromium/chrome/browser/gcore/GoogleApiClientConnectionHelperTest.java",
+    "junit/src/org/chromium/chrome/browser/gcore/GoogleApiClientHelperTest.java",
     "junit/src/org/chromium/chrome/browser/invalidation/InvalidationControllerTest.java",
     "junit/src/org/chromium/chrome/browser/media/remote/AbstractMediaRouteControllerTest.java",
     "junit/src/org/chromium/chrome/browser/media/remote/MediaUrlResolverTest.java",
     "junit/src/org/chromium/chrome/browser/media/remote/RemoteVideoInfoTest.java",
-    "junit/src/org/chromium/chrome/browser/media/remote/TransportControlTest.java",
-    "junit/src/org/chromium/chrome/browser/media/router/ChromeMediaRouterTest.java",
+    "junit/src/org/chromium/chrome/browser/media/router/ChromeMediaRouterRouteTest.java",
+    "junit/src/org/chromium/chrome/browser/media/router/ChromeMediaRouterSinkObservationTest.java",
+    "junit/src/org/chromium/chrome/browser/media/router/ChromeMediaRouterTestBase.java",
+    "junit/src/org/chromium/chrome/browser/media/router/cast/DiscoveryCallbackTest.java",
+    "junit/src/org/chromium/chrome/browser/media/router/cast/TestUtils.java",
+    "junit/src/org/chromium/chrome/browser/notifications/NotificationUIManagerUnitTest.java",
+    "junit/src/org/chromium/chrome/browser/ntp/NativePageFactoryTest.java",
+    "junit/src/org/chromium/chrome/browser/offlinepages/OfflinePageUtilsTest.java",
     "junit/src/org/chromium/chrome/browser/omaha/ResponseParserTest.java",
     "junit/src/org/chromium/chrome/browser/omaha/VersionNumberTest.java",
+    "junit/src/org/chromium/chrome/browser/snackbar/SnackbarCollectionUnitTest.java",
+    "junit/src/org/chromium/chrome/browser/superviseduser/SupervisedUserContentProviderUnitTest.java",
     "junit/src/org/chromium/chrome/browser/util/NonThreadSafeTest.java",
-    "junit/src/org/chromium/chrome/browser/notifications/NotificationUIManagerUnitTest.java",
     "junit/src/org/chromium/chrome/browser/webapps/WebappDataStorageTest.java",
     "junit/src/org/chromium/chrome/browser/webapps/WebappRegistryTest.java",
   ]
@@ -280,12 +290,16 @@ junit_binary("chrome_junit_tests") {
     "//base:base_java",
     "//base:base_java_test_support",
     "//base:base_junit_test_support",
+    "//components/bookmarks/common/android:bookmarks_java",
     "//components/invalidation/impl:java",
+    "//components/web_restrictions:web_restrictions_java",
+    "//content/public/android:content_java",
     "//sync:sync_java_test_support",
     "//sync/android:sync_java",
     "//third_party/android_tools:android_support_v7_mediarouter_java",
     "//third_party/cacheinvalidation:cacheinvalidation_javalib",
     "//third_party/junit:hamcrest",
+    "//ui/android:ui_java",
     google_play_services_library,
   ]
 }
@@ -344,7 +358,7 @@ android_library("chrome_shared_test_java") {
     "//components/precache/android:precache_java",
     "//components/precache/android:precache_javatests",
     "//components/web_contents_delegate_android:web_contents_delegate_android_java",
-    "//components/web_restriction:web_restriction_java",
+    "//components/web_restrictions:web_restrictions_java",
     "//content/public/android:content_java",
     "//content/public/test/android:content_java_test_support",
     "//net/android:net_java",
@@ -458,14 +472,6 @@ template("chrome_public_apk_tmpl_shared") {
 
     native_lib_version_rule = "//build/util:chrome_version_json"
 
-    # Only attempt loading the library from the APK for 64 bit devices
-    # until the number of 32 bit devices which don't support this
-    # approach falls to a minimal level -  http://crbug.com/390618.
-    if (chromium_linker_supported &&
-        (target_cpu == "arm64" || target_cpu == "x64")) {
-      load_library_from_apk = chrome_public_apk_load_library_from_apk
-    }
-
     deps += [
       ":chrome_java",
       ":chrome_public_apk_assets",
@@ -532,12 +538,14 @@ instrumentation_test_apk("chrome_public_test_apk") {
   apk_name = "ChromePublicTest"
   apk_under_test = ":chrome_public_apk"
   android_manifest = chrome_public_test_apk_manifest
+
   deps = [
     ":chrome_public_test_apk_manifest",
     ":chrome_shared_test_java",
   ]
-  data_deps = [
+  additional_apks = [
     "//chrome/test/android/chrome_public_test_support:chrome_public_test_support_apk",
+    "//net/android:net_test_support_apk",
   ]
   isolate_file = "../chrome_public_test_apk.isolate"
   proguard_enabled = !is_debug

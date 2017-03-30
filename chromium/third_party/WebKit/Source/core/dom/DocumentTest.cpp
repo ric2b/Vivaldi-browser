@@ -90,6 +90,7 @@ public:
     }
 
     MOCK_METHOD1(didChangeVisibilityState, void(PageVisibilityState));
+    MOCK_METHOD0(willDetachDocument, void());
 
 private:
     MockDocumentVisibilityObserver(Document& document) : DocumentVisibilityObserver(document) { }
@@ -258,7 +259,7 @@ TEST_F(DocumentTest, LinkManifest)
 
 TEST_F(DocumentTest, referrerPolicyParsing)
 {
-    EXPECT_EQ(ReferrerPolicyDefault, document().referrerPolicy());
+    EXPECT_EQ(ReferrerPolicyDefault, document().getReferrerPolicy());
 
     struct TestCase {
         const char* policy;
@@ -280,7 +281,7 @@ TEST_F(DocumentTest, referrerPolicyParsing)
         document().setReferrerPolicy(ReferrerPolicyDefault);
 
         document().processReferrerPolicy(test.policy);
-        EXPECT_EQ(test.expected, document().referrerPolicy()) << test.policy;
+        EXPECT_EQ(test.expected, document().getReferrerPolicy()) << test.policy;
     }
 }
 
@@ -300,12 +301,12 @@ TEST_F(DocumentTest, FrameTimingRelayout)
     EXPECT_FALSE(document().view()->frameTimingRequestsDirty());
 
     // Just calling update should have no effect.
-    document().updateLayoutTreeIfNeeded();
+    document().updateLayoutTree();
     EXPECT_FALSE(document().view()->frameTimingRequestsDirty());
 
     // Calling update with a style change should flag Frame Timing as dirty.
     document().setChildNeedsStyleRecalc();
-    document().updateLayoutTreeIfNeeded();
+    document().updateLayoutTree();
     EXPECT_TRUE(document().view()->frameTimingRequestsDirty());
 }
 

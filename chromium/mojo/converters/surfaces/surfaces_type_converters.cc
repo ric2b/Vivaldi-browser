@@ -30,17 +30,12 @@
 
 using mus::mojom::Color;
 using mus::mojom::ColorPtr;
-using mus::mojom::CommandBufferNamespace;
 using mus::mojom::CompositorFrame;
 using mus::mojom::CompositorFramePtr;
 using mus::mojom::CompositorFrameMetadata;
 using mus::mojom::CompositorFrameMetadataPtr;
 using mus::mojom::DebugBorderQuadState;
 using mus::mojom::DebugBorderQuadStatePtr;
-using mus::mojom::Mailbox;
-using mus::mojom::MailboxPtr;
-using mus::mojom::MailboxHolder;
-using mus::mojom::MailboxHolderPtr;
 using mus::mojom::Pass;
 using mus::mojom::PassPtr;
 using mus::mojom::Quad;
@@ -60,8 +55,6 @@ using mus::mojom::SurfaceId;
 using mus::mojom::SurfaceIdPtr;
 using mus::mojom::SurfaceQuadState;
 using mus::mojom::SurfaceQuadStatePtr;
-using mus::mojom::SyncToken;
-using mus::mojom::SyncTokenPtr;
 using mus::mojom::TextureQuadState;
 using mus::mojom::TextureQuadStatePtr;
 using mus::mojom::TileQuadState;
@@ -76,7 +69,7 @@ namespace mojo {
 
 #define ASSERT_ENUM_VALUES_EQUAL(value)                                     \
   static_assert(cc::DrawQuad::value == static_cast<cc::DrawQuad::Material>( \
-                                           mus::mojom::MATERIAL_##value),   \
+                                           mus::mojom::Material::value),    \
                 #value " enum value must match")
 
 ASSERT_ENUM_VALUES_EQUAL(DEBUG_BORDER);
@@ -92,7 +85,7 @@ ASSERT_ENUM_VALUES_EQUAL(YUV_VIDEO_CONTENT);
 
 static_assert(cc::YUVVideoDrawQuad::REC_601 ==
                   static_cast<cc::YUVVideoDrawQuad::ColorSpace>(
-                      mus::mojom::YUV_COLOR_SPACE_REC_601),
+                      mus::mojom::YUVColorSpace::REC_601),
               "REC_601 enum value must match");
 // TODO(jamesr): Add REC_709 and JPEG to the YUVColorSpace enum upstream in
 // mojo.
@@ -119,7 +112,7 @@ bool ConvertDrawQuad(const QuadPtr& input,
                      cc::RenderPass* render_pass,
                      CustomSurfaceConverter* custom_converter) {
   switch (input->material) {
-    case mus::mojom::MATERIAL_DEBUG_BORDER: {
+    case mus::mojom::Material::DEBUG_BORDER: {
       cc::DebugBorderDrawQuad* debug_border_quad =
           render_pass->CreateAndAppendDrawQuad<cc::DebugBorderDrawQuad>();
       debug_border_quad->SetAll(
@@ -132,7 +125,7 @@ bool ConvertDrawQuad(const QuadPtr& input,
           input->debug_border_quad_state->width);
       break;
     }
-    case mus::mojom::MATERIAL_RENDER_PASS: {
+    case mus::mojom::Material::RENDER_PASS: {
       cc::RenderPassDrawQuad* render_pass_quad =
           render_pass->CreateAndAppendDrawQuad<cc::RenderPassDrawQuad>();
       RenderPassQuadState* render_pass_quad_state =
@@ -156,7 +149,7 @@ bool ConvertDrawQuad(const QuadPtr& input,
           cc::FilterOperations());  // TODO(jamesr): background_filters
       break;
     }
-    case mus::mojom::MATERIAL_SOLID_COLOR: {
+    case mus::mojom::Material::SOLID_COLOR: {
       if (input->solid_color_quad_state.is_null())
         return false;
       cc::SolidColorDrawQuad* color_quad =
@@ -171,7 +164,7 @@ bool ConvertDrawQuad(const QuadPtr& input,
           input->solid_color_quad_state->force_anti_aliasing_off);
       break;
     }
-    case mus::mojom::MATERIAL_SURFACE_CONTENT: {
+    case mus::mojom::Material::SURFACE_CONTENT: {
       if (input->surface_quad_state.is_null())
         return false;
 
@@ -190,7 +183,7 @@ bool ConvertDrawQuad(const QuadPtr& input,
           input->surface_quad_state->surface.To<cc::SurfaceId>());
       break;
     }
-    case mus::mojom::MATERIAL_TEXTURE_CONTENT: {
+    case mus::mojom::Material::TEXTURE_CONTENT: {
       TextureQuadStatePtr& texture_quad_state =
           input->texture_quad_state;
       if (texture_quad_state.is_null() ||
@@ -211,7 +204,7 @@ bool ConvertDrawQuad(const QuadPtr& input,
           texture_quad_state->y_flipped, texture_quad_state->nearest_neighbor);
       break;
     }
-    case mus::mojom::MATERIAL_TILED_CONTENT: {
+    case mus::mojom::Material::TILED_CONTENT: {
       TileQuadStatePtr& tile_state = input->tile_quad_state;
       if (tile_state.is_null())
         return false;
@@ -229,7 +222,7 @@ bool ConvertDrawQuad(const QuadPtr& input,
                         tile_state->nearest_neighbor);
       break;
     }
-    case mus::mojom::MATERIAL_YUV_VIDEO_CONTENT: {
+    case mus::mojom::Material::YUV_VIDEO_CONTENT: {
       YUVVideoQuadStatePtr& yuv_state = input->yuv_video_quad_state;
       if (yuv_state.is_null())
         return false;
@@ -245,7 +238,9 @@ bool ConvertDrawQuad(const QuadPtr& input,
           yuv_state->y_plane_resource_id, yuv_state->u_plane_resource_id,
           yuv_state->v_plane_resource_id, yuv_state->a_plane_resource_id,
           static_cast<cc::YUVVideoDrawQuad::ColorSpace>(
-              yuv_state->color_space));
+              yuv_state->color_space),
+          yuv_state->resource_offset,
+          yuv_state->resource_multiplier);
       break;
     }
     default:
@@ -411,6 +406,8 @@ QuadPtr TypeConverter<QuadPtr, cc::DrawQuad>::Convert(
       yuv_state->a_plane_resource_id = yuv_quad->a_plane_resource_id();
       yuv_state->color_space =
           static_cast<YUVColorSpace>(yuv_quad->color_space);
+      yuv_state->resource_offset = yuv_quad->resource_offset;
+      yuv_state->resource_multiplier = yuv_quad->resource_multiplier;
       quad->yuv_video_quad_state = std::move(yuv_state);
       break;
     }
@@ -514,74 +511,6 @@ TypeConverter<scoped_ptr<cc::RenderPass>, PassPtr>::Convert(
 }
 
 // static
-MailboxPtr TypeConverter<MailboxPtr, gpu::Mailbox>::Convert(
-    const gpu::Mailbox& input) {
-  Array<int8_t> name(64);
-  for (int i = 0; i < 64; ++i) {
-    name[i] = input.name[i];
-  }
-  MailboxPtr mailbox(Mailbox::New());
-  mailbox->name = std::move(name);
-  return mailbox;
-}
-
-// static
-gpu::Mailbox TypeConverter<gpu::Mailbox, MailboxPtr>::Convert(
-    const MailboxPtr& input) {
-  gpu::Mailbox mailbox;
-  if (!input->name.is_null())
-    mailbox.SetName(&input->name.storage()[0]);
-  return mailbox;
-}
-
-// static
-SyncTokenPtr TypeConverter<SyncTokenPtr, gpu::SyncToken>::Convert(
-    const gpu::SyncToken& input) {
-  DCHECK(!input.HasData() || input.verified_flush());
-  SyncTokenPtr sync_token(SyncToken::New());
-  sync_token->verified_flush = input.verified_flush();
-  sync_token->namespace_id =
-      static_cast<CommandBufferNamespace>(input.namespace_id());
-  sync_token->extra_data_field = input.extra_data_field();
-  sync_token->command_buffer_id = input.command_buffer_id();
-  sync_token->release_count = input.release_count();
-  return sync_token;
-}
-
-// static
-gpu::SyncToken TypeConverter<gpu::SyncToken, SyncTokenPtr>::Convert(
-    const SyncTokenPtr& input) {
-  const gpu::CommandBufferNamespace namespace_id =
-      static_cast<gpu::CommandBufferNamespace>(input->namespace_id);
-  gpu::SyncToken sync_token(namespace_id, input->extra_data_field,
-                            input->command_buffer_id, input->release_count);
-  if (input->verified_flush)
-    sync_token.SetVerifyFlush();
-
-  return sync_token;
-}
-
-// static
-MailboxHolderPtr TypeConverter<MailboxHolderPtr, gpu::MailboxHolder>::Convert(
-    const gpu::MailboxHolder& input) {
-  MailboxHolderPtr holder(MailboxHolder::New());
-  holder->mailbox = Mailbox::From<gpu::Mailbox>(input.mailbox);
-  holder->sync_token = SyncToken::From<gpu::SyncToken>(input.sync_token);
-  holder->texture_target = input.texture_target;
-  return holder;
-}
-
-// static
-gpu::MailboxHolder TypeConverter<gpu::MailboxHolder, MailboxHolderPtr>::Convert(
-    const MailboxHolderPtr& input) {
-  gpu::MailboxHolder holder;
-  holder.mailbox = input->mailbox.To<gpu::Mailbox>();
-  holder.sync_token = input->sync_token.To<gpu::SyncToken>();
-  holder.texture_target = input->texture_target;
-  return holder;
-}
-
-// static
 TransferableResourcePtr
 TypeConverter<TransferableResourcePtr, cc::TransferableResource>::Convert(
     const cc::TransferableResource& input) {
@@ -590,7 +519,7 @@ TypeConverter<TransferableResourcePtr, cc::TransferableResource>::Convert(
   transferable->format = static_cast<ResourceFormat>(input.format);
   transferable->filter = input.filter;
   transferable->size = Size::From(input.size);
-  transferable->mailbox_holder = MailboxHolder::From(input.mailbox_holder);
+  transferable->mailbox_holder = input.mailbox_holder;
   transferable->read_lock_fences_enabled = input.read_lock_fences_enabled;
   transferable->is_software = input.is_software;
   transferable->is_overlay_candidate = input.is_overlay_candidate;
@@ -606,7 +535,7 @@ TypeConverter<cc::TransferableResource, TransferableResourcePtr>::Convert(
   transferable.format = static_cast<cc::ResourceFormat>(input->format);
   transferable.filter = input->filter;
   transferable.size = input->size.To<gfx::Size>();
-  transferable.mailbox_holder = input->mailbox_holder.To<gpu::MailboxHolder>();
+  transferable.mailbox_holder = input->mailbox_holder;
   transferable.read_lock_fences_enabled = input->read_lock_fences_enabled;
   transferable.is_software = input->is_software;
   transferable.is_overlay_candidate = input->is_overlay_candidate;
@@ -619,7 +548,7 @@ TypeConverter<ReturnedResourcePtr, cc::ReturnedResource>::Convert(
     const cc::ReturnedResource& input) {
   ReturnedResourcePtr returned = ReturnedResource::New();
   returned->id = input.id;
-  returned->sync_token = SyncToken::From<gpu::SyncToken>(input.sync_token);
+  returned->sync_token = input.sync_token;
   returned->count = input.count;
   returned->lost = input.lost;
   return returned;
@@ -631,7 +560,7 @@ TypeConverter<cc::ReturnedResource, ReturnedResourcePtr>::Convert(
     const ReturnedResourcePtr& input) {
   cc::ReturnedResource returned;
   returned.id = input->id;
-  returned.sync_token = input->sync_token.To<gpu::SyncToken>();
+  returned.sync_token = input->sync_token;
   returned.count = input->count;
   returned.lost = input->lost;
   return returned;

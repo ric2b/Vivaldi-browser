@@ -7,31 +7,27 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "mojo/shell/public/cpp/application_connection.h"
-#include "mojo/shell/public/cpp/application_impl.h"
+#include "base/message_loop/message_loop.h"
+#include "mojo/shell/public/cpp/connection.h"
+#include "mojo/shell/public/cpp/connector.h"
 
 namespace content {
 
 const char kTestMojoAppUrl[] = "system:content_mojo_test";
 
-TestMojoApp::TestMojoApp() : service_binding_(this), app_(nullptr) {
+TestMojoApp::TestMojoApp() : service_binding_(this) {
 }
 
 TestMojoApp::~TestMojoApp() {
 }
 
-void TestMojoApp::Initialize(mojo::ApplicationImpl* app) {
-  app_ = app;
-}
-
-bool TestMojoApp::ConfigureIncomingConnection(
-    mojo::ApplicationConnection* connection) {
+bool TestMojoApp::AcceptConnection(mojo::Connection* connection) {
   requestor_url_ = GURL(connection->GetRemoteApplicationURL());
-  connection->AddService<TestMojoService>(this);
+  connection->AddInterface<TestMojoService>(this);
   return true;
 }
 
-void TestMojoApp::Create(mojo::ApplicationConnection* connection,
+void TestMojoApp::Create(mojo::Connection* connection,
                          mojo::InterfaceRequest<TestMojoService> request) {
   DCHECK(!service_binding_.is_bound());
   service_binding_.Bind(std::move(request));
@@ -39,8 +35,7 @@ void TestMojoApp::Create(mojo::ApplicationConnection* connection,
 
 void TestMojoApp::DoSomething(const DoSomethingCallback& callback) {
   callback.Run();
-  DCHECK(app_);
-  app_->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
 }
 
 void TestMojoApp::GetRequestorURL(const GetRequestorURLCallback& callback) {

@@ -21,7 +21,9 @@ enum IPCMessageStart {
   WorkerMsgStart,
   NaClMsgStart,
   UtilityMsgStart,
+  GpuChannelMsgStart,
   GpuMsgStart,
+  MediaMsgStart,
   ServiceMsgStart,
   PpapiMsgStart,
   FirefoxImporterUnittestMsgStart,
@@ -75,7 +77,6 @@ enum IPCMessageStart {
   AppShimMsgStart,
   WebRtcLoggingMsgStart,
   TtsMsgStart,
-  MemoryBenchmarkMsgStart,
   WebSocketMsgStart,
   NaClHostMsgStart,
   WebRTCIdentityMsgStart,
@@ -136,6 +137,8 @@ enum IPCMessageStart {
   StartupMetricMsgStart,
   ArcCameraMsgStart,
   DWriteFontProxyMsgStart,
+  MediaPlayerDelegateMsgStart,
+  SurfaceViewManagerMsgStart,
   LastIPCMsgStart  // Must come last.
 };
 

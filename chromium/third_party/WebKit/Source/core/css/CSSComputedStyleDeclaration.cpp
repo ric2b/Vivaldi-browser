@@ -88,6 +88,9 @@ static const CSSPropertyID staticComputableProperties[] = {
     CSSPropertyBottom,
     CSSPropertyBoxShadow,
     CSSPropertyBoxSizing,
+    CSSPropertyBreakAfter,
+    CSSPropertyBreakBefore,
+    CSSPropertyBreakInside,
     CSSPropertyCaptionSide,
     CSSPropertyClear,
     CSSPropertyClip,
@@ -146,14 +149,12 @@ static const CSSPropertyID staticComputableProperties[] = {
     CSSPropertyPaddingLeft,
     CSSPropertyPaddingRight,
     CSSPropertyPaddingTop,
-    CSSPropertyPageBreakAfter,
-    CSSPropertyPageBreakBefore,
-    CSSPropertyPageBreakInside,
     CSSPropertyPointerEvents,
     CSSPropertyPosition,
     CSSPropertyResize,
     CSSPropertyRight,
     CSSPropertyScrollBehavior,
+    CSSPropertySnapHeight,
     CSSPropertySpeak,
     CSSPropertyTableLayout,
     CSSPropertyTabSize,
@@ -208,16 +209,13 @@ static const CSSPropertyID staticComputableProperties[] = {
     CSSPropertyWebkitBoxPack,
     CSSPropertyWebkitBoxReflect,
     CSSPropertyWebkitClipPath,
-    CSSPropertyWebkitColumnBreakAfter,
-    CSSPropertyWebkitColumnBreakBefore,
-    CSSPropertyWebkitColumnBreakInside,
-    CSSPropertyWebkitColumnCount,
-    CSSPropertyWebkitColumnGap,
-    CSSPropertyWebkitColumnRuleColor,
-    CSSPropertyWebkitColumnRuleStyle,
-    CSSPropertyWebkitColumnRuleWidth,
-    CSSPropertyWebkitColumnSpan,
-    CSSPropertyWebkitColumnWidth,
+    CSSPropertyColumnCount,
+    CSSPropertyColumnGap,
+    CSSPropertyColumnRuleColor,
+    CSSPropertyColumnRuleStyle,
+    CSSPropertyColumnRuleWidth,
+    CSSPropertyColumnSpan,
+    CSSPropertyColumnWidth,
     CSSPropertyWebkitFilter,
     CSSPropertyBackdropFilter,
     CSSPropertyAlignContent,
@@ -555,7 +553,7 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
 
     Document& document = styledNode->document();
 
-    document.updateLayoutTreeForNodeIfNeeded(styledNode);
+    document.updateLayoutTreeForNode(styledNode);
 
     // The style recalc could have caused the styled node to be discarded or replaced
     // if it was a PseudoElement so we need to update it.

@@ -3,7 +3,6 @@
 <translationbundle lang="ro">
 <translation id="1001534784610492198">Arhiva programului de instalare este deteriorată sau nevalidă. Descarcă din nou Google Chrome.</translation>
 <translation id="1013290471399003443">Chrome s-a asigurat că certificatul acestui site a fost emis de <ph name="ISSUER" />. Serverul a oferit informații valide privind Certificate Transparency.</translation>
-<translation id="1016765312371154165">Chrome nu s-a închis corect.</translation>
 <translation id="103396972844768118">Informații importante cu privire la datele dvs. Chrome</translation>
 <translation id="1035334672863811645">conectează-te la Chrome</translation>
 <translation id="1061441684050139317">Chrome are nevoie de acces la microfon pentru a-l acorda acestui site.</translation>
@@ -51,7 +50,6 @@ Dacă totuși vă conectați, informațiile Chrome cum ar fi marcajele, istoricu
 <translation id="2397416548179033562">Afișează meniul Chrome</translation>
 <translation id="2429317896000329049">Google Chrome nu a putut sincroniza datele, deoarece sincronizarea nu este disponibilă pentru domeniul dvs.</translation>
 <translation id="2485422356828889247">Dezinstalează</translation>
-<translation id="2576431527583832481">Chrome a devenit și mai bun! Este disponibilă o nouă versiune.</translation>
 <translation id="2580411288591421699">Nu se poate instala aceeași versiune Google Chrome care rulează în prezent. Închide Google Chrome și încearcă din nou.</translation>
 <translation id="2582790009689336987">În curând, acest computer nu va mai primi actualizări pentru Google Chrome, deoarece acest sistem Linux nu va mai fi acceptat.</translation>
 <translation id="2588322182880276190">Sigla Chrome</translation>
@@ -111,7 +109,6 @@ Dacă totuși vă conectați, informațiile Chrome cum ar fi marcajele, istoricu
 <translation id="4633000520311261472">Pentru ca browserul Chrome să fie mai sigur, am dezactivat câteva extensii care nu sunt incluse în <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> și care este posibil să fi fost adăugate fără știrea dvs.</translation>
 <translation id="4700157086864140907">Google Chrome poate oferi o verificare a ortografiei mai inteligentă prin trimiterea textului introdus în browser la serverele Google, permițându-vă să utilizați aceeași tehnologie de verificare a ortografiei utilizată de Căutare Google.</translation>
 <translation id="4728575227883772061">Instalarea nu a reușit din cauza unei erori necunoscute. Dacă Google Chrome rulează în acest moment, închide-l și încearcă din nou.</translation>
-<translation id="473775607612524610">Actualizează</translation>
 <translation id="4743926867934016338">Acceptă și caută</translation>
 <translation id="4751441238232965030">În curând, acest computer nu va mai primi actualizări pentru Google Chrome pe 32 de biți. Fă upgrade la Google Chrome pe 64 de biți.</translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
@@ -208,7 +205,6 @@ Dacă totuși vă conectați, informațiile Chrome cum ar fi marcajele, istoricu
 <translation id="7808348361785373670">Elimină din Chrome...</translation>
 <translation id="7825851276765848807">Instalarea nu a reușit din cauza unei erori neprecizate. Descarci Google Chrome din nou.</translation>
 <translation id="7890208801193284374">Dacă permiteți accesul la un computer, familia și prietenii pot să navigheze separat și să configureze Chrome cum doresc.</translation>
-<translation id="8000275528373650868">Google Chrome necesită Windows Vista sau Windows XP cu SP2 sau o versiune ulterioară.</translation>
 <translation id="8005540215158006229">Chrome este aproape pregătit.</translation>
 <translation id="8008534537613507642">Reinstalați Chrome</translation>
 <translation id="8030318113982266900">Se actualizează dispozitivul pentru canalul <ph name="CHANNEL_NAME" />...</translation>
@@ -237,6 +233,7 @@ Dacă totuși vă conectați, informațiile Chrome cum ar fi marcajele, istoricu
 <translation id="8851136666856101339">principal</translation>
 <translation id="8862326446509486874">Nu ai drepturile adecvate pentru instalarea la nivel de sistem. Încearcă să rulezi din nou programul de instalare ca Administrator.</translation>
 <translation id="9026991721384951619">Sistemul de operare Chrome nu a putut sincroniza datele, deoarece detaliile de conectare pentru contul dvs. nu sunt actualizate.</translation>
+<translation id="9067395829937117663">Google Chrome necesită Windows 7 sau o versiune ulterioară.</translation>
 <translation id="9102715433345326100">Acest fișier este rău-intenționat și a fost blocat de Chrome.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Avertisment:<ph name="END_BOLD" /> Google Chrome nu poate împiedica extensiile să înregistreze istoricul navigării. Pentru a dezactiva această extensie în modul incognito, debifează această opțiune.</translation>
 <translation id="911206726377975832">Ștergi și datele de navigare?</translation>

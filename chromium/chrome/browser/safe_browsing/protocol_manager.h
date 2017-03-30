@@ -87,20 +87,6 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
                            bool is_download,
                            bool is_extended_reporting);
 
-  // Retrieve the full hash for a set of prefixes, and invoke the callback
-  // argument when the results are retrieved. The callback may be invoked
-  // synchronously. Uses the V4 Safe Browsing protocol.
-  virtual void GetV4FullHashes(const std::vector<SBPrefix>& prefixes,
-                               const std::vector<PlatformType>& platforms,
-                               ThreatType threat_type,
-                               FullHashCallback callback);
-
-  // Retrieve the full hash and API metadata for a set of prefixes, and invoke
-  // the callback argument when the results are retrieved. The callback may be
-  // invoked synchronously. Uses the V4 Safe Browsing protocol.
-  virtual void GetFullHashesWithApis(const std::vector<SBPrefix>& prefixes,
-                                     FullHashCallback callback);
-
   // Forces the start of next update after |interval| time.
   void ForceScheduleNextUpdate(base::TimeDelta interval);
 
@@ -163,9 +149,6 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
     // Gethash attempted during error backoff, no request sent.
     GET_HASH_BACKOFF_ERROR,
 
-    // Gethash attempted before min wait duration elapsed, no request sent.
-    GET_HASH_MIN_WAIT_DURATION_ERROR,
-
     // Memory space for histograms is determined by the max.  ALWAYS
     // ADD NEW VALUES BEFORE THIS ONE.
     GET_HASH_RESULT_MAX
@@ -175,9 +158,6 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
   // hash is triggered by download related lookup.
   static void RecordGetHashResult(bool is_download,
                                   ResultType result_type);
-
-  // Record a V4 GetHash result.
-  static void RecordGetV4HashResult(ResultType result_type);
 
   // Record HTTP response code when there's no error in fetching an HTTP
   // request, and the error code, when there is.
@@ -191,11 +171,6 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
   // Returns whether another update is currently scheduled.
   bool IsUpdateScheduled() const;
 
-  // Called when app changes status of foreground or background.
-  void SetAppInForeground(bool foreground) {
-    app_in_foreground_ = foreground;
-  }
-
  protected:
   // Constructs a SafeBrowsingProtocolManager for |delegate| that issues
   // network requests using |request_context_getter|.
@@ -207,23 +182,9 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
  private:
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest, TestBackOffTimes);
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest, TestChunkStrings);
-  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest, TestGetHashUrl);
-  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest,
-                           TestGetV4HashUrl);
-  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest,
-                           TestGetV4HashRequest);
-  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest,
-                           TestParseV4HashResponse);
-  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest,
-                           TestParseV4HashResponseWrongThreatEntryType);
-  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest,
-                           TestParseV4HashResponseSocialEngineeringThreatType);
-  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest,
-                           TestParseV4HashResponseNonPermissionMetadata);
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest,
                            TestGetHashBackOffTimes);
-  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest,
-                           TestGetV4HashBackOffTimes);
+  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest, TestGetHashUrl);
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest, TestNextChunkUrl);
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest, TestUpdateUrl);
   friend class SafeBrowsingServerTest;
@@ -258,26 +219,6 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
   GURL GetHashUrl(bool is_extended_reporting) const;
   // Generates URL for reporting safe browsing hits for UMA users.
 
-  // Generates GetHashWithApis Pver4 request URL for retrieving full hashes.
-  // |request_base64| is the serialized FindFullHashesRequest protocol buffer
-  // encoded in base 64.
-  GURL GetV4HashUrl(const std::string& request_base64) const;
-
-  // Fills a FindFullHashesRequest protocol buffer for a V4 request.
-  // Returns the serialized and base 64 encoded request as a string.
-  std::string GetV4HashRequest(const std::vector<SBPrefix>& prefixes,
-                               const std::vector<PlatformType>& platforms,
-                               ThreatType threat_type);
-
-  // Parses a FindFullHashesResponse protocol buffer and fills the results in
-  // |full_hashes| and |negative_cache_duration|. |data| is a serialized
-  // FindFullHashes protocol buffer. |negative_cache_duration| is the duration
-  // to cache the response for entities that did not match the threat list.
-  // Returns true if parsing is successful, false otherwise.
-  bool ParseV4HashResponse(const std::string& data_base64,
-                           std::vector<SBFullHashResult>* full_hashes,
-                           base::TimeDelta* negative_cache_duration);
-
   // Composes a ChunkUrl based on input string.
   GURL NextChunkUrl(const std::string& input) const;
 
@@ -291,15 +232,6 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
   // 2nd and 5th, and |error_count| is incremented with each call.
   base::TimeDelta GetNextBackOffInterval(size_t* error_count,
                                          size_t* multiplier) const;
-
-  // Worker function for calculating the V4 GetHash backoff times.
-  // |multiplier| is doubled for each consecutive error after the
-  // first, and |error_count| is incremented with each call.
-  static base::TimeDelta GetNextV4BackOffInterval(size_t* error_count,
-                                                  size_t* multiplier);
-
-  // Resets the V4 gethash error counter and multiplier.
-  void ResetGetHashV4Errors();
 
   // Manages our update with the next allowable update time. If 'back_off_' is
   // true, we must decrease the frequency of requests of the SafeBrowsing
@@ -335,10 +267,6 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
   // current time is |now|.
   void HandleGetHashError(const base::Time& now);
 
-  // Updates internal state for each GetHash V4 response error, assuming that
-  // the current time is |now|.
-  void HandleGetHashV4Error(const base::Time& now);
-
   // Helper function for update completion.
   void UpdateFinished(bool success);
   void UpdateFinished(bool success, bool back_off);
@@ -355,6 +283,7 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
   struct FullHashDetails {
     FullHashDetails();
     FullHashDetails(FullHashCallback callback, bool is_download);
+    FullHashDetails(const FullHashDetails& other);
     ~FullHashDetails();
 
     FullHashCallback callback;
@@ -381,12 +310,10 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
   // response, used for request backoff timing.
   size_t update_error_count_;
   size_t gethash_error_count_;
-  size_t gethash_v4_error_count_;
 
   // Multipliers which double (max == 8) for each error after the second.
   size_t update_back_off_mult_;
   size_t gethash_back_off_mult_;
-  size_t gethash_v4_back_off_mult_;
 
   // Multiplier between 0 and 1 to spread clients over an interval.
   float back_off_fuzz_;
@@ -407,7 +334,6 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
   std::deque<ChunkUrl> chunk_request_urls_;
 
   HashRequests hash_requests_;
-  HashRequests v4_hash_requests_;
 
   // True if the service has been given an add/sub chunk but it hasn't been
   // added to the database yet.
@@ -418,10 +344,6 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
 
   // While in GetHash backoff, we can't make another GetHash until this time.
   base::Time next_gethash_time_;
-  // For v4, the next gethash time is set to the backoff time is the last
-  // response was an error, or the minimum wait time if the last response was
-  // successful.
-  base::Time next_gethash_v4_time_;
 
   // Current product version sent in each request.
   std::string version_;
@@ -460,9 +382,6 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
 
   // ID for URLFetchers for testing.
   int url_fetcher_id_;
-
-  // Whether the app is in foreground or background.
-  bool app_in_foreground_;
 
   DISALLOW_COPY_AND_ASSIGN(SafeBrowsingProtocolManager);
 };

@@ -7,7 +7,6 @@
 
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
 #include "chrome/browser/browser_process.h"
@@ -32,6 +31,7 @@
 #include "components/app_modal/javascript_app_modal_dialog.h"
 #include "components/app_modal/native_app_modal_dialog.h"
 #include "components/browser_sync/common/browser_sync_switches.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
@@ -45,7 +45,6 @@
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/cookies/canonical_cookie.h"
-#include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_store.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -404,10 +403,8 @@ class CookieReader : public base::RefCountedThreadSafe<CookieReader> {
   }
 
   void ReadCookiesOnIOThread() {
-    context_->GetURLRequestContext()->cookie_store()->GetCookieMonster()->
-        GetAllCookiesAsync(base::Bind(
-            &CookieReader::OnGetAllCookiesOnUIThread,
-            this));
+    context_->GetURLRequestContext()->cookie_store()->GetAllCookiesAsync(
+        base::Bind(&CookieReader::OnGetAllCookiesOnUIThread, this));
   }
 
   void OnGetAllCookiesOnUIThread(const net::CookieList& cookies) {
@@ -710,8 +707,7 @@ void SetUp() override {
 };
 
 Browser* FindOrCreateVisibleBrowser(Profile* profile) {
-  chrome::ScopedTabbedBrowserDisplayer displayer(
-      profile, chrome::GetActiveDesktop());
+  chrome::ScopedTabbedBrowserDisplayer displayer(profile);
   Browser* browser = displayer.browser();
   if (browser->tab_strip_model()->count() == 0)
     chrome::AddTabAt(browser, GURL(), -1, true);

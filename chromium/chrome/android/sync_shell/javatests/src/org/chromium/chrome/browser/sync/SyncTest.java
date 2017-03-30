@@ -76,6 +76,7 @@ public class SyncTest extends SyncTestBase {
                 // real account rename events instead of the mocks.
                 MockChangeEventChecker eventChecker = new MockChangeEventChecker();
                 eventChecker.insertRenameEvent(oldAccount.name, newAccount.name);
+                SigninHelper.resetAccountRenameEventIndex(mContext);
                 SigninHelper.updateAccountRenameData(mContext, eventChecker);
 
                 // Tell the fake content resolver that a rename had happen and copy over the sync
@@ -86,8 +87,9 @@ public class SyncTest extends SyncTestBase {
                 // Inform the AccountTracker, these would normally be done by account validation
                 // or signin. We will only be calling the testing versions of it.
                 AccountIdProvider provider = AccountIdProvider.getInstance();
-                String[] accountNames = {newAccount.name};
-                String[] accountIds = {provider.getAccountId(mContext, accountNames[0])};
+                String[] accountNames = {oldAccount.name, newAccount.name};
+                String[] accountIds = {provider.getAccountId(mContext, accountNames[0]),
+                                       provider.getAccountId(mContext, accountNames[1])};
                 AccountTrackerService.get(mContext).syncForceRefreshForTest(
                         accountIds, accountNames);
 

@@ -14,10 +14,6 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/field_trial.h"
-#include "base/prefs/json_pref_store.h"
-#include "base/prefs/pref_filter.h"
-#include "base/prefs/pref_member.h"
-#include "base/prefs/pref_service.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
@@ -36,6 +32,7 @@
 #include "chrome/browser/net/http_server_properties_manager_factory.h"
 #include "chrome/browser/net/predictor.h"
 #include "chrome/browser/net/quota_policy_channel_id_store.h"
+#include "chrome/browser/net/sdch_owner_pref_storage.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_io_data.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings_factory.h"
@@ -50,6 +47,10 @@
 #include "components/data_reduction_proxy/core/browser/data_store_impl.h"
 #include "components/domain_reliability/monitor.h"
 #include "components/net_log/chrome_net_log.h"
+#include "components/prefs/json_pref_store.h"
+#include "components/prefs/pref_filter.h"
+#include "components/prefs/pref_member.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
 #include "content/public/browser/notification_service.h"
@@ -508,7 +509,7 @@ void ProfileImplIOData::InitializeInternal(
         new QuotaPolicyChannelIDStore(
             lazy_params_->channel_id_path,
             BrowserThread::GetBlockingPool()->GetSequencedTaskRunner(
-                BrowserThread::GetBlockingPool()->GetSequenceToken()),
+                base::SequencedWorkerPool::GetSequenceToken()),
             lazy_params_->special_storage_policy.get());
     channel_id_service = new net::ChannelIDService(
         new net::DefaultChannelIDStore(channel_id_db.get()),
@@ -560,7 +561,8 @@ void ProfileImplIOData::InitializeInternal(
   sdch_manager_.reset(new net::SdchManager);
   sdch_policy_.reset(new net::SdchOwner(sdch_manager_.get(), main_context));
   main_context->set_sdch_manager(sdch_manager_.get());
-  sdch_policy_->EnablePersistentStorage(network_json_store_.get());
+  sdch_policy_->EnablePersistentStorage(scoped_ptr<net::SdchOwner::PrefStorage>(
+      new chrome_browser_net::SdchOwnerPrefStorage(network_json_store_.get())));
 
   // Create a media request context based on the main context, but using a
   // media cache.  It shares the same job factory as the main context.
@@ -587,14 +589,10 @@ void ProfileImplIOData::
       lazy_params_->session_cookie_mode,
       NULL, NULL);
   cookie_config.crypto_delegate = cookie_config::GetCookieCryptoDelegate();
+  // Enable cookies for chrome-extension URLs.
+  cookie_config.cookieable_schemes.push_back(extensions::kExtensionScheme);
   net::CookieStore* extensions_cookie_store =
       content::CreateCookieStore(cookie_config);
-  // Enable cookies for chrome-extension URLs.
-  const char* const schemes[] = {
-      extensions::kExtensionScheme
-  };
-  extensions_cookie_store->GetCookieMonster()->SetCookieableSchemes(
-      schemes, arraysize(schemes));
   extensions_context->set_cookie_store(extensions_cookie_store);
 
   scoped_ptr<net::URLRequestJobFactoryImpl> extensions_job_factory(

@@ -19,7 +19,6 @@
 namespace syncer_v2 {
 
 class DataBatch;
-class MetadataBatch;
 class MetadataChangeList;
 
 // Interface implemented by model types to receive updates from sync via the
@@ -29,9 +28,7 @@ class SYNC_EXPORT ModelTypeService {
  public:
   typedef base::Callback<void(syncer::SyncError, scoped_ptr<DataBatch>)>
       DataCallback;
-  typedef base::Callback<void(syncer::SyncError, scoped_ptr<MetadataBatch>)>
-      MetadataCallback;
-  typedef std::vector<std::string> ClientKeyList;
+  typedef std::vector<std::string> ClientTagList;
 
   ModelTypeService();
 
@@ -45,7 +42,7 @@ class SYNC_EXPORT ModelTypeService {
   // to be called when sync is first turned on, not on every restart.
   virtual syncer::SyncError MergeSyncData(
       scoped_ptr<MetadataChangeList> metadata_change_list,
-      EntityDataList entity_data_list) = 0;
+      EntityDataMap entity_data_map) = 0;
 
   // Apply changes from the sync server locally.
   // Please note that |entity_changes| might have fewer entries than
@@ -56,11 +53,8 @@ class SYNC_EXPORT ModelTypeService {
       scoped_ptr<MetadataChangeList> metadata_change_list,
       EntityChangeList entity_changes) = 0;
 
-  // Asynchronously retrieve the sync metadata.
-  virtual void LoadMetadata(MetadataCallback callback) = 0;
-
-  // Asynchronously retrieve the corresponding sync data for |client_keys|.
-  virtual void GetData(ClientKeyList client_keys, DataCallback callback) = 0;
+  // Asynchronously retrieve the corresponding sync data for |client_tags|.
+  virtual void GetData(ClientTagList client_tags, DataCallback callback) = 0;
 
   // Asynchronously retrieve all of the local sync data.
   virtual void GetAllData(DataCallback callback) = 0;
@@ -68,17 +62,22 @@ class SYNC_EXPORT ModelTypeService {
   // Get or generate a client tag for |entity_data|.
   virtual std::string GetClientTag(const EntityData& entity_data) = 0;
 
+  // Overridable notification for when the processor is set. This is typically
+  // when the service should start loading metadata and then subsequently giving
+  // it to the processor.
+  virtual void OnChangeProcessorSet() = 0;
+
   // TODO(skym): See crbug/547087, do we need all these accessors?
-  syncer_v2::ModelTypeChangeProcessor* change_processor();
+  ModelTypeChangeProcessor* change_processor() const;
 
   void set_change_processor(
-      scoped_ptr<syncer_v2::ModelTypeChangeProcessor> change_processor);
+      scoped_ptr<ModelTypeChangeProcessor> change_processor);
 
   void clear_change_processor();
 
  private:
   // Recieves ownership in set_change_processor(...).
-  scoped_ptr<syncer_v2::ModelTypeChangeProcessor> change_processor_;
+  scoped_ptr<ModelTypeChangeProcessor> change_processor_;
 };
 
 }  // namespace syncer_v2

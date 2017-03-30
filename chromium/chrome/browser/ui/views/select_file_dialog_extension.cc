@@ -10,7 +10,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
-#include "base/prefs/pref_service.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/apps/app_window_registry_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
@@ -30,6 +29,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/extensions/extension_dialog.h"
 #include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/native_app_window.h"
@@ -123,10 +123,8 @@ void FindRuntimeContext(gfx::NativeWindow owner_window,
   } else {
     // If the owning window is still unknown, this could be a background page or
     // and extension popup. Use the last active browser.
-    if (!owner_browser) {
-      owner_browser =
-          chrome::FindLastActiveWithHostDesktopType(chrome::GetActiveDesktop());
-    }
+    if (!owner_browser)
+      owner_browser = chrome::FindLastActive();
     if (owner_browser) {
       *base_window = owner_browser->window();
       *web_contents = owner_browser->tab_strip_model()->GetActiveWebContents();

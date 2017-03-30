@@ -11,30 +11,72 @@
 # much always the same as the Ninja target name, since GYP target names are not
 # hierarchical).
 #
-# The 'type' field is used to determine what the command line for the test
+# The "label" field specifies the matching GN label for the given ninja
+# target.
+#
+# The "type" field is used to determine what the command line for the test
 # needs to be; valid values are:
 #
-# "windowed_test_launcher"
-# : the test is a gtest-based test that uses the 'brave-new-test-launcher'
-#   from //base/test:test_support and needs to run under Xvfb if run on
-#   an X11-based platform (use_x11=true).
+#  "windowed_test_launcher"
+#  : the test is a gtest-based test that uses the "brave-new-test-launcher"
+#    from //base/test:test_support and needs to run under Xvfb if run on
+#    an X11-based platform (use_x11=true).
 #  "console_test_launcher"
-#  : the test is a gtest-based test that uses the 'brave-new-test-launcher'
+#  : the test is a gtest-based test that uses the "brave-new-test-launcher"
 #    from //base/test:test_support but does not need Xvfb.
 #  "gpu_browser_test"
 #  : the test is a subset of the browser_tests that will be run against
 #    a real GPU.
 #  "raw"
 #  : the test is a standalone executable; it may take an optional list of
-#    command line arguments in the 'args' field, but otherwise needs no
+#    command line arguments in the "args" field, but otherwise needs no
 #    extra files or special handling.
+#  "script"
+#  : the test is a python script; the path to the script is specified in
+#    the "script" field.
 #  "unknown"
 #  : (the default), which indicates that we don't know what the command line
 #    needs to be (this is a fatal error).
+#
+# The optional "executable" field can be used to override the name
+# of the binary to run. If the field is not specified, the binary
+# name will be assumed to be the same as the ninja build target name.
+# On Windows, ".exe" will be automatically appended if need be, so
+# the executable name (and target name) should not contain an ".exe".
+#
+# The optional "args" field can be used to append extra command line
+# args onto the command line determined by the "type". If not specified,
+# it defaults to an empty list (no extra args).
+#
+# The optional "label_type" field can be used in conjunction with
+# "type" == "console_test_launcher" or "type" == "windowed_test_launcher"
+# to indicate that even though the command line
+# to use follows the test_launcher patterns, the actual GN label refers
+# to a different type of thing (usually a "group") and so MB can find
+# the generated runtime files in the right place. This is used, for
+# example, in content_site_isolation_browsertests .
+#
+# The optional "script" field is used when "type" == "script", and
+# specifies the GN path to the corresponding python file, e.g.
+# "//testing/scripts/foo.py".
 
 {
   "accessibility_unittests":  {
     "label": "//ui/accessibility:accessibility_unittests",
+    "type": "raw",
+    "args": [],
+  },
+  "android_webview_unittests": {
+    "label": "//android_webview/test:android_webview_unittests",
+    "type": "console_test_launcher",
+  },
+  "angle_deqp_gles2_tests": {
+    "label": "//third_party/angle/src/tests:angle_deqp_gles2_tests",
+    "type": "raw",
+    "args": [],
+  },
+  "angle_deqp_gles3_tests": {
+    "label": "//third_party/angle/src/tests:angle_deqp_gles3_tests",
     "type": "raw",
     "args": [],
   },
@@ -58,7 +100,7 @@
   },
   "ash_unittests": {
     "label": "//ash:ash_unittests",
-    "type": "unknown",
+    "type": "windowed_test_launcher",
   },
   "audio_unittests": {
     "label": "//media:audio_unittests",
@@ -71,6 +113,10 @@
   },
   "base_unittests": {
     "label": "//base:base_unittests",
+    "type": "console_test_launcher",
+  },
+  "battor_agent_unittests": {
+    "label": "//tools/battor_agent:battor_agent_unittests",
     "type": "console_test_launcher",
   },
   "blimp_unittests": {
@@ -120,9 +166,13 @@
     "label": "//cc:cc_unittests",
     "type": "windowed_test_launcher",
   },
+  "chrome_app_unittests": {
+    "label": "//chrome/test:chrome_app_unittests",
+    "type": "console_test_launcher",
+  },
   "chrome_elf_unittests": {
     "label": "//chrome_elf:chrome_elf_unittests",
-    "type": "unknown",
+    "type": "raw",
   },
   "chromedriver_unittests": {
     "label": "//chrome/test/chromedriver:chromedriver_unittests",
@@ -153,13 +203,20 @@
     "type": "raw",
     "args": [],
   },
+  "content_site_isolation_browsertests": {
+    "label": "//content/test:content_site_isolation_browsertests",
+    "label_type": "group",
+    "type": "windowed_test_launcher",
+    "executable": "content_browsertests",
+    "args": ["--site-per-process", "--test-launcher-filter-file=../../testing/buildbot/filters/site-per-process.content_browsertests.filter"],
+  },
   "content_unittests": {
     "label": "//content/test:content_unittests",
     "type": "windowed_test_launcher",
   },
   "courgette_unittests": {
     "label": "//courgette:courgette_unittests",
-    "type": "unknown",
+    "type": "console_test_launcher",
   },
   "crypto_unittests": {
     "label": "//crypto:crypto_unittests",
@@ -229,13 +286,9 @@
     "label": "//gpu:gpu_unittests",
     "type": "windowed_test_launcher",
   },
-  "html_viewer_unittests": {
-    "label": "//components/html_viewer:html_viewer_unittests",
-    "type": "unknown",
-  },
   "installer_util_unittests": {
     "label": "//chrome/installer/util:installer_util_unittests",
-    "type": "unknown",
+    "type": "console_test_launcher",
   },
   "interactive_ui_tests": {
     "label": "//chrome/test:interactive_ui_tests",
@@ -257,6 +310,16 @@
     "label": "//ui/keyboard:keyboard_unittests",
     "type": "unknown",
   },
+  # See http://crbug.com/585151
+  #"libaddressinput_unittests": {
+    #"label": "//third_party/libaddressinput:libaddressinput_unittests",
+    #"type": "console_test_launcher",
+  #},
+  # See http://crbug.com/585151
+  #"libphonenumber_unittests": {
+    #"label": "//third_party/libphonenumber:libphonenumber_unittests",
+    #"type": "console_test_launcher",
+  #},
   "media_unittests": {
     "label": "//media:media_unittests",
     "type": "windowed_test_launcher",
@@ -273,24 +336,32 @@
     "label": "//mojo/common:mojo_common_unittests",
     "type": "console_test_launcher",
   },
+  "mojo_js_integration_tests": {
+    "label": "//mojo/edk/js/test:js_integration_tests",
+    "type": "console_test_launcher",
+  },
+  "mojo_js_unittests": {
+    "label": "//mojo/edk/js/test:js_unittests",
+    "type": "console_test_launcher",
+  },
   "mojo_public_application_unittests": {
-    "label": "//third_party/mojo/src/mojo/edk/test:mojo_public_applicaiton_unittests",
+    "label": "//mojo/edk/test:mojo_public_applicaiton_unittests",
     "type": "unknown",
   },
   "mojo_public_bindings_unittests": {
-    "label": "//third_party/mojo/src/mojo/edk/test:mojo_public_bindings_unittests",
+    "label": "//mojo/edk/test:mojo_public_bindings_unittests",
     "type": "console_test_launcher",
   },
   "mojo_public_environment_unittests": {
-    "label": "//third_party/mojo/src/mojo/edk/test:mojo_public_environment_unittests",
+    "label": "//mojo/edk/test:mojo_public_environment_unittests",
     "type": "console_test_launcher",
   },
   "mojo_public_system_unittests": {
-    "label": "//third_party/mojo/src/mojo/edk/test:mojo_public_system_unittests",
+    "label": "//mojo/edk/test:mojo_public_system_unittests",
     "type": "console_test_launcher",
   },
   "mojo_public_utility_unittests": {
-    "label": "//third_party/mojo/src/mojo/edk/test:mojo_public_utility_unittests",
+    "label": "//mojo/edk/test:mojo_public_utility_unittests",
     "type": "console_test_launcher",
   },
   "mojo_runner_host_unittests": {
@@ -306,7 +377,7 @@
     "type": "unknown",
   },
   "mojo_system_unittests": {
-    "label": "//third_party/mojo/src/mojo/edk/system:mojo_system_unittests",
+    "label": "//mojo/edk/system:mojo_system_unittests",
     "type": "unknown",
   },
   "mojo_view_manager_lib_unittests": {
@@ -315,7 +386,7 @@
   },
   "message_center_unittests": {
     "label": "//ui/message_center:message_center_unittests",
-    "type": "unknown",
+    "type": "console_test_launcher",
   },
   "mash_unittests": {
     "label": "//mash:mash_unittests",
@@ -336,7 +407,7 @@
   },
   "ppapi_unittests": {
     "label": "//ppapi:ppapi_unittests",
-    "type": "unknown",
+    "type": "console_test_launcher",
   },
   "printing_unittests": {
     "label": "//printing:printing_unittests",
@@ -361,19 +432,19 @@
   },
   "sbox_integration_tests": {
     "label": "//sandbox/win:sbox_integration_tests",
-    "type": "unknown",
+    "type": "console_test_launcher",
   },
   "sbox_unittests": {
     "label": "//sandbox/win:sbox_unittests",
-    "type": "unknown",
+    "type": "console_test_launcher",
   },
   "sbox_validation_tests": {
     "label": "//sandbox/win:sbox_validation_tests",
-    "type": "unknown",
+    "type": "console_test_launcher",
   },
   "setup_unittests": {
     "label": "//chrome/installer/setup:setup_unittests",
-    "type": "unknown",
+    "type": "console_test_launcher",
   },
   "skia_unittests": {
     "label": "//skia:skia_unittests",
@@ -459,17 +530,21 @@
     "label": "//url:url_unittests",
     "type": "console_test_launcher",
   },
-  "window_manager_unittests": {
-    "label": "//components/mus/ws:window_manager_unittests",
-    "type": "unknown",
+  "views_mus_unittests": {
+    "label": "//ui/views/mus:views_mus_unittests",
+    "type": "windowed_test_launcher",
   },
   "views_unittests": {
     "label": "//ui/views:views_unittests",
-    "type": "unknown",
+    "type": "windowed_test_launcher",
   },
   "webkit_unit_tests": {
     "label": "//third_party/WebKit/Source/web:webkit_unit_tests",
     "type": "console_test_launcher",
+  },
+  "window_manager_unittests": {
+    "label": "//components/mus/ws:window_manager_unittests",
+    "type": "unknown",
   },
   "wm_unittests": {
     "label": "//ui/wm:wm_unittests",

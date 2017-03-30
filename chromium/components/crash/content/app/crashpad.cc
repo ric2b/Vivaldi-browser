@@ -7,16 +7,22 @@
 #include <stddef.h>
 #include <string.h>
 
+#if BUILDFLAG(ENABLE_KASKO)
+#include <psapi.h>
+#endif  // BUILDFLAG(ENABLE_KASKO)
+
 #include <algorithm>
 #include <map>
 #include <vector>
 
 #include "base/auto_reset.h"
+#include "base/base_paths.h"
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
@@ -34,6 +40,12 @@
 #if defined(OS_POSIX)
 #include <unistd.h>
 #endif  // OS_POSIX
+
+#if BUILDFLAG(ENABLE_KASKO)
+#include "base/win/scoped_handle.h"
+#include "base/win/win_util.h"
+#include "third_party/crashpad/crashpad/snapshot/api/module_annotations_win.h"
+#endif
 
 namespace crash_reporter {
 
@@ -93,9 +105,28 @@ void DumpWithoutCrashing() {
   CRASHPAD_SIMULATE_CRASH();
 }
 
-}  // namespace
+#if BUILDFLAG(ENABLE_KASKO)
+HMODULE GetModuleInProcess(base::ProcessHandle process,
+                           const wchar_t* module_name) {
+  std::vector<HMODULE> modules_snapshot;
+  if (!base::win::GetLoadedModulesSnapshot(process, &modules_snapshot))
+    return nullptr;
 
-void InitializeCrashpad(bool initial_client, const std::string& process_type) {
+  for (HMODULE module : modules_snapshot) {
+    wchar_t current_module_name[MAX_PATH];
+    if (!::GetModuleBaseName(process, module, current_module_name, MAX_PATH))
+      continue;
+
+    if (std::wcscmp(module_name, current_module_name) == 0)
+      return module;
+  }
+  return nullptr;
+}
+#endif  // BUILDFLAG(ENABLE_KASKO)
+
+void InitializeCrashpadImpl(bool initial_client,
+                            const std::string& process_type,
+                            bool embedded_handler) {
   static bool initialized = false;
   DCHECK(!initialized);
   initialized = true;
@@ -109,16 +140,20 @@ void InitializeCrashpad(bool initial_client, const std::string& process_type) {
     // component can't see Chrome's switches. This is only used for argument
     // sanitization.
     DCHECK(browser_process || process_type == "relauncher");
+#elif defined(OS_WIN)
+    // "Chrome Installer" is the name historically used for installer binaries
+    // as processed by the backend.
+    DCHECK(browser_process || process_type == "Chrome Installer");
 #else
-    DCHECK(browser_process);
+#error Port.
 #endif  // OS_MACOSX
   } else {
     DCHECK(!browser_process);
   }
 
   // database_path is only valid in the browser process.
-  base::FilePath database_path =
-      internal::PlatformCrashpadInitialization(initial_client, browser_process);
+  base::FilePath database_path = internal::PlatformCrashpadInitialization(
+      initial_client, browser_process, embedded_handler);
 
   crashpad::CrashpadInfo* crashpad_info =
       crashpad::CrashpadInfo::GetCrashpadInfo();
@@ -173,7 +208,17 @@ void InitializeCrashpad(bool initial_client, const std::string& process_type) {
   // the same file and line.
   base::debug::SetDumpWithoutCrashingFunction(DumpWithoutCrashing);
 
-  if (browser_process) {
+#if defined(OS_MACOSX)
+  // On Mac, we only want the browser to initialize the database, but not the
+  // relauncher.
+  const bool should_initialize_database_and_set_upload_policy = browser_process;
+#elif defined(OS_WIN)
+  // On Windows, we want both the browser process and the installer and any
+  // other "main, first process" to initialize things. There is no "relauncher"
+  // on Windows, so this is synonymous with initial_client.
+  const bool should_initialize_database_and_set_upload_policy = initial_client;
+#endif
+  if (should_initialize_database_and_set_upload_policy) {
     g_database =
         crashpad::CrashReportDatabase::Initialize(database_path).release();
 
@@ -191,6 +236,19 @@ void InitializeCrashpad(bool initial_client, const std::string& process_type) {
     SetUploadsEnabled(enable_uploads);
   }
 }
+
+}  // namespace
+
+void InitializeCrashpad(bool initial_client, const std::string& process_type) {
+  InitializeCrashpadImpl(initial_client, process_type, false);
+}
+
+#if defined(OS_WIN)
+void InitializeCrashpadWithEmbeddedHandler(bool initial_client,
+                                           const std::string& process_type) {
+  InitializeCrashpadImpl(initial_client, process_type, true);
+}
+#endif  // OS_WIN
 
 void SetUploadsEnabled(bool enable_uploads) {
   if (g_database) {
@@ -246,9 +304,14 @@ void GetUploadedReports(std::vector<UploadedReport>* uploaded_reports) {
 #if BUILDFLAG(ENABLE_KASKO)
 
 void GetCrashKeysForKasko(std::vector<kasko::api::CrashKey>* crash_keys) {
-  // Reserve room for an extra key, the guid.
+  // Get the platform annotations.
+  std::map<std::string, std::string> annotations;
+  internal::GetPlatformCrashpadAnnotations(&annotations);
+
+  // Reserve room for the GUID and the platform annotations.
   crash_keys->clear();
-  crash_keys->reserve(g_simple_string_dictionary->GetCount() + 1);
+  crash_keys->reserve(
+      g_simple_string_dictionary->GetCount() + 1 + annotations.size());
 
   // Set the Crashpad client ID in the crash keys.
   bool got_guid = false;
@@ -275,9 +338,51 @@ void GetCrashKeysForKasko(std::vector<kasko::api::CrashKey>* crash_keys) {
     if (got_guid && ::strncmp(entry->key, kGuid, arraysize(kGuid)) == 0)
       continue;
 
+    // Skip any platform annotations as they'll be set below.
+    if (annotations.count(entry->key))
+      continue;
+
     kasko::api::CrashKey kv;
     wcsncpy_s(kv.name, base::UTF8ToWide(entry->key).c_str(), _TRUNCATE);
     wcsncpy_s(kv.value, base::UTF8ToWide(entry->value).c_str(), _TRUNCATE);
+    crash_keys->push_back(kv);
+  }
+
+  // Merge in the platform annotations.
+  for (const auto& entry : annotations) {
+    kasko::api::CrashKey kv;
+    wcsncpy_s(kv.name, base::UTF8ToWide(entry.first).c_str(), _TRUNCATE);
+    wcsncpy_s(kv.value, base::UTF8ToWide(entry.second).c_str(), _TRUNCATE);
+    crash_keys->push_back(kv);
+  }
+}
+
+void ReadMainModuleAnnotationsForKasko(
+    const base::Process& process,
+    std::vector<kasko::api::CrashKey>* crash_keys) {
+  // Reopen process with necessary access.
+  base::win::ScopedHandle process_handle(::OpenProcess(
+      PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, process.Pid()));
+  if (!process_handle.IsValid())
+    return;
+
+  // The executable name is the same for the browser process and the crash
+  // reporter.
+  base::FilePath exe_path;
+  base::PathService::Get(base::FILE_EXE, &exe_path);
+  HMODULE module = GetModuleInProcess(process_handle.Get(),
+                                      exe_path.BaseName().value().c_str());
+  if (!module)
+    return;
+
+  std::map<std::string, std::string> annotations;
+  crashpad::ReadModuleAnnotations(process_handle.Get(), module, &annotations);
+
+  // Append the annotations to the crash keys.
+  for (const auto& entry : annotations) {
+    kasko::api::CrashKey kv;
+    wcsncpy_s(kv.name, base::UTF8ToWide(entry.first).c_str(), _TRUNCATE);
+    wcsncpy_s(kv.value, base::UTF8ToWide(entry.second).c_str(), _TRUNCATE);
     crash_keys->push_back(kv);
   }
 }

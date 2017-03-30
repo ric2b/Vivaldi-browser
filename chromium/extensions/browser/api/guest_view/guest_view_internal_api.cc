@@ -16,6 +16,8 @@
 #include "extensions/common/api/guest_view_internal.h"
 #include "extensions/common/permissions/permissions_data.h"
 
+#include "app/vivaldi_apptools.h"
+
 using guest_view::GuestViewBase;
 using guest_view::GuestViewManager;
 using guest_view::GuestViewManagerDelegate;
@@ -117,6 +119,14 @@ bool GuestViewInternalDestroyGuestFunction::RunAsync() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
   GuestViewBase* guest = GuestViewBase::From(
       render_frame_host()->GetProcess()->GetID(), params->instance_id);
+
+  if (!guest && vivaldi::IsVivaldiRunning()) {
+    // In Vivaldi guests share the |WebContents| with the tabstrip, and
+    // can be destroyed when the WebContentsDestroyed is called. So this
+    // is not an error.
+    return true;
+  }
+
   if (!guest)
     return false;
   guest->Destroy();

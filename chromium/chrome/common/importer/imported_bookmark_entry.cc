@@ -9,6 +9,9 @@ ImportedBookmarkEntry::ImportedBookmarkEntry()
       is_folder(false),
       speeddial(false){}
 
+ImportedBookmarkEntry::ImportedBookmarkEntry(
+    const ImportedBookmarkEntry& other) = default;
+
 ImportedBookmarkEntry::~ImportedBookmarkEntry() {}
 
 bool ImportedBookmarkEntry::operator==(

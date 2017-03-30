@@ -9,7 +9,8 @@ need to be translated for each locale.-->
   <outputs>
     <!-- TODO add each of your output files.  Modify the three below, and add
     your own for your various languages.  See the user's guide
-    (http://wiki/Main/GritUsersGuide) for more details.
+    (https://www.chromium.org/developers/tools-we-use-in-chromium/grit/grit-users-guide)
+    for more details.
     Note that all output references are relative to the output directory
     which is specified at build time. -->
     <output filename="grit/ui_strings.h" type="rc_header">
@@ -592,11 +593,9 @@ need to be translated for each locale.-->
       </message>
 
       <!-- Message center -->
-      <if expr="use_ash">
-        <message name="IDS_MESSAGE_CENTER_ACCESSIBLE_NAME" desc="The accessible name for the Notification Center window.">
-          Notification Center
-        </message>
-      </if>
+      <message name="IDS_MESSAGE_CENTER_ACCESSIBLE_NAME" desc="The accessible name for the Notification Center window.">
+        Notification Center
+      </message>
       <message name="IDS_MESSAGE_CENTER_NOTIFIER_DISABLE" desc="The menu entry for disabling a notifier from a notification.">
         Disable notifications from <ph name="notifier_name">$1<ex>Notification Galore!</ex></ph>
       </message>

@@ -11,7 +11,6 @@
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 #include "net/tools/quic/quic_client_session.h"
-#include "net/tools/quic/quic_spdy_client_stream.h"
 #include "net/tools/quic/spdy_balsa_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -22,26 +21,30 @@ using net::test::MockConnection;
 using net::test::MockConnectionHelper;
 using net::test::SupportedVersions;
 using net::test::kClientDataStreamId1;
+using net::test::kServerDataStreamId1;
 using net::test::kInitialSessionFlowControlWindowForTest;
 using net::test::kInitialStreamFlowControlWindowForTest;
+using net::test::ValueRestore;
 
 using std::string;
 using testing::StrictMock;
 using testing::TestWithParam;
 
 namespace net {
-namespace tools {
 namespace test {
+
 namespace {
 
 class MockQuicClientSession : public QuicClientSession {
  public:
-  explicit MockQuicClientSession(QuicConnection* connection)
+  explicit MockQuicClientSession(QuicConnection* connection,
+                                 QuicClientPushPromiseIndex* push_promise_index)
       : QuicClientSession(
             DefaultQuicConfig(),
             connection,
             QuicServerId("example.com", 80, PRIVACY_MODE_DISABLED),
-            &crypto_config_),
+            &crypto_config_,
+            push_promise_index),
         crypto_config_(CryptoTestUtils::ProofVerifierForTesting()) {}
   ~MockQuicClientSession() override {}
 
@@ -55,26 +58,38 @@ class MockQuicClientSession : public QuicClientSession {
 
 class QuicSpdyClientStreamTest : public ::testing::Test {
  public:
+  class StreamVisitor;
+
   QuicSpdyClientStreamTest()
       : connection_(
             new StrictMock<MockConnection>(&helper_, Perspective::IS_CLIENT)),
-        session_(connection_),
+        session_(connection_, &push_promise_index_),
         body_("hello world") {
     session_.Initialize();
 
     headers_.SetResponseFirstlineFromStringPieces("HTTP/1.1", "200", "Ok");
     headers_.ReplaceOrAppendHeader("content-length", "11");
 
-    headers_string_ =
-        net::tools::SpdyBalsaUtils::SerializeResponseHeaders(headers_);
+    headers_string_ = net::SpdyBalsaUtils::SerializeResponseHeaders(headers_);
 
     stream_.reset(new QuicSpdyClientStream(kClientDataStreamId1, &session_));
+    stream_visitor_.reset(new StreamVisitor());
+    stream_->set_visitor(stream_visitor_.get());
   }
+
+  class StreamVisitor : public QuicSpdyClientStream::Visitor {
+    void OnClose(QuicSpdyStream* stream) override {
+      DVLOG(1) << "stream " << stream->id();
+    }
+  };
 
   MockConnectionHelper helper_;
   StrictMock<MockConnection>* connection_;
+  QuicClientPushPromiseIndex push_promise_index_;
+
   MockQuicClientSession session_;
   scoped_ptr<QuicSpdyClientStream> stream_;
+  scoped_ptr<StreamVisitor> stream_visitor_;
   BalsaHeaders headers_;
   string headers_string_;
   string body_;
@@ -129,7 +144,7 @@ TEST_F(QuicSpdyClientStreamTest, TestNoBidirectionalStreaming) {
 TEST_F(QuicSpdyClientStreamTest, ReceivingTrailers) {
   // Test that receiving trailing headers, containing a final offset, results in
   // the stream being closed at that byte offset.
-  FLAGS_quic_supports_trailers = true;
+  ValueRestore<bool> old_flag(&FLAGS_quic_supports_trailers, true);
 
   // Send headers as usual.
   stream_->OnStreamHeaders(headers_string_);
@@ -154,5 +169,4 @@ TEST_F(QuicSpdyClientStreamTest, ReceivingTrailers) {
 
 }  // namespace
 }  // namespace test
-}  // namespace tools
 }  // namespace net

@@ -22,7 +22,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -109,6 +108,7 @@
 #include "components/policy/core/common/policy_service.h"
 #include "components/policy/core/common/policy_service_impl.h"
 #include "components/policy/core/common/policy_types.h"
+#include "components/prefs/pref_service.h"
 #include "components/search/search.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
@@ -141,6 +141,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_paths.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/process_type.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/url_constants.h"
@@ -150,6 +151,8 @@
 #include "content/public/test/mock_notification_observer.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
+#include "device/bluetooth/bluetooth_adapter_factory.h"
+#include "device/bluetooth/test/mock_bluetooth_adapter.h"
 #include "extensions/browser/extension_dialog_auto_confirm.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_prefs.h"
@@ -163,7 +166,6 @@
 #include "extensions/common/extension_set.h"
 #include "extensions/common/manifest_handlers/shared_module_info.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
 #include "net/base/url_util.h"
 #include "net/http/http_stream_factory.h"
 #include "net/ssl/ssl_config.h"
@@ -182,6 +184,7 @@
 #include "ui/base/page_transition_types.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 #if defined(OS_CHROMEOS)
 #include "ash/accelerators/accelerator_controller.h"
@@ -2305,8 +2308,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, HomepageLocation) {
 IN_PROC_BROWSER_TEST_F(PolicyTest, IncognitoEnabled) {
   // Verifies that incognito windows can't be opened when disabled by policy.
 
-  const BrowserList* active_browser_list =
-      BrowserList::GetInstance(chrome::GetActiveDesktop());
+  const BrowserList* active_browser_list = BrowserList::GetInstance();
 
   // Disable incognito via policy and verify that incognito windows can't be
   // opened.
@@ -2732,12 +2734,12 @@ uint16_t GetSSLVersionFallbackMin(Profile* profile) {
 IN_PROC_BROWSER_TEST_F(PolicyTest, SSLVersionFallbackMin) {
   PrefService* prefs = g_browser_process->local_state();
 
-  const std::string new_value("tls1.2");
+  const std::string new_value("tls1.1");
   const std::string default_value(
       prefs->GetString(ssl_config::prefs::kSSLVersionFallbackMin));
 
   EXPECT_NE(default_value, new_value);
-  EXPECT_NE(net::SSL_PROTOCOL_VERSION_TLS1_2,
+  EXPECT_EQ(net::SSL_PROTOCOL_VERSION_TLS1_2,
             GetSSLVersionFallbackMin(browser()->profile()));
 
   PolicyMap policies;
@@ -2749,7 +2751,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, SSLVersionFallbackMin) {
                NULL);
   UpdateProviderPolicy(policies);
 
-  EXPECT_EQ(net::SSL_PROTOCOL_VERSION_TLS1_2,
+  EXPECT_EQ(net::SSL_PROTOCOL_VERSION_TLS1_1,
             GetSSLVersionFallbackMin(browser()->profile()));
 }
 
@@ -3655,6 +3657,53 @@ IN_PROC_BROWSER_TEST_P(MediaStreamDevicesControllerBrowserTest,
 INSTANTIATE_TEST_CASE_P(MediaStreamDevicesControllerBrowserTestInstance,
                         MediaStreamDevicesControllerBrowserTest,
                         testing::Bool());
+
+class WebBluetoothPolicyTest : public PolicyTest {
+  void SetUpCommandLine(base::CommandLine* command_line)override {
+    // This is needed while Web Bluetooth is an Origin Trial, but can go away
+    // once it ships globally.
+    command_line->AppendSwitch(switches::kEnableWebBluetooth);
+    PolicyTest::SetUpCommandLine(command_line);
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(WebBluetoothPolicyTest, Block) {
+  // Fake the BluetoothAdapter to say it's present.
+  scoped_refptr<device::MockBluetoothAdapter> adapter =
+      new testing::NiceMock<device::MockBluetoothAdapter>;
+  EXPECT_CALL(*adapter, IsPresent()).WillRepeatedly(testing::Return(true));
+  device::BluetoothAdapterFactory::SetAdapterForTesting(adapter);
+
+  // Navigate to a secure context.
+  embedded_test_server()->ServeFilesFromSourceDirectory("content/test/data");
+  ASSERT_TRUE(embedded_test_server()->Start());
+  ui_test_utils::NavigateToURL(
+      browser(),
+      embedded_test_server()->GetURL("localhost", "/simple_page.html"));
+  content::WebContents* const web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_THAT(
+      web_contents->GetMainFrame()->GetLastCommittedOrigin().Serialize(),
+      testing::StartsWith("http://localhost:"));
+
+  // Set the policy to block Web Bluetooth.
+  PolicyMap policies;
+  policies.Set(key::kDefaultWebBluetoothGuardSetting, POLICY_LEVEL_MANDATORY,
+               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+               new base::FundamentalValue(2), nullptr);
+  UpdateProviderPolicy(policies);
+
+  std::string rejection;
+  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+      web_contents,
+      "navigator.bluetooth.requestDevice({filters: [{name: 'Hello'}]})"
+      "  .then(() => { domAutomationController.send('Success'); },"
+      "        reason => {"
+      "      domAutomationController.send(reason.name + ': ' + reason.message);"
+      "  });",
+      &rejection));
+  EXPECT_THAT(rejection, testing::MatchesRegex("NotFoundError: .*policy.*"));
+}
 
 // Test that when extended reporting opt-in is disabled by policy, the
 // opt-in checkbox does not appear on SSL blocking pages.

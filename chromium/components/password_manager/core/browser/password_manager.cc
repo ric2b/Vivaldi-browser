@@ -11,7 +11,6 @@
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/platform_thread.h"
@@ -33,10 +32,11 @@
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/password_manager/core/common/password_manager_switches.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 
 #if defined(OS_WIN)
-#include "base/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_registry_simple.h"
 #endif
 
 using autofill::PasswordForm;
@@ -158,7 +158,9 @@ void PasswordManager::RegisterProfilePrefs(
   registry->RegisterBooleanPref(
       prefs::kCredentialsEnableService, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
-  registry->RegisterBooleanPref(prefs::kPasswordManagerAutoSignin, true);
+  registry->RegisterBooleanPref(
+      prefs::kCredentialsEnableAutosignin, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
   registry->RegisterBooleanPref(prefs::kPasswordManagerAllowShowPasswords,
                                 true);
   registry->RegisterListPref(prefs::kPasswordManagerGroupsForDomains);
@@ -209,9 +211,21 @@ void PasswordManager::SetHasGeneratedPasswordForForm(
 
   UMA_HISTOGRAM_BOOLEAN("PasswordManager.GeneratedFormHasNoFormManager",
                         password_is_generated);
+}
 
-  if (!password_is_generated)
+void PasswordManager::SetGenerationElementAndReasonForForm(
+    password_manager::PasswordManagerDriver* driver,
+    const autofill::PasswordForm& form,
+    const base::string16& generation_element,
+    bool is_manually_triggered) {
+  DCHECK(client_->IsSavingAndFillingEnabledForCurrentPage());
+
+  PasswordFormManager* form_manager = GetMatchingPendingManager(form);
+  if (form_manager) {
+    form_manager->set_generation_element(generation_element);
+    form_manager->set_is_manual_generation(is_manually_triggered);
     return;
+  }
 
   // If there is no corresponding PasswordFormManager, we create one. This is
   // not the common case, and should only happen when there is a bug in our
@@ -346,8 +360,7 @@ void PasswordManager::ProvisionallySavePassword(const PasswordForm& form) {
 
 void PasswordManager::UpdateFormManagers() {
   for (PasswordFormManager* form_manager : pending_login_managers_) {
-    form_manager->FetchDataFromPasswordStore(
-        client_->GetAuthorizationPromptPolicy(form_manager->observed_form()));
+    form_manager->FetchDataFromPasswordStore();
   }
 }
 
@@ -518,10 +531,7 @@ void PasswordManager::CreatePendingLoginManagers(
         *iter, ssl_valid);
     pending_login_managers_.push_back(manager);
 
-    PasswordStore::AuthorizationPromptPolicy prompt_policy =
-        client_->GetAuthorizationPromptPolicy(*iter);
-
-    manager->FetchDataFromPasswordStore(prompt_policy);
+    manager->FetchDataFromPasswordStore();
   }
 
   if (logger) {
@@ -715,6 +725,11 @@ void PasswordManager::OnLoginSuccessful() {
       logger->LogMessage(Logger::STRING_DECISION_SAVE);
     provisional_save_manager_->Save();
 
+    if (!provisional_save_manager_->IsNewLogin()) {
+      client_->NotifySuccessfulLoginWithExistingPassword(
+          provisional_save_manager_->pending_credentials());
+    }
+
     if (provisional_save_manager_->has_generated_password()) {
       client_->AutomaticPasswordSave(std::move(provisional_save_manager_));
     } else {
@@ -727,11 +742,13 @@ bool PasswordManager::OtherPossibleUsernamesEnabled() const {
   return false;
 }
 
-void PasswordManager::Autofill(password_manager::PasswordManagerDriver* driver,
-                               const PasswordForm& form_for_autofill,
-                               const PasswordFormMap& best_matches,
-                               const PasswordForm& preferred_match,
-                               bool wait_for_username) const {
+void PasswordManager::Autofill(
+    password_manager::PasswordManagerDriver* driver,
+    const PasswordForm& form_for_autofill,
+    const PasswordFormMap& best_matches,
+    const std::vector<scoped_ptr<PasswordForm>>& federated_matches,
+    const PasswordForm& preferred_match,
+    bool wait_for_username) const {
   DCHECK_EQ(PasswordForm::SCHEME_HTML, preferred_match.scheme);
 
   scoped_ptr<BrowserSavePasswordProgressLogger> logger;
@@ -754,7 +771,8 @@ void PasswordManager::Autofill(password_manager::PasswordManagerDriver* driver,
       PreferredRealmIsFromAndroid(fill_data));
   driver->FillPasswordForm(fill_data);
 
-  client_->PasswordWasAutofilled(best_matches, form_for_autofill.origin);
+  client_->PasswordWasAutofilled(best_matches, form_for_autofill.origin,
+                                 &federated_matches);
 }
 
 void PasswordManager::AutofillHttpAuth(
@@ -775,7 +793,7 @@ void PasswordManager::AutofillHttpAuth(
                     OnAutofillDataAvailable(preferred_match));
   DCHECK(!best_matches.empty());
   client_->PasswordWasAutofilled(best_matches,
-                                 best_matches.begin()->second->origin);
+                                 best_matches.begin()->second->origin, nullptr);
 }
 
 void PasswordManager::ProcessAutofillPredictions(

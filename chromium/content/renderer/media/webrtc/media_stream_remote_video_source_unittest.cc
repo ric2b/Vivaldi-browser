@@ -18,7 +18,7 @@
 #include "media/base/video_frame.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/web/WebHeap.h"
-#include "third_party/libjingle/source/talk/media/webrtc/webrtcvideoframe.h"
+#include "third_party/webrtc/media/engine/webrtcvideoframe.h"
 
 namespace content {
 
@@ -130,7 +130,7 @@ TEST_F(MediaStreamRemoteVideoSourceTest, StartTrack) {
   EXPECT_CALL(sink, OnVideoFrame()).WillOnce(
       RunClosure(quit_closure));
   cricket::WebRtcVideoFrame webrtc_frame;
-  webrtc_frame.InitToBlack(320, 240, 1, 1, 1);
+  webrtc_frame.InitToBlack(320, 240, 1);
   source()->RenderInterfaceForTest()->RenderFrame(&webrtc_frame);
   run_loop.Run();
 

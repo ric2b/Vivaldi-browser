@@ -86,6 +86,7 @@ public:
     virtual bool typeMismatch() const;
     virtual bool valueMissing() const;
     virtual String validationMessage() const;
+    virtual String validationSubMessage() const;
     bool valid() const;
     virtual void setCustomValidity(const String&);
 
@@ -141,6 +142,6 @@ HTMLElement& toHTMLElement(FormAssociatedElement&);
 const HTMLElement* toHTMLElement(const FormAssociatedElement*);
 const HTMLElement& toHTMLElement(const FormAssociatedElement&);
 
-} // namespace
+} // namespace blink
 
 #endif // FormAssociatedElement_h

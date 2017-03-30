@@ -7,9 +7,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "gpu/command_buffer/common/command_buffer_id.h"
 #include "gpu/command_buffer/common/mailbox_holder.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/command_buffer/common/value_state.h"
+
+// Generate param traits size methods.
+#include "ipc/param_traits_size_macros.h"
+namespace IPC {
+#include "gpu/ipc/gpu_command_buffer_traits_multi.h"
+}  // namespace IPC
 
 // Generate param traits write methods.
 #include "ipc/param_traits_write_macros.h"
@@ -31,17 +38,25 @@ namespace IPC {
 
 namespace IPC {
 
-void ParamTraits<gpu::CommandBuffer::State> ::Write(Message* m,
-                                                    const param_type& p) {
+void ParamTraits<gpu::CommandBuffer::State>::GetSize(base::PickleSizer* s,
+                                                     const param_type& p) {
+  GetParamSize(s, p.get_offset);
+  GetParamSize(s, p.token);
+  GetParamSize(s, p.error);
+  GetParamSize(s, p.generation);
+}
+
+void ParamTraits<gpu::CommandBuffer::State>::Write(base::Pickle* m,
+                                                   const param_type& p) {
   WriteParam(m, p.get_offset);
   WriteParam(m, p.token);
   WriteParam(m, p.error);
   WriteParam(m, p.generation);
 }
 
-bool ParamTraits<gpu::CommandBuffer::State> ::Read(const Message* m,
-                                                   base::PickleIterator* iter,
-                                                   param_type* p) {
+bool ParamTraits<gpu::CommandBuffer::State>::Read(const base::Pickle* m,
+                                                  base::PickleIterator* iter,
+                                                  param_type* p) {
   if (ReadParam(m, iter, &p->get_offset) &&
       ReadParam(m, iter, &p->token) &&
       ReadParam(m, iter, &p->error) &&
@@ -57,7 +72,16 @@ void ParamTraits<gpu::CommandBuffer::State> ::Log(const param_type& p,
   l->append("<CommandBuffer::State>");
 }
 
-void ParamTraits<gpu::SyncToken>::Write(Message* m, const param_type& p) {
+void ParamTraits<gpu::SyncToken>::GetSize(base::PickleSizer* s,
+                                          const param_type& p) {
+  DCHECK(!p.HasData() || p.verified_flush());
+  GetParamSize(s, p.verified_flush());
+  GetParamSize(s, p.namespace_id());
+  GetParamSize(s, p.command_buffer_id());
+  GetParamSize(s, p.release_count());
+}
+
+void ParamTraits<gpu::SyncToken>::Write(base::Pickle* m, const param_type& p) {
   DCHECK(!p.HasData() || p.verified_flush());
 
   WriteParam(m, p.verified_flush());
@@ -66,13 +90,13 @@ void ParamTraits<gpu::SyncToken>::Write(Message* m, const param_type& p) {
   WriteParam(m, p.release_count());
 }
 
-bool ParamTraits<gpu::SyncToken>::Read(const Message* m,
+bool ParamTraits<gpu::SyncToken>::Read(const base::Pickle* m,
                                        base::PickleIterator* iter,
                                        param_type* p) {
   bool verified_flush = false;
   gpu::CommandBufferNamespace namespace_id =
       gpu::CommandBufferNamespace::INVALID;
-  uint64_t command_buffer_id = 0;
+  gpu::CommandBufferId command_buffer_id;
   uint64_t release_count = 0;
 
   if (!ReadParam(m, iter, &verified_flush) ||
@@ -93,19 +117,23 @@ bool ParamTraits<gpu::SyncToken>::Read(const Message* m,
 }
 
 void ParamTraits<gpu::SyncToken>::Log(const param_type& p, std::string* l) {
-  *l +=
-      base::StringPrintf("[%d:%llX] %llu", static_cast<int>(p.namespace_id()),
-                         static_cast<unsigned long long>(p.command_buffer_id()),
-                         static_cast<unsigned long long>(p.release_count()));
+  *l += base::StringPrintf(
+      "[%" PRId8 ":%" PRIX64 "] %" PRIu64, p.namespace_id(),
+      p.command_buffer_id().GetUnsafeValue(), p.release_count());
 }
 
-void ParamTraits<gpu::Mailbox>::Write(Message* m, const param_type& p) {
+void ParamTraits<gpu::Mailbox>::GetSize(base::PickleSizer* s,
+                                        const param_type& p) {
+  s->AddBytes(sizeof(p.name));
+}
+
+void ParamTraits<gpu::Mailbox>::Write(base::Pickle* m, const param_type& p) {
   m->WriteBytes(p.name, sizeof(p.name));
 }
 
-bool ParamTraits<gpu::Mailbox> ::Read(const Message* m,
-                                      base::PickleIterator* iter,
-                                      param_type* p) {
+bool ParamTraits<gpu::Mailbox>::Read(const base::Pickle* m,
+                                     base::PickleIterator* iter,
+                                     param_type* p) {
   const char* bytes = NULL;
   if (!iter->ReadBytes(&bytes, sizeof(p->name)))
     return false;
@@ -119,15 +147,23 @@ void ParamTraits<gpu::Mailbox>::Log(const param_type& p, std::string* l) {
     *l += base::StringPrintf("%02x", p.name[i]);
 }
 
-void ParamTraits<gpu::MailboxHolder>::Write(Message* m, const param_type& p) {
+void ParamTraits<gpu::MailboxHolder>::GetSize(base::PickleSizer* s,
+                                              const param_type& p) {
+  GetParamSize(s, p.mailbox);
+  GetParamSize(s, p.sync_token);
+  GetParamSize(s, p.texture_target);
+}
+
+void ParamTraits<gpu::MailboxHolder>::Write(base::Pickle* m,
+                                            const param_type& p) {
   WriteParam(m, p.mailbox);
   WriteParam(m, p.sync_token);
   WriteParam(m, p.texture_target);
 }
 
-bool ParamTraits<gpu::MailboxHolder> ::Read(const Message* m,
-                                            base::PickleIterator* iter,
-                                            param_type* p) {
+bool ParamTraits<gpu::MailboxHolder>::Read(const base::Pickle* m,
+                                           base::PickleIterator* iter,
+                                           param_type* p) {
   if (!ReadParam(m, iter, &p->mailbox) || !ReadParam(m, iter, &p->sync_token) ||
       !ReadParam(m, iter, &p->texture_target))
     return false;
@@ -140,14 +176,19 @@ void ParamTraits<gpu::MailboxHolder>::Log(const param_type& p, std::string* l) {
   *l += base::StringPrintf(":%04x@", p.texture_target);
 }
 
-void ParamTraits<gpu::ValueState>::Write(Message* m, const param_type& p) {
+void ParamTraits<gpu::ValueState>::GetSize(base::PickleSizer* s,
+                                           const param_type& p) {
+  s->AddData(sizeof(gpu::ValueState));
+}
+
+void ParamTraits<gpu::ValueState>::Write(base::Pickle* m, const param_type& p) {
   m->WriteData(reinterpret_cast<const char*>(&p),
                sizeof(gpu::ValueState));
 }
 
-bool ParamTraits<gpu::ValueState> ::Read(const Message* m,
-                                         base::PickleIterator* iter,
-                                         param_type* p) {
+bool ParamTraits<gpu::ValueState>::Read(const base::Pickle* m,
+                                        base::PickleIterator* iter,
+                                        param_type* p) {
   int length;
   const char* data = NULL;
   if (!iter->ReadData(&data, &length) || length != sizeof(gpu::ValueState))

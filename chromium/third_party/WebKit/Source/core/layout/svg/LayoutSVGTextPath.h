@@ -25,25 +25,48 @@
 
 namespace blink {
 
+// This class maps a 1D location in the "path space"; [0, path length] to a
+// (2D) point on the path and provides the normal (angle from the x-axis) for
+// said point.
+class PathPositionMapper {
+    USING_FAST_MALLOC(PathPositionMapper);
+public:
+    static PassOwnPtr<PathPositionMapper> create(const Path& path)
+    {
+        return adoptPtr(new PathPositionMapper(path));
+    }
+
+    enum PositionType {
+        OnPath,
+        BeforePath,
+        AfterPath,
+    };
+    PositionType pointAndNormalAtLength(float length, FloatPoint&, float& angle);
+    float length() const { return m_pathLength; }
+
+private:
+    explicit PathPositionMapper(const Path&);
+
+    Path::PositionCalculator m_positionCalculator;
+    float m_pathLength;
+};
+
 class LayoutSVGTextPath final : public LayoutSVGInline {
 public:
     explicit LayoutSVGTextPath(Element*);
 
-    Path layoutPath() const;
-    float startOffset() const;
+    PassOwnPtr<PathPositionMapper> layoutPath() const;
+    float calculateStartOffset(float) const;
 
     bool isChildAllowed(LayoutObject*, const ComputedStyle&) const override;
 
     bool isOfType(LayoutObjectType type) const override { return type == LayoutObjectSVGTextPath || LayoutSVGInline::isOfType(type); }
 
     const char* name() const override { return "LayoutSVGTextPath"; }
-
-private:
-    Path m_layoutPath;
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutSVGTextPath, isSVGTextPath());
 
-}
+} // namespace blink
 
 #endif // LayoutSVGTextPath_h

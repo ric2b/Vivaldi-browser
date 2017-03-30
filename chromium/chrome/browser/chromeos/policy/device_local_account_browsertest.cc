@@ -28,8 +28,6 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_change_registrar.h"
-#include "base/prefs/pref_service.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -51,7 +49,6 @@
 #include "chrome/browser/chromeos/login/session/user_session_manager_test_api.h"
 #include "chrome/browser/chromeos/login/signin_specifics.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/browser/chromeos/login/users/avatar/user_image_manager.h"
 #include "chrome/browser/chromeos/login/users/avatar/user_image_manager_impl.h"
@@ -107,6 +104,8 @@
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_service.h"
 #include "components/policy/core/common/policy_switches.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
@@ -477,9 +476,8 @@ class DeviceLocalAccountTest : public DevicePolicyCrosBrowserTest,
         chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
         content::NotificationService::AllSources()).Wait();
 
-    chromeos::LoginDisplayHostImpl* host =
-        reinterpret_cast<chromeos::LoginDisplayHostImpl*>(
-            chromeos::LoginDisplayHostImpl::default_host());
+    chromeos::LoginDisplayHost* host =
+        chromeos::LoginDisplayHost::default_host();
     ASSERT_TRUE(host);
     chromeos::WebUILoginView* web_ui_login_view = host->GetWebUILoginView();
     ASSERT_TRUE(web_ui_login_view);
@@ -724,9 +722,8 @@ class DeviceLocalAccountTest : public DevicePolicyCrosBrowserTest,
   void StartLogin(const std::string& locale,
                   const std::string& input_method) {
     // Start login into the device-local account.
-    chromeos::LoginDisplayHostImpl* host =
-        reinterpret_cast<chromeos::LoginDisplayHostImpl*>(
-            chromeos::LoginDisplayHostImpl::default_host());
+    chromeos::LoginDisplayHost* host =
+        chromeos::LoginDisplayHost::default_host();
     ASSERT_TRUE(host);
     host->StartSignInScreen(LoginScreenContext());
     chromeos::ExistingUserController* controller =
@@ -1038,8 +1035,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, StartSession) {
   WaitForSessionStart();
 
   // Check that the startup pages specified in policy were opened.
-  BrowserList* browser_list =
-    BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_ASH);
+  BrowserList* browser_list = BrowserList::GetInstance();
   EXPECT_EQ(1U, browser_list->size());
   Browser* browser = browser_list->get(0);
   ASSERT_TRUE(browser);
@@ -1070,8 +1066,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, FullscreenDisallowed) {
   ASSERT_NO_FATAL_FAILURE(StartLogin(std::string(), std::string()));
   WaitForSessionStart();
 
-  BrowserList* browser_list =
-    BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_ASH);
+  BrowserList* browser_list = BrowserList::GetInstance();
   EXPECT_EQ(1U, browser_list->size());
   Browser* browser = browser_list->get(0);
   ASSERT_TRUE(browser);
@@ -1574,8 +1569,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, LastWindowClosedLogoutReminder) {
   EXPECT_EQ(1U, app_window_registry->app_windows().size());
 
   // Close the only open browser window.
-  BrowserList* browser_list =
-      BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_ASH);
+  BrowserList* browser_list = BrowserList::GetInstance();
   EXPECT_EQ(1U, browser_list->size());
   Browser* browser = browser_list->get(0);
   ASSERT_TRUE(browser);

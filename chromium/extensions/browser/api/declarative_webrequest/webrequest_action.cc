@@ -507,9 +507,11 @@ bool WebRequestAction::HasPermission(const InfoMap* extension_info_map,
       permission_check = WebRequestPermissions::REQUIRE_HOST_PERMISSION;
       break;
   }
+  // TODO(devlin): Pass in the real tab id here.
   return WebRequestPermissions::CanExtensionAccessURL(
-      extension_info_map, extension_id, request->url(), crosses_incognito,
-      permission_check);
+             extension_info_map, extension_id, request->url(), -1,
+             crosses_incognito,
+             permission_check) == PermissionsData::ACCESS_ALLOWED;
 }
 
 // static
@@ -968,7 +970,7 @@ WebRequestRemoveResponseHeaderAction::CreateDelta(
 
   LinkedPtrEventResponseDelta result(
       new helpers::EventResponseDelta(extension_id, extension_install_time));
-  void* iter = NULL;
+  size_t iter = 0;
   std::string current_value;
   while (headers->EnumerateHeader(&iter, name_, &current_value)) {
     if (has_value_ && !base::EqualsCaseInsensitiveASCII(current_value, value_))

@@ -13,6 +13,7 @@
 namespace views {
 class ImageView;
 class Label;
+class Checkbox;
 }  // namespace views
 
 class DesktopMediaPickerDialogView;
@@ -46,11 +47,13 @@ class DesktopMediaListView : public views::View,
 
  private:
   // DesktopMediaList::Observer interface
-  void OnSourceAdded(int index) override;
-  void OnSourceRemoved(int index) override;
-  void OnSourceMoved(int old_index, int new_index) override;
-  void OnSourceNameChanged(int index) override;
-  void OnSourceThumbnailChanged(int index) override;
+  void OnSourceAdded(DesktopMediaList* list, int index) override;
+  void OnSourceRemoved(DesktopMediaList* list, int index) override;
+  void OnSourceMoved(DesktopMediaList* list,
+                     int old_index,
+                     int new_index) override;
+  void OnSourceNameChanged(DesktopMediaList* list, int index) override;
+  void OnSourceThumbnailChanged(DesktopMediaList* list, int index) override;
 
   // Accepts whatever happens to be selected right now.
   void AcceptSelection();
@@ -116,7 +119,8 @@ class DesktopMediaPickerDialogView : public views::DialogDelegateView {
                                DesktopMediaPickerViews* parent,
                                const base::string16& app_name,
                                const base::string16& target_name,
-                               scoped_ptr<DesktopMediaList> media_list);
+                               scoped_ptr<DesktopMediaList> media_list,
+                               bool request_audio);
   ~DesktopMediaPickerDialogView() override;
 
   // Called by parent (DesktopMediaPickerViews) when it's destroyed.
@@ -128,7 +132,6 @@ class DesktopMediaPickerDialogView : public views::DialogDelegateView {
 
   // views::View overrides.
   gfx::Size GetPreferredSize() const override;
-  void Layout() override;
 
   // views::DialogDelegateView overrides.
   ui::ModalType GetModalType() const override;
@@ -148,9 +151,10 @@ class DesktopMediaPickerDialogView : public views::DialogDelegateView {
   DesktopMediaPickerViews* parent_;
   base::string16 app_name_;
 
-  views::Label* label_;
-  views::ScrollView* scroll_view_;
-  DesktopMediaListView* list_view_;
+  views::Label* description_label_;
+  views::Checkbox* audio_share_checkbox_;
+  views::ScrollView* sources_scroll_view_;
+  DesktopMediaListView* sources_list_view_;
 
   DISALLOW_COPY_AND_ASSIGN(DesktopMediaPickerDialogView);
 };
@@ -170,6 +174,7 @@ class DesktopMediaPickerViews : public DesktopMediaPicker {
             const base::string16& app_name,
             const base::string16& target_name,
             scoped_ptr<DesktopMediaList> media_list,
+            bool request_audio,
             const DoneCallback& done_callback) override;
 
   DesktopMediaPickerDialogView* GetDialogViewForTesting() const {

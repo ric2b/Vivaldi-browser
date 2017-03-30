@@ -82,13 +82,17 @@ cr.define('cr.FirstRun', function() {
     initialize: function() {
       disableTextSelectAndDrag();
       this.transitionsEnabled_ = loadTimeData.getBoolean('transitionsEnabled');
-      this.background_ = $('background');
-      this.backgroundContainer_ = $('background-container');
-      this.mask_ = $('mask');
-      this.rectangularHolePattern_ = $('rectangular-hole-pattern');
+
+      // Note: we don't use $() here because these are SVGElements, not
+      // HTMLElements.
+      this.background_ = getSVGElement('background');
+      this.mask_ = getSVGElement('mask');
+      this.rectangularHolePattern_ = getSVGElement('rectangular-hole-pattern');
       this.rectangularHolePattern_.removeAttribute('id');
-      this.roundHolePattern_ = $('round-hole-pattern');
+      this.roundHolePattern_ = getSVGElement('round-hole-pattern');
       this.roundHolePattern_.removeAttribute('id');
+
+      this.backgroundContainer_ = $('background-container');
       var stepElements = document.getElementsByClassName('step');
       for (var i = 0; i < stepElements.length; ++i) {
         var step = stepElements[i];

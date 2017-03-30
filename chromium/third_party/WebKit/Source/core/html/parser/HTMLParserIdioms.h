@@ -25,6 +25,7 @@
 #ifndef HTMLParserIdioms_h
 #define HTMLParserIdioms_h
 
+#include "core/CoreExport.h"
 #include "core/dom/QualifiedName.h"
 #include "platform/Decimal.h"
 #include "wtf/Forward.h"
@@ -38,11 +39,6 @@ namespace blink {
 
 // Strip leading and trailing whitespace as defined by the HTML specification.
 String stripLeadingAndTrailingHTMLSpaces(const String&);
-template<size_t inlineCapacity>
-String stripLeadingAndTrailingHTMLSpaces(const Vector<UChar, inlineCapacity>& vector)
-{
-    return stripLeadingAndTrailingHTMLSpaces(StringImpl::create8BitIfPossible(vector));
-}
 
 // An implementation of the HTML specification's algorithm to convert a number to a string for number and range types.
 String serializeForNumberType(const Decimal&);
@@ -59,6 +55,9 @@ bool parseHTMLInteger(const String&, int&);
 
 // http://www.whatwg.org/specs/web-apps/current-work/#rules-for-parsing-non-negative-integers
 bool parseHTMLNonNegativeInteger(const String&, unsigned&);
+
+// https://html.spec.whatwg.org/multipage/infrastructure.html#rules-for-parsing-a-list-of-floating-point-numbers
+CORE_EXPORT Vector<double> parseHTMLListOfFloatingPointNumbers(const String&);
 
 typedef Vector<std::pair<String, String>> HTMLAttributeList;
 // The returned encoding might not be valid.
@@ -130,6 +129,5 @@ inline static String attemptStaticStringCreation(const String str)
     return attemptStaticStringCreation(str.characters8(), str.length());
 }
 
-
-}
+} // namespace blink
 #endif

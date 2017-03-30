@@ -37,7 +37,7 @@ class PrefRegistrySyncable;
 }  // namespace user_prefs
 
 // Declares shareable ARC app specific preferences, that keep information
-// about app attributes (name, package, activity) and its state. This
+// about app attributes (name, package_name, activity) and its state. This
 // information is used to pre-create non-ready app items while ARC bridge
 // service is not ready to provide information about available ARC apps.
 class ArcAppListPrefs : public KeyedService,
@@ -46,12 +46,12 @@ class ArcAppListPrefs : public KeyedService,
  public:
   struct AppInfo {
     AppInfo(const std::string& name,
-            const std::string& package,
+            const std::string& package_name,
             const std::string& activity,
             bool ready);
 
     std::string name;
-    std::string package;
+    std::string package_name;
     std::string activity;
     bool ready;
   };
@@ -60,17 +60,17 @@ class ArcAppListPrefs : public KeyedService,
    public:
     // Notifies an observer that new app is registered.
     virtual void OnAppRegistered(const std::string& app_id,
-                                 const AppInfo& app_info) = 0;
+                                 const AppInfo& app_info) {}
     // Notifies an observer that app ready state has been changed.
-    virtual void OnAppReadyChanged(const std::string& id, bool ready) = 0;
+    virtual void OnAppReadyChanged(const std::string& id, bool ready) {}
     // Notifies an observer that app was removed.
-    virtual void OnAppRemoved(const std::string& id) = 0;
+    virtual void OnAppRemoved(const std::string& id) {}
     // Notifies an observer that app icon has been installed or updated.
     virtual void OnAppIconUpdated(const std::string& id,
-                                  ui::ScaleFactor scale_factor) = 0;
+                                  ui::ScaleFactor scale_factor) {}
     // Notifies an observer that the name of an app has changed.
     virtual void OnAppNameUpdated(const std::string& id,
-                                  const std::string& name) = 0;
+                                  const std::string& name) {}
 
    protected:
     virtual ~Observer() {}
@@ -82,9 +82,9 @@ class ArcAppListPrefs : public KeyedService,
   // Convenience function to get the ArcAppListPrefs for a BrowserContext.
   static ArcAppListPrefs* Get(content::BrowserContext* context);
 
-  // Constructs unique id based on package and activity information. This id
-  // is safe to use at file paths and as preference keys.
-  static std::string GetAppId(const std::string& package,
+  // Constructs unique id based on package name and activity information. This
+  // id is safe to use at file paths and as preference keys.
+  static std::string GetAppId(const std::string& package_name,
                               const std::string& activity);
 
   // It is called from chrome/browser/prefs/browser_prefs.cc.
@@ -129,8 +129,8 @@ class ArcAppListPrefs : public KeyedService,
   // arc::AppHost:
   void OnAppListRefreshed(mojo::Array<arc::AppInfoPtr> apps) override;
   void OnAppAdded(arc::AppInfoPtr app) override;
-  void OnPackageRemoved(const mojo::String& package) override;
-  void OnAppIcon(const mojo::String& package,
+  void OnPackageRemoved(const mojo::String& package_name) override;
+  void OnAppIcon(const mojo::String& package_name,
                  const mojo::String& activity,
                  arc::ScaleFactor scale_factor,
                  mojo::Array<uint8_t> icon_png_data) override;

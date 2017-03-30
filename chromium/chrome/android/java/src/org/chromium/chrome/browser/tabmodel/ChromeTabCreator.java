@@ -12,13 +12,11 @@ import org.chromium.base.TraceEvent;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.TabState;
-import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
+import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabDelegateFactory;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
-import org.chromium.chrome.browser.tabmodel.document.AsyncTabCreationParams;
-import org.chromium.chrome.browser.tabmodel.document.AsyncTabCreationParamsManager;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.components.service_tab_launcher.ServiceTabLauncher;
@@ -110,16 +108,24 @@ public class ChromeTabCreator extends TabCreatorManager.TabCreator {
             // Check if the tab is being created asynchronously.
             int assignedTabId = intent == null ? Tab.INVALID_TAB_ID : IntentUtils.safeGetIntExtra(
                     intent, IntentHandler.EXTRA_TAB_ID, Tab.INVALID_TAB_ID);
-            AsyncTabCreationParams asyncParams =
-                    AsyncTabCreationParamsManager.remove(assignedTabId);
-            WebContents webContents = asyncParams == null ? null : asyncParams.getWebContents();
+            AsyncTabParams asyncParams =
+                    AsyncTabParamsManager.remove(assignedTabId);
 
-            boolean openInForeground = mOrderController.willOpenInForeground(type, mIncognito)
-                    || webContents != null;
+            boolean openInForeground = mOrderController.willOpenInForeground(type, mIncognito);
             TabDelegateFactory delegateFactory = parent == null ? new TabDelegateFactory()
                     : parent.getDelegateFactory();
             Tab tab;
-            if (webContents != null) {
+            if (asyncParams != null && asyncParams.getTabToReparent() != null) {
+                type = TabLaunchType.FROM_REPARENTING;
+                openInForeground = true;
+
+                TabReparentingParams params = (TabReparentingParams) asyncParams;
+                tab = params.getTabToReparent();
+                tab.reparentToActivity(mActivity, new TabDelegateFactory());
+                params.finalizeTabReparenting();
+            } else if (asyncParams != null && asyncParams.getWebContents() != null) {
+                openInForeground = true;
+                WebContents webContents = asyncParams.getWebContents();
                 // A WebContents was passed through the Intent.  Create a new Tab to hold it.
                 Intent parentIntent = IntentUtils.safeGetParcelableExtra(
                         intent, IntentHandler.EXTRA_PARENT_INTENT);
@@ -146,14 +152,9 @@ public class ChromeTabCreator extends TabCreatorManager.TabCreator {
                 tab.initialize(null, mTabContentManager, delegateFactory, !openInForeground, false);
                 mTabSaver.addTabToSaveQueue(tab);
             } else {
-                webContents =
-                        WarmupManager.getInstance().hasPrerenderedUrl(loadUrlParams.getUrl())
-                        ? WarmupManager.getInstance().takePrerenderedWebContents() : null;
-
                 tab = Tab.createLiveTab(Tab.INVALID_TAB_ID, mActivity, mIncognito,
                         mNativeWindow, type, parentId, !openInForeground);
-                tab.initialize(
-                        webContents, mTabContentManager, delegateFactory, !openInForeground, false);
+                tab.initialize(null, mTabContentManager, delegateFactory, !openInForeground, false);
                 tab.loadUrl(loadUrlParams);
             }
             tab.getTabRedirectHandler().updateIntent(intent);
@@ -233,6 +234,13 @@ public class ChromeTabCreator extends TabCreatorManager.TabCreator {
             String appId, boolean forceNewTab, Intent intent, long intentTimestamp) {
         assert !mIncognito;
         boolean isLaunchedFromChrome = TextUtils.equals(appId, mActivity.getPackageName());
+
+        // If an external app sends an intent for a Weblite URL and the Data Reduction Proxy is
+        // using Weblite mode, then use the URL in the lite_url parameter if its scheme is HTTP.
+        // This is used by ChromeTabbedActvity intents so that the user does not receive Weblite
+        // pages when he or she could be served a Data Reduction Proxy preview page.
+        if (url != null) url = DataReductionProxySettings.getInstance().maybeRewriteWebliteUrl(url);
+
         if (forceNewTab && !isLaunchedFromChrome) {
             // We don't associate the tab with that app ID, as it is assumed that if the
             // application wanted to open this tab as a new tab, it probably does not want it
@@ -295,10 +303,9 @@ public class ChromeTabCreator extends TabCreatorManager.TabCreator {
             case FROM_LINK:
             case FROM_EXTERNAL_APP:
                 return PageTransition.LINK | PageTransition.FROM_API;
-            case FROM_MENU_OR_OVERVIEW:
+            case FROM_CHROME_UI:
             case FROM_LONGPRESS_FOREGROUND:
             case FROM_LONGPRESS_BACKGROUND:
-            case FROM_KEYBOARD:
                 return PageTransition.AUTO_TOPLEVEL;
             default:
                 assert false;

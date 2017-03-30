@@ -30,13 +30,13 @@ public:
 
 private:
     LegacyStyleInterpolation(PassOwnPtr<InterpolableValue> start, PassOwnPtr<InterpolableValue> end, CSSPropertyID id)
-        : StyleInterpolation(start, end, id)
+        : StyleInterpolation(std::move(start), std::move(end), id)
     {
     }
 };
 
 DEFINE_TYPE_CASTS(LegacyStyleInterpolation, Interpolation, value, value->isLegacyStyleInterpolation(), value.isLegacyStyleInterpolation());
 
-}
+} // namespace blink
 
 #endif

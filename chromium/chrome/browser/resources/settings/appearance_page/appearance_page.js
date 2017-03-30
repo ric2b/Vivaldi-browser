@@ -124,8 +124,8 @@ Polymer({
   /** @override */
   attached: function() {
     // Query the initial state.
-    cr.sendWithCallback('getResetThemeEnabled', undefined,
-                        this.setResetThemeEnabled.bind(this));
+    cr.sendWithPromise('getResetThemeEnabled').then(
+        this.setResetThemeEnabled.bind(this));
 
     // Set up the change event listener.
     cr.addWebUIListener('reset-theme-enabled-changed',

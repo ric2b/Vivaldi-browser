@@ -10,8 +10,10 @@
 
 #include <vector>
 
+#include "base/files/file.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/time/time.h"
 #include "components/nacl/renderer/plugin/nacl_subprocess.h"
 #include "components/nacl/renderer/plugin/plugin_error.h"
 #include "components/nacl/renderer/plugin/pnacl_resources.h"
@@ -25,7 +27,6 @@ namespace plugin {
 class Plugin;
 class PnaclCoordinator;
 class PnaclTranslateThread;
-class TempFile;
 
 // A class invoked by Plugin to handle PNaCl client-side translation.
 // Usage:
@@ -103,15 +104,15 @@ class PnaclCoordinator {
   // been created, this starts the translation.  Translation starts two
   // subprocesses, one for llc and one for ld.
   void LoadCompiler();
-  void RunCompile(int32_t pp_error, int64_t compile_load_start_time);
+  void RunCompile(int32_t pp_error, base::TimeTicks compile_load_start_time);
   void LoadLinker(int32_t pp_error);
-  void RunLink(int32_t pp_error, int64_t ld_load_start_time);
+  void RunLink(int32_t pp_error, base::TimeTicks ld_load_start_time);
 
   // Invoked when translation is finished.
   void TranslateFinished(int32_t pp_error);
 
   // Invoked when the read descriptor for nexe_file_ is created.
-  void NexeReadDidOpen(int32_t pp_error);
+  void NexeReadDidOpen();
 
   // Bring control back to the plugin by invoking the
   // |translate_notify_callback_|.  This does not set the ErrorInfo report,
@@ -120,12 +121,6 @@ class PnaclCoordinator {
   // Run |translate_notify_callback_| with an error condition that is not
   // PPAPI specific.  Also set ErrorInfo report.
   void ReportNonPpapiError(PP_NaClError err, const std::string& message);
-  // Run when faced with a PPAPI error condition. Bring control back to the
-  // plugin by invoking the |translate_notify_callback_|.
-  // Also set ErrorInfo report.
-  void ReportPpapiError(PP_NaClError err,
-                        int32_t pp_error, const std::string& message);
-
 
   // Keeps track of the pp_error upon entry to TranslateFinished,
   // for inspection after cleanup.
@@ -160,14 +155,14 @@ class PnaclCoordinator {
   std::string architecture_attributes_;
 
   // Object file, produced by the translator and consumed by the linker.
-  std::vector<TempFile*> obj_files_;
+  std::vector<base::File> obj_files_;
   // Number of split modules for llc.
   int split_module_count_;
   // Number of threads for llc / subzero.
   int num_threads_;
 
   // Translated nexe file, produced by the linker.
-  scoped_ptr<TempFile> temp_nexe_file_;
+  base::File temp_nexe_file_;
 
   // Used to report information when errors (PPAPI or otherwise) are reported.
   ErrorInfo error_info_;

@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/posix/eintr_wrapper.h"
+#include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
@@ -45,6 +46,9 @@ GpuChannelHost::StreamFlushInfo::StreamFlushInfo()
       put_offset(0),
       flush_count(0),
       flush_id(0) {}
+
+GpuChannelHost::StreamFlushInfo::StreamFlushInfo(const StreamFlushInfo& other) =
+    default;
 
 GpuChannelHost::StreamFlushInfo::~StreamFlushInfo() {}
 
@@ -81,13 +85,13 @@ GpuChannelHost::GpuChannelHost(
 void GpuChannelHost::Connect(const IPC::ChannelHandle& channel_handle,
                              base::WaitableEvent* shutdown_event) {
   DCHECK(factory_->IsMainThread());
-  // Open a channel to the GPU process. We pass NULL as the main listener here
-  // since we need to filter everything to route it to the right thread.
+  // Open a channel to the GPU process. We pass nullptr as the main listener
+  // here since we need to filter everything to route it to the right thread.
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
       factory_->GetIOThreadTaskRunner();
-  channel_ =
-      IPC::SyncChannel::Create(channel_handle, IPC::Channel::MODE_CLIENT, NULL,
-                               io_task_runner.get(), true, shutdown_event);
+  channel_ = IPC::SyncChannel::Create(channel_handle, IPC::Channel::MODE_CLIENT,
+                                      nullptr, io_task_runner.get(), true,
+                                      shutdown_event);
 
   sync_filter_ = channel_->CreateSyncMessageFilter();
 
@@ -198,9 +202,7 @@ scoped_ptr<CommandBufferProxyImpl> GpuChannelHost::CreateViewCommandBuffer(
     const GURL& active_url,
     gfx::GpuPreference gpu_preference) {
   DCHECK(!share_group || (stream_id == share_group->stream_id()));
-  TRACE_EVENT1("gpu",
-               "GpuChannelHost::CreateViewCommandBuffer",
-               "surface_id",
+  TRACE_EVENT1("gpu", "GpuChannelHost::CreateViewCommandBuffer", "surface_id",
                surface_id);
 
   GPUCreateCommandBufferConfig init_params;
@@ -214,24 +216,30 @@ scoped_ptr<CommandBufferProxyImpl> GpuChannelHost::CreateViewCommandBuffer(
 
   int32_t route_id = GenerateRouteID();
 
-  CreateCommandBufferResult result = factory_->CreateViewCommandBuffer(
-      surface_id, init_params, route_id);
-  if (result != CREATE_COMMAND_BUFFER_SUCCEEDED) {
-    LOG(ERROR) << "GpuChannelHost::CreateViewCommandBuffer failed.";
+  gfx::GLSurfaceHandle surface_handle = factory_->GetSurfaceHandle(surface_id);
+  DCHECK(!surface_handle.is_null());
 
-    if (result == CREATE_COMMAND_BUFFER_FAILED_AND_CHANNEL_LOST) {
-      // The GPU channel needs to be considered lost. The caller will
-      // then set up a new connection, and the GPU channel and any
-      // view command buffers will all be associated with the same GPU
-      // process.
-      scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
-          factory_->GetIOThreadTaskRunner();
-      io_task_runner->PostTask(
-          FROM_HERE, base::Bind(&GpuChannelHost::MessageFilter::OnChannelError,
-                                channel_filter_.get()));
-    }
+  // TODO(vadimt): Remove ScopedTracker below once crbug.com/125248 is fixed.
+  tracked_objects::ScopedTracker tracking_profile(
+      FROM_HERE_WITH_EXPLICIT_FUNCTION(
+          "125248 BrowserGpuChannelHostFactory::CreateViewCommandBuffer"));
 
-    return NULL;
+  // We're blocking the UI thread, which is generally undesirable.
+  // In this case we need to wait for this before we can show any UI /anyway/,
+  // so it won't cause additional jank.
+  // TODO(piman): Make this asynchronous (http://crbug.com/125248).
+
+  bool succeeded = false;
+  if (!Send(new GpuChannelMsg_CreateViewCommandBuffer(
+          surface_handle, init_params, route_id, &succeeded))) {
+    LOG(ERROR) << "Failed to send GpuChannelMsg_CreateViewCommandBuffer.";
+    return nullptr;
+  }
+
+  if (!succeeded) {
+    LOG(ERROR)
+        << "GpuChannelMsg_CreateOffscreenCommandBuffer returned failure.";
+    return nullptr;
   }
 
   scoped_ptr<CommandBufferProxyImpl> command_buffer =
@@ -267,13 +275,13 @@ scoped_ptr<CommandBufferProxyImpl> GpuChannelHost::CreateOffscreenCommandBuffer(
   if (!Send(new GpuChannelMsg_CreateOffscreenCommandBuffer(
           size, init_params, route_id, &succeeded))) {
     LOG(ERROR) << "Failed to send GpuChannelMsg_CreateOffscreenCommandBuffer.";
-    return NULL;
+    return nullptr;
   }
 
   if (!succeeded) {
     LOG(ERROR)
         << "GpuChannelMsg_CreateOffscreenCommandBuffer returned failure.";
-    return NULL;
+    return nullptr;
   }
 
   scoped_ptr<CommandBufferProxyImpl> command_buffer =
@@ -349,26 +357,7 @@ base::SharedMemoryHandle GpuChannelHost::ShareToGpuProcess(
   if (IsLost())
     return base::SharedMemory::NULLHandle();
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
-  // Windows and Mac need to explicitly duplicate the handle out to another
-  // process.
-  base::SharedMemoryHandle target_handle;
-  base::ProcessId peer_pid;
-  {
-    AutoLock lock(context_lock_);
-    if (!channel_)
-      return base::SharedMemory::NULLHandle();
-    peer_pid = channel_->GetPeerPID();
-  }
-  bool success = BrokerDuplicateSharedMemoryHandle(source_handle, peer_pid,
-                                                   &target_handle);
-  if (!success)
-    return base::SharedMemory::NULLHandle();
-
-  return target_handle;
-#else
   return base::SharedMemory::DuplicateHandle(source_handle);
-#endif  // defined(OS_WIN) || defined(OS_MACOSX)
 }
 
 int32_t GpuChannelHost::ReserveTransferBufferId() {
@@ -481,6 +470,9 @@ GpuChannelHost::~GpuChannelHost() {
 }
 
 GpuChannelHost::MessageFilter::ListenerInfo::ListenerInfo() {}
+
+GpuChannelHost::MessageFilter::ListenerInfo::ListenerInfo(
+    const ListenerInfo& other) = default;
 
 GpuChannelHost::MessageFilter::ListenerInfo::~ListenerInfo() {}
 

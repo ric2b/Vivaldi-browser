@@ -30,7 +30,9 @@
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/LayoutRect.h"
 #include "third_party/skia/include/core/SkRect.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "wtf/MathExtras.h"
+#include "wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -179,6 +181,11 @@ float FloatRect::squaredDistanceTo(const FloatPoint& point) const
     return (point - closestPoint).diagonalLengthSquared();
 }
 
+FloatRect::operator gfx::RectF() const
+{
+    return gfx::RectF(x(), y(), width(), height());
+}
+
 FloatRect unionRect(const Vector<FloatRect>& rects)
 {
     FloatRect result;
@@ -194,6 +201,11 @@ FloatRect unionRect(const Vector<FloatRect>& rects)
 void FloatRect::show() const
 {
     LayoutRect(*this).show();
+}
+
+String FloatRect::toString() const
+{
+    return String::format("%s %s", location().toString().ascii().data(), size().toString().ascii().data());
 }
 #endif
 
@@ -232,4 +244,4 @@ FloatRect mapRect(const FloatRect& r, const FloatRect& srcRect, const FloatRect&
         r.width() * widthScale, r.height() * heightScale);
 }
 
-}
+} // namespace blink

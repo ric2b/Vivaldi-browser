@@ -32,6 +32,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/inspector/InspectorInstrumentation.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/FocusController.h"
@@ -88,7 +89,7 @@ static Frame* createWindow(LocalFrame& openerFrame, LocalFrame& lookupFrame, con
     FrameHost* host = &page->frameHost();
 
     ASSERT(page->mainFrame());
-    Frame& frame = *page->mainFrame();
+    LocalFrame& frame = *toLocalFrame(page->mainFrame());
 
     if (request.frameName() != "_blank")
         frame.tree().setName(request.frameName());
@@ -114,11 +115,11 @@ static Frame* createWindow(LocalFrame& openerFrame, LocalFrame& lookupFrame, con
     host->chromeClient().setWindowRectWithAdjustment(windowRect);
     host->chromeClient().show(policy);
 
-    // TODO(japhet): There's currently no way to set sandbox flags on a RemoteFrame and have it propagate
-    // to the real frame in a different process. See crbug.com/483584.
-    if (frame.isLocalFrame() && openerFrame.document()->isSandboxed(SandboxPropagatesToAuxiliaryBrowsingContexts))
-        toLocalFrame(&frame)->loader().forceSandboxFlags(openerFrame.document()->sandboxFlags());
+    if (openerFrame.document()->isSandboxed(SandboxPropagatesToAuxiliaryBrowsingContexts))
+        frame.loader().forceSandboxFlags(openerFrame.securityContext()->getSandboxFlags());
 
+    // This call may suspend the execution by running nested message loop.
+    InspectorInstrumentation::windowCreated(&openerFrame, &frame);
     created = true;
     return &frame;
 }
@@ -145,7 +146,7 @@ DOMWindow* createWindow(const String& urlString, const AtomicString& frameName, 
     // that it eventually enters FrameLoader as an embedder-initiated navigation. FrameLoader
     // assumes no responsibility for generating an embedder-initiated navigation's referrer,
     // so we need to ensure the proper referrer is set now.
-    frameRequest.resourceRequest().setHTTPReferrer(SecurityPolicy::generateReferrer(activeFrame->document()->referrerPolicy(), completedURL, activeFrame->document()->outgoingReferrer()));
+    frameRequest.resourceRequest().setHTTPReferrer(SecurityPolicy::generateReferrer(activeFrame->document()->getReferrerPolicy(), completedURL, activeFrame->document()->outgoingReferrer()));
 
     // Records HasUserGesture before the value is invalidated inside createWindow(LocalFrame& openerFrame, ...).
     // This value will be set in ResourceRequest loaded in a new LocalFrame.
@@ -195,7 +196,7 @@ void createWindowForRequest(const FrameLoadRequest& request, LocalFrame& openerF
     if (shouldSendReferrer == MaybeSendReferrer) {
         // TODO(japhet): Does ReferrerPolicy need to be proagated for RemoteFrames?
         if (newFrame->isLocalFrame())
-            toLocalFrame(newFrame)->document()->setReferrerPolicy(openerFrame.document()->referrerPolicy());
+            toLocalFrame(newFrame)->document()->setReferrerPolicy(openerFrame.document()->getReferrerPolicy());
     }
 
     // TODO(japhet): Form submissions on RemoteFrames don't work yet.

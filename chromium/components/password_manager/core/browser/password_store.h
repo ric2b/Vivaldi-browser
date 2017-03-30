@@ -55,10 +55,6 @@ struct InteractionsStats;
 class PasswordStore : protected PasswordStoreSync,
                       public RefcountedKeyedService {
  public:
-  // Whether or not it's acceptable for Chrome to request access to locked
-  // passwords, which requires prompting the user for permission.
-  enum AuthorizationPromptPolicy { ALLOW_PROMPT, DISALLOW_PROMPT };
-
   // An interface used to notify clients (observers) of this object that data in
   // the password store has changed. Register the observer via
   // PasswordStore::AddObserver.
@@ -142,22 +138,21 @@ class PasswordStore : protected PasswordStoreSync,
                                       base::Time delete_end,
                                       const base::Closure& completion);
 
+  // Sets the 'skip_zero_click' flag for all logins in the database to 'true'.
+  // |completion| will be posted to the |main_thread_runner_| after these
+  // modifications are completed and notifications are sent out.
+  void DisableAutoSignInForAllLogins(const base::Closure& completion);
+
   // Removes cached affiliation data that is no longer needed; provided that
   // affiliation-based matching is enabled.
   void TrimAffiliationCache();
 
   // Searches for a matching PasswordForm, and notifies |consumer| on
   // completion. The request will be cancelled if the consumer is destroyed.
-  // |prompt_policy| indicates whether it's permissible to prompt the user to
-  // authorize access to locked passwords. This argument is only used on
-  // platforms that support prompting the user for access (such as Mac OS).
-  // NOTE: This means that this method can return different results depending
-  // on the value of |prompt_policy|.
   // TODO(engedy): Currently, this will not return federated logins saved from
   // Android applications that are affiliated with the realm of |form|. Need to
   // decide if this is the desired behavior. See: https://crbug.com/539844.
   virtual void GetLogins(const autofill::PasswordForm& form,
-                         AuthorizationPromptPolicy prompt_policy,
                          PasswordStoreConsumer* consumer);
 
   // Gets the complete list of PasswordForms that are not blacklist entries--and
@@ -249,7 +244,7 @@ class PasswordStore : protected PasswordStoreSync,
   virtual PasswordStoreChangeList RemoveLoginsByOriginAndTimeImpl(
       const url::Origin& origin,
       base::Time delete_begin,
-      base::Time delete_end);
+      base::Time delete_end) = 0;
 
   // Synchronous implementation to remove the given logins.
   virtual PasswordStoreChangeList RemoveLoginsCreatedBetweenImpl(
@@ -265,6 +260,9 @@ class PasswordStore : protected PasswordStoreSync,
   virtual bool RemoveStatisticsCreatedBetweenImpl(base::Time delete_begin,
                                                   base::Time delete_end) = 0;
 
+  // Synchronous implementation to disable auto sign-in.
+  virtual PasswordStoreChangeList DisableAutoSignInForAllLoginsImpl() = 0;
+
   // Finds all PasswordForms with a signon_realm that is equal to, or is a
   // PSL-match to that of |form|, and takes care of notifying the consumer with
   // the results when done.
@@ -272,7 +270,6 @@ class PasswordStore : protected PasswordStoreSync,
   // to be virtual only because asynchronous behavior in PasswordStoreWin.
   // TODO(engedy): Make this non-virtual once https://crbug.com/78830 is fixed.
   virtual void GetLoginsImpl(const autofill::PasswordForm& form,
-                             AuthorizationPromptPolicy prompt_policy,
                              scoped_ptr<GetLoginsRequest> request);
 
   // Synchronous implementation provided by subclasses to add the given login.
@@ -292,8 +289,7 @@ class PasswordStore : protected PasswordStoreSync,
   // Finds and returns all PasswordForms with the same signon_realm as |form|,
   // or with a signon_realm that is a PSL-match to that of |form|.
   virtual ScopedVector<autofill::PasswordForm> FillMatchingLogins(
-      const autofill::PasswordForm& form,
-      AuthorizationPromptPolicy prompt_policy) = 0;
+      const autofill::PasswordForm& form) = 0;
 
   // Synchronous implementation for manipulating with statistics.
   virtual void AddSiteStatsImpl(const InteractionsStats& stats) = 0;
@@ -366,6 +362,7 @@ class PasswordStore : protected PasswordStoreSync,
   void RemoveStatisticsCreatedBetweenInternal(base::Time delete_begin,
                                               base::Time delete_end,
                                               const base::Closure& completion);
+  void DisableAutoSignInForAllLoginsInternal(const base::Closure& completion);
 
   // Finds all non-blacklist PasswordForms, and notifies the consumer.
   void GetAutofillableLoginsImpl(scoped_ptr<GetLoginsRequest> request);
@@ -386,14 +383,12 @@ class PasswordStore : protected PasswordStoreSync,
   // and takes care of notifying the consumer with the results when done.
   void GetLoginsWithAffiliationsImpl(
       const autofill::PasswordForm& form,
-      AuthorizationPromptPolicy prompt_policy,
       scoped_ptr<GetLoginsRequest> request,
       const std::vector<std::string>& additional_android_realms);
 
   // Schedules GetLoginsWithAffiliationsImpl() to be run on the DB thread.
   void ScheduleGetLoginsWithAffiliations(
       const autofill::PasswordForm& form,
-      AuthorizationPromptPolicy prompt_policy,
       scoped_ptr<GetLoginsRequest> request,
       const std::vector<std::string>& additional_android_realms);
 

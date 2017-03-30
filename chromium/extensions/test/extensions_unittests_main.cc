@@ -13,7 +13,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_paths.h"
 #include "extensions/test/test_extensions_client.h"
-#include "third_party/mojo/src/mojo/edk/embedder/embedder.h"
+#include "mojo/edk/embedder/embedder.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gl/test/gl_surface_test_support.h"
 #include "url/url_util.h"
@@ -39,6 +39,7 @@ class ExtensionsContentClient : public content::ContentClient {
   // content::ContentClient overrides:
   void AddAdditionalSchemes(
       std::vector<url::SchemeWithType>* standard_schemes,
+      std::vector<url::SchemeWithType>* referrer_schemes,
       std::vector<std::string>* savable_schemes) override {
     for (int i = 0; i < kNumExtensionStandardURLSchemes; i++)
       standard_schemes->push_back(kExtensionStandardURLSchemes[i]);
@@ -110,7 +111,7 @@ void ExtensionsTestSuite::Shutdown() {
 int main(int argc, char** argv) {
   content::UnitTestTestSuite test_suite(new ExtensionsTestSuite(argc, argv));
 
-  mojo::embedder::Init();
+  mojo::edk::Init();
   return base::LaunchUnitTests(argc,
                                argv,
                                base::Bind(&content::UnitTestTestSuite::Run,

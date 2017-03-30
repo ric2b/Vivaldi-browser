@@ -7,7 +7,7 @@
 // NOTE: The format of types has changed. 'FooType' is now
 //   'chrome.bluetooth.FooType'.
 // Please run the closure compiler before committing changes.
-// See https://code.google.com/p/chromium/wiki/ClosureCompilation.
+// See https://chromium.googlesource.com/chromium/src/+/master/docs/closure_compilation.md
 
 /** @fileoverview Externs generated from namespace: bluetooth */
 
@@ -82,7 +82,7 @@ chrome.bluetooth.Device;
 /**
  * Get information about the Bluetooth adapter.
  * @param {function(!chrome.bluetooth.AdapterState):void} callback Called with
- *     an AdapterState object describing the adapter              state.
+ *     an AdapterState object describing the adapter state.
  * @see https://developer.chrome.com/extensions/bluetooth#method-getAdapterState
  */
 chrome.bluetooth.getAdapterState = function(callback) {};

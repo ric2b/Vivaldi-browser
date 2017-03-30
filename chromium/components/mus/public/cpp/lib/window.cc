@@ -18,7 +18,6 @@
 #include "components/mus/public/cpp/window_observer.h"
 #include "components/mus/public/cpp/window_surface.h"
 #include "components/mus/public/cpp/window_tracker.h"
-#include "mojo/shell/public/cpp/service_provider_impl.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -308,13 +307,13 @@ void Window::Reorder(Window* relative, mojom::OrderDirection direction) {
 void Window::MoveToFront() {
   if (!parent_ || parent_->children_.back() == this)
     return;
-  Reorder(parent_->children_.back(), mojom::ORDER_DIRECTION_ABOVE);
+  Reorder(parent_->children_.back(), mojom::OrderDirection::ABOVE);
 }
 
 void Window::MoveToBack() {
   if (!parent_ || parent_->children_.front() == this)
     return;
-  Reorder(parent_->children_.front(), mojom::ORDER_DIRECTION_BELOW);
+  Reorder(parent_->children_.front(), mojom::OrderDirection::BELOW);
 }
 
 bool Window::Contains(Window* child) const {
@@ -368,9 +367,23 @@ void Window::SetTextInputState(mojo::TextInputStatePtr state) {
 
 void Window::SetImeVisibility(bool visible, mojo::TextInputStatePtr state) {
   // SetImeVisibility() shouldn't be used if the window is not editable.
-  DCHECK(state.is_null() || state->type != mojo::TEXT_INPUT_TYPE_NONE);
+  DCHECK(state.is_null() || state->type != mojo::TextInputType::NONE);
   if (connection_)
     tree_client()->SetImeVisibility(id_, visible, std::move(state));
+}
+
+bool Window::HasCapture() const {
+  return connection_ && connection_->GetCaptureWindow() == this;
+}
+
+void Window::SetCapture() {
+  if (connection_)
+    tree_client()->SetCapture(this);
+}
+
+void Window::ReleaseCapture() {
+  if (connection_)
+    tree_client()->ReleaseCapture(this);
 }
 
 void Window::SetFocus() {
@@ -388,7 +401,7 @@ void Window::SetCanFocus(bool can_focus) {
 }
 
 void Window::Embed(mus::mojom::WindowTreeClientPtr client) {
-  Embed(std::move(client), mus::mojom::WindowTree::ACCESS_POLICY_DEFAULT,
+  Embed(std::move(client), mus::mojom::WindowTree::kAccessPolicyDefault,
         base::Bind(&EmptyEmbedCallback));
 }
 
@@ -483,7 +496,7 @@ Window::Window(WindowTreeConnection* connection, Id id)
       input_event_handler_(nullptr),
       viewport_metrics_(CreateEmptyViewportMetrics()),
       visible_(false),
-      cursor_id_(mojom::CURSOR_NULL),
+      cursor_id_(mojom::Cursor::CURSOR_NULL),
       drawn_(false) {}
 
 WindowTreeClientImpl* Window::tree_client() {
@@ -496,7 +509,7 @@ void Window::SetSharedPropertyInternal(const std::string& name,
     return;
 
   if (connection_) {
-    mojo::Array<uint8_t> transport_value;
+    mojo::Array<uint8_t> transport_value(nullptr);
     if (value) {
       transport_value.resize(value->size());
       if (value->size())
@@ -791,15 +804,15 @@ bool Window::ReorderImpl(Window* window,
       std::find(window->parent_->children_.begin(),
                 window->parent_->children_.end(), relative) -
       window->parent_->children_.begin();
-  if ((direction == mojom::ORDER_DIRECTION_ABOVE && child_i == target_i + 1) ||
-      (direction == mojom::ORDER_DIRECTION_BELOW && child_i + 1 == target_i)) {
+  if ((direction == mojom::OrderDirection::ABOVE && child_i == target_i + 1) ||
+      (direction == mojom::OrderDirection::BELOW && child_i + 1 == target_i)) {
     return false;
   }
 
   if (notifier)
     notifier->NotifyWindowReordering();
 
-  const size_t dest_i = direction == mojom::ORDER_DIRECTION_ABOVE
+  const size_t dest_i = direction == mojom::OrderDirection::ABOVE
                             ? (child_i < target_i ? target_i : target_i + 1)
                             : (child_i < target_i ? target_i - 1 : target_i);
   window->parent_->children_.erase(window->parent_->children_.begin() +

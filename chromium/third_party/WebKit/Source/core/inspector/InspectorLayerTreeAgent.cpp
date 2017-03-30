@@ -39,19 +39,20 @@
 #include "core/frame/Settings.h"
 #include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectedFrames.h"
-#include "core/inspector/InspectorState.h"
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/loader/DocumentLoader.h"
+#include "core/page/ChromeClient.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/CompositingReasons.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/PictureSnapshot.h"
 #include "platform/graphics/paint/SkPictureBuilder.h"
 #include "platform/image-encoders/skia/PNGImageEncoder.h"
+#include "platform/inspector_protocol/Parser.h"
 #include "platform/transforms/TransformationMatrix.h"
 #include "public/platform/WebFloatPoint.h"
 #include "public/platform/WebLayer.h"
@@ -60,6 +61,7 @@
 
 namespace blink {
 
+using protocol::Array;
 unsigned InspectorLayerTreeAgent::s_lastSnapshotId;
 
 inline String idForLayer(const GraphicsLayer* graphicsLayer)
@@ -67,47 +69,47 @@ inline String idForLayer(const GraphicsLayer* graphicsLayer)
     return String::number(graphicsLayer->platformLayer()->id());
 }
 
-static PassRefPtr<TypeBuilder::LayerTree::ScrollRect> buildScrollRect(const WebRect& rect, const TypeBuilder::LayerTree::ScrollRect::Type::Enum& type)
+static PassOwnPtr<protocol::LayerTree::ScrollRect> buildScrollRect(const WebRect& rect, const String& type)
 {
-    RefPtr<TypeBuilder::DOM::Rect> rectObject = TypeBuilder::DOM::Rect::create()
+    OwnPtr<protocol::DOM::Rect> rectObject = protocol::DOM::Rect::create()
         .setX(rect.x)
         .setY(rect.y)
         .setHeight(rect.height)
-        .setWidth(rect.width);
-    RefPtr<TypeBuilder::LayerTree::ScrollRect> scrollRectObject = TypeBuilder::LayerTree::ScrollRect::create()
+        .setWidth(rect.width).build();
+    OwnPtr<protocol::LayerTree::ScrollRect> scrollRectObject = protocol::LayerTree::ScrollRect::create()
         .setRect(rectObject.release())
-        .setType(type);
+        .setType(type).build();
     return scrollRectObject.release();
 }
 
-static PassRefPtr<TypeBuilder::Array<TypeBuilder::LayerTree::ScrollRect> > buildScrollRectsForLayer(GraphicsLayer* graphicsLayer)
+static PassOwnPtr<Array<protocol::LayerTree::ScrollRect>> buildScrollRectsForLayer(GraphicsLayer* graphicsLayer, bool reportWheelScrollers)
 {
-    RefPtr<TypeBuilder::Array<TypeBuilder::LayerTree::ScrollRect> > scrollRects = TypeBuilder::Array<TypeBuilder::LayerTree::ScrollRect>::create();
+    OwnPtr<Array<protocol::LayerTree::ScrollRect>> scrollRects = Array<protocol::LayerTree::ScrollRect>::create();
     WebLayer* webLayer = graphicsLayer->platformLayer();
     for (size_t i = 0; i < webLayer->nonFastScrollableRegion().size(); ++i) {
-        scrollRects->addItem(buildScrollRect(webLayer->nonFastScrollableRegion()[i], TypeBuilder::LayerTree::ScrollRect::Type::RepaintsOnScroll));
+        scrollRects->addItem(buildScrollRect(webLayer->nonFastScrollableRegion()[i], protocol::LayerTree::ScrollRect::TypeEnum::RepaintsOnScroll));
     }
     for (size_t i = 0; i < webLayer->touchEventHandlerRegion().size(); ++i) {
-        scrollRects->addItem(buildScrollRect(webLayer->touchEventHandlerRegion()[i], TypeBuilder::LayerTree::ScrollRect::Type::TouchEventHandler));
+        scrollRects->addItem(buildScrollRect(webLayer->touchEventHandlerRegion()[i], protocol::LayerTree::ScrollRect::TypeEnum::TouchEventHandler));
     }
-    if (webLayer->haveWheelEventHandlers()) {
+    if (reportWheelScrollers) {
         WebRect webRect(webLayer->position().x, webLayer->position().y, webLayer->bounds().width, webLayer->bounds().height);
-        scrollRects->addItem(buildScrollRect(webRect, TypeBuilder::LayerTree::ScrollRect::Type::WheelEventHandler));
+        scrollRects->addItem(buildScrollRect(webRect, protocol::LayerTree::ScrollRect::TypeEnum::WheelEventHandler));
     }
     return scrollRects->length() ? scrollRects.release() : nullptr;
 }
 
-static PassRefPtr<TypeBuilder::LayerTree::Layer> buildObjectForLayer(GraphicsLayer* graphicsLayer, int nodeId)
+static PassOwnPtr<protocol::LayerTree::Layer> buildObjectForLayer(GraphicsLayer* graphicsLayer, int nodeId, bool reportWheelEventListeners)
 {
     WebLayer* webLayer = graphicsLayer->platformLayer();
-    RefPtr<TypeBuilder::LayerTree::Layer> layerObject = TypeBuilder::LayerTree::Layer::create()
+    OwnPtr<protocol::LayerTree::Layer> layerObject = protocol::LayerTree::Layer::create()
         .setLayerId(idForLayer(graphicsLayer))
         .setOffsetX(webLayer->position().x)
         .setOffsetY(webLayer->position().y)
         .setWidth(webLayer->bounds().width)
         .setHeight(webLayer->bounds().height)
         .setPaintCount(graphicsLayer->paintCount())
-        .setDrawsContent(webLayer->drawsContent());
+        .setDrawsContent(webLayer->drawsContent()).build();
 
     if (nodeId)
         layerObject->setBackendNodeId(nodeId);
@@ -123,10 +125,10 @@ static PassRefPtr<TypeBuilder::LayerTree::Layer> buildObjectForLayer(GraphicsLay
     if (!transform.isIdentity()) {
         TransformationMatrix::FloatMatrix4 flattenedMatrix;
         transform.toColumnMajorFloatArray(flattenedMatrix);
-        RefPtr<TypeBuilder::Array<double> > transformArray = TypeBuilder::Array<double>::create();
+        OwnPtr<Array<double>> transformArray = Array<double>::create();
         for (size_t i = 0; i < WTF_ARRAY_LENGTH(flattenedMatrix); ++i)
             transformArray->addItem(flattenedMatrix[i]);
-        layerObject->setTransform(transformArray);
+        layerObject->setTransform(transformArray.release());
         const FloatPoint3D& transformOrigin = graphicsLayer->transformOrigin();
         // FIXME: rename these to setTransformOrigin*
         if (webLayer->bounds().width > 0)
@@ -139,14 +141,14 @@ static PassRefPtr<TypeBuilder::LayerTree::Layer> buildObjectForLayer(GraphicsLay
             layerObject->setAnchorY(0.0);
         layerObject->setAnchorZ(transformOrigin.z());
     }
-    RefPtr<TypeBuilder::Array<TypeBuilder::LayerTree::ScrollRect> > scrollRects = buildScrollRectsForLayer(graphicsLayer);
+    OwnPtr<Array<protocol::LayerTree::ScrollRect>> scrollRects = buildScrollRectsForLayer(graphicsLayer, reportWheelEventListeners);
     if (scrollRects)
         layerObject->setScrollRects(scrollRects.release());
-    return layerObject;
+    return layerObject.release();
 }
 
 InspectorLayerTreeAgent::InspectorLayerTreeAgent(InspectedFrames* inspectedFrames)
-    : InspectorBaseAgent<InspectorLayerTreeAgent, InspectorFrontend::LayerTree>("LayerTree")
+    : InspectorBaseAgent<InspectorLayerTreeAgent, protocol::Frontend::LayerTree>("LayerTree")
     , m_inspectedFrames(inspectedFrames)
 {
 }
@@ -194,24 +196,27 @@ void InspectorLayerTreeAgent::didPaint(LayoutObject*, const GraphicsLayer* graph
     if (!graphicsLayer)
         return;
 
-    RefPtr<TypeBuilder::DOM::Rect> domRect = TypeBuilder::DOM::Rect::create()
+    OwnPtr<protocol::DOM::Rect> domRect = protocol::DOM::Rect::create()
         .setX(rect.x())
         .setY(rect.y())
         .setWidth(rect.width())
-        .setHeight(rect.height());
+        .setHeight(rect.height()).build();
     frontend()->layerPainted(idForLayer(graphicsLayer), domRect.release());
 }
 
-PassRefPtr<TypeBuilder::Array<TypeBuilder::LayerTree::Layer> > InspectorLayerTreeAgent::buildLayerTree()
+PassOwnPtr<Array<protocol::LayerTree::Layer>> InspectorLayerTreeAgent::buildLayerTree()
 {
     PaintLayerCompositor* compositor = paintLayerCompositor();
     if (!compositor || !compositor->inCompositingMode())
         return nullptr;
 
     LayerIdToNodeIdMap layerIdToNodeIdMap;
-    RefPtr<TypeBuilder::Array<TypeBuilder::LayerTree::Layer> > layers = TypeBuilder::Array<TypeBuilder::LayerTree::Layer>::create();
+    OwnPtr<Array<protocol::LayerTree::Layer>> layers = Array<protocol::LayerTree::Layer>::create();
     buildLayerIdToNodeIdMap(compositor->rootLayer(), layerIdToNodeIdMap);
-    gatherGraphicsLayers(rootGraphicsLayer(), layerIdToNodeIdMap, layers);
+    int scrollingLayerId = m_inspectedFrames->root()->view()->layerForScrolling()->platformLayer()->id();
+    bool haveBlockingWheelEventHandlers = m_inspectedFrames->root()->chromeClient().eventListenerProperties(WebEventListenerClass::MouseWheel) == WebEventListenerProperties::Blocking;
+
+    gatherGraphicsLayers(rootGraphicsLayer(), layerIdToNodeIdMap, layers, haveBlockingWheelEventHandlers, scrollingLayerId);
     return layers.release();
 }
 
@@ -234,16 +239,16 @@ void InspectorLayerTreeAgent::buildLayerIdToNodeIdMap(PaintLayer* root, LayerIdT
     }
 }
 
-void InspectorLayerTreeAgent::gatherGraphicsLayers(GraphicsLayer* root, HashMap<int, int>& layerIdToNodeIdMap, RefPtr<TypeBuilder::Array<TypeBuilder::LayerTree::Layer> >& layers)
+void InspectorLayerTreeAgent::gatherGraphicsLayers(GraphicsLayer* root, HashMap<int, int>& layerIdToNodeIdMap, OwnPtr<Array<protocol::LayerTree::Layer>>& layers, bool hasWheelEventHandlers, int scrollingLayerId)
 {
     int layerId = root->platformLayer()->id();
     if (m_pageOverlayLayerIds.find(layerId) != WTF::kNotFound)
         return;
-    layers->addItem(buildObjectForLayer(root, layerIdToNodeIdMap.get(layerId)));
+    layers->addItem(buildObjectForLayer(root, layerIdToNodeIdMap.get(layerId), hasWheelEventHandlers && layerId == scrollingLayerId));
     if (GraphicsLayer* replica = root->replicaLayer())
-        gatherGraphicsLayers(replica, layerIdToNodeIdMap, layers);
+        gatherGraphicsLayers(replica, layerIdToNodeIdMap, layers, hasWheelEventHandlers, scrollingLayerId);
     for (size_t i = 0, size = root->children().size(); i < size; ++i)
-        gatherGraphicsLayers(root->children()[i], layerIdToNodeIdMap, layers);
+        gatherGraphicsLayers(root->children()[i], layerIdToNodeIdMap, layers, hasWheelEventHandlers, scrollingLayerId);
 }
 
 int InspectorLayerTreeAgent::idForNode(Node* node)
@@ -298,17 +303,17 @@ GraphicsLayer* InspectorLayerTreeAgent::layerById(ErrorString* errorString, cons
     return result;
 }
 
-void InspectorLayerTreeAgent::compositingReasons(ErrorString* errorString, const String& layerId, RefPtr<TypeBuilder::Array<String> >& reasonStrings)
+void InspectorLayerTreeAgent::compositingReasons(ErrorString* errorString, const String& layerId, OwnPtr<Array<String>>* reasonStrings)
 {
     const GraphicsLayer* graphicsLayer = layerById(errorString, layerId);
     if (!graphicsLayer)
         return;
     CompositingReasons reasonsBitmask = graphicsLayer->compositingReasons();
-    reasonStrings = TypeBuilder::Array<String>::create();
+    *reasonStrings = Array<String>::create();
     for (size_t i = 0; i < kNumberOfCompositingReasons; ++i) {
         if (!(reasonsBitmask & kCompositingReasonStringMap[i].reason))
             continue;
-        reasonStrings->addItem(kCompositingReasonStringMap[i].shortName);
+        (*reasonStrings)->addItem(kCompositingReasonStringMap[i].shortName);
 #ifndef _NDEBUG
         reasonsBitmask &= ~kCompositingReasonStringMap[i].reason;
 #endif
@@ -337,30 +342,19 @@ void InspectorLayerTreeAgent::makeSnapshot(ErrorString* errorString, const Strin
     ASSERT_UNUSED(newEntry, newEntry);
 }
 
-void InspectorLayerTreeAgent::loadSnapshot(ErrorString* errorString, const RefPtr<JSONArray>& tiles, String* snapshotId)
+void InspectorLayerTreeAgent::loadSnapshot(ErrorString* errorString, PassOwnPtr<Array<protocol::LayerTree::PictureTile>> tiles, String* snapshotId)
 {
     if (!tiles->length()) {
         *errorString = "Invalid argument, no tiles provided";
         return;
     }
-    Vector<RefPtr<PictureSnapshot::TilePictureStream> > decodedTiles;
+    Vector<RefPtr<PictureSnapshot::TilePictureStream>> decodedTiles;
     decodedTiles.grow(tiles->length());
     for (size_t i = 0; i < tiles->length(); ++i) {
-        RefPtr<JSONObject> item;
-        if (!tiles->get(i)->asObject(&item)) {
-            *errorString = "Invalid argument, array item is not an object";
-            return;
-        }
-        double x = 0, y = 0;
-        String picture;
-        if (!item->getNumber("x", &x) || !item->getNumber("y", &y)
-            || !item->getString("picture", &picture)) {
-            *errorString = "Invalid argument, missing required field";
-            return;
-        }
+        protocol::LayerTree::PictureTile* tile = tiles->get(i);
         decodedTiles[i] = adoptRef(new PictureSnapshot::TilePictureStream());
-        decodedTiles[i]->layerOffset.set(x, y);
-        if (!base64Decode(picture, decodedTiles[i]->data)) {
+        decodedTiles[i]->layerOffset.set(tile->getX(), tile->getY());
+        if (!base64Decode(tile->getPicture(), decodedTiles[i]->data)) {
             *errorString = "Invalid base64 encoding";
             return;
         }
@@ -400,12 +394,12 @@ const PictureSnapshot* InspectorLayerTreeAgent::snapshotById(ErrorString* errorS
     return it->value.get();
 }
 
-void InspectorLayerTreeAgent::replaySnapshot(ErrorString* errorString, const String& snapshotId, const int* fromStep, const int* toStep, const double* scale, String* dataURL)
+void InspectorLayerTreeAgent::replaySnapshot(ErrorString* errorString, const String& snapshotId, const Maybe<int>& fromStep, const Maybe<int>& toStep, const Maybe<double>& scale, String* dataURL)
 {
     const PictureSnapshot* snapshot = snapshotById(errorString, snapshotId);
     if (!snapshot)
         return;
-    OwnPtr<Vector<char> > base64Data = snapshot->replay(fromStep ? *fromStep : 0, toStep ? *toStep : 0, scale ? *scale : 1.0);
+    OwnPtr<Vector<char>> base64Data = snapshot->replay(fromStep.fromMaybe(0), toStep.fromMaybe(0), scale.fromMaybe(1.0));
     if (!base64Data) {
         *errorString = "Image encoding failed";
         return;
@@ -417,43 +411,38 @@ void InspectorLayerTreeAgent::replaySnapshot(ErrorString* errorString, const Str
     *dataURL = url.toString();
 }
 
-static bool parseRect(const JSONObject& object, FloatRect* rect)
+static void parseRect(protocol::DOM::Rect* object, FloatRect* rect)
 {
-    double x = 0, y = 0;
-    double width = 0, height = 0;
-    if (!object.getNumber("x", &x) || !object.getNumber("y", &y) || !object.getNumber("width", &width) || !object.getNumber("width", &height))
-        return false;
-    *rect = FloatRect(x, y, width, height);
-    return true;
+    *rect = FloatRect(object->getX(), object->getY(), object->getWidth(), object->getHeight());
 }
 
-void InspectorLayerTreeAgent::profileSnapshot(ErrorString* errorString, const String& snapshotId, const int* minRepeatCount, const double* minDuration, const RefPtr<JSONObject>* clipRect, RefPtr<TypeBuilder::Array<TypeBuilder::Array<double> > >& outTimings)
+void InspectorLayerTreeAgent::profileSnapshot(ErrorString* errorString, const String& snapshotId, const protocol::Maybe<int>& minRepeatCount, const protocol::Maybe<double>& minDuration, const Maybe<protocol::DOM::Rect>& clipRect, OwnPtr<protocol::Array<protocol::Array<double>>>* outTimings)
 {
     const PictureSnapshot* snapshot = snapshotById(errorString, snapshotId);
     if (!snapshot)
         return;
     FloatRect rect;
-    if (clipRect && !parseRect(**clipRect, &rect)) {
-        *errorString = "Invalid argument, missing required field";
-        return;
-    }
-    OwnPtr<PictureSnapshot::Timings> timings = snapshot->profile(minRepeatCount ? *minRepeatCount : 1, minDuration ? *minDuration : 0, clipRect ? &rect : 0);
-    outTimings = TypeBuilder::Array<TypeBuilder::Array<double> >::create();
+    if (clipRect.isJust())
+        parseRect(clipRect.fromJust(), &rect);
+    OwnPtr<PictureSnapshot::Timings> timings = snapshot->profile(minRepeatCount.fromMaybe(1), minDuration.fromMaybe(0), clipRect.isJust() ? &rect : 0);
+    *outTimings = Array<Array<double>>::create();
     for (size_t i = 0; i < timings->size(); ++i) {
         const Vector<double>& row = (*timings)[i];
-        RefPtr<TypeBuilder::Array<double> > outRow = TypeBuilder::Array<double>::create();
+        OwnPtr<Array<double>> outRow = Array<double>::create();
         for (size_t j = 0; j < row.size(); ++j)
             outRow->addItem(row[j]);
-        outTimings->addItem(outRow.release());
+        (*outTimings)->addItem(outRow.release());
     }
 }
 
-void InspectorLayerTreeAgent::snapshotCommandLog(ErrorString* errorString, const String& snapshotId, RefPtr<TypeBuilder::Array<JSONObject> >& commandLog)
+void InspectorLayerTreeAgent::snapshotCommandLog(ErrorString* errorString, const String& snapshotId, OwnPtr<Array<RefPtr<protocol::DictionaryValue>>>* commandLog)
 {
     const PictureSnapshot* snapshot = snapshotById(errorString, snapshotId);
     if (!snapshot)
         return;
-    commandLog = TypeBuilder::Array<JSONObject>::runtimeCast(snapshot->snapshotCommandLog());
+    protocol::ErrorSupport errors(errorString);
+    RefPtr<protocol::Value> logValue = protocol::parseJSON(snapshot->snapshotCommandLog()->toJSONString());
+    *commandLog = Array<RefPtr<protocol::DictionaryValue>>::parse(logValue, &errors);
 }
 
 void InspectorLayerTreeAgent::willAddPageOverlay(const GraphicsLayer* layer)

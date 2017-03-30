@@ -8,8 +8,8 @@
 
 #include "base/bind.h"
 #include "components/mus/public/cpp/event_matcher.h"
-#include "mojo/shell/public/cpp/application_connection.h"
-#include "mojo/shell/public/cpp/application_impl.h"
+#include "mojo/shell/public/cpp/connection.h"
+#include "mojo/shell/public/cpp/connector.h"
 
 namespace mash {
 namespace browser_driver {
@@ -24,20 +24,18 @@ enum class Accelerator : uint32_t {
 struct AcceleratorSpec {
   Accelerator id;
   mus::mojom::KeyboardCode keyboard_code;
-  mus::mojom::EventFlags event_flags;
+  // A bitfield of kEventFlag* and kMouseEventFlag* values in
+  // input_event_constants.mojom.
+  int event_flags;
 };
 
 AcceleratorSpec g_spec[] = {
-  { Accelerator::NewWindow,
-    mus::mojom::KEYBOARD_CODE_N,
-    mus::mojom::EVENT_FLAGS_CONTROL_DOWN },
-  { Accelerator::NewTab,
-    mus::mojom::KEYBOARD_CODE_T,
-    mus::mojom::EVENT_FLAGS_CONTROL_DOWN },
-  { Accelerator::NewIncognitoWindow,
-    mus::mojom::KEYBOARD_CODE_N,
-    static_cast<mus::mojom::EventFlags>(mus::mojom::EVENT_FLAGS_CONTROL_DOWN |
-        mus::mojom::EVENT_FLAGS_SHIFT_DOWN) },
+    {Accelerator::NewWindow, mus::mojom::KeyboardCode::N,
+     mus::mojom::kEventFlagControlDown},
+    {Accelerator::NewTab, mus::mojom::KeyboardCode::T,
+     mus::mojom::kEventFlagControlDown},
+    {Accelerator::NewIncognitoWindow, mus::mojom::KeyboardCode::N,
+     mus::mojom::kEventFlagControlDown | mus::mojom::kEventFlagShiftDown},
 };
 
 void AssertTrue(bool success) {
@@ -47,19 +45,22 @@ void AssertTrue(bool success) {
 }  // namespace
 
 BrowserDriverApplicationDelegate::BrowserDriverApplicationDelegate()
-    : app_(nullptr),
+    : connector_(nullptr),
       binding_(this) {}
 
 BrowserDriverApplicationDelegate::~BrowserDriverApplicationDelegate() {}
 
-void BrowserDriverApplicationDelegate::Initialize(mojo::ApplicationImpl* app) {
-  app_ = app;
+void BrowserDriverApplicationDelegate::Initialize(mojo::Connector* connector,
+                                                  const std::string& url,
+                                                  uint32_t id,
+                                                  uint32_t user_id) {
+  connector_ = connector;
   AddAccelerators();
 }
 
-bool BrowserDriverApplicationDelegate::ConfigureIncomingConnection(
-    mojo::ApplicationConnection* connection) {
-  return false;
+bool BrowserDriverApplicationDelegate::AcceptConnection(
+    mojo::Connection* connection) {
+  return true;
 }
 
 void BrowserDriverApplicationDelegate::OnAccelerator(
@@ -68,7 +69,7 @@ void BrowserDriverApplicationDelegate::OnAccelerator(
     case Accelerator::NewWindow:
     case Accelerator::NewTab:
     case Accelerator::NewIncognitoWindow:
-      app_->ConnectToApplication("exe:chrome");
+      connector_->Connect("exe:chrome");
       // TODO(beng): have Chrome export a service that allows it to be driven by
       //             this driver, e.g. to open new tabs, incognito windows, etc.
       break;
@@ -82,18 +83,16 @@ void BrowserDriverApplicationDelegate::AddAccelerators() {
   // TODO(beng): find some other way to get the window manager. I don't like
   //             having to specify it by URL because it may differ per display.
   mus::mojom::AcceleratorRegistrarPtr registrar;
-  app_->ConnectToService("mojo:desktop_wm", &registrar);
+  connector_->ConnectToInterface("mojo:desktop_wm", &registrar);
 
   if (binding_.is_bound())
     binding_.Unbind();
-  mus::mojom::AcceleratorHandlerPtr handler;
-  binding_.Bind(GetProxy(&handler));
+  registrar->SetHandler(binding_.CreateInterfacePtrAndBind());
   // If the window manager restarts, the handler pipe will close and we'll need
   // to re-add our accelerators when the window manager comes back up.
   binding_.set_connection_error_handler(
       base::Bind(&BrowserDriverApplicationDelegate::AddAccelerators,
                  base::Unretained(this)));
-  registrar->SetHandler(std::move(handler));
 
   for (const AcceleratorSpec& spec : g_spec) {
     registrar->AddAccelerator(

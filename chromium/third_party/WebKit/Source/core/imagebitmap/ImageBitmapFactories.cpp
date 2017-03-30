@@ -35,13 +35,20 @@
 #include "core/fileapi/Blob.h"
 #include "core/frame/ImageBitmap.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/html/ImageData.h"
+#include "core/imagebitmap/ImageBitmapOptions.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/SharedBuffer.h"
+#include "platform/ThreadSafeFunctional.h"
 #include "platform/graphics/ImageSource.h"
+#include "platform/threading/BackgroundTaskRunner.h"
+#include "public/platform/Platform.h"
+#include "public/platform/WebThread.h"
+#include "public/platform/WebTraceLocation.h"
 #include <v8.h>
 
 namespace blink {
@@ -66,26 +73,42 @@ static inline ImageBitmapSource* toImageBitmapSourceInternal(const ImageBitmapSo
 
 ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, const ImageBitmapSourceUnion& bitmapSource, ExceptionState& exceptionState)
 {
+    UseCounter::Feature feature = UseCounter::CreateImageBitmap;
+    UseCounter::count(scriptState->executionContext(), feature);
+    ImageBitmapOptions options;
+    return createImageBitmap(scriptState, eventTarget, bitmapSource, options, exceptionState);
+}
+
+ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, const ImageBitmapSourceUnion& bitmapSource, const ImageBitmapOptions& options, ExceptionState& exceptionState)
+{
     ImageBitmapSource* bitmapSourceInternal = toImageBitmapSourceInternal(bitmapSource);
     if (bitmapSourceInternal->isBlob()) {
         Blob* blob = static_cast<Blob*>(bitmapSourceInternal);
-        ImageBitmapLoader* loader = ImageBitmapFactories::ImageBitmapLoader::create(from(eventTarget), IntRect(), scriptState);
+        ImageBitmapLoader* loader = ImageBitmapFactories::ImageBitmapLoader::create(from(eventTarget), IntRect(), options, scriptState);
         ScriptPromise promise = loader->promise();
         from(eventTarget).addLoader(loader);
         loader->loadBlobAsync(eventTarget.executionContext(), blob);
         return promise;
     }
     IntSize srcSize = bitmapSourceInternal->bitmapSourceSize();
-    return createImageBitmap(scriptState, eventTarget, bitmapSourceInternal, 0, 0, srcSize.width(), srcSize.height(), exceptionState);
+    return createImageBitmap(scriptState, eventTarget, bitmapSourceInternal, 0, 0, srcSize.width(), srcSize.height(), options, exceptionState);
 }
 
 ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, const ImageBitmapSourceUnion& bitmapSource, int sx, int sy, int sw, int sh, ExceptionState& exceptionState)
 {
-    ImageBitmapSource* bitmapSourceInternal = toImageBitmapSourceInternal(bitmapSource);
-    return createImageBitmap(scriptState, eventTarget, bitmapSourceInternal, sx, sy, sw, sh, exceptionState);
+    UseCounter::Feature feature = UseCounter::CreateImageBitmap;
+    UseCounter::count(scriptState->executionContext(), feature);
+    ImageBitmapOptions options;
+    return createImageBitmap(scriptState, eventTarget, bitmapSource, sx, sy, sw, sh, options, exceptionState);
 }
 
-ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, ImageBitmapSource* bitmapSource, int sx, int sy, int sw, int sh, ExceptionState& exceptionState)
+ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, const ImageBitmapSourceUnion& bitmapSource, int sx, int sy, int sw, int sh, const ImageBitmapOptions& options, ExceptionState& exceptionState)
+{
+    ImageBitmapSource* bitmapSourceInternal = toImageBitmapSourceInternal(bitmapSource);
+    return createImageBitmap(scriptState, eventTarget, bitmapSourceInternal, sx, sy, sw, sh, options, exceptionState);
+}
+
+ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, ImageBitmapSource* bitmapSource, int sx, int sy, int sw, int sh, const ImageBitmapOptions& options, ExceptionState& exceptionState)
 {
     if (bitmapSource->isBlob()) {
         if (!sw || !sh) {
@@ -93,14 +116,14 @@ ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, 
             return ScriptPromise();
         }
         Blob* blob = static_cast<Blob*>(bitmapSource);
-        ImageBitmapLoader* loader = ImageBitmapFactories::ImageBitmapLoader::create(from(eventTarget), IntRect(sx, sy, sw, sh), scriptState);
+        ImageBitmapLoader* loader = ImageBitmapFactories::ImageBitmapLoader::create(from(eventTarget), IntRect(sx, sy, sw, sh), options, scriptState);
         ScriptPromise promise = loader->promise();
         from(eventTarget).addLoader(loader);
         loader->loadBlobAsync(eventTarget.executionContext(), blob);
         return promise;
     }
 
-    return bitmapSource->createImageBitmap(scriptState, eventTarget, sx, sy, sw, sh, exceptionState);
+    return bitmapSource->createImageBitmap(scriptState, eventTarget, sx, sy, sw, sh, options, exceptionState);
 }
 
 const char* ImageBitmapFactories::supplementName()
@@ -139,11 +162,12 @@ void ImageBitmapFactories::didFinishLoading(ImageBitmapLoader* loader)
     m_pendingLoaders.remove(loader);
 }
 
-ImageBitmapFactories::ImageBitmapLoader::ImageBitmapLoader(ImageBitmapFactories& factory, const IntRect& cropRect, ScriptState* scriptState)
+ImageBitmapFactories::ImageBitmapLoader::ImageBitmapLoader(ImageBitmapFactories& factory, const IntRect& cropRect, ScriptState* scriptState, const ImageBitmapOptions& options)
     : m_loader(FileReaderLoader::ReadAsArrayBuffer, this)
     , m_factory(&factory)
     , m_resolver(ScriptPromiseResolver::create(scriptState))
     , m_cropRect(cropRect)
+    , m_options(options)
 {
 }
 
@@ -171,11 +195,38 @@ void ImageBitmapFactories::ImageBitmapLoader::didFinishLoading()
         rejectPromise();
         return;
     }
+    scheduleAsyncImageBitmapDecoding();
+}
+
+void ImageBitmapFactories::ImageBitmapLoader::didFail(FileError::ErrorCode)
+{
+    rejectPromise();
+}
+
+void ImageBitmapFactories::ImageBitmapLoader::scheduleAsyncImageBitmapDecoding()
+{
+    // For a 4000*4000 png image where each 10*10 tile is filled in by a random RGBA value,
+    // the byteLength is around 2M, and it typically takes around 4.5ms to decode on a
+    // current model of Linux desktop.
+    const int longTaskByteLengthThreshold = 2000000;
+    BackgroundTaskRunner::TaskSize taskSize = (m_loader.arrayBufferResult()->byteLength() >= longTaskByteLengthThreshold) ? BackgroundTaskRunner::TaskSizeLongRunningTask : BackgroundTaskRunner::TaskSizeShortRunningTask;
+    WebTaskRunner* taskRunner = Platform::current()->currentThread()->taskRunner();
+    BackgroundTaskRunner::postOnBackgroundThread(BLINK_FROM_HERE, threadSafeBind(&ImageBitmapFactories::ImageBitmapLoader::decodeImageOnDecoderThread, AllowCrossThreadAccess(this), AllowCrossThreadAccess(taskRunner)), taskSize);
+}
+
+void ImageBitmapFactories::ImageBitmapLoader::decodeImageOnDecoderThread(WebTaskRunner* taskRunner)
+{
+    ASSERT(!isMainThread());
     RefPtr<SharedBuffer> sharedBuffer = SharedBuffer::create((char*)m_loader.arrayBufferResult()->data(), static_cast<size_t>(m_loader.arrayBufferResult()->byteLength()));
 
     OwnPtr<ImageSource> source = adoptPtr(new ImageSource());
     source->setData(*sharedBuffer, true);
 
+    taskRunner->postTask(BLINK_FROM_HERE, threadSafeBind(&ImageBitmapFactories::ImageBitmapLoader::resolvePromiseOnOriginalThread, AllowCrossThreadAccess(this), source.release()));
+}
+
+void ImageBitmapFactories::ImageBitmapLoader::resolvePromiseOnOriginalThread(PassOwnPtr<ImageSource> source)
+{
     RefPtr<SkImage> frame = source->createFrameAtIndex(0);
     ASSERT(!frame || (frame->width() && frame->height()));
     if (!frame) {
@@ -190,14 +241,9 @@ void ImageBitmapFactories::ImageBitmapLoader::didFinishLoading()
         m_cropRect = IntRect(IntPoint(), image->size());
     }
 
-    RefPtrWillBeRawPtr<ImageBitmap> imageBitmap = ImageBitmap::create(image, m_cropRect);
+    RefPtrWillBeRawPtr<ImageBitmap> imageBitmap = ImageBitmap::create(image, m_cropRect, m_options);
     m_resolver->resolve(imageBitmap.release());
     m_factory->didFinishLoading(this);
-}
-
-void ImageBitmapFactories::ImageBitmapLoader::didFail(FileError::ErrorCode)
-{
-    rejectPromise();
 }
 
 DEFINE_TRACE(ImageBitmapFactories::ImageBitmapLoader)

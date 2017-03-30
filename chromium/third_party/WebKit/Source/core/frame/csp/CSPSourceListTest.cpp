@@ -53,6 +53,15 @@ TEST_F(CSPSourceListTest, BasicMatchingNone)
     EXPECT_FALSE(sourceList.matches(KURL(base, "https://example.test/")));
 }
 
+TEST_F(CSPSourceListTest, BasicMatchingUnsafeDynamic)
+{
+    String sources = "'unsafe-dynamic'";
+    CSPSourceList sourceList(csp.get(), "script-src");
+    parseSourceList(sourceList, sources);
+
+    EXPECT_TRUE(sourceList.allowDynamic());
+}
+
 TEST_F(CSPSourceListTest, BasicMatchingStar)
 {
     KURL base;
@@ -177,4 +186,4 @@ TEST_F(CSPSourceListTest, RedirectMatching)
     EXPECT_FALSE(sourceList.matches(KURL(base, "http://example3.com/foo/"), ContentSecurityPolicy::DidRedirect));
 }
 
-} // namespace
+} // namespace blink

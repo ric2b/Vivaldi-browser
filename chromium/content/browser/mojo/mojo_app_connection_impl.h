@@ -7,7 +7,7 @@
 
 #include "base/macros.h"
 #include "content/public/browser/mojo_app_connection.h"
-#include "mojo/shell/public/interfaces/service_provider.mojom.h"
+#include "mojo/shell/public/interfaces/interface_provider.mojom.h"
 
 class GURL;
 
@@ -21,10 +21,10 @@ class MojoAppConnectionImpl : public MojoAppConnection {
 
  private:
   // MojoAppConnection:
-  void ConnectToService(const std::string& service_name,
-                        mojo::ScopedMessagePipeHandle handle) override;
+  void GetInterface(const std::string& interface_name,
+                    mojo::ScopedMessagePipeHandle handle) override;
 
-  mojo::ServiceProviderPtr services_;
+  mojo::shell::mojom::InterfaceProviderPtr interfaces_;
 
   DISALLOW_COPY_AND_ASSIGN(MojoAppConnectionImpl);
 };

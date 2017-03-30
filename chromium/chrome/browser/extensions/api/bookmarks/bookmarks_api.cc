@@ -16,7 +16,6 @@
 #include "base/lazy_instance.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
 #include "base/sha1.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
@@ -53,11 +52,15 @@
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/browser/notification_types.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/gfx/codec/jpeg_codec.h"
+
+#include "chrome/browser/thumbnails/thumbnail_service.h"
+#include "chrome/browser/thumbnails/thumbnail_service_factory.h"
+#include "chrome/browser/thumbnails/thumbnailing_context.h"
+#include "components/prefs/pref_service.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/gfx/codec/jpeg_codec.h"
 
 #if defined(OS_WIN)
-#include "ui/aura/remote_window_tree_host_win.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/jumplist_updater_win.h"
@@ -936,11 +939,6 @@ void BookmarksIOFunction::ShowSelectFileDialog(
   gfx::NativeWindow owning_window = web_contents ?
       platform_util::GetTopLevel(web_contents->GetNativeView())
           : NULL;
-#if defined(OS_WIN)
-  if (!owning_window &&
-      chrome::GetActiveDesktop() == chrome::HOST_DESKTOP_TYPE_ASH)
-    owning_window = aura::RemoteWindowTreeHostWin::Instance()->GetAshWindow();
-#endif
   // |web_contents| can be NULL (for background pages), which is fine. In such
   // a case if file-selection dialogs are forbidden by policy, we will not
   // show an InfoBar, which is better than letting one appear out of the blue.

@@ -28,7 +28,8 @@ def _CommonChecks(input_api, output_api):
 def _GetPathsToPrepend(input_api):
   perf_dir = input_api.PresubmitLocalPath()
   chromium_src_dir = input_api.os_path.join(perf_dir, '..', '..')
-  telemetry_dir = input_api.os_path.join(chromium_src_dir, 'tools', 'telemetry')
+  telemetry_dir = input_api.os_path.join(
+      chromium_src_dir, 'third_party', 'catapult', 'telemetry')
   return [
       telemetry_dir,
       input_api.os_path.join(telemetry_dir, 'third_party', 'mock'),
@@ -39,9 +40,11 @@ def _CheckWprShaFiles(input_api, output_api):
   """Check whether the wpr sha files have matching URLs."""
   old_sys_path = sys.path
   try:
-    # TODO: The cloud_storage module is in telemetry.
-    sys.path = [os.path.join('..', 'telemetry')] + sys.path
-    from catapult_base import cloud_storage
+    perf_dir = input_api.PresubmitLocalPath()
+    catapult_path = os.path.abspath(os.path.join(
+        perf_dir, '..', '..', 'third_party', 'catapult', 'catapult_base'))
+    sys.path.insert(1, catapult_path)
+    from catapult_base import cloud_storage  # pylint: disable=import-error
   finally:
     sys.path = old_sys_path
 
@@ -115,16 +118,15 @@ def PostUploadHook(cl, change, output_api):
   issue = cl.issue
   original_description = rietveld_obj.get_description(issue)
   if not benchmarks_modified or re.search(
-     r'^CQ_EXTRA_TRYBOTS=.*', original_description, re.M | re.I):
+      r'^CQ_EXTRA_TRYBOTS=.*', original_description, re.M | re.I):
     return []
 
   results = []
   bots = [
-    'linux_perf_bisect',
-    'mac_10_10_perf_bisect',
-    'win_perf_bisect',
-    # crbug.com/568661, Disable android bots for CQ due to scheduled lab move.
-    # 'android_nexus5_perf_bisect'
+    'android_s5_perf_cq',
+    'winx64_10_perf_cq',
+    'mac_retina_perf_cq',
+    'linux_perf_cq'
   ]
   bots = ['tryserver.chromium.perf:%s' % s for s in bots]
   bots_string = ';'.join(bots)
@@ -134,6 +136,6 @@ def PostUploadHook(cl, change, output_api):
       'Automatically added Perf trybots to run Telemetry benchmarks on CQ.'))
 
   if description != original_description:
-   rietveld_obj.update_description(issue, description)
+    rietveld_obj.update_description(issue, description)
 
   return results

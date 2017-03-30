@@ -35,6 +35,7 @@ class EventListener;
 
 class ProcessingInstruction final : public CharacterData, private ResourceOwner<StyleSheetResource> {
     DEFINE_WRAPPERTYPEINFO();
+    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(ProcessingInstruction);
 public:
     static PassRefPtrWillBeRawPtr<ProcessingInstruction> create(Document&, const String& target, const String& data);
     ~ProcessingInstruction() override;
@@ -81,7 +82,7 @@ private:
     ProcessingInstruction(Document&, const String& target, const String& data);
 
     String nodeName() const override;
-    NodeType nodeType() const override;
+    NodeType getNodeType() const override;
     PassRefPtrWillBeRawPtr<Node> cloneNode(bool deep) override;
 
     InsertionNotificationRequest insertedInto(ContainerNode*) override;
@@ -114,11 +115,11 @@ private:
     RefPtrWillBeMember<DetachableEventListener> m_listenerForXSLT;
 };
 
-DEFINE_NODE_TYPE_CASTS(ProcessingInstruction, nodeType() == Node::PROCESSING_INSTRUCTION_NODE);
+DEFINE_NODE_TYPE_CASTS(ProcessingInstruction, getNodeType() == Node::PROCESSING_INSTRUCTION_NODE);
 
 inline bool isXSLStyleSheet(const Node& node)
 {
-    return node.nodeType() == Node::PROCESSING_INSTRUCTION_NODE && toProcessingInstruction(node).isXSL();
+    return node.getNodeType() == Node::PROCESSING_INSTRUCTION_NODE && toProcessingInstruction(node).isXSL();
 }
 
 } // namespace blink

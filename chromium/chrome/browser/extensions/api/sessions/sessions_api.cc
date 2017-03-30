@@ -10,7 +10,6 @@
 
 #include "base/i18n/rtl.h"
 #include "base/lazy_instance.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -32,6 +31,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/pref_names.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/prefs/pref_service.h"
 #include "components/sessions/content/content_live_tab.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/sync_sessions/open_tabs_ui_delegate.h"
@@ -43,6 +43,8 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/error_utils.h"
 #include "ui/base/layout.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace extensions {
 
@@ -110,7 +112,7 @@ scoped_ptr<tabs::Tab> CreateTabModelHelper(
   // foreground).
   tab_struct->active = index == selected_index;
   tab_struct->ext_data.reset(new std::string(ext_data));
-  ExtensionTabUtil::ScrubTabForExtension(extension, tab_struct.get());
+  ExtensionTabUtil::ScrubTabForExtension(extension, nullptr, tab_struct.get());
   return tab_struct;
 }
 
@@ -429,9 +431,8 @@ void SessionsRestoreFunction::SetInvalidIdError(const std::string& invalid_id) {
 
 void SessionsRestoreFunction::SetResultRestoredTab(
     content::WebContents* contents) {
-  scoped_ptr<base::DictionaryValue> tab_value(
-      ExtensionTabUtil::CreateTabValue(contents, extension()));
-  scoped_ptr<tabs::Tab> tab(tabs::Tab::FromValue(*tab_value));
+  scoped_ptr<tabs::Tab> tab(
+      ExtensionTabUtil::CreateTabObject(contents, extension()));
   scoped_ptr<api::sessions::Session> restored_session(
       CreateSessionModelHelper(base::Time::Now().ToTimeT(), std::move(tab),
                                scoped_ptr<windows::Window>()));
@@ -463,13 +464,12 @@ bool SessionsRestoreFunction::RestoreMostRecentlyClosed(Browser* browser) {
     return false;
   }
 
-  chrome::HostDesktopType host_desktop_type = browser->host_desktop_type();
   bool is_window = is_window_entry(entries.front());
   sessions::LiveTabContext* context =
       BrowserLiveTabContext::FindContextForWebContents(
           browser->tab_strip_model()->GetActiveWebContents());
   std::vector<sessions::LiveTab*> restored_tabs =
-      tab_restore_service->RestoreMostRecentEntry(context, host_desktop_type);
+      tab_restore_service->RestoreMostRecentEntry(context);
   DCHECK(restored_tabs.size());
 
   sessions::ContentLiveTab* first_tab =
@@ -494,8 +494,6 @@ bool SessionsRestoreFunction::RestoreLocalSession(const SessionId& session_id,
     return false;
   }
 
-  chrome::HostDesktopType host_desktop_type = browser->host_desktop_type();
-
   // Check if the recently closed list contains an entry with the provided id.
   bool is_window = false;
   for (sessions::TabRestoreService::Entries::iterator it = entries.begin();
@@ -512,8 +510,7 @@ bool SessionsRestoreFunction::RestoreLocalSession(const SessionId& session_id,
       BrowserLiveTabContext::FindContextForWebContents(
           browser->tab_strip_model()->GetActiveWebContents());
   std::vector<sessions::LiveTab*> restored_tabs =
-      tab_restore_service->RestoreEntryById(context, session_id.id(),
-                                            host_desktop_type, UNKNOWN);
+      tab_restore_service->RestoreEntryById(context, session_id.id(), UNKNOWN);
   // If the ID is invalid, restored_tabs will be empty.
   if (!restored_tabs.size()) {
     SetInvalidIdError(session_id.ToString());
@@ -579,10 +576,9 @@ bool SessionsRestoreFunction::RestoreForeignSession(const SessionId& session_id,
     return false;
   }
 
-  chrome::HostDesktopType host_desktop_type = browser->host_desktop_type();
   // Only restore one window at a time.
   std::vector<Browser*> browsers = SessionRestore::RestoreForeignSessionWindows(
-      GetProfile(), host_desktop_type, window, window + 1);
+      GetProfile(), window, window + 1);
   // Will always create one browser because we only restore one window per call.
   DCHECK_EQ(1u, browsers.size());
   return SetResultRestoredWindow(ExtensionTabUtil::GetWindowId(browsers[0]));
@@ -592,8 +588,14 @@ bool SessionsRestoreFunction::RunSync() {
   scoped_ptr<Restore::Params> params(Restore::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  Browser* browser = chrome::FindBrowserWithProfile(
-      GetProfile(), chrome::HOST_DESKTOP_TYPE_NATIVE);
+  Browser* browser = chrome::FindBrowserWithProfile(GetProfile());
+
+  if (!browser) {
+    // We are restoring a session from an incognito profile.
+    browser = chrome::FindBrowserWithProfile(
+                  GetProfile()->GetOffTheRecordProfile());
+  }
+
   if (!browser) {
     SetError(kNoBrowserToRestoreSession);
     return false;
@@ -613,11 +615,6 @@ bool SessionsRestoreFunction::RunSync() {
     return false;
   }
 
-  if (!browser) {
-    // We are restoring a session from an incognito profile.
-    browser = chrome::FindBrowserWithProfile(
-    GetProfile()->GetOffTheRecordProfile(), chrome::HOST_DESKTOP_TYPE_NATIVE);
-  }
 
   return session_id->IsForeign() ?
       RestoreForeignSession(*session_id, browser)

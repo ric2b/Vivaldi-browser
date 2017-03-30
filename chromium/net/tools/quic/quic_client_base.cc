@@ -8,7 +8,6 @@
 #include "net/quic/quic_server_id.h"
 
 namespace net {
-namespace tools {
 
 QuicClientBase::QuicClientBase(const QuicServerId& server_id,
                                const QuicVersionVector& supported_versions,
@@ -42,8 +41,8 @@ ProofVerifier* QuicClientBase::proof_verifier() const {
 
 QuicClientSession* QuicClientBase::CreateQuicClientSession(
     QuicConnection* connection) {
-  session_.reset(
-      new QuicClientSession(config_, connection, server_id_, &crypto_config_));
+  session_.reset(new QuicClientSession(config_, connection, server_id_,
+                                       &crypto_config_, &push_promise_index_));
   if (initial_max_packet_length_ != 0) {
     session()->connection()->SetMaxPacketLength(initial_max_packet_length_);
   }
@@ -138,5 +137,4 @@ QuicConnectionId QuicClientBase::GenerateNewConnectionId() {
   return QuicRandom::GetInstance()->RandUint64();
 }
 
-}  // namespace tools
 }  // namespace net

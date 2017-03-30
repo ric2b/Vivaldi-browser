@@ -24,9 +24,9 @@ import urllib2
 import zipfile
 
 # Do NOT CHANGE this if you don't know what you're doing -- see
-# https://code.google.com/p/chromium/wiki/UpdatingClang
+# https://chromium.googlesource.com/chromium/src/+/master/docs/updating_clang.md
 # Reverting problematic clang rolls is safe, though.
-CLANG_REVISION = '255169'
+CLANG_REVISION = '261368'
 
 use_head_revision = 'LLVM_FORCE_HEAD_REVISION' in os.environ
 if use_head_revision:
@@ -65,12 +65,13 @@ LLVM_BUILD_TOOLS_DIR = os.path.abspath(
 STAMP_FILE = os.path.normpath(
     os.path.join(LLVM_DIR, '..', 'llvm-build', 'cr_build_revision'))
 BINUTILS_DIR = os.path.join(THIRD_PARTY_DIR, 'binutils')
-VERSION = '3.8.0'
+VERSION = '3.9.0'
 ANDROID_NDK_DIR = os.path.join(
     CHROMIUM_DIR, 'third_party', 'android_tools', 'ndk')
 
 # URL for pre-built binaries.
-CDS_URL = 'https://commondatastorage.googleapis.com/chromium-browser-clang'
+CDS_URL = os.environ.get('CDS_CLANG_BUCKET_OVERRIDE',
+    'https://commondatastorage.googleapis.com/chromium-browser-clang')
 
 LLVM_REPO_URL='https://llvm.org/svn/llvm-project'
 if 'LLVM_REPO_URL' in os.environ:
@@ -275,23 +276,18 @@ def CreateChromeToolsShim():
     f.write('endif (CHROMIUM_TOOLS_SRC)\n')
 
 
-def MaybeDownloadHostGcc(args):
-  """Downloads gcc 4.8.2 if needed and makes sure args.gcc_toolchain is set."""
+def DownloadHostGcc(args):
+  """Downloads gcc 4.8.2 and makes sure args.gcc_toolchain is set."""
   if not sys.platform.startswith('linux') or args.gcc_toolchain:
     return
-
-  if subprocess.check_output(['gcc', '-dumpversion']).rstrip() < '4.7.0':
-    # We need a newer gcc version.
-    gcc_dir = os.path.join(LLVM_BUILD_TOOLS_DIR, 'gcc482precise')
-    if not os.path.exists(gcc_dir):
-      print 'Downloading pre-built GCC 4.8.2...'
-      DownloadAndUnpack(
-          CDS_URL + '/tools/gcc482precise.tgz', LLVM_BUILD_TOOLS_DIR)
-    args.gcc_toolchain = gcc_dir
-  else:
-    # Always set gcc_toolchain; llvm-symbolizer needs the bundled libstdc++.
-    args.gcc_toolchain = \
-        os.path.dirname(os.path.dirname(distutils.spawn.find_executable('gcc')))
+  # Unconditionally download a prebuilt gcc to guarantee the included libstdc++
+  # works on Ubuntu Precise.
+  gcc_dir = os.path.join(LLVM_BUILD_TOOLS_DIR, 'gcc482precise')
+  if not os.path.exists(gcc_dir):
+    print 'Downloading pre-built GCC 4.8.2...'
+    DownloadAndUnpack(
+        CDS_URL + '/tools/gcc482precise.tgz', LLVM_BUILD_TOOLS_DIR)
+  args.gcc_toolchain = gcc_dir
 
 
 def AddCMakeToPath():
@@ -307,6 +303,7 @@ def AddCMakeToPath():
   if not os.path.exists(cmake_dir):
     DownloadAndUnpack(CDS_URL + '/tools/' + zip_name, LLVM_BUILD_TOOLS_DIR)
   os.environ['PATH'] = cmake_dir + os.pathsep + os.environ.get('PATH', '')
+
 
 vs_version = None
 def GetVSVersion():
@@ -347,7 +344,7 @@ def UpdateClang(args):
 
   if not args.force_local_build:
     cds_file = "clang-%s.tgz" %  PACKAGE_VERSION
-    if sys.platform == 'win32':
+    if sys.platform == 'win32' or sys.platform == 'cygwin':
       cds_full_url = CDS_URL + '/Win/' + cds_file
     elif sys.platform == 'darwin':
       cds_full_url = CDS_URL + '/Mac/' + cds_file
@@ -378,11 +375,11 @@ def UpdateClang(args):
     print 'Android NDK not found at ' + ANDROID_NDK_DIR
     print 'The Android NDK is needed to build a Clang whose -fsanitize=address'
     print 'works on Android. See '
-    print 'http://code.google.com/p/chromium/wiki/AndroidBuildInstructions'
+    print 'https://www.chromium.org/developers/how-tos/android-build-instructions'
     print 'for how to install the NDK, or pass --without-android.'
     return 1
 
-  MaybeDownloadHostGcc(args)
+  DownloadHostGcc(args)
   AddCMakeToPath()
 
   DeleteChromeToolsShim()
@@ -396,9 +393,9 @@ def UpdateClang(args):
     # clang needs a libc++ checkout, else -stdlib=libc++ won't find includes
     # (i.e. this is needed for bootstrap builds).
     Checkout('libcxx', LLVM_REPO_URL + '/libcxx/trunk', LIBCXX_DIR)
-    # While we're bundling our own libc++ on OS X, we need to compile libc++abi
-    # into it too (since OS X 10.6 doesn't have libc++abi.dylib either).
-    Checkout('libcxxabi', LLVM_REPO_URL + '/libcxxabi/trunk', LIBCXXABI_DIR)
+    # We used to check out libcxxabi on OS X; we no longer need that.
+    if os.path.exists(LIBCXXABI_DIR):
+      RmTree(LIBCXXABI_DIR)
 
   cc, cxx = None, None
   libstdcpp = None
@@ -420,29 +417,11 @@ def UpdateClang(args):
 
   cflags = cxxflags = ldflags = []
 
-  # LLVM uses C++11 starting in llvm 3.5. On Linux, this means libstdc++4.7+ is
-  # needed, on OS X it requires libc++. clang only automatically links to libc++
-  # when targeting OS X 10.9+, so add stdlib=libc++ explicitly so clang can run
-  # on OS X versions as old as 10.7.
-  # TODO(thakis): Some bots are still on 10.6 (nacl...), so for now bundle
-  # libc++.dylib.  Remove this once all bots are on 10.7+, then use
-  # -DLLVM_ENABLE_LIBCXX=ON and change deployment_target to 10.7.
-  deployment_target = ''
-
-  if sys.platform == 'darwin':
-    # When building on 10.9, /usr/include usually doesn't exist, and while
-    # Xcode's clang automatically sets a sysroot, self-built clangs don't.
-    cflags = ['-isysroot', subprocess.check_output(
-        ['xcrun', '--show-sdk-path']).rstrip()]
-    cxxflags = ['-stdlib=libc++', '-nostdinc++',
-                '-I' + os.path.join(LIBCXX_DIR, 'include')] + cflags
-    if args.bootstrap:
-      deployment_target = '10.6'
-
   base_cmake_args = ['-GNinja',
                      '-DCMAKE_BUILD_TYPE=Release',
                      '-DLLVM_ENABLE_ASSERTIONS=ON',
                      '-DLLVM_ENABLE_THREADS=OFF',
+                     '-DLLVM_ENABLE_TIMESTAMPS=OFF',
                      ]
 
   if args.bootstrap:
@@ -486,51 +465,24 @@ def UpdateClang(args):
       cxxflags = ['--gcc-toolchain=' + args.gcc_toolchain]
     print 'Building final compiler'
 
-  if sys.platform == 'darwin':
-    # Build libc++.dylib while some bots are still on OS X 10.6.
-    libcxxbuild = os.path.join(LLVM_BUILD_DIR, 'libcxxbuild')
-    if os.path.isdir(libcxxbuild):
-      RmTree(libcxxbuild)
-    libcxxflags = ['-O3', '-std=c++11', '-fstrict-aliasing']
+  # LLVM uses C++11 starting in llvm 3.5. On Linux, this means libstdc++4.7+ is
+  # needed, on OS X it requires libc++. clang only automatically links to libc++
+  # when targeting OS X 10.9+, so add stdlib=libc++ explicitly so clang can run
+  # on OS X versions as old as 10.7.
+  deployment_target = ''
 
-    # libcxx and libcxxabi both have a file stdexcept.cpp, so put their .o files
-    # into different subdirectories.
-    os.makedirs(os.path.join(libcxxbuild, 'libcxx'))
-    os.chdir(os.path.join(libcxxbuild, 'libcxx'))
-    RunCommand(['c++', '-c'] + cxxflags + libcxxflags +
-                glob.glob(os.path.join(LIBCXX_DIR, 'src', '*.cpp')))
-
-    os.makedirs(os.path.join(libcxxbuild, 'libcxxabi'))
-    os.chdir(os.path.join(libcxxbuild, 'libcxxabi'))
-    RunCommand(['c++', '-c'] + cxxflags + libcxxflags +
-               glob.glob(os.path.join(LIBCXXABI_DIR, 'src', '*.cpp')) +
-               ['-I' + os.path.join(LIBCXXABI_DIR, 'include')])
-
-    os.chdir(libcxxbuild)
-    libdir = os.path.join(LIBCXX_DIR, 'lib')
-    RunCommand(['cc'] + glob.glob('libcxx/*.o') + glob.glob('libcxxabi/*.o') +
-        ['-o', 'libc++.1.dylib', '-dynamiclib', '-nodefaultlibs',
-         '-current_version', '1', '-compatibility_version', '1', '-lSystem',
-         '-install_name', '@executable_path/libc++.dylib',
-         '-Wl,-unexported_symbols_list,' + libdir + '/libc++unexp.exp',
-         '-Wl,-force_symbols_not_weak_list,' + libdir + '/notweak.exp',
-         '-Wl,-force_symbols_weak_list,' + libdir + '/weak.exp'])
-    if os.path.exists('libc++.dylib'):
-      os.remove('libc++.dylib')
-    os.symlink('libc++.1.dylib', 'libc++.dylib')
-    ldflags += ['-stdlib=libc++', '-L' + libcxxbuild]
-
-    if args.bootstrap:
-      # Now that the libc++ headers have been installed and libc++.dylib is
-      # built, delete the libc++ checkout again so that it's not part of the
-      # main build below -- the libc++(abi) tests don't pass on OS X in
-      # bootstrap builds (http://llvm.org/PR24068)
-      RmTree(LIBCXX_DIR)
-      RmTree(LIBCXXABI_DIR)
-      cxxflags = ['-stdlib=libc++', '-nostdinc++',
-                  '-I' + os.path.join(LLVM_BOOTSTRAP_INSTALL_DIR,
-                                      'include/c++/v1')
-                  ] + cflags
+  if sys.platform == 'darwin' and args.bootstrap:
+    # When building on 10.9, /usr/include usually doesn't exist, and while
+    # Xcode's clang automatically sets a sysroot, self-built clangs don't.
+    cflags = ['-isysroot', subprocess.check_output(
+        ['xcrun', '--show-sdk-path']).rstrip()]
+    cxxflags = ['-stdlib=libc++'] + cflags
+    ldflags += ['-stdlib=libc++']
+    deployment_target = '10.7'
+    # Running libc++ tests takes a long time. Since it was only needed for
+    # the install step above, don't build it as part of the main build.
+    # This makes running package.py over 10% faster (30 min instead of 34 min)
+    RmTree(LIBCXX_DIR)
 
   # Build clang.
   binutils_incdir = ''
@@ -590,12 +542,12 @@ def UpdateClang(args):
     RunCommand(['ninja', 'cr-install'], msvc_arch='x64')
 
   if sys.platform == 'darwin':
-    CopyFile(os.path.join(libcxxbuild, 'libc++.1.dylib'),
-             os.path.join(LLVM_BUILD_DIR, 'bin'))
     # See http://crbug.com/256342
     RunCommand(['strip', '-x', os.path.join(LLVM_BUILD_DIR, 'bin', 'clang')])
   elif sys.platform.startswith('linux'):
     RunCommand(['strip', os.path.join(LLVM_BUILD_DIR, 'bin', 'clang')])
+
+  # TODO(thakis): Check that `clang --version` matches VERSION.
 
   # Do an out-of-tree build of compiler-rt.
   # On Windows, this is used to get the 32-bit ASan run-time.
@@ -786,11 +738,6 @@ def main():
     if re.search(r'\b(make_clang_dir)=', os.environ.get('GYP_DEFINES', '')):
       print 'Skipping Clang update (make_clang_dir= was set in GYP_DEFINES).'
       return 0
-
-  if use_head_revision:
-    # TODO(hans): Remove after the next roll.
-    global VERSION
-    VERSION = '3.9.0'
 
   global CLANG_REVISION, PACKAGE_VERSION
   if args.print_revision:

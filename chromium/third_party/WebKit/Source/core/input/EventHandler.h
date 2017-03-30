@@ -27,8 +27,8 @@
 #define EventHandler_h
 
 #include "core/CoreExport.h"
-#include "core/events/PointerEventFactory.h"
 #include "core/events/TextEventInputType.h"
+#include "core/input/PointerEventManager.h"
 #include "core/layout/HitTestRequest.h"
 #include "core/page/DragActions.h"
 #include "core/page/EventWithHitTestResults.h"
@@ -133,6 +133,8 @@ public:
 
     IntPoint lastKnownMousePosition() const;
 
+    IntPoint dragDataTransferLocationForTesting();
+
     // Attempts to scroll the DOM tree. If that fails, scrolls the view.
     // If the view can't be scrolled either, recursively bubble to the parent frame.
     bool bubblingScroll(ScrollDirection, ScrollGranularity, Node* startingNode = nullptr);
@@ -177,6 +179,9 @@ public:
     WebInputEventResult sendContextMenuEventForGesture(const GestureEventWithHitTestResults&);
 
     void setMouseDownMayStartAutoscroll() { m_mouseDownMayStartAutoscroll = true; }
+
+    static WebInputEventResult mergeEventResult(WebInputEventResult resultA, WebInputEventResult resultB);
+    static WebInputEventResult toWebInputEventResult(DispatchEventResult);
 
     static PlatformEvent::Modifiers accessKeyModifiers();
     bool handleAccessKey(const PlatformKeyboardEvent&);
@@ -270,8 +275,7 @@ private:
     // stopNode - On input, if provided and non-null, the node at which we should stop bubbling on input.
     //            On output, if provided and a node was scrolled stopNode will point to that node.
     // delta - The delta to scroll by, in the units of the granularity parameter. (e.g. pixels, lines, pages, etc.)
-    // absolutePoint - For wheel scrolls - the location, in absolute coordinates, where the event occured.
-    ScrollResultOneDimensional scroll(ScrollDirection, ScrollGranularity, Node* startNode = nullptr, Node** stopNode = nullptr, float delta = 1.0f, IntPoint absolutePoint = IntPoint());
+    ScrollResultOneDimensional scroll(ScrollDirection, ScrollGranularity, Node* startNode = nullptr, Node** stopNode = nullptr, float delta = 1.0f);
 
     void resetOverscroll(bool didScrollX, bool didScrollY);
     void handleOverscroll(const ScrollResult&, const FloatPoint& position = FloatPoint(), const FloatSize& velocity = FloatSize());
@@ -283,12 +287,6 @@ private:
     void invalidateClick();
 
     void updateMouseEventTargetNode(Node*, const PlatformMouseEvent&);
-
-    // Returns true when the sent PE has defaultPrevented or defaultHandled set.
-    WebInputEventResult dispatchPointerEvent(Node* target, const AtomicString& eventType, const PlatformMouseEvent&, Node* relatedTarget = nullptr);
-
-    // Dispatches mouseover, mouseout, mouseenter and mouseleave events to appropriate nodes when the mouse pointer moves from one node to another.
-    void sendMouseEventsForNodeTransition(Node*, Node*, const PlatformMouseEvent&);
 
     MouseEventWithHitTestResults prepareMouseEvent(const HitTestRequest&, const PlatformMouseEvent&);
 
@@ -343,8 +341,6 @@ private:
     bool panScrollInProgress() const;
     void setLastKnownMousePosition(const PlatformMouseEvent&);
 
-    void conditionallyEnableMouseEventForPointerTypeMouse(const PlatformMouseEvent&);
-
     bool shouldTopControlsConsumeScroll(FloatSize) const;
 
     // If the given element is a shadow host and its root has delegatesFocus=false flag,
@@ -391,7 +387,9 @@ private:
     RefPtrWillBeMember<Node> m_capturingMouseEventsNode;
     bool m_eventHandlerWillResetCapturingMouseEventsNode;
 
+    // Note the difference of this and m_nodeUnderPointer in PointerEventManager
     RefPtrWillBeMember<Node> m_nodeUnderMouse;
+
     RefPtrWillBeMember<LocalFrame> m_lastMouseMoveEventSubframe;
     RefPtrWillBeMember<Scrollbar> m_lastScrollbarUnderMouse;
 
@@ -428,12 +426,7 @@ private:
 
     bool m_touchPressed;
 
-    PointerEventFactory m_pointerEventFactory;
-
-    // Prevents firing mousedown, mousemove & mouseup in-between a canceled pointerdown and next pointerup/pointercancel.
-    // See "PREVENT MOUSE EVENT flag" in the spec:
-    //   https://w3c.github.io/pointerevents/#compatibility-mapping-with-mouse-events
-    bool m_preventMouseEventForPointerTypeMouse;
+    PointerEventManager m_pointerEventManager;
 
     // This is set upon sending a pointercancel for touch, prevents PE dispatches for touches until
     // all touch-points become inactive.

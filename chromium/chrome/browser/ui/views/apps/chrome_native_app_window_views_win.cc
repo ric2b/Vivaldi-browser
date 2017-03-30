@@ -9,8 +9,6 @@
 #include "base/files/file_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_worker_pool.h"
-#include "chrome/browser/apps/per_app_settings_service.h"
-#include "chrome/browser/apps/per_app_settings_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/ui/views/apps/app_window_desktop_native_widget_aura_win.h"
@@ -24,7 +22,6 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/common/extension.h"
-#include "ui/aura/remote_window_tree_host_win.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/win/shell.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
@@ -56,29 +53,6 @@ void ChromeNativeAppWindowViewsWin::OnBeforeWidgetInit(
     views::Widget* widget) {
   ChromeNativeAppWindowViewsAura::OnBeforeWidgetInit(create_params, init_params,
                                                      widget);
-
-  content::BrowserContext* browser_context = app_window()->browser_context();
-  std::string extension_id = app_window()->extension_id();
-  // If an app has any existing windows, ensure new ones are created on the
-  // same desktop.
-  extensions::AppWindow* any_existing_window =
-      extensions::AppWindowRegistry::Get(browser_context)
-          ->GetCurrentAppWindowForApp(extension_id);
-  chrome::HostDesktopType desktop_type;
-  if (any_existing_window) {
-    desktop_type = chrome::GetHostDesktopTypeForNativeWindow(
-        any_existing_window->GetNativeWindow());
-  } else {
-    PerAppSettingsService* settings =
-        PerAppSettingsServiceFactory::GetForBrowserContext(browser_context);
-    if (settings->HasDesktopLastLaunchedFrom(extension_id)) {
-      desktop_type = settings->GetDesktopLastLaunchedFrom(extension_id);
-    } else {
-      // We don't know what desktop this app was last launched from, so take our
-      // best guess as to what desktop the user is on.
-      desktop_type = chrome::GetActiveDesktop();
-    }
-  }
   init_params->native_widget = new AppWindowDesktopNativeWidgetAuraWin(this);
 
   is_translucent_ =
@@ -99,9 +73,8 @@ void ChromeNativeAppWindowViewsWin::InitializeDefaultWindow(
   HWND hwnd = GetNativeAppWindowHWND();
   Profile* profile =
       Profile::FromBrowserContext(app_window()->browser_context());
-  app_model_id_ =
-      ShellIntegration::GetAppModelIdForProfile(app_name_wide,
-                                                profile->GetPath());
+  app_model_id_ = shell_integration::GetAppModelIdForProfile(
+      app_name_wide, profile->GetPath());
   ui::win::SetAppIdForWindow(app_model_id_, hwnd);
   web_app::UpdateRelaunchDetailsForApp(profile, extension, hwnd);
 

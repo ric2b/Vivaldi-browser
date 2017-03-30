@@ -19,9 +19,6 @@
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/scoped_observer.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
@@ -35,6 +32,9 @@
 #include "components/component_updater/component_updater_service.h"
 #include "components/component_updater/default_component_installer.h"
 #include "components/crx_file/id_util.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/safe_json/json_sanitizer.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -95,6 +95,11 @@ void RecordUncleanUninstall() {
 void OnWhitelistSanitizationError(const base::FilePath& whitelist,
                                   const std::string& error) {
   LOG(WARNING) << "Invalid whitelist " << whitelist.value() << ": " << error;
+}
+
+void DeleteFileOnTaskRunner(const base::FilePath& path) {
+  if (!base::DeleteFile(path, true))
+    DPLOG(ERROR) << "Couldn't delete " << path.value();
 }
 
 void OnWhitelistSanitizationResult(
@@ -164,8 +169,7 @@ void RemoveUnregisteredWhitelistsOnTaskRunner(
 
       RecordUncleanUninstall();
 
-      if (!base::DeleteFile(path, true))
-        DPLOG(ERROR) << "Couldn't delete " << path.value();
+      DeleteFileOnTaskRunner(path);
     }
   }
 
@@ -195,8 +199,7 @@ void RemoveUnregisteredWhitelistsOnTaskRunner(
 
       RecordUncleanUninstall();
 
-      if (!base::DeleteFile(path, true))
-        DPLOG(ERROR) << "Couldn't delete " << path.value();
+      DeleteFileOnTaskRunner(path);
     }
   }
 }
@@ -339,9 +342,7 @@ SupervisedUserWhitelistInstallerImpl::SupervisedUserWhitelistInstallerImpl(
       weak_ptr_factory_(this) {
   DCHECK(cus);
   DCHECK(local_state);
-  // In unit tests, the profile info cache can be null.
-  if (profile_info_cache)
-    observer_.Add(profile_info_cache);
+  observer_.Add(profile_info_cache);
 }
 
 void SupervisedUserWhitelistInstallerImpl::RegisterComponent(
@@ -387,8 +388,9 @@ bool SupervisedUserWhitelistInstallerImpl::UnregisterWhitelistInternal(
   bool result = cus_->UnregisterComponent(crx_id);
   DCHECK(result);
 
-  result = base::DeleteFile(GetSanitizedWhitelistPath(crx_id), false);
-  DCHECK(result);
+  cus_->GetSequencedTaskRunner()->PostTask(
+    FROM_HERE,
+    base::Bind(&DeleteFileOnTaskRunner, GetSanitizedWhitelistPath(crx_id)));
 
   return removed;
 }
@@ -515,14 +517,20 @@ void SupervisedUserWhitelistInstallerImpl::OnProfileWillBeRemoved(
   std::string client_id = ClientIdForProfilePath(profile_path);
 
   // Go through all registered whitelists and possibly unregister them for this
-  // client.
+  // client. Because unregistering a whitelist might completely uninstall it, we
+  // need to make a copy of all the IDs before iterating over them.
   DictionaryPrefUpdate update(local_state_,
                               prefs::kRegisteredSupervisedUserWhitelists);
   base::DictionaryValue* pref_dict = update.Get();
+
+  std::vector<std::string> crx_ids;
   for (base::DictionaryValue::Iterator it(*pref_dict); !it.IsAtEnd();
        it.Advance()) {
-    UnregisterWhitelistInternal(pref_dict, client_id, it.key());
+    crx_ids.push_back(it.key());
   }
+
+  for (const std::string& crx_id : crx_ids)
+    UnregisterWhitelistInternal(pref_dict, client_id, crx_id);
 }
 
 }  // namespace

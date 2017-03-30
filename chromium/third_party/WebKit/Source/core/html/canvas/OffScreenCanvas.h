@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef OffScreenCanvas_h
-#define OffScreenCanvas_h
+#ifndef OffscreenCanvas_h
+#define OffscreenCanvas_h
 
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptState.h"
@@ -14,10 +14,10 @@
 
 namespace blink {
 
-class CORE_EXPORT OffScreenCanvas final : public GarbageCollectedFinalized<OffScreenCanvas>, public ScriptWrappable {
+class CORE_EXPORT OffscreenCanvas final : public GarbageCollectedFinalized<OffscreenCanvas>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static OffScreenCanvas* create(unsigned width, unsigned height);
+    static OffscreenCanvas* create(unsigned width, unsigned height);
 
     IntSize size() const { return m_size; }
     unsigned width() const { return m_size.width(); }
@@ -29,11 +29,11 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
 private:
-    OffScreenCanvas(const IntSize&);
+    OffscreenCanvas(const IntSize&);
 
     IntSize m_size;
 };
 
 } // namespace blink
 
-#endif // OffScreenCanvas_h
+#endif // OffscreenCanvas_h

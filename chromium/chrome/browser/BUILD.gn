@@ -119,7 +119,6 @@ source_set("browser") {
     "//components/data_use_measurement/core",
     "//components/device_event_log",
     "//components/domain_reliability",
-    "//components/enhanced_bookmarks",
     "//components/favicon/core",
     "//components/favicon_base",
     "//components/flags_ui",
@@ -206,6 +205,7 @@ source_set("browser") {
     "//third_party/zlib:minizip",
     "//third_party/zlib:zip",
     "//ui/base",
+    "//ui/base:ui_data_pack",
     "//ui/events:events_base",
     "//ui/gfx",
     "//ui/gfx/geometry",
@@ -357,13 +357,12 @@ source_set("browser") {
       "//components/webusb",
       "//content/app/resources",
       "//device/core",
-      "//device/devices_app/public/cpp",
-      "//device/devices_app/public/cpp:factory",
-      "//device/devices_app/usb/public/interfaces",
-      "//device/usb",
+      "//device/usb/mojo",
+      "//device/usb/public/interfaces",
       "//media",
       "//media/midi",
       "//mojo/common",
+      "//mojo/edk/system",
       "//mojo/environment:chromium",
       "//mojo/public/cpp/bindings",
       "//mojo/public/js",
@@ -378,7 +377,6 @@ source_set("browser") {
       "//third_party/leveldatabase",
       "//third_party/libaddressinput",
       "//third_party/libyuv",
-      "//third_party/mojo/src/mojo/edk/system",
       "//third_party/re2",
       "//third_party/smhasher:cityhash",
       "//third_party/webrtc/modules/desktop_capture",
@@ -437,6 +435,9 @@ source_set("browser") {
       "//chrome/app_shim",
       "//chrome/browser/apps/app_shim",
     ]
+  }
+  if (is_win) {
+    deps += [ "//chrome:file_pre_reader" ]
   }
   if (is_mac || is_android) {
     sources += rebase_path(
@@ -551,8 +552,8 @@ source_set("browser") {
                     "//chrome")
     deps += [
       "//chrome/browser/safe_browsing:chunk_proto",
-      "//chrome/browser/safe_browsing:metadata_proto",
       "//chrome/common/safe_browsing:proto",
+      "//components/safe_browsing_db:metadata_proto",
     ]
     if (safe_browsing_mode == 1) {
       sources +=
@@ -568,6 +569,7 @@ source_set("browser") {
           rebase_path(gypi_values.chrome_browser_safe_browsing_mobile_sources,
                       ".",
                       "//chrome")
+      deps += [ "//components/safe_browsing_db:safe_browsing_db_mobile" ]
     }
   }
 
@@ -601,6 +603,14 @@ source_set("browser") {
     ]
   }
 
+  if (is_chromeos) {
+    sources += [
+      "metrics/leak_detector_controller.cc",
+      "metrics/leak_detector_controller.h",
+    ]
+    deps += [ "//components/metrics:leak_detector" ]
+  }
+
   if (use_cups) {
     configs += [ "//printing:cups" ]
   }
@@ -631,7 +641,7 @@ source_set("browser") {
     deps += [
       "//components/mus/public/cpp",
       "//content/public/common",
-      "//mojo/runner/child:lib",
+      "//mojo/shell/runner/child:lib",
       "//ui/aura",
       "//ui/compositor",
       "//ui/keyboard",
@@ -778,7 +788,6 @@ source_set("browser") {
       ":delta_file_proto",
       ":jni_headers",
       "//components/data_usage/android",
-      "//components/enhanced_bookmarks",
       "//components/precache/content",
       "//components/precache/core",
       "//components/resources:components_resources",
@@ -863,7 +872,6 @@ source_set("browser") {
       "//third_party/isimpledom",
       "//third_party/wtl",
       "//ui/metro_viewer",
-      "//win8:metro_viewer",
     ]
 
     all_dependent_configs = [ ":browser_win_linker_flags" ]
@@ -901,6 +909,12 @@ source_set("browser") {
       configs += [ "//build/config/linux:x11" ]
       deps += [ "//ui/gfx/x" ]
     }
+  }
+
+  if (is_linux || is_win) {
+    sources += rebase_path(gypi_values.chrome_browser_non_mac_desktop_sources,
+                           ".",
+                           "//chrome")
   }
 
   if (is_desktop_linux) {
@@ -957,12 +971,10 @@ source_set("browser") {
     deps += [ "//chrome/browser/media/router" ]
   }
 
-  if (enable_mojo_media != "none") {
-    configs += [ "//media/mojo/services:enable_mojo_media_config" ]
-  }
-
-  if (enable_mojo_media == "utility") {
-    deps += [ "//media/mojo/services:application" ]
+  if (mojo_media_host == "browser") {
+    deps += [ "//media/mojo/services:application_factory" ]
+  } else if (enable_mojo_media) {
+    configs += [ "//media/mojo/services:mojo_media_config" ]
   }
 
   if (enable_wayland_server) {
@@ -1042,6 +1054,7 @@ grit("resources") {
     # file, rather than the whole mojo target which will link the C++ bindings.
     "//chrome/browser/ui/webui/engagement:mojo_bindings__generator",
     "//chrome/browser/ui/webui/omnibox:mojo_bindings__generator",
+    "//chrome/browser/ui/webui/plugins:mojo_bindings__generator",
   ]
 }
 
@@ -1098,8 +1111,6 @@ source_set("test_support") {
     "download/download_test_file_activity_observer.h",
     "download/test_download_shelf.cc",
     "download/test_download_shelf.h",
-    "invalidation/fake_invalidation_service.cc",
-    "invalidation/fake_invalidation_service.h",
     "media/fake_desktop_media_list.cc",
     "media/fake_desktop_media_list.h",
     "net/dns_probe_test_util.cc",
@@ -1139,7 +1150,6 @@ source_set("test_support") {
     "//chrome/browser/ui:test_support",
   ]
   deps = [
-    "//base:prefs_test_support",
     "//chrome/app/theme:theme_resources",
     "//chrome/browser",
     "//chrome/common",
@@ -1148,9 +1158,11 @@ source_set("test_support") {
     "//components/invalidation/impl",
     "//components/invalidation/impl:test_support",
     "//components/password_manager/core/browser:test_support",
+    "//components/prefs:test_support",
     "//components/search_engines:test_support",
     "//components/syncable_prefs:test_support",
     "//components/user_prefs/tracked:user_prefs_tracked_test_support",
+    "//content/test:browsertest_base",
     "//content/test:test_support",
     "//net:test_support",
     "//skia",
@@ -1316,6 +1328,8 @@ source_set("test_support_ui") {
   sources = [
     "password_manager/password_manager_test_base.cc",
     "password_manager/password_manager_test_base.h",
+    "signin/token_revoker_test_utils.cc",
+    "signin/token_revoker_test_utils.h",
     "ui/webui/signin/login_ui_test_utils.cc",
     "ui/webui/signin/login_ui_test_utils.h",
   ]

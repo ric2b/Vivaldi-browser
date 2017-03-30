@@ -5,13 +5,13 @@
 #include "chrome/browser/services/gcm/fake_signin_manager.h"
 
 #include "base/observer_list.h"
-#include "base/prefs/pref_service.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/gaia_cookie_manager_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/common/signin_pref_names.h"
 #include "content/public/browser/browser_context.h"
@@ -50,7 +50,8 @@ void FakeSigninManager::SignIn(const std::string& account_id) {
 }
 
 void FakeSigninManager::SignOut(
-    signin_metrics::ProfileSignout signout_source_metric) {
+    signin_metrics::ProfileSignout signout_source_metric,
+    signin_metrics::SignoutDelete signout_delete_metric) {
   const std::string account_id = GetAuthenticatedAccountId();
   const std::string username = GetAuthenticatedAccountInfo().email;
   clear_authenticated_user();

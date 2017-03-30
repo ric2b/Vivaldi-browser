@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/passwords/manage_passwords_bubble_model.h"
+#include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/grit/generated_resources.h"
 #include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -67,10 +68,7 @@ void BuildColumnSetIfNeeded(views::GridLayout* layout, int column_set_id) {
 
 scoped_ptr<views::Label> GenerateUsernameLabel(
     const autofill::PasswordForm& form) {
-  scoped_ptr<views::Label> label(new views::Label(
-      form.username_value.empty()
-          ? l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_EMPTY_LOGIN)
-          : form.username_value));
+  scoped_ptr<views::Label> label(new views::Label(GetDisplayUsername(form)));
   label->SetFontList(ui::ResourceBundle::GetSharedInstance().GetFontList(
       ui::ResourceBundle::SmallFont));
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -79,16 +77,17 @@ scoped_ptr<views::Label> GenerateUsernameLabel(
 
 scoped_ptr<views::Label> GeneratePasswordLabel(
     const autofill::PasswordForm& form) {
-  base::string16 text = form.federation_url.is_empty()
-      ? form.password_value
-      : l10n_util::GetStringFUTF16(
-            IDS_PASSWORDS_VIA_FEDERATION,
-            base::UTF8ToUTF16(form.federation_url.host()));
+  base::string16 text =
+      form.federation_origin.unique()
+          ? form.password_value
+          : l10n_util::GetStringFUTF16(
+                IDS_PASSWORDS_VIA_FEDERATION,
+                base::UTF8ToUTF16(form.federation_origin.host()));
   scoped_ptr<views::Label> label(new views::Label(text));
   label->SetFontList(ui::ResourceBundle::GetSharedInstance().GetFontList(
       ui::ResourceBundle::SmallFont));
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  if (form.federation_url.is_empty())
+  if (form.federation_origin.unique())
     label->SetObscured(true);
   return label;
 }
@@ -267,8 +266,9 @@ ManagePasswordItemsView::ManagePasswordItemsView(
     : model_(manage_passwords_bubble_model) {
   int fixed_height = PasswordFormRow::GetFixedHeight(model_->state());
   for (const autofill::PasswordForm* password_form : password_forms) {
-    password_forms_rows_.push_back(
-        new PasswordFormRow(this, password_form, fixed_height));
+    if (!password_form->is_public_suffix_match)
+      password_forms_rows_.push_back(
+          new PasswordFormRow(this, password_form, fixed_height));
   }
   AddRows();
 }

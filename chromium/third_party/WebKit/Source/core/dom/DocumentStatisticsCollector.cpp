@@ -13,6 +13,7 @@
 #include "core/html/HTMLHeadElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLMetaElement.h"
+#include "platform/Histogram.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebDistillability.h"
 
@@ -33,7 +34,7 @@ const double kMozScoreSaturation = 175.954539583; // 6 * sqrt(kTextContentLength
 const double kMozScoreAllSqrtSaturation = 189.73665961; // 6 * sqrt(kTextContentLengthSaturation);
 const double kMozScoreAllLinearSaturation = 6 * kTextContentLengthSaturation;
 
-unsigned textContentLengthSaturated(Element& root)
+unsigned textContentLengthSaturated(const Element& root)
 {
     unsigned length = 0;
     // This skips shadow DOM intentionally, to match the JavaScript implementation.
@@ -142,6 +143,7 @@ bool isGoodForScoring(const WebDistillabilityFeatures& features, const Element& 
 void collectFeatures(Element& root, WebDistillabilityFeatures& features, bool underListItem = false)
 {
     for (Node& node : NodeTraversal::childrenOf(root)) {
+        bool isListItem = false;
         if (!node.isElementNode()) {
             continue;
         }
@@ -178,9 +180,9 @@ void collectFeatures(Element& root, WebDistillabilityFeatures& features, bool un
                 features.mozScoreAllLinear = std::min(features.mozScoreAllLinear, kMozScoreAllLinearSaturation);
             }
         } else if (element.hasTagName(liTag)) {
-            underListItem = true;
+            isListItem = true;
         }
-        collectFeatures(element, features, underListItem);
+        collectFeatures(element, features, underListItem || isListItem);
     }
 }
 
@@ -228,25 +230,23 @@ WebDistillabilityFeatures DocumentStatisticsCollector::collectStatistics(Documen
     if (!body || !head)
         return features;
 
-    if (isMobileFriendly(document)) {
-        features.isMobileFriendly = true;
-        // We only trigger Reader Mode on non-mobile-friendly pages for now.
-        return features;
-    }
+    features.isMobileFriendly = isMobileFriendly(document);
 
     double startTime = monotonicallyIncreasingTime();
 
     // This should be cheap since collectStatistics is only called right after layout.
-    document.updateLayoutTreeIfNeeded();
+    document.updateLayoutTree();
 
     // Traverse the DOM tree and collect statistics.
     collectFeatures(*body, features);
     features.openGraph = hasOpenGraphArticle(*head);
 
     double elapsedTime = monotonicallyIncreasingTime() - startTime;
-    Platform::current()->histogramCustomCounts("WebCore.DistillabilityUs", static_cast<int>(1e6 * elapsedTime), 1, 1000000, 50);
+
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, distillabilityHistogram, ("WebCore.DistillabilityUs", 1, 1000000, 50));
+    distillabilityHistogram.count(static_cast<int>(1e6 * elapsedTime));
 
     return features;
 }
 
-}
+} // namespace blink

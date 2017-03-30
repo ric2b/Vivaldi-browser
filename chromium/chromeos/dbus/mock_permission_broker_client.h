@@ -24,12 +24,10 @@ class MockPermissionBrokerClient : public PermissionBrokerClient {
   MOCK_METHOD1(Init, void(dbus::Bus* bus));
   MOCK_METHOD2(CheckPathAccess,
                void(const std::string& path, const ResultCallback& callback));
-  MOCK_METHOD3(RequestPathAccess,
+  MOCK_METHOD3(OpenPath,
                void(const std::string& path,
-                    int interface_id,
-                    const ResultCallback& callback));
-  MOCK_METHOD2(OpenPath,
-               void(const std::string& path, const OpenPathCallback& callback));
+                    const OpenPathCallback& callback,
+                    const ErrorCallback& error_callback));
   MOCK_METHOD4(RequestTcpPortAccess,
                void(uint16_t port,
                     const std::string& interface,

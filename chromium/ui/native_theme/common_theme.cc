@@ -6,7 +6,7 @@
 
 #include "base/logging.h"
 #include "third_party/skia/include/core/SkCanvas.h"
-#include "ui/base/resource/material_design/material_design_controller.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
@@ -437,10 +437,12 @@ void CommonThemePaintComboboxArrow(SkCanvas* canvas, const gfx::Rect& rect) {
   CommonThemeCreateCanvas(canvas)->DrawImageInt(*arrow, rect.x(), rect.y());
 }
 
-void CommonThemePaintMenuItemBackground(const NativeTheme *theme,
-                                        SkCanvas* canvas,
-                                        NativeTheme::State state,
-                                        const gfx::Rect &rect) {
+void CommonThemePaintMenuItemBackground(
+    const NativeTheme* theme,
+    SkCanvas* canvas,
+    NativeTheme::State state,
+    const gfx::Rect& rect,
+    const NativeTheme::MenuItemExtraParams& menu_item) {
   SkPaint paint;
   switch (state) {
     case NativeTheme::kNormal:
@@ -456,6 +458,11 @@ void CommonThemePaintMenuItemBackground(const NativeTheme *theme,
       NOTREACHED() << "Invalid state " << state;
       break;
   }
+  if (menu_item.corner_radius > 0) {
+    const SkScalar radius = SkIntToScalar(menu_item.corner_radius);
+    canvas->drawRoundRect(gfx::RectToSkRect(rect), radius, radius, paint);
+    return;
+  }
   canvas->drawRect(gfx::RectToSkRect(rect), paint);
 }
 
@@ -465,7 +472,8 @@ scoped_ptr<gfx::Canvas> CommonThemeCreateCanvas(SkCanvas* sk_canvas) {
   // scale factor from canvas scale.
   SkMatrix m = sk_canvas->getTotalMatrix();
   float device_scale = static_cast<float>(SkScalarAbs(m.getScaleX()));
-  return make_scoped_ptr(new gfx::Canvas(sk_canvas, device_scale));
+  return make_scoped_ptr(new gfx::Canvas(skia::SharePtr(sk_canvas),
+                                         device_scale));
 }
 
 }  // namespace ui

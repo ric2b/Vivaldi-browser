@@ -18,6 +18,7 @@ namespace StyleChangeReason {
 extern const char ActiveStylesheetsUpdate[];
 extern const char Animation[];
 extern const char Attribute[];
+extern const char CleanupPlaceholderStyles[];
 extern const char CompositorProxy[];
 extern const char ControlValue[];
 extern const char Control[];
@@ -47,7 +48,7 @@ extern const char VisitedLink[];
 extern const char VisuallyOrdered[];
 extern const char WritingModeChange[];
 extern const char Zoom[];
-}
+} // namespace StyleChangeReason
 typedef const char StyleChangeReasonString[];
 
 namespace StyleChangeExtraData {

@@ -12,7 +12,6 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
-#include "base/prefs/pref_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -50,6 +49,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/prefs/pref_service.h"
 #include "components/security_interstitials/core/controller_client.h"
 #include "components/security_interstitials/core/metrics_helper.h"
 #include "components/security_state/security_state_model.h"
@@ -1120,7 +1120,7 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestWSSInvalidCertAndGoForward) {
 
 // Ensure that non-standard origins are marked correctly when the
 // MarkNonSecureAs field trial is enabled.
-IN_PROC_BROWSER_TEST_F(SSLUITest, TestMarkNonSecureAs) {
+IN_PROC_BROWSER_TEST_F(SSLUITest, MarkFileAsNonSecure) {
   scoped_refptr<base::FieldTrial> trial =
       base::FieldTrialList::CreateFieldTrial(
           "MarkNonSecureAs",
@@ -1134,17 +1134,62 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestMarkNonSecureAs) {
       ChromeSecurityStateModelClient::FromWebContents(contents);
   ASSERT_TRUE(model_client);
 
-  ui_test_utils::NavigateToURL(browser(), GURL("file:/"));
+  ui_test_utils::NavigateToURL(browser(), GURL("file:///"));
   EXPECT_EQ(security_state::SecurityStateModel::NONE,
             model_client->GetSecurityInfo().security_level);
+}
+
+IN_PROC_BROWSER_TEST_F(SSLUITest, MarkAboutAsNonSecure) {
+  scoped_refptr<base::FieldTrial> trial =
+      base::FieldTrialList::CreateFieldTrial(
+          "MarkNonSecureAs",
+          security_state::switches::kMarkNonSecureAsNonSecure);
+
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(contents);
+
+  ChromeSecurityStateModelClient* model_client =
+      ChromeSecurityStateModelClient::FromWebContents(contents);
+  ASSERT_TRUE(model_client);
 
   ui_test_utils::NavigateToURL(browser(), GURL("about:blank"));
   EXPECT_EQ(security_state::SecurityStateModel::NONE,
             model_client->GetSecurityInfo().security_level);
+}
+
+IN_PROC_BROWSER_TEST_F(SSLUITest, MarkDataAsNonSecure) {
+  scoped_refptr<base::FieldTrial> trial =
+      base::FieldTrialList::CreateFieldTrial(
+          "MarkNonSecureAs",
+          security_state::switches::kMarkNonSecureAsNonSecure);
+
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(contents);
+
+  ChromeSecurityStateModelClient* model_client =
+      ChromeSecurityStateModelClient::FromWebContents(contents);
+  ASSERT_TRUE(model_client);
 
   ui_test_utils::NavigateToURL(browser(), GURL("data:text/plain,hello"));
   EXPECT_EQ(security_state::SecurityStateModel::NONE,
             model_client->GetSecurityInfo().security_level);
+}
+
+IN_PROC_BROWSER_TEST_F(SSLUITest, MarkBlobAsNonSecure) {
+  scoped_refptr<base::FieldTrial> trial =
+      base::FieldTrialList::CreateFieldTrial(
+          "MarkNonSecureAs",
+          security_state::switches::kMarkNonSecureAsNonSecure);
+
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(contents);
+
+  ChromeSecurityStateModelClient* model_client =
+      ChromeSecurityStateModelClient::FromWebContents(contents);
+  ASSERT_TRUE(model_client);
 
   ui_test_utils::NavigateToURL(
       browser(),

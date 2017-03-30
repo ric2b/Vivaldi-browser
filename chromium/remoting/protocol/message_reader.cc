@@ -23,31 +23,21 @@ namespace protocol {
 
 static const int kReadBufferSize = 4096;
 
-MessageReader::MessageReader()
-    : socket_(nullptr),
-      read_pending_(false),
-      pending_messages_(0),
-      closed_(false),
-      weak_factory_(this) {
-}
-
-MessageReader::~MessageReader() {
-}
-
-void MessageReader::SetMessageReceivedCallback(
-    const MessageReceivedCallback& callback) {
-  DCHECK(CalledOnValidThread());
-  message_received_callback_ = callback;
-}
+MessageReader::MessageReader() : weak_factory_(this) {}
+MessageReader::~MessageReader() {}
 
 void MessageReader::StartReading(
     P2PStreamSocket* socket,
+    const MessageReceivedCallback& message_received_callback,
     const ReadFailedCallback& read_failed_callback) {
   DCHECK(CalledOnValidThread());
+  DCHECK(!socket_);
   DCHECK(socket);
+  DCHECK(!message_received_callback.is_null());
   DCHECK(!read_failed_callback.is_null());
 
   socket_ = socket;
+  message_received_callback_ = message_received_callback;
   read_failed_callback_ = read_failed_callback;
   DoRead();
 }
@@ -57,8 +47,7 @@ void MessageReader::DoRead() {
   // Don't try to read again if there is another read pending or we
   // have messages that we haven't finished processing yet.
   bool read_succeeded = true;
-  while (read_succeeded && !closed_ && !read_pending_ &&
-         pending_messages_ == 0) {
+  while (read_succeeded && !closed_ && !read_pending_) {
     read_buffer_ = new net::IOBuffer(kReadBufferSize);
     int result = socket_->Read(
         read_buffer_.get(),
@@ -116,30 +105,16 @@ void MessageReader::OnDataReceived(net::IOBuffer* data, int data_size) {
     CompoundBuffer* buffer = message_decoder_.GetNextMessage();
     if (!buffer)
       break;
-    pending_messages_++;
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(&MessageReader::RunCallback,
-                   weak_factory_.GetWeakPtr(),
+        base::Bind(&MessageReader::RunCallback, weak_factory_.GetWeakPtr(),
                    base::Passed(make_scoped_ptr(buffer))));
   }
 }
 
 void MessageReader::RunCallback(scoped_ptr<CompoundBuffer> message) {
-  if (!message_received_callback_.is_null()){
-    message_received_callback_.Run(
-        std::move(message),
-        base::Bind(&MessageReader::OnMessageDone, weak_factory_.GetWeakPtr()));
-  }
-}
-
-void MessageReader::OnMessageDone() {
-  DCHECK(CalledOnValidThread());
-  pending_messages_--;
-  DCHECK_GE(pending_messages_, 0);
-
-  // Start next read if necessary.
-  DoRead();
+  if (!message_received_callback_.is_null())
+    message_received_callback_.Run(std::move(message));
 }
 
 }  // namespace protocol

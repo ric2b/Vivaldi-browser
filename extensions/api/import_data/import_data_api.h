@@ -188,7 +188,7 @@ class ImportDataStartImportFunction : public ImporterApiFunction,
 
 class ImportDataSetVivaldiAsDefaultBrowserFunction :
     public ChromeAsyncExtensionFunction ,
-    public ShellIntegration::DefaultWebClientObserver {
+    public shell_integration::DefaultWebClientObserver {
  public:
   DECLARE_EXTENSION_FUNCTION("importData.setVivaldiAsDefaultBrowser",
                               IMPORTDATA_SETVIVALDIDEFAULT)
@@ -196,12 +196,12 @@ class ImportDataSetVivaldiAsDefaultBrowserFunction :
 
  protected:
   ~ImportDataSetVivaldiAsDefaultBrowserFunction() override;
-  scoped_refptr<ShellIntegration::DefaultBrowserWorker> default_browser_worker_;
+  scoped_refptr<shell_integration::DefaultBrowserWorker>
+      default_browser_worker_;
 
-  // ShellIntegration::DefaultWebClientObserver implementation.
+  // shell_integration::DefaultWebClientObserver implementation.
   void SetDefaultWebClientUIState(
-    ShellIntegration::DefaultWebClientUIState state) override;
-  bool IsInteractiveSetDefaultPermitted() override;
+    shell_integration::DefaultWebClientUIState state) override;
 
   // ExtensionFunction:
   bool RunAsync() override;
@@ -212,7 +212,7 @@ class ImportDataSetVivaldiAsDefaultBrowserFunction :
 
 class ImportDataIsVivaldiDefaultBrowserFunction
     : public ChromeAsyncExtensionFunction,
-      public ShellIntegration::DefaultWebClientObserver {
+      public shell_integration::DefaultWebClientObserver {
  public:
   DECLARE_EXTENSION_FUNCTION("importData.isVivaldiDefaultBrowser",
                               IMPORTDATA_ISVIVALDIDEFAULT)
@@ -221,12 +221,12 @@ class ImportDataIsVivaldiDefaultBrowserFunction
  protected:
   ~ImportDataIsVivaldiDefaultBrowserFunction() override;
 
-  scoped_refptr<ShellIntegration::DefaultBrowserWorker> default_browser_worker_;
+  scoped_refptr<shell_integration::DefaultBrowserWorker>
+      default_browser_worker_;
 
-  // ShellIntegration::DefaultWebClientObserver implementation.
+  // shell_integration::DefaultWebClientObserver implementation.
   void SetDefaultWebClientUIState(
-     ShellIntegration::DefaultWebClientUIState state) override;
-  bool IsInteractiveSetDefaultPermitted() override;
+     shell_integration::DefaultWebClientUIState state) override;
 
   // ExtensionFunction:
   bool RunAsync() override;

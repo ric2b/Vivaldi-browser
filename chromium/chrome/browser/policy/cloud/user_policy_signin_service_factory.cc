@@ -5,7 +5,6 @@
 #include "chrome/browser/policy/cloud/user_policy_signin_service_factory.h"
 
 #include "base/memory/ref_counted.h"
-#include "base/prefs/pref_service.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/policy/cloud/user_cloud_policy_manager_factory.h"
@@ -16,9 +15,10 @@
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "net/url_request/url_request_context_getter.h"
 
-#if defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_ANDROID)
 #include "chrome/browser/policy/cloud/user_policy_signin_service_mobile.h"
 #else
 #include "chrome/browser/policy/cloud/user_policy_signin_service.h"
@@ -83,22 +83,14 @@ KeyedService* UserPolicySigninServiceFactory::BuildServiceInstanceFor(
 
 bool
 UserPolicySigninServiceFactory::ServiceIsCreatedWithBrowserContext() const {
-#if defined(OS_IOS)
-  // This service isn't required at Profile creation time on iOS.
-  // Creating it at that time also leads to a crash, because the SigninManager
-  // trigger a token fetch too early (this isn't a problem on other platforms,
-  // because the refresh token isn't available that early).
-  return false;
-#else
   // Create this object when the profile is created so it can track any
   // user signin activity.
   return true;
-#endif
 }
 
 void UserPolicySigninServiceFactory::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* user_prefs) {
-#if defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_ANDROID)
   user_prefs->RegisterInt64Pref(prefs::kLastPolicyCheckTime, 0);
 #endif
 }

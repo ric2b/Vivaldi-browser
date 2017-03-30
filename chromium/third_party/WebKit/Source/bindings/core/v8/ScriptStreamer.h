@@ -6,7 +6,6 @@
 #define ScriptStreamer_h
 
 #include "core/CoreExport.h"
-#include "core/dom/PendingScript.h"
 #include "platform/heap/Handle.h"
 #include "wtf/RefCounted.h"
 
@@ -17,7 +16,6 @@ namespace blink {
 class PendingScript;
 class Resource;
 class ScriptResource;
-class ScriptResourceClient;
 class ScriptState;
 class Settings;
 class SourceStream;
@@ -33,17 +31,18 @@ class WebTaskRunner;
 class CORE_EXPORT ScriptStreamer final : public RefCountedWillBeRefCountedGarbageCollected<ScriptStreamer> {
     WTF_MAKE_NONCOPYABLE(ScriptStreamer);
 public:
-    static PassRefPtrWillBeRawPtr<ScriptStreamer> create(ScriptResource* resource, PendingScript::Type scriptType, ScriptState* scriptState, v8::ScriptCompiler::CompileOptions compileOptions, WebTaskRunner* loadingTaskRunner)
-    {
-        return adoptRefWillBeNoop(new ScriptStreamer(resource, scriptType, scriptState, compileOptions, loadingTaskRunner));
-    }
+    enum Type {
+        ParsingBlocking,
+        Deferred,
+        Async
+    };
 
     ~ScriptStreamer();
     DECLARE_TRACE();
 
     // Launches a task (on a background thread) which will stream the given
     // PendingScript into V8 as it loads.
-    static void startStreaming(PendingScript&, PendingScript::Type, Settings*, ScriptState*, WebTaskRunner*);
+    static void startStreaming(PendingScript*, Type, Settings*, ScriptState*, WebTaskRunner*);
 
     // Returns false if we cannot stream the given encoding.
     static bool convertEncoding(const char* encodingName, v8::ScriptCompiler::StreamedSource::Encoding*);
@@ -73,19 +72,6 @@ public:
         return m_compileOptions;
     }
 
-    void addClient(ScriptResourceClient* client)
-    {
-        ASSERT(!m_client);
-        m_client = client;
-        notifyFinishedToClient();
-    }
-
-    void removeClient(ScriptResourceClient* client)
-    {
-        ASSERT(m_client == client);
-        m_client = 0;
-    }
-
     // Called by PendingScript when data arrives from the network.
     void notifyAppendData(ScriptResource*);
     void notifyFinished(Resource*);
@@ -98,23 +84,28 @@ public:
 
     static void setSmallScriptThresholdForTesting(size_t threshold)
     {
-        kSmallScriptThreshold = threshold;
+        s_smallScriptThreshold = threshold;
     }
 
-    static size_t smallScriptThreshold() { return kSmallScriptThreshold; }
+    static size_t smallScriptThreshold() { return s_smallScriptThreshold; }
 
 private:
     // Scripts whose first data chunk is smaller than this constant won't be
     // streamed. Non-const for testing.
-    static size_t kSmallScriptThreshold;
+    static size_t s_smallScriptThreshold;
 
-    ScriptStreamer(ScriptResource*, PendingScript::Type, ScriptState*, v8::ScriptCompiler::CompileOptions, WebTaskRunner*);
+    static PassRefPtrWillBeRawPtr<ScriptStreamer> create(PendingScript* script, Type scriptType, ScriptState* scriptState, v8::ScriptCompiler::CompileOptions compileOptions, WebTaskRunner* loadingTaskRunner)
+    {
+        return adoptRefWillBeNoop(new ScriptStreamer(script, scriptType, scriptState, compileOptions, loadingTaskRunner));
+    }
+    ScriptStreamer(PendingScript*, Type, ScriptState*, v8::ScriptCompiler::CompileOptions, WebTaskRunner*);
 
     void streamingComplete();
     void notifyFinishedToClient();
 
-    static bool startStreamingInternal(PendingScript&, PendingScript::Type, Settings*, ScriptState*, WebTaskRunner*);
+    static bool startStreamingInternal(PendingScript*, Type, Settings*, ScriptState*, WebTaskRunner*);
 
+    RawPtrWillBeMember<PendingScript> m_pendingScript;
     // This pointer is weak. If PendingScript and its Resource are deleted
     // before ScriptStreamer, PendingScript will notify ScriptStreamer of its
     // deletion by calling cancel().
@@ -126,7 +117,6 @@ private:
 
     SourceStream* m_stream;
     OwnPtr<v8::ScriptCompiler::StreamedSource> m_source;
-    ScriptResourceClient* m_client;
     bool m_loadingFinished; // Whether loading from the network is done.
     // Whether the V8 side processing is done. Will be used by the main thread
     // and the streamer thread; guarded by m_mutex.
@@ -144,7 +134,7 @@ private:
     RefPtr<ScriptState> m_scriptState;
 
     // For recording metrics for different types of scripts separately.
-    PendingScript::Type m_scriptType;
+    Type m_scriptType;
 
     mutable Mutex m_mutex;
 

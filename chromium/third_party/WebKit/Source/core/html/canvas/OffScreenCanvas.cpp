@@ -2,33 +2,33 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "core/html/canvas/OffScreenCanvas.h"
+#include "core/html/canvas/OffscreenCanvas.h"
 
 #include "wtf/MathExtras.h"
 
 namespace blink {
 
-OffScreenCanvas* OffScreenCanvas::create(unsigned width, unsigned height)
+OffscreenCanvas* OffscreenCanvas::create(unsigned width, unsigned height)
 {
-    return new OffScreenCanvas(IntSize(clampTo<int>(width), clampTo<int>(height)));
+    return new OffscreenCanvas(IntSize(clampTo<int>(width), clampTo<int>(height)));
 }
 
-void OffScreenCanvas::setWidth(unsigned width)
+void OffscreenCanvas::setWidth(unsigned width)
 {
     m_size.setWidth(clampTo<int>(width));
 }
 
-void OffScreenCanvas::setHeight(unsigned height)
+void OffscreenCanvas::setHeight(unsigned height)
 {
     m_size.setHeight(clampTo<int>(height));
 }
 
-OffScreenCanvas::OffScreenCanvas(const IntSize& size)
+OffscreenCanvas::OffscreenCanvas(const IntSize& size)
     : m_size(size)
 {
 }
 
-DEFINE_TRACE(OffScreenCanvas)
+DEFINE_TRACE(OffscreenCanvas)
 {
 }
 

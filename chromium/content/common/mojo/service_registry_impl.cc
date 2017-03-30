@@ -21,27 +21,36 @@ ServiceRegistryImpl::~ServiceRegistryImpl() {
 }
 
 void ServiceRegistryImpl::Bind(
-    mojo::InterfaceRequest<mojo::ServiceProvider> request) {
+    mojo::shell::mojom::InterfaceProviderRequest request) {
   binding_.Bind(std::move(request));
   binding_.set_connection_error_handler(base::Bind(
       &ServiceRegistryImpl::OnConnectionError, base::Unretained(this)));
 }
 
 void ServiceRegistryImpl::BindRemoteServiceProvider(
-    mojo::ServiceProviderPtr service_provider) {
+    mojo::shell::mojom::InterfaceProviderPtr service_provider) {
   CHECK(!remote_provider_);
   remote_provider_ = std::move(service_provider);
   while (!pending_connects_.empty()) {
-    remote_provider_->ConnectToService(
+    remote_provider_->GetInterface(
         mojo::String::From(pending_connects_.front().first),
         mojo::ScopedMessagePipeHandle(pending_connects_.front().second));
     pending_connects_.pop();
   }
 }
 
-void ServiceRegistryImpl::AddService(
+void ServiceRegistryImpl::AddServiceOverrideForTesting(
     const std::string& service_name,
-    const base::Callback<void(mojo::ScopedMessagePipeHandle)> service_factory) {
+    const ServiceFactory& factory) {
+  service_overrides_[service_name] = factory;
+}
+
+void ServiceRegistryImpl::ClearServiceOverridesForTesting() {
+  service_overrides_.clear();
+}
+
+void ServiceRegistryImpl::AddService(const std::string& service_name,
+                                     const ServiceFactory service_factory) {
   service_factories_[service_name] = service_factory;
 }
 
@@ -52,12 +61,18 @@ void ServiceRegistryImpl::RemoveService(const std::string& service_name) {
 void ServiceRegistryImpl::ConnectToRemoteService(
     const base::StringPiece& service_name,
     mojo::ScopedMessagePipeHandle handle) {
+  auto override_it = service_overrides_.find(service_name.as_string());
+  if (override_it != service_overrides_.end()) {
+    override_it->second.Run(std::move(handle));
+    return;
+  }
+
   if (!remote_provider_) {
     pending_connects_.push(
         std::make_pair(service_name.as_string(), handle.release()));
     return;
   }
-  remote_provider_->ConnectToService(
+  remote_provider_->GetInterface(
       mojo::String::From(service_name.as_string()), std::move(handle));
 }
 
@@ -69,12 +84,10 @@ base::WeakPtr<ServiceRegistry> ServiceRegistryImpl::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
 
-void ServiceRegistryImpl::ConnectToService(
+void ServiceRegistryImpl::GetInterface(
     const mojo::String& name,
     mojo::ScopedMessagePipeHandle client_handle) {
-  std::map<std::string,
-           base::Callback<void(mojo::ScopedMessagePipeHandle)> >::iterator it =
-      service_factories_.find(name);
+  auto it = service_factories_.find(name);
   if (it == service_factories_.end())
     return;
 

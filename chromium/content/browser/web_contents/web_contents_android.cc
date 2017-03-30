@@ -182,15 +182,6 @@ void AXTreeSnapshotCallback(const ScopedJavaGlobalRef<jobject>& callback,
       env, j_root.obj(), callback.obj());
 }
 
-void ReleaseAllMediaPlayers(WebContents* web_contents,
-                            RenderFrameHost* render_frame_host) {
-  BrowserMediaPlayerManager* manager =
-      MediaWebContentsObserverAndroid::FromWebContents(web_contents)
-          ->GetMediaPlayerManager(render_frame_host);
-  if (manager)
-    manager->ReleaseAllMediaPlayers();
-}
-
 }  // namespace
 
 // static
@@ -398,13 +389,17 @@ void WebContentsAndroid::OnShow(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   web_contents_->WasShown();
 }
 
-void WebContentsAndroid::ReleaseMediaPlayers(
+void WebContentsAndroid::SuspendAllMediaPlayers(
     JNIEnv* env,
     const JavaParamRef<jobject>& jobj) {
-#if defined(ENABLE_BROWSER_CDMS)
-  web_contents_->ForEachFrame(
-      base::Bind(&ReleaseAllMediaPlayers, base::Unretained(web_contents_)));
-#endif // defined(ENABLE_BROWSER_CDMS)
+  MediaWebContentsObserverAndroid::FromWebContents(web_contents_)
+      ->SuspendAllMediaPlayers();
+}
+
+void WebContentsAndroid::SetAudioMuted(JNIEnv* env,
+                                       const JavaParamRef<jobject>& jobj,
+                                       jboolean mute) {
+  web_contents_->SetAudioMuted(mute);
 }
 
 void WebContentsAndroid::ShowInterstitialPage(JNIEnv* env,
@@ -441,7 +436,7 @@ jboolean WebContentsAndroid::IsRenderWidgetHostViewReady(
 
 void WebContentsAndroid::ExitFullscreen(JNIEnv* env,
                                         const JavaParamRef<jobject>& obj) {
-  web_contents_->ExitFullscreen();
+  web_contents_->ExitFullscreen(/*will_cause_resize=*/false);
 }
 
 void WebContentsAndroid::UpdateTopControlsState(
@@ -680,6 +675,11 @@ void WebContentsAndroid::OnContextMenuClosed(JNIEnv* env,
                                              const JavaParamRef<jobject>& obj) {
   static_cast<WebContentsImpl*>(web_contents_)
       ->NotifyContextMenuClosed(CustomContextMenuContext());
+}
+
+void WebContentsAndroid::ReloadLoFiImages(JNIEnv* env,
+                                          const JavaParamRef<jobject>& obj) {
+  static_cast<WebContentsImpl*>(web_contents_)->ReloadLoFiImages();
 }
 
 void WebContentsAndroid::OnFinishGetContentBitmap(

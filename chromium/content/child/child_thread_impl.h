@@ -20,18 +20,17 @@
 #include "build/build_config.h"
 #include "content/child/mojo/mojo_application.h"
 #include "content/common/content_export.h"
-#include "content/common/message_router.h"
 #include "content/common/mojo/channel_init.h"
 #include "content/public/child/child_thread.h"
 #include "ipc/ipc_message.h"  // For IPC_MESSAGE_LOG_ENABLED.
 #include "ipc/ipc_platform_file.h"
+#include "ipc/message_router.h"
 
 namespace base {
 class MessageLoop;
 }  // namespace base
 
 namespace IPC {
-class AttachmentBrokerUnprivileged;
 class MessageFilter;
 class ScopedIPCSupport;
 class SyncChannel;
@@ -80,6 +79,7 @@ class CONTENT_EXPORT ChildThreadImpl
   // should be joined in Shutdown().
   ~ChildThreadImpl() override;
   virtual void Shutdown();
+  void ShutdownDiscardableSharedMemoryManager();
 
   // IPC::Sender implementation:
   bool Send(IPC::Message* msg) override;
@@ -89,10 +89,12 @@ class CONTENT_EXPORT ChildThreadImpl
   void PreCacheFont(const LOGFONT& log_font) override;
   void ReleaseCachedFonts() override;
 #endif
+  void RecordAction(const base::UserMetricsAction& action) override;
+  void RecordComputedAction(const std::string& action) override;
 
   IPC::SyncChannel* channel() { return channel_.get(); }
 
-  MessageRouter* GetRouter();
+  IPC::MessageRouter* GetRouter();
 
   // Allocates a block of shared memory of the given size. Returns NULL on
   // failure.
@@ -203,7 +205,7 @@ class CONTENT_EXPORT ChildThreadImpl
   scoped_refptr<base::SequencedTaskRunner> GetIOTaskRunner();
 
  private:
-  class ChildThreadMessageRouter : public MessageRouter {
+  class ChildThreadMessageRouter : public IPC::MessageRouter {
    public:
     // |sender| must outlive this object.
     explicit ChildThreadMessageRouter(IPC::Sender* sender);
@@ -239,7 +241,6 @@ class CONTENT_EXPORT ChildThreadImpl
   scoped_ptr<MojoApplication> mojo_application_;
 
   std::string channel_name_;
-  scoped_ptr<IPC::AttachmentBrokerUnprivileged> attachment_broker_;
   scoped_ptr<IPC::SyncChannel> channel_;
 
   // Allows threads other than the main thread to send sync messages.
@@ -299,6 +300,7 @@ class CONTENT_EXPORT ChildThreadImpl
 };
 
 struct ChildThreadImpl::Options {
+  Options(const Options& other);
   ~Options();
 
   class Builder;

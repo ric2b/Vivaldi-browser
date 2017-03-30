@@ -11,7 +11,7 @@
 #include "ash/desktop_background/desktop_background_controller.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
-#include "base/prefs/pref_service.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/worker_pool.h"
 #include "chrome/browser/browser_process.h"
@@ -21,6 +21,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/wallpaper/wallpaper_layout.h"
@@ -113,7 +114,7 @@ bool WallpaperSetWallpaperFunction::RunAsync() {
 
   if (params_->details.data) {
     StartDecode(*params_->details.data);
-  } else {
+  } else if (params_->details.url) {
     GURL wallpaper_url(*params_->details.url);
     if (wallpaper_url.is_valid()) {
       g_wallpaper_fetcher.Get().FetchWallpaper(
@@ -123,6 +124,9 @@ bool WallpaperSetWallpaperFunction::RunAsync() {
       SetError("URL is invalid.");
       SendResponse(false);
     }
+  } else {
+    SetError("Either url or data field is required.");
+    SendResponse(false);
   }
   return true;
 }
@@ -219,20 +223,24 @@ void WallpaperSetWallpaperFunction::ThumbnailGenerated(
 
   // Inform the native Wallpaper Picker Application that the current wallpaper
   // has been modified by a third party application.
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  extensions::EventRouter* event_router = extensions::EventRouter::Get(profile);
-  scoped_ptr<base::ListValue> event_args(new base::ListValue());
-  event_args->Append(original_result);
-  event_args->Append(thumbnail_result);
-  event_args->Append(new base::StringValue(
-      extensions::api::wallpaper::ToString(params_->details.layout)));
-  scoped_ptr<extensions::Event> event(new extensions::Event(
-      extensions::events::WALLPAPER_PRIVATE_ON_WALLPAPER_CHANGED_BY_3RD_PARTY,
-      extensions::api::wallpaper_private::OnWallpaperChangedBy3rdParty::
-          kEventName,
-      std::move(event_args)));
-  event_router->DispatchEventToExtension(extension_misc::kWallpaperManagerId,
-                                         std::move(event));
+  if (extension()->id() != extension_misc::kWallpaperManagerId) {
+    Profile* profile = Profile::FromBrowserContext(browser_context());
+    extensions::EventRouter* event_router =
+        extensions::EventRouter::Get(profile);
+    scoped_ptr<base::ListValue> event_args(new base::ListValue());
+    event_args->Append(original_result);
+    event_args->Append(thumbnail_result);
+    event_args->Append(new base::StringValue(
+        extensions::api::wallpaper::ToString(params_->details.layout)));
+    event_args->Append(new base::StringValue(extension()->name()));
+    scoped_ptr<extensions::Event> event(new extensions::Event(
+        extensions::events::WALLPAPER_PRIVATE_ON_WALLPAPER_CHANGED_BY_3RD_PARTY,
+        extensions::api::wallpaper_private::OnWallpaperChangedBy3rdParty::
+            kEventName,
+        std::move(event_args)));
+    event_router->DispatchEventToExtension(extension_misc::kWallpaperManagerId,
+                                           std::move(event));
+  }
 }
 
 void WallpaperSetWallpaperFunction::OnWallpaperFetched(

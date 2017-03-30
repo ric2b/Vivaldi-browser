@@ -25,12 +25,12 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/user_metrics_action.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "components/prefs/pref_service.h"
 #include "components/url_formatter/url_formatter.h"
 #import "ios/net/nsurlrequest_util.h"
 #include "ios/public/provider/web/web_ui_ios.h"
@@ -70,12 +70,12 @@
 #import "ios/web/web_state/crw_web_view_proxy_impl.h"
 #import "ios/web/web_state/error_translation_util.h"
 #include "ios/web/web_state/frame_info.h"
+#import "ios/web/web_state/page_viewport_state.h"
 #import "ios/web/web_state/js/crw_js_early_script_manager.h"
 #import "ios/web/web_state/js/crw_js_plugin_placeholder_manager.h"
 #import "ios/web/web_state/js/crw_js_window_id_manager.h"
 #import "ios/web/web_state/ui/crw_context_menu_provider.h"
 #import "ios/web/web_state/ui/crw_swipe_recognizer_provider.h"
-#import "ios/web/web_state/ui/crw_ui_web_view_web_controller.h"
 #import "ios/web/web_state/ui/crw_web_controller+protected.h"
 #import "ios/web/web_state/ui/crw_web_controller_container_view.h"
 #import "ios/web/web_state/ui/crw_wk_web_view_web_controller.h"
@@ -130,6 +130,9 @@ struct UserInteractionEvent {
 
 namespace {
 
+// Key of UMA IOSFix.ViewportZoomBugCount histogram.
+const char kUMAViewportZoomBugCount[] = "Renderer.ViewportZoomBugCount";
+
 // A tag for the web view, so that tests can identify it. This is used instead
 // of exposing a getter (and deliberately not exposed in the header) to make it
 // *very* clear that this is a hack which should only be used as a last resort.
@@ -151,21 +154,6 @@ void CancelTouches(UIGestureRecognizer* gesture_recognizer) {
     gesture_recognizer.enabled = YES;
   }
 }
-
-// Cancels all touch events for web view (long presses, tapping, scrolling).
-void CancelAllTouches(UIScrollView* web_scroll_view) {
-  // Disable web view scrolling.
-  CancelTouches(web_scroll_view.panGestureRecognizer);
-
-  // All user gestures are handled by a subview of web view scroll view
-  // (UIWebBrowserView for UIWebView and WKContentView for WKWebView).
-  for (UIView* subview in web_scroll_view.subviews) {
-    for (UIGestureRecognizer* recognizer in subview.gestureRecognizers) {
-      CancelTouches(recognizer);
-    }
-  }
-}
-
 }  // namespace
 
 @interface CRWWebController () <CRWNativeContentDelegate,
@@ -350,6 +338,11 @@ void CancelAllTouches(UIScrollView* web_scroll_view) {
 - (void)setPushedOrReplacedURL:(const GURL&)URL
                    stateObject:(NSString*)stateObject;
 - (BOOL)isLoaded;
+// Extracts the current page's viewport tag information and calls |completion|.
+// If the page has changed before the viewport tag is successfully extracted,
+// |completion| is called with nullptr.
+typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
+- (void)extractViewportTagWithCompletion:(ViewportStateCompletion)completion;
 // Called by NSNotificationCenter upon orientation changes.
 - (void)orientationDidChange;
 // Queries the web view for the user-scalable meta tag and calls
@@ -368,9 +361,6 @@ void CancelAllTouches(UIScrollView* web_scroll_view) {
 // Sets scroll offset value for webview scroll view from |scrollState|.
 - (void)applyWebViewScrollOffsetFromScrollState:
     (const web::PageScrollState&)scrollState;
-// Asynchronously determines whether option |user-scalable| is on in the
-// viewport meta of the current web page.
-- (void)queryUserScalableProperty:(void (^)(BOOL))responseHandler;
 // Asynchronously fetches full width of the rendered web page.
 - (void)fetchWebPageWidthWithCompletionHandler:(void (^)(CGFloat))handler;
 // Asynchronously fetches information about DOM element for the given point (in
@@ -390,6 +380,8 @@ void CancelAllTouches(UIScrollView* web_scroll_view) {
 // YES if delegate supports showing context menu by responding to
 // webController:runContextMenu:atPoint:inView: selector.
 - (BOOL)supportsCustomContextMenu;
+// Cancels all touch events in the web view (long presses, tapping, scrolling).
+- (void)cancelAllTouches;
 // Returns the referrer for the current page.
 - (web::Referrer)currentReferrer;
 // Presents an error to the user because the CRWWebController cannot verify the
@@ -477,9 +469,6 @@ void CancelAllTouches(UIScrollView* web_scroll_view) {
 // Handles 'resetExternalRequest' message.
 - (BOOL)handleResetExternalRequestMessage:(base::DictionaryValue*)message
                                   context:(NSDictionary*)context;
-// Handles 'window.close.self' message.
-- (BOOL)handleWindowCloseSelfMessage:(base::DictionaryValue*)message
-                             context:(NSDictionary*)context;
 // Handles 'window.error' message.
 - (BOOL)handleWindowErrorMessage:(base::DictionaryValue*)message
                          context:(NSDictionary*)context;
@@ -524,38 +513,6 @@ GURL URLEscapedForHistory(const GURL& url) {
   // TODO(stuartmorgan): This is a very large hammer; see if limited unicode
   // escaping would be sufficient.
   return net::GURLWithNSURL(net::NSURLWithGURL(url));
-}
-
-// Parses a viewport tag content and returns the value of an attribute with
-// the given |name|, or nil if the attribute is not present in the tag.
-NSString* GetAttributeValueFromViewPortContent(NSString* attributeName,
-                                               NSString* viewPortContent) {
-  NSArray* contentItems = [viewPortContent componentsSeparatedByString:@","];
-  for (NSString* item in contentItems) {
-    NSArray* components = [item componentsSeparatedByString:@"="];
-    if ([components count] == 2) {
-      NSCharacterSet* spaceAndNewline =
-          [NSCharacterSet whitespaceAndNewlineCharacterSet];
-      NSString* currentAttributeName =
-          [components[0] stringByTrimmingCharactersInSet:spaceAndNewline];
-      if ([currentAttributeName isEqualToString:attributeName]) {
-        return [components[1] stringByTrimmingCharactersInSet:spaceAndNewline];
-      }
-    }
-  }
-  return nil;
-}
-
-// Parses a viewport tag content and returns the value of the user-scalable
-// attribute or nil.
-BOOL GetUserScalablePropertyFromViewPortContent(NSString* viewPortContent) {
-  NSString* value =
-      GetAttributeValueFromViewPortContent(@"user-scalable", viewPortContent);
-  if (!value) {
-    return YES;
-  }
-  return !([value isEqualToString:@"0"] ||
-           [value caseInsensitiveCompare:@"no"] == NSOrderedSame);
 }
 
 // Leave snapshot overlay up unless page loads.
@@ -915,13 +872,9 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
       [self contextMenuInfoForElement:_DOMElementForLastTouch.get()];
   CGPoint point = [gestureRecognizer locationInView:self.webView];
 
-  // Cancel all touches on the web view when showing custom context menu. This
-  // will suppress the system context menu and prevent further user interactions
-  // with web view (like scrolling the content and following links). This
-  // approach is similar to UIWebView and WKWebView workflow as both call
-  // -[UIApplication _cancelAllTouches] to cancel all touch events, once the
-  // long press is detected.
-  CancelAllTouches(self.webScrollView);
+  // Cancelling all touches has the intended side effect of suppressing the
+  // system's context menu.
+  [self cancelAllTouches];
   [self.UIDelegate webController:self
                   runContextMenu:info
                          atPoint:point
@@ -931,6 +884,25 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 - (BOOL)supportsCustomContextMenu {
   SEL runMenuSelector = @selector(webController:runContextMenu:atPoint:inView:);
   return [self.UIDelegate respondsToSelector:runMenuSelector];
+}
+
+- (void)cancelAllTouches {
+  // Disable web view scrolling.
+  CancelTouches(self.webScrollView.panGestureRecognizer);
+
+  // All user gestures are handled by a subview of web view scroll view
+  // (WKContentView).
+  for (UIView* subview in self.webScrollView.subviews) {
+    for (UIGestureRecognizer* recognizer in subview.gestureRecognizers) {
+      CancelTouches(recognizer);
+    }
+  }
+
+  // Just disabling/enabling the gesture recognizers is not enough to suppress
+  // the click handlers on the JS side. This JS performs the function of
+  // suppressing these handlers on the JS side.
+  NSString* suppressNextClick = @"__gCrWeb.suppressNextClick()";
+  [self evaluateJavaScript:suppressNextClick stringResultHandler:nil];
 }
 
 // TODO(shreyasv): This code is shared with SnapshotManager. Remove this and add
@@ -1258,6 +1230,14 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 
   [_delegate webWillAddPendingURL:requestURL transition:transition];
   // Add or update pending url.
+  // There is a crash being reported when accessing |_webStateImpl| in the
+  // condition below.  This CHECK was added in order to ascertain whether this
+  // is caused by a null WebState.  If the crash is still reported after the
+  // addition of this CHECK, it is likely that |_webStateImpl| has been
+  // corrupted.
+  // TODO(crbug.com/593852): Remove this check once we know the cause of the
+  // crash.
+  CHECK(_webStateImpl);
   if (_webStateImpl->GetNavigationManagerImpl().GetPendingItem()) {
     // Update the existing pending entry.
     // Typically on PAGE_TRANSITION_CLIENT_REDIRECT.
@@ -1329,8 +1309,10 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   // Load the url. The UIWebView delegate callbacks take care of updating the
   // session history and UI.
   const GURL targetURL([self currentNavigationURL]);
-  if (!targetURL.is_valid())
+  if (!targetURL.is_valid()) {
+    [self didFinishWithURL:targetURL loadSuccess:NO];
     return;
+  }
 
   // JavaScript should never be evaluated here. User-entered JS should be
   // evaluated via stringByEvaluatingUserJavaScriptFromString.
@@ -2078,8 +2060,6 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
         @selector(handleSignInFailedMessage:context:);
     (*handlers)["resetExternalRequest"] =
         @selector(handleResetExternalRequestMessage:context:);
-    (*handlers)["window.close.self"] =
-        @selector(handleWindowCloseSelfMessage:context:);
     (*handlers)["window.error"] = @selector(handleWindowErrorMessage:context:);
     (*handlers)["window.hashchange"] =
         @selector(handleWindowHashChangeMessage:context:);
@@ -2312,9 +2292,9 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
     DLOG(WARNING) << "JS message parameter not found: requestId";
     return NO;
   }
-  bool suppress_ui = false;
-  if (!message->GetBoolean("suppressUI", &suppress_ui)) {
-    DLOG(WARNING) << "JS message parameter not found: suppressUI";
+  bool unmediated = false;
+  if (!message->GetBoolean("unmediated", &unmediated)) {
+    DLOG(WARNING) << "JS message parameter not found: unmediated";
     return NO;
   }
   base::ListValue* federations_value = nullptr;
@@ -2333,7 +2313,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   }
   DCHECK(context[web::kUserIsInteractingKey]);
   _webStateImpl->OnCredentialsRequested(
-      request_id, net::GURLWithNSURL(context[web::kOriginURLKey]), suppress_ui,
+      request_id, net::GURLWithNSURL(context[web::kOriginURLKey]), unmediated,
       federations, [context[web::kUserIsInteractingKey] boolValue]);
   return YES;
 }
@@ -2401,12 +2381,6 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 - (BOOL)handleResetExternalRequestMessage:(base::DictionaryValue*)message
                                   context:(NSDictionary*)context {
   _externalRequest.reset();
-  return YES;
-}
-
-- (BOOL)handleWindowCloseSelfMessage:(base::DictionaryValue*)message
-                             context:(NSDictionary*)context {
-  [self orderClose];
   return YES;
 }
 
@@ -3342,6 +3316,19 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 - (void)webViewScrollViewDidZoom:
         (CRWWebViewScrollViewProxy*)webViewScrollViewProxy {
   _pageHasZoomed = YES;
+
+  base::WeakNSObject<UIScrollView> weakScrollView(self.webScrollView);
+  [self extractViewportTagWithCompletion:^(
+            const web::PageViewportState* viewportState) {
+    if (!weakScrollView)
+      return;
+    base::scoped_nsobject<UIScrollView> scrollView([weakScrollView retain]);
+    if (viewportState && !viewportState->viewport_tag_present() &&
+        [scrollView minimumZoomScale] == [scrollView maximumZoomScale] &&
+        [scrollView zoomScale] > 1.0) {
+      UMA_HISTOGRAM_BOOLEAN(kUMAViewportZoomBugCount, true);
+    }
+  }];
 }
 
 - (void)webViewScrollViewDidResetContentSize:
@@ -3418,6 +3405,30 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   }
 }
 
+- (void)extractViewportTagWithCompletion:(ViewportStateCompletion)completion {
+  DCHECK(completion);
+  web::NavigationItem* currentItem = [self currentNavItem];
+  if (!currentItem) {
+    completion(nullptr);
+    return;
+  }
+  NSString* const kViewportContentQuery =
+      @"var viewport = document.querySelector('meta[name=\"viewport\"]');"
+       "viewport ? viewport.content : '';";
+  base::WeakNSObject<CRWWebController> weakSelf(self);
+  int itemID = currentItem->GetUniqueID();
+  [self evaluateJavaScript:kViewportContentQuery
+       stringResultHandler:^(NSString* viewportContent, NSError*) {
+         web::NavigationItem* item = [weakSelf currentNavItem];
+         if (item && item->GetUniqueID() == itemID) {
+           web::PageViewportState viewportState(viewportContent);
+           completion(&viewportState);
+         } else {
+           completion(nullptr);
+         }
+       }];
+}
+
 - (void)orientationDidChange {
   // When rotating, the available zoom scale range may change, zoomScale's
   // percentage into this range should remain constant.  However, there are
@@ -3454,10 +3465,12 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
     return;
   base::WeakNSObject<CRWWebController> weakSelf(self);
   web::PageDisplayState displayStateCopy = displayState;
-  [self queryUserScalableProperty:^(BOOL isUserScalable) {
-    base::scoped_nsobject<CRWWebController> strongSelf([weakSelf retain]);
-    [strongSelf applyPageDisplayState:displayStateCopy
-                         userScalable:isUserScalable];
+  [self extractViewportTagWithCompletion:^(
+            const web::PageViewportState* viewportState) {
+    if (viewportState) {
+      [weakSelf applyPageDisplayState:displayStateCopy
+                         userScalable:viewportState->user_scalable()];
+    }
   }];
 }
 
@@ -3539,18 +3552,6 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 
 #pragma mark -
 #pragma mark Web Page Features
-
-// TODO(eugenebut): move JS parsing code to a separate file.
-- (void)queryUserScalableProperty:(void (^)(BOOL))responseHandler {
-  NSString* const kViewPortContentQuery =
-      @"var viewport = document.querySelector('meta[name=\"viewport\"]');"
-       "viewport ? viewport.content : '';";
-  [self evaluateJavaScript:kViewPortContentQuery
-       stringResultHandler:^(NSString* viewPortContent, NSError* error) {
-         responseHandler(
-             GetUserScalablePropertyFromViewPortContent(viewPortContent));
-       }];
-}
 
 - (void)fetchWebPageWidthWithCompletionHandler:(void (^)(CGFloat))handler {
   if (!self.webView) {

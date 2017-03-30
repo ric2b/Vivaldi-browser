@@ -18,8 +18,6 @@
 #include "base/memory/singleton.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -39,8 +37,8 @@
 #include "chrome/browser/printing/cloud_print/cloud_print_proxy_service.h"
 #include "chrome/browser/printing/cloud_print/cloud_print_proxy_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
-#include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/profiles/profile_shortcut_manager.h"
@@ -77,6 +75,8 @@
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_service.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/proximity_auth/switches.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
 #include "components/search_engines/template_url.h"
@@ -117,6 +117,7 @@
 #include "ash/system/chromeos/devicetype_utils.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_util.h"
+#include "chrome/browser/chromeos/arc/arc_auth_service.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/chromeos/net/wake_on_wifi_manager.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
@@ -130,6 +131,7 @@
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
+#include "components/arc/arc_bridge_service.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/chromeos/accessibility_types.h"
@@ -184,7 +186,11 @@ BrowserOptionsHandler::BrowserOptionsHandler()
 #endif  // defined(OS_CHROMEOS)
       signin_observer_(this),
       weak_ptr_factory_(this) {
-  default_browser_worker_ = new ShellIntegration::DefaultBrowserWorker(this);
+  // The worker pointer is reference counted. While it is running, the
+  // message loops of the FILE and UI thread will hold references to it
+  // and it will be automatically freed once all its tasks have finished.
+  default_browser_worker_ = new shell_integration::DefaultBrowserWorker(
+      this, /*delete_observer=*/false);
 
 #if defined(ENABLE_SERVICE_DISCOVERY)
   cloud_print_mdns_ui_enabled_ = true;
@@ -414,6 +420,8 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
       IDS_OPTIONS_SETTINGS_ACCESSIBILITY_TOUCHPAD_TAP_DRAGGING_DESCRIPTION },
     { "accessibilityVirtualKeyboard",
       IDS_OPTIONS_SETTINGS_ACCESSIBILITY_VIRTUAL_KEYBOARD_DESCRIPTION },
+    { "androidAppsTitle", IDS_OPTIONS_ARC_TITLE },
+    { "androidAppsEnabled", IDS_OPTIONS_ARC_ENABLE },
     { "autoclickDelayExtremelyShort",
       IDS_OPTIONS_SETTINGS_ACCESSIBILITY_AUTOCLICK_DELAY_EXTREMELY_SHORT },
     { "autoclickDelayLong",
@@ -829,7 +837,7 @@ void BrowserOptionsHandler::RegisterMessages() {
 void BrowserOptionsHandler::Uninitialize() {
   registrar_.RemoveAll();
   g_browser_process->profile_manager()->
-      GetProfileInfoCache().RemoveObserver(this);
+      GetProfileAttributesStorage().RemoveObserver(this);
 #if defined(OS_WIN)
   ExtensionRegistry::Get(Profile::FromWebUI(web_ui()))->RemoveObserver(this);
 #endif
@@ -880,7 +888,8 @@ void BrowserOptionsHandler::InitializeHandler() {
   g_browser_process->policy_service()->AddObserver(
       policy::POLICY_DOMAIN_CHROME, this);
 
-  g_browser_process->profile_manager()->GetProfileInfoCache().AddObserver(this);
+  g_browser_process->profile_manager()->
+      GetProfileAttributesStorage().AddObserver(this);
 
   ProfileSyncService* sync_service(
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile));
@@ -1007,7 +1016,6 @@ void BrowserOptionsHandler::InitializePage() {
   SetupPageZoomSelector();
   SetupAutoOpenFileTypes();
   SetupProxySettingsSection();
-  SetupManageCertificatesSection();
   SetupManagingSupervisedUsers();
   SetupEasyUnlock();
   SetupExtensionControlledIndicators();
@@ -1025,6 +1033,9 @@ void BrowserOptionsHandler::InitializePage() {
   }
 
   Profile* profile = Profile::FromWebUI(web_ui());
+  user_manager::User const* const user =
+      chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
+
   OnAccountPictureManagedChanged(
       policy::ProfilePolicyConnectorFactory::GetForBrowserContext(profile)
           ->policy_service()
@@ -1042,6 +1053,14 @@ void BrowserOptionsHandler::InitializePage() {
   if (consumer_management) {
     OnConsumerManagementStatusChanged();
     consumer_management->AddObserver(this);
+  }
+
+  if (arc::ArcBridgeService::GetEnabled(
+          base::CommandLine::ForCurrentProcess()) &&
+      !arc::ArcAuthService::IsOptInVerificationDisabled() &&
+      !profile->IsLegacySupervised() &&
+      user->HasGaiaAccount()) {
+    web_ui()->CallJavascriptFunction("BrowserOptions.showAndroidAppsSection");
   }
 #endif
 }
@@ -1100,42 +1119,38 @@ void BrowserOptionsHandler::BecomeDefaultBrowser(const base::ListValue* args) {
 }
 
 int BrowserOptionsHandler::StatusStringIdForState(
-    ShellIntegration::DefaultWebClientState state) {
-  if (state == ShellIntegration::IS_DEFAULT)
+    shell_integration::DefaultWebClientState state) {
+  if (state == shell_integration::IS_DEFAULT)
     return IDS_OPTIONS_DEFAULTBROWSER_DEFAULT;
-  if (state == ShellIntegration::NOT_DEFAULT)
+  if (state == shell_integration::NOT_DEFAULT)
     return IDS_OPTIONS_DEFAULTBROWSER_NOTDEFAULT;
   return IDS_OPTIONS_DEFAULTBROWSER_UNKNOWN;
 }
 
 void BrowserOptionsHandler::SetDefaultWebClientUIState(
-    ShellIntegration::DefaultWebClientUIState state) {
+    shell_integration::DefaultWebClientUIState state) {
   int status_string_id;
 
-  if (state == ShellIntegration::STATE_IS_DEFAULT) {
+  if (state == shell_integration::STATE_IS_DEFAULT) {
     status_string_id = IDS_OPTIONS_DEFAULTBROWSER_DEFAULT;
     // Notify the user in the future if Chrome ceases to be the user's chosen
     // default browser.
     PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
     prefs->SetBoolean(prefs::kCheckDefaultBrowser, true);
-  } else if (state == ShellIntegration::STATE_NOT_DEFAULT) {
-    if (ShellIntegration::CanSetAsDefaultBrowser() ==
-            ShellIntegration::SET_DEFAULT_NOT_ALLOWED) {
+  } else if (state == shell_integration::STATE_NOT_DEFAULT) {
+    if (shell_integration::CanSetAsDefaultBrowser() ==
+        shell_integration::SET_DEFAULT_NOT_ALLOWED) {
       status_string_id = IDS_OPTIONS_DEFAULTBROWSER_SXS;
     } else {
       status_string_id = IDS_OPTIONS_DEFAULTBROWSER_NOTDEFAULT;
     }
-  } else if (state == ShellIntegration::STATE_UNKNOWN) {
+  } else if (state == shell_integration::STATE_UNKNOWN) {
     status_string_id = IDS_OPTIONS_DEFAULTBROWSER_UNKNOWN;
   } else {
     return;  // Still processing.
   }
 
   SetDefaultBrowserUIString(status_string_id);
-}
-
-bool BrowserOptionsHandler::IsInteractiveSetDefaultPermitted() {
-  return true;  // This is UI so we can allow it.
 }
 
 void BrowserOptionsHandler::SetDefaultBrowserUIString(int status_string_id) {
@@ -1285,37 +1300,33 @@ void BrowserOptionsHandler::OnProfileAvatarChanged(
 }
 
 scoped_ptr<base::ListValue> BrowserOptionsHandler::GetProfilesInfoList() {
-  ProfileInfoCache& cache =
-      g_browser_process->profile_manager()->GetProfileInfoCache();
+  std::vector<ProfileAttributesEntry*> entries =
+      g_browser_process->profile_manager()->
+      GetProfileAttributesStorage().GetAllProfilesAttributesSortedByName();
   scoped_ptr<base::ListValue> profile_info_list(new base::ListValue);
   base::FilePath current_profile_path =
       web_ui()->GetWebContents()->GetBrowserContext()->GetPath();
 
-  for (size_t i = 0, e = cache.GetNumberOfProfiles(); i < e; ++i) {
+  for (const ProfileAttributesEntry* entry : entries) {
     // The items in |profile_value| are also described in
     // chrome/browser/resources/options/browser_options.js in a @typedef for
     // Profile. Please update it whenever you add or remove any keys here.
-
     base::DictionaryValue* profile_value = new base::DictionaryValue();
-    profile_value->SetString("name", cache.GetNameOfProfileAtIndex(i));
-    base::FilePath profile_path = cache.GetPathOfProfileAtIndex(i);
+    profile_value->SetString("name", entry->GetName());
+    base::FilePath profile_path = entry->GetPath();
     profile_value->Set("filePath", base::CreateFilePathValue(profile_path));
     profile_value->SetBoolean("isCurrentProfile",
                               profile_path == current_profile_path);
-    profile_value->SetBoolean("isSupervised",
-                              cache.ProfileIsSupervisedAtIndex(i));
-    profile_value->SetBoolean("isChild", cache.ProfileIsChildAtIndex(i));
+    profile_value->SetBoolean("isSupervised", entry->IsSupervised());
+    profile_value->SetBoolean("isChild", entry->IsChild());
 
-    bool is_gaia_picture =
-        cache.IsUsingGAIAPictureOfProfileAtIndex(i) &&
-        cache.GetGAIAPictureOfProfileAtIndex(i);
-    if (is_gaia_picture) {
-      gfx::Image icon = profiles::GetAvatarIconForWebUI(
-          cache.GetAvatarIconOfProfileAtIndex(i), true);
+    if (entry->IsUsingGAIAPicture() && entry->GetGAIAPicture()) {
+      gfx::Image icon = profiles::GetAvatarIconForWebUI(entry->GetAvatarIcon(),
+                                                        true);
       profile_value->SetString("iconURL",
-          webui::GetBitmapDataUrl(icon.AsBitmap()));
+                               webui::GetBitmapDataUrl(icon.AsBitmap()));
     } else {
-      size_t icon_index = cache.GetAvatarIconIndexOfProfileAtIndex(i);
+      size_t icon_index = entry->GetAvatarIconIndex();
       profile_value->SetString("iconURL",
                                profiles::GetDefaultAvatarIconUrl(icon_index));
     }
@@ -1446,7 +1457,7 @@ BrowserOptionsHandler::GetSyncStateDictionary() {
   sync_status->SetBoolean("signinAllowed", signin && signin->IsSigninAllowed());
   sync_status->SetBoolean("syncSystemEnabled", (service != NULL));
   sync_status->SetBoolean("setupCompleted",
-                          service && service->HasSyncSetupCompleted());
+                          service && service->IsFirstSetupComplete());
   sync_status->SetBoolean("setupInProgress",
       service && !service->IsManaged() && service->IsFirstSetupInProgress());
 
@@ -1476,7 +1487,7 @@ void BrowserOptionsHandler::HandleSelectDownloadLocation(
   select_folder_dialog_ = ui::SelectFileDialog::Create(
       this, new ChromeSelectFilePolicy(web_ui()->GetWebContents()));
   ui::SelectFileDialog::FileTypeInfo info;
-  info.support_drive = true;
+  info.allowed_paths = ui::SelectFileDialog::FileTypeInfo::NATIVE_OR_DRIVE_PATH;
   select_folder_dialog_->SelectFile(
       ui::SelectFileDialog::SELECT_FOLDER,
       l10n_util::GetStringUTF16(IDS_OPTIONS_DOWNLOADLOCATION_BROWSE_TITLE),
@@ -1962,23 +1973,14 @@ void BrowserOptionsHandler::SetupAutoOpenFileTypes() {
 
 void BrowserOptionsHandler::SetupProxySettingsSection() {
 #if !defined(OS_CHROMEOS)
-  // Disable the button if proxy settings are managed by a sysadmin, overridden
-  // by an extension, or the browser is running in Windows Ash (on Windows the
-  // proxy settings dialog will open on the Windows desktop and be invisible
-  // to a user in Ash).
-  bool is_win_ash = false;
-#if defined(OS_WIN)
-  chrome::HostDesktopType desktop_type = helper::GetDesktopType(web_ui());
-  is_win_ash = (desktop_type == chrome::HOST_DESKTOP_TYPE_ASH);
-#endif
   PrefService* pref_service = Profile::FromWebUI(web_ui())->GetPrefs();
   const PrefService::Preference* proxy_config =
       pref_service->FindPreference(proxy_config::prefs::kProxy);
   bool is_extension_controlled = (proxy_config &&
                                   proxy_config->IsExtensionControlled());
 
-  base::FundamentalValue disabled(is_win_ash || (proxy_config &&
-                                  !proxy_config->IsUserModifiable()));
+  base::FundamentalValue disabled(proxy_config &&
+                                  !proxy_config->IsUserModifiable());
   base::FundamentalValue extension_controlled(is_extension_controlled);
   web_ui()->CallJavascriptFunction("BrowserOptions.setupProxySettingsButton",
                                    disabled, extension_controlled);
@@ -1988,19 +1990,6 @@ void BrowserOptionsHandler::SetupProxySettingsSection() {
 #endif  // defined(OS_WIN)
 
 #endif  // !defined(OS_CHROMEOS)
-}
-
-void BrowserOptionsHandler::SetupManageCertificatesSection() {
-#if defined(OS_WIN)
-  // Disable the button if the settings page is displayed in Windows Ash,
-  // otherwise the proxy settings dialog will open on the Windows desktop and
-  // be invisible to a user in Ash.
-  if (helper::GetDesktopType(web_ui()) == chrome::HOST_DESKTOP_TYPE_ASH) {
-    base::FundamentalValue enabled(false);
-    web_ui()->CallJavascriptFunction("BrowserOptions.enableCertificateButton",
-                                     enabled);
-  }
-#endif  // defined(OS_WIN)
 }
 
 void BrowserOptionsHandler::SetupManagingSupervisedUsers() {
@@ -2109,7 +2098,7 @@ void BrowserOptionsHandler::HandleMetricsReportingChange(
   InitiateMetricsReportingChange(
       enable,
       base::Bind(&BrowserOptionsHandler::NotifyUIOfMetricsReportingChange,
-                 base::Unretained(this)));
+                 weak_ptr_factory_.GetWeakPtr()));
 }
 
 void BrowserOptionsHandler::NotifyUIOfMetricsReportingChange(bool enabled) {

@@ -47,6 +47,7 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
+#include "components/strings/grit/components_locale_settings.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -746,7 +747,8 @@ std::string AboutSandbox() {
   data.append("</h1>");
 
   // Get expected sandboxing status of renderers.
-  const int status = content::ZygoteHost::GetInstance()->GetSandboxStatus();
+  const int status =
+      content::ZygoteHost::GetInstance()->GetRendererSandboxStatus();
 
   data.append("<table>");
 

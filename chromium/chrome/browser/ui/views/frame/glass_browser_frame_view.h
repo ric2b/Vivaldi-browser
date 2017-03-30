@@ -8,14 +8,13 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/win/scoped_gdi_object.h"
+#include "chrome/browser/ui/views/frame/avatar_button_manager.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
-#include "ui/views/controls/button/button.h"
 #include "ui/views/window/non_client_view.h"
 
 class BrowserView;
 
-class GlassBrowserFrameView : public BrowserNonClientFrameView,
-                              public views::ButtonListener {
+class GlassBrowserFrameView : public BrowserNonClientFrameView {
  public:
   // Constructs a non-client view for an BrowserFrame.
   GlassBrowserFrameView(BrowserFrame* frame, BrowserView* browser_view);
@@ -27,6 +26,7 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
   int GetThemeBackgroundXInset() const override;
   void UpdateThrobber(bool running) override;
   gfx::Size GetMinimumSize() const override;
+  views::View* GetProfileSwitcherView() const override;
 
   // views::NonClientFrameView:
   gfx::Rect GetBoundsForClientView() const override;
@@ -44,11 +44,8 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
   void OnPaint(gfx::Canvas* canvas) override;
   void Layout() override;
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
   // BrowserNonClientFrameView:
-  void UpdateNewAvatarButtonImpl() override;
+  void UpdateAvatar() override;
 
  private:
   // views::NonClientFrameView:
@@ -80,8 +77,14 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
   bool IsToolbarVisible() const;
 
   // Paint various sub-components of this view.
-  void PaintToolbarBackground(gfx::Canvas* canvas);
-  void PaintClientEdge(gfx::Canvas* canvas);
+  void PaintToolbarBackground(gfx::Canvas* canvas) const;
+  void PaintClientEdge(gfx::Canvas* canvas) const;
+  void FillClientEdgeRects(int x,
+                           int y,
+                           int right,
+                           int bottom,
+                           SkColor color,
+                           gfx::Canvas* canvas) const;
 
   // Layout various sub-components of this view.
   void LayoutIncognitoIcon();
@@ -113,6 +116,9 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
 
   // The big icon created from the bitmap image of the window icon.
   base::win::ScopedHICON big_window_icon_;
+
+  // Wrapper around the in-frame avatar switcher.
+  AvatarButtonManager profile_switcher_;
 
   // Whether or not the window throbber is currently animating.
   bool throbber_running_;

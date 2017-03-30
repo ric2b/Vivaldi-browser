@@ -198,7 +198,8 @@ gpu::gles2::ProgramCache* InProcessCommandBuffer::Service::program_cache() {
 
 InProcessCommandBuffer::InProcessCommandBuffer(
     const scoped_refptr<Service>& service)
-    : command_buffer_id_(g_next_command_buffer_id.GetNext()),
+    : command_buffer_id_(
+          CommandBufferId::FromUnsafeValue(g_next_command_buffer_id.GetNext())),
       context_lost_(false),
       delayed_work_pending_(false),
       image_factory_(nullptr),
@@ -425,9 +426,6 @@ bool InProcessCommandBuffer::InitializeOnGpuThread(
   }
   *params.capabilities = decoder_->GetCapabilities();
 
-  decoder_->SetWaitSyncPointCallback(
-      base::Bind(&InProcessCommandBuffer::WaitSyncPointOnGpuThread,
-                 base::Unretained(this)));
   decoder_->SetFenceSyncReleaseCallback(
       base::Bind(&InProcessCommandBuffer::FenceSyncReleaseOnGpuThread,
                  base::Unretained(this)));
@@ -826,65 +824,6 @@ int32_t InProcessCommandBuffer::CreateGpuMemoryBufferImage(
   return CreateImage(buffer->AsClientBuffer(), width, height, internalformat);
 }
 
-uint32_t InProcessCommandBuffer::InsertSyncPoint() {
-  uint32_t sync_point = service_->sync_point_manager()->GenerateSyncPoint();
-  QueueTask(base::Bind(&InProcessCommandBuffer::RetireSyncPointOnGpuThread,
-                       base::Unretained(this),
-                       sync_point));
-  return sync_point;
-}
-
-uint32_t InProcessCommandBuffer::InsertFutureSyncPoint() {
-  return service_->sync_point_manager()->GenerateSyncPoint();
-}
-
-void InProcessCommandBuffer::RetireSyncPoint(uint32_t sync_point) {
-  QueueTask(base::Bind(&InProcessCommandBuffer::RetireSyncPointOnGpuThread,
-                       base::Unretained(this),
-                       sync_point));
-}
-
-void InProcessCommandBuffer::RetireSyncPointOnGpuThread(uint32_t sync_point) {
-  gles2::MailboxManager* mailbox_manager =
-      decoder_->GetContextGroup()->mailbox_manager();
-  if (mailbox_manager->UsesSync()) {
-    bool make_current_success = false;
-    {
-      base::AutoLock lock(command_buffer_lock_);
-      make_current_success = MakeCurrent();
-    }
-    if (make_current_success) {
-      // Old sync points are global and do not have a command buffer ID,
-      // We can simply use the GPUIO namespace with 0 for the command buffer ID
-      // (under normal circumstances 0 is  invalid so  will not be used) until
-      // the old sync points are replaced.
-      SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0, 0,
-                           sync_point);
-      mailbox_manager->PushTextureUpdates(sync_token);
-    }
-  }
-  service_->sync_point_manager()->RetireSyncPoint(sync_point);
-}
-
-void InProcessCommandBuffer::SignalSyncPoint(unsigned sync_point,
-                                             const base::Closure& callback) {
-  service_->sync_point_manager()->AddSyncPointCallback(sync_point,
-                                                       WrapCallback(callback));
-}
-
-bool InProcessCommandBuffer::WaitSyncPointOnGpuThread(unsigned sync_point) {
-  service_->sync_point_manager()->WaitSyncPoint(sync_point);
-  gles2::MailboxManager* mailbox_manager =
-      decoder_->GetContextGroup()->mailbox_manager();
-  // Old sync points are global and do not have a command buffer ID,
-  // We can simply use the GPUIO namespace with 0 for the command buffer ID
-  // (under normal circumstances 0 is  invalid so  will not be used) until
-  // the old sync points are replaced.
-  SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0, 0, sync_point);
-  mailbox_manager->PullTextureUpdates(sync_token);
-  return true;
-}
-
 void InProcessCommandBuffer::FenceSyncReleaseOnGpuThread(uint64_t release) {
   DCHECK(!sync_point_client_->client_state()->IsFenceSyncReleased(release));
   gles2::MailboxManager* mailbox_manager =
@@ -900,7 +839,7 @@ void InProcessCommandBuffer::FenceSyncReleaseOnGpuThread(uint64_t release) {
 
 bool InProcessCommandBuffer::WaitFenceSyncOnGpuThread(
     gpu::CommandBufferNamespace namespace_id,
-    uint64_t command_buffer_id,
+    gpu::CommandBufferId command_buffer_id,
     uint64_t release) {
   gpu::SyncPointManager* sync_point_manager = service_->sync_point_manager();
   DCHECK(sync_point_manager);
@@ -985,7 +924,7 @@ CommandBufferNamespace InProcessCommandBuffer::GetNamespaceID() const {
   return CommandBufferNamespace::IN_PROCESS;
 }
 
-uint64_t InProcessCommandBuffer::GetCommandBufferID() const {
+CommandBufferId InProcessCommandBuffer::GetCommandBufferID() const {
   return command_buffer_id_;
 }
 
@@ -1020,7 +959,7 @@ void InProcessCommandBuffer::SignalSyncToken(const SyncToken& sync_token,
 
 bool InProcessCommandBuffer::CanWaitUnverifiedSyncToken(
     const SyncToken* sync_token) {
-  return false;
+  return sync_token->namespace_id() == GetNamespaceID();
 }
 
 uint32_t InProcessCommandBuffer::CreateStreamTextureOnGpuThread(

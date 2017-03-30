@@ -11,7 +11,7 @@
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
 #include "components/mus/public/cpp/window_tree_host_factory.h"
-#include "mojo/shell/public/cpp/application_impl.h"
+#include "mojo/shell/public/cpp/connector.h"
 
 namespace mus {
 namespace {
@@ -29,6 +29,8 @@ void TimeoutRunLoop(const base::Closure& timeout_task, bool* timeout) {
 WindowServerTestBase::WindowServerTestBase()
     : most_recent_connection_(nullptr),
       window_manager_(nullptr),
+      window_manager_delegate_(nullptr),
+      window_manager_client_(nullptr),
       window_tree_connection_destroyed_(false) {}
 
 WindowServerTestBase::~WindowServerTestBase() {}
@@ -63,40 +65,65 @@ bool WindowServerTestBase::QuitRunLoop() {
 void WindowServerTestBase::SetUp() {
   ApplicationTestBase::SetUp();
 
-  CreateSingleWindowTreeHost(application_impl(),
-                             mojom::WindowTreeHostClientPtr(), this, &host_,
-                             nullptr, nullptr);
+  CreateWindowTreeHost(connector(), this, &host_, this);
 
   ASSERT_TRUE(DoRunLoopWithTimeout());  // RunLoop should be quit by OnEmbed().
   std::swap(window_manager_, most_recent_connection_);
 }
 
-void WindowServerTestBase::TearDown() {
-  ApplicationTestBase::TearDown();
-}
-
-mojo::ApplicationDelegate* WindowServerTestBase::GetApplicationDelegate() {
+mojo::ShellClient* WindowServerTestBase::GetShellClient() {
   return this;
 }
 
-bool WindowServerTestBase::ConfigureIncomingConnection(
-    mojo::ApplicationConnection* connection) {
-  connection->AddService<mojom::WindowTreeClient>(this);
+bool WindowServerTestBase::AcceptConnection(mojo::Connection* connection) {
+  connection->AddInterface<mojom::WindowTreeClient>(this);
   return true;
 }
 
 void WindowServerTestBase::OnEmbed(Window* root) {
   most_recent_connection_ = root->connection();
   EXPECT_TRUE(QuitRunLoop());
-  host_->AddActivationParent(root->id());
+  ASSERT_TRUE(window_manager_client_);
+  window_manager_client_->AddActivationParent(root);
 }
 
 void WindowServerTestBase::OnConnectionLost(WindowTreeConnection* connection) {
   window_tree_connection_destroyed_ = true;
 }
 
+void WindowServerTestBase::SetWindowManagerClient(WindowManagerClient* client) {
+  window_manager_client_ = client;
+}
+
+bool WindowServerTestBase::OnWmSetBounds(Window* window, gfx::Rect* bounds) {
+  return window_manager_delegate_
+             ? window_manager_delegate_->OnWmSetBounds(window, bounds)
+             : true;
+}
+
+bool WindowServerTestBase::OnWmSetProperty(
+    Window* window,
+    const std::string& name,
+    scoped_ptr<std::vector<uint8_t>>* new_data) {
+  return window_manager_delegate_
+             ? window_manager_delegate_->OnWmSetProperty(window, name, new_data)
+             : true;
+}
+
+Window* WindowServerTestBase::OnWmCreateTopLevelWindow(
+    std::map<std::string, std::vector<uint8_t>>* properties) {
+  return window_manager_delegate_
+             ? window_manager_delegate_->OnWmCreateTopLevelWindow(properties)
+             : nullptr;
+}
+
+void WindowServerTestBase::OnAccelerator(uint32_t id, mojom::EventPtr event) {
+  if (window_manager_delegate_)
+    window_manager_delegate_->OnAccelerator(id, std::move(event));
+}
+
 void WindowServerTestBase::Create(
-    mojo::ApplicationConnection* connection,
+    mojo::Connection* connection,
     mojo::InterfaceRequest<mojom::WindowTreeClient> request) {
   WindowTreeConnection::Create(
       this, std::move(request),

@@ -56,7 +56,7 @@ void WakeLockServiceContext::CancelWakeLock(int render_process_id,
 }
 
 bool WakeLockServiceContext::HasWakeLockForTests() const {
-  return wake_lock_;
+  return !!wake_lock_;
 }
 
 void WakeLockServiceContext::CreateWakeLock() {
@@ -65,7 +65,7 @@ void WakeLockServiceContext::CreateWakeLock() {
       PowerSaveBlocker::kPowerSaveBlockPreventDisplaySleep,
       PowerSaveBlocker::kReasonOther, "Wake Lock API");
 
-#if defined(OS_ANDROID) && !defined(USE_AURA)
+#if defined(OS_ANDROID)
   // On Android, additionaly associate the blocker with this WebContents.
   DCHECK(web_contents());
 

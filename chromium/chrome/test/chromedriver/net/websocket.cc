@@ -22,7 +22,6 @@
 #include "net/base/io_buffer.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
 #include "net/base/sys_addrinfo.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
@@ -51,7 +50,7 @@ bool ResolveHost(const std::string& host, net::IPAddressNumber* address) {
         freeaddrinfo(result);
         return false;
       }
-      *address = end_point.address();
+      *address = end_point.address().bytes();
     }
   }
   freeaddrinfo(result);

@@ -25,7 +25,6 @@ class FakeSyncClient : public SyncClient {
   bookmarks::BookmarkModel* GetBookmarkModel() override;
   favicon::FaviconService* GetFaviconService() override;
   history::HistoryService* GetHistoryService() override;
-  ClearBrowsingDataCallback GetClearBrowsingDataCallback() override;
   base::Closure GetPasswordStateChangedCallback() override;
   sync_driver::SyncApiComponentFactory::RegisterDataTypesMethod
   GetRegisterPlatformTypesCallback() override;
@@ -35,6 +34,8 @@ class FakeSyncClient : public SyncClient {
   scoped_refptr<syncer::ExtensionsActivity> GetExtensionsActivity() override;
   sync_sessions::SyncSessionsClient* GetSyncSessionsClient() override;
   base::WeakPtr<syncer::SyncableService> GetSyncableServiceForType(
+      syncer::ModelType type) override;
+  base::WeakPtr<syncer_v2::ModelTypeService> GetModelTypeServiceForType(
       syncer::ModelType type) override;
   scoped_refptr<syncer::ModelSafeWorker> CreateModelWorkerForGroup(
       syncer::ModelSafeGroup group,

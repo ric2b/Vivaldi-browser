@@ -13,6 +13,7 @@
 #include "modules/notifications/NotificationData.h"
 #include "modules/notifications/NotificationOptions.h"
 #include "modules/serviceworkers/ServiceWorkerRegistration.h"
+#include "platform/Histogram.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/modules/notifications/WebNotificationData.h"
@@ -31,7 +32,7 @@ public:
     {
         HeapVector<Member<Notification>> notifications;
         for (const WebPersistentNotificationInfo& notificationInfo : notificationInfos)
-            notifications.append(Notification::create(resolver->executionContext(), notificationInfo.persistentId, notificationInfo.data));
+            notifications.append(Notification::create(resolver->executionContext(), notificationInfo.persistentId, notificationInfo.data, true /* showing */));
 
         return notifications;
     }
@@ -60,7 +61,8 @@ ScriptPromise ServiceWorkerRegistrationNotifications::showNotification(ScriptSta
         return exceptionState.reject(scriptState);
 
     // Log number of actions developer provided in linear histogram: 0 -> underflow bucket, 1-16 -> distinct buckets, 17+ -> overflow bucket.
-    Platform::current()->histogramEnumeration("Notifications.PersistentNotificationActionCount", options.actions().size(), 17);
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(EnumerationHistogram, notificationCountHistogram, new EnumerationHistogram("Notifications.PersistentNotificationActionCount", 17));
+    notificationCountHistogram.count(options.actions().size());
 
     ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
     ScriptPromise promise = resolver->promise();

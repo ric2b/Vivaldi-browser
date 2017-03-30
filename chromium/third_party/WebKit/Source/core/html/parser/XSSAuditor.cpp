@@ -42,7 +42,6 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/MixedContentChecker.h"
-#include "platform/JSONValues.h"
 #include "platform/network/EncodedFormData.h"
 #include "platform/text/DecodeEscapeSequences.h"
 #include "wtf/ASCIICType.h"
@@ -144,7 +143,7 @@ static bool findAttributeWithName(const HTMLToken& token, const QualifiedName& n
     const String& attrName = name.namespaceURI() == XLinkNames::xlinkNamespaceURI ? "xlink:" + name.localName().string() : name.localName().string();
 
     for (size_t i = 0; i < token.attributes().size(); ++i) {
-        if (equalIgnoringNullity(token.attributes().at(i).name, attrName)) {
+        if (equalIgnoringNullity(token.attributes().at(i).nameAsVector(), attrName)) {
             indexOfMatchingAttribute = i;
             return true;
         }
@@ -196,10 +195,12 @@ static void truncateForSrcLikeAttribute(String& decodedSnippet)
     // In HTTP URLs, characters following the first ?, #, or third slash may come from
     // the page itself and can be merely ignored by an attacker's server when a remote
     // script or script-like resource is requested. In DATA URLS, the payload starts at
-    // the first comma, and the the first /*, //, or <!-- may introduce a comment. Characters
-    // following this may come from the page itself and may be ignored when the script is
-    // executed. For simplicity, we don't differentiate based on URL scheme, and stop at
-    // the first # or ?, the third slash, or the first slash or < once a comma is seen.
+    // the first comma, and the the first /*, //, or <!-- may introduce a comment. Also,
+    // DATA URLs may use the same string literal tricks as with script content itself.
+    // In either case, content following this may come from the page and may be ignored
+    // when the script is executed.
+    // For simplicity, we don't differentiate based on URL scheme, and stop at the first
+    // # or ?, the third slash, or the first slash, <, ', or " once a comma is seen.
     int slashCount = 0;
     bool commaSeen = false;
     for (size_t currentLength = 0; currentLength < decodedSnippet.length(); ++currentLength) {
@@ -207,7 +208,9 @@ static void truncateForSrcLikeAttribute(String& decodedSnippet)
         if (currentChar == '?'
             || currentChar == '#'
             || ((currentChar == '/' || currentChar == '\\') && (commaSeen || ++slashCount > 2))
-            || (currentChar == '<' && commaSeen)) {
+            || (currentChar == '<' && commaSeen)
+            || (currentChar == '\'' && commaSeen)
+            || (currentChar == '"' && commaSeen)) {
             decodedSnippet.truncate(currentLength);
             return;
         }
@@ -254,7 +257,7 @@ static ReflectedXSSDisposition combineXSSProtectionHeaderAndCSP(ReflectedXSSDisp
 
 static bool isSemicolonSeparatedAttribute(const HTMLToken::Attribute& attribute)
 {
-    return threadSafeMatch(attribute.name, SVGNames::valuesAttr);
+    return threadSafeMatch(attribute.nameAsVector(), SVGNames::valuesAttr);
 }
 
 static String semicolonSeparatedValueContainingJavaScriptURL(const String& value)
@@ -350,7 +353,7 @@ void XSSAuditor::init(Document* document, XSSAuditorDelegate* auditorDelegate)
         if (xssProtectionHeader == ReflectedXSSInvalid)
             document->addConsoleMessage(ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, "Error parsing header X-XSS-Protection: " + headerValue + ": "  + errorDetails + " at character position " + String::format("%u", errorPosition) + ". The default protections will be applied."));
 
-        ReflectedXSSDisposition cspHeader = document->contentSecurityPolicy()->reflectedXSSDisposition();
+        ReflectedXSSDisposition cspHeader = document->contentSecurityPolicy()->getReflectedXSSDisposition();
         m_didSendValidCSPHeader = cspHeader != ReflectedXSSUnset && cspHeader != ReflectedXSSInvalid;
 
         m_xssProtection = combineXSSProtectionHeaderAndCSP(xssProtectionHeader, cspHeader);
@@ -491,6 +494,7 @@ bool XSSAuditor::filterScriptToken(const FilterTokenRequest& request)
     m_scriptTagFoundInRequest = isContainedInRequest(canonicalizedSnippetForTagName(request));
     if (m_scriptTagFoundInRequest) {
         didBlockScript |= eraseAttributeIfInjected(request, srcAttr, blankURL().string(), SrcLikeAttributeTruncation);
+        didBlockScript |= eraseAttributeIfInjected(request, SVGNames::hrefAttr, blankURL().string(), SrcLikeAttributeTruncation);
         didBlockScript |= eraseAttributeIfInjected(request, XLinkNames::hrefAttr, blankURL().string(), SrcLikeAttributeTruncation);
     }
     return didBlockScript;
@@ -520,7 +524,7 @@ bool XSSAuditor::filterParamToken(const FilterTokenRequest& request)
         return false;
 
     const HTMLToken::Attribute& nameAttribute = request.token.attributes().at(indexOfNameAttribute);
-    if (!HTMLParamElement::isURLParameter(String(nameAttribute.value)))
+    if (!HTMLParamElement::isURLParameter(nameAttribute.value()))
         return false;
 
     return eraseAttributeIfInjected(request, valueAttr, blankURL().string(), SrcLikeAttributeTruncation);
@@ -602,7 +606,7 @@ bool XSSAuditor::filterLinkToken(const FilterTokenRequest& request)
         return false;
 
     const HTMLToken::Attribute& attribute = request.token.attributes().at(indexOfAttribute);
-    LinkRelAttribute parsedAttribute(String(attribute.value));
+    LinkRelAttribute parsedAttribute(attribute.value());
     if (!parsedAttribute.isImport())
         return false;
 
@@ -617,16 +621,16 @@ bool XSSAuditor::eraseDangerousAttributesIfInjected(const FilterTokenRequest& re
         bool valueContainsJavaScriptURL = false;
         const HTMLToken::Attribute& attribute = request.token.attributes().at(i);
         // FIXME: Don't create a new String for every attribute.value in the document.
-        if (isNameOfInlineEventHandler(attribute.name)) {
+        if (isNameOfInlineEventHandler(attribute.nameAsVector())) {
             eraseAttribute = isContainedInRequest(canonicalize(snippetFromAttribute(request, attribute), ScriptLikeAttributeTruncation));
         } else if (isSemicolonSeparatedAttribute(attribute)) {
-            String subValue = semicolonSeparatedValueContainingJavaScriptURL(String(attribute.value));
+            String subValue = semicolonSeparatedValueContainingJavaScriptURL(attribute.value());
             if (!subValue.isEmpty()) {
                 valueContainsJavaScriptURL = true;
                 eraseAttribute = isContainedInRequest(canonicalize(nameFromAttribute(request, attribute), NoTruncation))
                     && isContainedInRequest(canonicalize(subValue, ScriptLikeAttributeTruncation));
             }
-        } else if (protocolIsJavaScript(stripLeadingAndTrailingHTMLSpaces(String(attribute.value)))) {
+        } else if (protocolIsJavaScript(stripLeadingAndTrailingHTMLSpaces(attribute.value()))) {
             valueContainsJavaScriptURL = true;
             eraseAttribute = isContainedInRequest(canonicalize(snippetFromAttribute(request, attribute), ScriptLikeAttributeTruncation));
         }
@@ -651,10 +655,10 @@ bool XSSAuditor::eraseAttributeIfInjected(const FilterTokenRequest& request, con
         return false;
 
     if (threadSafeMatch(attributeName, srcAttr) || (restriction == AllowSameOriginHref && threadSafeMatch(attributeName, hrefAttr))) {
-        if (isLikelySafeResource(String(attribute.value)))
+        if (isLikelySafeResource(attribute.value()))
             return false;
     } else if (threadSafeMatch(attributeName, http_equivAttr)) {
-        if (!isDangerousHTTPEquiv(String(attribute.value)))
+        if (!isDangerousHTTPEquiv(attribute.value()))
             return false;
     }
 
@@ -675,8 +679,8 @@ String XSSAuditor::nameFromAttribute(const FilterTokenRequest& request, const HT
 {
     // The range inlcudes the character which terminates the name. So,
     // for an input of |name="value"|, the snippet is |name=|.
-    int start = attribute.nameRange.start - request.token.startIndex();
-    int end = attribute.valueRange.start - request.token.startIndex();
+    int start = attribute.nameRange().start - request.token.startIndex();
+    int end = attribute.valueRange().start - request.token.startIndex();
     return request.sourceTracker.sourceForToken(request.token).substring(start, end - start);
 }
 
@@ -686,8 +690,8 @@ String XSSAuditor::snippetFromAttribute(const FilterTokenRequest& request, const
     // for an input of |name="value"|, the snippet is |name="value|. For an
     // unquoted input of |name=value |, the snippet is |name=value|.
     // FIXME: We should grab one character before the name also.
-    int start = attribute.nameRange.start - request.token.startIndex();
-    int end = attribute.valueRange.end - request.token.startIndex();
+    int start = attribute.nameRange().start - request.token.startIndex();
+    int end = attribute.valueRange().end - request.token.startIndex();
     return request.sourceTracker.sourceForToken(request.token).substring(start, end - start);
 }
 

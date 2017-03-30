@@ -5,6 +5,7 @@
 package org.chromium.net;
 
 import android.support.annotation.IntDef;
+import android.util.Log;
 import android.util.Pair;
 
 import java.lang.annotation.Retention;
@@ -26,6 +27,7 @@ public interface UrlRequest {
      * with {@link Builder#build}.
      */
     public static final class Builder {
+        private static final String ACCEPT_ENCODING = "Accept-Encoding";
         // All fields are temporary storage of UrlRequest configuration to be
         // copied to built UrlRequests.
 
@@ -115,6 +117,14 @@ public interface UrlRequest {
             }
             if (value == null) {
                 throw new NullPointerException("Invalid header value.");
+            }
+            if (ACCEPT_ENCODING.equalsIgnoreCase(header)) {
+                Log.w("cronet",
+                        "It's not necessary to set Accept-Encoding on requests - cronet will do"
+                                + " this automatically for you, and setting it yourself has no "
+                                + "effect. See https://crbug.com/581399 for details.",
+                        new Exception());
+                return this;
             }
             mRequestHeaders.add(Pair.create(header, value));
             return this;
@@ -256,8 +266,8 @@ public interface UrlRequest {
     /**
      * Users of Cronet extend this class to receive callbacks indicating the
      * progress of a {@link UrlRequest} being processed. An instance of this class
-     * is passed in to {@link UrlRequest.Builder#UrlRequest.Builder UrlRequest.Builder()}
-     * when constructing the {@code UrlRequest}.
+     * is passed in to {@link UrlRequest.Builder}'s constructor when
+     * constructing the {@code UrlRequest}.
      * <p>
      * Note:  All methods will be invoked on the thread of the
      * {@link java.util.concurrent.Executor} used during construction of the
@@ -277,6 +287,9 @@ public interface UrlRequest {
          * @param request Request being redirected.
          * @param info Response information.
          * @param newLocationUrl Location where request is redirected.
+         * @throws Exception if an error occurs while processing a redirect. {@link #onFailed}
+         *         will be called with the thrown exception set as the cause of the
+         *         {@link UrlRequestException}.
          */
         public abstract void onRedirectReceived(
                 UrlRequest request, UrlResponseInfo info, String newLocationUrl) throws Exception;
@@ -288,12 +301,15 @@ public interface UrlRequest {
          * With the exception of {@link Callback#onCanceled onCanceled()},
          * no other {@link Callback} method will be invoked for the request,
          * including {@link Callback#onSucceeded onSucceeded()} and {@link
-         * Callback#onFailed onFailed()}, until {@link UrlRequest#read
-         * UrlRequest.read()} is called to attempt to start reading the response
+         * Callback#onFailed onFailed()}, until {@link UrlRequest#readNew
+         * UrlRequest.readNew()} is called to attempt to start reading the response
          * body.
          *
          * @param request Request that started to get response.
          * @param info Response information.
+         * @throws Exception if an error occurs while processing response start. {@link #onFailed}
+         *         will be called with the thrown exception set as the cause of the
+         *         {@link UrlRequestException}.
          */
         public abstract void onResponseStarted(UrlRequest request, UrlResponseInfo info)
                 throws Exception;
@@ -307,15 +323,18 @@ public interface UrlRequest {
          * no other {@link Callback} method will be invoked for the request,
          * including {@link Callback#onSucceeded onSucceeded()} and {@link
          * Callback#onFailed onFailed()}, until {@link
-         * UrlRequest#read UrlRequest.read()} is called to attempt to continue
+         * UrlRequest#readNew UrlRequest.readNew()} is called to attempt to continue
          * reading the response body.
          *
          * @param request Request that received data.
          * @param info Response information.
          * @param byteBuffer The buffer that was passed in to
-         *         {@link UrlRequest#read UrlRequest.read()}, now containing the
+         *         {@link UrlRequest#readNew UrlRequest.readNew()}, now containing the
          *         received data. The buffer's position is updated to the end of
          *         the received data. The buffer's limit is not changed.
+         * @throws Exception if an error occurs while processing a read completion.
+         *         {@link #onFailed} will be called with the thrown exception set as the cause of
+         *         the {@link UrlRequestException}.
          */
         public abstract void onReadCompleted(
                 UrlRequest request, UrlResponseInfo info, ByteBuffer byteBuffer) throws Exception;
@@ -379,7 +398,7 @@ public interface UrlRequest {
          * This state corresponds to a resource load that has either not yet begun
          * or is idle waiting for the consumer to do something to move things along
          * (e.g. when the consumer of a {@link UrlRequest} has not called
-         * {@link UrlRequest#read read()} yet).
+         * {@link UrlRequest#readNew readNew()} yet).
          */
         public static final int IDLE = 0;
         /**
@@ -468,14 +487,16 @@ public interface UrlRequest {
          * the period after the response headers have been received and before all
          * of the response body has been downloaded. (NOTE: This state only applies
          * for an {@link UrlRequest} while there is an outstanding
-         * {@link UrlRequest#read read()} operation.)
+         * {@link UrlRequest#readNew readNew()} operation.)
          */
         public static final int READING_RESPONSE = 14;
 
         private Status() {}
 
         /**
-         * Convert a {@link LoadState} static int to one of values listed above.
+         * Convert a LoadState int to one of values listed above.
+         * @param loadState a LoadState to convert.
+         * @return static int Status.
          */
         @StatusValues
         static int convertLoadState(int loadState) {
@@ -597,28 +618,6 @@ public interface UrlRequest {
      * onRedirectReceived()}.
      */
     public void followRedirect();
-
-    /**
-     * Attempts to read part of the response body into the provided buffer.
-     * Must only be called at most once in response to each invocation of the
-     * {@link Callback#onResponseStarted onResponseStarted()} and {@link
-     * Callback#onReadCompleted onReadCompleted()} methods of the {@link
-     * Callback}. Each call will result in an asynchronous call to
-     * either the {@link Callback Callback's}
-     * {@link Callback#onReadCompleted onReadCompleted()} method if data
-     * is read, its {@link Callback#onSucceeded onSucceeded()} method if
-     * there's no more data to read, or its {@link Callback#onFailed
-     * onFailed()} method if there's an error.
-     *
-     * @param buffer {@link ByteBuffer} to write response body to. Must be a
-     *     direct ByteBuffer. The embedder must not read or modify buffer's
-     *     position, limit, or data between its position and capacity until the
-     *     request calls back into the {@link Callback}.
-     * @deprecated Use readNew() instead though note that it updates the
-     *     buffer's position not limit.
-     */
-    // TODO(pauljensen): Switch all callers to call readNew().
-    @Deprecated public void read(ByteBuffer buffer);
 
     /**
      * Attempts to read part of the response body into the provided buffer.

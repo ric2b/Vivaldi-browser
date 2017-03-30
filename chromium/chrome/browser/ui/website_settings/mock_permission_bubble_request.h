@@ -23,8 +23,7 @@ class MockPermissionBubbleRequest : public PermissionBubbleRequest {
   int GetIconId() const override;
   base::string16 GetMessageText() const override;
   base::string16 GetMessageTextFragment() const override;
-  bool HasUserGesture() const override;
-  GURL GetRequestingHostname() const override;
+  GURL GetOrigin() const override;
 
   void PermissionGranted() override;
   void PermissionDenied() override;
@@ -35,18 +34,15 @@ class MockPermissionBubbleRequest : public PermissionBubbleRequest {
   bool cancelled();
   bool finished();
 
-  void SetHasUserGesture();
-
  private:
   bool granted_;
   bool cancelled_;
   bool finished_;
-  bool user_gesture_;
 
   base::string16 text_;
   base::string16 accept_label_;
   base::string16 deny_label_;
-  GURL hostname_;
+  GURL origin_;
 };
 
 #endif  // CHROME_BROWSER_UI_WEBSITE_SETTINGS_MOCK_PERMISSION_BUBBLE_REQUEST_H_

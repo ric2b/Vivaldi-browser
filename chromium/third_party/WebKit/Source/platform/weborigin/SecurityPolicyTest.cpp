@@ -31,14 +31,40 @@
 #include "platform/weborigin/SecurityPolicy.h"
 
 #include "platform/weborigin/KURL.h"
+#include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
 
-TEST(SecurityPolicyTest, ReferrerIsAlwaysAWebURL)
+TEST(SecurityPolicyTest, EmptyReferrerForUnauthorizedScheme)
 {
-    EXPECT_TRUE(String() == SecurityPolicy::generateReferrer(ReferrerPolicyAlways, KURL(ParsedURLString, "http://example.com/"), String::fromUTF8("chrome://somepage/")).referrer);
+    const KURL exampleHttpUrl = KURL(ParsedURLString, "http://example.com/");
+    EXPECT_TRUE(String() == SecurityPolicy::generateReferrer(ReferrerPolicyAlways, exampleHttpUrl, String::fromUTF8("chrome://somepage/")).referrer);
+}
+
+TEST(SecurityPolicyTest, GenerateReferrerRespectsReferrerSchemesRegistry)
+{
+    const KURL exampleHttpUrl = KURL(ParsedURLString, "http://example.com/");
+    const String foobarURL = String::fromUTF8("foobar://somepage/");
+    const String foobarScheme = String::fromUTF8("foobar");
+
+    EXPECT_EQ(String(), SecurityPolicy::generateReferrer(ReferrerPolicyAlways, exampleHttpUrl, foobarURL).referrer);
+    SchemeRegistry::registerURLSchemeAsAllowedForReferrer(foobarScheme);
+    EXPECT_EQ(foobarURL, SecurityPolicy::generateReferrer(ReferrerPolicyAlways, exampleHttpUrl, foobarURL).referrer);
+    SchemeRegistry::removeURLSchemeAsAllowedForReferrer(foobarScheme);
+}
+
+TEST(SecurityPolicyTest, ShouldHideReferrerRespectsReferrerSchemesRegistry)
+{
+    const KURL exampleHttpUrl = KURL(ParsedURLString, "http://example.com/");
+    const String foobarURL = String::fromUTF8("foobar://somepage/");
+    const String foobarScheme = String::fromUTF8("foobar");
+
+    EXPECT_TRUE(SecurityPolicy::shouldHideReferrer(exampleHttpUrl, foobarScheme));
+    SchemeRegistry::registerURLSchemeAsAllowedForReferrer(foobarScheme);
+    EXPECT_FALSE(SecurityPolicy::shouldHideReferrer(exampleHttpUrl, foobarURL));
+    SchemeRegistry::removeURLSchemeAsAllowedForReferrer(foobarScheme);
 }
 
 TEST(SecurityPolicyTest, GenerateReferrer)
@@ -144,11 +170,10 @@ TEST(SecurityPolicyTest, TrustworthyWhiteList)
     };
 
     for (const char* url : insecureURLs) {
-        String errorMessage;
         RefPtr<SecurityOrigin> origin = SecurityOrigin::createFromString(url);
-        EXPECT_FALSE(origin->isPotentiallyTrustworthy(errorMessage));
+        EXPECT_FALSE(origin->isPotentiallyTrustworthy());
         SecurityPolicy::addOriginTrustworthyWhiteList(origin);
-        EXPECT_TRUE(origin->isPotentiallyTrustworthy(errorMessage));
+        EXPECT_TRUE(origin->isPotentiallyTrustworthy());
     }
 
     // Tests that adding URLs that have inner-urls to the whitelist
@@ -173,17 +198,15 @@ TEST(SecurityPolicyTest, TrustworthyWhiteList)
         },
     };
     for (const TestCase& test : insecureURLsWithInnerOrigin) {
-        String errorMessage;
-
         // Actually origins of both URLs should be same.
         RefPtr<SecurityOrigin> origin1 = SecurityOrigin::createFromString(test.url);
         RefPtr<SecurityOrigin> origin2 = SecurityOrigin::createFromString(test.anotherUrlInOrigin);
 
-        EXPECT_FALSE(origin1->isPotentiallyTrustworthy(errorMessage));
-        EXPECT_FALSE(origin2->isPotentiallyTrustworthy(errorMessage));
+        EXPECT_FALSE(origin1->isPotentiallyTrustworthy());
+        EXPECT_FALSE(origin2->isPotentiallyTrustworthy());
         SecurityPolicy::addOriginTrustworthyWhiteList(origin1);
-        EXPECT_TRUE(origin1->isPotentiallyTrustworthy(errorMessage));
-        EXPECT_TRUE(origin2->isPotentiallyTrustworthy(errorMessage));
+        EXPECT_TRUE(origin1->isPotentiallyTrustworthy());
+        EXPECT_TRUE(origin2->isPotentiallyTrustworthy());
     }
 }
 

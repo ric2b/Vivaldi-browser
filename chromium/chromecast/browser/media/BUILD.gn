@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//chromecast/chromecast.gni")
+import("//media/media_options.gni")
 
 source_set("media") {
   sources = [
@@ -10,16 +11,27 @@ source_set("media") {
     "cast_browser_cdm_factory.h",
     "cast_media_client_android.cc",
     "cast_media_client_android.h",
-    "cma_media_pipeline_client.cc",
-    "cma_media_pipeline_client.h",
-    "cma_message_filter_host.cc",
-    "cma_message_filter_host.h",
     "media_pipeline_host.cc",
     "media_pipeline_host.h",
   ]
 
+  if (mojo_media_host == "browser") {
+    sources += [
+      "cast_mojo_media_client.cc",
+      "cast_mojo_media_client.h",
+      "cast_renderer.cc",
+      "cast_renderer.h",
+    ]
+  }
+
   if (use_playready) {
     public_configs = [ "//chromecast:playready_config" ]
+  }
+
+  if (mojo_media_host == "browser") {
+    public_deps = [
+      "//media/mojo/services:application",
+    ]
   }
 
   deps = [
@@ -30,4 +42,15 @@ source_set("media") {
     "//content/public/browser",
     "//media",
   ]
+
+  if (is_android) {
+    deps += [ "//components/cdm/browser" ]
+  } else {
+    sources += [
+      "cma_media_pipeline_client.cc",
+      "cma_media_pipeline_client.h",
+      "cma_message_filter_host.cc",
+      "cma_message_filter_host.h",
+    ]
+  }
 }

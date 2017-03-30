@@ -55,11 +55,12 @@
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLDocument.h"
-#include "core/inspector/ScriptCallStack.h"
+#include "core/inspector/InspectorInstrumentation.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
 #include "platform/LayoutTestSupport.h"
+#include "platform/v8_inspector/public/V8Debugger.h"
 #include "wtf/Assertions.h"
 #include "wtf/OwnPtr.h"
 
@@ -217,19 +218,6 @@ void V8Window::postMessageMethodCustom(const v8::FunctionCallbackInfo<v8::Value>
     exceptionState.throwIfNeeded();
 }
 
-// FIXME(fqian): returning string is cheating, and we should
-// fix this by calling toString function on the receiver.
-// However, V8 implements toString in JavaScript, which requires
-// switching context of receiver. I consider it is dangerous.
-void V8Window::toStringMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    v8::Local<v8::Object> domWrapper = V8Window::findInstanceInPrototypeChain(info.This(), info.GetIsolate());
-    v8::Local<v8::Object> target = domWrapper.IsEmpty() ? info.This() : domWrapper;
-    v8::Local<v8::String> value;
-    if (target->ObjectProtoToString(info.GetIsolate()->GetCurrentContext()).ToLocal(&value))
-        v8SetReturnValue(info, value);
-}
-
 void V8Window::openMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     DOMWindow* impl = V8Window::toImpl(info.Holder());
@@ -295,6 +283,31 @@ static bool installTestInterfaceIfNeeded(LocalFrame& frame, v8::Local<v8::String
     return false;
 }
 
+static bool installCommandLineAPIIfNeeded(v8::Local<v8::Name> name, const AtomicString& nameString, const v8::PropertyCallbackInfo<v8::Value>& info)
+{
+    if (!InspectorInstrumentation::hasFrontends())
+        return false;
+
+    if (!V8Debugger::isCommandLineAPIMethod(nameString))
+        return false;
+
+    v8::Isolate* isolate = info.GetIsolate();
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+    v8::Local<v8::Object> global = context->Global();
+    v8::Local<v8::Value> commandLineAPI;
+
+    if (v8Call(global->Get(context, V8Debugger::commandLineAPISymbol(isolate)), commandLineAPI)) {
+        v8::Local<v8::Value> value;
+        if (commandLineAPI->IsObject() && v8Call(commandLineAPI->ToObject(isolate)->Get(context, name), value)) {
+            v8SetReturnValue(info, value);
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void V8Window::namedPropertyGetterCustom(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     auto nameString = name.As<v8::String>();
@@ -323,6 +336,9 @@ void V8Window::namedPropertyGetterCustom(v8::Local<v8::Name> name, const v8::Pro
         return;
 
     if (installTestInterfaceIfNeeded(toLocalFrame(*frame), nameString, info))
+        return;
+
+    if (installCommandLineAPIIfNeeded(name, propName, info))
         return;
 
     // Search named items in the document.
@@ -382,7 +398,7 @@ static bool securityCheck(v8::Local<v8::Object> host)
     return BindingSecurity::shouldAllowAccessTo(isolate, callingDOMWindow(isolate), targetWindow, DoNotReportSecurityError);
 }
 
-bool V8Window::securityCheckCustom(v8::Local<v8::Context> accessingContext, v8::Local<v8::Object> accessedObject)
+bool V8Window::securityCheckCustom(v8::Local<v8::Context> accessingContext, v8::Local<v8::Object> accessedObject, v8::Local<v8::Value> data)
 {
     // TODO(jochen): Take accessingContext into account.
     return securityCheck(accessedObject);

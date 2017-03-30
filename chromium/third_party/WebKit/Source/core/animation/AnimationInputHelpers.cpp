@@ -5,10 +5,10 @@
 #include "core/animation/AnimationInputHelpers.h"
 
 #include "core/SVGNames.h"
-#include "core/XLinkNames.h"
 #include "core/css/CSSValueList.h"
 #include "core/css/parser/CSSParser.h"
 #include "core/css/resolver/CSSToStyleMap.h"
+#include "core/frame/Deprecation.h"
 #include "core/svg/SVGElement.h"
 #include "core/svg/animation/SVGSMILElement.h"
 #include "wtf/text/StringBuilder.h"
@@ -29,7 +29,7 @@ static String removeSVGPrefix(const String& property)
     return property.substring(kSVGPrefixLength);
 }
 
-CSSPropertyID AnimationInputHelpers::keyframeAttributeToCSSProperty(const String& property)
+CSSPropertyID AnimationInputHelpers::keyframeAttributeToCSSProperty(const String& property, const Document& document)
 {
     // Disallow prefixed properties.
     if (property[0] == '-' || isASCIIUpper(property[0]))
@@ -38,6 +38,8 @@ CSSPropertyID AnimationInputHelpers::keyframeAttributeToCSSProperty(const String
         return CSSPropertyFloat;
     StringBuilder builder;
     for (size_t i = 0; i < property.length(); ++i) {
+        if (property[i] == '-')
+            Deprecation::countDeprecation(document, UseCounter::WebAnimationHyphenatedProperty);
         if (isASCIIUpper(property[i]))
             builder.append('-');
         builder.append(property[i]);
@@ -88,6 +90,7 @@ const AttributeNameMap& getSupportedAttributes()
             &SVGNames::gradientTransformAttr,
             &SVGNames::gradientUnitsAttr,
             &SVGNames::heightAttr,
+            &SVGNames::hrefAttr,
             &SVGNames::in2Attr,
             &SVGNames::inAttr,
             &SVGNames::interceptAttr,
@@ -161,7 +164,6 @@ const AttributeNameMap& getSupportedAttributes()
             &SVGNames::yAttr,
             &SVGNames::yChannelSelectorAttr,
             &SVGNames::zAttr,
-            &XLinkNames::hrefAttr,
         };
         for (size_t i = 0; i < WTF_ARRAY_LENGTH(attributes); i++)
             supportedAttributes.set(*attributes[i], attributes[i]);
@@ -172,10 +174,6 @@ const AttributeNameMap& getSupportedAttributes()
 QualifiedName svgAttributeName(const String& property)
 {
     ASSERT(!isSVGPrefixed(property));
-
-    if (property == "href")
-        return XLinkNames::hrefAttr;
-
     return QualifiedName(nullAtom, AtomicString(property), nullAtom);
 }
 

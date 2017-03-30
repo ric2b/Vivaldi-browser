@@ -10,7 +10,7 @@
 #include "base/synchronization/lock.h"
 #include "base/threading/platform_thread.h"
 #include "base/trace_event/trace_event_impl.h"
-#include "mojo/shell/public/cpp/application_impl.h"
+#include "mojo/shell/public/cpp/connector.h"
 
 #ifdef NDEBUG
 #include "base/command_line.h"
@@ -41,7 +41,7 @@ TracingImpl::TracingImpl() {
 TracingImpl::~TracingImpl() {
 }
 
-void TracingImpl::Initialize(ApplicationImpl* app) {
+void TracingImpl::Initialize(Connector* connector, const std::string& url) {
   {
     base::AutoLock lock(g_singleton_lock.Get());
     if (g_tracing_singleton_created)
@@ -51,10 +51,10 @@ void TracingImpl::Initialize(ApplicationImpl* app) {
 
   // This will only set the name for the first app in a loaded mojo file. It's
   // up to something like CoreServices to name its own child threads.
-  base::PlatformThread::SetName(app->url());
+  base::PlatformThread::SetName(url);
 
-  connection_ = app->ConnectToApplication("mojo:tracing");
-  connection_->AddService(this);
+  connection_ = connector->Connect("mojo:tracing");
+  connection_->AddInterface(this);
 
 #ifdef NDEBUG
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -66,7 +66,7 @@ void TracingImpl::Initialize(ApplicationImpl* app) {
 #endif
 }
 
-void TracingImpl::Create(ApplicationConnection* connection,
+void TracingImpl::Create(Connection* connection,
                          InterfaceRequest<tracing::TraceProvider> request) {
   provider_impl_.Bind(std::move(request));
 }

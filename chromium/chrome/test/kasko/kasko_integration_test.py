@@ -17,9 +17,9 @@ most likely lead to constant failures.
 Typical usage (assuming in root 'src' directory):
 
 - generate project files with the following GYP variables:
-    syzyasan=1 win_z7=0 chromium_win_pch=0
+    branding=Chrome syzyasan=1 win_z7=0 chromium_win_pch=0
 - build the release Chrome binaries:
-    ninja -C out\Release chrome.exe
+    ninja -C out\Release chrome.exe chromedriver.exe
 - run the test:
     python chrome/test/kasko/kasko_integration_test.py
 """
@@ -40,49 +40,13 @@ _LOGGER = logging.getLogger(os.path.basename(__file__))
 def Main():
   options = kasko.config.ParseCommandLine()
 
-  # Generate a temporary directory for use in the tests.
-  with kasko.util.ScopedTempDir() as temp_dir:
-    # Prevent the temporary directory from self cleaning if requested.
-    if options.keep_temp_dirs:
-      temp_dir_path = temp_dir.release()
-    else:
-      temp_dir_path = temp_dir.path
+  kasko.integration_test.RunTest(
+      options,
+      'chrome://kasko/send-report',
+      10,
+      {'kasko-set-crash-key-value-impl': 'SetCrashKeyValueImpl'})
 
-    # Use the specified user data directory if requested.
-    if options.user_data_dir:
-      user_data_dir = options.user_data_dir
-    else:
-      user_data_dir = os.path.join(temp_dir_path, 'user-data-dir')
-
-    kasko_dir = os.path.join(temp_dir_path, 'kasko')
-    os.makedirs(kasko_dir)
-
-    # Launch the test server.
-    server = kasko.crash_server.CrashServer()
-    with kasko.util.ScopedStartStop(server):
-      _LOGGER.info('Started server on port %d', server.port)
-
-      # Configure the environment so Chrome can find the test crash server.
-      os.environ['KASKO_CRASH_SERVER_URL'] = (
-          'http://127.0.0.1:%d/crash' % server.port)
-
-      # Launch Chrome and navigate it to the test URL.
-      chrome = kasko.process.ChromeInstance(options.chromedriver,
-                                            options.chrome, user_data_dir)
-      with kasko.util.ScopedStartStop(chrome):
-        _LOGGER.info('Navigating to Kasko debug URL')
-        chrome.navigate_to('chrome://kasko/send-report')
-
-        _LOGGER.info('Waiting for Kasko report')
-        if not server.wait_for_report(10):
-          raise Exception('No Kasko report received.')
-
-    report = server.crash(0)
-    kasko.report.LogCrashKeys(report)
-    kasko.report.ValidateCrashReport(report,
-        {'kasko-set-crash-key-value-impl': 'SetCrashKeyValueImpl'})
-
-    return 0
+  _LOGGER.info('Test passed successfully!')
 
 
 if __name__ == '__main__':

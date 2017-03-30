@@ -12,6 +12,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
+#include "chrome/common/features.h"
 
 class LocationBarTesting;
 class OmniboxView;
@@ -57,6 +58,7 @@ class TestBrowserWindow : public BrowserWindow {
   gfx::Rect GetRestoredBounds() const override;
   ui::WindowShowState GetRestoredState() const override;
   gfx::Rect GetBounds() const override;
+  gfx::Size GetContentsSize() const override;
   bool IsMaximized() const override;
   bool IsMinimized() const override;
   void Maximize() override {}
@@ -65,11 +67,6 @@ class TestBrowserWindow : public BrowserWindow {
   bool ShouldHideUIForFullscreen() const override;
   bool IsFullscreen() const override;
   bool IsFullscreenBubbleVisible() const override;
-  bool SupportsFullscreenWithToolbar() const override;
-  void UpdateFullscreenWithToolbar(bool with_toolbar) override;
-  void ToggleFullscreenToolbar() override;
-  bool IsFullscreenWithToolbar() const override;
-  bool ShouldHideFullscreenToolbar() const override;
 #if defined(OS_WIN)
   void SetMetroSnapMode(bool enable) override {}
   bool IsInMetroSnapMode() const override;
@@ -112,7 +109,7 @@ class TestBrowserWindow : public BrowserWindow {
                            translate::TranslateStep step,
                            translate::TranslateErrors::Type error_type,
                            bool is_user_gesture) override {}
-#if defined(ENABLE_ONE_CLICK_SIGNIN)
+#if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
   void ShowOneClickSigninBubble(
       OneClickSigninBubbleType type,
       const base::string16& email,
@@ -143,10 +140,6 @@ class TestBrowserWindow : public BrowserWindow {
       AvatarBubbleMode mode,
       const signin::ManageAccountsParams& manage_accounts_params,
       signin_metrics::AccessPoint access_point) override {}
-  void ShowModalSigninWindow(
-      AvatarBubbleMode mode,
-      signin_metrics::AccessPoint access_point) override {}
-  void CloseModalSigninWindow() override {}
   int GetRenderViewHeightInsetWithDetachedBookmarkBar() override;
   void ExecuteExtensionCommand(const extensions::Extension* extension,
                                const extensions::Command& command) override;

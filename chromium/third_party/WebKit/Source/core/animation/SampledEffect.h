@@ -16,8 +16,7 @@ namespace blink {
 
 class SVGElement;
 
-// TODO(haraken): Drop Finalized once we ship Oilpan and the OwnPtrWillBeMember
-// is gone.
+// Associates the results of sampling an EffectModel with metadata used for effect ordering and managing composited animations.
 class SampledEffect : public GarbageCollectedFinalized<SampledEffect> {
     WTF_MAKE_NONCOPYABLE(SampledEffect);
 public:
@@ -34,6 +33,9 @@ public:
     KeyframeEffect* effect() const { return m_effect; }
     unsigned sequenceNumber() const { return m_sequenceNumber; }
     KeyframeEffect::Priority priority() const { return m_priority; }
+    bool willNeverChange() const;
+    void removeReplacedInterpolations(const HashSet<PropertyHandle>&);
+    void updateReplacedProperties(HashSet<PropertyHandle>&);
 
     DECLARE_TRACE();
 
@@ -41,7 +43,6 @@ private:
     SampledEffect(KeyframeEffect*);
 
     WeakMember<KeyframeEffect> m_effect;
-    Member<Animation> m_animation;
     Vector<RefPtr<Interpolation>> m_interpolations;
     const unsigned m_sequenceNumber;
     KeyframeEffect::Priority m_priority;

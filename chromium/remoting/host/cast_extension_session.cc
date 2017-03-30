@@ -19,9 +19,9 @@
 #include "remoting/protocol/port_allocator_factory.h"
 #include "remoting/protocol/transport_context.h"
 #include "remoting/protocol/webrtc_video_capturer_adapter.h"
-#include "third_party/libjingle/source/talk/app/webrtc/mediastreaminterface.h"
-#include "third_party/libjingle/source/talk/app/webrtc/test/fakeconstraints.h"
-#include "third_party/libjingle/source/talk/app/webrtc/videosourceinterface.h"
+#include "third_party/webrtc/api/mediastreaminterface.h"
+#include "third_party/webrtc/api/test/fakeconstraints.h"
+#include "third_party/webrtc/api/videosourceinterface.h"
 
 namespace remoting {
 
@@ -577,11 +577,6 @@ void CastExtensionSession::OnSignalingChange(
   VLOG(1) << "PeerConnectionObserver: SignalingState changed to:" << new_state;
 }
 
-void CastExtensionSession::OnStateChange(
-    webrtc::PeerConnectionObserver::StateType state_changed) {
-  VLOG(1) << "PeerConnectionObserver: StateType changed to: " << state_changed;
-}
-
 void CastExtensionSession::OnAddStream(webrtc::MediaStreamInterface* stream) {
   VLOG(1) << "PeerConnectionObserver: stream added: " << stream->label();
 }
@@ -621,10 +616,6 @@ void CastExtensionSession::OnIceGatheringChange(
     webrtc::PeerConnectionInterface::IceGatheringState new_state) {
   VLOG(1) << "PeerConnectionObserver: IceGatheringState changed to: "
           << new_state;
-}
-
-void CastExtensionSession::OnIceComplete() {
-  VLOG(1) << "PeerConnectionObserver: all ICE candidates found.";
 }
 
 void CastExtensionSession::OnIceCandidate(

@@ -6,7 +6,6 @@
 
 #include "base/auto_reset.h"
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/task_runner_util.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
@@ -34,6 +33,7 @@
 #include "components/mime_util/mime_util.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/plugin_service.h"
@@ -61,16 +61,15 @@ TabRendererData::NetworkState TabContentsNetworkState(
   return TabRendererData::NETWORK_STATE_LOADING;
 }
 
-bool DetermineTabStripLayoutStacked(
-    PrefService* prefs,
-    chrome::HostDesktopType host_desktop_type,
-    bool* adjust_layout) {
+bool DetermineTabStripLayoutStacked(PrefService* prefs, bool* adjust_layout) {
   *adjust_layout = false;
   // For ash, always allow entering stacked mode.
-  if (host_desktop_type != chrome::HOST_DESKTOP_TYPE_ASH)
-    return false;
+#if defined(USE_ASH)
   *adjust_layout = true;
   return prefs->GetBoolean(prefs::kTabStripStackedLayout);
+#else
+  return false;
+#endif
 }
 
 // Get the MIME type of the file pointed to by the url, based on the file's
@@ -389,10 +388,8 @@ bool BrowserTabStripController::IsIncognito() {
 
 void BrowserTabStripController::StackedLayoutMaybeChanged() {
   bool adjust_layout = false;
-  bool stacked_layout =
-      DetermineTabStripLayoutStacked(g_browser_process->local_state(),
-                                     browser_->host_desktop_type(),
-                                     &adjust_layout);
+  bool stacked_layout = DetermineTabStripLayoutStacked(
+      g_browser_process->local_state(), &adjust_layout);
   if (!adjust_layout || stacked_layout == tabstrip_->stacked_layout())
     return;
 
@@ -562,10 +559,8 @@ void BrowserTabStripController::AddTab(WebContents* contents,
 
 void BrowserTabStripController::UpdateStackedLayout() {
   bool adjust_layout = false;
-  bool stacked_layout =
-      DetermineTabStripLayoutStacked(g_browser_process->local_state(),
-                                     browser_->host_desktop_type(),
-                                     &adjust_layout);
+  bool stacked_layout = DetermineTabStripLayoutStacked(
+      g_browser_process->local_state(), &adjust_layout);
   tabstrip_->set_adjust_layout(adjust_layout);
   tabstrip_->SetStackedLayout(stacked_layout);
 }

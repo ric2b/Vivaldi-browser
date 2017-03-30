@@ -6,7 +6,11 @@
 #define BluetoothDevice_h
 
 #include "bindings/core/v8/ScriptWrappable.h"
+#include "core/dom/ActiveDOMObject.h"
+#include "core/page/PageLifecycleObserver.h"
+#include "modules/EventTargetModules.h"
 #include "modules/bluetooth/BluetoothAdvertisingData.h"
+#include "modules/bluetooth/BluetoothRemoteGATTServer.h"
 #include "platform/heap/Heap.h"
 #include "public/platform/modules/bluetooth/WebBluetoothDevice.h"
 #include "wtf/OwnPtr.h"
@@ -15,6 +19,7 @@
 
 namespace blink {
 
+class BluetoothRemoteGATTServer;
 class ScriptPromise;
 class ScriptPromiseResolver;
 class ScriptState;
@@ -26,17 +31,52 @@ class ScriptState;
 // "Interface required by CallbackPromiseAdapter" section and the
 // CallbackPromiseAdapter class comments.
 class BluetoothDevice final
-    : public GarbageCollectedFinalized<BluetoothDevice>
-    , public ScriptWrappable {
+    : public RefCountedGarbageCollectedEventTargetWithInlineData<BluetoothDevice>
+    , public ActiveDOMObject
+    , public PageLifecycleObserver {
+    USING_PRE_FINALIZER(BluetoothDevice, dispose);
     DEFINE_WRAPPERTYPEINFO();
+    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(BluetoothDevice);
+    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(BluetoothDevice);
 public:
-    BluetoothDevice(PassOwnPtr<WebBluetoothDevice>);
-
-    ScriptPromise connectGATT(ScriptState*);
+    BluetoothDevice(ExecutionContext*, PassOwnPtr<WebBluetoothDevice>);
 
     // Interface required by CallbackPromiseAdapter:
     using WebType = OwnPtr<WebBluetoothDevice>;
     static BluetoothDevice* take(ScriptPromiseResolver*, PassOwnPtr<WebBluetoothDevice>);
+
+    // We should disconnect from the device in all of the following cases:
+    // 1. When the object gets GarbageCollected e.g. it went out of scope.
+    // dispose() is called in this case.
+    // 2. When the parent document gets detached e.g. reloading a page.
+    // stop() is called in this case.
+    // 3. For now (https://crbug.com/579746), when the tab is no longer in the
+    // foreground e.g. change tabs.
+    // pageVisibilityChanged() is called in this case.
+    // TODO(ortuno): Users should be able to turn on notifications for
+    // events on navigator.bluetooth and still remain connected even if the
+    // BluetoothDevice object is garbage collected.
+    // TODO(ortuno): Allow connections when the tab is in the background.
+    // This is a short term solution instead of implementing a tab indicator
+    // for bluetooth connections.
+
+    // USING_PRE_FINALIZER interface.
+    // Called before the object gets garbage collected.
+    void dispose();
+
+    // ActiveDOMObject interface.
+    void stop() override;
+
+    // PageLifecycleObserver interface.
+    void pageVisibilityChanged() override;
+
+    // If gatt is connected then disconnects and sets gatt.connected to false.
+    // Returns true if gatt was disconnected.
+    bool disconnectGATTIfConnected();
+
+    // EventTarget methods:
+    const AtomicString& interfaceName() const override;
+    ExecutionContext* executionContext() const override;
 
     // Interface required by Garbage Collection:
     DECLARE_VIRTUAL_TRACE();
@@ -50,11 +90,18 @@ public:
     unsigned vendorID(bool& isNull);
     unsigned productID(bool& isNull);
     unsigned productVersion(bool& isNull);
+    BluetoothRemoteGATTServer* gatt() { return m_gatt; }
     Vector<String> uuids();
+    // TODO(ortuno): Remove connectGATT
+    // http://crbug.com/582292
+    ScriptPromise connectGATT(ScriptState*);
+
+    DEFINE_ATTRIBUTE_EVENT_LISTENER(gattserverdisconnected);
 
 private:
     OwnPtr<WebBluetoothDevice> m_webDevice;
     Member<BluetoothAdvertisingData> m_adData;
+    Member<BluetoothRemoteGATTServer> m_gatt;
 };
 
 } // namespace blink

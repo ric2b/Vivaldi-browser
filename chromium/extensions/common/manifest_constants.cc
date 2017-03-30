@@ -66,9 +66,11 @@ const char kIsolation[] = "app.isolation";
 const char kJs[] = "js";
 const char kKey[] = "key";
 const char kKeycode[] = "keyCode";
+const char kKiosk[] = "kiosk";
 const char kKioskEnabled[] = "kiosk_enabled";
 const char kKioskOnly[] = "kiosk_only";
 const char kKioskMode[] = "kiosk_mode";
+const char kKioskRequiredPlatformVersion[] = "kiosk.required_platform_version";
 const char kKioskSecondaryApps[] = "kiosk_secondary_apps";
 const char kLanguage[] = "language";
 const char kLaunch[] = "app.launch";
@@ -255,6 +257,8 @@ const char kAppsNotEnabled[] =
 const char kBackgroundPermissionNeeded[] =
     "Hosted apps that use 'background_page' must have the 'background' "
     "permission.";
+const char kBackgroundPersistentInvalidForPlatformApps[] =
+    "The key 'background.persistent' is not supported for packaged apps.";
 const char kBackgroundRequiredForPlatformApps[] =
     "Packaged apps must have a background page or background scripts.";
 const char kCannotAccessAboutUrl[] =
@@ -311,6 +315,9 @@ const char kInvalidBackgroundInHostedApp[] =
     "absolute HTTPS URL for the background page.";
 const char kInvalidBackgroundPersistent[] =
     "Invalid value for 'background.persistent'.";
+const char kInvalidBackgroundPersistentInPlatformApp[] =
+    "Invalid value for 'app.background.persistent'. Packaged apps do not "
+    "support persistent background pages and must use event pages.";
 const char kInvalidBackgroundPersistentNoPage[] =
     "Must specify one of background.page or background.scripts to use"
     " background.persistent.";
@@ -390,8 +397,11 @@ const char kInvalidFileHandlerExtension[] =
     "Invalid value for 'file_handlers[*].extensions'.";
 const char kInvalidFileHandlerExtensionElement[] =
     "Invalid value for 'file_handlers[*].extensions[*]'.";
+const char kInvalidFileHandlerIncludeDirectories[] =
+    "Invalid value for 'include_directories'.";
 const char kInvalidFileHandlerNoTypeOrExtension[] =
-    "'file_handlers[*]' must contain a non-empty 'types' or 'extensions'.";
+    "'file_handlers[*]' must contain a non-empty 'types', 'extensions' "
+    "or 'include_directories'.";
 const char kInvalidFileHandlerType[] =
     "Invalid value for 'file_handlers[*].types'.";
 const char kInvalidFileHandlerTypeElement[] =
@@ -404,6 +414,7 @@ const char kInvalidHomepageOverrideURL[] =
     "Invalid value for overriding homepage url: '[*]'.";
 const char kInvalidHomepageURL[] =
     "Invalid value for homepage url: '[*]'.";
+const char kInvalidIconKey[] = "Invalid key in icons: \"*\".";
 const char kInvalidIconPath[] =
     "Invalid value for 'icons[\"*\"]'.";
 const char kInvalidIcons[] =
@@ -466,6 +477,8 @@ const char kInvalidKioskOnly[] =
     "Invalid value for 'kiosk_only'.";
 const char kInvalidKioskOnlyButNotEnabled[] =
     "The 'kiosk_only' key is set, but 'kiosk_enabled' is not set.";
+const char kInvalidKioskRequiredPlatformVersion[] =
+    "Invalid value for 'kiosk.required_platform_version'";
 const char kInvalidKioskSecondaryApps[] =
     "Invalid value for 'kiosk_secondary_apps'";
 const char kInvalidKioskSecondaryAppsBadAppEntry[] =

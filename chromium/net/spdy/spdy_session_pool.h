@@ -34,6 +34,7 @@ class BoundNetLog;
 class ClientSocketHandle;
 class HostResolver;
 class HttpServerProperties;
+class ProxyDelegate;
 class SpdySession;
 class TransportSecurityState;
 
@@ -53,14 +54,12 @@ class NET_EXPORT SpdySessionPool
       SSLConfigService* ssl_config_service,
       const base::WeakPtr<HttpServerProperties>& http_server_properties,
       TransportSecurityState* transport_security_state,
-      bool enable_compression,
       bool enable_ping_based_connection_checking,
       NextProto default_protocol,
       size_t session_max_recv_window_size,
       size_t stream_max_recv_window_size,
-      size_t initial_max_concurrent_streams,
       SpdySessionPool::TimeFunc time_func,
-      const std::string& trusted_spdy_proxy);
+      ProxyDelegate* proxy_delegate);
   ~SpdySessionPool() override;
 
   // In the functions below, a session is "available" if this pool has
@@ -209,17 +208,16 @@ class NET_EXPORT SpdySessionPool
   // Defaults to true. May be controlled via SpdySessionPoolPeer for tests.
   bool verify_domain_authentication_;
   bool enable_sending_initial_data_;
-  bool enable_compression_;
   bool enable_ping_based_connection_checking_;
   const NextProto default_protocol_;
   size_t session_max_recv_window_size_;
   size_t stream_max_recv_window_size_;
-  size_t initial_max_concurrent_streams_;
   TimeFunc time_func_;
 
-  // This SPDY proxy is allowed to push resources from origins that are
-  // different from those of their associated streams.
-  HostPortPair trusted_spdy_proxy_;
+  // Determines if a proxy is a trusted SPDY proxy, which is allowed to push
+  // resources from origins that are different from those of their associated
+  // streams. May be nullptr.
+  ProxyDelegate* proxy_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(SpdySessionPool);
 };

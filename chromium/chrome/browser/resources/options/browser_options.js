@@ -200,7 +200,7 @@ cr.define('options', function() {
         } else if (cr.isChromeOS) {
           SyncSetupOverlay.showSetupUI();
         } else {
-          SyncSetupOverlay.startSignIn('access-point-settings');
+          SyncSetupOverlay.startSignIn(false /* creatingSupervisedUser */);
         }
       };
       $('customize-sync').onclick = function(event) {
@@ -1477,7 +1477,7 @@ cr.define('options', function() {
       else
         $('profiles-manage').title = '';
       $('profiles-delete').disabled = !profilesList.canDeleteItems ||
-                                      (!hasSelection && !hasSingleProfile);
+                                      !hasSelection;
       if (OptionsPage.isSettingsApp()) {
         $('profiles-app-list-switch').disabled = !hasSelection ||
             selectedProfile.isCurrentProfile;
@@ -1735,12 +1735,17 @@ cr.define('options', function() {
 
     /**
      * Enables or disables the Chrome OS display settings button and overlay.
+     * @param {boolean} enabled
+     * @param {boolean} showUnifiedDesktop
+     * @param {boolean} multiDisplayLayout
      * @private
      */
-    enableDisplaySettings_: function(enabled, showUnifiedDesktop) {
+    enableDisplaySettings_: function(
+        enabled, showUnifiedDesktop, multiDisplayLayout) {
       if (cr.isChromeOS) {
         $('display-options').disabled = !enabled;
-        DisplayOptions.getInstance().setEnabled(enabled, showUnifiedDesktop);
+        DisplayOptions.getInstance().setEnabled(
+            enabled, showUnifiedDesktop, multiDisplayLayout);
       }
     },
 
@@ -2316,6 +2321,16 @@ cr.define('options', function() {
           break;
       }
       button.textContent = loadTimeData.getString(strId);
+    };
+
+    /**
+     * Shows Android Apps settings when they are available.
+     * (Chrome OS only).
+     */
+    BrowserOptions.showAndroidAppsSection = function() {
+      var section = $('andorid-apps-section');
+      if (section)
+        section.hidden = false;
     };
   }
 

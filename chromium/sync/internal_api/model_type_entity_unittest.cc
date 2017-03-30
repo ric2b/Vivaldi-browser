@@ -60,9 +60,11 @@ class ModelTypeEntityTest : public ::testing::Test {
   void MakeLocalChange(ModelTypeEntity* entity,
                        const sync_pb::EntitySpecifics& specifics) {
     scoped_ptr<EntityData> entity_data = make_scoped_ptr(new EntityData());
+    entity_data->client_tag_hash = entity->metadata().client_tag_hash();
     entity_data->specifics = specifics;
     entity_data->non_unique_name = "foo";
-    entity->MakeLocalChange(std::move(entity_data), kMtime);
+    entity_data->modification_time = kMtime;
+    entity->MakeLocalChange(std::move(entity_data));
   }
 
   scoped_ptr<ModelTypeEntity> NewServerItem() {
@@ -96,7 +98,7 @@ class ModelTypeEntityTest : public ::testing::Test {
 
     UpdateResponseData response_data;
     response_data.response_version = version;
-    response_data.entity = data.Pass();
+    response_data.entity = data.PassToPtr();
 
     entity->ApplyUpdateFromServer(response_data);
   }
@@ -116,7 +118,7 @@ class ModelTypeEntityTest : public ::testing::Test {
 TEST_F(ModelTypeEntityTest, NewItem) {
   scoped_ptr<ModelTypeEntity> entity(NewLocalItem("asdf"));
 
-  EXPECT_EQ(entity->client_key(), "asdf");
+  EXPECT_EQ(entity->client_tag(), "asdf");
   EXPECT_EQ(entity->metadata().client_tag_hash(), GetSyncableHash("asdf"));
 
   EXPECT_FALSE(entity->HasCommitData());
@@ -140,7 +142,7 @@ TEST_F(ModelTypeEntityTest, NewLocalItem) {
 TEST_F(ModelTypeEntityTest, FromServerUpdate) {
   scoped_ptr<ModelTypeEntity> entity(NewServerItem());
 
-  EXPECT_EQ(entity->client_key(), kClientTag);
+  EXPECT_EQ(entity->client_tag(), kClientTag);
   EXPECT_EQ(entity->metadata().client_tag_hash(), kClientTagHash);
   EXPECT_FALSE(HasSpecificsHash(entity));
 
@@ -228,7 +230,8 @@ TEST_F(ModelTypeEntityTest, LocalDeletion) {
   entity->Delete();
   EXPECT_FALSE(HasSpecificsHash(entity));
 
-  EXPECT_TRUE(entity->HasCommitData());
+  EXPECT_FALSE(entity->HasCommitData());
+  EXPECT_FALSE(entity->RequiresCommitData());
   EXPECT_TRUE(entity->IsUnsynced());
 
   EXPECT_TRUE(entity->UpdateIsReflection(10));

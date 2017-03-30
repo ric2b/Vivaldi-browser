@@ -12,17 +12,17 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/prefs/pref_change_registrar.h"
-#include "base/prefs/pref_member.h"
 #include "base/scoped_observer.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_info_cache_observer.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/webui/options/options_ui.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "components/policy/core/common/policy_service.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "components/prefs/pref_member.h"
 #include "components/search_engines/template_url_service_observer.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "components/signin/core/common/signin_pref_names.h"
@@ -56,11 +56,11 @@ namespace options {
 // Chrome browser options page UI handler.
 class BrowserOptionsHandler
     : public OptionsPageUIHandler,
-      public ProfileInfoCacheObserver,
+      public ProfileAttributesStorage::Observer,
       public sync_driver::SyncServiceObserver,
       public SigninManagerBase::Observer,
       public ui::SelectFileDialog::Listener,
-      public ShellIntegration::DefaultWebClientObserver,
+      public shell_integration::DefaultWebClientObserver,
 #if defined(OS_CHROMEOS)
       public chromeos::system::PointerDeviceObserver::Observer,
       public policy::ConsumerManagementService::Observer,
@@ -91,10 +91,9 @@ class BrowserOptionsHandler
   void GoogleSignedOut(const std::string& account_id,
                        const std::string& username) override;
 
-  // ShellIntegration::DefaultWebClientObserver implementation.
+  // shell_integration::DefaultWebClientObserver implementation.
   void SetDefaultWebClientUIState(
-      ShellIntegration::DefaultWebClientUIState state) override;
-  bool IsInteractiveSetDefaultPermitted() override;
+      shell_integration::DefaultWebClientUIState state) override;
 
   // TemplateURLServiceObserver implementation.
   void OnTemplateURLServiceChanged() override;
@@ -117,13 +116,13 @@ class BrowserOptionsHandler
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
 
- // ProfileInfoCacheObserver implementation.
- void OnProfileAdded(const base::FilePath& profile_path) override;
- void OnProfileWasRemoved(const base::FilePath& profile_path,
-                          const base::string16& profile_name) override;
- void OnProfileNameChanged(const base::FilePath& profile_path,
-                           const base::string16& old_profile_name) override;
- void OnProfileAvatarChanged(const base::FilePath& profile_path) override;
+  // ProfileAttributesStorage::Observer implementation.
+  void OnProfileAdded(const base::FilePath& profile_path) override;
+  void OnProfileWasRemoved(const base::FilePath& profile_path,
+                           const base::string16& profile_name) override;
+  void OnProfileNameChanged(const base::FilePath& profile_path,
+                            const base::string16& old_profile_name) override;
+  void OnProfileAvatarChanged(const base::FilePath& profile_path) override;
 
 #if defined(ENABLE_PRINT_PREVIEW) && !defined(OS_CHROMEOS)
   void OnCloudPrintPrefsChanged();
@@ -166,7 +165,7 @@ class BrowserOptionsHandler
   void SetDefaultSearchEngine(const base::ListValue* args);
 
   // Returns the string ID for the given default browser state.
-  int StatusStringIdForState(ShellIntegration::DefaultWebClientState state);
+  int StatusStringIdForState(shell_integration::DefaultWebClientState state);
 
   // Returns if the "make Chrome default browser" button should be shown.
   bool ShouldShowSetDefaultBrowser();
@@ -339,9 +338,6 @@ class BrowserOptionsHandler
   // Setup the proxy settings section UI.
   void SetupProxySettingsSection();
 
-  // Setup the manage certificates section UI.
-  void SetupManageCertificatesSection();
-
   // Setup the UI specific to managing supervised users.
   void SetupManagingSupervisedUsers();
 
@@ -380,7 +376,8 @@ class BrowserOptionsHandler
   // true on other platforms.
   bool IsDeviceOwnerProfile();
 
-  scoped_refptr<ShellIntegration::DefaultBrowserWorker> default_browser_worker_;
+  scoped_refptr<shell_integration::DefaultBrowserWorker>
+      default_browser_worker_;
 
   bool page_initialized_;
 

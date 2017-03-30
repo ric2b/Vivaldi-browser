@@ -5,7 +5,6 @@
 #include "chrome/browser/download/download_target_determiner.h"
 
 #include "base/location.h"
-#include "base/prefs/pref_service.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
@@ -22,6 +21,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/mime_util/mime_util.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_interrupt_reasons.h"
@@ -243,15 +243,6 @@ DownloadTargetDeterminer::Result
   DCHECK(virtual_path_.IsAbsolute());
   DVLOG(20) << "Generated virtual path: " << virtual_path_.AsUTF8Unsafe();
 
-  // If the download is DOA, don't bother going any further. This would be the
-  // case for a download that failed to initialize (e.g. the initial temporary
-  // file couldn't be created because both the downloads directory and the
-  // temporary directory are unwriteable).
-  //
-  // A virtual path is determined for DOA downloads for display purposes. This
-  // is why this check is performed here instead of at the start.
-  if (download_->GetState() != DownloadItem::IN_PROGRESS)
-    return COMPLETE;
   return CONTINUE;
 }
 
@@ -262,7 +253,8 @@ DownloadTargetDeterminer::Result
 
   next_state_ = STATE_RESERVE_VIRTUAL_PATH;
 
-  if (!should_notify_extensions_)
+  if (!should_notify_extensions_ ||
+      download_->GetState() != DownloadItem::IN_PROGRESS)
     return CONTINUE;
 
   delegate_->NotifyExtensions(download_, virtual_path_,
@@ -310,6 +302,8 @@ DownloadTargetDeterminer::Result
   DCHECK(!virtual_path_.empty());
 
   next_state_ = STATE_PROMPT_USER_FOR_DOWNLOAD_PATH;
+  if (download_->GetState() != DownloadItem::IN_PROGRESS)
+    return CONTINUE;
 
   delegate_->ReserveVirtualPath(
       download_, virtual_path_, create_target_directory_, conflict_action_,
@@ -324,7 +318,16 @@ void DownloadTargetDeterminer::ReserveVirtualPathDone(
   DVLOG(20) << "Reserved path: " << path.AsUTF8Unsafe()
             << " Verified:" << verified;
   DCHECK_EQ(STATE_PROMPT_USER_FOR_DOWNLOAD_PATH, next_state_);
-
+#if BUILDFLAG(ANDROID_JAVA_UI)
+  // If we cannot reserve the path and the WebContent is already gone, there is
+  // no way to prompt user for an infobar. This could happen when user try to
+  // resume a download after another process has overwritten the same file.
+  // TODO(qinmin): show an error toast to the user. http://crbug.com/581106.
+  if (!verified && !download_->GetWebContents()) {
+    CancelOnFailureAndDeleteSelf();
+    return;
+  }
+#endif
   should_prompt_ = (should_prompt_ || !verified);
   virtual_path_ = path;
   DoLoop();
@@ -337,7 +340,9 @@ DownloadTargetDeterminer::Result
 
   next_state_ = STATE_DETERMINE_LOCAL_PATH;
 
-  if (should_prompt_) {
+  // Avoid prompting for a download if it isn't in-progress. The user will be
+  // prompted once the download is resumed and headers are available.
+  if (should_prompt_ && download_->GetState() == DownloadItem::IN_PROGRESS) {
     delegate_->PromptUserForDownloadPath(
         download_,
         virtual_path_,
@@ -575,6 +580,7 @@ DownloadTargetDeterminer::Result
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!virtual_path_.empty());
   next_state_ = STATE_CHECK_VISITED_REFERRER_BEFORE;
+
   delegate_->CheckDownloadUrl(
       download_,
       virtual_path_,
@@ -774,6 +780,14 @@ Profile* DownloadTargetDeterminer::GetProfile() const {
 bool DownloadTargetDeterminer::ShouldPromptForDownload(
     const base::FilePath& filename) const {
   if (is_resumption_) {
+#if BUILDFLAG(ANDROID_JAVA_UI)
+    // In case of file error, prompting user with the overwritten infobar
+    // won't solve the issue. Return false so that resumption will fail again
+    // if user hasn't performed any action to resolve file errors.
+    // TODO(qinmin): show an error toast to warn user that resume cannot
+    // continue due to file errors. http://crbug.com/581106.
+    return false;
+#else
     // For resumed downloads, if the target disposition or prefs require
     // prompting, the user has already been prompted. Try to respect the user's
     // selection, unless we've discovered that the target path cannot be used
@@ -782,6 +796,7 @@ bool DownloadTargetDeterminer::ShouldPromptForDownload(
     return (reason == content::DOWNLOAD_INTERRUPT_REASON_FILE_ACCESS_DENIED ||
             reason == content::DOWNLOAD_INTERRUPT_REASON_FILE_NO_SPACE ||
             reason == content::DOWNLOAD_INTERRUPT_REASON_FILE_TOO_LARGE);
+#endif
   }
 
   // If the download path is forced, don't prompt.

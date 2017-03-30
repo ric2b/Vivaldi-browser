@@ -26,7 +26,6 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using __gnu_cxx::vector;
 using net::test::CryptoTestUtils;
 using net::test::MockConnection;
 using net::test::MockConnectionHelper;
@@ -49,7 +48,6 @@ using testing::StrictMock;
 using testing::_;
 
 namespace net {
-namespace tools {
 namespace test {
 
 class QuicServerSessionBasePeer {
@@ -239,12 +237,12 @@ TEST_P(QuicServerSessionBaseTest, MaxOpenStreams) {
   // The slightly increased stream limit is set during config negotiation.  It
   // is either an increase of 10 over negotiated limit, or a fixed percentage
   // scaling, whichever is larger. Test both before continuing.
-  EXPECT_EQ(kMaxStreamsForTest, session_->get_max_open_streams());
+  EXPECT_EQ(kMaxStreamsForTest, session_->max_open_incoming_streams());
   session_->OnConfigNegotiated();
   EXPECT_LT(kMaxStreamsMultiplier * kMaxStreamsForTest,
             kMaxStreamsForTest + kMaxStreamsMinimumIncrement);
   EXPECT_EQ(kMaxStreamsForTest + kMaxStreamsMinimumIncrement,
-            session_->get_max_open_streams());
+            session_->max_open_incoming_streams());
   EXPECT_EQ(0u, session_->GetNumOpenIncomingStreams());
   QuicStreamId stream_id = kClientDataStreamId1;
   // Open the max configured number of streams, should be no problem.
@@ -282,11 +280,12 @@ TEST_P(QuicServerSessionBaseTest, MaxAvailableStreams) {
   // stream limit to deal with rare cases where a client FIN/RST is lost.
 
   // The slightly increased stream limit is set during config negotiation.
-  EXPECT_EQ(kMaxStreamsForTest, session_->get_max_open_streams());
+  EXPECT_EQ(kMaxStreamsForTest, session_->max_open_incoming_streams());
   session_->OnConfigNegotiated();
-  const size_t kAvailableStreamLimit = session_->get_max_available_streams();
-  EXPECT_EQ(session_->get_max_open_streams() * kMaxAvailableStreamsMultiplier,
-            session_->get_max_available_streams());
+  const size_t kAvailableStreamLimit = session_->MaxAvailableStreams();
+  EXPECT_EQ(
+      session_->max_open_incoming_streams() * kMaxAvailableStreamsMultiplier,
+      session_->MaxAvailableStreams());
   // The protocol specification requires that there can be at least 10 times
   // as many available streams as the connection's maximum open streams.
   EXPECT_LE(10 * kMaxStreamsForTest, kAvailableStreamLimit);
@@ -407,8 +406,7 @@ TEST_P(QuicServerSessionBaseTest, BandwidthEstimates) {
       &bandwidth_recorder, max_bandwidth_estimate_kbytes_per_second,
       max_bandwidth_estimate_timestamp);
   // Queue up some pending data.
-  session_->MarkConnectionLevelWriteBlocked(kCryptoStreamId,
-                                            net::kV3HighestPriority);
+  session_->MarkConnectionLevelWriteBlocked(kCryptoStreamId);
   EXPECT_TRUE(session_->HasDataToWrite());
 
   // There will be no update sent yet - not enough time has passed.
@@ -536,5 +534,4 @@ TEST_P(QuicServerSessionBaseTest, NoBandwidthResumptionByDefault) {
 
 }  // namespace
 }  // namespace test
-}  // namespace tools
 }  // namespace net

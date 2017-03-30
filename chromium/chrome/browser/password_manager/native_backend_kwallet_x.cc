@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
+#include <map>
 #include <utility>
 #include <vector>
 
@@ -26,6 +28,7 @@
 #include "dbus/object_path.h"
 #include "dbus/object_proxy.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "url/origin.h"
 
 using autofill::PasswordForm;
 using content::BrowserThread;
@@ -34,7 +37,7 @@ namespace {
 
 // In case the fields in the pickle ever change, version them so we can try to
 // read old pickles. (Note: do not eat old pickles past the expiration date.)
-const int kPickleVersion = 7;
+const int kPickleVersion = 8;
 
 // We could localize this string, but then changing your locale would cause
 // you to lose access to all your stored passwords. Maybe best not to do that.
@@ -82,6 +85,22 @@ bool ReadGURL(base::PickleIterator* iter, bool warn_only, GURL* url) {
   return true;
 }
 
+// Convenience function to read a url::Origin from a Pickle. Assumes the origin
+// has been written as a UTF-8 string. Returns true on success.
+bool ReadOrigin(base::PickleIterator* iter,
+                bool warn_only,
+                url::Origin* origin) {
+  std::string origin_string;
+  if (!iter->ReadString(&origin_string)) {
+    if (!warn_only)
+      LOG(ERROR) << "Failed to deserialize Origin.";
+    *origin = url::Origin();
+    return false;
+  }
+  *origin = url::Origin(GURL(origin_string));
+  return true;
+}
+
 void LogDeserializationWarning(int version,
                                std::string signon_realm,
                                bool warn_only) {
@@ -121,11 +140,13 @@ bool DeserializeValueSize(const std::string& signon_realm,
     }
     count = count_32;
   } else {
-    if (!iter.ReadSizeT(&count)) {
+    uint64_t count_64 = 0;
+    if (!iter.ReadUInt64(&count_64)) {
       LOG(ERROR) << "Failed to deserialize KWallet entry "
                  << "(realm: " << signon_realm << ")";
       return false;
     }
+    count = static_cast<size_t>(count_64);
   }
 
   if (count > 0xFFFF) {
@@ -195,11 +216,13 @@ bool DeserializeValueSize(const std::string& signon_realm,
     if (version > 3) {
       if (!iter.ReadString16(&form->display_name) ||
           !ReadGURL(&iter, warn_only, &form->icon_url) ||
-          !ReadGURL(&iter, warn_only, &form->federation_url) ||
+          !ReadOrigin(&iter, warn_only, &form->federation_origin) ||
           !iter.ReadBool(&form->skip_zero_click)) {
         LogDeserializationWarning(version, signon_realm, false);
         return false;
       }
+      if (version <= 7)
+        form->skip_zero_click = true;
     }
 
     if (version > 4) {
@@ -234,7 +257,7 @@ bool DeserializeValueSize(const std::string& signon_realm,
 void SerializeValue(const std::vector<autofill::PasswordForm*>& forms,
                     base::Pickle* pickle) {
   pickle->WriteInt(kPickleVersion);
-  pickle->WriteSizeT(forms.size());
+  pickle->WriteUInt64(forms.size());
   for (autofill::PasswordForm* form : forms) {
     pickle->WriteInt(form->scheme);
     pickle->WriteString(form->origin.spec());
@@ -254,7 +277,11 @@ void SerializeValue(const std::vector<autofill::PasswordForm*>& forms,
     pickle->WriteInt64(form->date_synced.ToInternalValue());
     pickle->WriteString16(form->display_name);
     pickle->WriteString(form->icon_url.spec());
-    pickle->WriteString(form->federation_url.spec());
+    // We serialize unique origins as "", in order to make other systems that
+    // read from the login database happy. https://crbug.com/591310
+    pickle->WriteString(form->federation_origin.unique()
+                            ? std::string()
+                            : form->federation_origin.Serialize());
     pickle->WriteBool(form->skip_zero_click);
     pickle->WriteInt(form->generation_upload_status);
   }
@@ -370,11 +397,11 @@ bool NativeBackendKWallet::StartKWalletd() {
                                "start_service_by_desktop_name");
   dbus::MessageWriter builder(&method_call);
   std::vector<std::string> empty;
-  builder.AppendString(kwalletd_name_); // serviceName
-  builder.AppendArrayOfStrings(empty);  // urls
-  builder.AppendArrayOfStrings(empty);  // envs
-  builder.AppendString(std::string());  // startup_id
-  builder.AppendBool(false);            // blind
+  builder.AppendString(kwalletd_name_);  // serviceName
+  builder.AppendArrayOfStrings(empty);   // urls
+  builder.AppendArrayOfStrings(empty);   // envs
+  builder.AppendString(std::string());   // startup_id
+  builder.AppendBool(false);             // blind
   scoped_ptr<dbus::Response> response(
       klauncher->CallMethodAndBlock(
           &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT));
@@ -558,6 +585,22 @@ bool NativeBackendKWallet::RemoveLoginsSyncedBetween(
   return RemoveLoginsBetween(delete_begin, delete_end, SYNC_TIMESTAMP, changes);
 }
 
+bool NativeBackendKWallet::DisableAutoSignInForAllLogins(
+    password_manager::PasswordStoreChangeList* changes) {
+  ScopedVector<autofill::PasswordForm> all_forms;
+  if (!GetAllLogins(&all_forms))
+    return false;
+
+  for (auto& form : all_forms) {
+    if (!form->skip_zero_click) {
+      form->skip_zero_click = true;
+      if (!UpdateLogin(*form, changes))
+        return false;
+    }
+  }
+  return true;
+}
+
 bool NativeBackendKWallet::GetLogins(
     const PasswordForm& form,
     ScopedVector<autofill::PasswordForm>* forms) {
@@ -581,6 +624,14 @@ bool NativeBackendKWallet::GetBlacklistLogins(
   if (wallet_handle == kInvalidKWalletHandle)
     return false;
   return GetLoginsList(BlacklistOptions::BLACKLISTED, wallet_handle, forms);
+}
+
+bool NativeBackendKWallet::GetAllLogins(
+    ScopedVector<autofill::PasswordForm>* forms) {
+  int wallet_handle = WalletHandle();
+  if (wallet_handle == kInvalidKWalletHandle)
+    return false;
+  return GetAllLoginsInternal(wallet_handle, forms);
 }
 
 bool NativeBackendKWallet::GetLoginsList(
@@ -662,7 +713,7 @@ bool NativeBackendKWallet::GetLoginsList(
     ScopedVector<autofill::PasswordForm>* forms) {
   forms->clear();
   ScopedVector<autofill::PasswordForm> all_forms;
-  if (!GetAllLogins(wallet_handle, &all_forms))
+  if (!GetAllLoginsInternal(wallet_handle, &all_forms))
     return false;
 
   // Remove the duplicate sync tags.
@@ -702,7 +753,7 @@ bool NativeBackendKWallet::GetLoginsList(
   return true;
 }
 
-bool NativeBackendKWallet::GetAllLogins(
+bool NativeBackendKWallet::GetAllLoginsInternal(
     int wallet_handle,
     ScopedVector<autofill::PasswordForm>* forms) {
   // We could probably also use readEntryList here.

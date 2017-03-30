@@ -11,7 +11,6 @@
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_timeline.h"
 #include "cc/base/switches.h"
-#include "cc/blink/web_compositor_animation_timeline_impl.h"
 #include "cc/blink/web_layer_impl.h"
 #include "cc/input/input_handler.h"
 #include "cc/layers/layer.h"
@@ -66,23 +65,16 @@ void WebLayerTreeViewImplForTesting::clearRootLayer() {
 }
 
 void WebLayerTreeViewImplForTesting::attachCompositorAnimationTimeline(
-    blink::WebCompositorAnimationTimeline* compositor_timeline) {
-  DCHECK(compositor_timeline);
+    cc::AnimationTimeline* compositor_timeline) {
   DCHECK(layer_tree_host_->animation_host());
-  layer_tree_host_->animation_host()->AddAnimationTimeline(
-      static_cast<const cc_blink::WebCompositorAnimationTimelineImpl*>(
-          compositor_timeline)
-          ->animation_timeline());
+  layer_tree_host_->animation_host()->AddAnimationTimeline(compositor_timeline);
 }
 
 void WebLayerTreeViewImplForTesting::detachCompositorAnimationTimeline(
-    blink::WebCompositorAnimationTimeline* compositor_timeline) {
-  DCHECK(compositor_timeline);
+    cc::AnimationTimeline* compositor_timeline) {
   DCHECK(layer_tree_host_->animation_host());
   layer_tree_host_->animation_host()->RemoveAnimationTimeline(
-      static_cast<const cc_blink::WebCompositorAnimationTimelineImpl*>(
-          compositor_timeline)
-          ->animation_timeline());
+      compositor_timeline);
 }
 
 void WebLayerTreeViewImplForTesting::setViewportSize(
@@ -198,6 +190,33 @@ void WebLayerTreeViewImplForTesting::registerSelection(
 }
 
 void WebLayerTreeViewImplForTesting::clearSelection() {
+}
+
+void WebLayerTreeViewImplForTesting::setEventListenerProperties(
+    blink::WebEventListenerClass eventClass,
+    blink::WebEventListenerProperties properties) {
+  // Equality of static_cast is checked in render_widget_compositor.cc.
+  layer_tree_host_->SetEventListenerProperties(
+      static_cast<cc::EventListenerClass>(eventClass),
+      static_cast<cc::EventListenerProperties>(properties));
+}
+
+blink::WebEventListenerProperties
+WebLayerTreeViewImplForTesting::eventListenerProperties(
+    blink::WebEventListenerClass event_class) const {
+  // Equality of static_cast is checked in render_widget_compositor.cc.
+  return static_cast<blink::WebEventListenerProperties>(
+      layer_tree_host_->event_listener_properties(
+          static_cast<cc::EventListenerClass>(event_class)));
+}
+
+void WebLayerTreeViewImplForTesting::setHaveScrollEventHandlers(
+    bool have_event_handlers) {
+  layer_tree_host_->SetHaveScrollEventHandlers(have_event_handlers);
+}
+
+bool WebLayerTreeViewImplForTesting::haveScrollEventHandlers() const {
+  return layer_tree_host_->have_scroll_event_handlers();
 }
 
 }  // namespace content

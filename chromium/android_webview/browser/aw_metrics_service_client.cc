@@ -9,7 +9,6 @@
 #include "base/files/file_util.h"
 #include "base/guid.h"
 #include "base/i18n/rtl.h"
-#include "base/prefs/pref_service.h"
 #include "components/metrics/call_stack_profile_metrics_provider.h"
 #include "components/metrics/gpu/gpu_metrics_provider.h"
 #include "components/metrics/metrics_pref_names.h"
@@ -19,6 +18,7 @@
 #include "components/metrics/profiler/profiler_metrics_provider.h"
 #include "components/metrics/ui/screen_info_metrics_provider.h"
 #include "components/metrics/url_constants.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace android_webview {
@@ -46,7 +46,7 @@ void GetOrCreateGUID(const base::FilePath guid_file_path, std::string* guid) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
 
   // Try to read an existing GUID.
-  if (base::ReadFileToString(guid_file_path, guid, GUID_SIZE)) {
+  if (base::ReadFileToStringWithMaxSize(guid_file_path, guid, GUID_SIZE)) {
     if (base::IsValidGUID(*guid))
       return;
     else
@@ -64,6 +64,7 @@ void GetOrCreateGUID(const base::FilePath guid_file_path, std::string* guid) {
 
 // static
 AwMetricsServiceClient* AwMetricsServiceClient::GetInstance() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   return g_lazy_instance_.Pointer();
 }
 
@@ -71,6 +72,7 @@ void AwMetricsServiceClient::Initialize(
     PrefService* pref_service,
     net::URLRequestContextGetter* request_context,
     const base::FilePath guid_file_path) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(!is_initialized_);
 
   pref_service_ = pref_service;
@@ -90,6 +92,7 @@ void AwMetricsServiceClient::Initialize(
 }
 
 void AwMetricsServiceClient::InitializeWithGUID(std::string* guid) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(!is_initialized_);
 
   pref_service_->SetString(metrics::prefs::kMetricsClientID, *guid);
@@ -129,12 +132,9 @@ void AwMetricsServiceClient::InitializeWithGUID(std::string* guid) {
     metrics_service_->Start();
 }
 
-void AwMetricsServiceClient::Finalize() {
-  DCHECK(is_initialized_);
-  metrics_service_->Stop();
-}
-
 void AwMetricsServiceClient::SetMetricsEnabled(bool enabled) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
   // If the client is already initialized, apply the setting immediately.
   // Otherwise, it will be applied on initialization.
   if (is_initialized_ && is_enabled_ != enabled) {

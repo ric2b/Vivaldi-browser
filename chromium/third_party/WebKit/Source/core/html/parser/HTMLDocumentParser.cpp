@@ -143,7 +143,7 @@ HTMLDocumentParser::HTMLDocumentParser(HTMLDocument& document, bool reportErrors
     , m_token(syncPolicy == ForceSynchronousParsing ? adoptPtr(new HTMLToken) : nullptr)
     , m_tokenizer(syncPolicy == ForceSynchronousParsing ? HTMLTokenizer::create(m_options) : nullptr)
     , m_scriptRunner(HTMLScriptRunner::create(&document, this))
-    , m_treeBuilder(HTMLTreeBuilder::create(this, &document, parserContentPolicy(), reportErrors, m_options))
+    , m_treeBuilder(HTMLTreeBuilder::create(this, &document, getParserContentPolicy(), reportErrors, m_options))
     , m_loadingTaskRunner(adoptPtr(document.loadingTaskRunner()->clone()))
     , m_parserScheduler(HTMLParserScheduler::create(this, m_loadingTaskRunner.get()))
     , m_xssAuditorDelegate(&document)
@@ -168,7 +168,7 @@ HTMLDocumentParser::HTMLDocumentParser(DocumentFragment* fragment, Element* cont
     , m_options(&fragment->document())
     , m_token(adoptPtr(new HTMLToken))
     , m_tokenizer(HTMLTokenizer::create(m_options))
-    , m_treeBuilder(HTMLTreeBuilder::create(this, fragment, contextElement, this->parserContentPolicy(), m_options))
+    , m_treeBuilder(HTMLTreeBuilder::create(this, fragment, contextElement, this->getParserContentPolicy(), m_options))
     , m_loadingTaskRunner(adoptPtr(fragment->document().loadingTaskRunner()->clone()))
     , m_xssAuditorDelegate(&fragment->document())
     , m_weakFactory(this)
@@ -321,7 +321,7 @@ void HTMLDocumentParser::resumeParsingAfterYield()
 
 void HTMLDocumentParser::runScriptsForPausedTreeBuilder()
 {
-    ASSERT(scriptingContentIsAllowed(parserContentPolicy()));
+    ASSERT(scriptingContentIsAllowed(getParserContentPolicy()));
 
     TextPosition scriptStartPosition = TextPosition::belowRangePosition();
     RefPtrWillBeRawPtr<Element> scriptElement = m_treeBuilder->takeScriptToProcess(scriptStartPosition);
@@ -430,7 +430,7 @@ void HTMLDocumentParser::validateSpeculations(PassOwnPtr<ParsedChunk> chunk)
     // speculation buffer in other states, but we'd likely need to do something more
     // sophisticated with the HTMLToken.
     if (chunk->tokenizerState == HTMLTokenizer::DataState
-        && tokenizer->state() == HTMLTokenizer::DataState
+        && tokenizer->getState() == HTMLTokenizer::DataState
         && m_input.current().isEmpty()
         && chunk->treeBuilderState == HTMLTreeBuilderSimulator::stateFor(m_treeBuilder.get())) {
         ASSERT(token->isUninitialized());
@@ -680,16 +680,18 @@ void HTMLDocumentParser::pumpTokenizer()
     RELEASE_ASSERT(!isStopped());
 
     if (isWaitingForScripts()) {
-        ASSERT(m_tokenizer->state() == HTMLTokenizer::DataState);
+        ASSERT(m_tokenizer->getState() == HTMLTokenizer::DataState);
 
         ASSERT(m_preloader);
         // TODO(kouhei): m_preloader should be always available for synchronous parsing case,
         // adding paranoia if for speculative crash fix for crbug.com/465478
         if (m_preloader) {
             if (!m_preloadScanner) {
-                m_preloadScanner = adoptPtr(new HTMLPreloadScanner(m_options,
+                m_preloadScanner = HTMLPreloadScanner::create(
+                    m_options,
                     document()->url(),
-                    CachedDocumentParameters::create(document())));
+                    CachedDocumentParameters::create(document()),
+                    MediaValuesCached::MediaValuesCachedData(*document()));
                 m_preloadScanner->appendToEnd(m_input.current());
             }
             m_preloadScanner->scan(m_preloader.get(), document()->baseElementURL());
@@ -771,9 +773,11 @@ void HTMLDocumentParser::insert(const SegmentedString& source)
         // Check the document.write() output with a separate preload scanner as
         // the main scanner can't deal with insertions.
         if (!m_insertionPreloadScanner) {
-            m_insertionPreloadScanner = adoptPtr(new HTMLPreloadScanner(m_options,
+            m_insertionPreloadScanner = HTMLPreloadScanner::create(
+                m_options,
                 document()->url(),
-                CachedDocumentParameters::create(document())));
+                CachedDocumentParameters::create(document()),
+                MediaValuesCached::MediaValuesCachedData(*document()));
         }
 
         m_insertionPreloadScanner->appendToEnd(source);
@@ -810,7 +814,6 @@ void HTMLDocumentParser::startBackgroundParser()
     config->xssAuditor = adoptPtr(new XSSAuditor);
     config->xssAuditor->init(document(), &m_xssAuditorDelegate);
 
-    config->preloadScanner = adoptPtr(new TokenPreloadScanner(document()->url().copy(), CachedDocumentParameters::create(document())));
     config->decoder = takeDecoder();
     config->parsedChunkQueue = m_parsedChunkQueue.get();
     if (document()->settings()) {
@@ -821,8 +824,13 @@ void HTMLDocumentParser::startBackgroundParser()
     }
 
     ASSERT(config->xssAuditor->isSafeToSendToAnotherThread());
-    ASSERT(config->preloadScanner->isSafeToSendToAnotherThread());
-    HTMLParserThread::shared()->postTask(threadSafeBind(&BackgroundHTMLParser::start, reference.release(), config.release(),
+    HTMLParserThread::shared()->postTask(threadSafeBind(
+        &BackgroundHTMLParser::start,
+        reference.release(),
+        config.release(),
+        document()->url(),
+        CachedDocumentParameters::create(document()),
+        MediaValuesCached::MediaValuesCachedData(*document()),
         adoptPtr(m_loadingTaskRunner->clone())));
 }
 
@@ -1161,4 +1169,4 @@ void HTMLDocumentParser::setDecoder(PassOwnPtr<TextResourceDecoder> decoder)
         HTMLParserThread::shared()->postTask(threadSafeBind(&BackgroundHTMLParser::setDecoder, AllowCrossThreadAccess(m_backgroundParser), takeDecoder()));
 }
 
-}
+} // namespace blink

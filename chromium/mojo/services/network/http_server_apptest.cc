@@ -26,8 +26,6 @@
 #include "mojo/services/network/public/interfaces/network_service.mojom.h"
 #include "mojo/services/network/public/interfaces/web_socket.mojom.h"
 #include "mojo/services/network/public/interfaces/web_socket_factory.mojom.h"
-#include "mojo/shell/public/cpp/application_connection.h"
-#include "mojo/shell/public/cpp/application_impl.h"
 #include "mojo/shell/public/cpp/application_test_base.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
@@ -44,7 +42,7 @@ const int kMaxExpectedResponseLength = 2048;
 
 NetAddressPtr GetLocalHostWithAnyPort() {
   NetAddressPtr addr(NetAddress::New());
-  addr->family = NET_ADDRESS_FAMILY_IPV4;
+  addr->family = NetAddressFamily::IPV4;
   addr->ipv4 = NetAddressIPv4::New();
   addr->ipv4->port = 0;
   addr->ipv4->addr.resize(4);
@@ -291,7 +289,7 @@ class WebSocketClientImpl : public WebSocketClient {
     send_stream_ = std::move(data_pipe.producer_handle);
     write_send_stream_.reset(new WebSocketWriteQueue(send_stream_.get()));
 
-    web_socket_->Connect(url, Array<String>(0), "http://example.com",
+    web_socket_->Connect(url, Array<String>(), "http://example.com",
                          std::move(data_pipe.consumer_handle),
                          std::move(client_ptr_));
   }
@@ -379,7 +377,7 @@ class WebSocketClientImpl : public WebSocketClient {
   void OnFinishedWritingSendStream(uint32_t num_bytes, const char* buffer) {
     EXPECT_TRUE(buffer);
 
-    web_socket_->Send(true, WebSocket::MESSAGE_TYPE_TEXT, num_bytes);
+    web_socket_->Send(true, WebSocket::MessageType::TEXT, num_bytes);
   }
 
   void OnFinishedReadingReceiveStream(uint32_t num_bytes, const char* data) {
@@ -558,10 +556,10 @@ class HttpServerAppTest : public test::ApplicationTestBase {
   void SetUp() override {
     ApplicationTestBase::SetUp();
 
-    scoped_ptr<ApplicationConnection> connection =
-        application_impl()->ConnectToApplication("mojo:network_service");
-    connection->ConnectToService(&network_service_);
-    connection->ConnectToService(&web_socket_factory_);
+    scoped_ptr<Connection> connection =
+        connector()->Connect("mojo:network_service");
+    connection->GetInterface(&network_service_);
+    connection->GetInterface(&web_socket_factory_);
   }
 
   void CreateHttpServer(HttpServerDelegatePtr delegate,

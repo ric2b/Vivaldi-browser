@@ -54,11 +54,13 @@ class WebrtcConnectionToClient : public ConnectionToClient,
   void OnWebrtcTransportConnecting() override;
   void OnWebrtcTransportConnected() override;
   void OnWebrtcTransportError(ErrorCode error) override;
+  void OnWebrtcTransportMediaStreamAdded(
+      scoped_refptr<webrtc::MediaStreamInterface> stream) override;
+  void OnWebrtcTransportMediaStreamRemoved(
+      scoped_refptr<webrtc::MediaStreamInterface> stream) override;
 
   // ChannelDispatcherBase::EventHandler interface.
   void OnChannelInitialized(ChannelDispatcherBase* channel_dispatcher) override;
-  void OnChannelError(ChannelDispatcherBase* channel_dispatcher,
-                      ErrorCode error) override;
 
  private:
   base::ThreadChecker thread_checker_;

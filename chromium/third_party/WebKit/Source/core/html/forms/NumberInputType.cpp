@@ -247,8 +247,7 @@ void NumberInputType::warnIfValueIsInvalid(const String& value) const
 {
     if (value.isEmpty() || !element().sanitizeValue(value).isEmpty())
         return;
-    element().document().addConsoleMessage(ConsoleMessage::create(RenderingMessageSource, WarningMessageLevel,
-        String::format("The specified value %s is not a valid number. The value must match to the following regular expression: -?(\\d+|\\d+\\.\\d+|\\.\\d+)([eE][-+]?\\d+)?", JSONValue::quoteString(value).utf8().data())));
+    addWarningToConsole("The specified value %s is not a valid number. The value must match to the following regular expression: -?(\\d+|\\d+\\.\\d+|\\.\\d+)([eE][-+]?\\d+)?", value);
 }
 
 bool NumberInputType::hasBadInput() const

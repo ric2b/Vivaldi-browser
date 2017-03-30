@@ -40,7 +40,7 @@ public:
 
     HTMLSelectElement* selectElement() const;
     void setOptionsChanged(bool changed) { m_optionsChanged = changed; }
-    void didSetSelectedIndex(int listIndex);
+    void didSetSelectedIndex(int optionIndex);
     String text() const;
 
     const char* name() const override { return "LayoutMenuList"; }
@@ -102,6 +102,6 @@ private:
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutMenuList, isMenuList());
 
-}
+} // namespace blink
 
 #endif

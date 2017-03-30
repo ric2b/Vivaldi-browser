@@ -14,7 +14,6 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/prefs/pref_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/pattern.h"
@@ -24,7 +23,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
-#include "chrome/browser/apps/scoped_keep_alive.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
 #include "chrome/browser/extensions/api/tabs/windows_util.h"
@@ -41,7 +39,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_iterator.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -58,6 +56,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "components/translate/core/browser/language_state.h"
 #include "components/translate/core/common/language_detection_details.h"
 #include "components/ui/zoom/zoom_controller.h"
@@ -66,11 +65,11 @@
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/render_frame_host.h"
-#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/browser/app_window/app_window.h"
+#include "extensions/browser/extension_api_frame_id_map.h"
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/browser/extension_function_util.h"
 #include "extensions/browser/extension_host.h"
@@ -604,9 +603,7 @@ bool WindowsCreateFunction::RunSync() {
       create_params.window_spec.bounds = window_bounds;
       create_params.focused = saw_focus_key && focused;
       AppWindow* app_window = new AppWindow(
-          window_profile,
-          new ChromeAppDelegate(make_scoped_ptr(new ScopedKeepAlive)),
-          extension());
+          window_profile, new ChromeAppDelegate(true), extension());
       AshPanelContents* ash_panel_contents = new AshPanelContents(app_window);
       app_window->Init(urls[0], ash_panel_contents, create_params);
       WindowController* window_controller =
@@ -639,27 +636,21 @@ bool WindowsCreateFunction::RunSync() {
   }
 
   // Create a new BrowserWindow.
-  chrome::HostDesktopType host_desktop_type = chrome::GetActiveDesktop();
   if (create_panel)
     window_type = Browser::TYPE_POPUP;
-  Browser::CreateParams create_params(window_type, window_profile,
-                                      host_desktop_type);
+  Browser::CreateParams create_params(window_type, window_profile);
   if (extension_id.empty()) {
     create_params.initial_bounds = window_bounds;
   } else {
     create_params = Browser::CreateParams::CreateForApp(
         web_app::GenerateApplicationNameFromExtensionId(extension_id),
-        false /* trusted_source */,
-        window_bounds,
-        window_profile,
-        host_desktop_type);
+        false /* trusted_source */, window_bounds, window_profile);
   }
   create_params.initial_show_state = ui::SHOW_STATE_NORMAL;
   if (create_data && create_data->state) {
     create_params.initial_show_state =
         ConvertToWindowShowState(create_data->state);
   }
-  create_params.host_desktop_type = chrome::GetActiveDesktop();
   create_params.is_vivaldi = is_vivaldi;
   if (create_data && create_data->ext_data) {
     create_params.ext_data = *create_data->ext_data;
@@ -874,7 +865,7 @@ bool TabsGetSelectedFunction::RunSync() {
     error_ = keys::kNoSelectedTabError;
     return false;
   }
-  SetResult(ExtensionTabUtil::CreateTabValue(
+  results_ = tabs::Get::Results::Create(*ExtensionTabUtil::CreateTabObject(
       contents, tab_strip, tab_strip->active_index(), extension()));
   return true;
 }
@@ -937,11 +928,10 @@ bool TabsQueryFunction::RunSync() {
     window_type = tabs::ToString(params->query_info.window_type);
 
   base::ListValue* result = new base::ListValue();
-  Browser* last_active_browser = chrome::FindAnyBrowser(
-      GetProfile(), include_incognito(), chrome::GetActiveDesktop());
+  Browser* last_active_browser =
+      chrome::FindAnyBrowser(GetProfile(), include_incognito());
   Browser* current_browser = GetCurrentBrowser();
-  for (chrome::BrowserIterator it; !it.done(); it.Next()) {
-    Browser* browser = *it;
+  for (auto* browser : *BrowserList::GetInstance()) {
     if (!GetProfile()->IsSameProfile(browser->profile()))
       continue;
 
@@ -1012,26 +1002,38 @@ bool TabsQueryFunction::RunSync() {
         continue;
       }
 
-      // "title" and "url" properties are considered privileged data and can
-      // only be checked if the extension has the "tabs" permission. Otherwise,
-      // these properties are ignored.
-      if (extension_->permissions_data()->HasAPIPermissionForTab(
-              ExtensionTabUtil::GetTabId(web_contents), APIPermission::kTab)) {
+      if (!title.empty() || !url_patterns.is_empty()) {
+        // "title" and "url" properties are considered privileged data and can
+        // only be checked if the extension has the "tabs" permission or it has
+        // access to the WebContents's origin. Otherwise, this tab is considered
+        // not matched.
+        if (!extension_->permissions_data()->HasAPIPermissionForTab(
+                ExtensionTabUtil::GetTabId(web_contents),
+                APIPermission::kTab) &&
+            !extension_->permissions_data()->HasHostPermission(
+                web_contents->GetURL())) {
+          continue;
+        }
+
         if (!title.empty() &&
             !base::MatchPattern(web_contents->GetTitle(),
-                                base::UTF8ToUTF16(title)))
+                                base::UTF8ToUTF16(title))) {
           continue;
+        }
 
         if (!url_patterns.is_empty() &&
-            !url_patterns.MatchesURL(web_contents->GetURL()))
+            !url_patterns.MatchesURL(web_contents->GetURL())) {
           continue;
+        }
       }
 
       if (loading_status_set && loading != web_contents->IsLoading())
         continue;
 
-      result->Append(ExtensionTabUtil::CreateTabValue(
-          web_contents, tab_strip, i, extension()));
+      result->Append(ExtensionTabUtil::CreateTabObject(web_contents, tab_strip,
+                                                       i, extension())
+                         ->ToValue()
+                         .release());
     }
   }
 
@@ -1105,7 +1107,7 @@ bool TabsDuplicateFunction::RunSync() {
   }
 
   // Return data about the newly created tab.
-  SetResult(ExtensionTabUtil::CreateTabValue(
+  results_ = tabs::Get::Results::Create(*ExtensionTabUtil::CreateTabObject(
       new_contents, new_tab_strip, new_tab_index, extension()));
 
   return true;
@@ -1129,7 +1131,7 @@ bool TabsGetFunction::RunSync() {
                   &error_))
     return false;
 
-  SetResult(ExtensionTabUtil::CreateTabValue(
+  results_ = tabs::Get::Results::Create(*ExtensionTabUtil::CreateTabObject(
       contents, tab_strip, tab_index, extension()));
   return true;
 }
@@ -1141,7 +1143,8 @@ bool TabsGetCurrentFunction::RunSync() {
   // empty tab (hence returning true).
   WebContents* caller_contents = GetSenderWebContents();
   if (caller_contents && ExtensionTabUtil::GetTabId(caller_contents) >= 0)
-    SetResult(ExtensionTabUtil::CreateTabValue(caller_contents, extension()));
+    results_ = tabs::Get::Results::Create(
+        *ExtensionTabUtil::CreateTabObject(caller_contents, extension()));
 
   return true;
 }
@@ -1363,12 +1366,10 @@ bool TabsUpdateFunction::UpdateURL(const std::string &url_string,
   // JavaScript URLs can do the same kinds of things as cross-origin XHR, so
   // we need to check host permissions before allowing them.
   if (url.SchemeIs(url::kJavaScriptScheme)) {
-    content::RenderProcessHost* process = web_contents_->GetRenderProcessHost();
     if (!extension()->permissions_data()->CanAccessPage(
             extension(),
             web_contents_->GetURL(),
             tab_id,
-            process ? process->GetID() : -1,
             &error_)) {
       return false;
     }
@@ -1381,10 +1382,10 @@ bool TabsUpdateFunction::UpdateURL(const std::string &url_string,
             net::UnescapeURLComponent(url.GetContent(),
                                       net::UnescapeRule::URL_SPECIAL_CHARS |
                                           net::UnescapeRule::SPACES),
-            ScriptExecutor::TOP_FRAME, ScriptExecutor::DONT_MATCH_ABOUT_BLANK,
-            UserScript::DOCUMENT_IDLE, ScriptExecutor::MAIN_WORLD,
-            ScriptExecutor::DEFAULT_PROCESS, GURL(), GURL(), user_gesture_,
-            ScriptExecutor::NO_RESULT,
+            ScriptExecutor::SINGLE_FRAME, ExtensionApiFrameIdMap::kTopFrameId,
+            ScriptExecutor::DONT_MATCH_ABOUT_BLANK, UserScript::DOCUMENT_IDLE,
+            ScriptExecutor::MAIN_WORLD, ScriptExecutor::DEFAULT_PROCESS, GURL(),
+            GURL(), user_gesture_, ScriptExecutor::NO_RESULT,
             base::Bind(&TabsUpdateFunction::OnExecuteCodeFinished, this));
 
     *is_async = true;
@@ -1406,7 +1407,8 @@ void TabsUpdateFunction::PopulateResult() {
   if (!has_callback())
     return;
 
-  SetResult(ExtensionTabUtil::CreateTabValue(web_contents_, extension()));
+  results_ = tabs::Get::Results::Create(
+      *ExtensionTabUtil::CreateTabObject(web_contents_, extension()));
 }
 
 void TabsUpdateFunction::OnExecuteCodeFinished(
@@ -1539,8 +1541,11 @@ bool TabsMoveFunction::MoveTab(int tab_id,
           *new_index, web_contents, TabStripModel::ADD_NONE);
 
       if (has_callback()) {
-        tab_values->Append(ExtensionTabUtil::CreateTabValue(
-            web_contents, target_tab_strip, *new_index, extension()));
+        tab_values->Append(
+            ExtensionTabUtil::CreateTabObject(web_contents, target_tab_strip,
+                                              *new_index, extension())
+                ->ToValue()
+                .release());
       }
 
       // gisli@vivaldi.com:  Fix index bug.
@@ -1560,8 +1565,10 @@ bool TabsMoveFunction::MoveTab(int tab_id,
     source_tab_strip->MoveWebContentsAt(tab_index, *new_index, false);
 
   if (has_callback()) {
-    tab_values->Append(ExtensionTabUtil::CreateTabValue(
-        contents, source_tab_strip, *new_index, extension()));
+    tab_values->Append(ExtensionTabUtil::CreateTabObject(
+                           contents, source_tab_strip, *new_index, extension())
+                           ->ToValue()
+                           .release());
   }
 
   // gisli@vivaldi.com:  for within-window the new index depends on the
@@ -1675,6 +1682,10 @@ TabsCaptureVisibleTabFunction::TabsCaptureVisibleTabFunction()
     : chrome_details_(this) {
 }
 
+bool TabsCaptureVisibleTabFunction::HasPermission() {
+  return true;
+}
+
 bool TabsCaptureVisibleTabFunction::IsScreenshotEnabled() {
   PrefService* service = chrome_details_.GetProfile()->GetPrefs();
   if (service->GetBoolean(prefs::kDisableScreenshots)) {
@@ -1700,6 +1711,40 @@ WebContents* TabsCaptureVisibleTabFunction::GetWebContentsForID(int window_id) {
     return NULL;
   }
   return contents;
+}
+
+bool TabsCaptureVisibleTabFunction::RunAsync() {
+  using api::extension_types::ImageDetails;
+
+  EXTENSION_FUNCTION_VALIDATE(args_);
+
+  int context_id = extension_misc::kCurrentWindowId;
+  args_->GetInteger(0, &context_id);
+
+  scoped_ptr<ImageDetails> image_details;
+  if (args_->GetSize() > 1) {
+    base::Value* spec = NULL;
+    EXTENSION_FUNCTION_VALIDATE(args_->Get(1, &spec) && spec);
+    image_details = ImageDetails::FromValue(*spec);
+  }
+
+  WebContents* contents = GetWebContentsForID(context_id);
+
+  return CaptureAsync(
+      contents, image_details.get(),
+      base::Bind(&TabsCaptureVisibleTabFunction::CopyFromBackingStoreComplete,
+                 this));
+}
+
+void TabsCaptureVisibleTabFunction::OnCaptureSuccess(const SkBitmap& bitmap) {
+  std::string base64_result;
+  if (!EncodeBitmap(bitmap, &base64_result)) {
+    OnCaptureFailure(FAILURE_REASON_ENCODING_FAILED);
+    return;
+  }
+
+  SetResult(new base::StringValue(base64_result));
+  SendResponse(true);
 }
 
 void TabsCaptureVisibleTabFunction::OnCaptureFailure(FailureReason reason) {
@@ -1890,15 +1935,45 @@ bool ExecuteCodeInTabFunction::CanExecuteScriptOnPage() {
 
   CHECK(contents);
 
+  int frame_id = details_->frame_id ? *details_->frame_id
+                                    : ExtensionApiFrameIdMap::kTopFrameId;
+  content::RenderFrameHost* rfh =
+      ExtensionApiFrameIdMap::GetRenderFrameHostById(contents, frame_id);
+  if (!rfh) {
+    error_ = ErrorUtils::FormatErrorMessage(keys::kFrameNotFoundError,
+                                            base::IntToString(frame_id),
+                                            base::IntToString(execute_tab_id_));
+    return false;
+  }
+
+  // Content scripts declared in manifest.json can access frames at about:-URLs
+  // if the extension has permission to access the frame's origin, so also allow
+  // programmatic content scripts at about:-URLs for allowed origins.
+  GURL effective_document_url(rfh->GetLastCommittedURL());
+  bool is_about_url = effective_document_url.SchemeIs(url::kAboutScheme);
+  if (is_about_url && details_->match_about_blank &&
+      *details_->match_about_blank) {
+    effective_document_url = GURL(rfh->GetLastCommittedOrigin().Serialize());
+  }
+
+  if (!effective_document_url.is_valid()) {
+    // Unknown URL, e.g. because no load was committed yet. Allow for now, the
+    // renderer will check again and fail the injection if needed.
+    return true;
+  }
+
   // NOTE: This can give the wrong answer due to race conditions, but it is OK,
   // we check again in the renderer.
-  content::RenderProcessHost* process = contents->GetRenderProcessHost();
   if (!extension()->permissions_data()->CanAccessPage(
-          extension(),
-          contents->GetURL(),
-          execute_tab_id_,
-          process ? process->GetID() : -1,
-          &error_)) {
+          extension(), effective_document_url, execute_tab_id_, &error_)) {
+    if (is_about_url &&
+        extension()->permissions_data()->active_permissions().HasAPIPermission(
+            APIPermission::kTab)) {
+      error_ = ErrorUtils::FormatErrorMessage(
+          manifest_errors::kCannotAccessAboutUrl,
+          rfh->GetLastCommittedURL().spec(),
+          rfh->GetLastCommittedOrigin().Serialize());
+    }
     return false;
   }
 

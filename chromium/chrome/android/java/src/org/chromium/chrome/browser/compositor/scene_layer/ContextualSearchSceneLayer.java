@@ -19,18 +19,6 @@ import org.chromium.ui.resources.ResourceManager;
 @JNINamespace("chrome::android")
 public class ContextualSearchSceneLayer extends SceneLayer {
 
-    // TODO(mdjones): Reader Mode's scene layer should be independent of this class. Both
-    // Contextual Search and Reader Mode should extend a common base SceneLayer.
-    /**
-     * The ID to pass when drawing the Contextual Search panel.
-     */
-    public static final int CONTEXTUAL_SEARCH_PANEL = 0;
-
-    /**
-     * The ID to pass when drawing the Reader Mode panel.
-     */
-    public static final int READER_MODE_PANEL = 1;
-
     // NOTE: If you use SceneLayer's native pointer here, the JNI generator will try to
     // downcast using reinterpret_cast<>. We keep a separate pointer to avoid it.
     private long mNativePtr;
@@ -45,7 +33,6 @@ public class ContextualSearchSceneLayer extends SceneLayer {
      * Update the scene layer to draw an OverlayPanel.
      * @param resourceManager Manager to get view and image resources.
      * @param panel The OverlayPanel to render.
-     * @param panelType Either CONTEXTUAL_SEARCH_PANEL or READER_MODE_PANEL.
      * @param searchContextViewId The ID of the view for Contextual Search's context.
      * @param searchTermViewId The ID of the view containing the Contextual Search search term.
      * @param peekPromoControl The peeking promotion for Contextual Search; optional if
@@ -57,7 +44,6 @@ public class ContextualSearchSceneLayer extends SceneLayer {
      */
     public void update(ResourceManager resourceManager,
             OverlayPanel panel,
-            int panelType,
             int searchContextViewId,
             int searchTermViewId,
             ContextualSearchPeekPromoControl peekPromoControl,
@@ -65,53 +51,34 @@ public class ContextualSearchSceneLayer extends SceneLayer {
             float searchTermOpacity,
             ContextualSearchIconSpriteControl spriteControl) {
 
-        // If the sprite control is null, use the reader icon in its place.
-        int readerIconId = 0;
-        if (spriteControl == null) {
-            readerIconId = R.drawable.infobar_mobile_friendly;
-        }
-
         boolean searchPromoVisible = panel.getPromoVisible();
         float searchPromoHeightPx = panel.getPromoHeightPx();
         float searchPromoOpacity = panel.getPromoOpacity();
 
-        int searchPeekPromoTextViewId = 0;
-        boolean searchPeekPromoVisible = false;
-        float searchPeekPromoHeightPx = 0;
-        float searchPeekPromoPaddingPx = 0;
-        float searchPeekPromoRippleWidthPx = 0;
-        float searchPeekPromoRippleOpacity = 0;
-        float searchPeekPromoTextOpacity = 0;
+        int searchPeekPromoTextViewId = peekPromoControl.getViewId();
+        boolean searchPeekPromoVisible = peekPromoControl.isVisible();
+        float searchPeekPromoHeightPx = peekPromoControl.getHeightPx();
+        float searchPeekPromoPaddingPx =  peekPromoControl.getPaddingPx();
+        float searchPeekPromoRippleWidthPx = peekPromoControl.getRippleWidthPx();
+        float searchPeekPromoRippleOpacity = peekPromoControl.getRippleOpacity();
+        float searchPeekPromoTextOpacity = peekPromoControl.getTextOpacity();
 
-        boolean searchProviderIconSpriteVisible = false;
-        float searchProviderIconCompletionPercentage = 0;
-
-        if (panelType == CONTEXTUAL_SEARCH_PANEL) {
-            searchPeekPromoTextViewId = peekPromoControl.getViewId();
-            searchPeekPromoVisible = peekPromoControl.isVisible();
-            searchPeekPromoHeightPx = peekPromoControl.getHeightPx();
-            searchPeekPromoPaddingPx =  peekPromoControl.getPaddingPx();
-            searchPeekPromoRippleWidthPx = peekPromoControl.getRippleWidthPx();
-            searchPeekPromoRippleOpacity = peekPromoControl.getRippleOpacity();
-            searchPeekPromoTextOpacity = peekPromoControl.getTextOpacity();
-
-            searchProviderIconSpriteVisible = spriteControl.isVisible();
-            searchProviderIconCompletionPercentage = spriteControl.getCompletionPercentage();
-        }
+        boolean searchProviderIconSpriteVisible = spriteControl.isVisible();
+        float searchProviderIconCompletionPercentage = spriteControl.getCompletionPercentage();
 
         float searchPanelX = panel.getOffsetX();
         float searchPanelY = panel.getOffsetY();
         float searchPanelWidth = panel.getWidth();
         float searchPanelHeight = panel.getHeight();
 
-        float searchBarMarginSide = panel.getSearchBarMarginSide();
-        float searchBarHeight = panel.getSearchBarHeight();
+        float searchBarMarginSide = panel.getBarMarginSide();
+        float searchBarHeight = panel.getBarHeight();
 
-        boolean searchBarBorderVisible = panel.isSearchBarBorderVisible();
-        float searchBarBorderHeight = panel.getSearchBarBorderHeight();
+        boolean searchBarBorderVisible = panel.isBarBorderVisible();
+        float searchBarBorderHeight = panel.getBarBorderHeight();
 
-        boolean searchBarShadowVisible = panel.getSearchBarShadowVisible();
-        float searchBarShadowOpacity = panel.getSearchBarShadowOpacity();
+        boolean searchBarShadowVisible = panel.getBarShadowVisible();
+        float searchBarShadowOpacity = panel.getBarShadowOpacity();
 
         float arrowIconOpacity = panel.getArrowIconOpacity();
         float arrowIconRotation = panel.getArrowIconRotation();
@@ -129,7 +96,8 @@ public class ContextualSearchSceneLayer extends SceneLayer {
                 searchContextViewId,
                 searchTermViewId,
                 R.drawable.contextual_search_bar_shadow,
-                readerIconId, // If this value is 0, the "G" sprite will be used.
+                R.drawable.google_icon_sprite,
+                R.raw.google_icon_sprite,
                 R.drawable.breadcrumb_arrow,
                 ContextualSearchPanel.CLOSE_ICON_DRAWABLE_ID,
                 R.drawable.progress_bar_background,
@@ -137,8 +105,6 @@ public class ContextualSearchSceneLayer extends SceneLayer {
                 R.id.contextual_search_opt_out_promo,
                 R.drawable.contextual_search_promo_ripple,
                 searchPeekPromoTextViewId,
-                R.drawable.google_icon_sprite,
-                R.raw.google_icon_sprite,
                 mDpToPx,
                 panel.getContentViewCore(),
                 searchPromoVisible,
@@ -199,6 +165,7 @@ public class ContextualSearchSceneLayer extends SceneLayer {
             int searchTermResourceId,
             int searchBarShadowResourceId,
             int panelIconResourceId,
+            int searchProviderIconSpriteMetadataResourceId,
             int arrowUpResourceId,
             int closeIconResourceId,
             int progressBarBackgroundResourceId,
@@ -206,8 +173,6 @@ public class ContextualSearchSceneLayer extends SceneLayer {
             int searchPromoResourceId,
             int peekPromoRippleResourceId,
             int peekPromoTextResourceId,
-            int searchProviderIconSpriteBitmapResourceId,
-            int searchProviderIconSpriteMetadataResourceId,
             float dpToPx,
             ContentViewCore contentViewCore,
             boolean searchPromoVisible,

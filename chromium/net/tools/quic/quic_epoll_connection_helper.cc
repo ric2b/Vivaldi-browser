@@ -15,14 +15,14 @@
 #include "net/tools/quic/quic_socket_utils.h"
 
 namespace net {
-namespace tools {
 
 namespace {
 
 class QuicEpollAlarm : public QuicAlarm {
  public:
-  QuicEpollAlarm(EpollServer* epoll_server, QuicAlarm::Delegate* delegate)
-      : QuicAlarm(delegate),
+  QuicEpollAlarm(EpollServer* epoll_server,
+                 QuicArenaScopedPtr<Delegate> delegate)
+      : QuicAlarm(std::move(delegate)),
         epoll_server_(epoll_server),
         epoll_alarm_impl_(this) {}
 
@@ -78,12 +78,23 @@ QuicRandom* QuicEpollConnectionHelper::GetRandomGenerator() {
 
 QuicAlarm* QuicEpollConnectionHelper::CreateAlarm(
     QuicAlarm::Delegate* delegate) {
-  return new QuicEpollAlarm(epoll_server_, delegate);
+  return new QuicEpollAlarm(epoll_server_,
+                            QuicArenaScopedPtr<QuicAlarm::Delegate>(delegate));
+}
+
+QuicArenaScopedPtr<QuicAlarm> QuicEpollConnectionHelper::CreateAlarm(
+    QuicArenaScopedPtr<QuicAlarm::Delegate> delegate,
+    QuicConnectionArena* arena) {
+  if (arena != nullptr) {
+    return arena->New<QuicEpollAlarm>(epoll_server_, std::move(delegate));
+  } else {
+    return QuicArenaScopedPtr<QuicAlarm>(
+        new QuicEpollAlarm(epoll_server_, std::move(delegate)));
+  }
 }
 
 QuicBufferAllocator* QuicEpollConnectionHelper::GetBufferAllocator() {
   return &buffer_allocator_;
 }
 
-}  // namespace tools
 }  // namespace net

@@ -40,14 +40,13 @@ class HTMLOptionElement;
 class HTMLSelectElement;
 class LayoutMenuList;
 class Page;
-class Widget;
 
 class CORE_EXPORT AXObjectCache : public GarbageCollectedFinalized<AXObjectCache> {
     WTF_MAKE_NONCOPYABLE(AXObjectCache);
 public:
     static AXObjectCache* create(Document&);
 
-    static AXObject* focusedUIElementForPage(const Page*);
+    static AXObject* focusedObject();
 
     virtual ~AXObjectCache();
     DEFINE_INLINE_VIRTUAL_TRACE() { }
@@ -60,6 +59,7 @@ public:
         AXBlur,
         AXCheckedStateChanged,
         AXChildrenChanged,
+        AXClicked,
         AXDocumentSelectionChanged,
         AXFocusedUIElementChanged,
         AXHide,
@@ -98,7 +98,6 @@ public:
 
     virtual void remove(LayoutObject*) = 0;
     virtual void remove(Node*) = 0;
-    virtual void remove(Widget*) = 0;
     virtual void remove(AbstractInlineTextBox*) = 0;
 
     virtual const Element* rootAXEditableElement(const Node*) = 0;
@@ -119,7 +118,7 @@ public:
     virtual void didHideMenuListPopup(LayoutMenuList*) = 0;
     virtual void handleLoadComplete(Document*) = 0;
     virtual void handleLayoutComplete(Document*) = 0;
-
+    virtual void handleClicked(Node*) = 0;
 
     virtual void setCanvasObjectBounds(Element*, const LayoutRect&) = 0;
 
@@ -130,7 +129,6 @@ public:
     virtual void handleScrollPositionChanged(LayoutObject*) = 0;
 
     // Called when scroll bars are added / removed (as the view resizes).
-    virtual void handleScrollbarUpdate(FrameView*) = 0;
     virtual void handleLayoutComplete(LayoutObject*) = 0;
     virtual void handleScrolledToAnchor(const Node* anchorNode) = 0;
 
@@ -165,6 +163,6 @@ private:
     Persistent<AXObjectCache> m_cache;
 };
 
-}
+} // namespace blink
 
 #endif

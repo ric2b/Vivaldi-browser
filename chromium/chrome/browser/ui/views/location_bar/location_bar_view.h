@@ -12,7 +12,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/prefs/pref_member.h"
 #include "chrome/browser/extensions/extension_context_menu_model.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/omnibox/chrome_omnibox_edit_controller.h"
@@ -20,6 +19,7 @@
 #include "chrome/browser/ui/views/dropdown_bar_host_delegate.h"
 #include "chrome/browser/ui/views/extensions/extension_popup.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
+#include "components/prefs/pref_member.h"
 #include "components/search_engines/template_url_service_observer.h"
 #include "components/security_state/security_state_model.h"
 #include "components/ui/zoom/zoom_event_manager_observer.h"
@@ -77,9 +77,6 @@ class LocationBarView : public LocationBar,
                         public TemplateURLServiceObserver,
                         public ui_zoom::ZoomEventManagerObserver {
  public:
-  // The location bar view's class name.
-  static const char kViewClassName[];
-
   class Delegate {
    public:
     // Should return the current web contents.
@@ -120,6 +117,9 @@ class LocationBarView : public LocationBar,
     EV_BUBBLE_TEXT_AND_BORDER,
   };
 
+  // The location bar view's class name.
+  static const char kViewClassName[];
+
   LocationBarView(Browser* browser,
                   Profile* profile,
                   CommandUpdater* command_updater,
@@ -127,6 +127,10 @@ class LocationBarView : public LocationBar,
                   bool is_popup_mode);
 
   ~LocationBarView() override;
+
+  // Returns the color for the location bar border in MD windows and non-MD
+  // popup windows, given the window's |incognito| state.
+  static SkColor GetBorderColor(bool incognito);
 
   // Initializes the LocationBarView.
   void Init();
@@ -216,12 +220,6 @@ class LocationBarView : public LocationBar,
   OmniboxViewViews* omnibox_view() { return omnibox_view_; }
   const OmniboxViewViews* omnibox_view() const { return omnibox_view_; }
 
-  // Returns the height of the control without the top and bottom
-  // edges(i.e.  the height of the edit control inside).  If
-  // |use_preferred_size| is true this will be the preferred height,
-  // otherwise it will be the current height.
-  int GetInternalHeight(bool use_preferred_size);
-
   // Returns the position and width that the popup should be, and also the left
   // edge that the results should align themselves to (which will leave some
   // border on the left of the popup). |top_edge_overlap| specifies the number
@@ -275,10 +273,12 @@ class LocationBarView : public LocationBar,
   int IncrementalMinimumWidth(views::View* view) const;
 
   // Returns the thickness of any visible edge, in pixels.
-  int GetEdgeThickness() const;
+  int GetHorizontalEdgeThickness() const;
+  int GetVerticalEdgeThickness() const;
 
-  // The vertical padding to be applied to all contained views.
-  int VerticalPadding() const;
+  // Returns the total amount of space reserved above or below the content,
+  // which is the vertical edge thickness plus the padding next to it.
+  int GetVerticalEdgeThicknessWithPadding() const;
 
   // Updates |location_icon_view_| based on the current state and theme.
   void RefreshLocationIcon();

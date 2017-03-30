@@ -59,7 +59,7 @@ Graphics3D::~Graphics3D() {
 bool Graphics3D::Init(gpu::gles2::GLES2Implementation* share_gles2,
                       const gpu::Capabilities& capabilities,
                       const SerializedHandle& shared_state,
-                      uint64_t command_buffer_id) {
+                      gpu::CommandBufferId command_buffer_id) {
   PluginDispatcher* dispatcher = PluginDispatcher::GetForResource(this);
   if (!dispatcher)
     return false;
@@ -99,20 +99,6 @@ gpu::CommandBuffer::State Graphics3D::WaitForTokenInRange(int32_t start,
 gpu::CommandBuffer::State Graphics3D::WaitForGetOffsetInRange(int32_t start,
                                                               int32_t end) {
   return GetErrorState();
-}
-
-uint32_t Graphics3D::InsertSyncPoint() {
-  NOTREACHED();
-  return 0;
-}
-
-uint32_t Graphics3D::InsertFutureSyncPoint() {
-  NOTREACHED();
-  return 0;
-}
-
-void Graphics3D::RetireSyncPoint(uint32_t sync_point) {
-  NOTREACHED();
 }
 
 void Graphics3D::EnsureWorkVisible() {
@@ -191,7 +177,7 @@ PP_Resource PPB_Graphics3D_Proxy::CreateProxyResource(
   HostResource result;
   gpu::Capabilities capabilities;
   ppapi::proxy::SerializedHandle shared_state;
-  uint64_t command_buffer_id = 0;
+  gpu::CommandBufferId command_buffer_id;
   dispatcher->Send(new PpapiHostMsg_PPBGraphics3D_Create(API_ID_PPB_GRAPHICS_3D,
         instance, share_host, attribs, &result, &capabilities, &shared_state,
         &command_buffer_id));
@@ -226,12 +212,6 @@ bool PPB_Graphics3D_Proxy::OnMessageReceived(const IPC::Message& msg) {
                         OnMsgDestroyTransferBuffer)
     IPC_MESSAGE_HANDLER(PpapiHostMsg_PPBGraphics3D_SwapBuffers,
                         OnMsgSwapBuffers)
-    IPC_MESSAGE_HANDLER(PpapiHostMsg_PPBGraphics3D_InsertSyncPoint,
-                        OnMsgInsertSyncPoint)
-    IPC_MESSAGE_HANDLER(PpapiHostMsg_PPBGraphics3D_InsertFutureSyncPoint,
-                        OnMsgInsertFutureSyncPoint)
-    IPC_MESSAGE_HANDLER(PpapiHostMsg_PPBGraphics3D_RetireSyncPoint,
-                        OnMsgRetireSyncPoint)
     IPC_MESSAGE_HANDLER(PpapiHostMsg_PPBGraphics3D_EnsureWorkVisible,
                         OnMsgEnsureWorkVisible)
 #endif  // !defined(OS_NACL)
@@ -246,13 +226,14 @@ bool PPB_Graphics3D_Proxy::OnMessageReceived(const IPC::Message& msg) {
 }
 
 #if !defined(OS_NACL)
-void PPB_Graphics3D_Proxy::OnMsgCreate(PP_Instance instance,
-                                       HostResource share_context,
-                                       const std::vector<int32_t>& attribs,
-                                       HostResource* result,
-                                       gpu::Capabilities* capabilities,
-                                       SerializedHandle* shared_state,
-                                       uint64_t* command_buffer_id) {
+void PPB_Graphics3D_Proxy::OnMsgCreate(
+    PP_Instance instance,
+    HostResource share_context,
+    const std::vector<int32_t>& attribs,
+    HostResource* result,
+    gpu::Capabilities* capabilities,
+    SerializedHandle* shared_state,
+    gpu::CommandBufferId* command_buffer_id) {
   shared_state->set_null_shmem();
   if (attribs.empty() ||
       attribs.back() != PP_GRAPHICS3DATTRIB_NONE ||
@@ -361,30 +342,6 @@ void PPB_Graphics3D_Proxy::OnMsgSwapBuffers(const HostResource& context,
       &PPB_Graphics3D_Proxy::SendSwapBuffersACKToPlugin, context);
   if (enter.succeeded())
     enter.SetResult(enter.object()->SwapBuffers(enter.callback(), sync_token));
-}
-
-void PPB_Graphics3D_Proxy::OnMsgInsertSyncPoint(const HostResource& context,
-                                                uint32_t* sync_point) {
-  *sync_point = 0;
-  EnterHostFromHostResource<PPB_Graphics3D_API> enter(context);
-  if (enter.succeeded())
-    *sync_point = enter.object()->InsertSyncPoint();
-}
-
-void PPB_Graphics3D_Proxy::OnMsgInsertFutureSyncPoint(
-    const HostResource& context,
-    uint32_t* sync_point) {
-  *sync_point = 0;
-  EnterHostFromHostResource<PPB_Graphics3D_API> enter(context);
-  if (enter.succeeded())
-    *sync_point = enter.object()->InsertFutureSyncPoint();
-}
-
-void PPB_Graphics3D_Proxy::OnMsgRetireSyncPoint(const HostResource& context,
-                                                uint32_t sync_point) {
-  EnterHostFromHostResource<PPB_Graphics3D_API> enter(context);
-  if (enter.succeeded())
-    enter.object()->RetireSyncPoint(sync_point);
 }
 
 void PPB_Graphics3D_Proxy::OnMsgEnsureWorkVisible(const HostResource& context) {

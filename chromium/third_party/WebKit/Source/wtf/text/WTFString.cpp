@@ -481,34 +481,41 @@ String String::format(const char *format, ...)
     return StringImpl::create(reinterpret_cast<const LChar*>(buffer.data()), len);
 }
 
+template<typename IntegerType>
+static String integerToString(IntegerType input)
+{
+    IntegerToStringConverter<IntegerType> converter(input);
+    return StringImpl::create(converter.characters8(), converter.length());
+}
+
 String String::number(int number)
 {
-    return numberToStringSigned<String>(number);
+    return integerToString(number);
 }
 
 String String::number(unsigned number)
 {
-    return numberToStringUnsigned<String>(number);
+    return integerToString(number);
 }
 
 String String::number(long number)
 {
-    return numberToStringSigned<String>(number);
+    return integerToString(number);
 }
 
 String String::number(unsigned long number)
 {
-    return numberToStringUnsigned<String>(number);
+    return integerToString(number);
 }
 
 String String::number(long long number)
 {
-    return numberToStringSigned<String>(number);
+    return integerToString(number);
 }
 
 String String::number(unsigned long long number)
 {
-    return numberToStringUnsigned<String>(number);
+    return integerToString(number);
 }
 
 String String::number(double number, unsigned precision, TrailingZerosTruncatingPolicy trailingZerosTruncatingPolicy)
@@ -1137,6 +1144,16 @@ double charactersToDouble(const UChar* data, size_t length, bool* ok)
 {
     size_t parsedLength;
     return toDoubleType<UChar, DisallowTrailingJunk>(data, length, ok, parsedLength);
+}
+
+double charactersToDouble(const LChar* data, size_t length, size_t& parsedLength)
+{
+    return toDoubleType<LChar, AllowTrailingJunk>(data, length, nullptr, parsedLength);
+}
+
+double charactersToDouble(const UChar* data, size_t length, size_t& parsedLength)
+{
+    return toDoubleType<UChar, AllowTrailingJunk>(data, length, nullptr, parsedLength);
 }
 
 float charactersToFloat(const LChar* data, size_t length, bool* ok)

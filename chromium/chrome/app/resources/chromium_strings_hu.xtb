@@ -106,7 +106,6 @@
 <translation id="457845228957001925">Fontos információ az Ön Chromium-adatairól</translation>
 <translation id="459535195905078186">Chromium-alkalmazások</translation>
 <translation id="4677944499843243528">Úgy tűnik, a profilt egy másik Chromium-folyamat (<ph name="PROCESS_ID" />) használja egy másik számítógépen (<ph name="HOST_NAME" />). A Chromium zárolta a profilt, hogy az ne sérülhessen. Ha biztos benne, hogy nem használja másik folyamat a profilt, feloldhatja azt, és újraindíthatja a Chromiumot.</translation>
-<translation id="473775607612524610">Frissítés</translation>
 <translation id="4743926867934016338">Elfogadás és keresés</translation>
 <translation id="4888717733111232871">Bejövő szabály a Chromiumhoz az mDNS forgalom engedélyezése céljából.</translation>
 <translation id="4943838377383847465">A Chromium háttérmódban van.</translation>
@@ -120,6 +119,7 @@
 <translation id="549669000822060376">Kérjük, várjon, amíg a Chromium telepíti a legutóbbi rendszerfrissítéseket.</translation>
 <translation id="5563479599352954471">Keresés egyetlen érintéssel</translation>
 <translation id="5620765574781326016">Tudjon meg többet a webhelyeken lévő egyes témákról anélkül, hogy elhagyná az adott oldalt.</translation>
+<translation id="5634636535844844681">A Chromium futtatásához Windows 7 vagy újabb verzió szükséges.</translation>
 <translation id="5680901439334282664">bejelentkezés a Chromiumba</translation>
 <translation id="5772805321386874569">(a Chromium <ph name="BEGIN_BUTTON" />újraindítását<ph name="END_BUTTON" /> igényli)</translation>
 <translation id="5796460469508169315">A Chromium majdnem készen áll.</translation>
@@ -128,7 +128,6 @@
 <translation id="5859963531214966875">A Chromium jövőbeli verziói nem fogják támogatni ezt a Linux rendszert.</translation>
 <translation id="5862307444128926510">Üdvözli a Chromium!</translation>
 <translation id="5877064549588274448">Módosult a csatorna. Indítsa újra az eszközt a módosítások alkalmazásához.</translation>
-<translation id="5909170354645388250">Nincs használatban a Chromiumban. Az erőforrástérképeket szinkronban tartó helyőrző. A következő argumentumot várja: $1.</translation>
 <translation id="5942225298871134766">A Chromium tárolja ezt a(z) <ph name="SAVED_PASSWORD_LINK" /> segítségével, és emlékezni fog, amikor legközelebb szükség lesz rá.</translation>
 <translation id="5942520288919337908">A(z) <ph name="EXTENSION_NAME" /> hozzá lett adva a Chromiumhoz.</translation>
 <translation id="59625444380784159">A névjegyek részletei révén gyorsabban kitöltheti az űrlapokat a Chromiumban.</translation>
@@ -140,7 +139,6 @@
 <translation id="6334986366598267305">Google-fiókjával most még egyszerűbben használhatja a Chromiumot közösen használt számítógépeken.</translation>
 <translation id="6373523479360886564">Biztos, hogy el szeretné távolítani a Chromiumot?</translation>
 <translation id="6403826409255603130">A Chromium olyan böngésző, amely villámgyorsan futtatja a weboldalakat és az alkalmazásokat. Gyors, stabil és könnyen használható. A beépített, adathalászat és kártékony programok elleni védelemmel biztonságosabban böngészhet az interneten.</translation>
-<translation id="6424492062988593837">A Chromium most még jobb lett! Új verzió áll rendelkezésre.</translation>
 <translation id="6475912303565314141">Továbbá azt is szabályozza, hogy melyik oldal jelenik meg a Chromium indításakor.</translation>
 <translation id="6485906693002546646">Chromiumos dolgainak szinkronizálásához a(z) <ph name="PROFILE_EMAIL" /> fiókot használja. Szinkronizálási beállításainak frissítéséhez, illetve a Chromium Google-fiók nélküli használatához keresse fel a <ph name="SETTINGS_LINK" /> linket.</translation>
 <translation id="6510925080656968729">Chromium eltávolítása</translation>
@@ -207,7 +205,6 @@ A Chromium nem tudja visszaállítani a beállításait.</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> – A Chromium szerzői. Minden jog fenntartva.</translation>
 <translation id="8621669128220841554">A telepítés egy meg nem határozott hiba miatt nem sikerült. Kérjük, töltse le újra a Chromiumot.</translation>
 <translation id="8628626585870903697">A Chromium nem tartalmazza a PDF Viewer alkalmazást, amely a Nyomtatási előnézet működéséhez szükséges.</translation>
-<translation id="8684913864886094367">A Chromium nem záródott be megfelelően.</translation>
 <translation id="8697124171261953979">Továbbá azt is szabályozza, hogy melyik oldal jelenik meg a Chromium indításakor vagy a cím- és keresősávban indított kereséskor.</translation>
 <translation id="8704119203788522458">Ez az Ön Chromiumja</translation>
 <translation id="872034308864968620">A Chromium fusson a háttérben</translation>
@@ -224,7 +221,6 @@ A Chromium nem tudja visszaállítani a beállításait.</translation>
 
 Ha mindenképp bejelentkezik, akkor egyesíti a(z) <ph name="ACCOUNT_EMAIL_NEW" /> fiókkal az olyan Chromium-adatokat, mint a könyvjelzők, az előzmények és más beállítások.</translation>
 <translation id="9013087743919948559">Hozzáadás a Chromiumhoz</translation>
-<translation id="9013262824292842194">A Chromium futtatásához Windows Vista, illetve Windows XP SP2 vagy újabb verzió szükséges.</translation>
 <translation id="9019929317751753759">A Chromium biztonságosabbá tétele érdekében kikapcsoltuk a következő bővítményt, amely nem a(z) <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> szolgáltatásból származik, és előfordulhat, hogy az Ön tudta nélkül lett telepítve.</translation>
 <translation id="9022552996538154597">Bejelentkezés a Chromiumba</translation>
 <translation id="9036189287518468038">Chromium Alkalmazásindító</translation>

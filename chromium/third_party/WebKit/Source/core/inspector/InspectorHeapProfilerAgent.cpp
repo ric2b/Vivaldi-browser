@@ -31,190 +31,29 @@
 #include "core/inspector/InspectorHeapProfilerAgent.h"
 
 #include "bindings/core/v8/V8Binding.h"
-#include "core/dom/Document.h"
-#include "core/frame/LocalDOMWindow.h"
-#include "core/inspector/InjectedScript.h"
-#include "core/inspector/InjectedScriptHost.h"
-#include "core/inspector/InspectorState.h"
-#include "core/inspector/RemoteObjectId.h"
 #include "platform/Timer.h"
-#include "wtf/CurrentTime.h"
+#include "platform/v8_inspector/public/V8HeapProfilerAgent.h"
 #include <v8-profiler.h>
 
 namespace blink {
 
-typedef uint32_t SnapshotObjectId;
-
 namespace HeapProfilerAgentState {
-static const char heapProfilerEnabled[] = "heapProfilerEnabled";
 static const char heapObjectsTrackingEnabled[] = "heapObjectsTrackingEnabled";
-static const char allocationTrackingEnabled[] = "allocationTrackingEnabled";
 }
 
-namespace {
-
-class HeapSnapshotProgress final : public v8::ActivityControl {
+class InspectorHeapProfilerAgent::HeapStatsUpdateTask final {
 public:
-    HeapSnapshotProgress(InspectorFrontend::HeapProfiler* frontend)
-        : m_frontend(frontend) { }
-    ControlOption ReportProgressValue(int done, int total) override
-    {
-        m_frontend->reportHeapSnapshotProgress(done, total, nullptr);
-        if (done >= total) {
-            const bool finished = true;
-            m_frontend->reportHeapSnapshotProgress(total, total, &finished);
-        }
-        m_frontend->flush();
-        return kContinue;
-    }
-private:
-    InspectorFrontend::HeapProfiler* m_frontend;
-};
-
-class GlobalObjectNameResolver final : public v8::HeapProfiler::ObjectNameResolver {
-public:
-    explicit GlobalObjectNameResolver(v8::Isolate* isolate) : m_isolate(isolate) { }
-    const char* GetName(v8::Local<v8::Object> object) override
-    {
-        DOMWindow* window = toDOMWindow(m_isolate, object);
-        if (!window)
-            return 0;
-        CString url = toLocalDOMWindow(window)->document()->url().string().utf8();
-        m_strings.append(url);
-        return url.data();
-    }
-
-private:
-    v8::Isolate* m_isolate;
-    Vector<CString> m_strings;
-};
-
-class HeapSnapshotOutputStream final : public v8::OutputStream {
-public:
-    HeapSnapshotOutputStream(InspectorFrontend::HeapProfiler* frontend)
-        : m_frontend(frontend) { }
-    void EndOfStream() override { }
-    int GetChunkSize() override { return 102400; }
-    WriteResult WriteAsciiChunk(char* data, int size) override
-    {
-        m_frontend->addHeapSnapshotChunk(String(data, size));
-        m_frontend->flush();
-        return kContinue;
-    }
-private:
-    InspectorFrontend::HeapProfiler* m_frontend;
-};
-
-ScriptValue objectByHeapObjectId(v8::Isolate* isolate, unsigned id)
-{
-    v8::HeapProfiler* profiler = isolate->GetHeapProfiler();
-    v8::HandleScope handleScope(isolate);
-    v8::Local<v8::Value> value = profiler->FindObjectById(id);
-    if (value.IsEmpty() || !value->IsObject())
-        return ScriptValue();
-
-    v8::Local<v8::Object> object = value.As<v8::Object>();
-
-    if (object->InternalFieldCount() >= v8DefaultWrapperInternalFieldCount) {
-        v8::Local<v8::Value> wrapper = object->GetInternalField(v8DOMWrapperObjectIndex);
-        // Skip wrapper boilerplates which are like regular wrappers but don't have
-        // native object.
-        if (!wrapper.IsEmpty() && wrapper->IsUndefined())
-            return ScriptValue();
-    }
-
-    ScriptState* scriptState = ScriptState::from(object->CreationContext());
-    return ScriptValue(scriptState, object);
-}
-
-class InspectableHeapObject final : public InjectedScriptHost::InspectableObject {
-public:
-    explicit InspectableHeapObject(unsigned heapObjectId) : m_heapObjectId(heapObjectId) { }
-    ScriptValue get(ScriptState* state) override
-    {
-        return objectByHeapObjectId(state->isolate(), m_heapObjectId);
-    }
-private:
-    unsigned m_heapObjectId;
-};
-
-class HeapStatsStream final : public v8::OutputStream {
-public:
-    HeapStatsStream(InspectorFrontend::HeapProfiler* frontend)
-        : m_frontend(frontend)
-    {
-    }
-
-    void EndOfStream() override { }
-
-    WriteResult WriteAsciiChunk(char* data, int size) override
-    {
-        ASSERT(false);
-        return kAbort;
-    }
-
-    WriteResult WriteHeapStatsChunk(v8::HeapStatsUpdate* updateData, int count) override
-    {
-        ASSERT(count > 0);
-        RefPtr<TypeBuilder::Array<int>> statsDiff = TypeBuilder::Array<int>::create();
-        for (int i = 0; i < count; ++i) {
-            statsDiff->addItem(updateData[i].index);
-            statsDiff->addItem(updateData[i].count);
-            statsDiff->addItem(updateData[i].size);
-        }
-        m_frontend->heapStatsUpdate(statsDiff.release());
-        return kContinue;
-    }
-
-private:
-    InspectorFrontend::HeapProfiler* m_frontend;
-};
-
-} // namespace
-
-class InspectorHeapProfilerAgent::HeapStatsUpdateTask final : public NoBaseWillBeGarbageCollectedFinalized<InspectorHeapProfilerAgent::HeapStatsUpdateTask> {
-public:
-    explicit HeapStatsUpdateTask(InspectorHeapProfilerAgent*);
+    explicit HeapStatsUpdateTask(V8HeapProfilerAgent*);
     void startTimer();
     void resetTimer() { m_timer.stop(); }
     void onTimer(Timer<HeapStatsUpdateTask>*);
-    DECLARE_TRACE();
 
 private:
-    RawPtrWillBeMember<InspectorHeapProfilerAgent> m_heapProfilerAgent;
+    V8HeapProfilerAgent* m_heapProfilerAgent;
     Timer<HeapStatsUpdateTask> m_timer;
 };
 
-PassOwnPtrWillBeRawPtr<InspectorHeapProfilerAgent> InspectorHeapProfilerAgent::create(v8::Isolate* isolate, InjectedScriptManager* injectedScriptManager)
-{
-    return adoptPtrWillBeNoop(new InspectorHeapProfilerAgent(isolate, injectedScriptManager));
-}
-
-InspectorHeapProfilerAgent::InspectorHeapProfilerAgent(v8::Isolate* isolate, InjectedScriptManager* injectedScriptManager)
-    : InspectorBaseAgent<InspectorHeapProfilerAgent, InspectorFrontend::HeapProfiler>("HeapProfiler")
-    , m_isolate(isolate)
-    , m_injectedScriptManager(injectedScriptManager)
-{
-}
-
-InspectorHeapProfilerAgent::~InspectorHeapProfilerAgent()
-{
-}
-
-void InspectorHeapProfilerAgent::restore()
-{
-    if (m_state->getBoolean(HeapProfilerAgentState::heapProfilerEnabled))
-        frontend()->resetProfiles();
-    if (m_state->getBoolean(HeapProfilerAgentState::heapObjectsTrackingEnabled))
-        startTrackingHeapObjectsInternal(m_state->getBoolean(HeapProfilerAgentState::allocationTrackingEnabled));
-}
-
-void InspectorHeapProfilerAgent::collectGarbage(ErrorString*)
-{
-    m_isolate->LowMemoryNotification();
-}
-
-InspectorHeapProfilerAgent::HeapStatsUpdateTask::HeapStatsUpdateTask(InspectorHeapProfilerAgent* heapProfilerAgent)
+InspectorHeapProfilerAgent::HeapStatsUpdateTask::HeapStatsUpdateTask(V8HeapProfilerAgent* heapProfilerAgent)
     : m_heapProfilerAgent(heapProfilerAgent)
     , m_timer(this, &HeapStatsUpdateTask::onTimer)
 {
@@ -233,95 +72,99 @@ void InspectorHeapProfilerAgent::HeapStatsUpdateTask::startTimer()
     m_timer.startRepeating(0.05, BLINK_FROM_HERE);
 }
 
-DEFINE_TRACE(InspectorHeapProfilerAgent::HeapStatsUpdateTask)
+PassOwnPtrWillBeRawPtr<InspectorHeapProfilerAgent> InspectorHeapProfilerAgent::create(v8::Isolate* isolate, V8RuntimeAgent* runtimeAgent)
 {
-    visitor->trace(m_heapProfilerAgent);
+    return adoptPtrWillBeNoop(new InspectorHeapProfilerAgent(isolate, runtimeAgent));
 }
 
-void InspectorHeapProfilerAgent::startTrackingHeapObjects(ErrorString*, const bool* trackAllocations)
+InspectorHeapProfilerAgent::InspectorHeapProfilerAgent(v8::Isolate* isolate, V8RuntimeAgent* runtimeAgent)
+    : InspectorBaseAgent<InspectorHeapProfilerAgent, protocol::Frontend::HeapProfiler>("HeapProfiler")
+    , m_v8HeapProfilerAgent(V8HeapProfilerAgent::create(isolate, runtimeAgent))
+    , m_isolate(isolate)
 {
-    m_state->setBoolean(HeapProfilerAgentState::heapObjectsTrackingEnabled, true);
-    bool allocationTrackingEnabled = asBool(trackAllocations);
-    m_state->setBoolean(HeapProfilerAgentState::allocationTrackingEnabled, allocationTrackingEnabled);
-    startTrackingHeapObjectsInternal(allocationTrackingEnabled);
 }
 
-void InspectorHeapProfilerAgent::requestHeapStatsUpdate()
+InspectorHeapProfilerAgent::~InspectorHeapProfilerAgent()
 {
-    if (!frontend())
-        return;
-    HeapStatsStream stream(frontend());
-    SnapshotObjectId lastSeenObjectId = m_isolate->GetHeapProfiler()->GetHeapStats(&stream);
-    frontend()->lastSeenObjectId(lastSeenObjectId, WTF::currentTimeMS());
 }
 
-void InspectorHeapProfilerAgent::stopTrackingHeapObjects(ErrorString* error, const bool* reportProgress)
+// InspectorBaseAgent overrides.
+void InspectorHeapProfilerAgent::setState(PassRefPtr<protocol::DictionaryValue> state)
 {
-    if (!m_heapStatsUpdateTask) {
-        *error = "Heap object tracking is not started.";
-        return;
-    }
-    requestHeapStatsUpdate();
-    takeHeapSnapshot(error, reportProgress);
-    stopTrackingHeapObjectsInternal();
+    InspectorBaseAgent::setState(state);
+    m_v8HeapProfilerAgent->setInspectorState(m_state);
 }
 
-void InspectorHeapProfilerAgent::startTrackingHeapObjectsInternal(bool trackAllocations)
+void InspectorHeapProfilerAgent::setFrontend(protocol::Frontend* frontend)
+{
+    InspectorBaseAgent::setFrontend(frontend);
+    m_v8HeapProfilerAgent->setFrontend(protocol::Frontend::HeapProfiler::from(frontend));
+}
+
+void InspectorHeapProfilerAgent::clearFrontend()
+{
+    m_v8HeapProfilerAgent->clearFrontend();
+    InspectorBaseAgent::clearFrontend();
+}
+
+void InspectorHeapProfilerAgent::restore()
+{
+    m_v8HeapProfilerAgent->restore();
+    if (m_state->booleanProperty(HeapProfilerAgentState::heapObjectsTrackingEnabled, false))
+        startUpdateStatsTimer();
+}
+
+// Protocol implementation.
+void InspectorHeapProfilerAgent::collectGarbage(ErrorString* error)
+{
+    m_v8HeapProfilerAgent->collectGarbage(error);
+}
+
+void InspectorHeapProfilerAgent::startTrackingHeapObjects(ErrorString* error, const protocol::Maybe<bool>& trackAllocations)
+{
+    m_v8HeapProfilerAgent->startTrackingHeapObjects(error, trackAllocations);
+    startUpdateStatsTimer();
+}
+
+void InspectorHeapProfilerAgent::stopTrackingHeapObjects(ErrorString* error, const protocol::Maybe<bool>& reportProgress)
+{
+    m_v8HeapProfilerAgent->stopTrackingHeapObjects(error, reportProgress);
+    stopUpdateStatsTimer();
+}
+
+void InspectorHeapProfilerAgent::startUpdateStatsTimer()
 {
     if (m_heapStatsUpdateTask)
         return;
-    m_isolate->GetHeapProfiler()->StartTrackingHeapObjects(trackAllocations);
-    m_heapStatsUpdateTask = adoptPtrWillBeNoop(new HeapStatsUpdateTask(this));
+    m_heapStatsUpdateTask = adoptPtr(new HeapStatsUpdateTask(m_v8HeapProfilerAgent.get()));
     m_heapStatsUpdateTask->startTimer();
 }
 
-void InspectorHeapProfilerAgent::stopTrackingHeapObjectsInternal()
+void InspectorHeapProfilerAgent::stopUpdateStatsTimer()
 {
     if (!m_heapStatsUpdateTask)
         return;
-    m_isolate->GetHeapProfiler()->StopTrackingHeapObjects();
     m_heapStatsUpdateTask->resetTimer();
     m_heapStatsUpdateTask.clear();
-    m_state->setBoolean(HeapProfilerAgentState::heapObjectsTrackingEnabled, false);
-    m_state->setBoolean(HeapProfilerAgentState::allocationTrackingEnabled, false);
 }
 
-void InspectorHeapProfilerAgent::enable(ErrorString*)
+void InspectorHeapProfilerAgent::enable(ErrorString* error)
 {
-    m_state->setBoolean(HeapProfilerAgentState::heapProfilerEnabled, true);
+    m_v8HeapProfilerAgent->enable(error);
 }
 
 void InspectorHeapProfilerAgent::disable(ErrorString* error)
 {
-    stopTrackingHeapObjectsInternal();
-    m_isolate->GetHeapProfiler()->ClearObjectIds();
-    m_state->setBoolean(HeapProfilerAgentState::heapProfilerEnabled, false);
+    m_v8HeapProfilerAgent->disable(error);
+    stopUpdateStatsTimer();
 }
 
-void InspectorHeapProfilerAgent::takeHeapSnapshot(ErrorString* errorString, const bool* reportProgress)
+void InspectorHeapProfilerAgent::takeHeapSnapshot(ErrorString* errorString, const protocol::Maybe<bool>& reportProgress)
 {
-    v8::HeapProfiler* profiler = m_isolate->GetHeapProfiler();
-    if (!profiler) {
-        *errorString = "Cannot access v8 heap profiler";
-        return;
-    }
-    OwnPtr<HeapSnapshotProgress> progress;
-    if (asBool(reportProgress))
-        progress = adoptPtr(new HeapSnapshotProgress(frontend()));
-
-    v8::HandleScope handleScope(m_isolate); // Remove?
-    GlobalObjectNameResolver resolver(m_isolate);
-    const v8::HeapSnapshot* snapshot = profiler->TakeHeapSnapshot(progress.get(), &resolver);
-    if (!snapshot) {
-        *errorString = "Failed to take heap snapshot";
-        return;
-    }
-    HeapSnapshotOutputStream stream(frontend());
-    snapshot->Serialize(&stream);
-    const_cast<v8::HeapSnapshot*>(snapshot)->Delete();
+    m_v8HeapProfilerAgent->takeHeapSnapshot(errorString, reportProgress);
 }
 
-void InspectorHeapProfilerAgent::getObjectByHeapObjectId(ErrorString* error, const String& heapSnapshotObjectId, const String* objectGroup, RefPtr<TypeBuilder::Runtime::RemoteObject>& result)
+void InspectorHeapProfilerAgent::getObjectByHeapObjectId(ErrorString* error, const String& heapSnapshotObjectId, const protocol::Maybe<String>& objectGroup, OwnPtr<protocol::Runtime::RemoteObject>* result)
 {
     bool ok;
     unsigned id = heapSnapshotObjectId.toUInt(&ok);
@@ -329,61 +172,63 @@ void InspectorHeapProfilerAgent::getObjectByHeapObjectId(ErrorString* error, con
         *error = "Invalid heap snapshot object id";
         return;
     }
-    ScriptValue heapObject = objectByHeapObjectId(m_isolate, id);
-    if (heapObject.isEmpty()) {
+
+    if (!isInspectableHeapObject(id)) {
         *error = "Object is not available";
         return;
     }
-    InjectedScript injectedScript = m_injectedScriptManager->injectedScriptFor(heapObject.scriptState());
-    if (injectedScript.isEmpty()) {
-        *error = "Object is not available. Inspected context is gone";
-        return;
-    }
-    result = injectedScript.wrapObject(heapObject, objectGroup ? *objectGroup : "");
-    if (!result)
-        *error = "Failed to wrap object";
+
+    m_v8HeapProfilerAgent->getObjectByHeapObjectId(error, heapSnapshotObjectId, objectGroup, result);
 }
 
-void InspectorHeapProfilerAgent::addInspectedHeapObject(ErrorString* errorString, const String& inspectedHeapObjectId)
+void InspectorHeapProfilerAgent::addInspectedHeapObject(ErrorString* error, const String& inspectedHeapObjectId)
 {
     bool ok;
     unsigned id = inspectedHeapObjectId.toUInt(&ok);
     if (!ok) {
-        *errorString = "Invalid heap snapshot object id";
+        *error = "Invalid heap snapshot object id";
         return;
     }
-    m_injectedScriptManager->injectedScriptHost()->addInspectedObject(adoptPtrWillBeNoop(new InspectableHeapObject(id)));
+
+    if (!isInspectableHeapObject(id)) {
+        *error = "Object is not available";
+        return;
+    }
+
+    m_v8HeapProfilerAgent->addInspectedHeapObject(error, inspectedHeapObjectId);
 }
 
 void InspectorHeapProfilerAgent::getHeapObjectId(ErrorString* errorString, const String& objectId, String* heapSnapshotObjectId)
 {
-    OwnPtr<RemoteObjectId> remoteId = RemoteObjectId::parse(objectId);
-    if (!remoteId) {
-        *errorString = "Invalid object id";
-        return;
-    }
-    InjectedScript injectedScript = m_injectedScriptManager->findInjectedScript(remoteId.get());
-    if (injectedScript.isEmpty()) {
-        *errorString = "Inspected context has gone";
-        return;
-    }
-    ScriptState::Scope scope(injectedScript.scriptState());
-    v8::Local<v8::Value> value = injectedScript.findObject(*remoteId);
-    if (value.IsEmpty() || value->IsUndefined()) {
-        *errorString = "Object with given id not found";
-        return;
-    }
-
-    v8::SnapshotObjectId id = m_isolate->GetHeapProfiler()->GetObjectId(value);
-    *heapSnapshotObjectId = String::number(id);
+    m_v8HeapProfilerAgent->getHeapObjectId(errorString, objectId, heapSnapshotObjectId);
 }
 
-DEFINE_TRACE(InspectorHeapProfilerAgent)
+bool InspectorHeapProfilerAgent::isInspectableHeapObject(unsigned id)
 {
-    visitor->trace(m_injectedScriptManager);
-    visitor->trace(m_heapStatsUpdateTask);
-    InspectorBaseAgent::trace(visitor);
+    v8::HandleScope scope(m_isolate);
+    v8::HeapProfiler* profiler = m_isolate->GetHeapProfiler();
+    v8::Local<v8::Value> value = profiler->FindObjectById(id);
+    if (value.IsEmpty() || !value->IsObject())
+        return false;
+    v8::Local<v8::Object> object = value.As<v8::Object>();
+    if (object->InternalFieldCount() >= v8DefaultWrapperInternalFieldCount) {
+        v8::Local<v8::Value> wrapper = object->GetInternalField(v8DOMWrapperObjectIndex);
+        // Skip wrapper boilerplates which are like regular wrappers but don't have
+        // native object.
+        if (!wrapper.IsEmpty() && wrapper->IsUndefined())
+            return false;
+    }
+    return true;
+}
+
+void InspectorHeapProfilerAgent::startSampling(ErrorString* errorString)
+{
+    m_v8HeapProfilerAgent->startSampling(errorString);
+}
+
+void InspectorHeapProfilerAgent::stopSampling(ErrorString* errorString, OwnPtr<protocol::HeapProfiler::SamplingHeapProfile>* profile)
+{
+    m_v8HeapProfilerAgent->stopSampling(errorString, profile);
 }
 
 } // namespace blink
-

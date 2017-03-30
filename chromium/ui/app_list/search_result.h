@@ -57,8 +57,7 @@ class APP_LIST_EXPORT SearchResult {
 
     Tag(int styles, size_t start, size_t end)
         : styles(styles),
-          range(start, end) {
-    }
+          range(static_cast<uint32_t>(start), static_cast<uint32_t>(end)) {}
 
     int styles;
     gfx::Range range;
@@ -76,6 +75,7 @@ class APP_LIST_EXPORT SearchResult {
            const base::string16& tooltip_text);
     Action(const base::string16& label_text,
            const base::string16& tooltip_text);
+    Action(const Action& other);
     ~Action();
 
     gfx::ImageSkia base_image;

@@ -5,16 +5,9 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_NON_CLIENT_FRAME_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_NON_CLIENT_FRAME_VIEW_H_
 
-#include "chrome/browser/profiles/profile_info_cache_observer.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "ui/views/window/non_client_view.h"
 
-#if defined(FRAME_AVATAR_BUTTON)
-#include "chrome/browser/ui/views/profiles/new_avatar_button.h"
-#endif
-
-#if defined(ENABLE_SUPERVISED_USERS)
-class SupervisedUserAvatarLabel;
-#endif
 class AvatarMenuButton;
 class BrowserFrame;
 class BrowserView;
@@ -22,24 +15,14 @@ class BrowserView;
 // A specialization of the NonClientFrameView object that provides additional
 // Browser-specific methods.
 class BrowserNonClientFrameView : public views::NonClientFrameView,
-                                  public ProfileInfoCacheObserver {
+                                  public ProfileAttributesStorage::Observer {
  public:
   BrowserNonClientFrameView(BrowserFrame* frame, BrowserView* browser_view);
   ~BrowserNonClientFrameView() override;
 
+  BrowserView* browser_view() const { return browser_view_; }
+  BrowserFrame* frame() const { return frame_; }
   AvatarMenuButton* avatar_button() const { return avatar_button_; }
-
-#if defined(FRAME_AVATAR_BUTTON)
-  NewAvatarButton* new_avatar_button() const { return new_avatar_button_; }
-#endif
-
-#if defined(ENABLE_SUPERVISED_USERS)
-  SupervisedUserAvatarLabel* supervised_user_avatar_label() const {
-    return supervised_user_avatar_label_;
-  }
-
-  void OnThemeChanged() override;
-#endif
 
   // Called when BrowserView creates all it's child views.
   virtual void OnBrowserViewInitViewsComplete();
@@ -69,48 +52,34 @@ class BrowserNonClientFrameView : public views::NonClientFrameView,
   // Returns the location icon, if this frame has any.
   virtual views::View* GetLocationIconView() const;
 
+  // Returns the profile switcher button, if this frame has any.
+  virtual views::View* GetProfileSwitcherView() const;
+
   // Overriden from views::View.
   void VisibilityChanged(views::View* starting_from, bool is_visible) override;
-  void ChildPreferredSizeChanged(View* child) override;
 
  protected:
-  BrowserView* browser_view() const { return browser_view_; }
-  BrowserFrame* frame() const { return frame_; }
-
   // Whether the frame should be painted with theming.
   // By default, tabbed browser windows are themed but popup and app windows are
   // not.
   virtual bool ShouldPaintAsThemed() const;
 
+#if !defined(OS_CHROMEOS)
   // Compute aspects of the frame needed to paint the frame background.
   SkColor GetFrameColor() const;
   gfx::ImageSkia* GetFrameImage() const;
   gfx::ImageSkia* GetFrameOverlayImage() const;
-  int GetTopAreaHeight() const;
+#endif
 
-  // Updates the avatar button using the old or new UI based on the BrowserView
-  // type, and the presence of the --enable-new-avatar-menu flag. Calls either
-  // UpdateOldAvatarButton() or UpdateNewAvatarButtonImpl() accordingly.
-  void UpdateAvatar();
+  // Update the profile switcher button if one should exist. Otherwise, update
+  // the incognito avatar, or profile avatar for teleported frames in ChromeOS.
+  virtual void UpdateAvatar() = 0;
 
   // Updates the title and icon of the old avatar button.
   void UpdateOldAvatarButton();
 
-  // Updates the avatar button displayed in the caption area by calling
-  // UpdateNewAvatarButton() with an implementation specific |listener|
-  // and button |style|.
-  virtual void UpdateNewAvatarButtonImpl() = 0;
-
-#if defined(FRAME_AVATAR_BUTTON)
-  // Updates the title of the avatar button displayed in the caption area.
-  // The button uses |style| to match the browser window style and notifies
-  // |listener| when it is clicked.
-  void UpdateNewAvatarButton(views::ButtonListener* listener,
-                             const NewAvatarButton::AvatarButtonStyle style);
-#endif
-
  private:
-  // Overriden from ProfileInfoCacheObserver.
+  // Overriden from ProfileAttributesStorage::Observer.
   void OnProfileAdded(const base::FilePath& profile_path) override;
   void OnProfileWasRemoved(const base::FilePath& profile_path,
                            const base::string16& profile_name) override;
@@ -125,19 +94,9 @@ class BrowserNonClientFrameView : public views::NonClientFrameView,
   // The BrowserView hosted within this View.
   BrowserView* browser_view_;
 
-#if defined(ENABLE_SUPERVISED_USERS)
-  SupervisedUserAvatarLabel* supervised_user_avatar_label_;
-#endif
-
-#if defined(FRAME_AVATAR_BUTTON)
-  // Menu button that displays the name of the active or guest profile.
-  // May be null and will not be displayed for off the record profiles.
-  NewAvatarButton* new_avatar_button_;
-#endif
-
   // Menu button that displays the incognito icon. May be null for some frame
   // styles. TODO(anthonyvd): simplify/rename.
-  AvatarMenuButton* avatar_button_;
+  AvatarMenuButton* avatar_button_ = nullptr;
 };
 
 namespace chrome {

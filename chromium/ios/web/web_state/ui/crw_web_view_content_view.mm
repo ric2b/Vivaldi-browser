@@ -83,6 +83,10 @@ const CGFloat kBackgroundRGBComponents[] = {0.75f, 0.74f, 0.76f};
   }
 }
 
+- (BOOL)becomeFirstResponder {
+  return [_webView becomeFirstResponder];
+}
+
 - (void)setFrame:(CGRect)frame {
   if (CGRectEqualToRect(self.frame, frame))
     return;

@@ -36,40 +36,21 @@ class CONTENT_EXPORT BackgroundSyncServiceImpl
                 int64_t sw_registration_id,
                 bool requested_from_service_worker,
                 const RegisterCallback& callback) override;
-  void Unregister(BackgroundSyncRegistrationHandle::HandleId handle_id,
-                  int64_t sw_registration_id,
-                  const UnregisterCallback& callback) override;
-  void GetRegistration(BackgroundSyncPeriodicity periodicity,
-                       const mojo::String& tag,
-                       int64_t sw_registration_id,
-                       const GetRegistrationCallback& callback) override;
-  void GetRegistrations(BackgroundSyncPeriodicity periodicity,
-                        int64_t sw_registration_id,
+  void GetRegistrations(int64_t sw_registration_id,
                         const GetRegistrationsCallback& callback) override;
-  void GetPermissionStatus(
-      BackgroundSyncPeriodicity periodicity,
-      int64_t sw_registration_id,
-      const GetPermissionStatusCallback& callback) override;
   void DuplicateRegistrationHandle(
       BackgroundSyncRegistrationHandle::HandleId handle_id,
       const DuplicateRegistrationHandleCallback& callback) override;
   void ReleaseRegistration(
       BackgroundSyncRegistrationHandle::HandleId handle_id) override;
-  void NotifyWhenFinished(BackgroundSyncRegistrationHandle::HandleId handle_id,
-                          const NotifyWhenFinishedCallback& callback) override;
 
   void OnRegisterResult(const RegisterCallback& callback,
                         BackgroundSyncStatus status,
                         scoped_ptr<BackgroundSyncRegistrationHandle> result);
-  void OnUnregisterResult(const UnregisterCallback& callback,
-                          BackgroundSyncStatus status);
   void OnGetRegistrationsResult(
       const GetRegistrationsCallback& callback,
       BackgroundSyncStatus status,
       scoped_ptr<ScopedVector<BackgroundSyncRegistrationHandle>> result);
-  void OnNotifyWhenFinishedResult(const NotifyWhenFinishedCallback& callback,
-                                  BackgroundSyncStatus status,
-                                  BackgroundSyncState sync_state);
 
   // Called when an error is detected on binding_.
   void OnConnectionError();

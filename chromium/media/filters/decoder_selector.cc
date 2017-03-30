@@ -13,9 +13,9 @@
 #include "build/build_config.h"
 #include "media/base/audio_decoder.h"
 #include "media/base/bind_to_current_loop.h"
+#include "media/base/cdm_context.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/media_log.h"
-#include "media/base/pipeline.h"
 #include "media/base/video_decoder.h"
 #include "media/filters/decoder_stream_traits.h"
 #include "media/filters/decrypting_demuxer_stream.h"
@@ -81,7 +81,7 @@ DecoderSelector<StreamType>::~DecoderSelector() {
 template <DemuxerStream::Type StreamType>
 void DecoderSelector<StreamType>::SelectDecoder(
     DemuxerStream* stream,
-    const SetCdmReadyCB& set_cdm_ready_cb,
+    CdmContext* cdm_context,
     const SelectDecoderCB& select_decoder_cb,
     const typename Decoder::OutputCB& output_cb,
     const base::Closure& waiting_for_decryption_key_cb) {
@@ -90,7 +90,7 @@ void DecoderSelector<StreamType>::SelectDecoder(
   DCHECK(stream);
   DCHECK(select_decoder_cb_.is_null());
 
-  set_cdm_ready_cb_ = set_cdm_ready_cb;
+  cdm_context_ = cdm_context;
   waiting_for_decryption_key_cb_ = waiting_for_decryption_key_cb;
 
   // Make sure |select_decoder_cb| runs on a different execution stack.
@@ -112,7 +112,7 @@ void DecoderSelector<StreamType>::SelectDecoder(
 
   // This could be null during fallback after decoder reinitialization failure.
   // See DecoderStream<StreamType>::OnDecoderReinitialized().
-  if (set_cdm_ready_cb_.is_null()) {
+  if (!cdm_context_) {
     ReturnNullDecoder();
     return;
   }
@@ -127,11 +127,12 @@ void DecoderSelector<StreamType>::SelectDecoder(
 #if !defined(OS_ANDROID)
 template <DemuxerStream::Type StreamType>
 void DecoderSelector<StreamType>::InitializeDecryptingDecoder() {
+  DVLOG(2) << __FUNCTION__;
   decoder_.reset(new typename StreamTraits::DecryptingDecoderType(
       task_runner_, media_log_, waiting_for_decryption_key_cb_));
 
   DecoderStreamTraits<StreamType>::InitializeDecoder(
-      decoder_.get(), input_stream_, set_cdm_ready_cb_,
+      decoder_.get(), input_stream_, cdm_context_,
       base::Bind(&DecoderSelector<StreamType>::DecryptingDecoderInitDone,
                  weak_ptr_factory_.GetWeakPtr()),
       output_cb_);
@@ -162,7 +163,7 @@ void DecoderSelector<StreamType>::InitializeDecryptingDemuxerStream() {
       task_runner_, media_log_, waiting_for_decryption_key_cb_));
 
   decrypted_stream_->Initialize(
-      input_stream_, set_cdm_ready_cb_,
+      input_stream_, cdm_context_,
       base::Bind(&DecoderSelector<StreamType>::DecryptingDemuxerStreamInitDone,
                  weak_ptr_factory_.GetWeakPtr()));
 }
@@ -204,7 +205,7 @@ void DecoderSelector<StreamType>::InitializeDecoder() {
   decoders_.weak_erase(decoders_.begin());
 
   DecoderStreamTraits<StreamType>::InitializeDecoder(
-      decoder_.get(), input_stream_, set_cdm_ready_cb_,
+      decoder_.get(), input_stream_, cdm_context_,
       base::Bind(&DecoderSelector<StreamType>::DecoderInitDone,
                  weak_ptr_factory_.GetWeakPtr()),
       output_cb_);

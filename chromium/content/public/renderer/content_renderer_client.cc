@@ -150,11 +150,6 @@ bool ContentRendererClient::ShouldOverridePageVisibilityState(
   return false;
 }
 
-const void* ContentRendererClient::CreatePPAPIInterface(
-    const std::string& interface_name) {
-  return nullptr;
-}
-
 bool ContentRendererClient::IsExternalPepperPlugin(
     const std::string& module_name) {
   return false;
@@ -178,6 +173,11 @@ ContentRendererClient::CreateMediaRendererFactory(
 
 scoped_ptr<MediaStreamRendererFactory>
 ContentRendererClient::CreateMediaStreamRendererFactory() {
+  return nullptr;
+}
+
+cc::ImageSerializationProcessor*
+ContentRendererClient::GetImageSerializationProcessor() {
   return nullptr;
 }
 
@@ -223,6 +223,10 @@ ContentRendererClient::CreateAppBannerClient(RenderFrame* render_frame) {
 
 bool ContentRendererClient::ShouldEnforceWebRTCRoutingPreferences() {
   return true;
+}
+
+base::StringPiece ContentRendererClient::GetOriginTrialPublicKey() {
+  return base::StringPiece();
 }
 
 }  // namespace content

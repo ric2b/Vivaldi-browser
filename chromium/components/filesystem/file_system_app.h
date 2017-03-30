@@ -8,64 +8,40 @@
 #include "base/macros.h"
 #include "components/filesystem/directory_impl.h"
 #include "components/filesystem/file_system_impl.h"
+#include "components/filesystem/lock_table.h"
 #include "components/filesystem/public/interfaces/file_system.mojom.h"
 #include "mojo/services/tracing/public/cpp/tracing_impl.h"
-#include "mojo/shell/public/cpp/application_delegate.h"
 #include "mojo/shell/public/cpp/interface_factory.h"
+#include "mojo/shell/public/cpp/shell_client.h"
 
 namespace mojo {
-class ApplicationImpl;
+class Connector;
 }
 
 namespace filesystem {
 
-class FileSystemApp : public mojo::ApplicationDelegate,
+class FileSystemApp : public mojo::ShellClient,
                       public mojo::InterfaceFactory<FileSystem> {
  public:
   FileSystemApp();
   ~FileSystemApp() override;
 
-  // Called by individual FileSystem objects to register lifetime events.
-  void RegisterDirectoryToClient(DirectoryImpl* directory,
-                                 FileSystemClientPtr client);
-
  private:
-  // We set the DirectoryImpl's error handler to this function. We do this so
-  // that we can QuitNow() once the last DirectoryImpl has closed itself.
-  void OnDirectoryConnectionError(DirectoryImpl* directory);
+  // Gets the system specific toplevel profile directory.
+  static base::FilePath GetUserDataDir();
 
-  // |ApplicationDelegate| override:
-  void Initialize(mojo::ApplicationImpl* app) override;
-  bool ConfigureIncomingConnection(
-      mojo::ApplicationConnection* connection) override;
-  bool OnShellConnectionError() override;
+  // |mojo::ShellClient| override:
+  void Initialize(mojo::Connector* connector, const std::string& url,
+                  uint32_t id, uint32_t user_id) override;
+  bool AcceptConnection(mojo::Connection* connection) override;
 
   // |InterfaceFactory<Files>| implementation:
-  void Create(mojo::ApplicationConnection* connection,
+  void Create(mojo::Connection* connection,
               mojo::InterfaceRequest<FileSystem> request) override;
 
-  // Use a vector to work around map not letting us use FileSystemClientPtr as
-  // a value in a std::map. The move constructors are to allow us to deal with
-  // FileSystemClientPtr inside a vector.
-  struct Client {
-    Client(DirectoryImpl* directory, FileSystemClientPtr fs_client);
-    Client(Client&& rhs);
-    ~Client();
-
-    Client& operator=(Client&& rhs);
-
-    DirectoryImpl* directory_;
-    FileSystemClientPtr fs_client_;
-  };
-  std::vector<Client> client_mapping_;
-
-  mojo::ApplicationImpl* app_;
   mojo::TracingImpl tracing_;
 
-  // Set to true when our shell connection is closed. On connection error, we
-  // then broadcast a notification to all FileSystemClients that they should
-  // shut down. Once the final one does, then we QuitNow().
-  bool in_shutdown_;
+  scoped_ptr<LockTable> lock_table_;
 
   DISALLOW_COPY_AND_ASSIGN(FileSystemApp);
 };

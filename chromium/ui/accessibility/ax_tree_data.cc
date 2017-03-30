@@ -21,11 +21,14 @@ AXTreeData::AXTreeData()
       parent_tree_id(-1),
       loaded(false),
       loading_progress(0.0),
+      focus_id(-1),
       sel_anchor_object_id(-1),
       sel_anchor_offset(-1),
       sel_focus_object_id(-1),
       sel_focus_offset(-1) {
 }
+
+AXTreeData::AXTreeData(const AXTreeData& other) = default;
 
 AXTreeData::~AXTreeData() {
 }
@@ -54,6 +57,9 @@ std::string AXTreeData::ToString() const {
   if (loading_progress != 0.0)
     result += " loading_progress=" + DoubleToString(loading_progress);
 
+  if (focus_id != -1)
+    result += " focus_id=" + IntToString(focus_id);
+
   if (sel_anchor_object_id != -1) {
     result += " sel_anchor_object_id=" + IntToString(sel_anchor_object_id);
     result += " sel_anchor_offset=" + IntToString(sel_anchor_offset);
@@ -75,6 +81,7 @@ bool operator==(const AXTreeData& lhs, const AXTreeData& rhs) {
           lhs.doctype == rhs.doctype &&
           lhs.loaded == rhs.loaded &&
           lhs.loading_progress == rhs.loading_progress &&
+          lhs.focus_id == rhs.focus_id &&
           lhs.sel_anchor_object_id == rhs.sel_anchor_object_id &&
           lhs.sel_anchor_offset == rhs.sel_anchor_offset &&
           lhs.sel_focus_object_id == rhs.sel_focus_object_id &&

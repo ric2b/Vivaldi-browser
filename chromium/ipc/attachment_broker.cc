@@ -18,9 +18,6 @@ namespace IPC {
 
 // static
 void AttachmentBroker::SetGlobal(AttachmentBroker* broker) {
-  CHECK(!g_attachment_broker || !broker)
-      << "Global attachment broker address: " << broker
-      << ". New attachment broker address: " << broker;
   g_attachment_broker = broker;
 }
 
@@ -82,6 +79,20 @@ void AttachmentBroker::DeregisterCommunicationChannel(Endpoint* endpoint) {
   NOTREACHED();
 }
 
+void AttachmentBroker::RegisterBrokerCommunicationChannel(Endpoint* endpoint) {
+  NOTREACHED();
+}
+
+void AttachmentBroker::DeregisterBrokerCommunicationChannel(
+    Endpoint* endpoint) {
+  NOTREACHED();
+}
+
+bool AttachmentBroker::IsPrivilegedBroker() {
+  NOTREACHED();
+  return false;
+}
+
 void AttachmentBroker::HandleReceivedAttachment(
     const scoped_refptr<BrokerableAttachment>& attachment) {
   {
@@ -127,6 +138,8 @@ void AttachmentBroker::NotifyObserver(
 }
 
 AttachmentBroker::ObserverInfo::ObserverInfo() {}
+AttachmentBroker::ObserverInfo::ObserverInfo(const ObserverInfo& other) =
+    default;
 AttachmentBroker::ObserverInfo::~ObserverInfo() {}
 
 }  // namespace IPC

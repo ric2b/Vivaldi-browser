@@ -66,6 +66,11 @@ class TestPacketSender : public PacketSender {
 
   int64_t GetBytesSent() final { return bytes_sent_; }
 
+  void StartReceiving(
+      const PacketReceiverCallbackWithStatus& packet_receiver) final {}
+
+  void StopReceiving() final {}
+
   void AddExpectedSizesAndPacketIds(int packet_size,
                                     uint16_t first_packet_id,
                                     int sequence_length) {

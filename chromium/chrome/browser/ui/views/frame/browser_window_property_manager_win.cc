@@ -5,7 +5,6 @@
 #include "chrome/browser/ui/views/frame/browser_window_property_manager_win.h"
 
 #include "base/command_line.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/windows_version.h"
 #include "chrome/browser/browser_process.h"
@@ -18,6 +17,7 @@
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_win.h"
 #include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "extensions/browser/extension_registry.h"
 #include "ui/base/win/shell.h"
 #include "ui/views/win/hwnd_util.h"
@@ -50,11 +50,11 @@ void BrowserWindowPropertyManager::UpdateWindowProperties() {
 
   // Set the app user model id for this application to that of the application
   // name. See http://crbug.com/7028.
-  base::string16 app_id = browser->is_app() ?
-      ShellIntegration::GetAppModelIdForProfile(
-          base::UTF8ToWide(browser->app_name()),
-          profile->GetPath()) :
-      ShellIntegration::GetChromiumModelIdForProfile(profile->GetPath());
+  base::string16 app_id =
+      browser->is_app()
+          ? shell_integration::GetAppModelIdForProfile(
+                base::UTF8ToWide(browser->app_name()), profile->GetPath())
+          : shell_integration::GetChromiumModelIdForProfile(profile->GetPath());
   base::string16 icon_path_string;
   base::string16 command_line_string;
   base::string16 pinned_name;

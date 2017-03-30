@@ -21,6 +21,7 @@
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/GLES2/gl2extchromium.h"
+#include "net/cookies/cookie_options.h"
 #include "net/cookies/cookie_store.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -52,6 +53,7 @@ void CreateChildFrameOnUI(
     int parent_routing_id,
     blink::WebTreeScopeType scope,
     const std::string& frame_name,
+    const std::string& frame_unique_name,
     blink::WebSandboxFlags sandbox_flags,
     const blink::WebFrameOwnerProperties& frame_owner_properties,
     int new_routing_id) {
@@ -62,7 +64,7 @@ void CreateChildFrameOnUI(
   // processing a subframe creation message.
   if (render_frame_host) {
     render_frame_host->OnCreateChildFrame(new_routing_id, scope, frame_name,
-                                          sandbox_flags,
+                                          frame_unique_name, sandbox_flags,
                                           frame_owner_properties);
   }
 }
@@ -326,18 +328,15 @@ bool RenderFrameMessageFilter::OnMessageReceived(const IPC::Message& message) {
 }
 
 void RenderFrameMessageFilter::OnCreateChildFrame(
-    int parent_routing_id,
-    blink::WebTreeScopeType scope,
-    const std::string& frame_name,
-    blink::WebSandboxFlags sandbox_flags,
-    const blink::WebFrameOwnerProperties& frame_owner_properties,
+    const FrameHostMsg_CreateChildFrame_Params& params,
     int* new_routing_id) {
   *new_routing_id = render_widget_helper_->GetNextRoutingID();
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&CreateChildFrameOnUI, render_process_id_, parent_routing_id,
-                 scope, frame_name, sandbox_flags, frame_owner_properties,
-                 *new_routing_id));
+      base::Bind(&CreateChildFrameOnUI, render_process_id_,
+                 params.parent_routing_id, params.scope, params.frame_name,
+                 params.frame_unique_name, params.sandbox_flags,
+                 params.frame_owner_properties, *new_routing_id));
 }
 
 void RenderFrameMessageFilter::OnSetCookie(int render_frame_id,
@@ -393,10 +392,13 @@ void RenderFrameMessageFilter::OnGetCookies(int render_frame_id,
   base::debug::Alias(url_buf);
 
   net::URLRequestContext* context = GetRequestContextForURL(url);
-  context->cookie_store()->GetAllCookiesForURLAsync(
-      url, base::Bind(&RenderFrameMessageFilter::CheckPolicyForCookies, this,
-                      render_frame_id, url, first_party_for_cookies,
-                      reply_msg));
+
+  net::CookieOptions options;
+  options.set_include_same_site();
+  context->cookie_store()->GetCookieListWithOptionsAsync(
+      url, options,
+      base::Bind(&RenderFrameMessageFilter::CheckPolicyForCookies, this,
+                 render_frame_id, url, first_party_for_cookies, reply_msg));
 }
 
 void RenderFrameMessageFilter::OnCookiesEnabled(
@@ -425,11 +427,8 @@ void RenderFrameMessageFilter::CheckPolicyForCookies(
       GetContentClient()->browser()->AllowGetCookie(
           url, first_party_for_cookies, cookie_list, resource_context_,
           render_process_id_, render_frame_id)) {
-    // Gets the cookies from cookie store if allowed.
-    context->cookie_store()->GetCookiesWithOptionsAsync(
-        url, net::CookieOptions(),
-        base::Bind(&RenderFrameMessageFilter::SendGetCookiesResponse,
-                   this, reply_msg));
+    SendGetCookiesResponse(reply_msg,
+                           net::CookieStore::BuildCookieLine(cookie_list));
   } else {
     SendGetCookiesResponse(reply_msg, std::string());
   }

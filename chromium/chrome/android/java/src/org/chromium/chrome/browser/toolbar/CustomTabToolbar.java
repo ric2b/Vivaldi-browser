@@ -11,9 +11,11 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.Pair;
+import android.util.TypedValue;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -46,12 +48,17 @@ import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.ui.base.WindowAndroid;
 
+import java.util.List;
+
 /**
  * The Toolbar layout to be used for a custom tab. This is used for both phone and tablet UIs.
  */
 public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
         View.OnLongClickListener {
     private static final int TITLE_ANIM_DELAY_MS = 200;
+    private static final int STATE_DOMAIN_ONLY = 0;
+    private static final int STATE_TITLE_ONLY = 1;
+    private static final int STATE_DOMAIN_AND_TITLE = 2;
 
     private View mLocationBarFrameLayout;
     private View mTitleUrlContainer;
@@ -60,7 +67,6 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
     private ImageView mSecurityButton;
     private ImageButton mCustomActionButton;
     private int mSecurityIconType;
-    private boolean mShouldShowTitle;
     private ImageButton mCloseButton;
 
     // Whether dark tint should be applied to icons and text.
@@ -69,6 +75,9 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
     private CustomTabToolbarAnimationDelegate mAnimDelegate;
     private boolean mBackgroundColorSet;
     private long mInitializeTimeStamp;
+    private int mState = STATE_DOMAIN_ONLY;
+    private String mFirstUrl;
+    private boolean mShowsOfflinePage = false;
 
     private Runnable mTitleAnimationStarter = new Runnable() {
         @Override
@@ -129,8 +138,8 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
                 if (currentTab == null || currentTab.getWebContents() == null) return;
                 Activity activity = currentTab.getWindowAndroid().getActivity().get();
                 if (activity == null) return;
-                WebsiteSettingsPopup.show(activity, currentTab.getProfile(),
-                        currentTab.getWebContents());
+                WebsiteSettingsPopup.show(activity, currentTab, mState == STATE_TITLE_ONLY
+                        ? parsePublisherNameFromUrl(currentTab.getUrl()) : null);
             }
         });
     }
@@ -200,8 +209,54 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
 
     @Override
     public void setShowTitle(boolean showTitle) {
-        mShouldShowTitle = showTitle;
-        if (mShouldShowTitle) mAnimDelegate.prepareTitleAnim(mUrlBar, mTitleBar);
+        if (showTitle) {
+            mState = STATE_DOMAIN_AND_TITLE;
+            mAnimDelegate.prepareTitleAnim(mUrlBar, mTitleBar);
+        } else {
+            mState = STATE_DOMAIN_ONLY;
+        }
+    }
+
+    @Override
+    public void setUrlBarHidden(boolean hideUrlBar) {
+        // Urlbar visibility cannot be toggled if it is the only visible element.
+        if (mState == STATE_DOMAIN_ONLY) return;
+
+        if (hideUrlBar && mState == STATE_DOMAIN_AND_TITLE) {
+            mState = STATE_TITLE_ONLY;
+            mAnimDelegate.setTitleAnimationEnabled(false);
+            mUrlBar.setVisibility(View.GONE);
+            mTitleBar.setVisibility(View.VISIBLE);
+            LayoutParams lp = (LayoutParams) mTitleBar.getLayoutParams();
+            lp.bottomMargin = 0;
+            mTitleBar.setLayoutParams(lp);
+            mTitleBar.setTextSize(TypedValue.COMPLEX_UNIT_PX,
+                    getResources().getDimension(R.dimen.location_bar_url_text_size));
+        } else if (!hideUrlBar && mState == STATE_TITLE_ONLY) {
+            mState = STATE_DOMAIN_AND_TITLE;
+            mTitleBar.setVisibility(View.VISIBLE);
+            mUrlBar.setTextSize(TypedValue.COMPLEX_UNIT_PX,
+                    getResources().getDimension(R.dimen.custom_tabs_url_text_size));
+            mUrlBar.setVisibility(View.VISIBLE);
+            LayoutParams lp = (LayoutParams) mTitleBar.getLayoutParams();
+            lp.bottomMargin = getResources()
+                    .getDimensionPixelSize(R.dimen.custom_tabs_toolbar_vertical_padding);
+            mTitleBar.setLayoutParams(lp);
+            mTitleBar.setTextSize(TypedValue.COMPLEX_UNIT_PX,
+                    getResources().getDimension(R.dimen.custom_tabs_title_text_size));
+            updateSecurityIcon(getSecurityLevel());
+        } else {
+            assert false : "Unreached state";
+        }
+    }
+
+    @Override
+    public String getContentPublisher() {
+        if (mState == STATE_TITLE_ONLY) {
+            if (getToolbarDataProvider().getTab() == null) return null;
+            return parsePublisherNameFromUrl(getToolbarDataProvider().getTab().getUrl());
+        }
+        return null;
     }
 
     @Override
@@ -215,7 +270,7 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
         // It takes some time to parse the title of the webcontent, and before that Tab#getTitle
         // always return the url. We postpone the title animation until the title is authentic.
         // TODO(yusufo): Clear the explicit references to about:blank here and for domain.
-        if (mShouldShowTitle
+        if (mState == STATE_DOMAIN_AND_TITLE
                 && !TextUtils.equals(currentTab.getTitle(), currentTab.getUrl())
                 && !TextUtils.equals(currentTab.getTitle(), "about:blank")) {
             long duration = System.currentTimeMillis() - mInitializeTimeStamp;
@@ -234,6 +289,15 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
     protected void onNavigatedToDifferentPage() {
         super.onNavigatedToDifferentPage();
         setTitleToPageTitle();
+        if (mState == STATE_TITLE_ONLY) {
+            if (TextUtils.isEmpty(mFirstUrl)) {
+                mFirstUrl = getToolbarDataProvider().getTab().getUrl();
+            } else {
+                if (mFirstUrl.equals(getToolbarDataProvider().getTab().getUrl())) return;
+                setUrlBarHidden(false);
+            }
+        }
+        showOfflineBoltIfNecessary();
     }
 
     @Override
@@ -331,6 +395,10 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
             ((TintedDrawable) mCustomActionButton.getDrawable()).setTint(
                     mUseDarkColors ? mDarkModeTint : mLightModeTint);
         }
+        if (mSecurityButton.getDrawable() instanceof TintedDrawable) {
+            ((TintedDrawable) mSecurityButton.getDrawable()).setTint(
+                    mUseDarkColors ? mDarkModeTint : mLightModeTint);
+        }
     }
 
     @Override
@@ -382,7 +450,8 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
 
     @Override
     public void updateSecurityIcon(int securityLevel) {
-        if (mSecurityIconType == securityLevel) return;
+        if (mSecurityIconType == securityLevel || mState == STATE_TITLE_ONLY) return;
+
         mSecurityIconType = securityLevel;
 
         if (securityLevel == ConnectionSecurityLevel.NONE) {
@@ -400,6 +469,25 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
         }
         mUrlBar.emphasizeUrl();
         mUrlBar.invalidate();
+    }
+
+    private void showOfflineBoltIfNecessary() {
+        boolean isOfflinePage = getCurrentTab() != null && getCurrentTab().isOfflinePage();
+        if (isOfflinePage == mShowsOfflinePage) return;
+
+        mShowsOfflinePage = isOfflinePage;
+        if (mShowsOfflinePage) {
+            // If we are showing an offline page, immediately update icon to offline bolt.
+            TintedDrawable bolt = TintedDrawable.constructTintedDrawable(
+                    getResources(), R.drawable.offline_bolt);
+            bolt.setTint(mUseDarkColors ? mDarkModeTint : mLightModeTint);
+            mSecurityButton.setImageDrawable(bolt);
+            mAnimDelegate.showSecurityButton();
+        } else {
+            // We are hiding the offline page so connection security information will change.
+            mSecurityIconType = ConnectionSecurityLevel.NONE;
+            mAnimDelegate.hideSecurityButton();
+        }
     }
 
     /**
@@ -516,6 +604,19 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
             return false;
         }
         return showAccessibilityToast(v, description);
+    }
+
+    private static String parsePublisherNameFromUrl(String url) {
+        // TODO(ianwen): Make it generic to parse url from URI path. http://crbug.com/599298
+        // The url should look like: https://www.google.com/amp/s/www.nyt.com/ampthml/blogs.html
+        // or https://www.google.com/amp/www.nyt.com/ampthml/blogs.html.
+        Uri uri = Uri.parse(url);
+        List<String> segments = uri.getPathSegments();
+        if (segments.size() >= 3) {
+            if (segments.get(1).length() > 1) return segments.get(1);
+            return segments.get(2);
+        }
+        return url;
     }
 
     // Toolbar and LocationBar calls that are not relevant here.

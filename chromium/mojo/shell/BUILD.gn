@@ -2,180 +2,57 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//mojo/public/mojo_application.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/test.gni")
+
+group("all") {
+  testonly = true
+  deps = [
+    ":shell",
+    "//mojo/shell/background",
+    "//mojo/shell/runner",
+    "//mojo/shell/standalone",
+    "//mojo/shell/tests",
+  ]
+}
 
 source_set("shell") {
   output_name = "mojo_shell"
   sources = [
-    "application_instance.cc",
-    "application_instance.h",
     "application_loader.h",
     "application_manager.cc",
     "application_manager.h",
     "capability_filter.cc",
     "capability_filter.h",
-    "connect_to_application_params.cc",
-    "connect_to_application_params.h",
+    "connect_params.cc",
+    "connect_params.h",
     "connect_util.cc",
     "connect_util.h",
-    "data_pipe_peek.cc",
-    "data_pipe_peek.h",
-    "fetcher.cc",
-    "fetcher.h",
     "identity.cc",
     "identity.h",
     "native_runner.h",
-    "package_manager.h",
-    "query_util.cc",
-    "query_util.h",
-    "shell_application_delegate.cc",
-    "shell_application_delegate.h",
-    "shell_application_loader.cc",
-    "shell_application_loader.h",
-    "static_application_loader.cc",
-    "static_application_loader.h",
+    "native_runner_delegate.h",
     "switches.cc",
     "switches.h",
   ]
 
-  public_deps = [
+  deps = [
     "//base",
+    "//base/third_party/dynamic_annotations",
     "//mojo/common",
     "//mojo/public/cpp/bindings",
-    "//mojo/services/network/public/interfaces",
-    "//mojo/services/updater",
-    "//mojo/shell/public/interfaces",
-    "//url",
-  ]
-  deps = [
-    "//base/third_party/dynamic_annotations",
-    "//crypto:crypto",
-    "//mojo/environment:chromium",
+    "//mojo/services/package_manager/public/interfaces",
     "//mojo/shell/public/cpp:sources",
+    "//mojo/shell/public/interfaces",
     "//mojo/util:filename_util",
-    "//third_party/mojo/src/mojo/edk/system",
     "//url",
   ]
-}
 
-source_set("test_support") {
-  testonly = true
-  sources = [
-    "capability_filter_test.cc",
-    "capability_filter_test.h",
-    "test_package_manager.cc",
-    "test_package_manager.h",
+  public_deps = [
+    # ApplicationManager exposes and uses PackageManager types in its header.
+    "//mojo/services/package_manager:lib",
   ]
 
-  deps = [
-    ":shell",
-    ":test_bindings",
-    "//mojo/shell/public/cpp",
-    "//mojo/shell/public/interfaces",
-    "//testing/gtest",
-  ]
-}
-
-test("mojo_shell_unittests") {
-  sources = [
-    "application_manager_unittest.cc",
-    "capability_filter_unittest.cc",
-    "data_pipe_peek_unittest.cc",
-    "fetcher/about_fetcher_unittest.cc",
-    "fetcher/data_fetcher_unittest.cc",
-    "fetcher/network_fetcher_unittest.cc",
-    "fetcher/url_resolver_unittest.cc",
-    "query_util_unittest.cc",
-  ]
-
-  deps = [
-    ":shell",
-    ":test_bindings",
-    ":test_support",
-    "//base",
-    "//mojo/edk/system:test_utils",
-    "//mojo/public/cpp/system",
-    "//mojo/shell/fetcher",
-    "//mojo/shell/package_manager",
-    "//mojo/shell/public/cpp",
-    "//mojo/util:filename_util",
-    "//testing/gtest",
-    "//third_party/mojo/src/mojo/edk/test:run_all_unittests",
-    "//url",
-  ]
-}
-
-mojom("test_bindings") {
-  sources = [
-    "application_manager_apptests.mojom",
-    "capability_filter_unittest.mojom",
-    "test.mojom",
-  ]
-}
-
-mojo_native_application("apptests") {
-  output_name = "mojo_shell_apptests"
-  testonly = true
-
-  sources = [
-    "application_manager_apptest.cc",
-  ]
-
-  deps = [
-    ":test_bindings",
-    "//base",
-    "//base/test:test_config",
-    "//mojo/common:common_base",
-    "//mojo/converters/network",
-    "//mojo/shell/public/cpp:sources",
-    "//mojo/shell/public/cpp:test_support",
-    "//mojo/shell/public/interfaces",
-  ]
-
-  data_deps = [
-    ":application_manager_apptest_driver",
-    ":application_manager_apptest_target",
-  ]
-}
-
-executable("application_manager_apptest_driver") {
-  testonly = true
-
-  sources = [
-    "application_manager_apptest_driver.cc",
-  ]
-
-  deps = [
-    ":test_bindings",
-    "//base",
-    "//base:base_static",
-    "//build/config/sanitizers:deps",
-    "//mojo/common:common_base",
-    "//mojo/converters/network",
-    "//mojo/runner:init",
-    "//mojo/runner/child:test_native_main",
-    "//mojo/shell/public/cpp",
-    "//mojo/shell/public/interfaces",
-    "//third_party/mojo/src/mojo/edk/system",
-  ]
-}
-
-executable("application_manager_apptest_target") {
-  testonly = true
-
-  sources = [
-    "application_manager_apptest_target.cc",
-  ]
-
-  deps = [
-    ":test_bindings",
-    "//base",
-    "//build/config/sanitizers:deps",
-    "//mojo/common:common_base",
-    "//mojo/converters/network",
-    "//mojo/runner/child:test_native_main",
-    "//mojo/shell/public/cpp",
-  ]
+  # For mojo/shell/application_loader.h
+  allow_circular_includes_from = [ "//mojo/services/package_manager:lib" ]
 }

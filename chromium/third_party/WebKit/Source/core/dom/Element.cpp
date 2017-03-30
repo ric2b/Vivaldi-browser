@@ -34,7 +34,6 @@
 #include "bindings/core/v8/V8PerContextData.h"
 #include "core/CSSValueKeywords.h"
 #include "core/SVGNames.h"
-#include "core/XLinkNames.h"
 #include "core/XMLNames.h"
 #include "core/animation/AnimationTimeline.h"
 #include "core/animation/css/CSSAnimations.h"
@@ -44,9 +43,10 @@
 #include "core/css/PropertySetCSSStyleDeclaration.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/parser/CSSParser.h"
+#include "core/css/resolver/SelectorFilterParentScope.h"
 #include "core/css/resolver/StyleResolver.h"
-#include "core/css/resolver/StyleResolverParentScope.h"
 #include "core/css/resolver/StyleResolverStats.h"
+#include "core/css/resolver/StyleSharingDepthScope.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/Attr.h"
 #include "core/dom/CSSSelectorWatch.h"
@@ -108,6 +108,7 @@
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/layout/LayoutTextFragment.h"
 #include "core/layout/LayoutView.h"
+#include "core/layout/api/LayoutBoxItem.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/FocusController.h"
@@ -118,11 +119,13 @@
 #include "core/page/scrolling/ScrollState.h"
 #include "core/page/scrolling/ScrollStateCallback.h"
 #include "core/paint/PaintLayer.h"
+#include "core/svg/SVGAElement.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGElement.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/UserGestureIndicator.h"
+#include "platform/graphics/CompositorMutableProperties.h"
 #include "platform/scroll/ScrollableArea.h"
 #include "wtf/BitVector.h"
 #include "wtf/HashFunctions.h"
@@ -256,24 +259,9 @@ bool Element::layoutObjectIsFocusable() const
         return canvas->layoutObject() && canvas->layoutObject()->style()->visibility() == VISIBLE;
     }
 
-    // FIXME: These asserts should be in Node::isFocusable, but there are some
-    // callsites like Document::setFocusedElement that would currently fail on
-    // them. See crbug.com/251163
-    if (!layoutObject()) {
-        // We can't just use needsStyleRecalc() because if the node is in a
-        // display:none tree it might say it needs style recalc but the whole
-        // document is actually up to date.
-        // In addition, style cannot be cleared out for non-active documents,
-        // so in that case the childNeedsStyleRecalc check is invalid.
-        ASSERT(!document().isActive() || !document().childNeedsStyleRecalc());
-    }
-
     // FIXME: Even if we are not visible, we might have a child that is visible.
     // Hyatt wants to fix that some day with a "has visible content" flag or the like.
-    if (!layoutObject() || layoutObject()->style()->visibility() != VISIBLE)
-        return false;
-
-    return true;
+    return layoutObject() && layoutObject()->style()->visibility() == VISIBLE;
 }
 
 PassRefPtrWillBeRawPtr<Node> Element::cloneNode(bool deep)
@@ -383,7 +371,7 @@ bool Element::hasAnimations() const
     return elementAnimations && !elementAnimations->isEmpty();
 }
 
-Node::NodeType Element::nodeType() const
+Node::NodeType Element::getNodeType() const
 {
     return ELEMENT_NODE;
 }
@@ -571,22 +559,22 @@ void Element::nativeApplyScroll(ScrollState& scrollState)
     // Handle the scrollingElement separately, as it scrolls the viewport.
     if (this == document().scrollingElement()) {
         FloatSize delta(deltaX, deltaY);
-        if (document().frame()->applyScrollDelta(delta, scrollState.isBeginning()).didScroll()) {
+        if (document().frame()->applyScrollDelta(ScrollByPrecisePixel, delta, scrollState.isBeginning()).didScroll()) {
             scrolled = true;
             scrollState.consumeDeltaNative(scrollState.deltaX(), scrollState.deltaY());
         }
     } else {
         if (!layoutObject())
             return;
-        LayoutBox* curBox = layoutObject()->enclosingBox();
+        LayoutBoxItem curBox = LayoutBoxItem(toLayoutBox(layoutObject())).enclosingBox();
         // FIXME: Native scrollers should only consume the scroll they
         // apply. See crbug.com/457765.
-        if (deltaX && curBox->scroll(ScrollLeft, ScrollByPrecisePixel, deltaX).didScroll) {
+        if (deltaX && curBox.scroll(ScrollLeft, ScrollByPrecisePixel, deltaX).didScroll) {
             scrollState.consumeDeltaNative(scrollState.deltaX(), 0);
             scrolled = true;
         }
 
-        if (deltaY && curBox->scroll(ScrollUp, ScrollByPrecisePixel, deltaY).didScroll) {
+        if (deltaY && curBox.scroll(ScrollUp, ScrollByPrecisePixel, deltaY).didScroll) {
             scrollState.consumeDeltaNative(0, scrollState.deltaY());
             scrolled = true;
         }
@@ -621,42 +609,11 @@ void Element::callApplyScroll(ScrollState& scrollState)
         callback->handleEvent(&scrollState);
 };
 
-static float localZoomForLayoutObject(LayoutObject& layoutObject)
-{
-    // FIXME: This does the wrong thing if two opposing zooms are in effect and canceled each
-    // other out, but the alternative is that we'd have to crawl up the whole layout tree every
-    // time (or store an additional bit in the ComputedStyle to indicate that a zoom was specified).
-    float zoomFactor = 1;
-    if (layoutObject.style()->effectiveZoom() != 1) {
-        // Need to find the nearest enclosing LayoutObject that set up
-        // a differing zoom, and then we divide our result by it to eliminate the zoom.
-        LayoutObject* prev = &layoutObject;
-        for (LayoutObject* curr = prev->parent(); curr; curr = curr->parent()) {
-            if (curr->style()->effectiveZoom() != prev->style()->effectiveZoom()) {
-                zoomFactor = prev->style()->zoom();
-                break;
-            }
-            prev = curr;
-        }
-        if (prev->isLayoutView())
-            zoomFactor = prev->style()->zoom();
-    }
-    return zoomFactor;
-}
-
-static double adjustForLocalZoom(LayoutUnit value, LayoutObject& layoutObject)
-{
-    float zoomFactor = localZoomForLayoutObject(layoutObject);
-    if (zoomFactor == 1)
-        return value.toDouble();
-    return value.toDouble() / zoomFactor;
-}
-
 int Element::offsetLeft()
 {
     document().updateLayoutIgnorePendingStylesheets();
     if (LayoutBoxModelObject* layoutObject = layoutBoxModelObject())
-        return lroundf(adjustForLocalZoom(layoutObject->offsetLeft(), *layoutObject));
+        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetLeft()), layoutObject->styleRef()).round();
     return 0;
 }
 
@@ -664,7 +621,7 @@ int Element::offsetTop()
 {
     document().updateLayoutIgnorePendingStylesheets();
     if (LayoutBoxModelObject* layoutObject = layoutBoxModelObject())
-        return lroundf(adjustForLocalZoom(layoutObject->pixelSnappedOffsetTop(), *layoutObject));
+        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetTop()), layoutObject->styleRef()).round();
     return 0;
 }
 
@@ -672,7 +629,7 @@ int Element::offsetWidth()
 {
     document().updateLayoutIgnorePendingStylesheets();
     if (LayoutBoxModelObject* layoutObject = layoutBoxModelObject())
-        return adjustLayoutUnitForAbsoluteZoom(layoutObject->pixelSnappedOffsetWidth(), *layoutObject).round();
+        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetWidth()), layoutObject->styleRef()).round();
     return 0;
 }
 
@@ -680,7 +637,7 @@ int Element::offsetHeight()
 {
     document().updateLayoutIgnorePendingStylesheets();
     if (LayoutBoxModelObject* layoutObject = layoutBoxModelObject())
-        return adjustLayoutUnitForAbsoluteZoom(layoutObject->pixelSnappedOffsetHeight(), *layoutObject).round();
+        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetHeight()), layoutObject->styleRef()).round();
     return 0;
 }
 
@@ -707,7 +664,7 @@ int Element::clientLeft()
     document().updateLayoutIgnorePendingStylesheets();
 
     if (LayoutBox* layoutObject = layoutBox())
-        return adjustLayoutUnitForAbsoluteZoom(roundToInt(layoutObject->clientLeft()), *layoutObject);
+        return adjustLayoutUnitForAbsoluteZoom(layoutObject->clientLeft(), layoutObject->styleRef()).round();
     return 0;
 }
 
@@ -716,7 +673,7 @@ int Element::clientTop()
     document().updateLayoutIgnorePendingStylesheets();
 
     if (LayoutBox* layoutObject = layoutBox())
-        return adjustLayoutUnitForAbsoluteZoom(roundToInt(layoutObject->clientTop()), *layoutObject);
+        return adjustLayoutUnitForAbsoluteZoom(layoutObject->clientTop(), layoutObject->styleRef()).round();
     return 0;
 }
 
@@ -731,13 +688,13 @@ int Element::clientWidth()
         || (inQuirksMode && isHTMLElement() && document().body() == this)) {
         if (LayoutView* layoutView = document().layoutView()) {
             if (document().page()->settings().forceZeroLayoutHeight())
-                return adjustLayoutUnitForAbsoluteZoom(layoutView->overflowClipRect(LayoutPoint()).width(), *layoutView);
-            return adjustLayoutUnitForAbsoluteZoom(layoutView->layoutSize().width(), *layoutView);
+                return adjustLayoutUnitForAbsoluteZoom(layoutView->overflowClipRect(LayoutPoint()).width(), layoutView->styleRef()).round();
+            return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutView->layoutSize().width()), layoutView->styleRef()).round();
         }
     }
 
     if (LayoutBox* layoutObject = layoutBox())
-        return adjustLayoutUnitForAbsoluteZoom(layoutObject->pixelSnappedClientWidth(), *layoutObject).round();
+        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedClientWidth()), layoutObject->styleRef()).round();
     return 0;
 }
 
@@ -753,13 +710,13 @@ int Element::clientHeight()
         || (inQuirksMode && isHTMLElement() && document().body() == this)) {
         if (LayoutView* layoutView = document().layoutView()) {
             if (document().page()->settings().forceZeroLayoutHeight())
-                return adjustLayoutUnitForAbsoluteZoom(layoutView->overflowClipRect(LayoutPoint()).height(), *layoutView);
-            return adjustLayoutUnitForAbsoluteZoom(layoutView->layoutSize().height(), *layoutView);
+                return adjustLayoutUnitForAbsoluteZoom(layoutView->overflowClipRect(LayoutPoint()).height(), layoutView->styleRef()).round();
+            return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutView->layoutSize().height()), layoutView->styleRef()).round();
         }
     }
 
     if (LayoutBox* layoutObject = layoutBox())
-        return adjustLayoutUnitForAbsoluteZoom(layoutObject->pixelSnappedClientHeight(), *layoutObject).round();
+        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedClientHeight()), layoutObject->styleRef()).round();
     return 0;
 }
 
@@ -996,10 +953,10 @@ void Element::decrementCompositorProxiedProperties(uint32_t mutableProperties)
 uint32_t Element::compositorMutableProperties() const
 {
     if (!hasRareData())
-        return WebCompositorMutablePropertyNone;
+        return CompositorMutableProperty::kNone;
     if (CompositorProxiedPropertySet* set = elementRareData()->proxiedPropertyCounts())
         return set->proxiedProperties();
-    return WebCompositorMutablePropertyNone;
+    return CompositorMutableProperty::kNone;
 }
 
 bool Element::hasNonEmptyLayoutSize() const
@@ -1558,7 +1515,7 @@ void Element::attach(const AttachContext& context)
 
     // We've already been through detach when doing an attach, but we might
     // need to clear any state that's been added since then.
-    if (hasRareData() && styleChangeType() == NeedsReattachStyleChange) {
+    if (hasRareData() && getStyleChangeType() == NeedsReattachStyleChange) {
         ElementRareData* data = elementRareData();
         data->clearComputedStyle();
     }
@@ -1575,7 +1532,8 @@ void Element::attach(const AttachContext& context)
         }
     }
 
-    StyleResolverParentScope parentScope(*this);
+    SelectorFilterParentScope filterScope(*this);
+    StyleSharingDepthScope sharingScope(*this);
 
     createPseudoElementIfNeeded(BEFORE);
 
@@ -1636,7 +1594,8 @@ void Element::detach(const AttachContext& context)
         document().userActionElements().didDetach(*this);
     }
 
-    document().styleEngine().styleInvalidator().clearInvalidation(*this);
+    if (context.clearInvalidation)
+        document().styleEngine().styleInvalidator().clearInvalidation(*this);
 
     if (svgFilterNeedsLayerUpdate())
         document().unscheduleSVGFilterLayerUpdateHack(*this);
@@ -1707,7 +1666,6 @@ PassRefPtr<ComputedStyle> Element::styleForLayoutObject()
             style->setHasInlineTransform(inlineStyle->hasProperty(CSSPropertyTransform));
     }
 
-    document().didRecalculateStyleForElement();
     return style.release();
 }
 
@@ -1744,7 +1702,8 @@ void Element::recalcStyle(StyleRecalcChange change, Text* nextTextSibling)
 
     // If we reattached we don't need to recalc the style of our descendants anymore.
     if ((change >= UpdatePseudoElements && change < Reattach) || childNeedsStyleRecalc()) {
-        StyleResolverParentScope parentScope(*this);
+        SelectorFilterParentScope filterScope(*this);
+        StyleSharingDepthScope sharingScope(*this);
 
         updatePseudoElement(BEFORE, change);
 
@@ -1788,9 +1747,9 @@ StyleRecalcChange Element::recalcOwnStyle(StyleRecalcChange change)
 
     StyleRecalcChange localChange = ComputedStyle::stylePropagationDiff(oldStyle.get(), newStyle.get());
     if (localChange == NoChange) {
-        INCREMENT_STYLE_STATS_COUNTER(*document().styleResolver(), stylesUnchanged, 1);
+        INCREMENT_STYLE_STATS_COUNTER(document().styleEngine(), stylesUnchanged, 1);
     } else {
-        INCREMENT_STYLE_STATS_COUNTER(*document().styleResolver(), stylesChanged, 1);
+        INCREMENT_STYLE_STATS_COUNTER(document().styleEngine(), stylesChanged, 1);
     }
 
     if (localChange == Reattach) {
@@ -1820,7 +1779,7 @@ StyleRecalcChange Element::recalcOwnStyle(StyleRecalcChange change)
         }
     }
 
-    if (styleChangeType() >= SubtreeStyleChange)
+    if (getStyleChangeType() >= SubtreeStyleChange)
         return Force;
 
     if (change > Inherit || localChange > Inherit)
@@ -1901,7 +1860,7 @@ void Element::clearAnimationStyleChange()
 
 void Element::setNeedsAnimationStyleRecalc()
 {
-    if (styleChangeType() != NoStyleChange)
+    if (getStyleChangeType() != NoStyleChange)
         return;
 
     setNeedsStyleRecalc(LocalStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::Animation));
@@ -1954,6 +1913,30 @@ PassRefPtrWillBeRawPtr<ShadowRoot> Element::attachShadow(const ScriptState* scri
     ASSERT(RuntimeEnabledFeatures::shadowDOMV1Enabled());
 
     OriginsUsingFeatures::countMainWorldOnly(scriptState, document(), OriginsUsingFeatures::Feature::ElementAttachShadow);
+
+    const AtomicString& tagName = localName();
+    bool tagNameIsSupported = isCustomElement()
+        || tagName == HTMLNames::articleTag
+        || tagName == HTMLNames::asideTag
+        || tagName == HTMLNames::blockquoteTag
+        || tagName == HTMLNames::bodyTag
+        || tagName == HTMLNames::divTag
+        || tagName == HTMLNames::footerTag
+        || tagName == HTMLNames::h1Tag
+        || tagName == HTMLNames::h2Tag
+        || tagName == HTMLNames::h3Tag
+        || tagName == HTMLNames::h4Tag
+        || tagName == HTMLNames::h5Tag
+        || tagName == HTMLNames::h6Tag
+        || tagName == HTMLNames::headerTag
+        || tagName == HTMLNames::navTag
+        || tagName == HTMLNames::pTag
+        || tagName == HTMLNames::sectionTag
+        || tagName == HTMLNames::spanTag;
+    if (!tagNameIsSupported) {
+        exceptionState.throwDOMException(NotSupportedError, "This element does not support attachShadow");
+        return nullptr;
+    }
 
     if (shadowRootInitDict.hasMode() && shadowRoot()) {
         exceptionState.throwDOMException(InvalidStateError, "Shadow root cannot be created on a host which already hosts a shadow tree.");
@@ -2379,9 +2362,9 @@ void Element::focus(const FocusParams& params)
             return;
 
         // Slide the focus to its inner node.
-        Element* next = document().page()->focusController().findFocusableElement(WebFocusTypeForward, *this);
-        if (next && containsIncludingShadowDOM(next)) {
-            next->focus(FocusParams(SelectionBehaviorOnFocus::Reset, WebFocusTypeForward, nullptr));
+        Element* found = document().page()->focusController().findFocusableElementInShadowHost(*this);
+        if (found && containsIncludingShadowDOM(found)) {
+            found->focus(FocusParams(SelectionBehaviorOnFocus::Reset, WebFocusTypeForward, nullptr));
             return;
         }
     }
@@ -2443,7 +2426,8 @@ bool Element::supportsFocus() const
     // But supportsFocus must return true when the element is editable, or else
     // it won't be focusable. Furthermore, supportsFocus cannot just return true
     // always or else tabIndex() will change for all HTML elements.
-    return hasElementFlag(TabIndexWasSetExplicitly) || (hasEditableStyle() && parentNode() && !parentNode()->hasEditableStyle())
+    return hasElementFlag(TabIndexWasSetExplicitly)
+        || isRootEditableElement()
         || (isShadowHost(this) && authorShadowRoot() && authorShadowRoot()->delegatesFocus())
         || supportsSpatialNavigationFocus();
 }
@@ -2472,6 +2456,9 @@ bool Element::supportsSpatialNavigationFocus() const
 
 bool Element::isFocusable() const
 {
+    // Style cannot be cleared out for non-active documents, so in that case the
+    // needsLayoutTreeUpdateForNode check is invalid.
+    ASSERT(!document().isActive() || !document().needsLayoutTreeUpdateForNode(*this));
     return inDocument() && supportsFocus() && !isInert() && layoutObjectIsFocusable();
 }
 
@@ -2951,7 +2938,7 @@ KURL Element::hrefURL() const
     if (isHTMLAnchorElement(*this) || isHTMLAreaElement(*this) || isHTMLLinkElement(*this))
         return getURLAttribute(hrefAttr);
     if (isSVGAElement(*this))
-        return getURLAttribute(XLinkNames::hrefAttr);
+        return toSVGAElement(*this).legacyHrefURL(document());
     return KURL();
 }
 
@@ -3580,6 +3567,10 @@ bool Element::supportsStyleSharing() const
     if (this == document().cssTarget())
         return false;
     if (isHTMLElement() && toHTMLElement(this)->hasDirectionAuto())
+        return false;
+    // TODO(kochi): This prevents any slotted elements from sharing styles.
+    // Investigate cases where we share styles to optimize styling performance.
+    if (isChildOfV1ShadowHost())
         return false;
     if (hasAnimations())
         return false;

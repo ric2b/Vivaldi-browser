@@ -1,18 +1,18 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://md-settings/controls/settings_checkbox.html">
+<link rel="import" href="chrome://md-settings/settings_shared_css.html">
 
 <dom-module id="settings-a11y-page">
-  <link rel="import" type="css" href="chrome://md-settings/settings_shared.css">
-  <link rel="import" type="css" href="a11y_page.css">
   <template>
-    <div class="settings-box">
+    <style include="settings-shared"></style>
+    <div class="settings-box row first">
       <span i18n-content="a11yExplanation"></span>
       <a i18n-values="href:a11yLearnMoreUrl" i18n-content="learnMore"
           target="_blank"></a>
     </div>
 
-    <div class="settings-box">
+    <div class="settings-box block">
       <settings-checkbox i18n-values="label:optionsInMenuLabel"
           pref="{{prefs.settings.a11y.enable_menu}}">
       </settings-checkbox>
@@ -39,22 +39,23 @@
           pref="{{prefs.settings.a11y.autoclick}}">
       </settings-checkbox>
 
-      <div class="autoclick-delay-label"
-          hidden$="[[!prefs.settings.a11y.autoclick]]">
-        <span i18n-content="delayBeforeClickLabel"></span>
-        <select id="autoclickDropdown"
-            value="{{prefs.settings.a11y.autoclick_delay_ms::change}}">
-          <option value="200" i18n-content="delayBeforeClickExtremelyShort">
-          </option>
-          <option value="400" i18n-content="delayBeforeClickVeryShort">
-          </option>
-          <option value="600" i18n-content="delayBeforeClickShort">
-          </option>
-          <option value="800" i18n-content="delayBeforeClickLong">
-          </option>
-          <option value="1000" i18n-content="delayBeforeClickVeryLong">
-          </option>
-        </select>
+      <div class="list-frame">
+        <div class="list-item">
+          <div i18n-content="delayBeforeClickLabel"></div>
+          <select
+              value="{{prefs.settings.a11y.autoclick_delay_ms::change}}">
+            <option value="200" i18n-content="delayBeforeClickExtremelyShort">
+            </option>
+            <option value="400" i18n-content="delayBeforeClickVeryShort">
+            </option>
+            <option value="600" i18n-content="delayBeforeClickShort">
+            </option>
+            <option value="800" i18n-content="delayBeforeClickLong">
+            </option>
+            <option value="1000" i18n-content="delayBeforeClickVeryLong">
+            </option>
+          </select>
+        </div>
       </div>
 
       <settings-checkbox pref="{{prefs.settings.a11y.virtual_keyboard}}"

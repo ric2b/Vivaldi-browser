@@ -40,9 +40,6 @@ public class AppBannerManager extends EmptyTabObserver {
     /** Pointer to the native side AppBannerManager. */
     private long mNativePointer;
 
-    /** Tab that the AppBannerView/AppBannerManager is owned by. */
-    private final Tab mTab;
-
     /**
      * Checks if app banners are enabled.
      * @return True if banners are enabled, false otherwise.
@@ -70,19 +67,18 @@ public class AppBannerManager extends EmptyTabObserver {
      */
     public AppBannerManager(Tab tab, Context context) {
         mNativePointer = nativeInit();
-        mTab = tab;
-        updatePointers();
+        updatePointers(tab);
     }
 
     @Override
     public void onWebContentsSwapped(Tab tab, boolean didStartLoad,
             boolean didFinishLoad) {
-        updatePointers();
+        updatePointers(tab);
     }
 
     @Override
     public void onContentChanged(Tab tab) {
-        updatePointers();
+        updatePointers(tab);
     }
 
     /**
@@ -96,8 +92,8 @@ public class AppBannerManager extends EmptyTabObserver {
     /**
      * Updates which WebContents the native AppBannerManager is monitoring.
      */
-    private void updatePointers() {
-        nativeReplaceWebContents(mNativePointer, mTab.getWebContents());
+    private void updatePointers(Tab tab) {
+        nativeReplaceWebContents(mNativePointer, tab.getWebContents());
     }
 
     /**
@@ -137,6 +133,11 @@ public class AppBannerManager extends EmptyTabObserver {
         };
     }
 
+    /** Requests the app banner. This method is called from the DevTools. */
+    public void requestAppBanner() {
+        nativeRequestAppBanner(mNativePointer);
+    }
+
     /** Enables or disables the app banners for testing. */
     @VisibleForTesting
     static void setIsEnabledForTesting(boolean state) {
@@ -173,6 +174,7 @@ public class AppBannerManager extends EmptyTabObserver {
             WebContents webContents);
     private native boolean nativeOnAppDetailsRetrieved(long nativeAppBannerManagerAndroid,
             AppData data, String title, String packageName, String imageUrl);
+    private native void nativeRequestAppBanner(long nativeAppBannerManagerAndroid);
 
     // Testing methods.
     private static native void nativeSetTimeDeltaForTesting(int days);

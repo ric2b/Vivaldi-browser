@@ -273,4 +273,6 @@ const size_t kMaxAppModelIdLength = 64U;
 const char kCourgette[] = "courgette";
 const char kBsdiff[] = "bsdiff";
 
+const char kSetupHistogramAllocatorName[] = "SetupMetrics";
+
 }  // namespace installer

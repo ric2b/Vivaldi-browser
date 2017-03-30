@@ -11,7 +11,9 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 
+#include <iterator>
 #include <map>
+#include <vector>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -256,7 +258,7 @@ TEST_F(SocketTest, SocketpairUnsupported) {
   EXPECT_EQ(errno, EOPNOTSUPP);
   EXPECT_LT(ki_socketpair(AF_INET6, SOCK_STREAM, 0, sv), 0);
   EXPECT_EQ(errno, EOPNOTSUPP);
-  EXPECT_LT(ki_socketpair(AF_UNIX, SOCK_DGRAM, 0, sv), 0);
+  EXPECT_LT(ki_socketpair(AF_UNIX, SOCK_RAW, 0, sv), 0);
   EXPECT_EQ(errno, EPROTOTYPE);
   EXPECT_LT(ki_socketpair(AF_MAX, SOCK_STREAM, 0, sv), 0);
   EXPECT_EQ(errno, EAFNOSUPPORT);
@@ -296,9 +298,15 @@ TEST_F(UnixSocketTest, Socketpair) {
   EXPECT_EQ(0, errno);
   EXPECT_LE(0, sv_[0]);
   EXPECT_LE(0, sv_[1]);
+
+  errno = 0;
+  EXPECT_EQ(0, ki_socketpair(AF_UNIX, SOCK_DGRAM, 0, sv_));
+  EXPECT_EQ(0, errno);
+  EXPECT_LE(0, sv_[0]);
+  EXPECT_LE(0, sv_[1]);
 }
 
-TEST_F(UnixSocketTest, SendRecv) {
+TEST_F(UnixSocketTest, SendRecvStream) {
   char outbuf[256];
   char inbuf[512];
 
@@ -318,7 +326,7 @@ TEST_F(UnixSocketTest, SendRecv) {
 
   EXPECT_EQ(0, memcmp(outbuf, inbuf, sizeof(outbuf)));
 
-  // A reader should block after to read at this point.
+  // A reader should block after trying to read at this point.
   EXPECT_EQ(-1, ki_recv(sv_[1], inbuf, sizeof(inbuf), MSG_DONTWAIT));
   EXPECT_EQ(EAGAIN, errno);
 
@@ -338,7 +346,7 @@ TEST_F(UnixSocketTest, SendRecv) {
   EXPECT_EQ(EAGAIN, errno);
 }
 
-TEST_F(UnixSocketTest, RecvNonBlocking) {
+TEST_F(UnixSocketTest, RecvNonBlockingStream) {
   char buf[128];
 
   EXPECT_EQ(0, ki_socketpair(AF_UNIX, SOCK_STREAM, 0, sv_));
@@ -350,6 +358,208 @@ TEST_F(UnixSocketTest, RecvNonBlocking) {
   EXPECT_EQ(1, ki_poll(&pollfd, 1, 0));
   EXPECT_EQ(POLLOUT, pollfd.revents & POLLOUT);
   EXPECT_NE(POLLIN, pollfd.revents & POLLIN);
+}
+
+TEST_F(UnixSocketTest, SendRecvDgram) {
+  char outbuf1[256];
+  char outbuf2[128];
+  char inbuf[512];
+
+  memset(outbuf1, 0xA4, sizeof(outbuf1));
+  memset(outbuf2, 0xA5, sizeof(outbuf2));
+  memset(inbuf, 0x3C, sizeof(inbuf));
+
+  EXPECT_EQ(0, ki_socketpair(AF_UNIX, SOCK_DGRAM, 0, sv_));
+
+  int len1 = ki_send(sv_[0], outbuf1, sizeof(outbuf1), /* flags */ 0);
+  EXPECT_EQ(sizeof(outbuf1), len1);
+
+  // The buffers should be different.
+  EXPECT_NE(0, memcmp(outbuf1, inbuf, sizeof(outbuf1)));
+
+  int len2 = ki_send(sv_[0], outbuf2, sizeof(outbuf2), /* flags */ 0);
+  EXPECT_EQ(sizeof(outbuf2), len2);
+
+  // Make sure the datagram boundaries are respected.
+  len1 = ki_recv(sv_[1], inbuf, sizeof(inbuf), /* flags */ 0);
+  EXPECT_EQ(sizeof(outbuf1), len1);
+  EXPECT_EQ(0, memcmp(outbuf1, inbuf, sizeof(outbuf1)));
+
+  len2 = ki_recv(sv_[1], inbuf, sizeof(inbuf), /* flags */ 0);
+  EXPECT_EQ(sizeof(outbuf2), len2);
+  EXPECT_EQ(0, memcmp(outbuf2, inbuf, sizeof(outbuf2)));
+
+  // A reader should block after trying to read at this point.
+  EXPECT_EQ(-1, ki_recv(sv_[1], inbuf, sizeof(inbuf), MSG_DONTWAIT));
+  EXPECT_EQ(EAGAIN, errno);
+
+  // Send a datagram larger than the recv buffer, and check for overflow.
+  memset(inbuf, 0x3C, sizeof(inbuf));
+  EXPECT_NE(0, memcmp(outbuf1, inbuf, sizeof(outbuf1)));
+  len1 = ki_send(sv_[1], outbuf1, sizeof(outbuf1), /* flags */ 0);
+  EXPECT_EQ(sizeof(outbuf1), len1);
+
+  len2 = ki_recv(sv_[0], inbuf, 16, /* flags */ 0);
+  EXPECT_EQ(16, len2);
+  EXPECT_EQ(0, memcmp(outbuf1, inbuf, 16));
+  EXPECT_EQ(0x3C, inbuf[16]);
+
+  // Verify that the remainder of the packet was discarded, and there
+  // is nothing left to receive.
+  EXPECT_EQ(-1, ki_recv(sv_[0], inbuf, sizeof(inbuf), MSG_DONTWAIT));
+  EXPECT_EQ(EAGAIN, errno);
+}
+
+TEST_F(UnixSocketTest, RecvNonBlockingDgram) {
+  char buf[128];
+
+  EXPECT_EQ(0, ki_socketpair(AF_UNIX, SOCK_DGRAM, 0, sv_));
+
+  EXPECT_EQ(-1, ki_recv(sv_[0], buf, sizeof(buf), MSG_DONTWAIT));
+  EXPECT_EQ(EAGAIN, errno);
+
+  struct pollfd pollfd = {sv_[0], POLLIN | POLLOUT, 0};
+  EXPECT_EQ(1, ki_poll(&pollfd, 1, 0));
+  EXPECT_EQ(POLLOUT, pollfd.revents & POLLOUT);
+  EXPECT_NE(POLLIN, pollfd.revents & POLLIN);
+}
+
+namespace {
+using std::vector;
+using std::min;
+using std::advance;
+using std::distance;
+
+typedef vector<uint8_t> Buffer;
+typedef Buffer::iterator BufferIterator;
+typedef Buffer::const_iterator BufferConstIterator;
+
+const size_t kReceiveBufferSize = 2 * 1024 * 1024;
+const size_t kThreadSendSize = 512 * 1024;
+const size_t kMainSendSize = 1024 * 1024;
+
+const uint8_t kThreadPattern[] = {0xAA, 0x12, 0x55, 0x34, 0xCC, 0x33};
+
+// Exercises the implementation of an AF_UNIX socket. Will read from the socket
+// into read_buf until EOF (or read_buf is full) whenever the socket is readable
+// and write send_size number of bytes into the socket according to pattern.
+// The test UnixSocketMultithreadedTest.SendRecv uses this function to quickly
+// push about 1 Meg of data between two threads over a socketpair.
+void ReadWriteSocket(int fd,
+                     const uint8_t* pattern,
+                     const size_t pattern_size,
+                     const size_t send_size,
+                     Buffer* read_vector) {
+  Buffer send;
+  while (send.size() != send_size) {
+    size_t s = min(pattern_size, send_size - send.size());
+    send.insert(send.end(), &pattern[0], &pattern[s]);
+  }
+
+  bool read_complete = false, write_complete = false;
+
+  size_t received_count = 0;
+  read_vector->resize(kReceiveBufferSize);
+
+  BufferConstIterator send_iterator(send.begin());
+  BufferConstIterator send_end(send.end());
+  while (!read_complete || !write_complete) {
+    fd_set rfd;
+    FD_ZERO(&rfd);
+    if (!read_complete) {
+      FD_SET(fd, &rfd);
+    }
+    fd_set wfd;
+    FD_ZERO(&wfd);
+    if (!write_complete) {
+      FD_SET(fd, &wfd);
+    }
+
+    ASSERT_LT(0, select(fd + 1, &rfd, &wfd, NULL, NULL));
+    if (!FD_ISSET(fd, &rfd) && !FD_ISSET(fd, &wfd)) {
+      FAIL() << "Select returned with neither readable nor writable fd.";
+    }
+
+    if (!read_complete && FD_ISSET(fd, &rfd)) {
+      read_vector->resize(read_vector->size() + kReceiveBufferSize);
+      ssize_t len =
+          ki_recv(fd, read_vector->data() + received_count,
+                  read_vector->size() - received_count, /* flags */ 0);
+      ASSERT_LE(0, len) << "Read should succeed";
+      if (len == 0) {
+        read_complete = true;
+      }
+      received_count += len;
+      read_vector->resize(received_count);
+    }
+    if (!write_complete && FD_ISSET(fd, &wfd)) {
+      ssize_t len = ki_send(fd, &(*send_iterator),
+                            distance(send_iterator, send_end), /* flags */ 0);
+      ASSERT_LE(0, len) << "Write should succeed";
+      advance(send_iterator, len);
+      if (send_iterator == send_end) {
+        EXPECT_EQ(0, ki_shutdown(fd, SHUT_WR));
+        write_complete = true;
+      }
+    }
+  }
+}
+
+class UnixSocketMultithreadedTest : public UnixSocketTest {
+ public:
+  void SetUp() {
+    UnixSocketTest::SetUp();
+    EXPECT_EQ(0, ki_socketpair(AF_UNIX, SOCK_STREAM, 0, sv_));
+  }
+
+  void TearDown() { UnixSocketTest::TearDown(); }
+
+  pthread_t CreateThread() {
+    pthread_t id;
+    EXPECT_EQ(0, pthread_create(&id, NULL, ThreadThunk, this));
+    return id;
+  }
+
+ private:
+  static void* ThreadThunk(void* ptr) {
+    return static_cast<UnixSocketMultithreadedTest*>(ptr)->ThreadEntry();
+  }
+
+  void* ThreadEntry() {
+    int fd = sv_[1];
+
+    ReadWriteSocket(fd, kThreadPattern, sizeof(kThreadPattern), kThreadSendSize,
+                    &thread_buffer_);
+    return NULL;
+  }
+
+ protected:
+  Buffer thread_buffer_;
+};
+
+}  // namespace
+
+TEST_F(UnixSocketMultithreadedTest, SendRecv) {
+  pthread_t thread = CreateThread();
+
+  uint8_t pattern[] = {0xA5, 0x00, 0xC3, 0xFF};
+  size_t pattern_size = sizeof(pattern);
+  Buffer main_read_buf;
+
+  ReadWriteSocket(sv_[0], pattern, pattern_size, kMainSendSize, &main_read_buf);
+
+  pthread_join(thread, NULL);
+
+  EXPECT_EQ(kMainSendSize, thread_buffer_.size());
+  EXPECT_EQ(kThreadSendSize, main_read_buf.size());
+  for (size_t i = 0; i != thread_buffer_.size(); ++i) {
+    ASSERT_EQ(pattern[i % pattern_size], thread_buffer_[i])
+        << "Invalid result at position " << i << " in data received by thread";
+  }
+  for (size_t i = 0; i != main_read_buf.size(); ++i) {
+    ASSERT_EQ(kThreadPattern[i % sizeof(kThreadPattern)], main_read_buf[i])
+        << "Invalid result at position " << i << " in data received by main";
+  }
 }
 
 TEST(SocketUtilityFunctions, Htonl) {

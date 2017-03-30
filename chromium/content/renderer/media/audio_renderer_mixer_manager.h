@@ -80,6 +80,7 @@ class CONTENT_EXPORT AudioRendererMixerManager {
              const media::AudioParameters& params,
              const std::string& device_id,
              const url::Origin& security_origin);
+    MixerKey(const MixerKey& other);
     int source_render_frame_id;
     media::AudioParameters params;
     std::string device_id;
@@ -120,6 +121,14 @@ class CONTENT_EXPORT AudioRendererMixerManager {
 
   // Overrides the AudioRendererSink implementation for unit testing.
   void SetAudioRendererSinkForTesting(media::AudioRendererSink* sink);
+
+  // A helper to get hardware output parameters in the absence of
+  // AudioOutputDevice.
+  static media::AudioParameters GetHardwareOutputParams(
+      int render_frame_id,
+      int session_id,
+      const std::string& device_id,
+      const url::Origin& security_origin);
 
   // Active mixers.
   AudioRendererMixerMap mixers_;

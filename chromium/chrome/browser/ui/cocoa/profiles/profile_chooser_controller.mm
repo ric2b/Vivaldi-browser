@@ -11,7 +11,6 @@
 #include "base/mac/bundle_locations.h"
 #include "base/macros.h"
 #include "base/metrics/user_metrics.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -42,6 +41,7 @@
 #import "chrome/browser/ui/cocoa/browser_window_utils.h"
 #import "chrome/browser/ui/cocoa/info_bubble_view.h"
 #import "chrome/browser/ui/cocoa/info_bubble_window.h"
+#include "chrome/browser/ui/cocoa/profiles/signin_view_controller_delegate_mac.h"
 #import "chrome/browser/ui/cocoa/profiles/user_manager_mac.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/user_manager.h"
@@ -51,6 +51,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_metrics.h"
@@ -73,6 +74,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/native_theme/common_theme.h"
@@ -100,7 +102,6 @@ const CGFloat kFocusRingLineWidth = 2;
 
 // Fixed size for embedded sign in pages as defined in Gaia.
 const CGFloat kFixedGaiaViewWidth = 360;
-const CGFloat kFixedGaiaViewHeight = 440;
 
 // Fixed size for the account removal view.
 const CGFloat kFixedAccountRemovalViewWidth = 280;
@@ -1057,12 +1058,20 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   [self postActionPerformed:ProfileMetrics::PROFILE_DESKTOP_MENU_LOCK];
 }
 
+- (void)showSigninUIForMode:(profiles::BubbleViewMode)mode {
+  if (SigninViewController::ShouldShowModalSigninForMode(mode)) {
+    browser_->ShowModalSigninWindow(mode, accessPoint_);
+  } else {
+    [self initMenuContentsWithView:mode];
+  }
+}
+
 - (IBAction)showInlineSigninPage:(id)sender {
-  [self initMenuContentsWithView:profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN];
+  [self showSigninUIForMode:profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN];
 }
 
 - (IBAction)addAccount:(id)sender {
-  [self initMenuContentsWithView:profiles::BUBBLE_VIEW_MODE_GAIA_ADD_ACCOUNT];
+  [self showSigninUIForMode:profiles::BUBBLE_VIEW_MODE_GAIA_ADD_ACCOUNT];
   [self postActionPerformed:ProfileMetrics::PROFILE_DESKTOP_MENU_ADD_ACCT];
 }
 
@@ -1095,7 +1104,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
 
 - (IBAction)showAccountReauthenticationView:(id)sender {
   DCHECK(!isGuestSession_);
-  [self initMenuContentsWithView:profiles::BUBBLE_VIEW_MODE_GAIA_REAUTH];
+  [self showSigninUIForMode:profiles::BUBBLE_VIEW_MODE_GAIA_REAUTH];
 }
 
 - (IBAction)removeAccount:(id)sender {
@@ -1129,7 +1138,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
 - (IBAction)configureSyncSettings:(id)sender {
   tutorialMode_ = profiles::TUTORIAL_MODE_NONE;
   LoginUIServiceFactory::GetForProfile(browser_->profile())->
-      SyncConfirmationUIClosed(true);
+      SyncConfirmationUIClosed(LoginUIService::CONFIGURE_SYNC_FIRST);
   ProfileMetrics::LogProfileNewAvatarMenuSignin(
       ProfileMetrics::PROFILE_AVATAR_MENU_SIGNIN_SETTINGS);
 }
@@ -1137,7 +1146,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
 - (IBAction)syncSettingsConfirmed:(id)sender {
   tutorialMode_ = profiles::TUTORIAL_MODE_NONE;
   LoginUIServiceFactory::GetForProfile(browser_->profile())->
-      SyncConfirmationUIClosed(false);
+      SyncConfirmationUIClosed(LoginUIService::SYNC_WITH_DEFAULT_SETTINGS);
   ProfileMetrics::LogProfileNewAvatarMenuSignin(
       ProfileMetrics::PROFILE_AVATAR_MENU_SIGNIN_OK);
   [self initMenuContentsWithView:profiles::BUBBLE_VIEW_MODE_PROFILE_CHOOSER];
@@ -1176,7 +1185,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
 - (void)windowWillClose:(NSNotification*)notification {
   if (tutorialMode_ == profiles::TUTORIAL_MODE_CONFIRM_SIGNIN) {
     LoginUIServiceFactory::GetForProfile(browser_->profile())->
-        SyncConfirmationUIClosed(false);
+        SyncConfirmationUIClosed(LoginUIService::SYNC_WITH_DEFAULT_SETTINGS);
   }
 
   [super windowWillClose:notification];
@@ -2081,26 +2090,16 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
       [[NSView alloc] initWithFrame:NSZeroRect]);
   CGFloat yOffset = 0;
 
-  GURL url;
   int messageId = -1;
   switch (viewMode_) {
     case profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN:
-      url = signin::GetPromoURL(
-          accessPoint_, signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT,
-          false /* auto_close */, true /* is_constrained */);
       messageId = IDS_PROFILES_GAIA_SIGNIN_TITLE;
       break;
     case profiles::BUBBLE_VIEW_MODE_GAIA_ADD_ACCOUNT:
-      url = signin::GetPromoURL(
-          accessPoint_, signin_metrics::Reason::REASON_ADD_SECONDARY_ACCOUNT,
-          false /* auto_close */, true /* is_constrained */);
       messageId = IDS_PROFILES_GAIA_ADD_ACCOUNT_TITLE;
       break;
     case profiles::BUBBLE_VIEW_MODE_GAIA_REAUTH:
       DCHECK(HasAuthError(browser_->profile()));
-      url = signin::GetReauthURL(
-          accessPoint_, signin_metrics::Reason::REASON_REAUTHENTICATION,
-          browser_->profile(), GetAuthErrorAccountId(browser_->profile()));
       messageId = IDS_PROFILES_GAIA_REAUTH_TITLE;
       break;
     default:
@@ -2108,21 +2107,13 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
       break;
   }
 
-  webContents_.reset(content::WebContents::Create(
-      content::WebContents::CreateParams(browser_->profile())));
-
   webContentsDelegate_.reset(new GaiaWebContentsDelegate());
-  webContents_->SetDelegate(webContentsDelegate_.get());
-  webContents_->GetController().LoadURL(url,
-                                        content::Referrer(),
-                                        ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-                                        std::string());
+  webContents_ = SigninViewControllerDelegateMac::CreateGaiaWebContents(
+      webContentsDelegate_.get(), viewMode_, browser_->profile(), accessPoint_);
+
   NSView* webview = webContents_->GetNativeView();
-  [webview setFrameSize:NSMakeSize(kFixedGaiaViewWidth, kFixedGaiaViewHeight)];
+
   [container addSubview:webview];
-  content::RenderWidgetHostView* rwhv = webContents_->GetRenderWidgetHostView();
-  if (rwhv)
-    rwhv->SetBackgroundColor(profiles::kAvatarBubbleGaiaBackgroundColor);
   yOffset = NSMaxY([webview frame]);
 
   // Adds the title card.

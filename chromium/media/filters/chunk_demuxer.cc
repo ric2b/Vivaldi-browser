@@ -160,11 +160,12 @@ size_t ChunkDemuxerStream::GetBufferedSize() const {
   return stream_->GetBufferedSize();
 }
 
-void ChunkDemuxerStream::OnNewMediaSegment(DecodeTimestamp start_timestamp) {
-  DVLOG(2) << "ChunkDemuxerStream::OnNewMediaSegment("
+void ChunkDemuxerStream::OnStartOfCodedFrameGroup(
+    DecodeTimestamp start_timestamp) {
+  DVLOG(2) << "ChunkDemuxerStream::OnStartOfCodedFrameGroup("
            << start_timestamp.InSecondsF() << ")";
   base::AutoLock auto_lock(lock_);
-  stream_->OnNewMediaSegment(start_timestamp);
+  stream_->OnStartOfCodedFrameGroup(start_timestamp);
 }
 
 bool ChunkDemuxerStream::UpdateAudioConfig(
@@ -295,7 +296,7 @@ void ChunkDemuxerStream::CompletePendingReadIfPossible_Locked() {
   lock_.AssertAcquired();
   DCHECK(!read_cb_.is_null());
 
-  DemuxerStream::Status status;
+  DemuxerStream::Status status = DemuxerStream::kAborted;
   scoped_refptr<StreamParserBuffer> buffer;
 
   switch (state_) {

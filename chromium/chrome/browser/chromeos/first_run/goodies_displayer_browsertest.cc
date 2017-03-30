@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
-#include "base/prefs/pref_service.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/first_run/goodies_displayer.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -13,6 +12,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/prefs/pref_service.h"
 
 namespace chromeos {
 
@@ -30,8 +30,8 @@ class GoodiesDisplayerBrowserTest : public InProcessBrowserTest {
   Browser* CreateBrowserAndDisplayer(int delta_days) {
     // Create a new browser and wait for completion.
     ui_test_utils::BrowserAddedObserver browser_added_observer;
-    Browser* browser = new Browser(Browser::CreateParams(
-        ProfileManager::GetActiveUserProfile(), chrome::GetActiveDesktop()));
+    Browser* browser = new Browser(
+        Browser::CreateParams(ProfileManager::GetActiveUserProfile()));
     browser_added_observer.WaitForSingleNewBrowser();
 
     // Set up Goodies Displayer and set fake age of device.
@@ -109,8 +109,7 @@ IN_PROC_BROWSER_TEST_F(GoodiesDisplayerBrowserTest, DisplayGoodies) {
 
   // Shouldn't show Goodies tab in incognito mode.
   Browser* incognito_browser = new Browser(
-      Browser::CreateParams(browser->profile()->GetOffTheRecordProfile(),
-                            chrome::GetActiveDesktop()));
+      Browser::CreateParams(browser->profile()->GetOffTheRecordProfile()));
   ASSERT_EQ(2u, chrome::GetTotalBrowserCount());
   AddBlankTabAndShow(incognito_browser);
   ExpectTabCounts(incognito_browser, 1, 0);

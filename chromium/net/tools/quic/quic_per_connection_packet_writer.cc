@@ -6,8 +6,6 @@
 
 namespace net {
 
-namespace tools {
-
 QuicPerConnectionPacketWriter::QuicPerConnectionPacketWriter(
     QuicPacketWriter* shared_writer)
     : shared_writer_(shared_writer) {}
@@ -17,10 +15,11 @@ QuicPerConnectionPacketWriter::~QuicPerConnectionPacketWriter() {}
 WriteResult QuicPerConnectionPacketWriter::WritePacket(
     const char* buffer,
     size_t buf_len,
-    const IPAddressNumber& self_address,
-    const IPEndPoint& peer_address) {
+    const IPAddress& self_address,
+    const IPEndPoint& peer_address,
+    PerPacketOptions* options) {
   return shared_writer_->WritePacket(buffer, buf_len, self_address,
-                                     peer_address);
+                                     peer_address, options);
 }
 
 bool QuicPerConnectionPacketWriter::IsWriteBlockedDataBuffered() const {
@@ -39,7 +38,5 @@ QuicByteCount QuicPerConnectionPacketWriter::GetMaxPacketSize(
     const IPEndPoint& peer_address) const {
   return shared_writer_->GetMaxPacketSize(peer_address);
 }
-
-}  // namespace tools
 
 }  // namespace net

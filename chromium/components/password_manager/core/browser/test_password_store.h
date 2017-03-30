@@ -45,18 +45,22 @@ class TestPasswordStore : public PasswordStore {
   PasswordStoreChangeList RemoveLoginImpl(
       const autofill::PasswordForm& form) override;
   ScopedVector<autofill::PasswordForm> FillMatchingLogins(
-      const autofill::PasswordForm& form,
-      PasswordStore::AuthorizationPromptPolicy prompt_policy) override;
+      const autofill::PasswordForm& form) override;
 
   // Unused portions of PasswordStore interface
   void ReportMetricsImpl(const std::string& sync_username,
                          bool custom_passphrase_sync_enabled) override;
+  PasswordStoreChangeList RemoveLoginsByOriginAndTimeImpl(
+      const url::Origin& origin,
+      base::Time begin,
+      base::Time end) override;
   PasswordStoreChangeList RemoveLoginsCreatedBetweenImpl(
       base::Time begin,
       base::Time end) override;
   PasswordStoreChangeList RemoveLoginsSyncedBetweenImpl(
       base::Time delete_begin,
       base::Time delete_end) override;
+  PasswordStoreChangeList DisableAutoSignInForAllLoginsImpl() override;
   bool RemoveStatisticsCreatedBetweenImpl(base::Time delete_begin,
                                           base::Time delete_end) override;
   bool FillAutofillableLogins(

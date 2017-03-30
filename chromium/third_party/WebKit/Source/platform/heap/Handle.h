@@ -38,6 +38,8 @@
 #include "platform/heap/ThreadState.h"
 #include "platform/heap/TraceTraits.h"
 #include "platform/heap/Visitor.h"
+#include "wtf/Allocator.h"
+#include "wtf/Atomics.h"
 #include "wtf/Functional.h"
 #include "wtf/HashFunctions.h"
 #include "wtf/Locker.h"
@@ -72,6 +74,7 @@ enum CrossThreadnessPersistentConfiguration {
 
 template<typename T, WeaknessPersistentConfiguration weaknessConfiguration, CrossThreadnessPersistentConfiguration crossThreadnessConfiguration>
 class PersistentBase {
+    USING_FAST_MALLOC(PersistentBase);
     IS_PERSISTENT_REFERENCE_TYPE();
 public:
     PersistentBase() : m_raw(nullptr)
@@ -208,11 +211,17 @@ public:
     }
 #endif
 
+protected:
+    T* atomicGet() { return reinterpret_cast<T*>(acquireLoad(reinterpret_cast<void* volatile*>(&m_raw))); }
+
 private:
     NO_LAZY_SWEEP_SANITIZE_ADDRESS
     void assign(T* ptr)
     {
-        m_raw = ptr;
+        if (crossThreadnessConfiguration == CrossThreadPersistentConfiguration)
+            releaseStore(reinterpret_cast<void* volatile*>(&m_raw), ptr);
+        else
+            m_raw = ptr;
         checkPointer();
         if (m_raw) {
             if (!m_persistentNode)
@@ -434,6 +443,8 @@ public:
     CrossThreadPersistent(const Member<U>& other) : Parent(other) { }
     template<typename U>
     CrossThreadPersistent(const RawPtr<U>& other) : Parent(other.get()) { }
+
+    T* atomicGet() { return Parent::atomicGet(); }
 
     template<typename U>
     CrossThreadPersistent& operator=(U* other)
@@ -701,6 +712,7 @@ public:
 // all Member fields of a live object will be traced marked as live as well.
 template<typename T>
 class Member {
+    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 public:
     Member() : m_raw(nullptr)
     {
@@ -1198,12 +1210,14 @@ template<typename T> PassOwnPtrWillBeRawPtr<T> adoptPtrWillBeNoop(T* ptr) { retu
 
 template<typename T, bool = IsGarbageCollectedType<T>::value>
 class RawPtrOrMemberTrait {
+    STATIC_ONLY(RawPtrOrMemberTrait)
 public:
     using Type = RawPtr<T>;
 };
 
 template<typename T>
 class RawPtrOrMemberTrait<T, true> {
+    STATIC_ONLY(RawPtrOrMemberTrait)
 public:
     using Type = Member<T>;
 };
@@ -1263,7 +1277,8 @@ private:
 //
 //
 template<typename Self>
-class SelfKeepAlive {
+class SelfKeepAlive final {
+    DISALLOW_NEW();
 public:
     SelfKeepAlive()
     {
@@ -1305,6 +1320,16 @@ private:
 // TODO(sof): once wtf/Functional.h is able to work over platform/heap/ types
 // (like CrossThreadWeakPersistent<>), drop the restriction on weak persistent
 // use by function closures (and rename this ad-hoc type.)
+template<typename T>
+class WeakPersistentThisPointer {
+    STACK_ALLOCATED();
+public:
+    explicit WeakPersistentThisPointer(T* value) : m_value(value) { }
+    WeakPersistent<T> value() const { return m_value; }
+private:
+    WeakPersistent<T> m_value;
+};
+
 template<typename T>
 class CrossThreadWeakPersistentThisPointer {
     STACK_ALLOCATED();
@@ -1348,145 +1373,8 @@ public:
 
 namespace WTF {
 
-template <typename T> struct VectorTraits<blink::Member<T>> : VectorTraitsBase<blink::Member<T>> {
-    static const bool needsDestruction = false;
-    static const bool canInitializeWithMemset = true;
-    static const bool canClearUnusedSlotsWithMemset = true;
-    static const bool canMoveWithMemcpy = true;
-};
-
-template <typename T> struct VectorTraits<blink::WeakMember<T>> : VectorTraitsBase<blink::WeakMember<T>> {
-    static const bool needsDestruction = false;
-    static const bool canInitializeWithMemset = true;
-    static const bool canClearUnusedSlotsWithMemset = true;
-    static const bool canMoveWithMemcpy = true;
-};
-
-template <typename T> struct VectorTraits<blink::UntracedMember<T>> : VectorTraitsBase<blink::UntracedMember<T>> {
-    static const bool needsDestruction = false;
-    static const bool canInitializeWithMemset = true;
-    static const bool canClearUnusedSlotsWithMemset = true;
-    static const bool canMoveWithMemcpy = true;
-};
-
-template <typename T> struct VectorTraits<blink::HeapVector<T, 0>> : VectorTraitsBase<blink::HeapVector<T, 0>> {
-    static const bool needsDestruction = false;
-    static const bool canInitializeWithMemset = true;
-    static const bool canClearUnusedSlotsWithMemset = true;
-    static const bool canMoveWithMemcpy = true;
-};
-
-template <typename T> struct VectorTraits<blink::HeapDeque<T, 0>> : VectorTraitsBase<blink::HeapDeque<T, 0>> {
-    static const bool needsDestruction = false;
-    static const bool canInitializeWithMemset = true;
-    static const bool canClearUnusedSlotsWithMemset = true;
-    static const bool canMoveWithMemcpy = true;
-};
-
-template <typename T, size_t inlineCapacity> struct VectorTraits<blink::HeapVector<T, inlineCapacity>> : VectorTraitsBase<blink::HeapVector<T, inlineCapacity>> {
-    static const bool needsDestruction = VectorTraits<T>::needsDestruction;
-    static const bool canInitializeWithMemset = VectorTraits<T>::canInitializeWithMemset;
-    static const bool canClearUnusedSlotsWithMemset = VectorTraits<T>::canClearUnusedSlotsWithMemset;
-    static const bool canMoveWithMemcpy = VectorTraits<T>::canMoveWithMemcpy;
-};
-
-template <typename T, size_t inlineCapacity> struct VectorTraits<blink::HeapDeque<T, inlineCapacity>> : VectorTraitsBase<blink::HeapDeque<T, inlineCapacity>> {
-    static const bool needsDestruction = VectorTraits<T>::needsDestruction;
-    static const bool canInitializeWithMemset = VectorTraits<T>::canInitializeWithMemset;
-    static const bool canClearUnusedSlotsWithMemset = VectorTraits<T>::canClearUnusedSlotsWithMemset;
-    static const bool canMoveWithMemcpy = VectorTraits<T>::canMoveWithMemcpy;
-};
-
-template<typename T> struct HashTraits<blink::Member<T>> : SimpleClassHashTraits<blink::Member<T>> {
-    // FIXME: The distinction between PeekInType and PassInType is there for
-    // the sake of the reference counting handles. When they are gone the two
-    // types can be merged into PassInType.
-    // FIXME: Implement proper const'ness for iterator types. Requires support
-    // in the marking Visitor.
-    using PeekInType = RawPtr<T>;
-    using PassInType = RawPtr<T>;
-    using IteratorGetType = blink::Member<T>*;
-    using IteratorConstGetType = const blink::Member<T>*;
-    using IteratorReferenceType = blink::Member<T>&;
-    using IteratorConstReferenceType = const blink::Member<T>&;
-    static IteratorReferenceType getToReferenceConversion(IteratorGetType x) { return *x; }
-    static IteratorConstReferenceType getToReferenceConstConversion(IteratorConstGetType x) { return *x; }
-    // FIXME: Similarly, there is no need for a distinction between PeekOutType
-    // and PassOutType without reference counting.
-    using PeekOutType = T*;
-    using PassOutType = T*;
-
-    template<typename U>
-    static void store(const U& value, blink::Member<T>& storage) { storage = value; }
-
-    static PeekOutType peek(const blink::Member<T>& value) { return value; }
-    static PassOutType passOut(const blink::Member<T>& value) { return value; }
-};
-
-template<typename T> struct HashTraits<blink::WeakMember<T>> : SimpleClassHashTraits<blink::WeakMember<T>> {
-    static const bool needsDestruction = false;
-    // FIXME: The distinction between PeekInType and PassInType is there for
-    // the sake of the reference counting handles. When they are gone the two
-    // types can be merged into PassInType.
-    // FIXME: Implement proper const'ness for iterator types. Requires support
-    // in the marking Visitor.
-    using PeekInType = RawPtr<T>;
-    using PassInType = RawPtr<T>;
-    using IteratorGetType = blink::WeakMember<T>*;
-    using IteratorConstGetType = const blink::WeakMember<T>*;
-    using IteratorReferenceType = blink::WeakMember<T>&;
-    using IteratorConstReferenceType = const blink::WeakMember<T>&;
-    static IteratorReferenceType getToReferenceConversion(IteratorGetType x) { return *x; }
-    static IteratorConstReferenceType getToReferenceConstConversion(IteratorConstGetType x) { return *x; }
-    // FIXME: Similarly, there is no need for a distinction between PeekOutType
-    // and PassOutType without reference counting.
-    using PeekOutType = T*;
-    using PassOutType = T*;
-
-    template<typename U>
-    static void store(const U& value, blink::WeakMember<T>& storage) { storage = value; }
-
-    static PeekOutType peek(const blink::WeakMember<T>& value) { return value; }
-    static PassOutType passOut(const blink::WeakMember<T>& value) { return value; }
-
-    template<typename VisitorDispatcher>
-    static bool traceInCollection(VisitorDispatcher visitor, blink::WeakMember<T>& weakMember, ShouldWeakPointersBeMarkedStrongly strongify)
-    {
-        if (strongify == WeakPointersActStrong) {
-            visitor->trace(weakMember.get()); // Strongified visit.
-            return false;
-        }
-        return !blink::Heap::isHeapObjectAlive(weakMember);
-    }
-};
-
-template<typename T> struct HashTraits<blink::UntracedMember<T>> : SimpleClassHashTraits<blink::UntracedMember<T>> {
-    static const bool needsDestruction = false;
-    // FIXME: The distinction between PeekInType and PassInType is there for
-    // the sake of the reference counting handles. When they are gone the two
-    // types can be merged into PassInType.
-    // FIXME: Implement proper const'ness for iterator types.
-    using PeekInType = RawPtr<T>;
-    using PassInType = RawPtr<T>;
-    using IteratorGetType = blink::UntracedMember<T>*;
-    using IteratorConstGetType = const blink::UntracedMember<T>*;
-    using IteratorReferenceType = blink::UntracedMember<T>&;
-    using IteratorConstReferenceType = const blink::UntracedMember<T>&;
-    static IteratorReferenceType getToReferenceConversion(IteratorGetType x) { return *x; }
-    static IteratorConstReferenceType getToReferenceConstConversion(IteratorConstGetType x) { return *x; }
-    // FIXME: Similarly, there is no need for a distinction between PeekOutType
-    // and PassOutType without reference counting.
-    using PeekOutType = T*;
-    using PassOutType = T*;
-
-    template<typename U>
-    static void store(const U& value, blink::UntracedMember<T>& storage) { storage = value; }
-
-    static PeekOutType peek(const blink::UntracedMember<T>& value) { return value; }
-    static PassOutType passOut(const blink::UntracedMember<T>& value) { return value; }
-};
-
 template<typename T> struct PtrHash<blink::Member<T>> : PtrHash<T*> {
+    STATIC_ONLY(PtrHash);
     template<typename U>
     static unsigned hash(const U& key) { return PtrHash<T*>::hash(key); }
     static bool equal(T* a, const blink::Member<T>& b) { return a == b; }
@@ -1496,31 +1384,38 @@ template<typename T> struct PtrHash<blink::Member<T>> : PtrHash<T*> {
 };
 
 template<typename T> struct PtrHash<blink::WeakMember<T>> : PtrHash<blink::Member<T>> {
+    STATIC_ONLY(PtrHash);
 };
 
 template<typename T> struct PtrHash<blink::UntracedMember<T>> : PtrHash<blink::Member<T>> {
+    STATIC_ONLY(PtrHash);
 };
 
 // PtrHash is the default hash for hash tables with members.
 template<typename T> struct DefaultHash<blink::Member<T>> {
+    STATIC_ONLY(DefaultHash);
     using Hash = PtrHash<blink::Member<T>>;
 };
 
 template<typename T> struct DefaultHash<blink::WeakMember<T>> {
+    STATIC_ONLY(DefaultHash);
     using Hash = PtrHash<blink::WeakMember<T>>;
 };
 
 template<typename T> struct DefaultHash<blink::UntracedMember<T>> {
+    STATIC_ONLY(DefaultHash);
     using Hash = PtrHash<blink::UntracedMember<T>>;
 };
 
 template<typename T>
 struct NeedsTracing<blink::Member<T>> {
+    STATIC_ONLY(NeedsTracing);
     static const bool value = true;
 };
 
 template<typename T>
 struct IsWeak<blink::WeakMember<T>> {
+    STATIC_ONLY(IsWeak);
     static const bool value = true;
 };
 
@@ -1534,20 +1429,12 @@ template<typename T> inline T* getPtr(const blink::Persistent<T>& p)
     return p.get();
 }
 
-template<typename T, size_t inlineCapacity>
-struct NeedsTracing<ListHashSetNode<T, blink::HeapListHashSetAllocator<T, inlineCapacity>> *> {
-    static_assert(sizeof(T), "T must be fully defined");
-    // All heap allocated node pointers need visiting to keep the nodes alive,
-    // regardless of whether they contain pointers to other heap allocated
-    // objects.
-    static const bool value = true;
-};
-
 // For wtf/Functional.h
 template<typename T, bool isGarbageCollected> struct PointerParamStorageTraits;
 
 template<typename T>
 struct PointerParamStorageTraits<T*, false> {
+    STATIC_ONLY(PointerParamStorageTraits);
     static_assert(sizeof(T), "T must be fully defined");
     using StorageType = T*;
 
@@ -1557,6 +1444,7 @@ struct PointerParamStorageTraits<T*, false> {
 
 template<typename T>
 struct PointerParamStorageTraits<T*, true> {
+    STATIC_ONLY(PointerParamStorageTraits);
     static_assert(sizeof(T), "T must be fully defined");
     using StorageType = blink::CrossThreadPersistent<T>;
 
@@ -1566,16 +1454,35 @@ struct PointerParamStorageTraits<T*, true> {
 
 template<typename T>
 struct ParamStorageTraits<T*> : public PointerParamStorageTraits<T*, blink::IsGarbageCollectedType<T>::value> {
+    STATIC_ONLY(ParamStorageTraits);
     static_assert(sizeof(T), "T must be fully defined");
 };
 
 template<typename T>
 struct ParamStorageTraits<RawPtr<T>> : public PointerParamStorageTraits<T*, blink::IsGarbageCollectedType<T>::value> {
+    STATIC_ONLY(ParamStorageTraits);
     static_assert(sizeof(T), "T must be fully defined");
 };
 
 template<typename T>
+struct ParamStorageTraits<blink::WeakPersistentThisPointer<T>> {
+    STATIC_ONLY(ParamStorageTraits);
+    static_assert(sizeof(T), "T must be fully defined");
+    using StorageType = blink::WeakPersistent<T>;
+
+    static StorageType wrap(const blink::WeakPersistentThisPointer<T>& value) { return value.value(); }
+
+    // WTF::FunctionWrapper<> handles WeakPtr<>, so recast this weak persistent
+    // into it.
+    //
+    // TODO(sof): remove this hack once wtf/Functional.h can also work with a type like
+    // WeakPersistent<>.
+    static WeakPtr<T> unwrap(const StorageType& value) { return WeakPtr<T>(WeakReference<T>::create(value.get())); }
+};
+
+template<typename T>
 struct ParamStorageTraits<blink::CrossThreadWeakPersistentThisPointer<T>> {
+    STATIC_ONLY(ParamStorageTraits);
     static_assert(sizeof(T), "T must be fully defined");
     using StorageType = blink::CrossThreadWeakPersistent<T>;
 
@@ -1588,10 +1495,6 @@ struct ParamStorageTraits<blink::CrossThreadWeakPersistentThisPointer<T>> {
     // CrossThreadWeakPersistent<>.
     static WeakPtr<T> unwrap(const StorageType& value) { return WeakPtr<T>(WeakReference<T>::create(value.get())); }
 };
-
-// Adoption is not needed nor wanted for RefCountedGarbageCollected<>-derived types.
-template<typename T>
-PassRefPtr<T> adoptRef(blink::RefCountedGarbageCollected<T>*) = delete;
 
 } // namespace WTF
 

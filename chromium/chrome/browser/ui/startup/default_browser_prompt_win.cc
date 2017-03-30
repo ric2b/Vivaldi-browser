@@ -5,13 +5,13 @@
 #include "chrome/browser/ui/startup/default_browser_prompt.h"
 
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/win/windows_version.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/webui/set_as_default_browser_ui.h"
+#include "components/prefs/pref_service.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -80,10 +80,10 @@ bool ShowFirstRunDefaultBrowserPrompt(Profile* profile) {
   // If the only available mode of setting the default browser requires
   // user interaction, it means this couldn't have been done yet. Therefore,
   // we launch the dialog and inform the caller of it.
-  bool show_status =
-      (ShellIntegration::CanSetAsDefaultBrowser() ==
-       ShellIntegration::SET_DEFAULT_INTERACTIVE) &&
-      (ShellIntegration::GetDefaultBrowser() == ShellIntegration::NOT_DEFAULT);
+  bool show_status = (shell_integration::CanSetAsDefaultBrowser() ==
+                      shell_integration::SET_DEFAULT_INTERACTIVE) &&
+                     (shell_integration::GetDefaultBrowser() ==
+                      shell_integration::NOT_DEFAULT);
 
   if (show_status) {
     startup_metric_utils::SetNonBrowserUIDisplayed();

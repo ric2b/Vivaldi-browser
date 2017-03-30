@@ -30,6 +30,9 @@ AXAuraObjWrapper* AXWidgetObjWrapper::GetParent() {
 
 void AXWidgetObjWrapper::GetChildren(
     std::vector<AXAuraObjWrapper*>* out_children) {
+  if (!widget_->IsVisible() || !widget_->GetRootView()->visible())
+    return;
+
   out_children->push_back(
       AXAuraObjCache::GetInstance()->GetOrCreate(widget_->GetRootView()));
 }
@@ -51,7 +54,7 @@ void AXWidgetObjWrapper::OnWidgetDestroying(Widget* widget) {
 }
 
 void AXWidgetObjWrapper::OnWillRemoveView(Widget* widget, View* view) {
-  AXAuraObjCache::GetInstance()->Remove(view);
+  AXAuraObjCache::GetInstance()->RemoveViewSubtree(view);
 }
 
 }  // namespace views

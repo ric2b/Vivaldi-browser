@@ -34,12 +34,11 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
 
-import org.chromium.base.CommandLine;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.favicon.FaviconHelper.FaviconImageCallback;
 import org.chromium.chrome.browser.favicon.FaviconHelper.IconAvailabilityCallback;
 import org.chromium.chrome.browser.favicon.LargeIconBridge.LargeIconCallback;
@@ -48,7 +47,6 @@ import org.chromium.chrome.browser.ntp.LogoBridge.LogoObserver;
 import org.chromium.chrome.browser.ntp.MostVisitedItem.MostVisitedItemManager;
 import org.chromium.chrome.browser.ntp.NewTabPage.OnSearchBoxScrollListener;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsManager;
-import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.preferences.DocumentModeManager;
 import org.chromium.chrome.browser.profiles.MostVisitedSites.MostVisitedURLsObserver;
 import org.chromium.chrome.browser.profiles.MostVisitedSites.ThumbnailCallback;
@@ -77,7 +75,7 @@ public class NewTabPageView extends FrameLayout
     private View mSearchBoxView;
     private TextView mSearchBoxTextView;
     private ImageView mVoiceSearchButton;
-    private ViewGroup mMostVisitedLayout;
+    private MostVisitedLayout mMostVisitedLayout;
     private View mMostVisitedPlaceholder;
     private View mOptOutView;
     private View mNoSearchLogoSpacer;
@@ -88,7 +86,6 @@ public class NewTabPageView extends FrameLayout
     private NewTabPageManager mManager;
     private MostVisitedDesign mMostVisitedDesign;
     private MostVisitedItem[] mMostVisitedItems;
-    private SnippetsManager mSnippetsManager;
     private boolean mFirstShow = true;
     private boolean mSearchProviderHasLogo = true;
     private boolean mHasReceivedMostVisitedSites;
@@ -251,7 +248,7 @@ public class NewTabPageView extends FrameLayout
      * @param searchProviderHasLogo Whether the search provider has a logo.
      */
     public void initialize(NewTabPageManager manager, boolean isSingleUrlBarMode,
-            boolean searchProviderHasLogo) {
+            boolean searchProviderHasLogo, SnippetsManager snippetsManager) {
         mManager = manager;
 
         mScrollView = (NewTabScrollView) findViewById(R.id.ntp_scrollview);
@@ -259,9 +256,7 @@ public class NewTabPageView extends FrameLayout
         mContentView = (ViewGroup) findViewById(R.id.ntp_content);
 
         mMostVisitedDesign = new MostVisitedDesign(getContext());
-        ViewStub mostVisitedLayoutStub = (ViewStub) findViewById(R.id.most_visited_layout_stub);
-        mostVisitedLayoutStub.setLayoutResource(R.layout.most_visited_layout);
-        mMostVisitedLayout = (ViewGroup) mostVisitedLayoutStub.inflate();
+        mMostVisitedLayout = (MostVisitedLayout) findViewById(R.id.most_visited_layout);
         mMostVisitedDesign.initMostVisitedLayout(mMostVisitedLayout, searchProviderHasLogo);
 
         mSearchProviderLogoView = (LogoView) findViewById(R.id.search_provider_logo);
@@ -337,13 +332,12 @@ public class NewTabPageView extends FrameLayout
         if (mManager.shouldShowOptOutPromo()) showOptOutPromo();
 
         // Set up snippets
-        if (CommandLine.getInstance().hasSwitch(ChromeSwitches.ENABLE_NTP_SNIPPETS)) {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_SNIPPETS)) {
             mSnippetsView = (RecyclerView) findViewById(R.id.snippets_card_list);
             mSnippetsView.setVisibility(View.VISIBLE);
             RecordHistogram.recordEnumeratedHistogram(SnippetsManager.SNIPPETS_STATE_HISTOGRAM,
                     SnippetsManager.SNIPPETS_SHOWN, SnippetsManager.NUM_SNIPPETS_ACTIONS);
             mSnippetsView.setLayoutManager(new LinearLayoutManager(getContext()));
-            mSnippetsManager = new SnippetsManager(mManager, mSnippetsView);
             mSnippetsView.addOnScrollListener(new RecyclerView.OnScrollListener() {
                 private boolean mScrolledOnce = false;
                 @Override
@@ -358,6 +352,7 @@ public class NewTabPageView extends FrameLayout
                             SnippetsManager.NUM_SNIPPETS_ACTIONS);
                 }
             });
+            snippetsManager.setSnippetsView(mSnippetsView);
         }
 
         // Set up interests
@@ -786,13 +781,15 @@ public class NewTabPageView extends FrameLayout
         for (int i = 0; i < titles.length; i++) {
             final String url = urls[i];
             final String title = titles[i];
+            boolean offlineAvailable = mManager.isOfflineAvailable(url);
 
             // Look for an existing item to reuse.
             MostVisitedItem item = null;
             for (int j = 0; j < oldItemCount; j++) {
                 MostVisitedItem oldItem = oldItems[j];
                 if (oldItem != null && TextUtils.equals(url, oldItem.getUrl())
-                        && TextUtils.equals(title, oldItem.getTitle())) {
+                        && TextUtils.equals(title, oldItem.getTitle())
+                        && offlineAvailable == oldItem.isOfflineAvailable()) {
                     item = oldItem;
                     item.setIndex(i);
                     oldItems[j] = null;
@@ -802,10 +799,9 @@ public class NewTabPageView extends FrameLayout
 
             // If nothing can be reused, create a new item.
             if (item == null) {
-                String displayTitle = getTitleForDisplay(title, url);
-                item = new MostVisitedItem(mManager, title, url, i);
-                View view = mMostVisitedDesign.createMostVisitedItemView(inflater, url,
-                        displayTitle, item, isInitialLoad);
+                item = new MostVisitedItem(mManager, title, url, offlineAvailable, i);
+                View view =
+                        mMostVisitedDesign.createMostVisitedItemView(inflater, item, isInitialLoad);
                 item.initView(view);
             }
 
@@ -878,7 +874,7 @@ public class NewTabPageView extends FrameLayout
     }
 
     /**
-     * The new-fangled design for most visited tiles, where each tile shows a large icon and title.
+     * The design for most visited tiles: each tile shows a large icon and the site's title.
      */
     private class MostVisitedDesign {
 
@@ -919,10 +915,9 @@ public class NewTabPageView extends FrameLayout
             return mMostVisitedLayoutBleed;
         }
 
-        public void initMostVisitedLayout(ViewGroup mostVisitedLayout,
+        public void initMostVisitedLayout(MostVisitedLayout mostVisitedLayout,
                 boolean searchProviderHasLogo) {
-            ((MostVisitedLayout) mostVisitedLayout).setMaxRows(
-                    searchProviderHasLogo ? MAX_ROWS : MAX_ROWS_NO_LOGO);
+            mostVisitedLayout.setMaxRows(searchProviderHasLogo ? MAX_ROWS : MAX_ROWS_NO_LOGO);
         }
 
         public void setSearchProviderHasLogo(View mostVisitedLayout, boolean hasLogo) {
@@ -967,23 +962,22 @@ public class NewTabPageView extends FrameLayout
             }
         }
 
-        public View createMostVisitedItemView(LayoutInflater inflater, final String url,
-                String displayTitle, MostVisitedItem item,
-                final boolean isInitialLoad) {
+        public View createMostVisitedItemView(
+                LayoutInflater inflater, MostVisitedItem item, boolean isInitialLoad) {
             final MostVisitedItemView view = (MostVisitedItemView) inflater.inflate(
                     R.layout.most_visited_item, mMostVisitedLayout, false);
-            view.setTitle(displayTitle);
-            view.setOfflineAvailable(mManager.isOfflineAvailable(url)
-                    && !OfflinePageUtils.isConnected(getContext()));
+            view.setTitle(getTitleForDisplay(item.getTitle(), item.getUrl()));
+            view.setOfflineAvailable(item.isOfflineAvailable());
 
             LargeIconCallback iconCallback = new LargeIconCallbackImpl(item, isInitialLoad);
             if (isInitialLoad) mPendingLoadTasks++;
-            mManager.getLargeIconForUrl(url, mMinIconSize, iconCallback);
+            mManager.getLargeIconForUrl(item.getUrl(), mMinIconSize, iconCallback);
 
             return view;
         }
 
         public void onIconUpdated(final String url) {
+            if (mMostVisitedItems == null) return;
             // Find a matching most visited item.
             for (MostVisitedItem item : mMostVisitedItems) {
                 if (item.getUrl().equals(url)) {

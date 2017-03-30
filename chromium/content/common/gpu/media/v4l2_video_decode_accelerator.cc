@@ -253,16 +253,9 @@ bool V4L2VideoDecodeAccelerator::Initialize(const Config& config,
   const __u32 kCapsRequired = V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING;
   IOCTL_OR_ERROR_RETURN_FALSE(VIDIOC_QUERYCAP, &caps);
   if ((caps.capabilities & kCapsRequired) != kCapsRequired) {
-    // This cap combination is deprecated, but some older drivers may still be
-    // returning it.
-    const __u32 kCapsRequiredCompat = V4L2_CAP_VIDEO_CAPTURE_MPLANE |
-                                      V4L2_CAP_VIDEO_OUTPUT_MPLANE |
-                                      V4L2_CAP_STREAMING;
-    if ((caps.capabilities & kCapsRequiredCompat) != kCapsRequiredCompat) {
-      LOG(ERROR) << "Initialize(): ioctl() failed: VIDIOC_QUERYCAP"
-          ", caps check failed: 0x" << std::hex << caps.capabilities;
-      return false;
-    }
+    LOG(ERROR) << "Initialize(): ioctl() failed: VIDIOC_QUERYCAP"
+        ", caps check failed: 0x" << std::hex << caps.capabilities;
+    return false;
   }
 
   if (!SetupFormats())
@@ -304,6 +297,14 @@ void V4L2VideoDecodeAccelerator::Decode(
   DVLOG(1) << "Decode(): input_id=" << bitstream_buffer.id()
            << ", size=" << bitstream_buffer.size();
   DCHECK(io_task_runner_->BelongsToCurrentThread());
+
+  if (bitstream_buffer.id() < 0) {
+    LOG(ERROR) << "Invalid bitstream_buffer, id: " << bitstream_buffer.id();
+    if (base::SharedMemory::IsHandleValid(bitstream_buffer.handle()))
+      base::SharedMemory::CloseHandle(bitstream_buffer.handle());
+    NOTIFY_ERROR(INVALID_ARGUMENT);
+    return;
+  }
 
   // DecodeTask() will take care of running a DecodeBufferTask().
   decoder_thread_.message_loop()->PostTask(FROM_HERE, base::Bind(
@@ -1023,14 +1024,7 @@ bool V4L2VideoDecodeAccelerator::DequeueResolutionChangeEvent() {
 
   while (device_->Ioctl(VIDIOC_DQEVENT, &ev) == 0) {
     if (ev.type == V4L2_EVENT_SOURCE_CHANGE) {
-      uint32_t changes = ev.u.src_change.changes;
-      // We used to define source change was always resolution change. The union
-      // |ev.u| is not used and it is zero by default. When using the upstream
-      // version of the resolution event change, we also need to check
-      // |ev.u.src_change.changes| to know what is changed. For API backward
-      // compatibility, event is treated as resolution change when all bits in
-      // |ev.u.src_change.changes| are cleared.
-      if (changes == 0 || (changes & V4L2_EVENT_SRC_CH_RESOLUTION)) {
+      if (ev.u.src_change.changes & V4L2_EVENT_SRC_CH_RESOLUTION) {
         DVLOG(3)
             << "DequeueResolutionChangeEvent(): got resolution change event.";
         return true;

@@ -14,7 +14,6 @@
 #include "base/android/jni_string.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/lazy_instance.h"
-#include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/synchronization/lock.h"
 #include "content/public/browser/browser_thread.h"
@@ -495,7 +494,7 @@ void AwContentsIoThreadClientImpl::OnReceivedHttpError(
   vector<string> response_header_names;
   vector<string> response_header_values;
   {
-    void* headers_iterator = NULL;
+    size_t headers_iterator = 0;
     string header_name, header_value;
     while (response_headers->EnumerateHeaderLines(
         &headers_iterator, &header_name, &header_value)) {

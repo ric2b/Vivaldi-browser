@@ -62,6 +62,8 @@ AXNodeData::AXNodeData()
       state(0xFFFFFFFF) {
 }
 
+AXNodeData::AXNodeData(const AXNodeData& other) = default;
+
 AXNodeData::~AXNodeData() {
 }
 
@@ -273,8 +275,6 @@ std::string AXNodeData::ToString() const {
     result += " EXPANDED";
   if (state & (1 << AX_STATE_FOCUSABLE))
     result += " FOCUSABLE";
-  if (state & (1 << AX_STATE_FOCUSED))
-    result += " FOCUSED";
   if (state & (1 << AX_STATE_HASPOPUP))
     result += " HASPOPUP";
   if (state & (1 << AX_STATE_HOVERED))

@@ -123,8 +123,10 @@
     overall type: <ph name="OVERALL_TYPE">$1<ex>NAME_FIRST</ex></ph>
     server type: <ph name="SERVER_TYPE">$2<ex>NAME_FIRST</ex></ph>
     heuristic type: <ph name="HEURISTIC_TYPE">$3<ex>NAME_FIRST</ex></ph>
-    field signature: <ph name="FIELD_SIGNATURE">$4<ex>12345678</ex></ph>
-    form signature: <ph name="FORM_SIGNATURE">$5<ex>1234567812345678</ex></ph>
+    label: <ph name="LABEL">$4<ex>SOME LABEL</ex></ph>
+    parseable name: <ph name="PARSEABLE_NAME">$5<ex>SOME_NAME</ex></ph>
+    field signature: <ph name="FIELD_SIGNATURE">$6<ex>12345678</ex></ph>
+    form signature: <ph name="FORM_SIGNATURE">$7<ex>1234567812345678</ex></ph>
   </message>
 
   <!-- Autofill dialog: legal documents -->
@@ -134,14 +136,15 @@
 
   <if expr="_google_chrome">
     <message name="IDS_AUTOFILL_OPTIONS_POPUP" desc="The text displayed in the Autofill popup to direct the user to the Autofill settings UI.">
-      Chrome Autofill settings...
-    </message>
+     Chrome Autofill settings...
+   </message>
   </if>
   <if expr="not _google_chrome">
-    <message name="IDS_AUTOFILL_OPTIONS_POPUP" desc="The text displayed in the Autofill popup to direct the user to the Autofill settings UI.">
+    <message name="IDS_AUTOFILL_OPTIONS_POPUP" desc="The label of the text displayed in the Autofill popup to direct the user to the Autofill settings UI.">
       Chromium Autofill settings...
     </message>
   </if>
+
   <message name="IDS_AUTOFILL_OPTIONS_CONTENT_DESCRIPTION" desc="The text verbalised by a screen reader for the button that directs the user to the Autofill settings UI. This string is not displayed.">
     settings
   </message>

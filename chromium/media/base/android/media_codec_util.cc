@@ -25,8 +25,7 @@ using base::android::ScopedJavaLocalRef;
 
 namespace media {
 
-// static
-const std::string CodecTypeToAndroidMimeType(const std::string& codec) {
+static std::string CodecTypeToAndroidMimeType(const std::string& codec) {
   // TODO(xhwang): Shall we handle more detailed strings like "mp4a.40.2"?
   if (codec == "avc1")
     return "video/avc";
@@ -45,34 +44,9 @@ const std::string CodecTypeToAndroidMimeType(const std::string& codec) {
   return std::string();
 }
 
-// TODO(qinmin): using a map to help all the conversions in this class.
-const std::string AndroidMimeTypeToCodecType(const std::string& mime) {
-  if (mime == "video/mp4v-es")
-    return "mp4v";
-  if (mime == "video/avc")
-    return "avc1";
-  if (mime == "video/hevc")
-    return "hvc1";
-  if (mime == "video/x-vnd.on2.vp8")
-    return "vp8";
-  if (mime == "video/x-vnd.on2.vp9")
-    return "vp9";
-  if (mime == "audio/mp4a-latm")
-    return "mp4a";
-  if (mime == "audio/mpeg")
-    return "mp3";
-  if (mime == "audio/vorbis")
-    return "vorbis";
-  if (mime == "audio/opus")
-    return "opus";
-  return std::string();
-}
-
-std::string GetDefaultCodecName(const std::string& mime_type,
-                                MediaCodecDirection direction) {
-  if (!MediaCodecUtil::IsMediaCodecAvailable())
-    return std::string();
-
+static std::string GetDefaultCodecName(const std::string& mime_type,
+                                       MediaCodecDirection direction) {
+  DCHECK(MediaCodecUtil::IsMediaCodecAvailable());
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jstring> j_mime = ConvertUTF8ToJavaString(env, mime_type);
   ScopedJavaLocalRef<jstring> j_codec_name =
@@ -80,47 +54,11 @@ std::string GetDefaultCodecName(const std::string& mime_type,
   return ConvertJavaStringToUTF8(env, j_codec_name.obj());
 }
 
-bool SupportsGetName() {
-  // MediaCodec.getName() is only available on JB MR2 and greater.
-  return base::android::BuildInfo::GetInstance()->sdk_int() >= 18;
-}
-
-// Represents supported codecs on android.
-// TODO(qinmin): Currently the codecs string only contains one codec. Do we
-// need to support codecs separated by comma. (e.g. "vp8" -> "vp8, vp8.0")?
-struct CodecsInfo {
-  std::string codecs;  // E.g. "vp8" or "avc1".
-  std::string name;    // E.g. "OMX.google.vp8.decoder".
-  MediaCodecDirection direction;
-};
-
-// Get a list of supported codecs.
-std::vector<CodecsInfo> GetCodecsInfo() {
-  std::vector<CodecsInfo> codecs_info;
-  if (!MediaCodecUtil::IsMediaCodecAvailable())
-    return codecs_info;
-
+static bool IsDecoderSupportedByDevice(const std::string& mime_type) {
+  DCHECK(MediaCodecUtil::IsMediaCodecAvailable());
   JNIEnv* env = AttachCurrentThread();
-  std::string mime_type;
-  ScopedJavaLocalRef<jobjectArray> j_codec_info_array =
-      Java_MediaCodecUtil_getCodecsInfo(env);
-  jsize len = env->GetArrayLength(j_codec_info_array.obj());
-  for (jsize i = 0; i < len; ++i) {
-    ScopedJavaLocalRef<jobject> j_info(
-        env, env->GetObjectArrayElement(j_codec_info_array.obj(), i));
-    ScopedJavaLocalRef<jstring> j_codec_type =
-        Java_CodecInfo_codecType(env, j_info.obj());
-    ConvertJavaStringToUTF8(env, j_codec_type.obj(), &mime_type);
-    ScopedJavaLocalRef<jstring> j_codec_name =
-        Java_CodecInfo_codecName(env, j_info.obj());
-    CodecsInfo info;
-    info.codecs = AndroidMimeTypeToCodecType(mime_type);
-    ConvertJavaStringToUTF8(env, j_codec_name.obj(), &info.name);
-    info.direction = static_cast<MediaCodecDirection>(
-        Java_CodecInfo_direction(env, j_info.obj()));
-    codecs_info.push_back(info);
-  }
-  return codecs_info;
+  ScopedJavaLocalRef<jstring> j_mime = ConvertUTF8ToJavaString(env, mime_type);
+  return Java_MediaCodecUtil_isDecoderSupportedForDevice(env, j_mime.obj());
 }
 
 // static
@@ -183,40 +121,33 @@ bool MediaCodecUtil::IsKnownUnaccelerated(const std::string& mime_type,
   if (!IsMediaCodecAvailable())
     return true;
 
-  std::string codec_name;
-  if (SupportsGetName()) {
-    codec_name = GetDefaultCodecName(mime_type, direction);
-  } else {
-    std::string codec_type = AndroidMimeTypeToCodecType(mime_type);
-    std::vector<CodecsInfo> codecs_info = GetCodecsInfo();
-    for (size_t i = 0; i < codecs_info.size(); ++i) {
-      if (codecs_info[i].codecs == codec_type &&
-          codecs_info[i].direction == direction) {
-        codec_name = codecs_info[i].name;
-        break;
-      }
-    }
+  std::string codec_name = GetDefaultCodecName(mime_type, direction);
+  DVLOG(1) << __FUNCTION__ << "Default codec for " << mime_type << " : "
+           << codec_name << ", direction: " << direction;
+  if (!codec_name.size())
+    return true;
+
+  // MediaTek hardware vp8 is known slower than the software implementation.
+  // MediaTek hardware vp9 is known crashy, see http://crbug.com/446974 and
+  // http://crbug.com/597836.
+  if (base::StartsWith(codec_name, "OMX.MTK.", base::CompareCase::SENSITIVE)) {
+    if (mime_type == "video/x-vnd.on2.vp8")
+      return true;
+
+    if (mime_type == "video/x-vnd.on2.vp9")
+      return base::android::BuildInfo::GetInstance()->sdk_int() < 21;
+
+    return false;
   }
-  DVLOG(1) << __PRETTY_FUNCTION__ << "Default codec for " << mime_type << " : "
-           << codec_name;
+
   // It would be nice if MediaCodecInfo externalized some notion of
   // HW-acceleration but it doesn't. Android Media guidance is that the
   // "OMX.google" prefix is always used for SW decoders, so that's what we
   // use. "OMX.SEC.*" codec is Samsung software implementation - report it
-  // as unaccelerated as well. Also temporary blacklist Exynos and MediaTek
-  // devices while HW decoder video freezes and distortions are
-  // investigated - http://crbug.com/446974.
-  if (codec_name.length() > 0) {
-    return (base::StartsWith(codec_name, "OMX.google.",
-                             base::CompareCase::SENSITIVE) ||
-            base::StartsWith(codec_name, "OMX.SEC.",
-                             base::CompareCase::SENSITIVE) ||
-            base::StartsWith(codec_name, "OMX.MTK.",
-                             base::CompareCase::SENSITIVE) ||
-            base::StartsWith(codec_name, "OMX.Exynos.",
-                             base::CompareCase::SENSITIVE));
-  }
-  return true;
+  // as unaccelerated as well.
+  return base::StartsWith(codec_name, "OMX.google.",
+                          base::CompareCase::SENSITIVE) ||
+         base::StartsWith(codec_name, "OMX.SEC.", base::CompareCase::SENSITIVE);
 }
 
 // static
@@ -243,6 +174,25 @@ bool MediaCodecUtil::IsHLSURL(const GURL& url) {
 // static
 bool MediaCodecUtil::RegisterMediaCodecUtil(JNIEnv* env) {
   return RegisterNativesImpl(env);
+}
+
+// static
+bool MediaCodecUtil::IsVp8DecoderAvailable() {
+  return IsMediaCodecAvailable() &&
+         IsDecoderSupportedByDevice(CodecTypeToAndroidMimeType("vp8"));
+}
+
+// static
+bool MediaCodecUtil::IsVp8EncoderAvailable() {
+  // Currently the vp8 encoder and decoder blacklists cover the same devices,
+  // but we have a second method for clarity in future issues.
+  return IsVp8DecoderAvailable();
+}
+
+// static
+bool MediaCodecUtil::IsVp9DecoderAvailable() {
+  return IsMediaCodecAvailable() &&
+         IsDecoderSupportedByDevice(CodecTypeToAndroidMimeType("vp9"));
 }
 
 }  // namespace media

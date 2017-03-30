@@ -5,7 +5,7 @@
 #include "ui/views/animation/ink_drop_animation_controller_factory.h"
 
 #include "base/macros.h"
-#include "ui/base/resource/material_design/material_design_controller.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/animation/ink_drop_animation_controller.h"
@@ -25,14 +25,11 @@ class InkDropAnimationControllerStub
   ~InkDropAnimationControllerStub() override;
 
   // InkDropAnimationController:
-  InkDropState GetInkDropState() const override;
+  InkDropState GetTargetInkDropState() const override;
+  bool IsVisible() const override;
   void AnimateToState(InkDropState state) override;
-  gfx::Size GetInkDropLargeSize() const override;
-  void SetInkDropSize(const gfx::Size& large_size,
-                      int large_corner_radius,
-                      const gfx::Size& small_size,
-                      int small_corner_radius) override;
-  void SetInkDropCenter(const gfx::Point& center_point) override;
+  void SnapToActivated() override;
+  void SetHovered(bool is_hovered) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(InkDropAnimationControllerStub);
@@ -42,23 +39,19 @@ InkDropAnimationControllerStub::InkDropAnimationControllerStub() {}
 
 InkDropAnimationControllerStub::~InkDropAnimationControllerStub() {}
 
-InkDropState InkDropAnimationControllerStub::GetInkDropState() const {
+InkDropState InkDropAnimationControllerStub::GetTargetInkDropState() const {
   return InkDropState::HIDDEN;
+}
+
+bool InkDropAnimationControllerStub::IsVisible() const {
+  return false;
 }
 
 void InkDropAnimationControllerStub::AnimateToState(InkDropState state) {}
 
-gfx::Size InkDropAnimationControllerStub::GetInkDropLargeSize() const {
-  return gfx::Size();
-}
+void InkDropAnimationControllerStub::SnapToActivated() {}
 
-void InkDropAnimationControllerStub::SetInkDropSize(const gfx::Size& large_size,
-                                                    int large_corner_radius,
-                                                    const gfx::Size& small_size,
-                                                    int small_corner_radius) {}
-
-void InkDropAnimationControllerStub::SetInkDropCenter(
-    const gfx::Point& center_point) {}
+void InkDropAnimationControllerStub::SetHovered(bool is_hovered) {}
 
 }  // namespace
 

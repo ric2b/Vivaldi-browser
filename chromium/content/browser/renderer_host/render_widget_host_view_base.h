@@ -18,6 +18,7 @@
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "cc/output/compositor_frame.h"
+#include "cc/surfaces/surface_id.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/common/content_export.h"
 #include "content/common/input/input_event_ack_state.h"
@@ -51,6 +52,10 @@ class WebMouseEvent;
 class WebMouseWheelEvent;
 }
 
+namespace cc {
+class SurfaceHittestDelegate;
+}
+
 namespace ui {
 class LatencyInfo;
 }
@@ -71,6 +76,10 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
  public:
   ~RenderWidgetHostViewBase() override;
 
+  float current_device_scale_factor() const {
+    return current_device_scale_factor_;
+  }
+
   // RenderWidgetHostView implementation.
   bool IsAura() const override;
 
@@ -89,6 +98,12 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   void BeginFrameSubscription(
       scoped_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) override;
   void EndFrameSubscription() override;
+
+  // This only needs to be overridden by RenderWidgetHostViewBase subclasses
+  // that handle content embedded within other RenderWidgetHostViews.
+  gfx::Point TransformPointToRootCoordSpace(const gfx::Point& point) override;
+  gfx::PointF TransformPointToRootCoordSpaceF(
+      const gfx::PointF& point) override;
 
   // IPC::Listener implementation:
   bool OnMessageReceived(const IPC::Message& msg) override;
@@ -198,22 +213,15 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // methods are invoked on the RenderWidgetHostView that should be able to
   // properly handle the event (i.e. it has focus for keyboard events, or has
   // been identified by hit testing mouse, touch or gesture events).
-  virtual uint32_t SurfaceIdNamespaceAtPoint(const gfx::Point& point,
-                                             gfx::Point* transformed_point);
+  virtual uint32_t SurfaceIdNamespaceAtPoint(
+      cc::SurfaceHittestDelegate* delegate,
+      const gfx::Point& point,
+      gfx::Point* transformed_point);
   virtual void ProcessKeyboardEvent(const NativeWebKeyboardEvent& event) {}
   virtual void ProcessMouseEvent(const blink::WebMouseEvent& event) {}
   virtual void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event) {}
   virtual void ProcessTouchEvent(const blink::WebTouchEvent& event,
                          const ui::LatencyInfo& latency) {}
-
-  // If a RenderWidgetHost is dealing with points that are transformed from the
-  // root frame for a page (i.e. because its content is contained within
-  // that of another RenderWidgetHost), this provides a facility to convert
-  // a point from its own coordinate space to that of the root frame.
-  // This only needs to be overriden by RenderWidgetHostView subclasses
-  // that handle content embedded within other RenderWidgetHostViews.
-  virtual void TransformPointToRootCoordSpace(const gfx::Point& point,
-                                              gfx::Point* transformed_point);
 
   // Transform a point that is in the coordinate space of a Surface that is
   // embedded within the RenderWidgetHostViewBase's Surface to the
@@ -383,6 +391,9 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // this directly if you want to do custom filtering on plugin windows first.
   static void DetachPluginWindowsCallback(HWND window);
 #endif
+
+  // Exposed for testing.
+  virtual cc::SurfaceId SurfaceIdForTesting() const;
 
  protected:
   // Interface class only, do not construct.

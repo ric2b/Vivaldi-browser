@@ -13,6 +13,7 @@
 #include "base/synchronization/condition_variable.h"
 #include "base/task_runner.h"
 #include "base/threading/simple_thread.h"
+#include "cc/raster/task_category.h"
 #include "cc/raster/task_graph_runner.h"
 #include "cc/raster/task_graph_work_queue.h"
 #include "content/common/content_export.h"
@@ -27,10 +28,8 @@ namespace content {
 // parallel with other instances of sequenced task runners.
 // It's also possible to get the underlying TaskGraphRunner to schedule a graph
 // of tasks with their dependencies.
-class CONTENT_EXPORT RasterWorkerPool
-    : public base::TaskRunner,
-      public cc::TaskGraphRunner,
-      public base::DelegateSimpleThread::Delegate {
+class CONTENT_EXPORT RasterWorkerPool : public base::TaskRunner,
+                                        public cc::TaskGraphRunner {
  public:
   RasterWorkerPool();
 
@@ -47,15 +46,16 @@ class CONTENT_EXPORT RasterWorkerPool
   void CollectCompletedTasks(cc::NamespaceToken token,
                              cc::Task::Vector* completed_tasks) override;
 
-  // Overridden from base::DelegateSimpleThread::Delegate:
-  void Run() override;
+  // Runs a task from one of the provided categories. Categories listed first
+  // have higher priority.
+  void Run(const std::vector<cc::TaskCategory>& categories,
+           base::ConditionVariable* has_ready_to_run_tasks_cv);
 
   void FlushForTesting();
 
   // Spawn |num_threads| number of threads and start running work on the
   // worker threads.
-  void Start(int num_threads,
-             const base::SimpleThread::Options& thread_options);
+  void Start(int num_threads);
 
   // Finish running all the posted tasks (and nested task posted by those tasks)
   // of all the associated task runners.
@@ -74,10 +74,6 @@ class CONTENT_EXPORT RasterWorkerPool
  private:
   class RasterWorkerPoolSequencedTaskRunner;
   friend class RasterWorkerPoolSequencedTaskRunner;
-
-  // Run next task. Caller must acquire |lock_| prior to calling this function.
-  // Returns true if there was a task available to run.
-  bool RunTaskWithLockAcquired();
 
   // Simple Task for the TaskGraphRunner that wraps a closure.
   // This class is used to schedule TaskRunner tasks on the
@@ -103,8 +99,24 @@ class CONTENT_EXPORT RasterWorkerPool
   void CollectCompletedTasksWithLockAcquired(cc::NamespaceToken token,
                                              cc::Task::Vector* completed_tasks);
 
+  // Runs a task from one of the provided categories. Categories listed first
+  // have higher priority. Returns false if there were no tasks to run.
+  bool RunTaskWithLockAcquired(const std::vector<cc::TaskCategory>& categories);
+
+  // Run next task for the given category. Caller must acquire |lock_| prior to
+  // calling this function and make sure at least one task is ready to run.
+  void RunTaskInCategoryWithLockAcquired(cc::TaskCategory category);
+
+  // Helper function which signals worker threads if tasks are ready to run.
+  void SignalHasReadyToRunTasksWithLockAcquired();
+
+  // Determines if we should run a new task for the given category. This factors
+  // in whether a task is available and whether the count of running tasks is
+  // low enough to start a new one.
+  bool ShouldRunTaskForCategoryWithLockAcquired(cc::TaskCategory category);
+
   // The actual threads where work is done.
-  ScopedVector<base::DelegateSimpleThread> threads_;
+  std::vector<scoped_ptr<base::SimpleThread>> threads_;
 
   // Lock to exclusively access all the following members that are used to
   // implement the TaskRunner and TaskGraphRunner interfaces.
@@ -120,9 +132,9 @@ class CONTENT_EXPORT RasterWorkerPool
   // Cached vector to avoid allocation when getting the list of complete
   // tasks.
   cc::Task::Vector completed_tasks_;
-  // Condition variable that is waited on by Run() until new tasks are ready to
-  // run or shutdown starts.
-  base::ConditionVariable has_ready_to_run_tasks_cv_;
+  // Condition variables for foreground and background tasks.
+  base::ConditionVariable has_ready_to_run_foreground_tasks_cv_;
+  base::ConditionVariable has_ready_to_run_background_tasks_cv_;
   // Condition variable that is waited on by origin threads until a namespace
   // has finished running all associated tasks.
   base::ConditionVariable has_namespaces_with_finished_running_tasks_cv_;

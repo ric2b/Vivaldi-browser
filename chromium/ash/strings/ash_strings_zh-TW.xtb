@@ -52,6 +52,7 @@
 <translation id="252373100621549798">顯示器不明</translation>
 <translation id="2532589005999780174">高反差模式</translation>
 <translation id="2562916301614567480">私人網路</translation>
+<translation id="2661637000095600270">找不到系統支援的解析度，因此無法以鏡像方式顯示。已改為進入延伸桌面。如要傳送意見回饋報告，請按一下這裡。</translation>
 <translation id="2692809339924654275"><ph name="BLUETOOTH" />：正在連線...</translation>
 <translation id="2700058918926273959">這個工作階段將在 <ph name="SESSION_TIME_REMAINING" />後結束，屆時系統會將您登出。</translation>
 <translation id="2727977024730340865">使用低功率充電器，可能導致充電狀態不穩定。</translation>
@@ -113,7 +114,6 @@
 <translation id="4250680216510889253">否</translation>
 <translation id="4279490309300973883">鏡像</translation>
 <translation id="4321179778687042513">Ctrl</translation>
-<translation id="4379753398862151997">Dear Monitor, it's not working out between us. (系統無法支援該顯示器)</translation>
 <translation id="4421231901400348175">透過遠端協助與<ph name="HELPER_NAME" />分享螢幕控制功能。</translation>
 <translation id="4430019312045809116">音量</translation>
 <translation id="4527045527269911712">藍牙裝置「<ph name="DEVICE_NAME" />」要求配對權限。</translation>
@@ -182,7 +182,6 @@
 <translation id="6650933572246256093">藍牙裝置「<ph name="DEVICE_NAME" />」要求配對權限，請在裝置上輸入此密碼金鑰：<ph name="PASSKEY" /></translation>
 <translation id="6713285437468012787">藍牙裝置「<ph name="DEVICE_NAME" />」已配對成功，可供所有使用者使用。如要移除配對，請使用「設定」。</translation>
 <translation id="6785414152754474415">電池電量為 <ph name="PERCENTAGE" />% (充電中)。</translation>
-<translation id="6803622936009808957">找不到系統支援的解析度，因此無法顯示鏡像。已改為進入延伸桌面。</translation>
 <translation id="683971173229319003">搜尋鍵 + L 鍵</translation>
 <translation id="68610848741840742">ChromeVox (互動朗讀)</translation>
 <translation id="6911468394164995108">加入其他網路...</translation>
@@ -237,6 +236,7 @@
 <translation id="8878886163241303700">延伸螢幕</translation>
 <translation id="8938800817013097409">USB-C 裝置 (背面右側連接埠)</translation>
 <translation id="8940956008527784070">電池電量不足 (<ph name="PERCENTAGE" />%)</translation>
+<translation id="9008540565042607572">顯示器不相容 (系統無法支援該顯示器。如要傳送意見回饋報告，請按一下這裡)。</translation>
 <translation id="9074739597929991885">藍牙</translation>
 <translation id="9080206825613744995">麥克風正在使用中。</translation>
 <translation id="9089416786594320554">輸入法</translation>

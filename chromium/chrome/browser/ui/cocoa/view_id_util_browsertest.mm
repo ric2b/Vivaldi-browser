@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/devtools/devtools_window_testing.h"
@@ -20,6 +19,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
+#include "components/prefs/pref_service.h"
 #include "extensions/common/switches.h"
 
 using bookmarks::BookmarkModel;
@@ -76,7 +76,10 @@ class ViewIDTest : public InProcessBrowserTest {
           i == VIEW_ID_SCRIPT_BUBBLE ||
           i == VIEW_ID_SAVE_CREDIT_CARD_BUTTON ||
           i == VIEW_ID_TRANSLATE_BUTTON ||
-          i == VIEW_ID_LOCATION_ICON) {
+          i == VIEW_ID_LOCATION_ICON ||
+          i == VIEW_ID_FIND_IN_PAGE_PREVIOUS_BUTTON ||
+          i == VIEW_ID_FIND_IN_PAGE_NEXT_BUTTON ||
+          i == VIEW_ID_FIND_IN_PAGE_CLOSE_BUTTON) {
         continue;
       }
 

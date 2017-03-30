@@ -44,6 +44,8 @@ using URLSchemesMap = HashMap<String, T, CaseFoldingHash>;
 class PLATFORM_EXPORT SchemeRegistry {
     STATIC_ONLY(SchemeRegistry);
 public:
+    static void initialize();
+
     static void registerURLSchemeAsLocal(const String&);
     static bool shouldTreatURLSchemeAsLocal(const String&);
 
@@ -100,6 +102,11 @@ public:
     // Schemes which override the first-/third-party checks on a Document.
     static void registerURLSchemeAsFirstPartyWhenTopLevel(const String& scheme);
     static bool shouldTreatURLSchemeAsFirstPartyWhenTopLevel(const String& scheme);
+
+    // Schemes that can be used in a referrer.
+    static void registerURLSchemeAsAllowedForReferrer(const String& scheme);
+    static void removeURLSchemeAsAllowedForReferrer(const String& scheme);
+    static bool shouldTreatURLSchemeAsAllowedForReferrer(const String& scheme);
 
     // Allow resources from some schemes to load on a page, regardless of its
     // Content Security Policy.

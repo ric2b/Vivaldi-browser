@@ -46,7 +46,6 @@ source_set("chromeos") {
     "//chrome/browser/devtools",
     "//chrome/browser/extensions",
     "//chrome/browser/safe_browsing:chunk_proto",
-    "//chrome/browser/safe_browsing:metadata_proto",
     "//chrome/common",
     "//chrome/common/extensions/api",
     "//chrome/common/extensions/api:api_registration",
@@ -57,11 +56,11 @@ source_set("chromeos") {
     "//chromeos:cryptohome_proto",
     "//chromeos:cryptohome_signkey_proto",
     "//chromeos:power_manager_proto",
-    "//chromeos/ime:gencode",
     "//components/arc",
     "//components/certificate_reporting:cert_logger_proto",
     "//components/certificate_reporting:encrypted_cert_logger_proto",
     "//components/drive",
+    "//components/drive:drive_chromeos",
     "//components/feedback",
     "//components/flags_ui",
     "//components/login",
@@ -70,6 +69,7 @@ source_set("chromeos") {
     "//components/pairing",
     "//components/policy",
     "//components/proxy_config",
+    "//components/safe_browsing_db:metadata_proto",
     "//components/session_manager/core",
     "//components/user_manager",
     "//components/wifi_sync",
@@ -77,6 +77,7 @@ source_set("chromeos") {
     # This depends directly on the variations target, rather than just
     # transitively via the common target because the proto sources need to
     # be generated before code in this target can start building.
+    "//components/resources",
     "//components/strings",
     "//components/variations",
     "//content/public/browser",
@@ -87,6 +88,8 @@ source_set("chromeos") {
     "//device/hid",
     "//media",
     "//media/mojo/interfaces",
+    "//mojo/common",
+    "//mojo/shell/public/cpp",
     "//net",
     "//ppapi/proxy:ipc",  # For PpapiMsg_LoadPlugin
 
@@ -116,6 +119,7 @@ source_set("chromeos") {
     "//ui/events/devices",
     "//ui/events/platform",
     "//ui/file_manager",
+    "//ui/keyboard:mojom",
     "//ui/message_center",
     "//ui/surface",
     "//ui/views",
@@ -125,12 +129,16 @@ source_set("chromeos") {
     "//v8",
   ]
 
-  defines = []
+  defines = [ "MOJO_SHELL_CLIENT" ]
 
   sources = rebase_path(gypi_values.browser_chromeos_sources, ".", "//chrome") +
             rebase_path(gypi_values.browser_chromeos_extension_sources,
                         ".",
                         "//chrome")
+  sources += [
+    "chrome_interface_factory.cc",
+    "chrome_interface_factory.h",
+  ]
   if (use_x11) {
     configs += [ "//build/config/linux:x11" ]
     deps += [ "//ui/events/devices" ]
@@ -178,6 +186,7 @@ source_set("unit_tests") {
     ":device_policy_proto",
     "//ash/resources",
     "//components/drive",
+    "//components/drive:test_support_chromeos",
     "//components/invalidation/public",
     "//components/policy",
     "//components/resources",

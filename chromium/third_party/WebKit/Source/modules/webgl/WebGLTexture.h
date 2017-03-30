@@ -27,136 +27,36 @@
 #define WebGLTexture_h
 
 #include "modules/webgl/WebGLSharedPlatform3DObject.h"
-#include "wtf/Vector.h"
 
 namespace blink {
-
-struct WebGLSamplerState {
-    WebGLSamplerState();
-
-    GLenum compreFunc;
-    GLenum compreMode;
-    GLenum magFilter;
-    GLenum minFilter;
-    GLenum wrapR;
-    GLenum wrapS;
-    GLenum wrapT;
-    GLfloat maxLod;
-    GLfloat minLod;
-};
 
 class WebGLTexture final : public WebGLSharedPlatform3DObject {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    enum TextureExtensionFlag {
-        NoTextureExtensionEnabled = 0,
-        TextureFloatLinearExtensionEnabled = 1 << 0,
-        TextureHalfFloatLinearExtensionEnabled = 1 << 1
-    };
     ~WebGLTexture() override;
 
     static WebGLTexture* create(WebGLRenderingContextBase*);
 
-    void setTarget(GLenum target, GLint maxLevel);
-    void setParameteri(GLenum pname, GLint param);
-    void setParameterf(GLenum pname, GLfloat param);
+    void setTarget(GLenum);
 
     GLenum getTarget() const { return m_target; }
 
-    int getMinFilter() const { return m_samplerState.minFilter; }
-
-    void setLevelInfo(GLenum target, GLint level, GLenum internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLenum type);
-    void setTexStorageInfo(GLenum target, GLint levels, GLenum internalFormat, GLsizei width, GLsizei height, GLsizei depth);
-
-    bool canGenerateMipmaps();
-    // Generate all level information.
-    void generateMipmapLevelInfo();
-
-    GLenum getInternalFormat(GLenum target, GLint level) const;
-    GLenum getType(GLenum target, GLint level) const;
-    GLsizei getWidth(GLenum target, GLint level) const;
-    GLsizei getHeight(GLenum target, GLint level) const;
-    GLsizei getDepth(GLenum target, GLint level) const;
-    bool isValid(GLenum target, GLint level) const;
-    bool isImmutable() const { return m_immutable; }
-
     static GLenum getValidFormatForInternalFormat(GLenum);
-
-    bool isCubeComplete() const { return m_isCubeComplete; }
-
-    // Whether width/height is NotPowerOfTwo.
-    static bool isNPOT(GLsizei, GLsizei);
-
-    bool isNPOT() const;
-    // Determine if texture sampling should always return [0, 0, 0, 1] (OpenGL ES 2.0 Sec 3.8.2).
-    bool needToUseBlackTexture(TextureExtensionFlag, const WebGLSamplerState*) const;
 
     bool hasEverBeenBound() const { return object() && m_target; }
 
     static GLint computeLevelCount(GLsizei width, GLsizei height, GLsizei depth);
-    static GLenum getValidTypeForInternalFormat(GLenum);
-
-    const WebGLSamplerState* getSamplerState() const { return &m_samplerState; }
 
 private:
     explicit WebGLTexture(WebGLRenderingContextBase*);
 
     void deleteObjectImpl(WebGraphicsContext3D*) override;
 
-    class LevelInfo {
-    public:
-        LevelInfo()
-            : valid(false)
-            , internalFormat(0)
-            , width(0)
-            , height(0)
-            , depth(0)
-            , type(0)
-        {
-        }
-
-        void setInfo(GLenum internalFmt, GLsizei w, GLsizei h, GLsizei d, GLenum tp)
-        {
-            valid = true;
-            internalFormat = internalFmt;
-            width = w;
-            height = h;
-            depth = d;
-            type = tp;
-        }
-
-        bool valid;
-        GLenum internalFormat;
-        GLsizei width;
-        GLsizei height;
-        GLsizei depth;
-        GLenum type;
-    };
-
     bool isTexture() const override { return true; }
-
-    void update();
 
     int mapTargetToIndex(GLenum) const;
 
-    const LevelInfo* getLevelInfo(GLenum target, GLint level) const;
-
     GLenum m_target;
-
-    WebGLSamplerState m_samplerState;
-
-    Vector<Vector<LevelInfo>> m_info;
-
-    bool m_isNPOT;
-    bool m_isCubeComplete;
-    bool m_isComplete;
-    bool m_needToUseBlackTexture;
-    bool m_isFloatType;
-    bool m_isHalfFloatType;
-    bool m_isWebGL2OrHigher;
-    bool m_immutable;
-    size_t m_baseLevel;
-    size_t m_maxLevel;
 };
 
 } // namespace blink

@@ -54,6 +54,8 @@ WebInspector.TimelinePanel = function()
     this._tracingModel = new WebInspector.TracingModel(this._tracingModelBackingStorage);
     this._model = new WebInspector.TimelineModel(this._tracingModel, WebInspector.TimelineUIUtils.visibleEventsFilter());
     this._frameModel = new WebInspector.TracingTimelineFrameModel();
+    if (Runtime.experiments.isEnabled("timelineLatencyInfo"))
+        this._irModel = new WebInspector.TimelineIRModel();
 
     this._model.addEventListener(WebInspector.TimelineModel.Events.RecordingStarted, this._onRecordingStarted, this);
     this._model.addEventListener(WebInspector.TimelineModel.Events.RecordingStopped, this._onRecordingStopped, this);
@@ -182,13 +184,6 @@ WebInspector.TimelinePanel.prototype = {
 
     wasShown: function()
     {
-        if (!WebInspector.TimelinePanel._categoryStylesInitialized) {
-            WebInspector.TimelinePanel._categoryStylesInitialized = true;
-            var style = createElement("style");
-            var categories = WebInspector.TimelineUIUtils.categories();
-            style.textContent = Object.values(categories).map(WebInspector.TimelineUIUtils.createStyleRuleForCategory).join("\n");
-            this.element.ownerDocument.head.appendChild(style);
-        }
         WebInspector.context.setFlavor(WebInspector.TimelinePanel, this);
     },
 
@@ -293,7 +288,12 @@ WebInspector.TimelinePanel.prototype = {
     {
         modeView.setWindowTimes(this.windowStartTime(), this.windowEndTime());
         modeView.refreshRecords();
-        this._stackView.appendView(modeView.view(), "timelinePanelTimelineStackSplitViewState", undefined, 112);
+        var splitWidget = this._stackView.appendView(modeView.view(), "timelinePanelTimelineStackSplitViewState", undefined, 112);
+        var resizer = modeView.resizerElement();
+        if (splitWidget && resizer) {
+            splitWidget.hideDefaultResizer();
+            splitWidget.installResizer(resizer);
+        }
         this._currentViews.push(modeView);
     },
 
@@ -585,7 +585,7 @@ WebInspector.TimelinePanel.prototype = {
             this._stackView.show(this._tabbedPane.visibleView.element);
         }
         if (viewMode === WebInspector.TimelinePanel.ViewMode.FlameChart) {
-            this._flameChart = new WebInspector.TimelineFlameChartView(this, this._model, this._frameModel);
+            this._flameChart = new WebInspector.TimelineFlameChartView(this, this._model, this._frameModel, this._irModel);
             this._flameChart.enableNetworkPane(this._captureNetworkSetting.get());
             this._addModeView(this._flameChart);
         } else if (viewMode === WebInspector.TimelinePanel.ViewMode.CallTree || viewMode === WebInspector.TimelinePanel.ViewMode.BottomUp) {
@@ -798,6 +798,8 @@ WebInspector.TimelinePanel.prototype = {
         this._setState(WebInspector.TimelinePanel.State.Idle);
         this._frameModel.reset();
         this._frameModel.addTraceEvents(this._model.target(), this._model.inspectedTargetEvents(), this._model.sessionId() || "");
+        if (this._irModel)
+            this._irModel.populate(this._model);
         this._overviewPane.reset();
         this._overviewPane.setBounds(this._model.minimumRecordTime(), this._model.maximumRecordTime());
         this._setAutoWindowTimes();
@@ -1228,8 +1230,14 @@ WebInspector.TimelinePanel.prototype = {
         var leftTime = tasks[leftIndex].startTime();
         var rightTime = tasks[rightIndex].endTime();
         var span = rightTime - leftTime;
-        leftTime = Math.max(leftTime - 0.05 * span, this._tracingModel.minimumRecordTime());
-        rightTime = Math.min(rightTime + 0.05 * span, this._tracingModel.maximumRecordTime());
+        var totalSpan = this._tracingModel.maximumRecordTime() - this._tracingModel.minimumRecordTime();
+        if (span < totalSpan * 0.1) {
+            leftTime = this._tracingModel.minimumRecordTime();
+            rightTime = this._tracingModel.maximumRecordTime();
+        } else {
+            leftTime = Math.max(leftTime - 0.05 * span, this._tracingModel.minimumRecordTime());
+            rightTime = Math.min(rightTime + 0.05 * span, this._tracingModel.maximumRecordTime());
+        }
         this.requestWindowTimes(leftTime, rightTime);
     },
 
@@ -1256,6 +1264,15 @@ WebInspector.TimelineTreeModeView.prototype = {
      */
     dispose: function()
     {
+    },
+
+    /**
+     * @override
+     * @return {?Element}
+     */
+    resizerElement: function()
+    {
+        return null;
     },
 
     /**
@@ -1539,6 +1556,11 @@ WebInspector.TimelineModeView.prototype = {
     view: function() {},
 
     dispose: function() {},
+
+    /**
+     * @return {?Element}
+     */
+    resizerElement: function() {},
 
     reset: function() {},
 
@@ -2002,7 +2024,7 @@ WebInspector.TimelineFilters.prototype = {
             if (!category.visible)
                 continue;
             var filter = new WebInspector.CheckboxFilterUI(category.name, category.title);
-            filter.setColor(category.fillColorStop0, category.borderColor);
+            filter.setColor(category.color, "rgba(0, 0, 0, 0.2)");
             categoryFiltersUI[category.name] = filter;
             filter.addEventListener(WebInspector.FilterUI.Events.FilterChanged, categoriesFilterChanged.bind(this, categoryName));
             this._filterBar.addFilter(filter);

@@ -44,6 +44,7 @@ namespace fakeApi {
     long? maybe;
     (DOMString or Greek or long[]) choice;
     object plainObj;
+    ArrayBuffer arrayBuff;
   };
 
   callback VoidCallback = void();
@@ -81,7 +82,7 @@ expected_output = ("""// Copyright %s The Chromium Authors. All rights reserved.
 // NOTE: The format of types has changed. 'FooType' is now
 //   'chrome.fakeApi.FooType'.
 // Please run the closure compiler before committing changes.
-// See https://code.google.com/p/chromium/wiki/ClosureCompilation.
+// See https://chromium.googlesource.com/chromium/src/+/master/docs/closure_compilation.md
 
 /** @fileoverview Externs generated from namespace: fakeApi */
 
@@ -123,7 +124,8 @@ chrome.fakeApi.Bar;
  *   obj: !chrome.fakeApi.Bar,
  *   maybe: (number|undefined),
  *   choice: (string|!chrome.fakeApi.Greek|!Array<number>),
- *   plainObj: Object
+ *   plainObj: Object,
+ *   arrayBuff: ArrayBuffer
  * }}
  * @see https://developer.chrome.com/extensions/fakeApi#type-Baz
  */
@@ -202,6 +204,10 @@ fake_json = """// Copyright 2014 The Chromium Authors. All rights reserved.
                   "type": "integer"
                 }
               }
+            },
+            "quu": {
+              "type": "binary",
+              "description": "The array buffer"
             }
           }
         },
@@ -240,7 +246,7 @@ json_expected = ("""// Copyright %s The Chromium Authors. All rights reserved.
 // NOTE: The format of types has changed. 'FooType' is now
 //   'chrome.fakeJson.FooType'.
 // Please run the closure compiler before committing changes.
-// See https://code.google.com/p/chromium/wiki/ClosureCompilation.
+// See https://chromium.googlesource.com/chromium/src/+/master/docs/closure_compilation.md
 
 /** @fileoverview Externs generated from namespace: fakeJson */
 
@@ -266,7 +272,8 @@ chrome.fakeJson.CrazyEnum = {
  *   bar: number,
  *   baz: {
  *     depth: number
- *   }
+ *   },
+ *   quu: ArrayBuffer
  * }} inlineObj Evil inline object! With a super duper duper long string
  *     description that causes problems!
  * @param {function({
@@ -279,7 +286,7 @@ chrome.fakeJson.CrazyEnum = {
  * @see https://developer.chrome.com/extensions/fakeJson#method-funcWithInlineObj
  */
 chrome.fakeJson.funcWithInlineObj = function(inlineObj, callback) {};""" %
-                 (datetime.now().year, sys.argv[0]))
+    (datetime.now().year, sys.argv[0]))
 
 
 class JsExternGeneratorTest(unittest.TestCase):

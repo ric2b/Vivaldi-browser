@@ -52,6 +52,10 @@ const int kMinHeightForGpuRasteredTile = 256;
 // of using the same tile size.
 const int kTileRoundUp = 64;
 
+// For performance reasons and to support compressed tile textures, tile
+// width and height should be an even multiple of 4 in size.
+const int kTileMinimalAlignment = 4;
+
 }  // namespace
 
 namespace cc {
@@ -73,6 +77,7 @@ PictureLayerImpl::PictureLayerImpl(
       raster_source_scale_(0.f),
       raster_contents_scale_(0.f),
       low_res_raster_contents_scale_(0.f),
+      raster_source_scale_is_fixed_(false),
       was_screen_space_transform_animating_(false),
       only_used_low_res_last_append_quads_(false),
       is_mask_(is_mask),
@@ -546,6 +551,12 @@ void PictureLayerImpl::UpdateRasterSource(
   bool could_have_tilings = raster_source_.get() && CanHaveTilings();
   raster_source_.swap(raster_source);
 
+  // Only set the image decode controller when we're committing.
+  if (!pending_set) {
+    raster_source_->SetImageDecodeController(
+        layer_tree_impl()->tile_manager()->GetImageDecodeController());
+  }
+
   // The |new_invalidation| must be cleared before updating tilings since they
   // access the invalidation through the PictureLayerTilingClient interface.
   invalidation_.Clear();
@@ -775,6 +786,10 @@ gfx::Size PictureLayerImpl::CalculateTileSize(
     tile_height = std::min(tile_height, default_tile_height);
   }
 
+  // Ensure that tile width and height are properly aligned.
+  tile_width = MathUtil::UncheckedRoundUp(tile_width, kTileMinimalAlignment);
+  tile_height = MathUtil::UncheckedRoundUp(tile_height, kTileMinimalAlignment);
+
   // Under no circumstance should we be larger than the max texture size.
   tile_width = std::min(tile_width, max_texture_size);
   tile_height = std::min(tile_height, max_texture_size);
@@ -897,8 +912,10 @@ bool PictureLayerImpl::ShouldAdjustRasterScale() const {
   if (raster_device_scale_ != ideal_device_scale_)
     return true;
 
-  // When the source scale changes we want to match it, but not when animating.
+  // When the source scale changes we want to match it, but not when animating
+  // or when we've fixed the scale in place.
   if (!draw_properties().screen_space_transform_is_animating &&
+      !raster_source_scale_is_fixed_ &&
       raster_source_scale_ != ideal_source_scale_)
     return true;
 
@@ -939,13 +956,32 @@ void PictureLayerImpl::AddLowResolutionTilingIfNeeded() {
 }
 
 void PictureLayerImpl::RecalculateRasterScales() {
-  const float old_raster_contents_scale = raster_contents_scale_;
-  const float old_raster_page_scale = raster_page_scale_;
+  float old_raster_contents_scale = raster_contents_scale_;
+  float old_raster_page_scale = raster_page_scale_;
+  float old_raster_source_scale = raster_source_scale_;
 
   raster_device_scale_ = ideal_device_scale_;
   raster_page_scale_ = ideal_page_scale_;
   raster_source_scale_ = ideal_source_scale_;
   raster_contents_scale_ = ideal_contents_scale_;
+
+  // If we're not animating, or leaving an animation, and the
+  // ideal_source_scale_ changes, then things are unpredictable, and we fix
+  // the raster_source_scale_ in place.
+  if (old_raster_source_scale &&
+      !draw_properties().screen_space_transform_is_animating &&
+      !was_screen_space_transform_animating_ &&
+      old_raster_source_scale != ideal_source_scale_)
+    raster_source_scale_is_fixed_ = true;
+
+  // TODO(danakj): Adjust raster source scale closer to ideal source scale at
+  // a throttled rate. Possibly make use of invalidation_.IsEmpty() on pending
+  // tree. This will allow CSS scale changes to get re-rastered at an
+  // appropriate rate. (crbug.com/413636)
+  if (raster_source_scale_is_fixed_) {
+    raster_contents_scale_ /= raster_source_scale_;
+    raster_source_scale_ = 1.f;
+  }
 
   // During pinch we completely ignore the current ideal scale, and just use
   // a multiple of the previous scale.
@@ -1117,6 +1153,7 @@ void PictureLayerImpl::ResetRasterScale() {
   raster_source_scale_ = 0.f;
   raster_contents_scale_ = 0.f;
   low_res_raster_contents_scale_ = 0.f;
+  raster_source_scale_is_fixed_ = false;
 }
 
 bool PictureLayerImpl::CanHaveTilings() const {
@@ -1200,7 +1237,6 @@ void PictureLayerImpl::AsValueInto(
     base::trace_event::TracedValue* state) const {
   LayerImpl::AsValueInto(state);
   state->SetDouble("ideal_contents_scale", ideal_contents_scale_);
-  state->SetDouble("raster_contents_scale", raster_contents_scale_);
   state->SetDouble("geometry_contents_scale", MaximumTilingContentsScale());
   state->BeginArray("tilings");
   tilings_->AsValueInto(state);

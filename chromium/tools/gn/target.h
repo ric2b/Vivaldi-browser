@@ -16,11 +16,13 @@
 #include "tools/gn/config_values.h"
 #include "tools/gn/inherited_libraries.h"
 #include "tools/gn/item.h"
+#include "tools/gn/label_pattern.h"
 #include "tools/gn/label_ptr.h"
 #include "tools/gn/lib_file.h"
 #include "tools/gn/ordered_set.h"
 #include "tools/gn/output_file.h"
 #include "tools/gn/source_file.h"
+#include "tools/gn/toolchain.h"
 #include "tools/gn/unique_vector.h"
 
 class DepsIteratorRange;
@@ -65,6 +67,10 @@ class Target : public Item {
 
   OutputType output_type() const { return output_type_; }
   void set_output_type(OutputType t) { output_type_ = t; }
+
+  // True for targets that compile source code (all types of libaries and
+  // executables).
+  bool IsBinary() const;
 
   // Can be linked into other targets.
   bool IsLinkable() const;
@@ -204,6 +210,13 @@ class Target : public Item {
     return recursive_hard_deps_;
   }
 
+  std::vector<LabelPattern>& assert_no_deps() {
+    return assert_no_deps_;
+  }
+  const std::vector<LabelPattern>& assert_no_deps() const {
+    return assert_no_deps_;
+  }
+
   // The toolchain is only known once this target is resolved (all if its
   // dependencies are known). They will be null until then. Generally, this can
   // only be used during target writing.
@@ -244,6 +257,21 @@ class Target : public Item {
   const OutputFile& dependency_output_file() const {
     return dependency_output_file_;
   }
+  const OutputFile& runtime_link_output_file() const {
+    return runtime_link_output_file_;
+  }
+
+  // Computes the set of output files resulting from compiling the given source
+  // file. If the file can be compiled and the tool exists, fills the outputs
+  // in and writes the tool type to computed_tool_type. If the file is not
+  // compilable, returns false.
+  //
+  // The function can succeed with a "NONE" tool type for object files which
+  // are just passed to the output. The output will always be overwritten, not
+  // appended to.
+  bool GetOutputFilesForSource(const SourceFile& source,
+                               Toolchain::ToolType* computed_tool_type,
+                               std::vector<OutputFile>* outputs) const;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(Target, ResolvePrecompiledHeaders);
@@ -267,6 +295,7 @@ class Target : public Item {
   bool CheckVisibility(Err* err) const;
   bool CheckTestonly(Err* err) const;
   bool CheckNoNestedStaticLibs(Err* err) const;
+  bool CheckAssertNoDeps(Err* err) const;
   void CheckSourcesGenerated() const;
   void CheckSourceGenerated(const SourceFile& source) const;
 
@@ -307,6 +336,8 @@ class Target : public Item {
   // target is marked resolved. This will not include the current target.
   std::set<const Target*> recursive_hard_deps_;
 
+  std::vector<LabelPattern> assert_no_deps_;
+
   // Used for all binary targets. The precompiled header values in this struct
   // will be resolved to the ones to use for this target, if precompiled
   // headers are used.
@@ -322,6 +353,7 @@ class Target : public Item {
   std::vector<OutputFile> computed_outputs_;
   OutputFile link_output_file_;
   OutputFile dependency_output_file_;
+  OutputFile runtime_link_output_file_;
 
   DISALLOW_COPY_AND_ASSIGN(Target);
 };

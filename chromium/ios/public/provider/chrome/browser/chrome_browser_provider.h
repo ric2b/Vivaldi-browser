@@ -39,23 +39,14 @@ namespace user_prefs {
 class PrefRegistrySyncable;
 }
 
-// TODO(ios): Determine the best way to interface with Obj-C code through
-// the ChromeBrowserProvider. crbug/298181
-#ifdef __OBJC__
 @class UIView;
 @protocol InfoBarViewProtocol;
 typedef UIView<InfoBarViewProtocol>* InfoBarViewPlaceholder;
-#else
-class InfoBarViewPlaceholderClass;
-typedef InfoBarViewPlaceholderClass* InfoBarViewPlaceholder;
-class UIView;
-#endif
 
 namespace ios {
 
 class ChromeBrowserProvider;
 class ChromeBrowserState;
-class ChromeBrowserStateManager;
 class ChromeIdentityService;
 class GeolocationUpdaterProvider;
 class SigninResourcesProvider;
@@ -84,9 +75,6 @@ class ChromeBrowserProvider {
   GetProfileOAuth2TokenServiceIOSProvider();
   // Returns an UpdatableResourceProvider instance.
   virtual UpdatableResourceProvider* GetUpdatableResourceProvider();
-  // Creates a new ChromeBrowserStateManager instance.
-  virtual scoped_ptr<ChromeBrowserStateManager>
-  CreateChromeBrowserStateManager();
   // Returns an infobar view conforming to the InfoBarViewProtocol. The returned
   // object is retained.
   virtual InfoBarViewPlaceholder CreateInfoBarView(

@@ -3,8 +3,11 @@
     "MANY": {
       "chromium/components/security_interstitials/core/browser/resources/interstitial_v2.css": {
         "encoding": "utf8",
-        "targets": [ "component_resources", "component_chrome_resources",
-                     "component_google_resources" ],
+        "targets": [
+          "component_resources",
+          "component_chrome_resources",
+          "component_google_resources"
+        ],
         "basepath": "chromium/components",
         "stringreplace": [
           {
@@ -15,52 +18,6 @@
       }
     },
     "renderer_resources": {
-      "chromium/chrome/renderer/resources/neterror.html": {
-        "encoding": "utf8",
-        "stringreplace": [
-          {
-            "match": "href=\"../../../components/security_interstitials/core/browser/resources/interstitial_v2.css\"",
-            "replace": "href=\"interstitial_v2.css\""
-          },
-          {
-            "match": "src=\"../../../components/security_interstitials/core/browser/resources/interstitial_v2_mobile.js\"",
-            "replace": "src=\"interstitial_v2_mobile.js\""
-          },
-          {
-            "match": "src=\"default_100_percent/offline/100-offline-sprite.png\"",
-            "replace": "src=\"default_100_percent/vivaldi/100-offline-sprite.png\""
-          },
-          {
-            "match": "src=\"default_200_percent/offline/200-offline-sprite.png\"",
-            "replace": "src=\"default_200_percent/vivaldi/200-offline-sprite.png\""
-          }
-        ]
-      },
-      "chromium/chrome/renderer/resources/neterror.css": {
-        "encoding": "utf8",
-        "stringreplace": [
-          {
-            "match": "url(default_100_percent/offline/100-error-offline.png)",
-            "replace": "url(default_100_percent/vivaldi/100-error-offline.png)"
-          },
-          {
-            "match": "url(default_200_percent/offline/200-error-offline.png)",
-            "replace": "url(default_200_percent/vivaldi/200-error-offline.png)"
-          },
-          {
-            "match": "url(default_100_percent/common/error_network_generic.png)",
-            "replace": "url(default_100_percent/vivaldi/error_network_generic.png)"
-          },
-          {
-            "match": "url(default_200_percent/common/error_network_generic.png)",
-            "replace": "url(default_200_percent/vivaldi/error_network_generic.png)"
-          },
-          {
-            "match": "url(../../app/theme",
-            "replace": "url(../../../chromium/chrome/app/theme"
-          }
-        ]
-      },
       "chromium/chrome/renderer/resources/plugins/blocked_plugin.html": {
         "encoding": "utf8",
         "basepath": "chromium/chrome/renderer/resources/",
@@ -88,6 +45,46 @@
           {
             "match": "url(../../../../ui/resources/",
             "replace": "url(../../../../chromium/ui/resources/"
+          }
+        ]
+      }
+    },
+    "component_locale_resources": {
+      "chromium/components/neterror/resources/neterror.html": {
+        "encoding": "utf8",
+        "stringreplace": [
+          {
+            "match": "href=\"../../../components/security_interstitials/core/browser/resources/interstitial_v2.css\"",
+            "replace": "href=\"interstitial_v2.css\""
+          },
+          {
+            "match": "src=\"../../../components/security_interstitials/core/browser/resources/interstitial_v2_mobile.js\"",
+            "replace": "src=\"interstitial_v2_mobile.js\""
+          }
+        ]
+      },
+      "chromium/components/neterror/resources/neterror.css": {
+        "encoding": "utf8",
+        "stringreplace": [
+          {
+            "match": "url(../../../../app/resources/renderer/default_100_percent/vivaldi/100-error-offline.png)",
+            "replace": "url(default_100_percent/vivaldi/100-error-offline.png)"
+          },
+          {
+            "match": "url(../../../../app/resources/renderer/default_200_percent/vivaldi/200-error-offline.png)",
+            "replace": "url(default_200_percent/vivaldi/200-error-offline.png)"
+          },
+          {
+            "match": "url(../../../../app/resources/renderer/default_100_percent/vivaldi/error_network_generic.png)",
+            "replace": "url(default_100_percent/vivaldi/error_network_generic.png)"
+          },
+          {
+            "match": "url(../../../../app/resources/renderer/default_200_percent/vivaldi/error_network_generic.png)",
+            "replace": "url(default_200_percent/vivaldi/error_network_generic.png)"
+          },
+          {
+            "match": "url(../../resources/",
+            "replace": "url(../../../chromium/components/resources/"
           }
         ]
       }

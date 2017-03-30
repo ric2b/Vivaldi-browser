@@ -5,6 +5,7 @@
 #include "cc/test/fake_layer_tree_host.h"
 
 #include "cc/layers/layer.h"
+#include "cc/test/fake_image_serialization_processor.h"
 #include "cc/test/test_task_graph_runner.h"
 
 namespace cc {
@@ -20,7 +21,7 @@ FakeLayerTreeHost::FakeLayerTreeHost(FakeLayerTreeHostClient* client,
       needs_commit_(false),
       renderer_capabilities_set(false) {
   scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner =
-      mode == CompositorMode::Threaded ? base::ThreadTaskRunnerHandle::Get()
+      mode == CompositorMode::THREADED ? base::ThreadTaskRunnerHandle::Get()
                                        : nullptr;
   SetTaskRunnerProviderForTesting(TaskRunnerProvider::Create(
       base::ThreadTaskRunnerHandle::Get(), impl_task_runner));
@@ -31,7 +32,6 @@ scoped_ptr<FakeLayerTreeHost> FakeLayerTreeHost::Create(
     FakeLayerTreeHostClient* client,
     TestTaskGraphRunner* task_graph_runner) {
   LayerTreeSettings settings;
-  settings.verify_property_trees = true;
   settings.use_compositor_animation_timelines = true;
   return Create(client, task_graph_runner, settings);
 }
@@ -41,7 +41,7 @@ scoped_ptr<FakeLayerTreeHost> FakeLayerTreeHost::Create(
     TestTaskGraphRunner* task_graph_runner,
     const LayerTreeSettings& settings) {
   return Create(client, task_graph_runner, settings,
-                CompositorMode::SingleThreaded);
+                CompositorMode::SINGLE_THREADED);
 }
 
 scoped_ptr<FakeLayerTreeHost> FakeLayerTreeHost::Create(
@@ -53,6 +53,20 @@ scoped_ptr<FakeLayerTreeHost> FakeLayerTreeHost::Create(
   params.client = client;
   params.settings = &settings;
   params.task_graph_runner = task_graph_runner;
+  return make_scoped_ptr(new FakeLayerTreeHost(client, &params, mode));
+}
+
+scoped_ptr<FakeLayerTreeHost> FakeLayerTreeHost::Create(
+    FakeLayerTreeHostClient* client,
+    TestTaskGraphRunner* task_graph_runner,
+    const LayerTreeSettings& settings,
+    CompositorMode mode,
+    ImageSerializationProcessor* image_serialization_processor) {
+  LayerTreeHost::InitParams params;
+  params.client = client;
+  params.settings = &settings;
+  params.task_graph_runner = task_graph_runner;
+  params.image_serialization_processor = image_serialization_processor;
   return make_scoped_ptr(new FakeLayerTreeHost(client, &params, mode));
 }
 
@@ -89,6 +103,18 @@ LayerImpl* FakeLayerTreeHost::CommitAndCreateLayerImplTree() {
 
   active_tree()->UpdatePropertyTreesForBoundsDelta();
   return active_tree()->root_layer();
+}
+
+LayerImpl* FakeLayerTreeHost::CommitAndCreatePendingTree() {
+  scoped_ptr<LayerImpl> old_root_layer_impl = pending_tree()->DetachLayerTree();
+
+  scoped_ptr<LayerImpl> layer_impl = TreeSynchronizer::SynchronizeTrees(
+      root_layer(), std::move(old_root_layer_impl), pending_tree());
+  pending_tree()->SetPropertyTrees(*property_trees());
+  TreeSynchronizer::PushProperties(root_layer(), layer_impl.get());
+
+  pending_tree()->SetRootLayer(std::move(layer_impl));
+  return pending_tree()->root_layer();
 }
 
 }  // namespace cc

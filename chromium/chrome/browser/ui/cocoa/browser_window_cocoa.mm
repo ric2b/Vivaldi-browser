@@ -9,7 +9,6 @@
 #include "base/logging.h"
 #import "base/mac/sdk_forward_declarations.h"
 #include "base/message_loop/message_loop.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -17,8 +16,8 @@
 #include "chrome/browser/download/download_shelf.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
-#include "chrome/browser/fullscreen.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/signin/chrome_signin_helper.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
@@ -29,6 +28,7 @@
 #include "chrome/browser/ui/browser_window_state.h"
 #import "chrome/browser/ui/cocoa/autofill/save_card_bubble_view_bridge.h"
 #import "chrome/browser/ui/cocoa/browser/edit_search_engine_cocoa_controller.h"
+#import "chrome/browser/ui/cocoa/browser/exclusive_access_controller_views.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/browser_window_utils.h"
 #import "chrome/browser/ui/cocoa/chrome_event_processing_window.h"
@@ -46,16 +46,18 @@
 #include "chrome/browser/ui/cocoa/status_bubble_mac.h"
 #include "chrome/browser/ui/cocoa/task_manager_mac.h"
 #import "chrome/browser/ui/cocoa/toolbar/toolbar_controller.h"
-#import "chrome/browser/ui/cocoa/web_dialog_window_controller.h"
 #import "chrome/browser/ui/cocoa/website_settings/website_settings_bubble_controller.h"
-#include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
+#include "chrome/browser/ui/profile_chooser_constants.h"
 #include "chrome/browser/ui/search/search_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "components/translate/core/browser/language_state.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/notification_details.h"
@@ -70,7 +72,7 @@
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/rect.h"
 
-#if defined(ENABLE_ONE_CLICK_SIGNIN)
+#if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
 #import "chrome/browser/ui/cocoa/one_click_signin_bubble_controller.h"
 #import "chrome/browser/ui/cocoa/one_click_signin_dialog_controller.h"
 #endif
@@ -154,8 +156,8 @@ void BrowserWindowCocoa::Show() {
   // browser at the time |Show()| is called. This is the natural behaviour under
   // Windows, but |-makeKeyAndOrderFront:| won't send |-windowDidBecomeMain:|
   // until we return to the runloop. Therefore any calls to
-  // |chrome::FindLastActiveWithHostDesktopType| will return the previous
-  // browser instead if we don't explicitly set it here.
+  // |chrome::FindLastActive| will return the previous browser instead if we
+  // don't explicitly set it here.
   BrowserList::SetLastActive(browser_);
 
   bool is_session_restore = browser_->is_session_restore();
@@ -208,7 +210,7 @@ void BrowserWindowCocoa::Hide() {
 void BrowserWindowCocoa::SetBounds(const gfx::Rect& bounds) {
   gfx::Rect real_bounds = [controller_ enforceMinWindowSize:bounds];
 
-  ExitFullscreen();
+  GetExclusiveAccessContext()->ExitFullscreen();
   NSRect cocoa_bounds = NSMakeRect(real_bounds.x(), 0,
                                    real_bounds.width(),
                                    real_bounds.height());
@@ -382,6 +384,12 @@ gfx::Rect BrowserWindowCocoa::GetBounds() const {
   return GetRestoredBounds();
 }
 
+gfx::Size BrowserWindowCocoa::GetContentsSize() const {
+  NSView* view = [[controller_ overlayableContentsController] view];
+  const NSSize size = [view bounds].size;
+  return gfx::Size(NSSizeToCGSize(size));
+}
+
 bool BrowserWindowCocoa::IsMaximized() const {
   // -isZoomed returns YES if the window's frame equals the rect returned by
   // -windowWillUseStandardFrame:defaultFrame:, even if the window is in the
@@ -410,35 +418,6 @@ void BrowserWindowCocoa::Restore() {
     [window() deminiaturize:controller_];
 }
 
-// See browser_window_controller.h for a detailed explanation of the logic in
-// this method.
-void BrowserWindowCocoa::EnterFullscreen(const GURL& url,
-                                         ExclusiveAccessBubbleType bubble_type,
-                                         bool with_toolbar) {
-  if (browser_->exclusive_access_manager()
-          ->fullscreen_controller()
-          ->IsWindowFullscreenForTabOrPending())
-    [controller_ enterWebContentFullscreenForURL:url bubbleType:bubble_type];
-  else if (!url.is_empty())
-    [controller_ enterExtensionFullscreenForURL:url bubbleType:bubble_type];
-  else
-    [controller_ enterBrowserFullscreenWithToolbar:with_toolbar];
-}
-
-void BrowserWindowCocoa::ExitFullscreen() {
-  [controller_ exitAnyFullscreen];
-}
-
-void BrowserWindowCocoa::UpdateExclusiveAccessExitBubbleContent(
-    const GURL& url,
-    ExclusiveAccessBubbleType bubble_type) {
-  [controller_ updateFullscreenExitBubbleURL:url bubbleType:bubble_type];
-}
-
-void BrowserWindowCocoa::OnExclusiveAccessUserInput() {
-  // TODO(mgiuca): Route this signal to the exclusive access bubble on Mac.
-}
-
 bool BrowserWindowCocoa::ShouldHideUIForFullscreen() const {
   // On Mac, fullscreen mode has most normal things (in a slide-down panel).
   return false;
@@ -449,30 +428,7 @@ bool BrowserWindowCocoa::IsFullscreen() const {
 }
 
 bool BrowserWindowCocoa::IsFullscreenBubbleVisible() const {
-  return false;
-}
-
-bool BrowserWindowCocoa::SupportsFullscreenWithToolbar() const {
-  return chrome::mac::SupportsSystemFullscreen();
-}
-
-void BrowserWindowCocoa::UpdateFullscreenWithToolbar(bool with_toolbar) {
-  [controller_ updateFullscreenWithToolbar:with_toolbar];
-}
-
-void BrowserWindowCocoa::ToggleFullscreenToolbar() {
-  PrefService* prefs = browser_->profile()->GetPrefs();
-  bool hideToolbar = !prefs->GetBoolean(prefs::kHideFullscreenToolbar);
-  [controller_ setFullscreenToolbarHidden:hideToolbar];
-  prefs->SetBoolean(prefs::kHideFullscreenToolbar, hideToolbar);
-}
-
-bool BrowserWindowCocoa::IsFullscreenWithToolbar() const {
-  return IsFullscreen() && ![controller_ inPresentationMode];
-}
-
-bool BrowserWindowCocoa::ShouldHideFullscreenToolbar() const {
-  return [controller_ shouldHideFullscreenToolbar];
+  return false;  // Currently only called from toolkit-views website_settings.
 }
 
 void BrowserWindowCocoa::ConfirmAddSearchProvider(
@@ -686,7 +642,7 @@ void BrowserWindowCocoa::ShowTranslateBubble(
                                        errorType:error_type];
 }
 
-#if defined(ENABLE_ONE_CLICK_SIGNIN)
+#if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
 void BrowserWindowCocoa::ShowOneClickSigninBubble(
     OneClickSigninBubbleType type,
     const base::string16& email,
@@ -779,8 +735,17 @@ bool BrowserWindowCocoa::PreHandleKeyboardEvent(
 
 void BrowserWindowCocoa::HandleKeyboardEvent(
     const NativeWebKeyboardEvent& event) {
-  if ([BrowserWindowUtils shouldHandleKeyboardEvent:event])
-    [BrowserWindowUtils handleKeyboardEvent:event.os_event inWindow:window()];
+  if ([BrowserWindowUtils shouldHandleKeyboardEvent:event]) {
+    if (![BrowserWindowUtils handleKeyboardEvent:event.os_event
+                                        inWindow:window()]) {
+
+      // TODO(spqchan): This is a temporary fix for exit extension fullscreen.
+      // A priority system for exiting extension fullscreen when there is a
+      // conflict is being experimented. See Issue 536047.
+      if (event.windowsKeyCode == ui::VKEY_ESCAPE)
+        [controller_ exitExtensionFullscreenIfPossible];
+    }
+  }
 }
 
 void BrowserWindowCocoa::CutCopyPaste(int command_id) {
@@ -850,23 +815,23 @@ void BrowserWindowCocoa::ShowAvatarBubbleFromAvatarButton(
     AvatarBubbleMode mode,
     const signin::ManageAccountsParams& manage_accounts_params,
     signin_metrics::AccessPoint access_point) {
-  AvatarBaseController* controller = [controller_ avatarButtonController];
-  NSView* anchor = [controller buttonView];
-  if ([anchor isHiddenOrHasHiddenAncestor])
-    anchor = [[controller_ toolbarController] appMenuButton];
-  [controller showAvatarBubbleAnchoredAt:anchor
-                                withMode:mode
-                         withServiceType:manage_accounts_params.service_type
-                         fromAccessPoint:access_point];
-}
+  profiles::BubbleViewMode bubble_view_mode;
+  profiles::TutorialMode tutorial_mode;
+  profiles::BubbleViewModeFromAvatarBubbleMode(mode, &bubble_view_mode,
+                                               &tutorial_mode);
 
-void BrowserWindowCocoa::ShowModalSigninWindow(
-    AvatarBubbleMode mode,
-    signin_metrics::AccessPoint access_point) {
-  NOTREACHED();
-}
-void BrowserWindowCocoa::CloseModalSigninWindow() {
-  NOTREACHED();
+  if (SigninViewController::ShouldShowModalSigninForMode(bubble_view_mode)) {
+    browser_->ShowModalSigninWindow(bubble_view_mode, access_point);
+  } else {
+    AvatarBaseController* controller = [controller_ avatarButtonController];
+    NSView* anchor = [controller buttonView];
+    if ([anchor isHiddenOrHasHiddenAncestor])
+      anchor = [[controller_ toolbarController] appMenuButton];
+    [controller showAvatarBubbleAnchoredAt:anchor
+                                  withMode:mode
+                           withServiceType:manage_accounts_params.service_type
+                           fromAccessPoint:access_point];
+  }
 }
 
 int
@@ -883,24 +848,5 @@ void BrowserWindowCocoa::ExecuteExtensionCommand(
 }
 
 ExclusiveAccessContext* BrowserWindowCocoa::GetExclusiveAccessContext() {
-  return this;
-}
-
-Profile* BrowserWindowCocoa::GetProfile() {
-  return browser_->profile();
-}
-
-WebContents* BrowserWindowCocoa::GetActiveWebContents() {
-  return browser_->tab_strip_model()->GetActiveWebContents();
-}
-
-void BrowserWindowCocoa::UnhideDownloadShelf() {
-  GetDownloadShelf()->Unhide();
-}
-
-void BrowserWindowCocoa::HideDownloadShelf() {
-  GetDownloadShelf()->Hide();
-  StatusBubble* statusBubble = GetStatusBubble();
-  if (statusBubble)
-    statusBubble->Hide();
+  return [controller_ exclusiveAccessController];
 }

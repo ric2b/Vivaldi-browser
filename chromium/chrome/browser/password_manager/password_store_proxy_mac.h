@@ -9,11 +9,11 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/prefs/pref_member.h"
 #include "base/threading/thread.h"
 #include "components/password_manager/core/browser/keychain_migration_status_mac.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "components/prefs/pref_member.h"
 
 namespace crypto {
 class AppleKeychain;
@@ -86,11 +86,12 @@ class PasswordStoreProxyMac : public password_manager::PasswordStore {
   password_manager::PasswordStoreChangeList RemoveLoginsSyncedBetweenImpl(
       base::Time delete_begin,
       base::Time delete_end) override;
+  password_manager::PasswordStoreChangeList DisableAutoSignInForAllLoginsImpl()
+      override;
   bool RemoveStatisticsCreatedBetweenImpl(base::Time delete_begin,
                                           base::Time delete_end) override;
   ScopedVector<autofill::PasswordForm> FillMatchingLogins(
-      const autofill::PasswordForm& form,
-      AuthorizationPromptPolicy prompt_policy) override;
+      const autofill::PasswordForm& form) override;
   bool FillAutofillableLogins(
       ScopedVector<autofill::PasswordForm>* forms) override;
   bool FillBlacklistLogins(

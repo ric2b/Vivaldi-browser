@@ -13,6 +13,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/mus/common/types.h"
+#include "components/mus/public/interfaces/window_manager_constants.mojom.h"
 #include "components/mus/public/interfaces/window_tree_host.mojom.h"
 #include "components/mus/ws/display_manager.h"
 #include "components/mus/ws/event_dispatcher.h"
@@ -21,6 +22,7 @@
 #include "components/mus/ws/focus_controller_observer.h"
 #include "components/mus/ws/server_window.h"
 #include "components/mus/ws/server_window_observer.h"
+#include "components/mus/ws/server_window_tracker.h"
 
 namespace mus {
 namespace ws {
@@ -45,21 +47,24 @@ class WindowTreeHostImpl : public DisplayManagerDelegate,
   // TODO(fsamuel): All these parameters are just plumbing for creating
   // DisplayManagers. We should probably just store these common parameters
   // in the DisplayManagerFactory and pass them along on DisplayManager::Create.
-  WindowTreeHostImpl(mojom::WindowTreeHostClientPtr client,
-                     ConnectionManager* connection_manager,
-                     mojo::ApplicationImpl* app_impl,
+  WindowTreeHostImpl(ConnectionManager* connection_manager,
+                     mojo::Connector* connector,
                      const scoped_refptr<GpuState>& gpu_state,
-                     const scoped_refptr<SurfacesState>& surfaces_state,
-                     mojom::WindowManagerPtr window_manater);
+                     const scoped_refptr<SurfacesState>& surfaces_state);
   ~WindowTreeHostImpl() override;
 
   // Initializes state that depends on the existence of a WindowTreeHostImpl.
   void Init(WindowTreeHostDelegate* delegate);
 
+  uint32_t id() const { return id_; }
+
   const WindowTreeImpl* GetWindowTree() const;
   WindowTreeImpl* GetWindowTree();
 
-  mojom::WindowTreeHostClient* client() const { return client_.get(); }
+  void SetFrameDecorationValues(mojom::FrameDecorationValuesPtr values);
+  const mojom::FrameDecorationValues& frame_decoration_values() const {
+    return *frame_decoration_values_;
+  }
 
   // Returns whether |window| is a descendant of this root but not itself a
   // root window.
@@ -80,21 +85,37 @@ class WindowTreeHostImpl : public DisplayManagerDelegate,
   // Returns the metrics for this viewport.
   const mojom::ViewportMetrics& GetViewportMetrics() const;
 
+  mojom::Rotation GetRotation() const;
+
   ConnectionManager* connection_manager() { return connection_manager_; }
 
-  mojom::WindowManager* window_manager() { return window_manager_.get(); }
+  EventDispatcher* event_dispatcher() { return &event_dispatcher_; }
 
   // Returns the root ServerWindow of this viewport.
   ServerWindow* root_window() { return root_.get(); }
   const ServerWindow* root_window() const { return root_.get(); }
 
+  void SetCapture(ServerWindow* window, bool in_nonclient_area);
+
   void SetFocusedWindow(ServerWindow* window);
   ServerWindow* GetFocusedWindow();
   void DestroyFocusController();
+  FocusController* focus_controller() { return focus_controller_.get(); }
+
+  void AddActivationParent(ServerWindow* window);
+  void RemoveActivationParent(ServerWindow* window);
 
   void UpdateTextInputState(ServerWindow* window,
                             const ui::TextInputState& state);
   void SetImeVisibility(ServerWindow* window, bool visible);
+
+  // Returns the window that has captured input.
+  ServerWindow* GetCaptureWindow() {
+    return event_dispatcher_.capture_window();
+  }
+  const ServerWindow* GetCaptureWindow() const {
+    return event_dispatcher_.capture_window();
+  }
 
   // Called just before |tree| is destroyed after its connection encounters an
   // error.
@@ -112,18 +133,6 @@ class WindowTreeHostImpl : public DisplayManagerDelegate,
   // WindowTreeHost:
   void SetSize(mojo::SizePtr size) override;
   void SetTitle(const mojo::String& title) override;
-  void AddAccelerator(uint32_t id,
-                      mojom::EventMatcherPtr event_matcher,
-                      const AddAcceleratorCallback& callback) override;
-  void RemoveAccelerator(uint32_t id) override;
-  void AddActivationParent(Id transport_window_id) override;
-  void RemoveActivationParent(Id transport_window_id) override;
-  void ActivateNextWindow() override;
-  void SetUnderlaySurfaceOffsetAndExtendedHitArea(
-      Id window_id,
-      int32_t x_offset,
-      int32_t y_offset,
-      mojo::InsetsPtr hit_area) override;
 
   void OnEventAck(mojom::WindowTree* tree);
 
@@ -147,10 +156,6 @@ class WindowTreeHostImpl : public DisplayManagerDelegate,
     scoped_ptr<ProcessedEventTarget> processed_target;
   };
 
-  WindowId MapWindowIdFromClient(Id transport_window_id) const;
-
-  void OnClientClosed();
-
   void OnEventAckTimeout();
 
   // Schedules an event to be processed later.
@@ -172,6 +177,7 @@ class WindowTreeHostImpl : public DisplayManagerDelegate,
   // DisplayManagerDelegate:
   ServerWindow* GetRootWindow() override;
   void OnEvent(const ui::Event& event) override;
+  void OnNativeCaptureLost() override;
   void OnDisplayClosed() override;
   void OnViewportMetricsChanged(
       const mojom::ViewportMetrics& old_metrics,
@@ -193,6 +199,9 @@ class WindowTreeHostImpl : public DisplayManagerDelegate,
   void OnAccelerator(uint32_t accelerator_id, mojom::EventPtr event) override;
   void SetFocusedWindowFromEventDispatcher(ServerWindow* window) override;
   ServerWindow* GetFocusedWindowForEventDispatcher() override;
+  void SetNativeCapture() override;
+  void ReleaseNativeCapture() override;
+  void OnServerWindowCaptureLost(ServerWindow* window) override;
   void DispatchInputEventToWindow(ServerWindow* target,
                                   bool in_nonclient_area,
                                   mojom::EventPtr event) override;
@@ -200,20 +209,19 @@ class WindowTreeHostImpl : public DisplayManagerDelegate,
   // ServerWindowObserver:
   void OnWindowDestroyed(ServerWindow* window) override;
 
+  const uint32_t id_;
   WindowTreeHostDelegate* delegate_;
   ConnectionManager* const connection_manager_;
-  mojom::WindowTreeHostClientPtr client_;
   EventDispatcher event_dispatcher_;
   scoped_ptr<ServerWindow> root_;
   scoped_ptr<DisplayManager> display_manager_;
   scoped_ptr<FocusController> focus_controller_;
-  mojom::WindowManagerPtr window_manager_;
   mojom::WindowTree* tree_awaiting_input_ack_;
 
   // The last cursor set. Used to track whether we need to change the cursor.
   int32_t last_cursor_;
 
-  std::set<WindowId> activation_parents_;
+  ServerWindowTracker activation_parents_;
 
   // Set of windows with surfaces that need to be destroyed once the frame
   // draws.
@@ -221,6 +229,8 @@ class WindowTreeHostImpl : public DisplayManagerDelegate,
 
   std::queue<scoped_ptr<QueuedEvent>> event_queue_;
   base::OneShotTimer event_ack_timer_;
+
+  mojom::FrameDecorationValuesPtr frame_decoration_values_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowTreeHostImpl);
 };

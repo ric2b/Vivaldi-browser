@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import imp
+import collections
 import itertools
 import os
 import posixpath
@@ -11,7 +11,6 @@ from devil.android import device_errors
 from devil.android import device_temp_file
 from devil.android import ports
 from devil.utils import reraiser_thread
-from incremental_install import installer
 from pylib import constants
 from pylib.gtest import gtest_test_instance
 from pylib.local import local_test_server_spawner
@@ -69,10 +68,37 @@ def PullAppFilesImpl(device, package, files, directory):
     device.PullFile(device_file, host_file)
 
 
+def _ExtractTestsFromFilter(gtest_filter):
+  """Returns the list of tests specified by the given filter.
+
+  Returns:
+    None if the device should be queried for the test list instead.
+  """
+  # Empty means all tests, - means exclude filter.
+  if not gtest_filter or '-' in gtest_filter:
+    return None
+
+  patterns = gtest_filter.split(':')
+  # For a single pattern, allow it even if it has a wildcard so long as the
+  # wildcard comes at the end and there is at least one . to prove the scope is
+  # not too large.
+  # This heuristic is not necessarily faster, but normally is.
+  if len(patterns) == 1 and patterns[0].endswith('*'):
+    no_suffix = patterns[0].rstrip('*')
+    if '*' not in no_suffix and '.' in no_suffix:
+      return patterns
+
+  if '*' in gtest_filter:
+    return None
+  return patterns
+
+
 class _ApkDelegate(object):
   def __init__(self, test_instance):
     self._activity = test_instance.activity
     self._apk_helper = test_instance.apk_helper
+    self._test_apk_incremental_install_script = (
+        test_instance.test_apk_incremental_install_script)
     self._package = test_instance.package
     self._runner = test_instance.runner
     self._permissions = test_instance.permissions
@@ -80,25 +106,13 @@ class _ApkDelegate(object):
     self._component = '%s/%s' % (self._package, self._runner)
     self._extras = test_instance.extras
 
-  def Install(self, device, incremental=False):
-    if not incremental:
+  def Install(self, device):
+    if self._test_apk_incremental_install_script:
+      local_device_test_run.IncrementalInstall(device, self._apk_helper,
+          self._test_apk_incremental_install_script)
+    else:
       device.Install(self._apk_helper, reinstall=True,
                      permissions=self._permissions)
-      return
-
-    installer_script = os.path.join(constants.GetOutDirectory(), 'bin',
-                                    'install_%s_apk_incremental' % self._suite)
-    try:
-      install_wrapper = imp.load_source('install_wrapper', installer_script)
-    except IOError:
-      raise Exception(('Incremental install script not found: %s\n'
-                       'Make sure to first build "%s_incremental"') %
-                      (installer_script, self._suite))
-    params = install_wrapper.GetInstallParameters()
-
-    installer.Install(device, self._apk_helper, split_globs=params['splits'],
-                      native_libs=params['native_libs'],
-                      dex_files=params['dex_files'])
 
   def Run(self, test, device, flags=None, **kwargs):
     extras = dict(self._extras)
@@ -159,8 +173,7 @@ class _ExeDelegate(object):
       self._deps_host_path = None
     self._test_run = tr
 
-  def Install(self, device, incremental=False):
-    assert not incremental
+  def Install(self, device):
     # TODO(jbudorick): Look into merging this with normal data deps pushing if
     # executables become supported on nonlocal environments.
     host_device_tuples = [(self._exe_host_path, self._exe_device_path)]
@@ -217,7 +230,7 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
     elif self._test_instance.exe:
       self._delegate = _ExeDelegate(self, self._test_instance.exe)
 
-    self._servers = {}
+    self._servers = collections.defaultdict(list)
 
   #override
   def TestPackage(self):
@@ -230,7 +243,7 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
     def individual_device_set_up(dev):
       def install_apk():
         # Install test APK.
-        self._delegate.Install(dev, incremental=self._env.incremental_install)
+        self._delegate.Install(dev)
 
       def push_test_data():
         # Push data dependencies.
@@ -280,6 +293,14 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
 
   #override
   def _GetTests(self):
+    if self._test_instance.extract_test_list_from_filter:
+      # When the exact list of tests to run is given via command-line (e.g. when
+      # locally iterating on a specific test), skip querying the device (which
+      # takes ~3 seconds).
+      tests = _ExtractTestsFromFilter(self._test_instance.gtest_filter)
+      if tests:
+        return tests
+
     # Even when there's only one device, it still makes sense to retrieve the
     # test list so that tests can be split up and run in batches rather than all
     # at once (since test output is not streamed).
@@ -311,9 +332,7 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
     if self._test_instance.app_files:
       self._delegate.PullAppFiles(device, self._test_instance.app_files,
                                   self._test_instance.app_file_dir)
-    # Clearing data when using incremental install wipes out cached optimized
-    # dex files (and shouldn't be necessary by tests anyways).
-    if not self._env.incremental_install:
+    if not self._test_instance.skip_clear_data:
       self._delegate.Clear(device)
 
     # Parse the output.

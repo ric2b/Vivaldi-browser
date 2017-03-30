@@ -46,7 +46,7 @@ void GpuRasterizer::RasterizeSource(
     float scale) {
   // Play back raster_source into temp SkPicture.
   SkPictureRecorder recorder;
-  gfx::Size size = write_lock->resource()->size;
+  const gfx::Size size = write_lock->GetResourceSize();
   const int flags = SkPictureRecorder::kComputeSaveLayerInfo_RecordFlag;
   skia::RefPtr<SkCanvas> canvas = skia::SharePtr(
       recorder.beginRecording(size.width(), size.height(), NULL, flags));
@@ -79,7 +79,7 @@ void GpuRasterizer::RasterizeSource(
 
     SkMultiPictureDraw multi_picture_draw;
     multi_picture_draw.add(sk_surface->getCanvas(), picture.get());
-    multi_picture_draw.draw(msaa_sample_count_ > 0);
+    multi_picture_draw.draw(false);
     write_lock->ReleaseSkSurface();
   }
 }

@@ -18,9 +18,12 @@ namespace test {
 class QuicPacketCreatorPeer {
  public:
   static bool SendVersionInPacket(QuicPacketCreator* creator);
+  static bool SendPathIdInPacket(QuicPacketCreator* creator);
 
   static void SetSendVersionInPacket(QuicPacketCreator* creator,
                                      bool send_version_in_packet);
+  static void SetSendPathIdInPacket(QuicPacketCreator* creator,
+                                    bool send_path_id_in_packet);
   static void SetPacketNumberLength(
       QuicPacketCreator* creator,
       QuicPacketNumberLength packet_number_length);
@@ -47,9 +50,13 @@ class QuicPacketCreatorPeer {
   static bool IsFecEnabled(QuicPacketCreator* creator);
   static void StartFecProtectingPackets(QuicPacketCreator* creator);
   static void StopFecProtectingPackets(QuicPacketCreator* creator);
-  static SerializedPacket SerializeFec(QuicPacketCreator* creator,
-                                       char* buffer,
-                                       size_t buffer_len);
+  static void SerializeFec(QuicPacketCreator* creator,
+                           char* buffer,
+                           size_t buffer_len);
+  static SerializedPacket SerializeAllFrames(QuicPacketCreator* creator,
+                                             const QuicFrames& frames,
+                                             char* buffer,
+                                             size_t buffer_len);
   static void ResetFecGroup(QuicPacketCreator* creator);
   static QuicTime::Delta GetFecTimeout(QuicPacketCreator* creator);
   // TODO(rtenneti): Delete this code after the 0.25 RTT FEC experiment.

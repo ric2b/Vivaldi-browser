@@ -8,12 +8,12 @@
 
 #include "components/filesystem/public/interfaces/directory.mojom.h"
 #include "components/filesystem/public/interfaces/types.mojom.h"
-#include "mojo/shell/public/cpp/application_impl.h"
+#include "mojo/shell/public/cpp/connector.h"
 #include "mojo/util/capture_util.h"
 
 namespace filesystem {
 
-FilesTestBase::FilesTestBase() : binding_(this) {
+FilesTestBase::FilesTestBase() {
 }
 
 FilesTestBase::~FilesTestBase() {
@@ -21,21 +21,14 @@ FilesTestBase::~FilesTestBase() {
 
 void FilesTestBase::SetUp() {
   ApplicationTestBase::SetUp();
-  application_impl()->ConnectToService("mojo:filesystem", &files_);
-}
-
-void FilesTestBase::OnFileSystemShutdown() {
+  connector()->ConnectToInterface("mojo:filesystem", &files_);
 }
 
 void FilesTestBase::GetTemporaryRoot(DirectoryPtr* directory) {
-  filesystem::FileSystemClientPtr client;
-  binding_.Bind(GetProxy(&client));
-
-  FileError error = FILE_ERROR_FAILED;
-  files()->OpenFileSystem("temp", GetProxy(directory), std::move(client),
-                          mojo::Capture(&error));
+  FileError error = FileError::FAILED;
+  files()->OpenTempDirectory(GetProxy(directory), mojo::Capture(&error));
   ASSERT_TRUE(files().WaitForIncomingResponse());
-  ASSERT_EQ(FILE_ERROR_OK, error);
+  ASSERT_EQ(FileError::OK, error);
 }
 
 }  // namespace filesystem

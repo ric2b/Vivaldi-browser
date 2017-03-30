@@ -18,6 +18,7 @@
 #include "third_party/WebKit/public/platform/WebImage.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebScreenInfo.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebSetSinkIdCallbacks.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
@@ -31,7 +32,6 @@
 #include "third_party/WebKit/public/web/WebIconURL.h"
 #include "third_party/WebKit/public/web/WebNavigationPolicy.h"
 #include "third_party/WebKit/public/web/WebNavigationType.h"
-#include "third_party/WebKit/public/web/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
 
 class SkBitmap;
@@ -113,7 +113,7 @@ class TEST_RUNNER_EXPORT WebTestProxyBase {
   void HideValidationMessage();
   void MoveValidationMessage(const blink::WebRect& anchor_in_root_view);
 
-  std::string CaptureTree(bool debug_render_tree, bool dump_line_box_trees);
+  std::string DumpBackForwardLists();
   void CapturePixelsForPrinting(
       const base::Callback<void(const SkBitmap&)>& callback);
   void CopyImageAtAndCapturePixels(
@@ -143,6 +143,8 @@ class TEST_RUNNER_EXPORT WebTestProxyBase {
   void SetAcceptLanguages(const std::string& accept_languages);
 
   void PostAccessibilityEvent(const blink::WebAXObject&, blink::WebAXEvent);
+
+  bool AnimationScheduled() { return animate_scheduled_; }
 
  protected:
   WebTestProxyBase();
@@ -205,17 +207,14 @@ class TEST_RUNNER_EXPORT WebTestProxyBase {
   void DidChangeLocationWithinPage(blink::WebLocalFrame* frame);
   void DidDetectXSS(const blink::WebURL& insecure_url,
                     bool did_block_entire_page);
-  void DidDispatchPingLoader(blink::WebLocalFrame* frame,
-                             const blink::WebURL& url);
+  void DidDispatchPingLoader(const blink::WebURL& url);
   void WillSendRequest(blink::WebLocalFrame* frame,
                        unsigned identifier,
                        blink::WebURLRequest& request,
                        const blink::WebURLResponse& redirect_response);
-  void DidReceiveResponse(blink::WebLocalFrame* frame,
-                          unsigned identifier,
+  void DidReceiveResponse(unsigned identifier,
                           const blink::WebURLResponse& response);
-  void DidChangeResourcePriority(blink::WebLocalFrame* frame,
-                                 unsigned identifier,
+  void DidChangeResourcePriority(unsigned identifier,
                                  const blink::WebURLRequest::Priority& priority,
                                  int intra_priority_value);
   void DidFinishResourceLoad(blink::WebLocalFrame* frame, unsigned identifier);
@@ -378,9 +377,6 @@ class WebTestProxy : public Base, public WebTestProxyBase {
                                      blink::WebTextDirection sub_message_hint) {
     WebTestProxyBase::ShowValidationMessage(main_message, main_message_hint,
                                             sub_message, sub_message_hint);
-  }
-  virtual void postSpellCheckEvent(const blink::WebString& event_name) {
-    WebTestProxyBase::PostSpellCheckEvent(event_name);
   }
   virtual blink::WebString acceptLanguages() {
     return WebTestProxyBase::acceptLanguages();

@@ -9,293 +9,340 @@
 #include "base/memory/scoped_ptr.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gfx/geometry/size_f.h"
+#include "ui/views/animation/flood_fill_ink_drop_animation.h"
 #include "ui/views/animation/ink_drop_animation.h"
+#include "ui/views/animation/ink_drop_animation_observer.h"
 #include "ui/views/animation/ink_drop_state.h"
+#include "ui/views/animation/square_ink_drop_animation.h"
+#include "ui/views/animation/test/flood_fill_ink_drop_animation_test_api.h"
 #include "ui/views/animation/test/ink_drop_animation_test_api.h"
+#include "ui/views/animation/test/square_ink_drop_animation_test_api.h"
+#include "ui/views/animation/test/test_ink_drop_animation_observer.h"
 
 namespace views {
 namespace test {
 
-namespace {
+// Represents all the derivatives of the InkDropAnimation class. To be used with
+// the InkDropAnimationTest fixture to test all derviatives.
+enum InkDropAnimationTestTypes {
+  SQUARE_INK_DROP_ANIMATION,
+  FLOOD_FILL_INK_DROP_ANIMATION
+};
 
-// Transforms a copy of |point| with |transform| and returns it.
-gfx::Point TransformPoint(const gfx::Transform& transform,
-                          const gfx::Point& point) {
-  gfx::Point transformed_point = point;
-  transform.TransformPoint(&transformed_point);
-  return transformed_point;
-}
-
-}  // namespace
-
-class InkDropAnimationTest : public testing::Test {
+// Test fixture for all InkDropAnimation class derivatives.
+//
+// To add a new derivative:
+//    1. Add a value to the InkDropAnimationTestTypes enum.
+//    2. Implement set up and tear down code for the new enum value in
+//       InkDropAnimationTest() and
+//      ~InkDropAnimationTest().
+//    3. Add the new enum value to the INSTANTIATE_TEST_CASE_P) Values list.
+class InkDropAnimationTest
+    : public testing::TestWithParam<InkDropAnimationTestTypes> {
  public:
-  InkDropAnimationTest() {}
-  ~InkDropAnimationTest() override {}
+  InkDropAnimationTest();
+  ~InkDropAnimationTest() override;
 
  protected:
-  scoped_ptr<InkDropAnimation> CreateInkDropAnimation() const;
+  TestInkDropAnimationObserver observer_;
+
+  scoped_ptr<InkDropAnimation> ink_drop_animation_;
+
+  scoped_ptr<InkDropAnimationTestApi> test_api_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(InkDropAnimationTest);
 };
 
-// Returns a new InkDropAnimation with default parameters.
-scoped_ptr<InkDropAnimation> InkDropAnimationTest::CreateInkDropAnimation()
-    const {
-  return make_scoped_ptr(
-      new InkDropAnimation(gfx::Size(10, 10), 2, gfx::Size(8, 8), 1));
+InkDropAnimationTest::InkDropAnimationTest() {
+  switch (GetParam()) {
+    case SQUARE_INK_DROP_ANIMATION: {
+      SquareInkDropAnimation* square_ink_drop_animation =
+          new SquareInkDropAnimation(gfx::Size(10, 10), 2, gfx::Size(8, 8), 1,
+                                     gfx::Point(), SK_ColorBLACK);
+      ink_drop_animation_.reset(square_ink_drop_animation);
+      test_api_.reset(
+          new SquareInkDropAnimationTestApi(square_ink_drop_animation));
+      break;
+    }
+    case FLOOD_FILL_INK_DROP_ANIMATION: {
+      FloodFillInkDropAnimation* flood_fill_ink_drop_animation =
+          new FloodFillInkDropAnimation(gfx::Size(10, 10), gfx::Point(),
+                                        SK_ColorBLACK);
+      ink_drop_animation_.reset(flood_fill_ink_drop_animation);
+      test_api_.reset(
+          new FloodFillInkDropAnimationTestApi(flood_fill_ink_drop_animation));
+      break;
+    }
+  }
+  ink_drop_animation_->set_observer(&observer_);
+  observer_.set_ink_drop_animation(ink_drop_animation_.get());
+  test_api_->SetDisableAnimationTimers(true);
 }
 
-TEST_F(InkDropAnimationTest, InitialStateAfterConstruction) {
-  scoped_ptr<InkDropAnimation> ink_drop_animation = CreateInkDropAnimation();
-  EXPECT_EQ(views::InkDropState::HIDDEN, ink_drop_animation->ink_drop_state());
+InkDropAnimationTest::~InkDropAnimationTest() {}
+
+// Note: First argument is optional and intentionally left blank.
+// (it's a prefix for the generated test cases)
+INSTANTIATE_TEST_CASE_P(,
+                        InkDropAnimationTest,
+                        testing::Values(SQUARE_INK_DROP_ANIMATION,
+                                        FLOOD_FILL_INK_DROP_ANIMATION));
+
+TEST_P(InkDropAnimationTest, InitialStateAfterConstruction) {
+  EXPECT_EQ(views::InkDropState::HIDDEN,
+            ink_drop_animation_->target_ink_drop_state());
 }
 
-TEST_F(InkDropAnimationTest, AnimateToActionPending) {
-  scoped_ptr<InkDropAnimation> ink_drop_animation = CreateInkDropAnimation();
-  ink_drop_animation->AnimateToState(views::InkDropState::ACTION_PENDING);
+// Verify no animations are used when animating from HIDDEN to HIDDEN.
+TEST_P(InkDropAnimationTest, AnimateToHiddenFromInvisibleState) {
+  EXPECT_EQ(InkDropState::HIDDEN, ink_drop_animation_->target_ink_drop_state());
+
+  ink_drop_animation_->AnimateToState(InkDropState::HIDDEN);
+  EXPECT_EQ(1, observer_.last_animation_started_ordinal());
+  EXPECT_EQ(2, observer_.last_animation_ended_ordinal());
+  EXPECT_EQ(InkDropAnimation::kHiddenOpacity, test_api_->GetCurrentOpacity());
+  EXPECT_FALSE(ink_drop_animation_->IsVisible());
+}
+
+TEST_P(InkDropAnimationTest, AnimateToHiddenFromVisibleState) {
+  ink_drop_animation_->AnimateToState(InkDropState::ACTION_PENDING);
+  test_api_->CompleteAnimations();
+  EXPECT_EQ(1, observer_.last_animation_started_ordinal());
+  EXPECT_EQ(2, observer_.last_animation_ended_ordinal());
+
+  EXPECT_NE(InkDropState::HIDDEN, ink_drop_animation_->target_ink_drop_state());
+
+  ink_drop_animation_->AnimateToState(InkDropState::HIDDEN);
+  test_api_->CompleteAnimations();
+
+  EXPECT_EQ(3, observer_.last_animation_started_ordinal());
+  EXPECT_EQ(4, observer_.last_animation_ended_ordinal());
+  EXPECT_EQ(InkDropAnimation::kHiddenOpacity, test_api_->GetCurrentOpacity());
+}
+
+TEST_P(InkDropAnimationTest, ActionPendingOpacity) {
+  ink_drop_animation_->AnimateToState(views::InkDropState::ACTION_PENDING);
+  test_api_->CompleteAnimations();
+
+  EXPECT_EQ(InkDropAnimation::kVisibleOpacity, test_api_->GetCurrentOpacity());
+}
+
+TEST_P(InkDropAnimationTest, QuickActionOpacity) {
+  ink_drop_animation_->AnimateToState(views::InkDropState::ACTION_PENDING);
+  ink_drop_animation_->AnimateToState(views::InkDropState::QUICK_ACTION);
+  test_api_->CompleteAnimations();
+
+  EXPECT_EQ(InkDropAnimation::kHiddenOpacity, test_api_->GetCurrentOpacity());
+}
+
+TEST_P(InkDropAnimationTest, SlowActionPendingOpacity) {
+  ink_drop_animation_->AnimateToState(views::InkDropState::ACTION_PENDING);
+  ink_drop_animation_->AnimateToState(views::InkDropState::SLOW_ACTION_PENDING);
+  test_api_->CompleteAnimations();
+
+  EXPECT_EQ(InkDropAnimation::kVisibleOpacity, test_api_->GetCurrentOpacity());
+}
+
+TEST_P(InkDropAnimationTest, SlowActionOpacity) {
+  ink_drop_animation_->AnimateToState(views::InkDropState::ACTION_PENDING);
+  ink_drop_animation_->AnimateToState(views::InkDropState::SLOW_ACTION_PENDING);
+  ink_drop_animation_->AnimateToState(views::InkDropState::SLOW_ACTION);
+  test_api_->CompleteAnimations();
+
+  EXPECT_EQ(InkDropAnimation::kHiddenOpacity, test_api_->GetCurrentOpacity());
+}
+
+TEST_P(InkDropAnimationTest, ActivatedOpacity) {
+  ink_drop_animation_->AnimateToState(views::InkDropState::ACTIVATED);
+  test_api_->CompleteAnimations();
+
+  EXPECT_EQ(InkDropAnimation::kVisibleOpacity, test_api_->GetCurrentOpacity());
+}
+
+TEST_P(InkDropAnimationTest, DeactivatedOpacity) {
+  ink_drop_animation_->AnimateToState(views::InkDropState::ACTIVATED);
+  ink_drop_animation_->AnimateToState(views::InkDropState::DEACTIVATED);
+  test_api_->CompleteAnimations();
+
+  EXPECT_EQ(InkDropAnimation::kHiddenOpacity, test_api_->GetCurrentOpacity());
+}
+
+// Verify animations are aborted during deletion and the
+// InkDropAnimationObservers are notified.
+TEST_P(InkDropAnimationTest, AnimationsAbortedDuringDeletion) {
+  ink_drop_animation_->AnimateToState(views::InkDropState::ACTION_PENDING);
+  ink_drop_animation_.reset();
+  EXPECT_EQ(1, observer_.last_animation_started_ordinal());
+  EXPECT_EQ(2, observer_.last_animation_ended_ordinal());
   EXPECT_EQ(views::InkDropState::ACTION_PENDING,
-            ink_drop_animation->ink_drop_state());
+            observer_.last_animation_state_ended());
+  EXPECT_EQ(InkDropAnimationObserver::InkDropAnimationEndedReason::PRE_EMPTED,
+            observer_.last_animation_ended_reason());
 }
 
-TEST_F(InkDropAnimationTest, AnimateToQuickAction) {
-  scoped_ptr<InkDropAnimation> ink_drop_animation = CreateInkDropAnimation();
-  ink_drop_animation->AnimateToState(views::InkDropState::QUICK_ACTION);
-  EXPECT_EQ(views::InkDropState::QUICK_ACTION,
-            ink_drop_animation->ink_drop_state());
+TEST_P(InkDropAnimationTest, VerifyObserversAreNotified) {
+  ink_drop_animation_->AnimateToState(InkDropState::ACTION_PENDING);
+
+  EXPECT_TRUE(test_api_->HasActiveAnimations());
+  EXPECT_EQ(1, observer_.last_animation_started_ordinal());
+  EXPECT_TRUE(observer_.AnimationHasNotEnded());
+  EXPECT_EQ(InkDropState::ACTION_PENDING,
+            observer_.last_animation_state_started());
+
+  test_api_->CompleteAnimations();
+
+  EXPECT_FALSE(test_api_->HasActiveAnimations());
+  EXPECT_EQ(1, observer_.last_animation_started_ordinal());
+  EXPECT_EQ(2, observer_.last_animation_ended_ordinal());
+  EXPECT_EQ(InkDropState::ACTION_PENDING,
+            observer_.last_animation_state_ended());
 }
 
-TEST_F(InkDropAnimationTest, AnimateToSlowActionPending) {
-  scoped_ptr<InkDropAnimation> ink_drop_animation = CreateInkDropAnimation();
-  ink_drop_animation->AnimateToState(views::InkDropState::SLOW_ACTION_PENDING);
-  EXPECT_EQ(views::InkDropState::SLOW_ACTION_PENDING,
-            ink_drop_animation->ink_drop_state());
+TEST_P(InkDropAnimationTest, VerifyObserversAreNotifiedOfSuccessfulAnimations) {
+  ink_drop_animation_->AnimateToState(InkDropState::ACTION_PENDING);
+  test_api_->CompleteAnimations();
+
+  EXPECT_EQ(2, observer_.last_animation_ended_ordinal());
+  EXPECT_EQ(InkDropAnimationObserver::InkDropAnimationEndedReason::SUCCESS,
+            observer_.last_animation_ended_reason());
 }
 
-TEST_F(InkDropAnimationTest, AnimateToSlowAction) {
-  scoped_ptr<InkDropAnimation> ink_drop_animation = CreateInkDropAnimation();
-  ink_drop_animation->AnimateToState(views::InkDropState::SLOW_ACTION);
-  EXPECT_EQ(views::InkDropState::SLOW_ACTION,
-            ink_drop_animation->ink_drop_state());
+TEST_P(InkDropAnimationTest, VerifyObserversAreNotifiedOfPreemptedAnimations) {
+  ink_drop_animation_->AnimateToState(InkDropState::ACTION_PENDING);
+  ink_drop_animation_->AnimateToState(InkDropState::SLOW_ACTION_PENDING);
+
+  EXPECT_EQ(2, observer_.last_animation_ended_ordinal());
+  EXPECT_EQ(InkDropAnimationObserver::InkDropAnimationEndedReason::PRE_EMPTED,
+            observer_.last_animation_ended_reason());
 }
 
-TEST_F(InkDropAnimationTest, AnimateToActivated) {
-  scoped_ptr<InkDropAnimation> ink_drop_animation = CreateInkDropAnimation();
-  ink_drop_animation->AnimateToState(views::InkDropState::ACTIVATED);
+TEST_P(InkDropAnimationTest, InkDropStatesPersistWhenCallingAnimateToState) {
+  ink_drop_animation_->AnimateToState(views::InkDropState::ACTION_PENDING);
+  ink_drop_animation_->AnimateToState(views::InkDropState::ACTIVATED);
   EXPECT_EQ(views::InkDropState::ACTIVATED,
-            ink_drop_animation->ink_drop_state());
+            ink_drop_animation_->target_ink_drop_state());
 }
 
-TEST_F(InkDropAnimationTest, AnimateToDeactivated) {
-  scoped_ptr<InkDropAnimation> ink_drop_animation = CreateInkDropAnimation();
-  ink_drop_animation->AnimateToState(views::InkDropState::DEACTIVATED);
-  EXPECT_EQ(views::InkDropState::DEACTIVATED,
-            ink_drop_animation->ink_drop_state());
+TEST_P(InkDropAnimationTest, HideImmediatelyWithoutActiveAnimations) {
+  ink_drop_animation_->AnimateToState(views::InkDropState::ACTION_PENDING);
+  test_api_->CompleteAnimations();
+  EXPECT_EQ(1, observer_.last_animation_started_ordinal());
+  EXPECT_EQ(2, observer_.last_animation_ended_ordinal());
+
+  EXPECT_FALSE(test_api_->HasActiveAnimations());
+  EXPECT_NE(InkDropState::HIDDEN, ink_drop_animation_->target_ink_drop_state());
+
+  ink_drop_animation_->HideImmediately();
+
+  EXPECT_FALSE(test_api_->HasActiveAnimations());
+  EXPECT_EQ(views::InkDropState::HIDDEN,
+            ink_drop_animation_->target_ink_drop_state());
+  EXPECT_EQ(1, observer_.last_animation_started_ordinal());
+  EXPECT_EQ(2, observer_.last_animation_ended_ordinal());
+
+  EXPECT_EQ(InkDropAnimation::kHiddenOpacity, test_api_->GetCurrentOpacity());
+  EXPECT_FALSE(ink_drop_animation_->IsVisible());
 }
 
-TEST_F(InkDropAnimationTest,
-       TransformedPointsUsingTransformsFromCalculateCircleTransforms) {
-  const int kHalfDrawnSize = 5;
-  const int kDrawnSize = 2 * kHalfDrawnSize;
+// Verifies all active animations are aborted and the InkDropState is set to
+// HIDDEN after invoking HideImmediately().
+TEST_P(InkDropAnimationTest, HideImmediatelyWithActiveAnimations) {
+  ink_drop_animation_->AnimateToState(views::InkDropState::ACTION_PENDING);
+  EXPECT_TRUE(test_api_->HasActiveAnimations());
+  EXPECT_NE(InkDropState::HIDDEN, ink_drop_animation_->target_ink_drop_state());
+  EXPECT_EQ(1, observer_.last_animation_started_ordinal());
 
-  const int kHalfTransformedSize = 100;
-  const int kTransformedSize = 2 * kHalfTransformedSize;
+  ink_drop_animation_->HideImmediately();
 
-  // Constant points in the drawn space that will be transformed.
-  const gfx::Point center(kHalfDrawnSize, kHalfDrawnSize);
-  const gfx::Point mid_left(0, kHalfDrawnSize);
-  const gfx::Point mid_right(kDrawnSize, kHalfDrawnSize);
-  const gfx::Point top_mid(kHalfDrawnSize, 0);
-  const gfx::Point bottom_mid(kHalfDrawnSize, kDrawnSize);
+  EXPECT_FALSE(test_api_->HasActiveAnimations());
+  EXPECT_EQ(views::InkDropState::HIDDEN,
+            ink_drop_animation_->target_ink_drop_state());
+  EXPECT_EQ(1, observer_.last_animation_started_ordinal());
+  EXPECT_EQ(2, observer_.last_animation_ended_ordinal());
+  EXPECT_EQ(InkDropState::ACTION_PENDING,
+            observer_.last_animation_state_ended());
+  EXPECT_EQ(InkDropAnimationObserver::InkDropAnimationEndedReason::PRE_EMPTED,
+            observer_.last_animation_ended_reason());
 
-  scoped_ptr<InkDropAnimation> ink_drop_animation(
-      new InkDropAnimation(gfx::Size(kDrawnSize, kDrawnSize), 2,
-                           gfx::Size(kHalfDrawnSize, kHalfDrawnSize), 1));
-  InkDropAnimationTestApi test_api(ink_drop_animation.get());
-
-  InkDropAnimationTestApi::InkDropTransforms transforms;
-  test_api.CalculateCircleTransforms(
-      gfx::Size(kTransformedSize, kTransformedSize), &transforms);
-
-  // Transform variables to reduce verbosity of actual verification code.
-  const gfx::Transform kTopLeftTransform =
-      transforms[InkDropAnimationTestApi::PaintedShape::TOP_LEFT_CIRCLE];
-  const gfx::Transform kTopRightTransform =
-      transforms[InkDropAnimationTestApi::PaintedShape::TOP_RIGHT_CIRCLE];
-  const gfx::Transform kBottomRightTransform =
-      transforms[InkDropAnimationTestApi::PaintedShape::BOTTOM_RIGHT_CIRCLE];
-  const gfx::Transform kBottomLeftTransform =
-      transforms[InkDropAnimationTestApi::PaintedShape::BOTTOM_LEFT_CIRCLE];
-  const gfx::Transform kHorizontalTransform =
-      transforms[InkDropAnimationTestApi::PaintedShape::HORIZONTAL_RECT];
-  const gfx::Transform kVerticalTransform =
-      transforms[InkDropAnimationTestApi::PaintedShape::VERTICAL_RECT];
-
-  // Top left circle
-  EXPECT_EQ(gfx::Point(0, 0), TransformPoint(kTopLeftTransform, center));
-  EXPECT_EQ(gfx::Point(-kHalfTransformedSize, 0),
-            TransformPoint(kTopLeftTransform, mid_left));
-  EXPECT_EQ(gfx::Point(kHalfTransformedSize, 0),
-            TransformPoint(kTopLeftTransform, mid_right));
-  EXPECT_EQ(gfx::Point(0, -kHalfTransformedSize),
-            TransformPoint(kTopLeftTransform, top_mid));
-  EXPECT_EQ(gfx::Point(0, kHalfTransformedSize),
-            TransformPoint(kTopLeftTransform, bottom_mid));
-
-  // Top right circle
-  EXPECT_EQ(gfx::Point(0, 0), TransformPoint(kTopRightTransform, center));
-  EXPECT_EQ(gfx::Point(-kHalfTransformedSize, 0),
-            TransformPoint(kTopRightTransform, mid_left));
-  EXPECT_EQ(gfx::Point(kHalfTransformedSize, 0),
-            TransformPoint(kTopRightTransform, mid_right));
-  EXPECT_EQ(gfx::Point(0, -kHalfTransformedSize),
-            TransformPoint(kTopRightTransform, top_mid));
-  EXPECT_EQ(gfx::Point(0, kHalfTransformedSize),
-            TransformPoint(kTopRightTransform, bottom_mid));
-
-  // Bottom right circle
-  EXPECT_EQ(gfx::Point(0, 0), TransformPoint(kBottomRightTransform, center));
-  EXPECT_EQ(gfx::Point(-kHalfTransformedSize, 0),
-            TransformPoint(kBottomRightTransform, mid_left));
-  EXPECT_EQ(gfx::Point(kHalfTransformedSize, 0),
-            TransformPoint(kBottomRightTransform, mid_right));
-  EXPECT_EQ(gfx::Point(0, -kHalfTransformedSize),
-            TransformPoint(kBottomRightTransform, top_mid));
-  EXPECT_EQ(gfx::Point(0, kHalfTransformedSize),
-            TransformPoint(kBottomRightTransform, bottom_mid));
-
-  // Bottom left circle
-  EXPECT_EQ(gfx::Point(0, 0), TransformPoint(kBottomLeftTransform, center));
-  EXPECT_EQ(gfx::Point(-kHalfTransformedSize, 0),
-            TransformPoint(kBottomLeftTransform, mid_left));
-  EXPECT_EQ(gfx::Point(kHalfTransformedSize, 0),
-            TransformPoint(kBottomLeftTransform, mid_right));
-  EXPECT_EQ(gfx::Point(0, -kHalfTransformedSize),
-            TransformPoint(kBottomLeftTransform, top_mid));
-  EXPECT_EQ(gfx::Point(0, kHalfTransformedSize),
-            TransformPoint(kBottomLeftTransform, bottom_mid));
-
-  // Horizontal rectangle
-  EXPECT_EQ(gfx::Point(0, 0), TransformPoint(kHorizontalTransform, center));
-  EXPECT_EQ(gfx::Point(-kHalfTransformedSize, 0),
-            TransformPoint(kHorizontalTransform, mid_left));
-  EXPECT_EQ(gfx::Point(kHalfTransformedSize, 0),
-            TransformPoint(kHorizontalTransform, mid_right));
-  EXPECT_EQ(gfx::Point(0, 0), TransformPoint(kHorizontalTransform, top_mid));
-  EXPECT_EQ(gfx::Point(0, 0), TransformPoint(kHorizontalTransform, bottom_mid));
-
-  // Vertical rectangle
-  EXPECT_EQ(gfx::Point(0, 0), TransformPoint(kVerticalTransform, center));
-  EXPECT_EQ(gfx::Point(0, 0), TransformPoint(kVerticalTransform, mid_left));
-  EXPECT_EQ(gfx::Point(0, 0), TransformPoint(kVerticalTransform, mid_right));
-  EXPECT_EQ(gfx::Point(0, -kHalfTransformedSize),
-            TransformPoint(kVerticalTransform, top_mid));
-  EXPECT_EQ(gfx::Point(0, kHalfTransformedSize),
-            TransformPoint(kVerticalTransform, bottom_mid));
+  EXPECT_EQ(InkDropAnimation::kHiddenOpacity, test_api_->GetCurrentOpacity());
+  EXPECT_FALSE(ink_drop_animation_->IsVisible());
 }
 
-TEST_F(InkDropAnimationTest,
-       TransformedPointsUsingTransformsFromCalculateRectTransforms) {
-  const int kHalfDrawnSize = 5;
-  const int kDrawnSize = 2 * kHalfDrawnSize;
+TEST_P(InkDropAnimationTest, SnapToActivatedWithoutActiveAnimations) {
+  ink_drop_animation_->AnimateToState(views::InkDropState::ACTION_PENDING);
+  test_api_->CompleteAnimations();
+  EXPECT_EQ(1, observer_.last_animation_started_ordinal());
+  EXPECT_EQ(2, observer_.last_animation_ended_ordinal());
 
-  const int kTransformedRadius = 10;
+  EXPECT_FALSE(test_api_->HasActiveAnimations());
+  EXPECT_NE(InkDropState::ACTIVATED,
+            ink_drop_animation_->target_ink_drop_state());
 
-  const int kHalfTransformedWidth = 100;
-  const int kTransformedWidth = 2 * kHalfTransformedWidth;
+  ink_drop_animation_->SnapToActivated();
 
-  const int kHalfTransformedHeight = 100;
-  const int kTransformedHeight = 2 * kHalfTransformedHeight;
+  EXPECT_FALSE(test_api_->HasActiveAnimations());
+  EXPECT_EQ(views::InkDropState::ACTIVATED,
+            ink_drop_animation_->target_ink_drop_state());
+  EXPECT_EQ(3, observer_.last_animation_started_ordinal());
+  EXPECT_EQ(4, observer_.last_animation_ended_ordinal());
 
-  // Constant points in the drawn space that will be transformed.
-  const gfx::Point center(kHalfDrawnSize, kHalfDrawnSize);
-  const gfx::Point mid_left(0, kHalfDrawnSize);
-  const gfx::Point mid_right(kDrawnSize, kHalfDrawnSize);
-  const gfx::Point top_mid(kHalfDrawnSize, 0);
-  const gfx::Point bottom_mid(kHalfDrawnSize, kDrawnSize);
+  EXPECT_EQ(InkDropAnimation::kVisibleOpacity, test_api_->GetCurrentOpacity());
+  EXPECT_TRUE(ink_drop_animation_->IsVisible());
+}
 
-  scoped_ptr<InkDropAnimation> ink_drop_animation(
-      new InkDropAnimation(gfx::Size(kDrawnSize, kDrawnSize), 2,
-                           gfx::Size(kHalfDrawnSize, kHalfDrawnSize), 1));
-  InkDropAnimationTestApi test_api(ink_drop_animation.get());
+// Verifies all active animations are aborted and the InkDropState is set to
+// ACTIVATED after invoking SnapToActivated().
+TEST_P(InkDropAnimationTest, SnapToActivatedWithActiveAnimations) {
+  ink_drop_animation_->AnimateToState(views::InkDropState::ACTION_PENDING);
+  EXPECT_TRUE(test_api_->HasActiveAnimations());
+  EXPECT_NE(InkDropState::ACTIVATED,
+            ink_drop_animation_->target_ink_drop_state());
+  EXPECT_EQ(1, observer_.last_animation_started_ordinal());
 
-  InkDropAnimationTestApi::InkDropTransforms transforms;
-  test_api.CalculateRectTransforms(
-      gfx::Size(kTransformedWidth, kTransformedHeight), kTransformedRadius,
-      &transforms);
+  ink_drop_animation_->SnapToActivated();
 
-  // Transform variables to reduce verbosity of actual verification code.
-  const gfx::Transform kTopLeftTransform =
-      transforms[InkDropAnimationTestApi::PaintedShape::TOP_LEFT_CIRCLE];
-  const gfx::Transform kTopRightTransform =
-      transforms[InkDropAnimationTestApi::PaintedShape::TOP_RIGHT_CIRCLE];
-  const gfx::Transform kBottomRightTransform =
-      transforms[InkDropAnimationTestApi::PaintedShape::BOTTOM_RIGHT_CIRCLE];
-  const gfx::Transform kBottomLeftTransform =
-      transforms[InkDropAnimationTestApi::PaintedShape::BOTTOM_LEFT_CIRCLE];
-  const gfx::Transform kHorizontalTransform =
-      transforms[InkDropAnimationTestApi::PaintedShape::HORIZONTAL_RECT];
-  const gfx::Transform kVerticalTransform =
-      transforms[InkDropAnimationTestApi::PaintedShape::VERTICAL_RECT];
+  EXPECT_FALSE(test_api_->HasActiveAnimations());
+  EXPECT_EQ(views::InkDropState::ACTIVATED,
+            ink_drop_animation_->target_ink_drop_state());
+  EXPECT_EQ(3, observer_.last_animation_started_ordinal());
+  EXPECT_EQ(4, observer_.last_animation_ended_ordinal());
+  EXPECT_EQ(InkDropState::ACTIVATED, observer_.last_animation_state_ended());
+  EXPECT_EQ(InkDropAnimationObserver::InkDropAnimationEndedReason::SUCCESS,
+            observer_.last_animation_ended_reason());
 
-  const int x_offset = kHalfTransformedWidth - kTransformedRadius;
-  const int y_offset = kHalfTransformedWidth - kTransformedRadius;
+  EXPECT_EQ(InkDropAnimation::kVisibleOpacity, test_api_->GetCurrentOpacity());
+  EXPECT_TRUE(ink_drop_animation_->IsVisible());
+}
 
-  // Top left circle
-  EXPECT_EQ(gfx::Point(-x_offset, -y_offset),
-            TransformPoint(kTopLeftTransform, center));
-  EXPECT_EQ(gfx::Point(-kHalfTransformedWidth, -y_offset),
-            TransformPoint(kTopLeftTransform, mid_left));
-  EXPECT_EQ(gfx::Point(-x_offset, -kHalfTransformedHeight),
-            TransformPoint(kTopLeftTransform, top_mid));
+TEST_P(InkDropAnimationTest, AnimateToVisibleFromHidden) {
+  EXPECT_EQ(InkDropState::HIDDEN, ink_drop_animation_->target_ink_drop_state());
+  ink_drop_animation_->AnimateToState(views::InkDropState::ACTION_PENDING);
+  EXPECT_TRUE(ink_drop_animation_->IsVisible());
+}
 
-  // Top right circle
-  EXPECT_EQ(gfx::Point(x_offset, -y_offset),
-            TransformPoint(kTopRightTransform, center));
-  EXPECT_EQ(gfx::Point(kHalfTransformedWidth, -y_offset),
-            TransformPoint(kTopRightTransform, mid_right));
-  EXPECT_EQ(gfx::Point(x_offset, -kHalfTransformedHeight),
-            TransformPoint(kTopRightTransform, top_mid));
+// Verifies that the value of InkDropAnimation::target_ink_drop_state() returns
+// the most recent value passed to AnimateToState() when notifying observers
+// that an animation has started within the AnimateToState() function call.
+TEST_P(InkDropAnimationTest, TargetInkDropStateOnAnimationStarted) {
+  ink_drop_animation_->AnimateToState(views::InkDropState::ACTION_PENDING);
+  ink_drop_animation_->AnimateToState(views::InkDropState::HIDDEN);
 
-  // Bottom right circle
-  EXPECT_EQ(gfx::Point(x_offset, y_offset),
-            TransformPoint(kBottomRightTransform, center));
-  EXPECT_EQ(gfx::Point(kHalfTransformedWidth, y_offset),
-            TransformPoint(kBottomRightTransform, mid_right));
-  EXPECT_EQ(gfx::Point(x_offset, kHalfTransformedHeight),
-            TransformPoint(kBottomRightTransform, bottom_mid));
+  EXPECT_EQ(3, observer_.last_animation_started_ordinal());
+  EXPECT_EQ(views::InkDropState::HIDDEN,
+            observer_.target_state_at_last_animation_started());
+}
 
-  // Bottom left circle
-  EXPECT_EQ(gfx::Point(-x_offset, y_offset),
-            TransformPoint(kBottomLeftTransform, center));
-  EXPECT_EQ(gfx::Point(-kHalfTransformedWidth, y_offset),
-            TransformPoint(kBottomLeftTransform, mid_left));
-  EXPECT_EQ(gfx::Point(-x_offset, kHalfTransformedHeight),
-            TransformPoint(kBottomLeftTransform, bottom_mid));
+// Verifies that the value of InkDropAnimation::target_ink_drop_state() returns
+// the most recent value passed to AnimateToState() when notifying observers
+// that an animation has ended within the AnimateToState() function call.
+TEST_P(InkDropAnimationTest, TargetInkDropStateOnAnimationEnded) {
+  ink_drop_animation_->AnimateToState(views::InkDropState::ACTION_PENDING);
+  ink_drop_animation_->AnimateToState(views::InkDropState::HIDDEN);
 
-  // Horizontal rectangle
-  EXPECT_EQ(gfx::Point(0, 0), TransformPoint(kHorizontalTransform, center));
-  EXPECT_EQ(gfx::Point(-kHalfTransformedWidth, 0),
-            TransformPoint(kHorizontalTransform, mid_left));
-  EXPECT_EQ(gfx::Point(kHalfTransformedWidth, 0),
-            TransformPoint(kHorizontalTransform, mid_right));
-  EXPECT_EQ(gfx::Point(0, -y_offset),
-            TransformPoint(kHorizontalTransform, top_mid));
-  EXPECT_EQ(gfx::Point(0, y_offset),
-            TransformPoint(kHorizontalTransform, bottom_mid));
-
-  // Vertical rectangle
-  EXPECT_EQ(gfx::Point(0, 0), TransformPoint(kVerticalTransform, center));
-  EXPECT_EQ(gfx::Point(-x_offset, 0),
-            TransformPoint(kVerticalTransform, mid_left));
-  EXPECT_EQ(gfx::Point(x_offset, 0),
-            TransformPoint(kVerticalTransform, mid_right));
-  EXPECT_EQ(gfx::Point(0, -kHalfTransformedHeight),
-            TransformPoint(kVerticalTransform, top_mid));
-  EXPECT_EQ(gfx::Point(0, kHalfTransformedHeight),
-            TransformPoint(kVerticalTransform, bottom_mid));
+  EXPECT_EQ(2, observer_.last_animation_ended_ordinal());
+  EXPECT_EQ(views::InkDropState::HIDDEN,
+            observer_.target_state_at_last_animation_ended());
 }
 
 }  // namespace test

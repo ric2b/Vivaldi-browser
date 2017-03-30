@@ -42,12 +42,11 @@
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
-#include "core/editing/commands/MoveSelectionCommand.h"
-#include "core/editing/commands/ReplaceSelectionCommand.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/events/TextEvent.h"
 #include "core/fetch/ImageResource.h"
 #include "core/fetch/ResourceFetcher.h"
+#include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
@@ -60,6 +59,7 @@
 #include "core/layout/LayoutView.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
+#include "core/page/ChromeClient.h"
 #include "core/page/DragClient.h"
 #include "core/page/DragData.h"
 #include "core/page/DragSession.h"
@@ -75,6 +75,7 @@
 #include "platform/graphics/ImageOrientation.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "public/platform/WebScreenInfo.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
@@ -308,12 +309,8 @@ static HTMLInputElement* asFileInput(Node* node)
 }
 
 // This can return null if an empty document is loaded.
-static Element* elementUnderMouse(Document* documentUnderMouse, const IntPoint& p)
+static Element* elementUnderMouse(Document* documentUnderMouse, const IntPoint& point)
 {
-    LocalFrame* frame = documentUnderMouse->frame();
-    float zoomFactor = frame ? frame->pageZoomFactor() : 1;
-    LayoutPoint point = roundedLayoutPoint(FloatPoint(p.x() * zoomFactor, p.y() * zoomFactor));
-
     HitTestRequest request(HitTestRequest::ReadOnly | HitTestRequest::Active);
     HitTestResult result(request, point);
     documentUnderMouse->layoutView()->hitTest(result);
@@ -435,7 +432,7 @@ static bool setSelectionToDragCaret(LocalFrame* frame, VisibleSelection& dragCar
     return !frame->selection().isNone() && frame->selection().isContentEditable();
 }
 
-bool DragController::dispatchTextInputEventFor(LocalFrame* innerFrame, DragData* dragData)
+DispatchEventResult DragController::dispatchTextInputEventFor(LocalFrame* innerFrame, DragData* dragData)
 {
     ASSERT(m_page->dragCaretController().hasCaret());
     String text = m_page->dragCaretController().isContentRichlyEditable() ? "" : dragData->asPlainText();
@@ -463,7 +460,7 @@ bool DragController::concludeEditDrag(DragData* dragData)
     RefPtrWillBeRawPtr<LocalFrame> innerFrame = element->ownerDocument()->frame();
     ASSERT(innerFrame);
 
-    if (m_page->dragCaretController().hasCaret() && !dispatchTextInputEventFor(innerFrame.get(), dragData))
+    if (m_page->dragCaretController().hasCaret() && dispatchTextInputEventFor(innerFrame.get(), dragData) != DispatchEventResult::NotCanceled)
         return true;
 
     if (dragData->containsFiles() && fileInput) {
@@ -503,16 +500,11 @@ bool DragController::concludeEditDrag(DragData* dragData)
             // but only to smart insert if the selection granularity is word granularity.
             bool smartDelete = innerFrame->editor().smartInsertDeleteEnabled();
             bool smartInsert = smartDelete && innerFrame->selection().granularity() == WordGranularity && dragData->canSmartReplace();
-            MoveSelectionCommand::create(fragment, dragCaret.base(), smartInsert, smartDelete)->apply();
+            innerFrame->editor().moveSelectionAfterDragging(fragment, dragCaret.base(), smartInsert, smartDelete);
         } else {
             if (setSelectionToDragCaret(innerFrame.get(), dragCaret, range, point)) {
-                ReplaceSelectionCommand::CommandOptions options = ReplaceSelectionCommand::SelectReplacement | ReplaceSelectionCommand::PreventNesting;
-                if (dragData->canSmartReplace())
-                    options |= ReplaceSelectionCommand::SmartReplace;
-                if (chosePlainText)
-                    options |= ReplaceSelectionCommand::MatchStyle;
                 ASSERT(m_documentUnderMouse);
-                ReplaceSelectionCommand::create(*m_documentUnderMouse.get(), fragment, options)->apply();
+                m_documentUnderMouse->frame()->editor().replaceSelectionAfterDragging(fragment, dragData->canSmartReplace(), chosePlainText);
             }
         }
     } else {
@@ -521,8 +513,10 @@ bool DragController::concludeEditDrag(DragData* dragData)
             return false;
 
         if (setSelectionToDragCaret(innerFrame.get(), dragCaret, range, point)) {
+            const bool canSmartReplace = false;
+            const bool chosePlainText = true;
             ASSERT(m_documentUnderMouse);
-            ReplaceSelectionCommand::create(*m_documentUnderMouse.get(), createFragmentFromText(EphemeralRange(range.get()), text),  ReplaceSelectionCommand::SelectReplacement | ReplaceSelectionCommand::MatchStyle | ReplaceSelectionCommand::PreventNesting)->apply();
+            m_documentUnderMouse->frame()->editor().replaceSelectionAfterDragging(createFragmentFromText(EphemeralRange(range.get()), text), canSmartReplace, chosePlainText);
         }
     }
 
@@ -779,7 +773,7 @@ static IntPoint dragLocationForSelectionDrag(LocalFrame* sourceFrame)
     return IntPoint(xpos, ypos);
 }
 
-static const IntSize& maxDragImageSize()
+static const IntSize maxDragImageSize(float deviceScaleFactor)
 {
 #if OS(MACOSX)
     // Match Safari's drag image size.
@@ -787,10 +781,12 @@ static const IntSize& maxDragImageSize()
 #else
     static const IntSize maxDragImageSize(200, 200);
 #endif
-    return maxDragImageSize;
+    IntSize maxSizeInPixels = maxDragImageSize;
+    maxSizeInPixels.scale(deviceScaleFactor);
+    return maxSizeInPixels;
 }
 
-static PassOwnPtr<DragImage> dragImageForImage(Element* element, Image* image, const IntPoint& dragOrigin, const IntRect& imageRect, IntPoint& dragLocation)
+static PassOwnPtr<DragImage> dragImageForImage(Element* element, Image* image, float deviceScaleFactor, const IntPoint& dragOrigin, const IntPoint& imageElementLocation, const IntSize& imageElementSizeInPixels, IntPoint& dragLocation)
 {
     OwnPtr<DragImage> dragImage;
     IntPoint origin;
@@ -802,12 +798,15 @@ static PassOwnPtr<DragImage> dragImageForImage(Element* element, Image* image, c
     if (shouldRespectImageOrientation == RespectImageOrientation && image->isBitmapImage())
         orientation = toBitmapImage(image)->currentFrameOrientation();
 
-    if (image->size().height() * image->size().width() <= MaxOriginalImageArea
+    IntSize imageSize = orientation.usesWidthAsHeight() ? image->size().transposedSize() : image->size();
+
+    FloatSize imageScale = DragImage::clampedImageScale(imageSize, imageElementSizeInPixels, maxDragImageSize(deviceScaleFactor));
+
+    if (imageSize.area() <= MaxOriginalImageArea
         && (dragImage = DragImage::create(image, shouldRespectImageOrientation,
-            1 /* deviceScaleFactor */, interpolationQuality, DragImageAlpha,
-            DragImage::clampedImageScale(orientation.usesWidthAsHeight() ? image->size().transposedSize() : image->size(), imageRect.size(), maxDragImageSize())))) {
-        IntSize originalSize = imageRect.size();
-        origin = imageRect.location();
+            deviceScaleFactor, interpolationQuality, DragImageAlpha, imageScale))) {
+        IntSize originalSize = imageElementSizeInPixels;
+        origin = imageElementLocation;
 
         IntSize newSize = dragImage->size();
 
@@ -886,7 +885,18 @@ bool DragController::startDrag(LocalFrame* src, const DragState& state, const Pl
         // This is an early detection for problems encountered later upon drop.
         ASSERT(!image->filenameExtension().isEmpty());
         if (!dragImage) {
-            dragImage = dragImageForImage(element, image, dragOrigin, hitTestResult.imageRect(), dragLocation);
+            const IntRect& imageRect = hitTestResult.imageRect();
+            IntSize imageSizeInPixels = imageRect.size();
+            // TODO(oshima): Remove this scaling and simply pass imageRect to dragImageForImage
+            // once all platforms are migrated to use zoom for dsf.
+            imageSizeInPixels.scale(src->host()->deviceScaleFactor());
+
+            float screenDeviceScaleFactor = src->page()->chromeClient().screenInfo().deviceScaleFactor;
+            // Pass the selected image size in DIP becasue dragImageForImage clips the image in DIP.
+            // The coordinates of the locations are in Viewport coordinates, and they're converted in the Blink client.
+            // TODO(oshima): Currently, the dragged image on high DPI is scaled and can be blurry because of this.
+            // Consider to clip in the screen coordinates to use high resolution image on high DPI screens.
+            dragImage = dragImageForImage(element, image, screenDeviceScaleFactor, dragOrigin, imageRect.location(), imageSizeInPixels, dragLocation);
         }
         doSystemDrag(dragImage.get(), dragLocation, dragOrigin, dataTransfer, src, false);
     } else if (state.m_dragType == DragSourceActionLink) {
@@ -902,8 +912,8 @@ bool DragController::startDrag(LocalFrame* src, const DragState& state, const Pl
 
         if (!dragImage) {
             ASSERT(src->page());
-            float deviceScaleFactor = src->page()->deviceScaleFactor();
-            dragImage = dragImageForLink(linkURL, hitTestResult.textContent(), deviceScaleFactor, mouseDraggedPoint, dragLocation);
+            float screenDeviceScaleFactor = src->page()->chromeClient().screenInfo().deviceScaleFactor;
+            dragImage = dragImageForLink(linkURL, hitTestResult.textContent(), screenDeviceScaleFactor, mouseDraggedPoint, dragLocation);
         }
         doSystemDrag(dragImage.get(), dragLocation, mouseDraggedPoint, dataTransfer, src, true);
     } else if (state.m_dragType == DragSourceActionDHTML) {
@@ -918,6 +928,9 @@ bool DragController::startDrag(LocalFrame* src, const DragState& state, const Pl
 
 void DragController::doSystemDrag(DragImage* image, const IntPoint& dragLocation, const IntPoint& eventPos, DataTransfer* dataTransfer, LocalFrame* frame, bool forLink)
 {
+    // TODO(dcheng): Drag and drop is not yet supported for OOPI.
+    if (m_page->mainFrame()->isRemoteFrame())
+        return;
     m_didInitiateDrag = true;
     m_dragInitiator = frame->document();
     // Protect this frame and view, as a load may occur mid drag and attempt to unload this frame

@@ -36,6 +36,7 @@ using namespace Unicode;
 static_assert(sizeof(AtomicString) == sizeof(String), "AtomicString and String must be same size");
 
 class AtomicStringTable {
+    USING_FAST_MALLOC(AtomicStringTable);
     WTF_MAKE_NONCOPYABLE(AtomicStringTable);
 public:
     static AtomicStringTable* create(WTFThreadData& data)
@@ -486,34 +487,41 @@ AtomicString AtomicString::fromUTF8Internal(const char* charactersStart, const c
     return atomicString;
 }
 
+template<typename IntegerType>
+static AtomicString integerToAtomicString(IntegerType input)
+{
+    IntegerToStringConverter<IntegerType> converter(input);
+    return AtomicString(converter.characters8(), converter.length());
+}
+
 AtomicString AtomicString::number(int number)
 {
-    return numberToStringSigned<AtomicString>(number);
+    return integerToAtomicString(number);
 }
 
 AtomicString AtomicString::number(unsigned number)
 {
-    return numberToStringUnsigned<AtomicString>(number);
+    return integerToAtomicString(number);
 }
 
 AtomicString AtomicString::number(long number)
 {
-    return numberToStringSigned<AtomicString>(number);
+    return integerToAtomicString(number);
 }
 
 AtomicString AtomicString::number(unsigned long number)
 {
-    return numberToStringUnsigned<AtomicString>(number);
+    return integerToAtomicString(number);
 }
 
 AtomicString AtomicString::number(long long number)
 {
-    return numberToStringSigned<AtomicString>(number);
+    return integerToAtomicString(number);
 }
 
 AtomicString AtomicString::number(unsigned long long number)
 {
-    return numberToStringUnsigned<AtomicString>(number);
+    return integerToAtomicString(number);
 }
 
 AtomicString AtomicString::number(double number, unsigned precision, TrailingZerosTruncatingPolicy trailingZerosTruncatingPolicy)

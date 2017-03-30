@@ -11,7 +11,6 @@
       'dependencies': [
         '../base/base.gyp:base',
         '../base/base.gyp:base_i18n',
-        '../third_party/zlib/google/zip.gyp:compression_utils',
         '../url/url.gyp:url_lib',
       ],
       'include_dirs': [
@@ -66,7 +65,6 @@
       'dependencies': [
         '../base/base.gyp:base',
         '../base/base.gyp:base_i18n',
-        '../base/base.gyp:base_prefs',
         '../google_apis/google_apis.gyp:google_apis',
         '../net/net.gyp:net',
         '../skia/skia.gyp:skia',
@@ -77,7 +75,6 @@
         '../third_party/icu/icu.gyp:icuuc',
         '../third_party/libaddressinput/libaddressinput.gyp:libaddressinput_util',
         '../third_party/libphonenumber/libphonenumber.gyp:libphonenumber',
-        '../third_party/libxml/libxml.gyp:libxml',
         '../third_party/re2/re2.gyp:re2',
         '../ui/base/ui_base.gyp:ui_base',
         '../ui/gfx/gfx.gyp:gfx',
@@ -85,6 +82,7 @@
         '../ui/gfx/gfx.gyp:gfx_vector_icons',
         '../url/url.gyp:url_lib',
         'autofill_core_common',
+        'autofill_server_proto',
         'components_resources.gyp:components_resources',
         'components_strings.gyp:components_strings',
         'data_use_measurement_core',
@@ -92,6 +90,7 @@
         'keyed_service_core',
         'os_crypt',
         'pref_registry',
+        'prefs/prefs.gyp:prefs',
         'rappor',
         'signin_core_browser',
         'signin_core_common',
@@ -139,15 +138,12 @@
         'autofill/core/browser/autofill_regex_constants.h',
         'autofill/core/browser/autofill_scanner.cc',
         'autofill/core/browser/autofill_scanner.h',
-        'autofill/core/browser/autofill_server_field_info.h',
         'autofill/core/browser/autofill_sync_constants.cc',
         'autofill/core/browser/autofill_sync_constants.h',
         'autofill/core/browser/autofill_type.cc',
         'autofill/core/browser/autofill_type.h',
         'autofill/core/browser/autofill_wallet_data_type_controller.cc',
         'autofill/core/browser/autofill_wallet_data_type_controller.h',
-        'autofill/core/browser/autofill_xml_parser.cc',
-        'autofill/core/browser/autofill_xml_parser.h',
         'autofill/core/browser/card_unmask_delegate.cc',
         'autofill/core/browser/card_unmask_delegate.h',
         'autofill/core/browser/contact_info.cc',
@@ -165,6 +161,8 @@
         'autofill/core/browser/dialog_section.h',
         'autofill/core/browser/email_field.cc',
         'autofill/core/browser/email_field.h',
+        'autofill/core/browser/field_candidates.h',
+        'autofill/core/browser/field_candidates.cc',
         'autofill/core/browser/field_types.h',
         'autofill/core/browser/form_field.cc',
         'autofill/core/browser/form_field.h',
@@ -235,6 +233,12 @@
       # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
       'msvs_disabled_warnings': [4267, ],
 
+      # This is needed because GYP's handling of transitive dependencies is
+      # not great. See https://goo.gl/QGtlae for details.
+      'export_dependent_settings': [
+        'autofill_server_proto',
+      ],
+
       'conditions': [
         ['OS=="ios"', {
           'sources': [
@@ -255,12 +259,26 @@
     },
 
     {
+      # Protobuf compiler / generate rule for Autofill's server proto.
+      # GN version: //components/autofill/core/browser/proto
+      'target_name': 'autofill_server_proto',
+      'type': 'static_library',
+      'sources': [
+        'autofill/core/browser/proto/server.proto',
+      ],
+      'variables': {
+        'proto_in_dir': 'autofill/core/browser/proto',
+        'proto_out_dir': 'components/autofill/core/browser/proto',
+      },
+      'includes': [ '../build/protoc.gypi' ]
+    },
+
+    {
       # GN version: //components/autofill/core/browser:test_support
       'target_name': 'autofill_core_test_support',
       'type': 'static_library',
       'dependencies': [
         '../base/base.gyp:base',
-        '../base/base.gyp:base_prefs',
         '../base/base.gyp:test_support_base',
         '../skia/skia.gyp:skia',
         '../testing/gtest.gyp:gtest',
@@ -268,6 +286,7 @@
         'autofill_core_browser',
         'os_crypt',
         'pref_registry',
+        'prefs/prefs.gyp:prefs',
         'rappor',
         'signin_core_browser_test_support',
       ],
@@ -363,7 +382,6 @@
           'dependencies': [
             '../base/base.gyp:base',
             '../base/base.gyp:base_i18n',
-            '../base/base.gyp:base_prefs',
             '../content/content.gyp:content_browser',
             '../content/content.gyp:content_common',
             '../google_apis/google_apis.gyp:google_apis',
@@ -382,9 +400,11 @@
             'autofill_content_risk_proto',
             'autofill_core_browser',
             'autofill_core_common',
+            'autofill_server_proto',
             'components_resources.gyp:components_resources',
             'components_strings.gyp:components_strings',
             'os_crypt',
+            'prefs/prefs.gyp:prefs',
             'user_prefs',
             'webdata_common',
           ],
@@ -407,6 +427,11 @@
 
           # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
           'msvs_disabled_warnings': [4267, ],
+          # This is needed because GYP's handling of transitive dependencies is
+          # not great. See https://goo.gl/QGtlae for details.
+          'export_dependent_settings': [
+            'autofill_server_proto',
+          ],
         },
 
         {
@@ -468,6 +493,7 @@
             'autofill_core_browser',
             'autofill_core_common',
             'autofill_ios_injected_js',
+            'autofill_server_proto',
             '../ios/provider/ios_provider_web.gyp:ios_provider_web',
             '../ios/web/ios_web.gyp:ios_web',
           ],
@@ -486,6 +512,11 @@
             'autofill/ios/browser/js_suggestion_manager.mm',
             'autofill/ios/browser/personal_data_manager_observer_bridge.h',
             'autofill/ios/browser/personal_data_manager_observer_bridge.mm',
+          ],
+          # This is needed because GYP's handling of transitive dependencies is
+          # not great. See https://goo.gl/QGtlae for details.
+          'export_dependent_settings': [
+            'autofill_server_proto',
           ],
         },
         {

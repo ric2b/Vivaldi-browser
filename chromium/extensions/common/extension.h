@@ -5,27 +5,21 @@
 #ifndef EXTENSIONS_COMMON_EXTENSION_H_
 #define EXTENSIONS_COMMON_EXTENSION_H_
 
-#include <algorithm>
-#include <iosfwd>
 #include <map>
 #include <set>
 #include <string>
-#include <utility>
 #include <vector>
 
-#include "base/containers/hash_tables.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
 #include "extensions/common/extension_resource.h"
 #include "extensions/common/install_warning.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/url_pattern_set.h"
-#include "ui/base/accelerators/accelerator.h"
 #include "url/gurl.h"
 
 #if !defined(ENABLE_EXTENSIONS)
@@ -55,11 +49,6 @@ typedef std::string ExtensionId;
 // RuntimeData is protected by a lock.
 class Extension : public base::RefCountedThreadSafe<Extension> {
  public:
-  struct ManifestData;
-
-  typedef std::map<const std::string, linked_ptr<ManifestData> >
-      ManifestDataMap;
-
   enum State {
     DISABLED = 0,
     ENABLED,
@@ -290,6 +279,7 @@ class Extension : public base::RefCountedThreadSafe<Extension> {
   Manifest::Location location() const;
   const ExtensionId& id() const;
   const base::Version* version() const { return version_.get(); }
+  const std::string& version_name() const { return version_name_; }
   const std::string VersionString() const;
   const std::string GetVersionForDisplay() const;
   const std::string& name() const { return name_; }
@@ -465,6 +455,7 @@ class Extension : public base::RefCountedThreadSafe<Extension> {
   scoped_ptr<Manifest> manifest_;
 
   // Stored parsed manifest data.
+  using ManifestDataMap = std::map<std::string, scoped_ptr<ManifestData>>;
   ManifestDataMap manifest_data_;
 
   // Set to true at the end of InitValue when initialization is finished.

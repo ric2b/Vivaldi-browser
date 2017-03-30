@@ -46,6 +46,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyDeviceMac
   uint16_t GetVendorID() const override;
   uint16_t GetProductID() const override;
   uint16_t GetDeviceID() const override;
+  uint16_t GetAppearance() const override;
   bool IsPaired() const override;
   bool IsConnected() const override;
   bool IsGattConnected() const override;
@@ -107,9 +108,6 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyDeviceMac
  private:
   friend class BluetoothAdapterMac;
   friend class BluetoothAdapterMacTest;
-
-  // Equivalent to [peripheral_ state].  Allows compilation on OS X 10.6.
-  CBPeripheralState GetPeripheralState() const;
 
   // CoreBluetooth data structure.
   base::scoped_nsobject<CBPeripheral> peripheral_;

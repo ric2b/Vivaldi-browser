@@ -26,6 +26,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
 #include "base/time/tick_clock.h"
 #include "build/build_config.h"
@@ -37,7 +38,6 @@
 #include "chrome/browser/memory/tab_manager_web_contents_data.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_iterator.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
@@ -49,6 +49,7 @@
 #include "components/metrics/system_memory_stats_recorder.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/memory_pressure_controller.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
@@ -94,8 +95,7 @@ int64_t IdFromWebContents(WebContents* web_contents) {
 int FindTabStripModelById(int64_t target_web_contents_id,
                           TabStripModel** model) {
   DCHECK(model);
-  for (chrome::BrowserIterator it; !it.done(); it.Next()) {
-    Browser* browser = *it;
+  for (auto* browser : *BrowserList::GetInstance()) {
     TabStripModel* local_model = browser->tab_strip_model();
     for (int idx = 0; idx < local_model->count(); idx++) {
       WebContents* web_contents = local_model->GetWebContentsAt(idx);
@@ -110,6 +110,26 @@ int FindTabStripModelById(int64_t target_web_contents_id,
   return -1;
 }
 
+// A wrapper around base::MemoryPressureMonitor::GetCurrentPressureLevel.
+// TODO(chrisha): Move this do the default implementation of a delegate.
+base::MemoryPressureListener::MemoryPressureLevel
+GetCurrentPressureLevel() {
+  auto monitor = base::MemoryPressureMonitor::Get();
+  if (monitor)
+    return monitor->GetCurrentPressureLevel();
+  return base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE;
+}
+
+// A wrapper to content::SendPressureNotification that doesn't have overloaded
+// type ambiguity. Makes use of Bind easier.
+// TODO(chrisha): Move this do the default implementation of a delegate.
+void NotifyRendererProcess(
+    const content::RenderProcessHost* render_process_host,
+    base::MemoryPressureListener::MemoryPressureLevel level) {
+  content::MemoryPressureController::SendPressureNotification(
+      render_process_host, level);
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -120,12 +140,19 @@ TabManager::TabManager()
       recent_tab_discard_(false),
       discard_once_(false),
       browser_tab_strip_tracker_(this, nullptr, nullptr),
-      test_tick_clock_(nullptr) {
+      test_tick_clock_(nullptr),
+      under_memory_pressure_(false),
+      weak_ptr_factory_(this) {
 #if defined(OS_CHROMEOS)
   delegate_.reset(new TabManagerDelegate);
 #endif
   browser_tab_strip_tracker_.Init(
       BrowserTabStripTracker::InitWith::ALL_BROWERS);
+
+  // Set up default callbacks. These may be overridden post-construction as
+  // testing seams.
+  get_current_pressure_level_ = base::Bind(&GetCurrentPressureLevel);
+  notify_renderer_process_ = base::Bind(&NotifyRendererProcess);
 }
 
 TabManager::~TabManager() {
@@ -206,26 +233,49 @@ void TabManager::Stop() {
 TabStatsList TabManager::GetTabStats() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   TabStatsList stats_list;
-  stats_list.reserve(32);  // 99% of users have < 30 tabs open
+  stats_list.reserve(32);  // 99% of users have < 30 tabs open.
 
-  // Go through each window to get all the tabs. Depending on the platform,
-  // windows are either native or ash or both. The goal is to make sure to go
-  // through them all, starting with the active window first (use
-  // chrome::GetActiveDesktop to get the current used type).
-  AddTabStats(BrowserList::GetInstance(chrome::GetActiveDesktop()), true,
-              &stats_list);
-  if (chrome::GetActiveDesktop() != chrome::HOST_DESKTOP_TYPE_NATIVE) {
-    AddTabStats(BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_NATIVE),
-                false, &stats_list);
-  } else if (chrome::GetActiveDesktop() != chrome::HOST_DESKTOP_TYPE_ASH) {
-    AddTabStats(BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_ASH), false,
-                &stats_list);
+  // TODO(chrisha): Move this code to a TabStripModel enumeration delegate!
+  if (!test_tab_strip_models_.empty()) {
+    for (size_t i = 0; i < test_tab_strip_models_.size(); ++i) {
+      AddTabStats(test_tab_strip_models_[i].first,   // tab_strip_model
+                  test_tab_strip_models_[i].second,  // is_app
+                  i == 0,                            // is_active
+                  &stats_list);
+    }
+  } else {
+    // The code here can only be tested under a full browser test.
+    AddTabStats(&stats_list);
   }
 
   // Sort the collected data so that least desirable to be killed is first, most
   // desirable is last.
   std::sort(stats_list.begin(), stats_list.end(), CompareTabStats);
   return stats_list;
+}
+
+std::vector<content::RenderProcessHost*> TabManager::GetOrderedRenderers() {
+  // Get the tab stats.
+  auto tab_stats = GetTabStats();
+
+  std::vector<content::RenderProcessHost*> sorted_renderers;
+  std::set<content::RenderProcessHost*> seen_renderers;
+  sorted_renderers.reserve(tab_stats.size());
+
+  // Convert the tab sort order to a process sort order. The process inherits
+  // the priority of its highest priority tab.
+  for (auto& tab : tab_stats) {
+    // Skip renderers that have already been encountered. This can occur when
+    // multiple tabs are folded into a single renderer process. In this case the
+    // process takes the priority of its highest priority contained tab.
+    auto renderer = tab.render_process_host;
+    if (!seen_renderers.insert(renderer).second)
+      continue;
+
+    sorted_renderers.push_back(renderer);
+  }
+
+  return sorted_renderers;
 }
 
 bool TabManager::IsTabDiscarded(content::WebContents* contents) const {
@@ -306,6 +356,19 @@ void TabManager::ActiveTabChanged(content::WebContents* old_contents,
   // inactive, so record the time of that transition.
   if (old_contents)
     GetWebContentsData(old_contents)->SetLastInactiveTime(NowTicks());
+}
+
+void TabManager::TabInsertedAt(content::WebContents* contents,
+                               int index,
+                               bool foreground) {
+  // Only interested in background tabs, as foreground tabs get taken care of by
+  // ActiveTabChanged.
+  if (foreground)
+    return;
+
+  // A new background tab is similar to having a tab switch from being active to
+  // inactive.
+  GetWebContentsData(contents)->SetLastInactiveTime(NowTicks());
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -412,51 +475,56 @@ void TabManager::PurgeBrowserMemory() {
 
 int TabManager::GetTabCount() const {
   int tab_count = 0;
-  for (chrome::BrowserIterator it; !it.done(); it.Next())
-    tab_count += it->tab_strip_model()->count();
+  for (auto* browser : *BrowserList::GetInstance())
+    tab_count += browser->tab_strip_model()->count();
   return tab_count;
 }
 
-void TabManager::AddTabStats(BrowserList* browser_list,
-                             bool active_desktop,
-                             TabStatsList* stats_list) {
-  // If it's the active desktop, the first window will be the active one.
-  // Otherwise, assume no active windows.
-  bool browser_active = active_desktop;
+void TabManager::AddTabStats(TabStatsList* stats_list) {
+  BrowserList* browser_list = BrowserList::GetInstance();
+  // The first window will be the active one.
+  bool browser_active = true;
   for (BrowserList::const_reverse_iterator browser_iterator =
            browser_list->begin_last_active();
        browser_iterator != browser_list->end_last_active();
        ++browser_iterator) {
     Browser* browser = *browser_iterator;
-    bool is_browser_for_app = browser->is_app();
-    const TabStripModel* model = browser->tab_strip_model();
-    for (int i = 0; i < model->count(); i++) {
-      WebContents* contents = model->GetWebContentsAt(i);
-      if (!contents->IsCrashed()) {
-        TabStats stats;
-        stats.is_app = is_browser_for_app;
-        stats.is_internal_page =
-            IsInternalPage(contents->GetLastCommittedURL());
-        stats.is_media = IsMediaTab(contents);
-        stats.is_pinned = model->IsTabPinned(i);
-        stats.is_selected = browser_active && model->IsTabSelected(i);
-        stats.is_discarded = GetWebContentsData(contents)->IsDiscarded();
-        stats.has_form_entry =
-            contents->GetPageImportanceSignals().had_form_interaction;
-        stats.discard_count = GetWebContentsData(contents)->DiscardCount();
-        stats.last_active = contents->GetLastActiveTime();
-        stats.renderer_handle = contents->GetRenderProcessHost()->GetHandle();
-        stats.child_process_host_id = contents->GetRenderProcessHost()->GetID();
-#if defined(OS_CHROMEOS)
-        stats.oom_score = delegate_->GetOomScore(stats.child_process_host_id);
-#endif
-        stats.title = contents->GetTitle();
-        stats.tab_contents_id = IdFromWebContents(contents);
-        stats_list->push_back(stats);
-      }
-    }
+    AddTabStats(browser->tab_strip_model(), browser->is_app(), browser_active,
+                stats_list);
     // The active browser window is processed in the first iteration.
     browser_active = false;
+  }
+}
+
+void TabManager::AddTabStats(const TabStripModel* model,
+                             bool is_app,
+                             bool active_model,
+                             TabStatsList* stats_list) {
+for (int i = 0; i < model->count(); i++) {
+    WebContents* contents = model->GetWebContentsAt(i);
+    if (!contents->IsCrashed()) {
+      TabStats stats;
+      stats.is_app = is_app;
+      stats.is_internal_page =
+          IsInternalPage(contents->GetLastCommittedURL());
+      stats.is_media = IsMediaTab(contents);
+      stats.is_pinned = model->IsTabPinned(i);
+      stats.is_selected = active_model && model->IsTabSelected(i);
+      stats.is_discarded = GetWebContentsData(contents)->IsDiscarded();
+      stats.has_form_entry =
+          contents->GetPageImportanceSignals().had_form_interaction;
+      stats.discard_count = GetWebContentsData(contents)->DiscardCount();
+      stats.last_active = contents->GetLastActiveTime();
+      stats.render_process_host = contents->GetRenderProcessHost();
+      stats.renderer_handle = contents->GetRenderProcessHost()->GetHandle();
+      stats.child_process_host_id = contents->GetRenderProcessHost()->GetID();
+#if defined(OS_CHROMEOS)
+      stats.oom_score = delegate_->GetOomScore(stats.child_process_host_id);
+#endif
+      stats.title = contents->GetTitle();
+      stats.tab_contents_id = IdFromWebContents(contents);
+      stats_list->push_back(stats);
+    }
   }
 }
 
@@ -468,8 +536,7 @@ void TabManager::UpdateTimerCallback() {
   if (g_browser_process->IsShuttingDown())
     return;
 
-  if (BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_ASH)->empty() &&
-      BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_NATIVE)->empty())
+  if (BrowserList::GetInstance()->empty())
     return;
 
   // Check for a discontinuity in time caused by the machine being suspended.
@@ -605,13 +672,30 @@ void TabManager::OnMemoryPressure(
   if (g_browser_process->IsShuttingDown())
     return;
 
-  // For the moment only do something when critical state is reached.
+  // If no task runner has been set, then use the same one that the memory
+  // pressure subsystem uses.
+  if (!task_runner_.get())
+    task_runner_ = base::ThreadTaskRunnerHandle::Get();
+
+  // Under critical pressure try to discard a tab.
   if (memory_pressure_level ==
       base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL) {
     LogMemoryAndDiscardTab();
   }
   // TODO(skuhne): If more memory pressure levels are introduced, consider
   // calling PurgeBrowserMemory() before CRITICAL is reached.
+
+  // If this is the beginning of a period of memory pressure then kick off
+  // notification of child processes.
+  // NOTE: This mechanism relies on having a MemoryPressureMonitor
+  // implementation that supports "CurrentPressureLevel". This is true on all
+  // platforms on which TabManager is used.
+#if !defined(OS_CHROMEOS)
+  // Running GC under memory pressure can cause thrashing. Disable it on
+  // ChromeOS until the thrashing is fixed. crbug.com/588172.
+  if (!under_memory_pressure_)
+    DoChildProcessDispatch();
+#endif
 }
 
 bool TabManager::IsMediaTab(WebContents* contents) const {
@@ -683,6 +767,66 @@ TimeTicks TabManager::NowTicks() const {
     return TimeTicks::Now();
 
   return test_tick_clock_->NowTicks();
+}
+
+void TabManager::DoChildProcessDispatch() {
+  // If Chrome is shutting down, do not do anything.
+  if (g_browser_process->IsShuttingDown())
+    return;
+
+  if (!under_memory_pressure_)
+    under_memory_pressure_ = true;
+
+  // If the memory pressure condition has ended then stop dispatching messages.
+  auto level = get_current_pressure_level_.Run();
+  if (level == base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE) {
+    under_memory_pressure_ = false;
+    notified_renderers_.clear();
+    return;
+  }
+
+  // Get a vector of active renderers, from highest to lowest priority.
+  auto renderers = GetOrderedRenderers();
+
+  // The following code requires at least one renderer to be present or it will
+  // busyloop. It's possible (however unlikely) for no renderers to exist, so
+  // bail early if that's the case.
+  if (renderers.empty())
+    return;
+
+  // Notify a single renderer of memory pressure.
+  bool notified = false;
+  while (!notified) {
+    // Notify the lowest priority renderer that hasn't been notified yet.
+    for (auto rit = renderers.rbegin(); rit != renderers.rend(); ++rit) {
+      // If this renderer has already been notified then look at the next one.
+      if (!notified_renderers_.insert(*rit).second)
+        continue;
+
+      // Notify the renderer.
+      notify_renderer_process_.Run(*rit, level);
+      notified = true;
+      break;
+    }
+
+    // If all renderers were processed and none were notified, then all
+    // renderers have already been notified. Clear the list and start again.
+    if (!notified)
+      notified_renderers_.clear();
+
+    // This loop can only run at most twice. If it doesn't exit the first time
+    // through, by the second time through |notified_renderers_| will be empty.
+    // Since |renderers| is always non-empty, the first renderer encountered
+    // during the second pass will be notified.
+  }
+
+  // Schedule another notification. Use a weak pointer so this doesn't explode
+  // during tear down.
+  task_runner_->PostDelayedTask(
+      FROM_HERE,
+      base::Bind(&TabManager::DoChildProcessDispatch,
+                 weak_ptr_factory_.GetWeakPtr()),
+      base::TimeDelta::FromSeconds(kRendererNotificationDelayInSeconds));
 }
 
 }  // namespace memory

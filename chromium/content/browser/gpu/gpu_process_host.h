@@ -23,7 +23,6 @@
 #include "content/common/content_export.h"
 #include "content/common/gpu/gpu_memory_uma_stats.h"
 #include "content/common/gpu/gpu_process_launch_causes.h"
-#include "content/common/gpu/gpu_result_codes.h"
 #include "content/public/browser/browser_child_process_host_delegate.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "gpu/command_buffer/common/constants.h"
@@ -69,16 +68,8 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   typedef base::Callback<void(const IPC::ChannelHandle&, const gpu::GPUInfo&)>
       EstablishChannelCallback;
 
-  typedef base::Callback<void(CreateCommandBufferResult)>
-      CreateCommandBufferCallback;
-
   typedef base::Callback<void(const gfx::GpuMemoryBufferHandle& handle)>
       CreateGpuMemoryBufferCallback;
-
-#if defined(OS_CHROMEOS)
-  typedef base::Callback<void(const IPC::ChannelHandle&)>
-      CreateArcVideoAcceleratorChannelCallback;
-#endif
 
   static bool gpu_enabled() { return gpu_enabled_; }
   static int gpu_crash_count() { return gpu_crash_count_; }
@@ -105,6 +96,9 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   CONTENT_EXPORT static void RegisterGpuMainThreadFactory(
       GpuMainThreadFactoryFunction create);
 
+  // BrowserChildProcessHostDelegate implementation.
+  ServiceRegistry* GetServiceRegistry() override;
+
   // Get the GPU process host for the GPU process with the given ID. Returns
   // null if the process no longer exists.
   static GpuProcessHost* FromID(int host_id);
@@ -122,8 +116,7 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   void EstablishGpuChannel(int client_id,
                            uint64_t client_tracing_id,
                            bool preempts,
-                           bool preempted,
-                           bool allow_future_sync_points,
+                           bool allow_view_command_buffers,
                            bool allow_real_time_streams,
                            const EstablishChannelCallback& callback);
   // TODO(mmaliszkiewicz): Remove when media pipeline has its own process.
@@ -131,19 +124,9 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
       int client_id,
       uint64_t client_tracing_id,
       bool preempts,
-      bool preempted,
-      bool allow_future_sync_points,
+      bool allow_view_command_buffers,
       bool allow_real_time_streams,
       const EstablishChannelCallback& callback);
-
-  // Tells the GPU process to create a new command buffer that draws into the
-  // given surface.
-  void CreateViewCommandBuffer(
-      const gfx::GLSurfaceHandle& compositing_surface,
-      int client_id,
-      const GPUCreateCommandBufferConfig& init_params,
-      int route_id,
-      const CreateCommandBufferCallback& callback);
 
   // Tells the GPU process to create a new GPU memory buffer.
   void CreateGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
@@ -169,13 +152,6 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
                               int client_id,
                               const gpu::SyncToken& sync_token);
 
-#if defined(OS_CHROMEOS)
-  // Tells the GPU process to create a new ipc channel for
-  // ArcVideoAccelerator.
-  void CreateArcVideoAcceleratorChannel(
-      const CreateArcVideoAcceleratorChannelCallback& callback);
-#endif
-
   // What kind of GPU process, e.g. sandboxed or unsandboxed.
   GpuProcessKind kind();
 
@@ -185,10 +161,6 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   // Asks the GPU process to stop by itself.
   void StopGpuProcess();
 
-  void BeginFrameSubscription(
-      int surface_id,
-      base::WeakPtr<RenderWidgetHostViewFrameSubscriber> subscriber);
-  void EndFrameSubscription(int surface_id);
   void LoadedShader(const std::string& key, const std::string& data);
 
  private:
@@ -211,14 +183,11 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   void OnProcessLaunched() override;
   void OnProcessLaunchFailed() override;
   void OnProcessCrashed(int exit_code) override;
-  ServiceRegistry* GetServiceRegistry() override;
 
   // Message handlers.
   void OnInitialized(bool result, const gpu::GPUInfo& gpu_info);
   void OnChannelEstablished(const IPC::ChannelHandle& channel_handle);
-  void OnCommandBufferCreated(CreateCommandBufferResult result);
   void OnGpuMemoryBufferCreated(const gfx::GpuMemoryBufferHandle& handle);
-  void OnArcVideoAcceleratorChannelCreated(const IPC::ChannelHandle& handle);
   void OnDidCreateOffscreenContext(const GURL& url);
   void OnDidLoseContext(bool offscreen,
                         gpu::error::ContextLostReason reason,
@@ -255,8 +224,7 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   void EstablishGpuChannelInternal(int client_id,
                                    uint64_t client_tracing_id,
                                    bool preempts,
-                                   bool preempted,
-                                   bool allow_future_sync_points,
+                                   bool allow_view_command_buffers,
                                    bool allow_real_time_streams,
                                    const EstablishChannelCallback& callback,
                                    bool ignore_disallowed_gpu);
@@ -269,18 +237,8 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   // Second value indicates whether disallowed gpu should be ignored.
   std::queue<std::pair<EstablishChannelCallback, bool> > channel_requests_;
 
-  // The pending create command buffer requests we need to reply to.
-  std::queue<CreateCommandBufferCallback> create_command_buffer_requests_;
-
   // The pending create gpu memory buffer requests we need to reply to.
   std::queue<CreateGpuMemoryBufferCallback> create_gpu_memory_buffer_requests_;
-
-#if defined(OS_CHROMEOS)
-  // The pending create arc video accelerator channel requests we need to reply
-  // to.
-  std::queue<CreateArcVideoAcceleratorChannelCallback>
-      create_arc_video_accelerator_channel_requests_;
-#endif
 
   // Qeueud messages to send when the process launches.
   std::queue<IPC::Message*> queued_messages_;

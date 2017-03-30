@@ -23,10 +23,10 @@
 #include "remoting/protocol/webrtc_transport.h"
 #include "remoting/protocol/webrtc_video_capturer_adapter.h"
 #include "remoting/protocol/webrtc_video_stream.h"
-#include "third_party/libjingle/source/talk/app/webrtc/mediastreaminterface.h"
-#include "third_party/libjingle/source/talk/app/webrtc/peerconnectioninterface.h"
-#include "third_party/libjingle/source/talk/app/webrtc/test/fakeconstraints.h"
-#include "third_party/libjingle/source/talk/app/webrtc/videosourceinterface.h"
+#include "third_party/webrtc/api/mediastreaminterface.h"
+#include "third_party/webrtc/api/peerconnectioninterface.h"
+#include "third_party/webrtc/api/test/fakeconstraints.h"
+#include "third_party/webrtc/api/videosourceinterface.h"
 
 namespace remoting {
 namespace protocol {
@@ -149,7 +149,6 @@ void WebrtcConnectionToClient::OnWebrtcTransportConnecting() {
 
 void WebrtcConnectionToClient::OnWebrtcTransportConnected() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  event_handler_->OnConnectionChannelsConnected(this);
 }
 
 void WebrtcConnectionToClient::OnWebrtcTransportError(ErrorCode error) {
@@ -157,19 +156,22 @@ void WebrtcConnectionToClient::OnWebrtcTransportError(ErrorCode error) {
   Disconnect(error);
 }
 
+void WebrtcConnectionToClient::OnWebrtcTransportMediaStreamAdded(
+    scoped_refptr<webrtc::MediaStreamInterface> stream) {
+  LOG(WARNING) << "The client created an unexpected media stream.";
+}
+
+void WebrtcConnectionToClient::OnWebrtcTransportMediaStreamRemoved(
+    scoped_refptr<webrtc::MediaStreamInterface> stream) {}
+
 void WebrtcConnectionToClient::OnChannelInitialized(
     ChannelDispatcherBase* channel_dispatcher) {
   DCHECK(thread_checker_.CalledOnValidThread());
-}
 
-void WebrtcConnectionToClient::OnChannelError(
-    ChannelDispatcherBase* channel_dispatcher,
-    ErrorCode error) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  LOG(ERROR) << "Failed to connect channel "
-             << channel_dispatcher->channel_name();
-  Disconnect(error);
+  if (control_dispatcher_ && control_dispatcher_->is_connected() &&
+      event_dispatcher_ && event_dispatcher_->is_connected()) {
+    event_handler_->OnConnectionChannelsConnected(this);
+  }
 }
 
 }  // namespace protocol

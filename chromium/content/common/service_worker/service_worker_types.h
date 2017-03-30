@@ -106,6 +106,12 @@ enum ServiceWorkerFetchEventResult {
   SERVICE_WORKER_FETCH_EVENT_LAST = SERVICE_WORKER_FETCH_EVENT_RESULT_RESPONSE
 };
 
+enum class ServiceWorkerFetchType {
+  FETCH,
+  FOREIGN_FETCH,
+  LAST = FOREIGN_FETCH
+};
+
 struct ServiceWorkerCaseInsensitiveCompare {
   bool operator()(const std::string& lhs, const std::string& rhs) const {
     return base::CompareCaseInsensitiveASCII(lhs, rhs) < 0;
@@ -123,6 +129,7 @@ struct CONTENT_EXPORT ServiceWorkerFetchRequest {
                             const ServiceWorkerHeaderMap& headers,
                             const Referrer& referrer,
                             bool is_reload);
+  ServiceWorkerFetchRequest(const ServiceWorkerFetchRequest& other);
   ~ServiceWorkerFetchRequest();
 
   FetchRequestMode mode;
@@ -139,6 +146,7 @@ struct CONTENT_EXPORT ServiceWorkerFetchRequest {
   FetchRedirectMode redirect_mode;
   std::string client_id;
   bool is_reload;
+  ServiceWorkerFetchType fetch_type;
 };
 
 // Represents a response to a fetch.
@@ -153,6 +161,7 @@ struct CONTENT_EXPORT ServiceWorkerResponse {
                         uint64_t blob_size,
                         const GURL& stream_url,
                         blink::WebServiceWorkerResponseError error);
+  ServiceWorkerResponse(const ServiceWorkerResponse& other);
   ~ServiceWorkerResponse();
 
   GURL url;

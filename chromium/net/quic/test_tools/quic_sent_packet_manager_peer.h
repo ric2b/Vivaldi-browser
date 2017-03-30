@@ -36,7 +36,7 @@ class QuicSentPacketManagerPeer {
   static void SetPerspective(QuicSentPacketManager* sent_packet_manager,
                              Perspective perspective);
 
-  static const SendAlgorithmInterface* GetSendAlgorithm(
+  static SendAlgorithmInterface* GetSendAlgorithm(
       const QuicSentPacketManager& sent_packet_manager);
 
   static void SetSendAlgorithm(QuicSentPacketManager* sent_packet_manager,
@@ -78,6 +78,12 @@ class QuicSentPacketManagerPeer {
 
   static QuicSentPacketManager::NetworkChangeVisitor* GetNetworkChangeVisitor(
       const QuicSentPacketManager* sent_packet_manager);
+
+  static void SetConsecutiveRtoCount(QuicSentPacketManager* sent_packet_manager,
+                                     size_t count);
+
+  static void SetConsecutiveTlpCount(QuicSentPacketManager* sent_packet_manager,
+                                     size_t count);
 
   static QuicSustainedBandwidthRecorder& GetBandwidthRecorder(
       QuicSentPacketManager* sent_packet_manager);

@@ -18,12 +18,14 @@
 #include <sstream>
 #include <string>
 #include "base/compiler_specific.h"
+#include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
+#include "base/trace_event/trace_event.h"
 #include "gpu/command_buffer/client/buffer_tracker.h"
 #include "gpu/command_buffer/client/gles2_cmd_helper.h"
 #include "gpu/command_buffer/client/gpu_control.h"
@@ -34,7 +36,6 @@
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "gpu/command_buffer/common/id_allocator.h"
 #include "gpu/command_buffer/common/sync_token.h"
-#include "gpu/command_buffer/common/trace_event.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 
@@ -131,6 +132,7 @@ GLES2Implementation::GLES2Implementation(
       gpu_control_(gpu_control),
       capabilities_(gpu_control->GetCapabilities()),
       aggressively_free_resources_(false),
+      cached_extension_string_(nullptr),
       weak_ptr_factory_(this) {
   DCHECK(helper);
   DCHECK(transfer_buffer);
@@ -147,8 +149,9 @@ GLES2Implementation::GLES2Implementation(
 
   share_group_ =
       (share_group ? share_group
-                   : new ShareGroup(bind_generates_resource,
-                                    gpu_control_->GetCommandBufferID()));
+                   : new ShareGroup(
+                         bind_generates_resource,
+                         gpu_control_->GetCommandBufferID().GetUnsafeValue()));
   DCHECK(share_group_->bind_generates_resource() == bind_generates_resource);
 
   memset(&reserved_ids_, 0, sizeof(reserved_ids_));
@@ -311,15 +314,6 @@ void GLES2Implementation::FreeEverything() {
 void GLES2Implementation::RunIfContextNotLost(const base::Closure& callback) {
   if (!helper_->IsContextLost())
     callback.Run();
-}
-
-void GLES2Implementation::SignalSyncPoint(uint32_t sync_point,
-                                          const base::Closure& callback) {
-  gpu_control_->SignalSyncPoint(
-      sync_point,
-      base::Bind(&GLES2Implementation::RunIfContextNotLost,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 callback));
 }
 
 void GLES2Implementation::SignalSyncToken(const gpu::SyncToken& sync_token,
@@ -958,7 +952,8 @@ bool GLES2Implementation::GetHelper(GLenum pname, GLint* params) {
       *params = capabilities_.minor_version;
       return true;
     case GL_NUM_EXTENSIONS:
-      *params = capabilities_.num_extensions;
+      UpdateCachedExtensionsIfNeeded();
+      *params = cached_extensions_.size();
       return true;
     case GL_NUM_PROGRAM_BINARY_FORMATS:
       *params = capabilities_.num_program_binary_formats;
@@ -2114,9 +2109,6 @@ void GLES2Implementation::CompressedTexImage2D(
     SetGLError(GL_INVALID_VALUE, "glCompressedTexImage2D", "border != 0");
     return;
   }
-  if (height == 0 || width == 0) {
-    return;
-  }
   // If there's a pixel unpack buffer bound use it when issuing
   // CompressedTexImage2D.
   if (bound_pixel_unpack_transfer_buffer_id_) {
@@ -2200,9 +2192,6 @@ void GLES2Implementation::CompressedTexImage3D(
   }
   if (border != 0) {
     SetGLError(GL_INVALID_VALUE, "glCompressedTexImage3D", "border != 0");
-    return;
-  }
-  if (height == 0 || width == 0 || depth == 0) {
     return;
   }
   // If there's a pixel unpack buffer bound use it when issuing
@@ -3306,6 +3295,9 @@ void GLES2Implementation::GetShaderPrecisionFormat(
 }
 
 const GLubyte* GLES2Implementation::GetStringHelper(GLenum name) {
+  if (name == GL_EXTENSIONS && cached_extension_string_) {
+    return reinterpret_cast<const GLubyte*>(cached_extension_string_);
+  }
   const char* result = NULL;
   // Clears the bucket so if the command fails nothing will be in it.
   helper_->SetBucketSize(kResultBucketId, 0);
@@ -3313,40 +3305,33 @@ const GLubyte* GLES2Implementation::GetStringHelper(GLenum name) {
   std::string str;
   if (GetBucketAsString(kResultBucketId, &str)) {
     // Adds extensions implemented on client side only.
-    switch (name) {
-      case GL_EXTENSIONS:
-        str += std::string(str.empty() ? "" : " ") +
-            "GL_EXT_unpack_subimage "
-            "GL_CHROMIUM_map_sub";
-        if (capabilities_.image)
-          str += " GL_CHROMIUM_image GL_CHROMIUM_gpu_memory_buffer_image";
-        if (capabilities_.future_sync_points)
-          str += " GL_CHROMIUM_future_sync_point";
-        break;
-      default:
-        break;
+    if (name == GL_EXTENSIONS) {
+      str += std::string(str.empty() ? "" : " ") +
+             "GL_EXT_unpack_subimage "
+             "GL_CHROMIUM_map_sub";
+      if (capabilities_.image)
+        str += " GL_CHROMIUM_image GL_CHROMIUM_gpu_memory_buffer_image";
+      if (capabilities_.future_sync_points)
+        str += " GL_CHROMIUM_future_sync_point";
     }
 
     // Because of WebGL the extensions can change. We have to cache each unique
     // result since we don't know when the client will stop referring to a
     // previous one it queries.
-    GLStringMap::iterator it = gl_strings_.find(name);
-    if (it == gl_strings_.end()) {
-      std::set<std::string> strings;
-      std::pair<GLStringMap::iterator, bool> insert_result =
-          gl_strings_.insert(std::make_pair(name, strings));
-      DCHECK(insert_result.second);
-      it = insert_result.first;
-    }
-    std::set<std::string>& string_set = it->second;
-    std::set<std::string>::const_iterator sit = string_set.find(str);
-    if (sit != string_set.end()) {
-      result = sit->c_str();
-    } else {
-      std::pair<std::set<std::string>::const_iterator, bool> insert_result =
-          string_set.insert(str);
-      DCHECK(insert_result.second);
-      result = insert_result.first->c_str();
+    // TODO: Here we could save memory by defining RequestExtensions
+    // invalidating the GL_EXTENSIONS string. http://crbug.com/586414
+    const std::string& cache = *gl_strings_.insert(str).first;
+    result = cache.c_str();
+
+    if (name == GL_EXTENSIONS) {
+      cached_extension_string_ = result;
+      std::vector<std::string> extensions =
+          base::SplitString(cache, base::kWhitespaceASCII,
+                            base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+      for (const std::string& extension : extensions) {
+        cached_extensions_.push_back(
+            gl_strings_.insert(extension).first->c_str());
+      }
     }
   }
   return reinterpret_cast<const GLubyte*>(result);
@@ -3361,6 +3346,28 @@ const GLubyte* GLES2Implementation::GetString(GLenum name) {
   GPU_CLIENT_LOG("  returned " << reinterpret_cast<const char*>(result));
   CheckGLError();
   return result;
+}
+
+const GLubyte* GLES2Implementation::GetStringi(GLenum name, GLuint index) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glGetStringi("
+                     << GLES2Util::GetStringStringType(name) << "," << index
+                     << ")");
+  TRACE_EVENT0("gpu", "GLES2::GetStringi");
+  UpdateCachedExtensionsIfNeeded();
+  if (name != GL_EXTENSIONS) {
+    SetGLError(GL_INVALID_ENUM, "glGetStringi", "name");
+    return nullptr;
+  }
+  if (index >= cached_extensions_.size()) {
+    SetGLError(GL_INVALID_VALUE, "glGetStringi", "index too large");
+    return nullptr;
+  }
+
+  const char* result = cached_extensions_[index];
+  GPU_CLIENT_LOG("  returned " << result);
+  CheckGLError();
+  return reinterpret_cast<const GLubyte*>(result);
 }
 
 bool GLES2Implementation::GetTransformFeedbackVaryingHelper(
@@ -3530,9 +3537,6 @@ void GLES2Implementation::ReadPixels(
     SetGLError(GL_INVALID_VALUE, "glReadPixels", "dimensions < 0");
     return;
   }
-  if (width == 0 || height == 0) {
-    return;
-  }
 
   // glReadPixel pads the size of each row of pixels by an amount specified by
   // glPixelStorei. So, we have to take that into account both in the fact that
@@ -3621,8 +3625,10 @@ void GLES2Implementation::ReadPixels(
   if (xoffset < 0) {
     skip_row_bytes = static_cast<uint32_t>(-xoffset) * group_size;
   }
-  while (remaining_rows) {
-    GLsizei desired_size =
+  do {
+    // Even if height == 0, we still need to trigger the service side handling
+    // in case invalid args are passed in and a GL errro needs to be generated.
+    GLsizei desired_size = remaining_rows == 0 ? 0 :
         service_padded_row_size * (remaining_rows - 1) + unpadded_row_size;
     ScopedTransferBufferPtr buffer(desired_size, helper_, transfer_buffer_);
     if (!buffer.valid()) {
@@ -3648,6 +3654,9 @@ void GLES2Implementation::ReadPixels(
     WaitForCmd();
     // If it was not marked as successful exit.
     if (!result->success) {
+      break;
+    }
+    if (remaining_rows == 0) {
       break;
     }
     const uint8_t* src = static_cast<const uint8_t*>(buffer.address());
@@ -3685,7 +3694,7 @@ void GLES2Implementation::ReadPixels(
     }
     y_index += num_rows;
     remaining_rows -= num_rows;
-  }
+  } while (remaining_rows);
   CheckGLError();
 }
 
@@ -4827,16 +4836,9 @@ const GLchar* GLES2Implementation::GetRequestableExtensionsCHROMIUM() {
     // them. Because we don't know when the client will stop referring
     // to a previous one it queries (see GetString) we need to cache
     // the unique results.
-    std::set<std::string>::const_iterator sit =
-        requestable_extensions_set_.find(str);
-    if (sit != requestable_extensions_set_.end()) {
-      result = sit->c_str();
-    } else {
-      std::pair<std::set<std::string>::const_iterator, bool> insert_result =
-          requestable_extensions_set_.insert(str);
-      DCHECK(insert_result.second);
-      result = insert_result.first->c_str();
-    }
+    // TODO: Here we could save memory by defining RequestExtensions
+    // invalidating the GL_EXTENSIONS string. http://crbug.com/586414
+    result = gl_strings_.insert(str).first->c_str();
   }
   GPU_CLIENT_LOG("  returned " << result);
   return reinterpret_cast<const GLchar*>(result);
@@ -4848,6 +4850,7 @@ void GLES2Implementation::RequestExtensionCHROMIUM(const char* extension) {
   GPU_CLIENT_SINGLE_THREAD_CHECK();
   GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glRequestExtensionCHROMIUM("
                  << extension << ")");
+  InvalidateCachedExtensions();
   SetBucketAsCString(kResultBucketId, extension);
   helper_->RequestExtensionCHROMIUM(kResultBucketId);
   helper_->SetBucketSize(kResultBucketId, 0);
@@ -5549,34 +5552,6 @@ GLboolean GLES2Implementation::UnmapBufferCHROMIUM(GLuint target) {
   return true;
 }
 
-GLuint GLES2Implementation::InsertSyncPointCHROMIUM() {
-  GPU_CLIENT_SINGLE_THREAD_CHECK();
-  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glInsertSyncPointCHROMIUM");
-  helper_->CommandBufferHelper::Flush();
-  return gpu_control_->InsertSyncPoint();
-}
-
-void GLES2Implementation::WaitSyncPointCHROMIUM(GLuint sync_point) {
-  // This should no longer be called.
-  NOTREACHED();
-}
-
-GLuint GLES2Implementation::InsertFutureSyncPointCHROMIUM() {
-  GPU_CLIENT_SINGLE_THREAD_CHECK();
-  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glInsertFutureSyncPointCHROMIUM");
-  DCHECK(capabilities_.future_sync_points);
-  return gpu_control_->InsertFutureSyncPoint();
-}
-
-void GLES2Implementation::RetireSyncPointCHROMIUM(GLuint sync_point) {
-  GPU_CLIENT_SINGLE_THREAD_CHECK();
-  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glRetireSyncPointCHROMIUM("
-                     << sync_point << ")");
-  DCHECK(capabilities_.future_sync_points);
-  helper_->CommandBufferHelper::Flush();
-  gpu_control_->RetireSyncPoint(sync_point);
-}
-
 uint64_t GLES2Implementation::ShareGroupTracingGUID() const {
   return share_group_->TracingGUID();
 }
@@ -5689,20 +5664,10 @@ void GLES2Implementation::WaitSyncTokenCHROMIUM(const GLbyte* sync_token) {
         return;
       }
 
-      // TODO(dyen): Temporarily support old sync points, remove once all old
-      // sync points have been removed.
-      const gpu::CommandBufferNamespace namespace_id =
-          sync_token_data.namespace_id();
-      if (namespace_id == gpu::CommandBufferNamespace::OLD_SYNC_POINTS) {
-        const uint32_t sync_point =
-            static_cast<uint32_t>(sync_token_data.release_count());
-        helper_->WaitSyncPointCHROMIUM(sync_point);
-        return;
-      }
-
       helper_->WaitSyncTokenCHROMIUM(
           static_cast<GLint>(sync_token_data.namespace_id()),
-          sync_token_data.command_buffer_id(), sync_token_data.release_count());
+          sync_token_data.command_buffer_id().GetUnsafeValue(),
+          sync_token_data.release_count());
     }
   }
 }
@@ -6595,6 +6560,18 @@ void GLES2Implementation::ProgramPathFragmentInputGenCHROMIUM(
                                                  buffer.offset());
   }
   CheckGLError();
+}
+
+void GLES2Implementation::UpdateCachedExtensionsIfNeeded() {
+  if (cached_extension_string_) {
+    return;
+  }
+  GetStringHelper(GL_EXTENSIONS);
+}
+
+void GLES2Implementation::InvalidateCachedExtensions() {
+  cached_extension_string_ = nullptr;
+  cached_extensions_.clear();
 }
 
 // Include the auto-generated part of this file. We split this because it means

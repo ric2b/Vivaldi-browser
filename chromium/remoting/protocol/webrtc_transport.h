@@ -12,11 +12,10 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
-#include "remoting/protocol/port_allocator_factory.h"
 #include "remoting/protocol/transport.h"
 #include "remoting/protocol/webrtc_data_stream_adapter.h"
 #include "remoting/signaling/signal_strategy.h"
-#include "third_party/libjingle/source/talk/app/webrtc/peerconnectioninterface.h"
+#include "third_party/webrtc/api/peerconnectioninterface.h"
 
 namespace webrtc {
 class FakeAudioDeviceModule;
@@ -26,6 +25,7 @@ namespace remoting {
 namespace protocol {
 
 class TransportContext;
+class MessageChannelFactory;
 
 class WebrtcTransport : public Transport,
                         public webrtc::PeerConnectionObserver {
@@ -45,6 +45,12 @@ class WebrtcTransport : public Transport,
 
     // Called when there is an error connecting the session.
     virtual void OnWebrtcTransportError(ErrorCode error) = 0;
+
+    // Called when an incoming media stream is added or removed.
+    virtual void OnWebrtcTransportMediaStreamAdded(
+        scoped_refptr<webrtc::MediaStreamInterface> stream) = 0;
+    virtual void OnWebrtcTransportMediaStreamRemoved(
+        scoped_refptr<webrtc::MediaStreamInterface> stream) = 0;
   };
 
   WebrtcTransport(rtc::Thread* worker_thread,
@@ -61,10 +67,10 @@ class WebrtcTransport : public Transport,
 
   // Factories for outgoing and incoming data channels. Must be used only after
   // the transport is connected.
-  StreamChannelFactory* outgoing_channel_factory() {
+  MessageChannelFactory* outgoing_channel_factory() {
     return &outgoing_data_stream_adapter_;
   }
-  StreamChannelFactory* incoming_channel_factory() {
+  MessageChannelFactory* incoming_channel_factory() {
     return &incoming_data_stream_adapter_;
   }
 
@@ -124,9 +130,6 @@ class WebrtcTransport : public Transport,
   base::OneShotTimer transport_info_timer_;
 
   ScopedVector<webrtc::IceCandidateInterface> pending_incoming_candidates_;
-
-  std::list<rtc::scoped_refptr<webrtc::MediaStreamInterface>>
-      unclaimed_streams_;
 
   WebrtcDataStreamAdapter outgoing_data_stream_adapter_;
   WebrtcDataStreamAdapter incoming_data_stream_adapter_;

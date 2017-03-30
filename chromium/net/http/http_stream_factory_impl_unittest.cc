@@ -103,6 +103,11 @@ class MockWebSocketHandshakeStream : public WebSocketHandshakeStreamBase {
   void GetSSLInfo(SSLInfo* ssl_info) override {}
   void GetSSLCertRequestInfo(SSLCertRequestInfo* cert_request_info) override {}
   bool GetRemoteEndpoint(IPEndPoint* endpoint) override { return false; }
+  Error GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
+                                    std::vector<uint8_t>* out) override {
+    ADD_FAILURE();
+    return ERR_NOT_IMPLEMENTED;
+  }
   void Drain(HttpNetworkSession* session) override {}
   void PopulateNetErrorDetails(NetErrorDetails* details) override { return; }
   void SetPriority(RequestPriority priority) override {}
@@ -369,6 +374,7 @@ class CapturePreconnectsSocketPool : public ParentPool {
   int RequestSocket(const std::string& group_name,
                     const void* socket_params,
                     RequestPriority priority,
+                    ClientSocketPool::RespectLimits respect_limits,
                     ClientSocketHandle* handle,
                     const CompletionCallback& callback,
                     const BoundNetLog& net_log) override {
@@ -762,6 +768,8 @@ TEST_P(HttpStreamFactoryTest, QuicLossyProxyMarkedAsBad) {
 
   session->quic_stream_factory()->number_of_lossy_connections_[99] =
       params.quic_max_number_of_lossy_connections;
+  session->quic_stream_factory()->MaybeDisableQuic(99);
+  ASSERT_TRUE(session->quic_stream_factory()->IsQuicDisabled(99));
 
   StaticSocketDataProvider socket_data2;
   socket_data2.set_connect_data(MockConnect(ASYNC, OK));
@@ -1619,7 +1627,8 @@ TEST_P(HttpStreamFactoryTest, DISABLED_RequestWebSocketSpdyHandshakeStream) {
 TEST_P(HttpStreamFactoryTest, DISABLED_OrphanedWebSocketStream) {
   SpdySessionDependencies session_deps(GetParam(),
                                        ProxyService::CreateDirect());
-  session_deps.use_alternative_services = true;
+  session_deps.parse_alternative_services = true;
+  session_deps.enable_alternative_service_with_different_host = false;
 
   MockRead mock_read(ASYNC, OK);
   SequencedSocketData socket_data(&mock_read, 1, nullptr, 0);

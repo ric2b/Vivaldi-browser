@@ -4,46 +4,70 @@
 
 #include "ui/views/test/platform_test_helper.h"
 
-#include "base/path_service.h"
-#include "mojo/shell/public/cpp/application_impl.h"
-#include "mojo/shell/public/cpp/application_test_base.h"
-#include "ui/aura/env.h"
-#include "ui/base/resource/resource_bundle.h"
-#include "ui/base/ui_base_paths.h"
-#include "ui/gl/test/gl_surface_test_support.h"
+#include "base/command_line.h"
+#include "mojo/shell/background/background_shell.h"
+#include "mojo/shell/background/tests/test_application_catalog_store.h"
+#include "mojo/shell/public/cpp/connector.h"
+#include "mojo/shell/public/cpp/shell_client.h"
+#include "mojo/shell/public/cpp/shell_connection.h"
 #include "ui/views/mus/window_manager_connection.h"
+#include "url/gurl.h"
+
+using mojo::shell::BackgroundShell;
 
 namespace views {
 namespace {
 
+const char kTestUrl[] = "mojo://test-app";
+
+class DefaultShellClient : public mojo::ShellClient {
+ public:
+  DefaultShellClient() {}
+  ~DefaultShellClient() override {}
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(DefaultShellClient);
+};
+
+scoped_ptr<mojo::shell::TestApplicationCatalogStore>
+BuildTestApplicationCatalogStore() {
+  scoped_ptr<base::ListValue> apps(new base::ListValue);
+  apps->Append(
+      mojo::shell::BuildPermissiveSerializedAppInfo(GURL(kTestUrl), "test"));
+  return make_scoped_ptr(
+      new mojo::shell::TestApplicationCatalogStore(std::move(apps)));
+}
+
 class PlatformTestHelperMus : public PlatformTestHelper {
  public:
   PlatformTestHelperMus() {
-    gfx::GLSurfaceTestSupport::InitializeOneOff();
-
-    // TODO(sky): We really shouldn't need to configure ResourceBundle.
-    ui::RegisterPathProvider();
-    base::FilePath ui_test_pak_path;
-    CHECK(PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
-    ui::ResourceBundle::InitSharedInstanceWithPakPath(ui_test_pak_path);
-    aura::Env::CreateInstance(true);
-
-    mojo_test_helper_.reset(new mojo::test::TestHelper(nullptr));
+    background_shell_.reset(new BackgroundShell);
+    scoped_ptr<BackgroundShell::InitParams> init_params(
+        new BackgroundShell::InitParams);
+    init_params->app_catalog = BuildTestApplicationCatalogStore();
+    background_shell_->Init(std::move(init_params));
+    shell_client_.reset(new DefaultShellClient);
+    shell_connection_.reset(new mojo::ShellConnection(
+        shell_client_.get(),
+        background_shell_->CreateShellClientRequest(GURL(kTestUrl))));
+    shell_connection_->WaitForInitialize();
     // ui/views/mus requires a WindowManager running, for now use the desktop
     // one.
-    mojo_test_helper_->application_impl()->ConnectToApplication(
-        "mojo:desktop_wm");
-    WindowManagerConnection::Create(mojo_test_helper_->application_impl());
+    mojo::Connector* connector = shell_connection_->connector();
+    connector->Connect("mojo:desktop_wm");
+    WindowManagerConnection::Create(connector);
   }
 
   ~PlatformTestHelperMus() override {
-    mojo_test_helper_.reset(nullptr);
-    aura::Env::DeleteInstance();
-    ui::ResourceBundle::CleanupSharedInstance();
+    WindowManagerConnection::Reset();
+    // |app_| has a reference to us, destroy it while we are still valid.
+    shell_connection_.reset();
   }
 
  private:
-  scoped_ptr<mojo::test::TestHelper> mojo_test_helper_;
+  scoped_ptr<BackgroundShell> background_shell_;
+  scoped_ptr<mojo::ShellConnection> shell_connection_;
+  scoped_ptr<DefaultShellClient> shell_client_;
 
   DISALLOW_COPY_AND_ASSIGN(PlatformTestHelperMus);
 };

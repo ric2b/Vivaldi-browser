@@ -4,27 +4,27 @@
 
 #include "chrome/test/base/testing_browser_process.h"
 
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
+#include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_impl.h"
+#include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/printing/print_job_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#include "chrome/common/features.h"
 #include "chrome/test/base/testing_browser_process_platform_part.h"
 #include "components/network_time/network_time_tracker.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/notification_service.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/message_center/message_center.h"
 
-#if !defined(OS_IOS)
-#include "chrome/browser/notifications/notification_ui_manager.h"
-#include "chrome/browser/safe_browsing/safe_browsing_service.h"
-#endif
 
-#if defined(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND)
 #include "chrome/browser/background/background_mode_manager.h"
 #endif
 
@@ -125,16 +125,10 @@ WatchDogThread* TestingBrowserProcess::watchdog_thread() {
 }
 
 ProfileManager* TestingBrowserProcess::profile_manager() {
-#if defined(OS_IOS)
-  NOTIMPLEMENTED();
-  return nullptr;
-#else
   return profile_manager_.get();
-#endif
 }
 
 void TestingBrowserProcess::SetProfileManager(ProfileManager* profile_manager) {
-#if !defined(OS_IOS)
   // NotificationUIManager can contain references to elements in the current
   // ProfileManager (for example, the MessageCenterSettingsController maintains
   // a pointer to the ProfileInfoCache). So when we change the ProfileManager
@@ -143,7 +137,6 @@ void TestingBrowserProcess::SetProfileManager(ProfileManager* profile_manager) {
   // similar situation.
   notification_ui_manager_.reset();
   profile_manager_.reset(profile_manager);
-#endif
 }
 
 PrefService* TestingBrowserProcess::local_state() {
@@ -174,10 +167,7 @@ policy::BrowserPolicyConnector*
 }
 
 policy::PolicyService* TestingBrowserProcess::policy_service() {
-#if defined(OS_IOS)
-  NOTIMPLEMENTED();
-  return nullptr;
-#elif defined(ENABLE_CONFIGURATION_POLICY)
+#if defined(ENABLE_CONFIGURATION_POLICY)
   return browser_policy_connector()->GetPolicyService();
 #else
   if (!policy_service_)
@@ -213,12 +203,7 @@ StatusTray* TestingBrowserProcess::status_tray() {
 
 safe_browsing::SafeBrowsingService*
 TestingBrowserProcess::safe_browsing_service() {
-#if defined(OS_IOS)
-  NOTIMPLEMENTED();
-  return nullptr;
-#else
   return sb_service_.get();
-#endif
 }
 
 safe_browsing::ClientSideDetectionService*
@@ -258,10 +243,14 @@ message_center::MessageCenter* TestingBrowserProcess::message_center() {
 IntranetRedirectDetector* TestingBrowserProcess::intranet_redirect_detector() {
   return nullptr;
 }
+
 void TestingBrowserProcess::CreateDevToolsHttpProtocolHandler(
-    chrome::HostDesktopType host_desktop_type,
     const std::string& ip,
-    uint16_t port) {}
+    uint16_t port) {
+}
+
+void TestingBrowserProcess::CreateDevToolsAutoOpener() {
+}
 
 unsigned int TestingBrowserProcess::AddRefModule() {
   return ++module_ref_count_;
@@ -355,7 +344,7 @@ TestingBrowserProcess::supervised_user_whitelist_installer() {
 }
 
 MediaFileSystemRegistry* TestingBrowserProcess::media_file_system_registry() {
-#if defined(OS_IOS) || defined(OS_ANDROID)
+#if defined(OS_ANDROID)
   NOTIMPLEMENTED();
   return nullptr;
 #else
@@ -380,6 +369,7 @@ TestingBrowserProcess::network_time_tracker() {
   if (!network_time_tracker_) {
     DCHECK(local_state_);
     network_time_tracker_.reset(new network_time::NetworkTimeTracker(
+        scoped_ptr<base::Clock>(new base::DefaultClock()),
         scoped_ptr<base::TickClock>(new base::DefaultTickClock()),
         local_state_));
   }
@@ -394,9 +384,9 @@ memory::TabManager* TestingBrowserProcess::GetTabManager() {
   return nullptr;
 }
 
-ShellIntegration::DefaultWebClientState
+shell_integration::DefaultWebClientState
 TestingBrowserProcess::CachedDefaultWebClientState() {
-  return ShellIntegration::UNKNOWN_DEFAULT;
+  return shell_integration::UNKNOWN_DEFAULT;
 }
 void TestingBrowserProcess::SetSystemRequestContext(
     net::URLRequestContextGetter* context_getter) {
@@ -420,9 +410,7 @@ void TestingBrowserProcess::SetLocalState(PrefService* local_state) {
     // any components owned by TestingBrowserProcess that depend on local_state
     // are also freed.
     network_time_tracker_.reset();
-#if !defined(OS_IOS)
     notification_ui_manager_.reset();
-#endif
 #if defined(ENABLE_CONFIGURATION_POLICY)
     ShutdownBrowserPolicyConnector();
     created_browser_policy_connector_ = false;
@@ -447,11 +435,7 @@ void TestingBrowserProcess::ShutdownBrowserPolicyConnector() {
 
 void TestingBrowserProcess::SetSafeBrowsingService(
     safe_browsing::SafeBrowsingService* sb_service) {
-#if defined(OS_IOS)
-  NOTIMPLEMENTED();
-#else
   sb_service_ = sb_service;
-#endif
 }
 
 void TestingBrowserProcess::SetRapporService(

@@ -37,17 +37,11 @@ namespace ash {
 
 namespace {
 
-const int kMaximumStatusStringLength = 100;
+const size_t kMaximumStatusStringLength = 100;
 const int kStopButtonRightPadding = 18;
 
 // Returns the active CastConfigDelegate instance.
 ash::CastConfigDelegate* GetCastConfigDelegate() {
-  // When shutting down Chrome, there may not be a shell or a delegate instance.
-  if (!ash::Shell::GetInstance() ||
-      !ash::Shell::GetInstance()->system_tray_delegate()) {
-    return nullptr;
-  }
-
   return ash::Shell::GetInstance()
       ->system_tray_delegate()
       ->GetCastConfigDelegate();
@@ -338,7 +332,7 @@ views::View* CastDuplexView::ActiveChildView() {
 // Exposes an icon in the tray. |TrayCast| manages the visiblity of this.
 class CastTrayView : public TrayItemView {
  public:
-  CastTrayView(SystemTrayItem* tray_item);
+  explicit CastTrayView(SystemTrayItem* tray_item);
   ~CastTrayView() override;
 
   // Called when the tray alignment changes so that the icon can recenter
@@ -560,14 +554,9 @@ TrayCast::TrayCast(SystemTray* system_tray) : SystemTrayItem(system_tray) {
 }
 
 TrayCast::~TrayCast() {
-  // TODO(jdufault): Remove these if checks (and the ones in
-  // GetCastConfigDelegate) by fixing deinit order. See crbug.com/577413.
-  if (Shell::GetInstance())
-    Shell::GetInstance()->RemoveShellObserver(this);
-
-  ash::CastConfigDelegate* cast_config_delegate = GetCastConfigDelegate();
-  if (added_observer_ && cast_config_delegate)
-    cast_config_delegate->RemoveObserver(this);
+  Shell::GetInstance()->RemoveShellObserver(this);
+  if (added_observer_)
+    GetCastConfigDelegate()->RemoveObserver(this);
 }
 
 void TrayCast::StartCastForTest(const std::string& receiver_id) {

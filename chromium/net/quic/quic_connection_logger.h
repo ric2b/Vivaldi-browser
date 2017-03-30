@@ -29,7 +29,8 @@ class CertVerifyResult;
 // This class is a debug visitor of a QuicConnection which logs
 // events to |net_log|.
 class NET_EXPORT_PRIVATE QuicConnectionLogger
-    : public QuicConnectionDebugVisitor {
+    : public QuicConnectionDebugVisitor,
+      public QuicPacketCreator::DebugDelegate {
  public:
   QuicConnectionLogger(
       QuicSpdySession* session,
@@ -39,14 +40,13 @@ class NET_EXPORT_PRIVATE QuicConnectionLogger
 
   ~QuicConnectionLogger() override;
 
-  // QuicPacketGenerator::DebugDelegateInterface
+  // QuicPacketCreator::DebugDelegateInterface
   void OnFrameAddedToPacket(const QuicFrame& frame) override;
 
   // QuicConnectionDebugVisitorInterface
   void OnPacketSent(const SerializedPacket& serialized_packet,
                     QuicPacketNumber original_packet_number,
                     TransmissionType transmission_type,
-                    size_t encrypted_length,
                     QuicTime sent_time) override;
   void OnPacketReceived(const IPEndPoint& self_address,
                         const IPEndPoint& peer_address,
@@ -71,7 +71,8 @@ class NET_EXPORT_PRIVATE QuicConnectionLogger
       const QuicVersionNegotiationPacket& packet) override;
   void OnRevivedPacket(const QuicPacketHeader& revived_header,
                        base::StringPiece payload) override;
-  void OnConnectionClosed(QuicErrorCode error, bool from_peer) override;
+  void OnConnectionClosed(QuicErrorCode error,
+                          ConnectionCloseSource source) override;
   void OnSuccessfulVersionNegotiation(const QuicVersion& version) override;
   void OnRttChanged(QuicTime::Delta rtt) const override;
 

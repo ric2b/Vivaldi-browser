@@ -137,32 +137,33 @@
 //
 //
 // Convertable notes:
-// Converting a large data type to a string can be costly. To help with this,
-// the trace framework provides an interface ConvertableToTraceFormat. If you
-// inherit from it and implement the AppendAsTraceFormat method the trace
-// framework will call back to your object to convert a trace output time. This
-// means, if the category for the event is disabled, the conversion will not
-// happen.
+// Unlike base's trace framework, no convertable support in Blink because of
+// the way we estimate tracing memory overhead. All objects passed to the
+// tracing framework should be allocated by malloc to calculate overhead
+// correctly, while many Blink objects use PartitionAlloc/Oilpan. Convertable
+// is an interface to avoid unnecessary conversion but if we allow to use
+// PartitionAlloc/Oilpan backed objects, overhead estimation could be wrong.
+// For structured objects, you can use TracedValue.
 //
-//   class MyData : public base::trace_event::ConvertableToTraceFormat {
+//   class MyData {
 //    public:
 //     MyData() {}
-//     void AppendAsTraceFormat(std::string* out) const override {
-//       out->append("{\"foo\":1}");
+//     PassOwnPtr<TracedValue> toTracedValue() {
+//       OwnPtr<TracedValue> tracedValue = TracedValue::create();
+//       tracedValue->setInteger("foo", 1);
+//       tracedValue->beginArray("bar");
+//       tracedValue->pushInteger(2);
+//       tracedValue->pushInteger(3);
+//       tracedValue->endArray();
+//       return tracedValue.release();
 //     }
 //    private:
 //     ~MyData() override {}
-//     DISALLOW_COPY_AND_ASSIGN(MyData);
 //   };
 //
-//   TRACE_EVENT1("foo", "bar", "data",
-//                scoped_refptr<ConvertableToTraceFormat>(new MyData()));
+//   TRACE_EVENT1("foo", "bar", "data", myData.toTracedValue());
 //
-// The trace framework will take ownership if the passed pointer and it will
-// be free'd when the trace buffer is flushed.
-//
-// Note, we only do the conversion when the buffer is flushed, so the provided
-// data object should not be modified after it's passed to the trace framework.
+// The trace framework will take ownership.
 //
 //
 // Thread Safety:
@@ -938,6 +939,21 @@
       TRACE_EVENT_PHASE_DELETE_OBJECT, category_group, name,         \
       TRACE_ID_DONT_MANGLE(id), TRACE_EVENT_FLAG_NONE)
 
+// Entering and leaving trace event contexts. |category_group| and |name|
+// specify the context category and type. |context| represents a snapshotted
+// context object.
+#define TRACE_EVENT_ENTER_CONTEXT(category_group, name, context)                      \
+    INTERNAL_TRACE_EVENT_ADD_WITH_ID(TRACE_EVENT_PHASE_ENTER_CONTEXT, category_group, \
+        name, TRACE_ID_DONT_MANGLE(context),                                          \
+        TRACE_EVENT_FLAG_NONE)
+#define TRACE_EVENT_LEAVE_CONTEXT(category_group, name, context)                      \
+    INTERNAL_TRACE_EVENT_ADD_WITH_ID(TRACE_EVENT_PHASE_LEAVE_CONTEXT, category_group, \
+        name, TRACE_ID_DONT_MANGLE(context),                                          \
+        TRACE_EVENT_FLAG_NONE)
+#define TRACE_EVENT_SCOPED_CONTEXT(category_group, name, context) \
+    INTERNAL_TRACE_EVENT_SCOPED_CONTEXT(category_group, name,     \
+        TRACE_ID_DONT_MANGLE(context))
+
 // Macro to efficiently determine if a given category group is enabled.
 #define TRACE_EVENT_CATEGORY_GROUP_ENABLED(category_group, ret)             \
   do {                                                                      \
@@ -1000,6 +1016,8 @@
 #define TRACE_EVENT_PHASE_DELETE_OBJECT ('D')
 #define TRACE_EVENT_PHASE_MEMORY_DUMP ('v')
 #define TRACE_EVENT_PHASE_MARK ('R')
+#define TRACE_EVENT_PHASE_ENTER_CONTEXT ('(')
+#define TRACE_EVENT_PHASE_LEAVE_CONTEXT (')')
 
 // Flags for changing the behavior of TRACE_EVENT_API_ADD_TRACE_EVENT.
 #define TRACE_EVENT_FLAG_NONE (static_cast<unsigned int>(0))

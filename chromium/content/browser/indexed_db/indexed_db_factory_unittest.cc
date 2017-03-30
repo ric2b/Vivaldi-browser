@@ -17,6 +17,7 @@
 #include "content/browser/indexed_db/indexed_db_factory_impl.h"
 #include "content/browser/indexed_db/mock_indexed_db_callbacks.h"
 #include "content/browser/indexed_db/mock_indexed_db_database_callbacks.h"
+#include "content/browser/quota/mock_quota_manager_proxy.h"
 #include "storage/common/database/database_identifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabaseException.h"
@@ -74,11 +75,14 @@ class IndexedDBFactoryTest : public testing::Test {
  public:
   IndexedDBFactoryTest() {
     task_runner_ = new base::TestSimpleTaskRunner();
-    context_ = new IndexedDBContextImpl(base::FilePath(),
-                                        NULL /* special_storage_policy */,
-                                        NULL /* quota_manager_proxy */,
-                                        task_runner_.get());
+    quota_manager_proxy_ = new MockQuotaManagerProxy(nullptr, nullptr);
+    context_ = new IndexedDBContextImpl(
+        base::FilePath(), NULL /* special_storage_policy */,
+        quota_manager_proxy_.get(), task_runner_.get());
     idb_factory_ = new MockIDBFactory(context_.get());
+  }
+  ~IndexedDBFactoryTest() override {
+    quota_manager_proxy_->SimulateQuotaManagerDestroyed();
   }
 
  protected:
@@ -93,7 +97,7 @@ class IndexedDBFactoryTest : public testing::Test {
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
   scoped_refptr<IndexedDBContextImpl> context_;
   scoped_refptr<MockIDBFactory> idb_factory_;
-
+  scoped_refptr<MockQuotaManagerProxy> quota_manager_proxy_;
   DISALLOW_COPY_AND_ASSIGN(IndexedDBFactoryTest);
 };
 
@@ -279,11 +283,8 @@ TEST_F(IndexedDBFactoryTest, BackingStoreReleasedOnForcedClose) {
       new MockIndexedDBDatabaseCallbacks());
   const int64_t transaction_id = 1;
   IndexedDBPendingConnection connection(
-      callbacks,
-      db_callbacks,
-      0, /* child_process_id */
-      transaction_id,
-      IndexedDBDatabaseMetadata::DEFAULT_INT_VERSION);
+      callbacks, db_callbacks, 0, /* child_process_id */
+      transaction_id, IndexedDBDatabaseMetadata::DEFAULT_VERSION);
   factory()->Open(ASCIIToUTF16("db"),
                   connection,
                   NULL /* request_context */,
@@ -312,11 +313,8 @@ TEST_F(IndexedDBFactoryTest, BackingStoreReleaseDelayedOnClose) {
       new MockIndexedDBDatabaseCallbacks());
   const int64_t transaction_id = 1;
   IndexedDBPendingConnection connection(
-      callbacks,
-      db_callbacks,
-      0, /* child_process_id */
-      transaction_id,
-      IndexedDBDatabaseMetadata::DEFAULT_INT_VERSION);
+      callbacks, db_callbacks, 0, /* child_process_id */
+      transaction_id, IndexedDBDatabaseMetadata::DEFAULT_VERSION);
   factory()->Open(ASCIIToUTF16("db"),
                   connection,
                   NULL /* request_context */,
@@ -407,11 +405,8 @@ TEST_F(IndexedDBFactoryTest, ForceCloseReleasesBackingStore) {
       new MockIndexedDBDatabaseCallbacks());
   const int64_t transaction_id = 1;
   IndexedDBPendingConnection connection(
-      callbacks,
-      db_callbacks,
-      0, /* child_process_id */
-      transaction_id,
-      IndexedDBDatabaseMetadata::DEFAULT_INT_VERSION);
+      callbacks, db_callbacks, 0, /* child_process_id */
+      transaction_id, IndexedDBDatabaseMetadata::DEFAULT_VERSION);
   factory()->Open(ASCIIToUTF16("db"),
                   connection,
                   NULL /* request_context */,

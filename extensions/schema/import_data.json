@@ -53,6 +53,10 @@
             "type": "boolean",
             "description": "Does profile support search."
           },
+          "speeddial": {
+            "type": "boolean",
+            "description": "Does profile support Speed Dial."
+          },
           "notes": {
             "type": "boolean",
             "description": "Does profile support notes."

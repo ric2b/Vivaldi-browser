@@ -33,8 +33,8 @@
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/fetch/ImageResource.h"
+#include "core/frame/Deprecation.h"
 #include "core/frame/ImageBitmap.h"
-#include "core/frame/UseCounter.h"
 #include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLFormElement.h"
@@ -42,6 +42,7 @@
 #include "core/html/HTMLSourceElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/parser/HTMLSrcsetParser.h"
+#include "core/imagebitmap/ImageBitmapOptions.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/layout/LayoutBlockFlow.h"
 #include "core/layout/LayoutImage.h"
@@ -91,7 +92,6 @@ HTMLImageElement::HTMLImageElement(Document& document, HTMLFormElement* form, bo
     , m_source(nullptr)
     , m_formWasSetByParser(false)
     , m_elementCreatedByParser(createdByParser)
-    , m_intrinsicSizingViewportDependant(false)
     , m_useFallbackContent(false)
     , m_isFallbackImage(false)
     , m_referrerPolicy(ReferrerPolicyDefault)
@@ -250,14 +250,25 @@ void HTMLImageElement::setBestFitURLAndDPRFromImageCandidate(const ImageCandidat
     float candidateDensity = candidate.density();
     if (candidateDensity >= 0)
         m_imageDevicePixelRatio = 1.0 / candidateDensity;
-    if (candidate.resourceWidth() > 0) {
-        m_intrinsicSizingViewportDependant = true;
+
+    bool intrinsicSizingViewportDependant = false;
+    if (candidate.getResourceWidth() > 0) {
+        intrinsicSizingViewportDependant = true;
         UseCounter::count(document(), UseCounter::SrcsetWDescriptor);
     } else if (!candidate.srcOrigin()) {
         UseCounter::count(document(), UseCounter::SrcsetXDescriptor);
     }
     if (layoutObject() && layoutObject()->isImage())
         toLayoutImage(layoutObject())->setImageDevicePixelRatio(m_imageDevicePixelRatio);
+
+    if (intrinsicSizingViewportDependant) {
+        if (!m_listener)
+            m_listener = ViewportChangeListener::create(this);
+
+        document().mediaQueryMatcher().addViewportListener(m_listener);
+    } else if (m_listener) {
+        document().mediaQueryMatcher().removeViewportListener(m_listener);
+    }
 }
 
 void HTMLImageElement::parseAttribute(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& value)
@@ -320,7 +331,7 @@ ImageCandidate HTMLImageElement::findBestFitImageFromPictureParent()
 
         HTMLSourceElement* source = toHTMLSourceElement(child);
         if (!source->fastGetAttribute(srcAttr).isNull())
-            UseCounter::countDeprecation(document(), UseCounter::PictureSourceSrc);
+            Deprecation::countDeprecation(document(), UseCounter::PictureSourceSrc);
         String srcset = source->fastGetAttribute(srcsetAttr);
         if (srcset.isEmpty())
             continue;
@@ -369,8 +380,8 @@ void HTMLImageElement::attach(const AttachContext& context)
         if (m_isFallbackImage) {
             float deviceScaleFactor = blink::deviceScaleFactor(layoutImage->frame());
             std::pair<Image*, float> brokenImageAndImageScaleFactor = ImageResource::brokenImage(deviceScaleFactor);
-            ImageResource* newImageResource = new ImageResource(brokenImageAndImageScaleFactor.first);
-            layoutImage->imageResource()->setImageResource(newImageResource);
+            RefPtrWillBeRawPtr<ImageResource> newImageResource = ImageResource::create(brokenImageAndImageScaleFactor.first);
+            layoutImage->imageResource()->setImageResource(newImageResource.get());
         }
         if (layoutImageResource->hasImage())
             return;
@@ -592,7 +603,7 @@ bool HTMLImageElement::isInteractiveContent() const
     return fastHasAttribute(usemapAttr);
 }
 
-PassRefPtr<Image> HTMLImageElement::getSourceImageForCanvas(SourceImageStatus* status, AccelerationHint) const
+PassRefPtr<Image> HTMLImageElement::getSourceImageForCanvas(SourceImageStatus* status, AccelerationHint, SnapshotReason) const
 {
     if (!complete() || !cachedImage()) {
         *status = IncompleteSourceImageStatus;
@@ -645,7 +656,7 @@ FloatSize HTMLImageElement::defaultDestinationSize() const
         return FloatSize();
     LayoutSize size;
     size = image->imageSize(LayoutObject::shouldRespectImageOrientation(layoutObject()), 1.0f);
-    if (layoutObject() && layoutObject()->isLayoutImage() && image->image() && !image->image()->hasRelativeWidth())
+    if (layoutObject() && layoutObject()->isLayoutImage() && image->image() && !image->image()->hasRelativeSize())
         size.scale(toLayoutImage(layoutObject())->imageDevicePixelRatio());
     return FloatSize(size);
 }
@@ -660,7 +671,7 @@ static bool sourceSizeValue(Element& element, Document& currentDocument, float& 
     return exists;
 }
 
-FetchRequest::ResourceWidth HTMLImageElement::resourceWidth()
+FetchRequest::ResourceWidth HTMLImageElement::getResourceWidth()
 {
     FetchRequest::ResourceWidth resourceWidth;
     Element* element = m_source.get();
@@ -684,7 +695,7 @@ void HTMLImageElement::forceReload() const
     imageLoader().updateFromElement(ImageLoader::UpdateForcedReload, m_referrerPolicy);
 }
 
-ScriptPromise HTMLImageElement::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, int sx, int sy, int sw, int sh, ExceptionState& exceptionState)
+ScriptPromise HTMLImageElement::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, int sx, int sy, int sw, int sh, const ImageBitmapOptions& options, ExceptionState& exceptionState)
 {
     ASSERT(eventTarget.toDOMWindow());
     if (!cachedImage()) {
@@ -699,7 +710,7 @@ ScriptPromise HTMLImageElement::createImageBitmap(ScriptState* scriptState, Even
         exceptionState.throwDOMException(IndexSizeError, String::format("The source %s provided is 0.", sw ? "height" : "width"));
         return ScriptPromise();
     }
-    return ImageBitmapSource::fulfillImageBitmap(scriptState, ImageBitmap::create(this, IntRect(sx, sy, sw, sh), eventTarget.toDOMWindow()->document()));
+    return ImageBitmapSource::fulfillImageBitmap(scriptState, ImageBitmap::create(this, IntRect(sx, sy, sw, sh), eventTarget.toDOMWindow()->document(), options));
 }
 
 void HTMLImageElement::selectSourceURL(ImageLoader::UpdateFromElementBehavior behavior)
@@ -717,10 +728,6 @@ void HTMLImageElement::selectSourceURL(ImageLoader::UpdateFromElementBehavior be
     if (!foundURL) {
         candidate = bestFitSourceForImageAttributes(document().devicePixelRatio(), sourceSize(*this), fastGetAttribute(srcAttr), fastGetAttribute(srcsetAttr), &document());
         setBestFitURLAndDPRFromImageCandidate(candidate);
-    }
-    if (m_intrinsicSizingViewportDependant && !m_listener) {
-        m_listener = ViewportChangeListener::create(this);
-        document().mediaQueryMatcher().addViewportListener(m_listener);
     }
     imageLoader().updateFromElement(behavior, m_referrerPolicy);
 
@@ -811,4 +818,4 @@ IntSize HTMLImageElement::bitmapSourceSize() const
     return IntSize(lSize.width(), lSize.height());
 }
 
-}
+} // namespace blink

@@ -18,15 +18,17 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/prefs/pref_change_registrar.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/common/features.h"
+#include "components/prefs/pref_change_registrar.h"
 
 class ChromeChildProcessWatcher;
 class ChromeDeviceClient;
 class ChromeResourceDispatcherHostDelegate;
+class DevToolsAutoOpener;
 class RemoteDebuggingServer;
 class PrefRegistrySimple;
 
@@ -109,10 +111,9 @@ class BrowserProcessImpl : public BrowserProcess,
   IconManager* icon_manager() override;
   GLStringManager* gl_string_manager() override;
   GpuModeManager* gpu_mode_manager() override;
-  void CreateDevToolsHttpProtocolHandler(
-      chrome::HostDesktopType host_desktop_type,
-      const std::string& ip,
-      uint16_t port) override;
+  void CreateDevToolsHttpProtocolHandler(const std::string& ip,
+                                         uint16_t port) override;
+  void CreateDevToolsAutoOpener() override;
   unsigned int AddRefModule() override;
   unsigned int ReleaseModule() override;
   bool IsShuttingDown() override;
@@ -152,7 +153,7 @@ class BrowserProcessImpl : public BrowserProcess,
   network_time::NetworkTimeTracker* network_time_tracker() override;
   gcm::GCMDriver* gcm_driver() override;
   memory::TabManager* GetTabManager() override;
-  ShellIntegration::DefaultWebClientState CachedDefaultWebClientState()
+  shell_integration::DefaultWebClientState CachedDefaultWebClientState()
       override;
 
   static void RegisterPrefs(PrefRegistrySimple* registry);
@@ -223,6 +224,7 @@ class BrowserProcessImpl : public BrowserProcess,
 
 #if !defined(OS_ANDROID)
   scoped_ptr<RemoteDebuggingServer> remote_debugging_server_;
+  scoped_ptr<DevToolsAutoOpener> devtools_auto_opener_;
 #endif
 
 #if defined(ENABLE_PRINT_PREVIEW)
@@ -240,7 +242,7 @@ class BrowserProcessImpl : public BrowserProcess,
 
   scoped_ptr<StatusTray> status_tray_;
 
-#if defined(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND)
   scoped_ptr<BackgroundModeManager> background_mode_manager_;
 #endif
 
@@ -332,7 +334,7 @@ class BrowserProcessImpl : public BrowserProcess,
   scoped_ptr<memory::TabManager> tab_manager_;
 #endif
 
-  ShellIntegration::DefaultWebClientState cached_default_web_client_state_;
+  shell_integration::DefaultWebClientState cached_default_web_client_state_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserProcessImpl);
 };

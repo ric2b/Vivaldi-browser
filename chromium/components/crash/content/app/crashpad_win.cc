@@ -4,8 +4,6 @@
 
 #include "components/crash/content/app/crashpad.h"
 
-#include <stddef.h>
-
 #include "base/environment.h"
 #include "base/lazy_instance.h"
 #include "base/memory/scoped_ptr.h"
@@ -16,6 +14,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "components/crash/content/app/crash_reporter_client.h"
+#include "components/crash/content/app/crash_switches.h"
 #include "components/startup_metric_utils/common/pre_read_field_trial_utils_win.h"
 #include "third_party/crashpad/crashpad/client/crashpad_client.h"
 #include "third_party/crashpad/crashpad/client/crashpad_info.h"
@@ -31,51 +30,65 @@ base::LazyInstance<crashpad::CrashpadClient>::Leaky g_crashpad_client =
 
 }  // namespace
 
+void GetPlatformCrashpadAnnotations(
+    std::map<std::string, std::string>* annotations) {
+  CrashReporterClient* crash_reporter_client = GetCrashReporterClient();
+  base::FilePath exe_file;
+  CHECK(PathService::Get(base::FILE_EXE, &exe_file));
+  base::string16 product_name, version, special_build, channel_name;
+  crash_reporter_client->GetProductNameAndVersion(
+      exe_file, &product_name, &version, &special_build, &channel_name);
+  (*annotations)["prod"] = base::UTF16ToUTF8(product_name);
+  (*annotations)["ver"] = base::UTF16ToUTF8(version);
+  (*annotations)["channel"] = base::UTF16ToUTF8(channel_name);
+  if (!special_build.empty())
+    (*annotations)["special"] = base::UTF16ToUTF8(special_build);
+#if defined(ARCH_CPU_X86)
+  (*annotations)["plat"] = std::string("Win32");
+#elif defined(ARCH_CPU_X86_64)
+  (*annotations)["plat"] = std::string("Win64");
+#endif
+}
+
 base::FilePath PlatformCrashpadInitialization(bool initial_client,
-                                              bool browser_process) {
+                                              bool browser_process,
+                                              bool embedded_handler) {
   base::FilePath database_path;  // Only valid in the browser process.
   bool result;
 
   const char kPipeNameVar[] = "CHROME_CRASHPAD_PIPE_NAME";
   scoped_ptr<base::Environment> env(base::Environment::Create());
 
-  DCHECK_EQ(initial_client, browser_process);
-
   if (initial_client) {
     CrashReporterClient* crash_reporter_client = GetCrashReporterClient();
     crash_reporter_client->GetCrashDumpLocation(&database_path);
 
-    base::FilePath exe_file;
-    CHECK(PathService::Get(base::FILE_EXE, &exe_file));
-    base::string16 product_name, version, special_build, channel_name;
-    crash_reporter_client->GetProductNameAndVersion(
-        exe_file, &product_name, &version, &special_build, &channel_name);
     std::map<std::string, std::string> process_annotations;
-    process_annotations["prod"] = base::UTF16ToUTF8(product_name);
-    process_annotations["ver"] = base::UTF16ToUTF8(version);
-    process_annotations["channel"] = base::UTF16ToUTF8(channel_name);
-    if (!special_build.empty())
-      process_annotations["special"] = base::UTF16ToUTF8(special_build);
-#if defined(ARCH_CPU_X86)
-    process_annotations["plat"] = std::string("Win32");
-#elif defined(ARCH_CPU_X86_64)
-    process_annotations["plat"] = std::string("Win64");
-#endif
+    GetPlatformCrashpadAnnotations(&process_annotations);
+
 #if defined(GOOGLE_CHROME_BUILD)
     std::string url = "https://clients2.google.com/cr/report";
 #else
     std::string url;
 #endif
 
-    std::vector<std::string> arguments;
+    base::FilePath exe_file;
+    CHECK(PathService::Get(base::FILE_EXE, &exe_file));
 
-    // In test binaries, use crashpad_handler directly. Otherwise, we launch
-    // chrome.exe with --type=crashpad-handler.
-    if (exe_file.BaseName().value() != FILE_PATH_LITERAL("vivaldi.exe")) {
-      base::FilePath exe_dir = exe_file.DirName();
-      exe_file = exe_dir.Append(FILE_PATH_LITERAL("crashpad_handler.exe"));
-    } else {
-      arguments.push_back("--type=crashpad-handler");
+    bool is_per_user_install =
+        crash_reporter_client->GetIsPerUserInstall(exe_file);
+    if (crash_reporter_client->GetShouldDumpLargerDumps(is_per_user_install)) {
+      crashpad::CrashpadInfo::GetCrashpadInfo()
+          ->set_gather_indirectly_referenced_memory(
+              crashpad::TriState::kEnabled);
+    }
+
+    // If the handler is embedded in the binary (e.g. chrome, setup), we
+    // reinvoke it with --type=crashpad-handler. Otherwise, we use the
+    // standalone crashpad_handler.exe (for tests, etc.).
+    std::vector<std::string> arguments;
+    if (embedded_handler) {
+      arguments.push_back(std::string("--type=") + switches::kCrashpadHandler);
 
       if (startup_metric_utils::GetPreReadOptions().use_prefetch_argument) {
         // The prefetch argument added here has to be documented in
@@ -83,6 +96,9 @@ base::FilePath PlatformCrashpadInitialization(bool initial_client,
         // constant can't be used here because crashpad can't depend on Chrome.
         arguments.push_back("/prefetch:7");
       }
+    } else {
+      base::FilePath exe_dir = exe_file.DirName();
+      exe_file = exe_dir.Append(FILE_PATH_LITERAL("crashpad_handler.exe"));
     }
 
     // TODO(scottmg): See https://crashpad.chromium.org/bug/23.

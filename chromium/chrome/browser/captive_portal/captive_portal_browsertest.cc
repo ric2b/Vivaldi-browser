@@ -17,7 +17,6 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -42,6 +41,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/interstitial_page_delegate.h"
@@ -2668,9 +2668,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, ReloadTimeout) {
 // the background one.
 // Disabled:  http://crbug.com/134357
 IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_TwoWindows) {
-  Browser* browser2 =
-      new Browser(Browser::CreateParams(browser()->profile(),
-                                        browser()->host_desktop_type()));
+  Browser* browser2 = new Browser(Browser::CreateParams(browser()->profile()));
   // Navigate the new browser window so it'll be shown and we can pick the
   // active window.
   ui_test_utils::NavigateToURL(browser2, GURL(url::kAboutBlankURL));
@@ -2680,8 +2678,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_TwoWindows) {
   // when running multiple tests at once, the original browser window may
   // remain the profile's active window.
   Browser* active_browser =
-      chrome::FindTabbedBrowser(browser()->profile(), true,
-                                browser()->host_desktop_type());
+      chrome::FindTabbedBrowser(browser()->profile(), true);
   Browser* inactive_browser;
   if (active_browser == browser2) {
     // When only one test is running at a time, the new browser will probably be
@@ -2710,8 +2707,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, DISABLED_TwoWindows) {
   // Make sure the active window hasn't changed, and its new tab is
   // active.
   ASSERT_EQ(active_browser,
-            chrome::FindTabbedBrowser(browser()->profile(), true,
-                                      browser()->host_desktop_type()));
+            chrome::FindTabbedBrowser(browser()->profile(), true));
   ASSERT_EQ(1, active_browser->tab_strip_model()->active_index());
 
   // Check that the only two navigated tabs were the new error tab in the

@@ -1,0 +1,406 @@
+Name: font-roboto
+Version: 1.0.1
+Repository: git://github.com/PolymerElements/font-roboto.git
+Tag: v1.0.1
+Revision: 21ce9b51a417fa9995cf6606e886aba0728f70a1
+Tree link: https://github.com/PolymerElements/font-roboto/tree/v1.0.1
+
+Name: iron-a11y-keys
+Version: 1.0.4
+Repository: git://github.com/PolymerElements/iron-a11y-keys.git
+Tag: v1.0.4
+Revision: 51a34396a392bcfb45592900973c35eceb11f0d7
+Tree link: https://github.com/PolymerElements/iron-a11y-keys/tree/v1.0.4
+
+Name: iron-a11y-keys-behavior
+Version: 1.1.1
+Repository: git://github.com/PolymerElements/iron-a11y-keys-behavior.git
+Tag: v1.1.1
+Revision: 12af7cb19b2c6b3887e37a5ea1501ffe676d1e8a
+Tree link: https://github.com/PolymerElements/iron-a11y-keys-behavior/tree/v1.1.1
+
+Name: iron-autogrow-textarea
+Version: 1.0.10
+Repository: git://github.com/PolymerElements/iron-autogrow-textarea.git
+Tag: v1.0.10
+Revision: 1ba4f97e250dc14e9638d95be582dd62b9083736
+Tree link: https://github.com/PolymerElements/iron-autogrow-textarea/tree/v1.0.10
+
+Name: iron-behaviors
+Version: 1.0.12
+Repository: git://github.com/PolymerElements/iron-behaviors.git
+Tag: v1.0.12
+Revision: 657f526a2382a659cdf4e13be87ecc89261588a3
+Tree link: https://github.com/PolymerElements/iron-behaviors/tree/v1.0.12
+
+Name: iron-checked-element-behavior
+Version: 1.0.4
+Repository: git://github.com/PolymerElements/iron-checked-element-behavior.git
+Tag: v1.0.4
+Revision: cc30263ec2871ae8f8f944948f44299d3f3cdf0d
+Tree link: https://github.com/PolymerElements/iron-checked-element-behavior/tree/v1.0.4
+
+Name: iron-collapse
+Version: 1.0.6
+Repository: git://github.com/PolymerElements/iron-collapse.git
+Tag: v1.0.6
+Revision: afd2b928c84fb1a1d6069b05a36c37b269f25209
+Tree link: https://github.com/PolymerElements/iron-collapse/tree/v1.0.6
+
+Name: iron-dropdown
+Version: 1.2.0
+Repository: git://github.com/PolymerElements/iron-dropdown.git
+Tag: v1.2.0
+Revision: f864191c6ffbd3aaddea8102102ab40137046327
+Tree link: https://github.com/PolymerElements/iron-dropdown/tree/v1.2.0
+
+Name: iron-fit-behavior
+Version: 1.0.5
+Repository: git://github.com/PolymerElements/iron-fit-behavior.git
+Tag: v1.0.5
+Revision: 18dec1eb5c7217be4d360c0fb9101fe899136f92
+Tree link: https://github.com/PolymerElements/iron-fit-behavior/tree/v1.0.5
+
+Name: iron-flex-layout
+Version: 1.2.2
+Repository: git://github.com/PolymerElements/iron-flex-layout.git
+Tag: v1.2.2
+Revision: 41c4f35be1368afb770312b907a258175565dbdf
+Tree link: https://github.com/PolymerElements/iron-flex-layout/tree/v1.2.2
+
+Name: iron-form-element-behavior
+Version: 1.0.6
+Repository: git://github.com/PolymerElements/iron-form-element-behavior.git
+Tag: v1.0.6
+Revision: cf9e09ded62daf3363852ce98260aaad1ed0fae1
+Tree link: https://github.com/PolymerElements/iron-form-element-behavior/tree/v1.0.6
+
+Name: iron-icon
+Version: 1.0.7
+Repository: git://github.com/PolymerElements/iron-icon.git
+Tag: v1.0.7
+Revision: 6f4d152dc3998a6cc12a5a585a654f893dc99381
+Tree link: https://github.com/PolymerElements/iron-icon/tree/v1.0.7
+
+Name: iron-icons
+Version: 1.1.3
+Repository: git://github.com/PolymerElements/iron-icons.git
+Tag: v1.1.3
+Revision: c13869b57a9464dfc3a1f26e89858f8be37e7441
+Tree link: https://github.com/PolymerElements/iron-icons/tree/v1.1.3
+
+Name: iron-iconset-svg
+Version: 1.0.9
+Repository: git://github.com/PolymerElements/iron-iconset-svg.git
+Tag: v1.0.9
+Revision: ce9b2ea1f73d936cffdd05f3fe34b1f69d1d32db
+Tree link: https://github.com/PolymerElements/iron-iconset-svg/tree/v1.0.9
+
+Name: iron-image
+Version: 1.2.2
+Repository: git://github.com/PolymerElements/iron-image.git
+Tag: v1.2.2
+Revision: 2b9e5466ce0809a8503c369c9c500ec487dee224
+Tree link: https://github.com/PolymerElements/iron-image/tree/v1.2.2
+
+Name: iron-input
+Version: 1.0.8
+Repository: git://github.com/PolymerElements/iron-input.git
+Tag: 1.0.8
+Revision: 55d2b39ead32b8d90da538daa1a6681fd9ae89d9
+Tree link: https://github.com/PolymerElements/iron-input/tree/1.0.8
+
+Name: iron-list
+Version: 1.2.3
+Repository: git://github.com/PolymerElements/iron-list.git
+Tag: v1.2.3
+Revision: 07957dc10616341606ae030d78bb41492fb7c0cc
+Tree link: https://github.com/PolymerElements/iron-list/tree/v1.2.3
+
+Name: iron-media-query
+Version: 1.0.8
+Repository: git://github.com/PolymerElements/iron-media-query.git
+Tag: v1.0.8
+Revision: 3f916be171af7a3e03eb019acdfea71055d3c744
+Tree link: https://github.com/PolymerElements/iron-media-query/tree/v1.0.8
+
+Name: iron-menu-behavior
+Version: 1.1.0
+Repository: git://github.com/PolymerElements/iron-menu-behavior.git
+Tag: v1.1.0
+Revision: b18d5478f1d4d6befb15533716d60d5772f8e812
+Tree link: https://github.com/PolymerElements/iron-menu-behavior/tree/v1.1.0
+
+Name: iron-meta
+Version: 1.1.1
+Repository: git://github.com/PolymerElements/iron-meta.git
+Tag: v1.1.1
+Revision: e171ee234b482219c9514e6f9551df48ef48bd9f
+Tree link: https://github.com/PolymerElements/iron-meta/tree/v1.1.1
+
+Name: iron-overlay-behavior
+Version: 1.3.0
+Repository: git://github.com/PolymerElements/iron-overlay-behavior.git
+Tag: v1.3.0
+Revision: b488ce94ec1c17c3a5491af1a2fba2f7382684da
+Tree link: https://github.com/PolymerElements/iron-overlay-behavior/tree/v1.3.0
+
+Name: iron-pages
+Version: 1.0.7
+Repository: git://github.com/PolymerElements/iron-pages.git
+Tag: v1.0.7
+Revision: 395e253134488b1cab13072890ca5a7eb1b0fd54
+Tree link: https://github.com/PolymerElements/iron-pages/tree/v1.0.7
+
+Name: iron-range-behavior
+Version: 1.0.4
+Repository: git://github.com/PolymerElements/iron-range-behavior.git
+Tag: v1.0.4
+Revision: 71774a7d8a8c377496bfe05e60b754e91216e0b9
+Tree link: https://github.com/PolymerElements/iron-range-behavior/tree/v1.0.4
+
+Name: iron-resizable-behavior
+Version: 1.0.2
+Repository: git://github.com/PolymerElements/iron-resizable-behavior.git
+Tag: v1.0.2
+Revision: 85de8ba28be2bf17c81d6436ef1119022b003674
+Tree link: https://github.com/PolymerElements/iron-resizable-behavior/tree/v1.0.2
+
+Name: iron-scroll-target-behavior
+Version: 1.0.3
+Repository: git://github.com/PolymerElements/iron-scroll-target-behavior.git
+Tag: v1.0.3
+Revision: 7ce943d4bc9daf9704174f58a6c5104fe3097986
+Tree link: https://github.com/PolymerElements/iron-scroll-target-behavior/tree/v1.0.3
+
+Name: iron-selector
+Version: 1.2.1
+Repository: git://github.com/PolymerElements/iron-selector.git
+Tag: v1.2.1
+Revision: 1e6a7ee05e5ff350472ffc1ee780f145a7606b7b
+Tree link: https://github.com/PolymerElements/iron-selector/tree/v1.2.1
+
+Name: iron-test-helpers
+Version: 1.1.3
+Repository: git://github.com/PolymerElements/iron-test-helpers.git
+Tag: v1.1.3
+Revision: 51e03645e9a5a7884b5fadc567508e1d730e9174
+Tree link: https://github.com/PolymerElements/iron-test-helpers/tree/v1.1.3
+
+Name: iron-validatable-behavior
+Version: 1.0.5
+Repository: git://github.com/PolymerElements/iron-validatable-behavior.git
+Tag: v1.0.5
+Revision: c1334b835892b3d7a329a8e6b8741d4be3a8d99c
+Tree link: https://github.com/PolymerElements/iron-validatable-behavior/tree/v1.0.5
+
+Name: neon-animation
+Version: 1.1.0
+Repository: git://github.com/PolymerElements/neon-animation.git
+Tag: v1.1.0
+Revision: 564e0dc92724f2bc0bf0f76bf2ac392d4905b2ff
+Tree link: https://github.com/PolymerElements/neon-animation/tree/v1.1.0
+
+Name: paper-behaviors
+Version: 1.0.11
+Repository: git://github.com/PolymerElements/paper-behaviors.git
+Tag: v1.0.11
+Revision: e3c1ab0c72905b58fb4d9adc2921ea73b5c085a5
+Tree link: https://github.com/PolymerElements/paper-behaviors/tree/v1.0.11
+
+Name: paper-button
+Version: 1.0.11
+Repository: git://github.com/PolymerElements/paper-button.git
+Tag: v1.0.11
+Revision: 7d0f75300372d91835ae7298593d50987d4a610f
+Tree link: https://github.com/PolymerElements/paper-button/tree/v1.0.11
+
+Name: paper-card
+Version: 1.1.1
+Repository: git://github.com/PolymerElements/paper-card.git
+Tag: v1.1.1
+Revision: 8ddd91424414ad32147c4c0c6812aff348da6114
+Tree link: https://github.com/PolymerElements/paper-card/tree/v1.1.1
+
+Name: paper-checkbox
+Version: 1.1.1
+Repository: git://github.com/PolymerElements/paper-checkbox.git
+Tag: v1.1.1
+Revision: ce52f51c537d27f414fec7298b9ebff4248044eb
+Tree link: https://github.com/PolymerElements/paper-checkbox/tree/v1.1.1
+
+Name: paper-dialog
+Version: 1.0.4
+Repository: git://github.com/PolymerElements/paper-dialog.git
+Tag: v1.0.4
+Revision: 53b099bed06bbbab7cb0f82c8209328c1a82aee6
+Tree link: https://github.com/PolymerElements/paper-dialog/tree/v1.0.4
+
+Name: paper-dialog-behavior
+Version: 1.1.1
+Repository: git://github.com/PolymerElements/paper-dialog-behavior.git
+Tag: v1.1.1
+Revision: 5831039e9f878c63478064abed115c98992b5504
+Tree link: https://github.com/PolymerElements/paper-dialog-behavior/tree/v1.1.1
+
+Name: paper-drawer-panel
+Version: 1.0.6
+Repository: git://github.com/PolymerElements/paper-drawer-panel.git
+Tag: v1.0.6
+Revision: 9dd19ef9153ed303a5f8b6d573179cde31b2f5e6
+Tree link: https://github.com/PolymerElements/paper-drawer-panel/tree/v1.0.6
+
+Name: paper-dropdown-menu
+Version: 1.1.3
+Repository: git://github.com/PolymerElements/paper-dropdown-menu.git
+Tag: v1.1.3
+Revision: 1ca32e3eeb568f1ae356a205c1812744fdd65950
+Tree link: https://github.com/PolymerElements/paper-dropdown-menu/tree/v1.1.3
+
+Name: paper-fab
+Version: 1.1.2
+Repository: git://github.com/PolymerElements/paper-fab.git
+Tag: v1.1.2
+Revision: 19bf68f79e4ece424bbaf4cfa1c74c62d481c75d
+Tree link: https://github.com/PolymerElements/paper-fab/tree/v1.1.2
+
+Name: paper-header-panel
+Version: 1.1.3
+Repository: git://github.com/PolymerElements/paper-header-panel.git
+Tag: v1.1.3
+Revision: a36f782c6687aa08ce811f597a495a4f09137c75
+Tree link: https://github.com/PolymerElements/paper-header-panel/tree/v1.1.3
+
+Name: paper-icon-button
+Version: 1.0.6
+Repository: git://github.com/PolymerElements/paper-icon-button.git
+Tag: v1.0.6
+Revision: 35347d81939093cd2abe2783ac1b17fa57b7b303
+Tree link: https://github.com/PolymerElements/paper-icon-button/tree/v1.0.6
+
+Name: paper-input
+Version: 1.1.5
+Repository: git://github.com/PolymerElements/paper-input.git
+Tag: v1.1.5
+Revision: 0aa8318b5e026688f94c78c7673acabf5bad0f17
+Tree link: https://github.com/PolymerElements/paper-input/tree/v1.1.5
+
+Name: paper-item
+Version: 1.1.3
+Repository: git://github.com/PolymerElements/paper-item.git
+Tag: v1.1.3
+Revision: 280c2e703315a6f1f707bec6fd0b1e0b80fee8f4
+Tree link: https://github.com/PolymerElements/paper-item/tree/v1.1.3
+
+Name: paper-material
+Version: 1.0.6
+Repository: git://github.com/PolymerElements/paper-material.git
+Tag: v1.0.6
+Revision: 6aef0896fcbc25f9f5bd1dd55f7679e6ab7f92ad
+Tree link: https://github.com/PolymerElements/paper-material/tree/v1.0.6
+
+Name: paper-menu
+Version: 1.2.2
+Repository: git://github.com/PolymerElements/paper-menu.git
+Tag: v1.2.2
+Revision: f31a1dbc5b594a84c8c01eca0f23f9bcb8f6ba76
+Tree link: https://github.com/PolymerElements/paper-menu/tree/v1.2.2
+
+Name: paper-menu-button
+Version: 1.0.4
+Repository: git://github.com/PolymerElements/paper-menu-button.git
+Tag: v1.0.4
+Revision: 886c7eb904a5d59652adc0a127a8e0eab7e0f663
+Tree link: https://github.com/PolymerElements/paper-menu-button/tree/v1.0.4
+
+Name: paper-progress
+Version: 1.0.8
+Repository: git://github.com/PolymerElements/paper-progress.git
+Tag: v1.0.8
+Revision: 9d879787a55c95eedaa28cfd65813de4367bc858
+Tree link: https://github.com/PolymerElements/paper-progress/tree/v1.0.8
+
+Name: paper-radio-button
+Version: 1.0.12
+Repository: git://github.com/PolymerElements/paper-radio-button.git
+Tag: v1.0.12
+Revision: d7a5a090968c8448d7568208e05fb626fe74ab64
+Tree link: https://github.com/PolymerElements/paper-radio-button/tree/v1.0.12
+
+Name: paper-radio-group
+Version: 1.0.9
+Repository: git://github.com/PolymerElements/paper-radio-group.git
+Tag: v1.0.9
+Revision: 27a8447ed1709dd1a9bef514acd7dee218604077
+Tree link: https://github.com/PolymerElements/paper-radio-group/tree/v1.0.9
+
+Name: paper-ripple
+Version: 1.0.5
+Repository: git://github.com/PolymerElements/paper-ripple.git
+Tag: v1.0.5
+Revision: d72e7a9a8ab518b901ed18dde492df3b87a93be5
+Tree link: https://github.com/PolymerElements/paper-ripple/tree/v1.0.5
+
+Name: paper-slider
+Version: 1.0.9
+Repository: git://github.com/PolymerElements/paper-slider.git
+Tag: v1.0.9
+Revision: 5814b574e9440cec40619157f00b7aa2ced20c8d
+Tree link: https://github.com/PolymerElements/paper-slider/tree/v1.0.9
+
+Name: paper-spinner
+Version: 1.1.0
+Repository: git://github.com/PolymerElements/paper-spinner.git
+Tag: v1.1.0
+Revision: 66d77a91969b5f2deff4f2363740ccf4a47d423b
+Tree link: https://github.com/PolymerElements/paper-spinner/tree/v1.1.0
+
+Name: paper-styles
+Version: 1.1.3
+Repository: git://github.com/PolymerElements/paper-styles.git
+Tag: v1.1.3
+Revision: 6239484bc25ca1f56e7263ac952c63edd8298853
+Tree link: https://github.com/PolymerElements/paper-styles/tree/v1.1.3
+
+Name: paper-tabs
+Version: 1.3.3
+Repository: git://github.com/PolymerElements/paper-tabs.git
+Tag: v1.3.3
+Revision: 4c53ca15663b6f4b13b20a8aab6af8dea5bfc369
+Tree link: https://github.com/PolymerElements/paper-tabs/tree/v1.3.3
+
+Name: paper-toggle-button
+Version: 1.0.14
+Repository: git://github.com/PolymerElements/paper-toggle-button.git
+Tag: v1.0.14
+Revision: 131f32adf5ce831f94be7f80c436865b44d7cd95
+Tree link: https://github.com/PolymerElements/paper-toggle-button/tree/v1.0.14
+
+Name: paper-toolbar
+Version: 1.1.4
+Repository: git://github.com/PolymerElements/paper-toolbar.git
+Tag: v1.1.4
+Revision: e9d582733fab4d0698c680047d7faaab1a35196c
+Tree link: https://github.com/PolymerElements/paper-toolbar/tree/v1.1.4
+
+Name: paper-tooltip
+Version: 1.1.1
+Repository: git://github.com/PolymerElements/paper-tooltip.git
+Tag: v1.1.1
+Revision: 0b274f0ad241877fd316101b43fe48b013a470b6
+Tree link: https://github.com/PolymerElements/paper-tooltip/tree/v1.1.1
+
+Name: polymer
+Version: 1.2.4
+Repository: git://github.com/Polymer/polymer.git
+Tag: v1.2.4
+Revision: 284332a905ddd60eab11901a82ac037976175cf8
+Tree link: https://github.com/Polymer/polymer/tree/v1.2.4
+
+Name: polymer-externs
+Version: 1.0.16
+Repository: git://github.com/PolymerLabs/polymer-externs.git
+Tag: v1.0.16
+Revision: 05696d670d8a283b9b8c17bd6c3d5f4f41443e12
+Tree link: https://github.com/PolymerLabs/polymer-externs/tree/v1.0.16
+

@@ -8,7 +8,6 @@
 #include <map>
 
 #include "base/i18n/rtl.h"
-#include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -23,6 +22,7 @@
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/translate/translate_service.h"
 #include "chrome/browser/ui/autofill/save_card_bubble_controller_impl.h"
@@ -35,6 +35,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/autofill/save_card_icon_view.h"
 #include "chrome/browser/ui/views/browser_dialogs.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/background_with_1_px_border.h"
 #include "chrome/browser/ui/views/location_bar/content_setting_image_view.h"
 #include "chrome/browser/ui/views/location_bar/keyword_hint_view.h"
@@ -56,6 +57,7 @@
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/omnibox_popup_view.h"
+#include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/toolbar/toolbar_model.h"
@@ -70,7 +72,7 @@
 #include "grit/theme_resources.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
-#include "ui/base/resource/material_design/material_design_controller.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
 #include "ui/compositor/paint_recorder.h"
@@ -103,6 +105,9 @@ using views::View;
 
 namespace {
 
+// The border color for MD windows, as well as non-MD popup windows.
+const SkColor kBorderColor = SkColorSetA(SK_ColorBLACK, 0x4D);
+
 int GetEditLeadingInternalSpace() {
   // The textfield has 1 px of whitespace before the text in the RTL case only.
   return base::i18n::IsRTL() ? 1 : 0;
@@ -114,7 +119,6 @@ int GetEditLeadingInternalSpace() {
 // LocationBarView -----------------------------------------------------------
 
 // static
-
 const char LocationBarView::kViewClassName[] = "LocationBarView";
 
 LocationBarView::LocationBarView(Browser* browser,
@@ -163,23 +167,35 @@ LocationBarView::~LocationBarView() {
 ////////////////////////////////////////////////////////////////////////////////
 // LocationBarView, public:
 
+// static
+SkColor LocationBarView::GetBorderColor(bool incognito) {
+  return color_utils::AlphaBlend(
+      SkColorSetA(kBorderColor, SK_AlphaOPAQUE),
+      ThemeProperties::GetDefaultColor(ThemeProperties::COLOR_TOOLBAR,
+                                       incognito),
+      SkColorGetA(kBorderColor));
+}
+
 void LocationBarView::Init() {
   // We need to be in a Widget, otherwise GetNativeTheme() may change and we're
   // not prepared for that.
   DCHECK(GetWidget());
 
-  if (!ui::MaterialDesignController::IsModeMaterial()) {
-    if (is_popup_mode_) {
-      const int kOmniboxPopupBorderImages[] =
-          IMAGE_GRID(IDR_OMNIBOX_POPUP_BORDER_AND_SHADOW);
-      border_painter_.reset(
-          views::Painter::CreateImageGridPainter(kOmniboxPopupBorderImages));
-    } else {
-      ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-      const gfx::Insets omnibox_border_insets(14, 9, 14, 9);
-      border_painter_.reset(views::Painter::CreateImagePainter(
-          *rb.GetImageSkiaNamed(IDR_OMNIBOX_BORDER), omnibox_border_insets));
-    }
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    // Make sure children with layers are clipped. See http://crbug.com/589497
+    SetPaintToLayer(true);
+    SetFillsBoundsOpaquely(false);
+    layer()->SetMasksToBounds(true);
+  } else if (is_popup_mode_) {
+    const int kOmniboxPopupBorderImages[] =
+        IMAGE_GRID(IDR_OMNIBOX_POPUP_BORDER_AND_SHADOW);
+    border_painter_.reset(
+        views::Painter::CreateImageGridPainter(kOmniboxPopupBorderImages));
+  } else {
+    ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
+    const gfx::Insets omnibox_border_insets(14, 9, 14, 9);
+    border_painter_.reset(views::Painter::CreateImagePainter(
+        *rb.GetImageSkiaNamed(IDR_OMNIBOX_BORDER), omnibox_border_insets));
   }
 
   // Determine the main font.
@@ -193,18 +209,16 @@ void LocationBarView::Init() {
   }
   // Shrink large fonts to make them fit.
   // TODO(pkasting): Stretch the location bar instead in this case.
-  const int location_height = GetInternalHeight(true);
+  const int vertical_padding = GetVerticalEdgeThicknessWithPadding();
+  const int location_height =
+      std::max(GetPreferredSize().height() - (vertical_padding * 2), 0);
   font_list = font_list.DeriveWithHeightUpperBound(location_height);
 
-  // Determine the font for use inside the bubbles.  The bubble background
-  // images have 1 px thick edges, which we don't want to overlap.
-  const int kBubbleInteriorVerticalPadding =
-      ui::MaterialDesignController::IsModeMaterial() ? 2 : 1;
+  // Determine the font for use inside the bubbles.
   const int bubble_padding =
-      GetEdgeThickness() +
       GetLayoutConstant(LOCATION_BAR_BUBBLE_VERTICAL_PADDING) +
-      kBubbleInteriorVerticalPadding;
-  const int bubble_height = GetPreferredSize().height() - (bubble_padding * 2);
+      GetLayoutConstant(LOCATION_BAR_BUBBLE_FONT_VERTICAL_PADDING);
+  const int bubble_height = location_height - (bubble_padding * 2);
   gfx::FontList bubble_font_list =
       font_list.DeriveWithHeightUpperBound(bubble_height);
 
@@ -249,8 +263,7 @@ void LocationBarView::Init() {
   AddChildView(suggested_text_view_);
 
   keyword_hint_view_ = new KeywordHintView(
-      profile(), font_list, bubble_font_list,
-      bubble_height + 2 * kBubbleInteriorVerticalPadding,
+      profile(), font_list, bubble_font_list, location_height,
       GetColor(LocationBarView::DEEMPHASIZED_TEXT), background_color);
   AddChildView(keyword_hint_view_);
 
@@ -448,19 +461,10 @@ void LocationBarView::SelectAll() {
 
 gfx::Point LocationBarView::GetLocationBarAnchorPoint() const {
   const views::ImageView* image = location_icon_view_->GetImageView();
-  // The +1 in the next line creates a 1-px gap between icon and arrow tip.
-  int icon_bottom = image->GetImageBounds().bottom() -
-                    GetLayoutConstant(ICON_LABEL_VIEW_TRAILING_PADDING) + 1;
-  gfx::Point icon_center(image->GetImageBounds().CenterPoint());
-  gfx::Point point(icon_center.x(), icon_bottom);
+  const gfx::Rect image_bounds(image->GetImageBounds());
+  gfx::Point point(image_bounds.CenterPoint().x(), image_bounds.bottom());
   ConvertPointToTarget(image, this, &point);
   return point;
-}
-
-int LocationBarView::GetInternalHeight(bool use_preferred_size) {
-  int total_height =
-      use_preferred_size ? GetPreferredSize().height() : height();
-  return std::max(total_height - (VerticalPadding() * 2), 0);
 }
 
 void LocationBarView::GetOmniboxPopupPositioningInfo(
@@ -474,8 +478,7 @@ void LocationBarView::GetOmniboxPopupPositioningInfo(
 
   *popup_width = parent()->width();
   gfx::Rect location_bar_bounds(bounds());
-  location_bar_bounds.Inset(GetLayoutConstant(LOCATION_BAR_BORDER_THICKNESS),
-                            0);
+  location_bar_bounds.Inset(GetHorizontalEdgeThickness(), 0);
   *left_margin = location_bar_bounds.x();
   *right_margin = *popup_width - location_bar_bounds.right();
 }
@@ -512,9 +515,7 @@ gfx::Size LocationBarView::GetPreferredSize() const {
   // Compute minimum height.
   gfx::Size min_size;
   if (ui::MaterialDesignController::IsModeMaterial() || is_popup_mode_) {
-    const int height = GetLayoutConstant(LOCATION_BAR_HEIGHT);
-    const int edge_thickness = views::NonClientFrameView::kClientEdgeThickness;
-    min_size.set_height(height - (is_popup_mode_ ? (2 * edge_thickness) : 0));
+    min_size.set_height(GetLayoutConstant(LOCATION_BAR_HEIGHT));
   } else {
     min_size = border_painter_->GetMinimumSize();
   }
@@ -527,7 +528,7 @@ gfx::Size LocationBarView::GetPreferredSize() const {
   const int padding = GetLayoutConstant(LOCATION_BAR_HORIZONTAL_PADDING);
 
   // Compute width of omnibox-leading content.
-  const int edge_thickness = GetEdgeThickness();
+  const int edge_thickness = GetHorizontalEdgeThickness();
   int leading_width = edge_thickness;
   if (ShouldShowKeywordBubble()) {
     // The selected keyword view can collapse completely.
@@ -570,7 +571,7 @@ void LocationBarView::Layout() {
   keyword_hint_view_->SetVisible(false);
 
   const int item_padding = GetLayoutConstant(LOCATION_BAR_HORIZONTAL_PADDING);
-  const int edge_thickness = GetEdgeThickness();
+  const int edge_thickness = GetHorizontalEdgeThickness();
   int trailing_edge_item_padding = 0;
   if (!ui::MaterialDesignController::IsModeMaterial()) {
     trailing_edge_item_padding =
@@ -589,20 +590,16 @@ void LocationBarView::Layout() {
   // to position our child views in this case, because other things may be
   // positioned relative to them (e.g. the "bookmark added" bubble if the user
   // hits ctrl-d).
-  const int bubble_vertical_padding =
-      edge_thickness + GetLayoutConstant(LOCATION_BAR_BUBBLE_VERTICAL_PADDING);
-  const int bubble_height =
-      std::max(height() - (bubble_vertical_padding * 2), 0);
   const int bubble_horizontal_padding =
       GetLayoutConstant(LOCATION_BAR_BUBBLE_HORIZONTAL_PADDING);
-  const int location_height = GetInternalHeight(false);
-  const int vertical_padding = VerticalPadding();
+  const int vertical_padding = GetVerticalEdgeThicknessWithPadding();
+  const int location_height = std::max(height() - (vertical_padding * 2), 0);
 
   location_icon_view_->SetLabel(base::string16());
   location_icon_view_->SetBackground(false);
   if (ShouldShowKeywordBubble()) {
-    leading_decorations.AddDecoration(bubble_vertical_padding, bubble_height,
-                                      true, 0, bubble_horizontal_padding,
+    leading_decorations.AddDecoration(vertical_padding, location_height, true,
+                                      0, bubble_horizontal_padding,
                                       item_padding, selected_keyword_view_);
     if (selected_keyword_view_->keyword() != keyword) {
       selected_keyword_view_->SetKeyword(keyword);
@@ -626,7 +623,7 @@ void LocationBarView::Layout() {
     // The largest fraction of the omnibox that can be taken by the EV bubble.
     const double kMaxBubbleFraction = 0.5;
     leading_decorations.AddDecoration(
-        bubble_vertical_padding, bubble_height, false, kMaxBubbleFraction,
+        vertical_padding, location_height, false, kMaxBubbleFraction,
         bubble_horizontal_padding, item_padding, location_icon_view_);
   } else {
     leading_decorations.AddDecoration(vertical_padding, location_height,
@@ -668,7 +665,7 @@ void LocationBarView::Layout() {
            content_setting_views_.rbegin()); i != content_setting_views_.rend();
        ++i) {
     if ((*i)->visible()) {
-      trailing_decorations.AddDecoration(bubble_vertical_padding, bubble_height,
+      trailing_decorations.AddDecoration(vertical_padding, location_height,
                                          false, 0, item_padding, item_padding,
                                          *i);
     }
@@ -785,8 +782,8 @@ void LocationBarView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
   if (ui::MaterialDesignController::IsModeMaterial()) {
     RefreshLocationIcon();
     if (!is_popup_mode_) {
-      set_background(new BackgroundWith1PxBorder(
-          GetColor(BACKGROUND), SkColorSetARGB(0x4D, 0x00, 0x00, 0x00)));
+      set_background(new BackgroundWith1PxBorder(GetColor(BACKGROUND),
+                                                 kBorderColor));
     }
   }
 }
@@ -847,12 +844,20 @@ int LocationBarView::IncrementalMinimumWidth(views::View* view) const {
           view->GetMinimumSize().width()) : 0;
 }
 
-int LocationBarView::GetEdgeThickness() const {
+int LocationBarView::GetHorizontalEdgeThickness() const {
   return is_popup_mode_ ? 0 : GetLayoutConstant(LOCATION_BAR_BORDER_THICKNESS);
 }
 
-int LocationBarView::VerticalPadding() const {
-  return is_popup_mode_ ? 0 : GetLayoutConstant(LOCATION_BAR_VERTICAL_PADDING);
+int LocationBarView::GetVerticalEdgeThickness() const {
+  if (ui::MaterialDesignController::IsModeMaterial())
+    return GetLayoutConstant(LOCATION_BAR_BORDER_THICKNESS);
+  return is_popup_mode_ ? views::NonClientFrameView::kClientEdgeThickness
+                        : GetLayoutConstant(LOCATION_BAR_BORDER_THICKNESS);
+}
+
+int LocationBarView::GetVerticalEdgeThicknessWithPadding() const {
+  return GetVerticalEdgeThickness() +
+         GetLayoutConstant(LOCATION_BAR_VERTICAL_PADDING);
 }
 
 void LocationBarView::RefreshLocationIcon() {
@@ -1273,21 +1278,24 @@ void LocationBarView::OnPaint(gfx::Canvas* canvas) {
   // border images are meant to rest atop the toolbar background and parts atop
   // the omnibox background, so we can't just blindly fill our entire bounds.
   gfx::Rect bounds(GetContentsBounds());
-  const int edge_thickness = GetEdgeThickness();
-  bounds.Inset(edge_thickness, edge_thickness);
-  SkColor color(GetColor(BACKGROUND));
-  if (is_popup_mode_) {
-    canvas->FillRect(bounds, color);
-  } else {
+  bounds.Inset(GetHorizontalEdgeThickness(),
+               is_popup_mode_ ? 0 : GetVerticalEdgeThickness());
+  SkColor background_color(GetColor(BACKGROUND));
+  if (!is_popup_mode_) {
     SkPaint paint;
     paint.setStyle(SkPaint::kFill_Style);
-    paint.setColor(color);
+    paint.setColor(background_color);
     const int kBorderCornerRadius = 2;
     canvas->DrawRoundRect(bounds, kBorderCornerRadius, paint);
+    // The border itself will be drawn in PaintChildren() since it includes an
+    // inner shadow which should be drawn over the contents.
+    return;
   }
 
-  // The border itself will be drawn in PaintChildren() since it includes an
-  // inner shadow which should be drawn over the contents.
+  canvas->FillRect(bounds, background_color);
+  const SkColor border_color = GetBorderColor(profile()->IsOffTheRecord());
+  BrowserView::Paint1pxHorizontalLine(canvas, border_color, bounds, false);
+  BrowserView::Paint1pxHorizontalLine(canvas, border_color, bounds, true);
 }
 
 void LocationBarView::PaintChildren(const ui::PaintContext& context) {

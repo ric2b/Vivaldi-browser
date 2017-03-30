@@ -112,6 +112,10 @@ class DataReductionProxyRequestOptions {
   // Invalidates the secure session credentials.
   void Invalidate();
 
+  // Parses |request_headers| and returns the value of the session key.
+  std::string GetSessionKeyFromRequestHeaders(
+      const net::HttpRequestHeaders& request_headers) const;
+
  protected:
   void SetHeader(net::HttpRequestHeaders* headers);
 
@@ -134,18 +138,6 @@ class DataReductionProxyRequestOptions {
  private:
   FRIEND_TEST_ALL_PREFIXES(DataReductionProxyRequestOptionsTest,
                            AuthHashForSalt);
-
-  // Returns the version of Chromium that is being used.
-  std::string ChromiumVersion() const;
-
-  // Returns the build and patch numbers of |version|. If |version| isn't of the
-  // form xx.xx.xx.xx build and patch are not modified.
-  void GetChromiumBuildAndPatch(const std::string& version,
-                                std::string* build,
-                                std::string* patch) const;
-
-  // Updates client type, build, and patch.
-  void UpdateVersion();
 
   // Updates the value of the experiments to be run and regenerate the header if
   // necessary.
@@ -183,7 +175,6 @@ class DataReductionProxyRequestOptions {
 
   // Name of the client and version of the data reduction proxy protocol to use.
   std::string client_;
-  std::string version_;
   std::string session_;
   std::string credentials_;
   std::string secure_session_;

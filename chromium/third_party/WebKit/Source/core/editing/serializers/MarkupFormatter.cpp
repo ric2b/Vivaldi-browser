@@ -131,7 +131,7 @@ String MarkupFormatter::resolveURLIfNeeded(const Element& element, const String&
 
 void MarkupFormatter::appendStartMarkup(StringBuilder& result, const Node& node, Namespaces* namespaces)
 {
-    switch (node.nodeType()) {
+    switch (node.getNodeType()) {
     case Node::TEXT_NODE:
         ASSERT_NOT_REACHED();
         break;
@@ -471,4 +471,4 @@ bool MarkupFormatter::serializeAsHTMLDocument(const Node& node) const
     return node.document().isHTMLDocument();
 }
 
-}
+} // namespace blink

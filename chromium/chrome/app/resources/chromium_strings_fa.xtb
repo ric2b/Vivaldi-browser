@@ -105,7 +105,6 @@
 <translation id="457845228957001925">‏اطلاعات مهم در مورد داده‌های Chromium</translation>
 <translation id="459535195905078186">‏برنامه‌های Chromium</translation>
 <translation id="4677944499843243528">‏ظاهراً نمایه توسط فرآیند Chromium دیگری (<ph name="PROCESS_ID" />) در رایانه‌ای دیگر (<ph name="HOST_NAME" />) در حال استفاده است. Chromium نمایه را قفل کرده است تا خراب نشود. اگر مطمئنید فرآیندهای دیگری از این نمایه استفاده نمی‌کنند، می‌توانید قفل نمایه را باز کنید و Chromium را مجدداً راه‌اندازی نمایید.</translation>
-<translation id="473775607612524610">به‌روزرسانی</translation>
 <translation id="4743926867934016338">پذیرش و جستجو</translation>
 <translation id="4888717733111232871">‏قانون ترافیک ورودی برای Chromium جهت اجازه به ترافیک mDNS.</translation>
 <translation id="4943838377383847465">‏Chromium در حالت پس‌زمینه است.</translation>
@@ -119,6 +118,7 @@
 <translation id="549669000822060376">‏وقتی Chromium جدیدترین به‌روزرسانی‌های سیستم را نصب می‌کند، لطفاً صبر کنید.</translation>
 <translation id="5563479599352954471">جستجو فقط با یک تماس</translation>
 <translation id="5620765574781326016">بدون اینکه صفحه را ترک کنید، درباره موضوعات در وب‌سایت‌ها اطلاعاتی به دست آورید.</translation>
+<translation id="5634636535844844681">‏Chromium به Windows 7 یا بالاتر نیاز دارد.</translation>
 <translation id="5680901439334282664">‏ورود به سیستم Chromium</translation>
 <translation id="5772805321386874569">‏(Chromium باید <ph name="BEGIN_BUTTON" />راه‌اندازی مجدد<ph name="END_BUTTON" /> شود)</translation>
 <translation id="5796460469508169315">‏Chromium تقریباً آماده است.</translation>
@@ -127,7 +127,6 @@
 <translation id="5859963531214966875">‏نسخه‌های بعدی Chromium دیگر این سیستم Linux را پشتیبانی نمی‌کند.</translation>
 <translation id="5862307444128926510">‏به Chromium خوش آمدید</translation>
 <translation id="5877064549588274448">کانال تغییر کرد. برای اعمال تغییرات دستگاه خود را مجدداً راه‌اندازی کنید.</translation>
-<translation id="5909170354645388250">‏در Chromium استفاده نمی‌شود. نگه‌دارنده برای نگهداری نقشه‌های مکان به‌صورت همگام‌سازی‌شده. انتظار یک آرگومان می‌رود: $1.</translation>
 <translation id="5942225298871134766">‏Chromium این مورد را با <ph name="SAVED_PASSWORD_LINK" /> ذخیره می‌کند و دفعه بعد که به آن نیاز داشتید، آن را به خاطر دارد.</translation>
 <translation id="5942520288919337908">‏<ph name="EXTENSION_NAME" /> به Chromium اضافه شده است.</translation>
 <translation id="59625444380784159">‏جزئیات مخاطبین شما می‌تواند به شما کمک کند فرم‌ها را سریع‌تر در Chromium تکمیل کنید.</translation>
@@ -139,7 +138,6 @@
 <translation id="6334986366598267305">‏اکنون استفاده از Chromium با حساب Google شما و در رایانه‌های مشترک آسان‌تر شده است.</translation>
 <translation id="6373523479360886564">‏آیا مطمئن هستید که می‌خواهید Chromium را حذف نصب کنید؟</translation>
 <translation id="6403826409255603130">‏Chromium یک مرورگر وب است که صفحات وب و برنامه‌ها را با سرعت بسیار زیاد اجرا می‌کند. این مرورگر خیلی سریع، پایدار و دارای کاربرد آسان است. با محافظت در مقابل بدافزار و فیشینگ طراحی شده در داخل Chromium، با امنیت بیشتری وب را مرور کنید.</translation>
-<translation id="6424492062988593837">‏Chromium بهتر شده است! نسخه جدید آن در دسترس است.</translation>
 <translation id="6475912303565314141">‏این برنامه همچنین صفحه‌ای را که هنگام راه‌اندازی Chromium نشان داده می‌شود، کنترل می‌کند.</translation>
 <translation id="6485906693002546646">‏شما از <ph name="PROFILE_EMAIL" /> برای همگام‌سازی موارد Chromium خودتان استفاده می‌کنید. برای به‌روزرسانی تنظیمات ترجیحی همگام‌سازی‌تان یا استفاده از Chromium بدون حساب Google، به <ph name="SETTINGS_LINK" /> مراجعه کنید.</translation>
 <translation id="6510925080656968729">‏حذف نصب Chromium </translation>
@@ -207,7 +205,6 @@ Chromium قادر به بازیابی تنظیمات شما نیست.</translati
 <translation id="8586442755830160949">‏حق نسخه‌برداری <ph name="YEAR" /> نویسندگان Chromium. کلیه حقوق محفوظ است.</translation>
 <translation id="8621669128220841554">‏به دلیل خطای نامشخص، نصب ناموفق بود. لطفاً دوباره Chromium را بارگیری کنید.</translation>
 <translation id="8628626585870903697">‏Chromium فاقد نمایشگر PDF است که برای عملکرد پیش‌نمایش چاپ لازم است.</translation>
-<translation id="8684913864886094367">‏Chromium به درستی خاموش نشده است.</translation>
 <translation id="8697124171261953979">‏این برنامه همچنین صفحه‌ای را که هنگام راه‌اندازی Chromium یا جستجو از Omnibox نشان داده می‌شود، کنترل می‌کند.</translation>
 <translation id="8704119203788522458">‏این Chromium شماست</translation>
 <translation id="872034308864968620">‏اجازه به Chromium Run برای اجرا در پس‌زمینه</translation>
@@ -224,7 +221,6 @@ Chromium قادر به بازیابی تنظیمات شما نیست.</translati
 
 ورود به سیستم به هر حال اطلاعات Chromium مانند نشانک‌ها، سابقه، و سایر تنظیمات را در <ph name="ACCOUNT_EMAIL_NEW" /> ادغام می‌کند.</translation>
 <translation id="9013087743919948559">‏افزودن به Chromium</translation>
-<translation id="9013262824292842194">‏Chromium به Windows Vista یا Windows XP دارای SP2 یا بالاتر نیاز دارد.</translation>
 <translation id="9019929317751753759">‏برای ایمن‌تر کردن Chromium، افزونه زیر را که در <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> فهرست نشده است و ممکن است بدون اطلاع شما اضافه شده باشد، غیرفعال کردیم.</translation>
 <translation id="9022552996538154597">‏ورود به سیستم Chromium</translation>
 <translation id="9036189287518468038">‏راه‌انداز برنامه Chromium</translation>

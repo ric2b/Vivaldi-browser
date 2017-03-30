@@ -6,15 +6,13 @@
 
 #include "base/command_line.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/screens/base_screen_delegate.h"
 #include "chrome/browser/chromeos/login/screens/error_screen.h"
 #include "chrome/browser/chromeos/login/screens/network_error.h"
 #include "chrome/browser/chromeos/login/screens/reset_view.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/reset/metrics.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/common/pref_names.h"
@@ -22,6 +20,8 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/dbus/session_manager_client.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
 
 
 namespace chromeos {
@@ -207,7 +207,7 @@ void ResetScreen::OnLearnMore() {
   VLOG(1) << "Trying to view the help article about reset options.";
   if (!help_app_.get()) {
     help_app_ = new HelpAppLauncher(
-        LoginDisplayHostImpl::default_host()->GetNativeWindow());
+        LoginDisplayHost::default_host()->GetNativeWindow());
   }
   help_app_->ShowHelpTopic(HelpAppLauncher::HELP_POWERWASH);
 #endif

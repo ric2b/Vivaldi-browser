@@ -31,6 +31,7 @@ def StepArmRunHooks():
   buildbot_common.BuildStep('gclient runhooks for arm')
   env = dict(os.environ)
   env['GYP_DEFINES'] = 'target_arch=arm'
+  env['GYP_CHROMIUM_NO_ACTION'] = '1'
   Run(['gclient', 'runhooks'], env=env, cwd=SDK_SRC_DIR)
 
 
@@ -71,20 +72,20 @@ def StepBuildSDK():
       subprocess.check_call(['subst', '/D', subst_drive])
 
 
-def StepTestSDK():
+def StepTestSDK(args):
   cmd = []
   if getos.GetPlatform() == 'linux':
     # Run all of test_sdk.py under xvfb-run; it's startup time leaves something
     # to be desired, so only start it up once.
     # We also need to make sure that there are at least 24 bits per pixel.
     # https://code.google.com/p/chromium/issues/detail?id=316687
-    cmd.extend([
+    cmd += [
         'xvfb-run',
         '--auto-servernum',
         '--server-args', '-screen 0 1024x768x24'
-    ])
+    ]
 
-  cmd.extend([sys.executable, 'test_sdk.py'])
+  cmd += [sys.executable, 'test_sdk.py'] + args
   Run(cmd, cwd=SCRIPT_DIR)
 
 
@@ -115,7 +116,12 @@ def main(args):
   StepRunUnittests()
   StepBuildSDK()
   if not options.build_only:
-    StepTestSDK()
+    # Run sanitizer tests on the asan bot, and on the trybots
+    args = []
+    if getos.GetPlatform() == 'linux':
+      if 'asan' in os.getenv('BUILDBOT_BUILDERNAME', ''):
+        args = ['--sanitizer']
+    StepTestSDK(args)
 
   return 0
 

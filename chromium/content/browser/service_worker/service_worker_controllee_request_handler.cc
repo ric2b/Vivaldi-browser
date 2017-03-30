@@ -20,7 +20,7 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/resource_response_info.h"
 #include "net/base/load_flags.h"
-#include "net/base/net_util.h"
+#include "net/base/url_util.h"
 #include "net/url_request/url_request.h"
 
 namespace content {
@@ -104,7 +104,7 @@ net::URLRequestJob* ServiceWorkerControlleeRequestHandler::MaybeCreateJob(
       request, network_delegate, provider_host_->client_uuid(),
       blob_storage_context_, resource_context, request_mode_, credentials_mode_,
       redirect_mode_, is_main_resource_load_, request_context_type_,
-      frame_type_, body_, this));
+      frame_type_, body_, ServiceWorkerFetchType::FETCH, this));
   job_ = job->GetWeakPtr();
 
   resource_context_ = resource_context;
@@ -431,11 +431,6 @@ void ServiceWorkerControlleeRequestHandler::MainResourceLoadFailed() {
   DCHECK(provider_host_);
   // Detach the controller so subresource requests also skip the worker.
   provider_host_->NotifyControllerLost();
-}
-
-GURL ServiceWorkerControlleeRequestHandler::GetRequestingOrigin() {
-  DCHECK(provider_host_);
-  return provider_host_->document_url().GetOrigin();
 }
 
 void ServiceWorkerControlleeRequestHandler::ClearJob() {

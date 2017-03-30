@@ -11,6 +11,8 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
+#include "sync/api/data_batch.h"
+#include "sync/api/metadata_batch.h"
 #include "sync/api/metadata_change_list.h"
 #include "sync/api/model_type_change_processor.h"
 #include "sync/api/model_type_service.h"
@@ -19,6 +21,7 @@
 #include "sync/internal_api/public/base/model_type.h"
 #include "sync/internal_api/public/model_type_processor.h"
 #include "sync/internal_api/public/non_blocking_sync_common.h"
+#include "sync/protocol/data_type_state.pb.h"
 #include "sync/protocol/sync.pb.h"
 
 namespace syncer_v2 {
@@ -38,84 +41,96 @@ class SYNC_EXPORT SharedModelTypeProcessor : public ModelTypeProcessor,
   typedef base::Callback<void(syncer::SyncError, scoped_ptr<ActivationContext>)>
       StartCallback;
 
-  // Called by DataTypeController to begins asynchronous operation of preparing
-  // the model to sync. Once the model is ready to be activated with Sync the
-  // callback will be invoked with the activation context. If the model is
-  // already ready it is safe to call the callback right away. Otherwise the
-  // callback needs to be stored and called when the model is ready.
-  void Start(StartCallback callback);
+  // Called by the DataTypeController to gather additional information needed
+  // before a CommitQueue object can be created for this model type. Once the
+  // metadata has been loaded, the info is collected and given to |callback|.
+  // Once called, this can only be called again if sync is disconnected.
+  void OnSyncStarting(StartCallback callback);
 
-  // Called by DataTypeController to inform the model that the sync is
-  // stopping for the model type.
-  void Stop();
+  // Disconnect this processor from the sync engine. Change metadata will
+  // continue being processed and persisted, but no commits can be made until
+  // the next time sync is connected.
+  void DisconnectSync();
 
-  // Returns true if the datatype is enabled.
-  // TODO(stanisc): crbug.com/537027: There is no explicit call to indicate
-  // that the datatype is enabled. The flag is set to true when Start is called
-  // and reset to false when Disable is called.
-  bool IsEnabled() const;
-
-  // TODO(stanisc): crbug.com/537027: This needs to be called from
-  // DataTypeController when the type is disabled
-  // Severs all ties to the sync thread and may delete local sync state.
-  // Another call to Enable() can be used to re-establish this connection.
+  // Indicates that we no longer want to do any sync-related things for this
+  // data type. Severs all ties to the sync thread, deletes all local sync
+  // metadata, and then destroys the SharedModelTypeProcessor.
+  // TODO(crbug.com/584365): This needs to be called from DataTypeController.
   void Disable();
+
+  // Whether the processor is allowing changes to its model type. If this is
+  // false, the service should not allow any changes to its data.
+  bool IsAllowingChanges() const;
 
   // Returns true if the handshake with sync thread is complete.
   bool IsConnected() const;
 
   // ModelTypeChangeProcessor implementation.
-  void Put(const std::string& client_key,
+  void Put(const std::string& client_tag,
            scoped_ptr<EntityData> entity_data,
            MetadataChangeList* metadata_change_list) override;
-  void Delete(const std::string& client_key,
+  void Delete(const std::string& client_tag,
               MetadataChangeList* metadata_change_list) override;
-
-  // Returns the list of pending updates.
-  //
-  // This is used as a helper function, but it's public mainly for testing.
-  // The current test harness setup doesn't allow us to test the data that the
-  // proxy sends to the worker during initialization, so we use this to inspect
-  // its state instead.
-  UpdateResponseDataList GetPendingUpdates();
+  void OnMetadataLoaded(scoped_ptr<MetadataBatch> batch) override;
 
   // Returns the long-lived WeakPtr that is intended to be registered with the
   // ProfileSyncService.
   base::WeakPtr<SharedModelTypeProcessor> AsWeakPtrForUI();
 
   // ModelTypeProcessor implementation.
-  void OnConnect(scoped_ptr<CommitQueue> worker) override;
-  void OnCommitCompleted(const DataTypeState& type_state,
+  void ConnectSync(scoped_ptr<CommitQueue> worker) override;
+  void OnCommitCompleted(const sync_pb::DataTypeState& type_state,
                          const CommitResponseDataList& response_list) override;
-  void OnUpdateReceived(const DataTypeState& type_state,
-                        const UpdateResponseDataList& response_list,
-                        const UpdateResponseDataList& pending_updates) override;
+  void OnUpdateReceived(const sync_pb::DataTypeState& type_state,
+                        const UpdateResponseDataList& updates) override;
 
  private:
+  friend class SharedModelTypeProcessorTest;
+
   using EntityMap = std::map<std::string, scoped_ptr<ModelTypeEntity>>;
   using UpdateMap = std::map<std::string, scoped_ptr<UpdateResponseData>>;
+
+  // Callback for ModelTypeService::GetData(). Used when we need to load data
+  // for pending commits during the initialization process.
+  void OnDataLoaded(syncer::SyncError error, scoped_ptr<DataBatch> data_batch);
+
+  // Check conditions, and if met inform sync that we are ready to connect.
+  void ConnectIfReady();
+
+  // Handle the first update received from the server after being enabled.
+  void OnInitialUpdateReceived(const sync_pb::DataTypeState& type_state,
+                               const UpdateResponseDataList& updates);
 
   // Sends all commit requests that are due to be sent to the sync thread.
   void FlushPendingCommitRequests();
 
-  // Clears any state related to outstanding communications with the
-  // CommitQueue.  Used when we want to disconnect from
-  // the current worker.
-  void ClearTransientSyncState();
+  // Computes the client tag hash for the given client |tag|.
+  std::string GetHashForTag(const std::string& tag);
 
-  // Clears any state related to our communications with the current sync
-  // account.  Useful when a user signs out of the current account.
-  void ClearSyncState();
+  // Gets the entity for the given tag, or null if there isn't one.
+  ModelTypeEntity* GetEntityForTag(const std::string& tag);
+
+  // Gets the entity for the given tag hash, or null if there isn't one.
+  ModelTypeEntity* GetEntityForTagHash(const std::string& tag_hash);
+
+  // Create an entity in the entity map for |tag| and return a pointer to it.
+  // Requires that no entity for |tag| already exists in the map.
+  ModelTypeEntity* CreateEntity(const std::string& tag, const EntityData& data);
+
+  // Version of the above that generates a tag for |data|.
+  ModelTypeEntity* CreateEntity(const EntityData& data);
 
   syncer::ModelType type_;
-  DataTypeState data_type_state_;
+  sync_pb::DataTypeState data_type_state_;
 
-  // Whether or not sync is enabled by this type's DataTypeController.
-  bool is_enabled_;
+  // Stores the start callback in between OnSyncStarting() and ReadyToConnect().
+  StartCallback start_callback_;
 
-  // Whether or not this object has completed its initial handshake with the
-  // SyncContextProxy.
-  bool is_connected_;
+  // Indicates whether the metadata has finished loading.
+  bool is_metadata_loaded_;
+
+  // Indicates whether data for pending commits has finished loading.
+  bool is_pending_commit_data_loaded_;
 
   // Reference to the CommitQueue.
   //
@@ -127,11 +142,6 @@ class SYNC_EXPORT SharedModelTypeProcessor : public ModelTypeProcessor,
   // The set of sync entities known to this object.
   EntityMap entities_;
 
-  // A set of updates that can not be applied at this time.  These are never
-  // used by the model.  They are kept here only so we can save and restore
-  // them across restarts, and keep them in sync with our progress markers.
-  UpdateMap pending_updates_map_;
-
   // ModelTypeService linked to this processor.
   // The service owns this processor instance so the pointer should never
   // become invalid.
@@ -142,7 +152,7 @@ class SYNC_EXPORT SharedModelTypeProcessor : public ModelTypeProcessor,
   // thread, we want to make sure that no tasks generated as part of the
   // now-obsolete connection to affect us.  But we also want the WeakPtr we
   // sent to the UI thread to remain valid.
-  base::WeakPtrFactory<SharedModelTypeProcessor> weak_ptr_factory_for_ui_;
+  base::WeakPtrFactory<SharedModelTypeProcessor> weak_ptr_factory_;
   base::WeakPtrFactory<SharedModelTypeProcessor> weak_ptr_factory_for_sync_;
 };
 

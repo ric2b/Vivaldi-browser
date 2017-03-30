@@ -6,6 +6,7 @@
 
 #include "base/memory/ref_counted.h"
 #include "mojo/edk/system/test_utils.h"
+#include "mojo/edk/test/mojo_test_base.h"
 #include "mojo/public/c/system/core.h"
 #include "mojo/public/c/system/types.h"
 
@@ -18,7 +19,7 @@ const MojoHandleSignals kAllSignals = MOJO_HANDLE_SIGNAL_READABLE |
                                       MOJO_HANDLE_SIGNAL_PEER_CLOSED;
 static const char kHelloWorld[] = "hello world";
 
-class MessagePipeTest : public testing::Test {
+class MessagePipeTest : public test::MojoTestBase {
  public:
   MessagePipeTest() {
     CHECK_EQ(MOJO_RESULT_OK, MojoCreateMessagePipe(nullptr, &pipe0_, &pipe1_));
@@ -405,6 +406,88 @@ TEST_F(MessagePipeTest, BasicWaiting) {
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_PEER_CLOSED, hss.satisfied_signals);
   ASSERT_EQ(MOJO_HANDLE_SIGNAL_PEER_CLOSED, hss.satisfiable_signals);
 }
+
+#if !defined(OS_IOS)
+
+const size_t kPingPongHandlesPerIteration = 50;
+const size_t kPingPongIterations = 500;
+
+DEFINE_TEST_CLIENT_TEST_WITH_PIPE(HandlePingPong, MessagePipeTest, h) {
+  // Waits for a handle to become readable and writes it back to the sender.
+  for (size_t i = 0; i < kPingPongIterations; i++) {
+    MojoHandle handles[kPingPongHandlesPerIteration];
+    ReadMessageWithHandles(h, handles, kPingPongHandlesPerIteration);
+    WriteMessageWithHandles(h, "", handles, kPingPongHandlesPerIteration);
+  }
+
+  EXPECT_EQ(MOJO_RESULT_OK, MojoWait(h, MOJO_HANDLE_SIGNAL_READABLE,
+                                     MOJO_DEADLINE_INDEFINITE, nullptr));
+  char msg[4];
+  uint32_t num_bytes = 4;
+  EXPECT_EQ(MOJO_RESULT_OK, ReadMessage(h, msg, &num_bytes));
+}
+
+// This test is flaky: http://crbug.com/585784
+TEST_F(MessagePipeTest, DISABLED_DataPipeConsumerHandlePingPong) {
+  MojoHandle p, c[kPingPongHandlesPerIteration];
+  for (size_t i = 0; i < kPingPongHandlesPerIteration; ++i) {
+    EXPECT_EQ(MOJO_RESULT_OK, MojoCreateDataPipe(nullptr, &p, &c[i]));
+    MojoClose(p);
+  }
+
+  RUN_CHILD_ON_PIPE(HandlePingPong, h)
+    for (size_t i = 0; i < kPingPongIterations; i++) {
+      WriteMessageWithHandles(h, "", c, kPingPongHandlesPerIteration);
+      ReadMessageWithHandles(h, c, kPingPongHandlesPerIteration);
+    }
+    WriteMessage(h, "quit", 4);
+  END_CHILD()
+  for (size_t i = 0; i < kPingPongHandlesPerIteration; ++i)
+    MojoClose(c[i]);
+}
+
+// This test is flaky: http://crbug.com/585784
+TEST_F(MessagePipeTest, DISABLED_DataPipeProducerHandlePingPong) {
+  MojoHandle p[kPingPongHandlesPerIteration], c;
+  for (size_t i = 0; i < kPingPongHandlesPerIteration; ++i) {
+    EXPECT_EQ(MOJO_RESULT_OK, MojoCreateDataPipe(nullptr, &p[i], &c));
+    MojoClose(c);
+  }
+
+  RUN_CHILD_ON_PIPE(HandlePingPong, h)
+    for (size_t i = 0; i < kPingPongIterations; i++) {
+      WriteMessageWithHandles(h, "", p, kPingPongHandlesPerIteration);
+      ReadMessageWithHandles(h, p, kPingPongHandlesPerIteration);
+    }
+    WriteMessage(h, "quit", 4);
+  END_CHILD()
+  for (size_t i = 0; i < kPingPongHandlesPerIteration; ++i)
+    MojoClose(p[i]);
+}
+
+#if defined(OS_ANDROID)
+// Android multi-process tests are not executing the new process. This is flaky.
+#define MAYBE_SharedBufferHandlePingPong DISABLED_SharedBufferHandlePingPong
+#else
+#define MAYBE_SharedBufferHandlePingPong SharedBufferHandlePingPong
+#endif
+TEST_F(MessagePipeTest, MAYBE_SharedBufferHandlePingPong) {
+  MojoHandle buffers[kPingPongHandlesPerIteration];
+  for (size_t i = 0; i <kPingPongHandlesPerIteration; ++i)
+    EXPECT_EQ(MOJO_RESULT_OK, MojoCreateSharedBuffer(nullptr, 1, &buffers[i]));
+
+  RUN_CHILD_ON_PIPE(HandlePingPong, h)
+    for (size_t i = 0; i < kPingPongIterations; i++) {
+      WriteMessageWithHandles(h, "", buffers, kPingPongHandlesPerIteration);
+      ReadMessageWithHandles(h, buffers, kPingPongHandlesPerIteration);
+    }
+    WriteMessage(h, "quit", 4);
+  END_CHILD()
+  for (size_t i = 0; i < kPingPongHandlesPerIteration; ++i)
+    MojoClose(buffers[i]);
+}
+
+#endif  // !defined(OS_IOS)
 
 }  // namespace
 }  // namespace edk

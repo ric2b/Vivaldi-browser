@@ -17,8 +17,6 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/prefs/pref_change_registrar.h"
-#include "base/prefs/pref_member.h"
 #include "base/scoped_observer.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
@@ -30,12 +28,16 @@
 #include "chrome/browser/ui/chrome_web_modal_dialog_manager_delegate.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/host_desktop.h"
+#include "chrome/browser/ui/profile_chooser_constants.h"
 #include "chrome/browser/ui/search/search_tab_helper_delegate.h"
 #include "chrome/browser/ui/search_engines/search_engine_tab_helper_delegate.h"
+#include "chrome/browser/ui/signin_view_controller.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "components/prefs/pref_member.h"
 #include "components/sessions/core/session_id.h"
 #include "components/toolbar/toolbar_model.h"
 #include "components/translate/content/browser/content_translate_driver.h"
@@ -160,29 +162,22 @@ class Browser : public TabStripModelObserver,
   };
 
   struct CreateParams {
-    CreateParams(Profile* profile, chrome::HostDesktopType host_desktop_type);
-    CreateParams(Type type,
-                 Profile* profile,
-                 chrome::HostDesktopType host_desktop_type);
+    explicit CreateParams(Profile* profile);
+    CreateParams(Type type, Profile* profile);
+    CreateParams(const CreateParams& other);
 
     static CreateParams CreateForApp(const std::string& app_name,
                                      bool trusted_source,
                                      const gfx::Rect& window_bounds,
-                                     Profile* profile,
-                                     chrome::HostDesktopType host_desktop_type);
+                                     Profile* profile);
 
-    static CreateParams CreateForDevTools(
-        Profile* profile,
-        chrome::HostDesktopType host_desktop_type);
+    static CreateParams CreateForDevTools(Profile* profile);
 
     // The browser type.
     Type type;
 
     // The associated profile.
     Profile* profile;
-
-    // The host desktop the browser is created on.
-    chrome::HostDesktopType host_desktop_type;
 
     // Specifies the browser is_trusted_source_ value.
     bool trusted_source;
@@ -422,6 +417,21 @@ class Browser : public TabStripModelObserver,
                                   ui::PageTransition transition,
                                   bool user_initiated);
 
+  // Shows the signin flow for |mode| in a tab-modal dialog.
+  // |access_point| indicates the access point used to open the Gaia sign in
+  // page.
+  void ShowModalSigninWindow(profiles::BubbleViewMode mode,
+                             signin_metrics::AccessPoint access_point);
+
+  // Closes the tab-modal signin flow opened with ShowModalSigninWindow, if it's
+  // open. Does nothing otherwise.
+  void CloseModalSigninWindow();
+
+  // Shows the tab modal sync confirmation dialog that informs the user about
+  // sync and gives them a chance to abort signin under the tab modal signin
+  // flow.
+  void ShowModalSyncConfirmationWindow();
+
   // Interface implementations ////////////////////////////////////////////////
 
   // Overridden from content::PageNavigator:
@@ -480,9 +490,9 @@ class Browser : public TabStripModelObserver,
       content::WebContents* web_contents,
       int cert_id) override;
   scoped_ptr<content::BluetoothChooser> RunBluetoothChooser(
-      content::WebContents* web_contents,
-      const content::BluetoothChooser::EventHandler& event_handler,
-      const GURL& origin) override;
+      content::RenderFrameHost* frame,
+      const content::BluetoothChooser::EventHandler& event_handler) override;
+  bool RequestAppBanner(content::WebContents* web_contents) override;
 
   bool is_type_tabbed() const { return type_ == TYPE_TABBED; }
   bool is_type_popup() const { return type_ == TYPE_POPUP; }
@@ -1012,6 +1022,8 @@ class Browser : public TabStripModelObserver,
   bool window_has_shown_;
 
   scoped_ptr<ValidationMessageBubble> validation_message_bubble_;
+
+  SigninViewController signin_view_controller_;
 
   // The following factory is used for chrome update coalescing.
   base::WeakPtrFactory<Browser> chrome_updater_factory_;

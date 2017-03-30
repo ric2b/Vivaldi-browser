@@ -3,7 +3,6 @@
 <translationbundle lang="ru">
 <translation id="1001534784610492198">Архив программы установки поврежден или имеет неправильный формат. Скачайте Google Chrome снова.</translation>
 <translation id="1013290471399003443">Данные Chrome подтверждают, что издатель сертификата сайта – <ph name="ISSUER" />. Сервер предоставил действительные временные метки сертификата.</translation>
-<translation id="1016765312371154165">Работа Chrome была завершена некорректно.</translation>
 <translation id="103396972844768118">Важная информация о ваших данных Chrome</translation>
 <translation id="1035334672863811645">войдите в Chrome</translation>
 <translation id="1061441684050139317">Предоставьте браузеру Chrome доступ к микрофону, чтобы пользоваться им на этом сайте.</translation>
@@ -51,7 +50,6 @@
 <translation id="2397416548179033562">Отображение меню Chrome</translation>
 <translation id="2429317896000329049">Google Chrome не удалось синхронизировать данные, поскольку служба Sync недоступна для вашего домена.</translation>
 <translation id="2485422356828889247">Удалить</translation>
-<translation id="2576431527583832481">Chrome становится лучше! Доступна новая версия.</translation>
 <translation id="2580411288591421699">Не удается установить версию Google Chrome, аналогичную уже выполняемой. Закройте Google Chrome и повторите попытку.</translation>
 <translation id="2582790009689336987">Google Chrome скоро перестанет обновляться на этом компьютере, поскольку поддержка этой системы Linux будет прекращена.</translation>
 <translation id="2588322182880276190">Логотип Chrome</translation>
@@ -82,7 +80,7 @@
 <translation id="3612333635265770873">Известно, что модуль с таким названием конфликтует с Google Chrome.</translation>
 <translation id="3622797965165704966">Теперь с Chrome ещё удобнее работать в аккаунте Google, в том числе на общих компьютерах.</translation>
 <translation id="3735758079232443276">Расширение "<ph name="EXTENSION_NAME" />" изменило стартовую страницу Chrome.</translation>
-<translation id="3738139272394829648">Нажмите для поиска</translation>
+<translation id="3738139272394829648">Быстрый поиск</translation>
 <translation id="3784527566857328444">Удалить из Chrome</translation>
 <translation id="3836351788193713666">Перезапустите Google Chrome для завершения обновления.</translation>
 <translation id="3847841918622877581">Браузер Google Chrome может использовать различные веб-службы, которые делают работу в Интернете более удобной и приятной.</translation>
@@ -111,7 +109,6 @@
 <translation id="4633000520311261472">Чтобы обеспечить безопасность ваших данных, некоторые расширения Chrome были отключены, так как <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> не содержит сведений о них, то есть эти компоненты могли быть установлены без вашего ведома.</translation>
 <translation id="4700157086864140907">В браузере Chrome для проверки правописания вводимый вами текст передается на серверы Google. Та же технология используется в Google Поиске.</translation>
 <translation id="4728575227883772061">Установка не удалась из-за неизвестной ошибки. Закройте все окна Google Chrome и повторите попытку снова.</translation>
-<translation id="473775607612524610">Обновление</translation>
 <translation id="4743926867934016338">Принимаю</translation>
 <translation id="4751441238232965030">Обновление 32-разрядной версии Google Chrome на этом компьютере скоро будет прекращено. Установите 64-разрядную версию браузера.</translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
@@ -208,7 +205,6 @@
 <translation id="7808348361785373670">Удалить из Chrome</translation>
 <translation id="7825851276765848807">Не удалось выполнить установку из-за неизвестной ошибки. Скачайте Google Chrome ещё раз.</translation>
 <translation id="7890208801193284374">Если, кроме вас, компьютером пользуется кто-то ещё, например родные или друзья, они тоже смогут настроить Chrome на свой вкус.</translation>
-<translation id="8000275528373650868">Для работы браузера Google Chrome требуется наличие ОС Windows Vista или Windows XP с пакетом обновления 2 (SP1) либо более поздней версии.</translation>
 <translation id="8005540215158006229">Chrome почти готов к работе.</translation>
 <translation id="8008534537613507642">Переустановить Chrome</translation>
 <translation id="8030318113982266900">Переключение устройства на канал <ph name="CHANNEL_NAME" />...</translation>
@@ -237,6 +233,7 @@
 <translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">У вас нет прав, необходимых для установки на системном уровне. Запустите программу установки еще раз в качестве администратора.</translation>
 <translation id="9026991721384951619">Не удалось выполнить синхронизацию, так как учетные данные устарели.</translation>
+<translation id="9067395829937117663">Для работы Google Chrome необходима ОС Windows 7 или более поздней версии.</translation>
 <translation id="9102715433345326100">Chrome заблокировал этот файл как вредоносный.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Внимание!<ph name="END_BOLD" /> Google Chrome не может запретить расширениям записывать историю браузера. Чтобы отключить это расширение в режиме инкогнито, снимите этот флажок.</translation>
 <translation id="911206726377975832">Также удалить данные о работе в браузере?</translation>

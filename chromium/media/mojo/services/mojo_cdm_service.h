@@ -18,7 +18,6 @@
 #include "media/mojo/services/mojo_cdm_service_context.h"
 #include "media/mojo/services/mojo_decryptor_service.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "mojo/shell/public/interfaces/service_provider.mojom.h"
 
 namespace media {
 
@@ -36,12 +35,11 @@ class MojoCdmService : public interfaces::ContentDecryptionModule {
   // render frame the caller is associated with. In the future, we should move
   // all out-of-process media players into the MojoMediaApplicaiton so that we
   // can use MojoCdmServiceContext (per render frame) to get the CDM.
-  static scoped_refptr<MediaKeys> GetCdm(int cdm_id);
+  static scoped_refptr<MediaKeys> LegacyGetCdm(int cdm_id);
 
   // Constructs a MojoCdmService and strongly binds it to the |request|.
   MojoCdmService(
       base::WeakPtr<MojoCdmServiceContext> context,
-      mojo::ServiceProvider* service_provider,
       CdmFactory* cdm_factory,
       mojo::InterfaceRequest<interfaces::ContentDecryptionModule> request);
 
@@ -81,8 +79,8 @@ class MojoCdmService : public interfaces::ContentDecryptionModule {
       const mojo::Callback<void(interfaces::CdmPromiseResultPtr)>& callback)
       final;
 
-  // Get CdmContext to be used by the media pipeline.
-  CdmContext* GetCdmContext();
+  // Get CDM to be used by the media pipeline.
+  scoped_refptr<MediaKeys> GetCdm();
 
  private:
   // Callback for CdmFactory::Create().
@@ -117,7 +115,6 @@ class MojoCdmService : public interfaces::ContentDecryptionModule {
   mojo::StrongBinding<interfaces::ContentDecryptionModule> binding_;
   base::WeakPtr<MojoCdmServiceContext> context_;
 
-  mojo::ServiceProvider* service_provider_;
   CdmFactory* cdm_factory_;
   scoped_refptr<MediaKeys> cdm_;
 

@@ -49,7 +49,7 @@ import org.chromium.ui.resources.ResourceManager;
  */
 @JNINamespace("chrome::android")
 public class CompositorView
-        extends SurfaceView implements ContentOffsetProvider, SurfaceHolder.Callback2 {
+        extends SurfaceView implements ContentOffsetProvider, SurfaceHolder.Callback {
     private static final String TAG = "CompositorView";
 
     // Cache objects that should not be created every frame
@@ -129,7 +129,8 @@ public class CompositorView
             mPreviousWindowTop = windowTop;
 
             Activity activity = mWindowAndroid != null ? mWindowAndroid.getActivity().get() : null;
-            boolean isMultiWindow = MultiWindowUtils.getInstance().isMultiWindow(activity);
+            boolean isMultiWindow = MultiWindowUtils.getInstance().isLegacyMultiWindow(activity)
+                    || MultiWindowUtils.getInstance().isMultiWindow(activity);
 
             // If the measured width is the same as the allowed width (i.e. the orientation has
             // not changed) and multi-window mode is off, use the largest measured height seen thus
@@ -145,12 +146,6 @@ public class CompositorView
     }
 
     @Override
-    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
-        super.onLayout(changed, left, top, right, bottom);
-        mRenderHost.onOverdrawBottomHeightChanged(getOverdrawBottomHeight());
-    }
-
-    @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         mPreviousWindowTop = -1;
@@ -161,21 +156,6 @@ public class CompositorView
      */
     public ResourceManager getResourceManager() {
         return mResourceManager;
-    }
-
-    /**
-     * @return The amount the surface view is overdrawing the window bounds.
-     */
-    public int getOverdrawBottomHeight() {
-        if (mRootActivityView == null) {
-            mRootActivityView = mRootView.findViewById(android.R.id.content);
-        }
-        if (mRootActivityView != null) {
-            int compositorHeight = getHeight();
-            int rootViewHeight = mRootActivityView.getHeight();
-            return Math.max(0, compositorHeight - rootViewHeight);
-        }
-        return 0;
     }
 
     /**
@@ -252,9 +232,6 @@ public class CompositorView
         if (mNativeCompositorView == 0) return;
         nativeSurfaceDestroyed(mNativeCompositorView);
     }
-
-    @Override
-    public void surfaceRedrawNeeded(SurfaceHolder holder) {}
 
     @Override
     public void onWindowVisibilityChanged(int visibility) {
@@ -409,14 +386,13 @@ public class CompositorView
 
         // TODO(jscholler): change 1.0f to dpToPx once the native part is fully supporting dp.
         mRenderHost.getVisibleViewport(mCacheVisibleViewport);
+        mCacheVisibleViewport.right = mCacheVisibleViewport.left + mSurfaceWidth;
+        mCacheVisibleViewport.bottom = mCacheVisibleViewport.top + mSurfaceHeight;
+
         provider.getViewportPixel(mCacheViewport);
         nativeSetLayoutViewport(mNativeCompositorView, mCacheViewport.left, mCacheViewport.top,
                 mCacheViewport.width(), mCacheViewport.height(), mCacheVisibleViewport.left,
-                mCacheVisibleViewport.top, mRenderHost.getCurrentOverdrawBottomHeight(), 1.0f);
-
-        mCacheVisibleViewport.right = mCacheVisibleViewport.left + mSurfaceWidth;
-        mCacheVisibleViewport.bottom = mCacheVisibleViewport.top
-                + Math.max(mSurfaceHeight - mRenderHost.getCurrentOverdrawBottomHeight(), 0);
+                mCacheVisibleViewport.top, 1.0f);
 
         // TODO(changwan): move to treeprovider.
         updateToolbarLayer(provider, forRotation, progressBarDrawingInfo);
@@ -464,7 +440,7 @@ public class CompositorView
     private native void nativeSetNeedsComposite(long nativeCompositorView);
     private native void nativeSetLayoutViewport(long nativeCompositorView, float x, float y,
             float width, float height, float visibleXOffset, float visibleYOffset,
-            float overdrawBottomHeight, float dpToPixel);
+            float dpToPixel);
     private native void nativeUpdateToolbarLayer(long nativeCompositorView, int resourceId,
             int toolbarBackgroundColor, int urlBarResourceId, float urlBarAlpha, float topOffset,
             float brightness, boolean visible, boolean showShadow);

@@ -6,10 +6,14 @@ package org.chromium.chrome.browser.init;
 
 import android.app.Activity;
 import android.content.Context;
+import android.os.AsyncTask;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
 import android.preference.PreferenceManager;
+import android.text.TextUtils;
+
+import com.squareup.leakcanary.LeakCanary;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
@@ -21,6 +25,7 @@ import org.chromium.base.Log;
 import org.chromium.base.ResourceExtractor;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
+import org.chromium.base.annotations.RemovableInRelease;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
@@ -29,12 +34,16 @@ import org.chromium.chrome.browser.ChromeStrictMode;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.FileProviderHelper;
+import org.chromium.chrome.browser.crash.MinidumpDirectoryObserver;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.services.GoogleServicesManager;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelImpl;
 import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.browser.webapps.ActivityAssigner;
+import org.chromium.components.variations.VariationsAssociatedData;
 import org.chromium.content.app.ContentApplication;
 import org.chromium.content.browser.BrowserStartupController;
+import org.chromium.content.browser.ChildProcessLauncher;
 import org.chromium.content.browser.DeviceUtils;
 import org.chromium.content.browser.SpeechRecognition;
 import org.chromium.net.NetworkChangeNotifier;
@@ -59,6 +68,8 @@ public class ChromeBrowserInitializer {
     private boolean mPreInflationStartupComplete;
     private boolean mPostInflationStartupComplete;
     private boolean mNativeInitializationComplete;
+
+    private MinidumpDirectoryObserver mMinidumpDirectoryObserver;
 
     /**
      * A callback to be executed when there is a new version available in Play Store.
@@ -86,6 +97,14 @@ public class ChromeBrowserInitializer {
     private ChromeBrowserInitializer(Context context) {
         mApplication = (ChromeApplication) context.getApplicationContext();
         mHandler = new Handler(Looper.getMainLooper());
+        initLeakCanary();
+    }
+
+    @RemovableInRelease
+    private void initLeakCanary() {
+        // Watch that Activity objects are not retained after their onDestroy() has been called.
+        // This is a no-op in release builds.
+        LeakCanary.install(mApplication);
     }
 
     /**
@@ -139,6 +158,7 @@ public class ChromeBrowserInitializer {
     private void warmUpSharedPrefs() {
         PreferenceManager.getDefaultSharedPreferences(mApplication);
         DocumentTabModelImpl.warmUpSharedPrefs(mApplication);
+        ActivityAssigner.warmUpSharedPrefs(mApplication);
     }
 
     private void preInflationStartup() {
@@ -273,6 +293,9 @@ public class ChromeBrowserInitializer {
             }
         });
 
+        // See crbug.com/593250. This can be removed after N SDK is released, crbug.com/592722.
+        ChildProcessLauncher.setChildProcessCreationParams(
+                mApplication.getChildProcessCreationParams());
         if (isAsync) {
             // We want to start this queue once the C++ startup tasks have run; allow the
             // C++ startup to run asynchonously, and set it up to start the Java queue once
@@ -347,6 +370,24 @@ public class ChromeBrowserInitializer {
 
         mNativeInitializationComplete = true;
         ContentUriUtils.setFileProviderUtil(new FileProviderHelper());
+
+        if (TextUtils.equals("true", VariationsAssociatedData.getVariationParamValue(
+                MinidumpDirectoryObserver.MINIDUMP_EXPERIMENT_NAME, "Enabled"))) {
+
+            // Start the file observer to watch the minidump directory.
+            new AsyncTask<Void, Void, MinidumpDirectoryObserver>() {
+                @Override
+                protected MinidumpDirectoryObserver doInBackground(Void... params) {
+                    return new MinidumpDirectoryObserver();
+                }
+
+                @Override
+                protected void onPostExecute(MinidumpDirectoryObserver minidumpDirectoryObserver) {
+                    mMinidumpDirectoryObserver = minidumpDirectoryObserver;
+                    mMinidumpDirectoryObserver.startWatching();
+                }
+            }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+        }
     }
 
     private void waitForDebuggerIfNeeded() {

@@ -89,7 +89,7 @@
 
 namespace blink {
 
-typedef HashMap<ScrollbarThemeClient*, RetainPtr<BlinkScrollbarObserver> > ScrollbarPainterMap;
+typedef HashMap<ScrollbarThemeClient*, RetainPtr<BlinkScrollbarObserver>> ScrollbarPainterMap;
 
 static ScrollbarPainterMap& scrollbarPainterMap()
 {
@@ -102,6 +102,13 @@ static bool supportsExpandedScrollbars()
     // FIXME: This is temporary until all platforms that support ScrollbarPainter support this part of the API.
     static bool globalSupportsExpandedScrollbars = [NSClassFromString(@"NSScrollerImp") instancesRespondToSelector:@selector(setExpanded:)];
     return globalSupportsExpandedScrollbars;
+}
+
+ScrollbarPart ScrollbarThemeMacOverlayAPI::invalidateOnThumbPositionChange(
+    const ScrollbarThemeClient& scrollbar, float oldPosition, float newPosition) const
+{
+    // ScrollAnimatorMac will invalidate scrollbar parts if necessary.
+    return NoPart;
 }
 
 void ScrollbarThemeMacOverlayAPI::registerScrollbar(ScrollbarThemeClient& scrollbar)

@@ -171,13 +171,13 @@ public:
 
     // FIXME: once scroll customization is enabled everywhere
     // (crbug.com/416862), this should take a ScrollState object.
-    ScrollResult applyScrollDelta(const FloatSize& delta, bool isScrollBegin);
+    ScrollResult applyScrollDelta(ScrollGranularity, const FloatSize& delta, bool isScrollBegin);
     bool shouldScrollTopControls(const FloatSize& delta) const;
 
     // DisplayItemClient methods
     String debugName() const final { return "LocalFrame"; }
     // TODO(chrishtr): fix this.
-    IntRect visualRect() const override { return IntRect(); }
+    LayoutRect visualRect() const override { return LayoutRect(); }
 
     bool shouldThrottleRendering() const;
 
@@ -198,12 +198,6 @@ private:
     WindowProxyManager* windowProxyManager() const override;
 
     String localLayerTreeAsText(unsigned flags) const;
-
-    // Paints the area for the given rect into a DragImage, with the given displayItemClient id attached.
-    // The rect is in the coordinate space of the frame.
-    PassOwnPtr<DragImage> paintIntoDragImage(const DisplayItemClient&,
-        RespectImageOrientationEnum shouldRespectImageOrientation, const GlobalPaintFlags,
-        IntRect paintingRect, float opacity = 1);
 
     void enableNavigation() { --m_navigationDisableCount; }
     void disableNavigation() { ++m_navigationDisableCount; }
@@ -233,10 +227,6 @@ private:
     bool m_inViewSourceMode;
 
     RefPtrWillBeMember<InstrumentingAgents> m_instrumentingAgents;
-
-    // TODO(dcheng): Temporary to try to debug https://crbug.com/531291
-    enum class SupplementStatus { Uncleared, Clearing, Cleared };
-    SupplementStatus m_supplementStatus = SupplementStatus::Uncleared;
 };
 
 inline void LocalFrame::init()

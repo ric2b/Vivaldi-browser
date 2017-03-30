@@ -67,7 +67,7 @@ class TestShellDelegate : public ShellDelegate {
   void SetMediaCaptureState(MediaCaptureState state);
   void SetForceMaximizeOnFirstRun(bool maximize) {
     force_maximize_on_first_run_ = maximize;
-  };
+  }
 
  private:
   int num_exit_requests_;
@@ -78,8 +78,6 @@ class TestShellDelegate : public ShellDelegate {
 
   base::ObserverList<ash::VirtualKeyboardStateObserver>
       keyboard_state_observer_list_;
-
-  TestSessionStateDelegate* test_session_state_delegate_;  // Not owned.
 
   DISALLOW_COPY_AND_ASSIGN(TestShellDelegate);
 };

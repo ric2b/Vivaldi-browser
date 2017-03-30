@@ -8,9 +8,6 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/testing_pref_service.h"
 #include "base/run_loop.h"
 #include "base/test/mock_entropy_provider.h"
 #include "build/build_config.h"
@@ -19,6 +16,9 @@
 #include "chrome/common/pref_names.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/policy/core/common/mock_policy_service.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/testing_pref_service.h"
 #include "components/proxy_config/pref_proxy_config_tracker_impl.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
 #include "content/public/browser/browser_thread.h"
@@ -70,6 +70,12 @@ class IOThreadPeer {
                                    spdy_trial_params, globals);
   }
 
+  static void ConfigureAltSvcGlobals(const base::CommandLine& command_line,
+                                     base::StringPiece altsvc_trial_group,
+                                     IOThread::Globals* globals) {
+    IOThread::ConfigureAltSvcGlobals(command_line, altsvc_trial_group, globals);
+  }
+
   static void ConfigureNPNGlobals(base::StringPiece npn_trial_group,
                                   IOThread::Globals* globals) {
     IOThread::ConfigureNPNGlobals(npn_trial_group, globals);
@@ -107,6 +113,11 @@ class IOThreadTest : public testing::Test {
                                        field_trial_params_, &globals_);
   }
 
+  void ConfigureAltSvcGlobals() {
+    IOThreadPeer::ConfigureAltSvcGlobals(command_line_, field_trial_group_,
+                                         &globals_);
+  }
+
   void ConfigureNPNGlobals() {
     IOThreadPeer::ConfigureNPNGlobals(field_trial_group_, &globals_);
   }
@@ -142,42 +153,50 @@ TEST_F(IOThreadTest, SpdyFieldTrialHoldbackEnabled) {
 TEST_F(IOThreadTest, SpdyFieldTrialSpdy31Enabled) {
   field_trial_group_ = "Spdy31Enabled";
   ConfigureSpdyGlobals();
-  EXPECT_THAT(globals_.next_protos,
-              ElementsAre(net::kProtoSPDY31, net::kProtoHTTP11));
+  net::HttpNetworkSession::Params params;
+  InitializeNetworkSessionParams(&params);
+  EXPECT_TRUE(params.enable_spdy31);
+  EXPECT_FALSE(params.enable_http2);
 }
 
 TEST_F(IOThreadTest, SpdyFieldTrialSpdy4Enabled) {
   field_trial_group_ = "Spdy4Enabled";
   ConfigureSpdyGlobals();
-  EXPECT_THAT(
-      globals_.next_protos,
-      ElementsAre(net::kProtoHTTP2, net::kProtoSPDY31, net::kProtoHTTP11));
+  net::HttpNetworkSession::Params params;
+  InitializeNetworkSessionParams(&params);
+  EXPECT_TRUE(params.enable_spdy31);
+  EXPECT_TRUE(params.enable_http2);
 }
 
 TEST_F(IOThreadTest, SpdyFieldTrialDefault) {
   field_trial_group_ = "";
   ConfigureSpdyGlobals();
-  EXPECT_THAT(
-      globals_.next_protos,
-      ElementsAre(net::kProtoHTTP2, net::kProtoSPDY31, net::kProtoHTTP11));
+  net::HttpNetworkSession::Params params;
+  InitializeNetworkSessionParams(&params);
+  EXPECT_TRUE(params.enable_spdy31);
+  EXPECT_TRUE(params.enable_http2);
 }
 
 TEST_F(IOThreadTest, SpdyFieldTrialParametrized) {
   field_trial_params_["enable_spdy31"] = "false";
-  // Undefined parameter "enable_http2_14" should default to false.
   field_trial_params_["enable_http2"] = "true";
   field_trial_group_ = "ParametrizedHTTP2Only";
   ConfigureSpdyGlobals();
-  EXPECT_THAT(globals_.next_protos,
-              ElementsAre(net::kProtoHTTP2, net::kProtoHTTP11));
+  net::HttpNetworkSession::Params params;
+  InitializeNetworkSessionParams(&params);
+  EXPECT_FALSE(params.enable_spdy31);
+  EXPECT_TRUE(params.enable_http2);
 }
 
-TEST_F(IOThreadTest, SpdyCommandLineUseSpdyOff) {
-  command_line_.AppendSwitchASCII("use-spdy", "off");
+TEST_F(IOThreadTest, SpdyCommandLineDisableHttp2) {
+  command_line_.AppendSwitch("disable-http2");
   // Command line should overwrite field trial group.
   field_trial_group_ = "Spdy4Enabled";
   ConfigureSpdyGlobals();
-  EXPECT_EQ(0u, globals_.next_protos.size());
+  net::HttpNetworkSession::Params params;
+  InitializeNetworkSessionParams(&params);
+  EXPECT_FALSE(params.enable_spdy31);
+  EXPECT_FALSE(params.enable_http2);
 }
 
 TEST_F(IOThreadTest, NPNFieldTrialEnabled) {
@@ -213,6 +232,7 @@ TEST_F(IOThreadTest, EnableQuicFromFieldTrialGroup) {
   net::HttpNetworkSession::Params params;
   InitializeNetworkSessionParams(&params);
   EXPECT_TRUE(params.enable_quic);
+  EXPECT_FALSE(params.disable_quic_on_timeout_with_open_streams);
   EXPECT_TRUE(params.enable_quic_for_proxies);
   EXPECT_EQ(1350u, params.quic_max_packet_length);
   EXPECT_EQ(1.0, params.alternative_service_probability_threshold);
@@ -226,7 +246,8 @@ TEST_F(IOThreadTest, EnableQuicFromFieldTrialGroup) {
   EXPECT_FALSE(params.quic_enable_non_blocking_io);
   EXPECT_FALSE(params.quic_disable_disk_cache);
   EXPECT_FALSE(params.quic_prefer_aes);
-  EXPECT_FALSE(params.use_alternative_services);
+  EXPECT_FALSE(params.parse_alternative_services);
+  EXPECT_FALSE(params.enable_alternative_service_with_different_host);
   EXPECT_EQ(0, params.quic_max_number_of_lossy_connections);
   EXPECT_EQ(1.0f, params.quic_packet_loss_threshold);
   EXPECT_FALSE(params.quic_delay_tcp_race);
@@ -235,8 +256,19 @@ TEST_F(IOThreadTest, EnableQuicFromFieldTrialGroup) {
             params.quic_idle_connection_timeout_seconds);
   EXPECT_FALSE(params.quic_disable_preconnect_if_0rtt);
   EXPECT_FALSE(params.quic_migrate_sessions_on_network_change);
+  EXPECT_FALSE(params.quic_migrate_sessions_early);
   EXPECT_FALSE(IOThread::ShouldEnableQuicForDataReductionProxy());
   EXPECT_TRUE(params.quic_host_whitelist.empty());
+}
+
+TEST_F(IOThreadTest,
+       DisableQuicWhenConnectionTimesOutWithOpenStreamsFromFieldTrialParams) {
+  field_trial_group_ = "Enabled";
+  field_trial_params_["disable_quic_on_timeout_with_open_streams"] = "true";
+  ConfigureQuicGlobals();
+  net::HttpNetworkSession::Params params;
+  InitializeNetworkSessionParams(&params);
+  EXPECT_TRUE(params.disable_quic_on_timeout_with_open_streams);
 }
 
 TEST_F(IOThreadTest, EnableQuicFromQuicProxyFieldTrialGroup) {
@@ -292,25 +324,47 @@ TEST_F(IOThreadTest, EnableQuicFromCommandLine) {
   EXPECT_FALSE(IOThread::ShouldEnableQuicForDataReductionProxy());
 }
 
+TEST_F(IOThreadTest, AltSvcFieldTrialEnabled) {
+  field_trial_group_ = "AltSvcEnabled";
+  ConfigureAltSvcGlobals();
+  net::HttpNetworkSession::Params params;
+  InitializeNetworkSessionParams(&params);
+  EXPECT_TRUE(params.parse_alternative_services);
+  EXPECT_FALSE(params.enable_alternative_service_with_different_host);
+}
+
+TEST_F(IOThreadTest, AltSvcFieldTrialDisabled) {
+  field_trial_group_ = "AltSvcDisabled";
+  ConfigureAltSvcGlobals();
+  net::HttpNetworkSession::Params params;
+  InitializeNetworkSessionParams(&params);
+  EXPECT_FALSE(params.parse_alternative_services);
+  EXPECT_FALSE(params.enable_alternative_service_with_different_host);
+}
+
 TEST_F(IOThreadTest, EnableAlternativeServicesFromCommandLineWithQuicDisabled) {
   command_line_.AppendSwitch("enable-alternative-services");
 
+  ConfigureAltSvcGlobals();
   ConfigureQuicGlobals();
   net::HttpNetworkSession::Params params;
   InitializeNetworkSessionParams(&params);
   EXPECT_FALSE(params.enable_quic);
-  EXPECT_TRUE(params.use_alternative_services);
+  EXPECT_TRUE(params.parse_alternative_services);
+  EXPECT_TRUE(params.enable_alternative_service_with_different_host);
 }
 
 TEST_F(IOThreadTest, EnableAlternativeServicesFromCommandLineWithQuicEnabled) {
   command_line_.AppendSwitch("enable-quic");
   command_line_.AppendSwitch("enable-alternative-services");
 
+  ConfigureAltSvcGlobals();
   ConfigureQuicGlobals();
   net::HttpNetworkSession::Params params;
   InitializeNetworkSessionParams(&params);
   EXPECT_TRUE(params.enable_quic);
-  EXPECT_TRUE(params.use_alternative_services);
+  EXPECT_TRUE(params.parse_alternative_services);
+  EXPECT_TRUE(params.enable_alternative_service_with_different_host);
 }
 
 TEST_F(IOThreadTest, PacketLengthFromCommandLine) {
@@ -357,6 +411,15 @@ TEST_F(IOThreadTest, QuicMigrateSessionsOnNetworkChangeFromFieldTrialParams) {
   net::HttpNetworkSession::Params params;
   InitializeNetworkSessionParams(&params);
   EXPECT_TRUE(params.quic_migrate_sessions_on_network_change);
+}
+
+TEST_F(IOThreadTest, QuicMigrateSessionsEarlyFromFieldTrialParams) {
+  field_trial_group_ = "Enabled";
+  field_trial_params_["migrate_sessions_early"] = "true";
+  ConfigureQuicGlobals();
+  net::HttpNetworkSession::Params params;
+  InitializeNetworkSessionParams(&params);
+  EXPECT_TRUE(params.quic_migrate_sessions_early);
 }
 
 TEST_F(IOThreadTest, PacketLengthFromFieldTrialParams) {
@@ -494,12 +557,15 @@ TEST_F(IOThreadTest, QuicPreferAes) {
 
 TEST_F(IOThreadTest, QuicEnableAlternativeServicesFromFieldTrialParams) {
   field_trial_group_ = "Enabled";
-  field_trial_params_["use_alternative_services"] = "true";
+  field_trial_params_["enable_alternative_service_with_different_host"] =
+      "true";
 
   ConfigureQuicGlobals();
   net::HttpNetworkSession::Params params;
   InitializeNetworkSessionParams(&params);
-  EXPECT_TRUE(params.use_alternative_services);
+  EXPECT_TRUE(params.enable_alternative_service_with_different_host);
+  // QUIC AltSvc pooling parameter should also enable AltSvc parsing.
+  EXPECT_TRUE(params.parse_alternative_services);
 }
 
 TEST_F(IOThreadTest, QuicMaxNumberOfLossyConnectionsFieldTrialParams) {
@@ -696,7 +762,7 @@ class IOThreadTestWithIOThreadObject : public testing::Test {
   }
 
   ~IOThreadTestWithIOThreadObject() override {
-#if defined(USE_NSS_CERTS) || defined(OS_IOS)
+#if defined(USE_NSS_CERTS)
     // Reset OCSPIOLoop thread checks, so that the test runner can run
     // futher tests in the same process.
     RunOnIOThreadBlocking(base::Bind(&net::ResetNSSHttpIOForTesting));

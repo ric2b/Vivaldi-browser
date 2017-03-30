@@ -147,8 +147,7 @@ void ModelTypeRegistry::ConnectSyncTypeToWorker(
     cryptographer_copy.reset(new Cryptographer(*cryptographer_));
 
   scoped_ptr<syncer_v2::ModelTypeWorker> worker(new syncer_v2::ModelTypeWorker(
-      type, activation_context->data_type_state,
-      activation_context->saved_pending_updates, std::move(cryptographer_copy),
+      type, activation_context->data_type_state, std::move(cryptographer_copy),
       nudge_handler_, std::move(activation_context->type_processor)));
 
   // Initialize Processor -> Worker communication channel.
@@ -156,7 +155,7 @@ void ModelTypeRegistry::ConnectSyncTypeToWorker(
       worker->AsWeakPtr(), scoped_refptr<base::SequencedTaskRunner>(
                                base::ThreadTaskRunnerHandle::Get())));
 
-  type_processor->OnConnect(std::move(commit_queue_proxy));
+  type_processor->ConnectSync(std::move(commit_queue_proxy));
 
   DCHECK(update_handler_map_.find(type) == update_handler_map_.end());
   DCHECK(commit_contributor_map_.find(type) == commit_contributor_map_.end());

@@ -42,8 +42,9 @@ using testing::Return;
 using testing::StrictMock;
 using testing::WithArgs;
 
+DECLARE_bool(quic_always_log_bugs_for_tests);
+
 namespace net {
-namespace tools {
 namespace test {
 
 class QuicSimpleServerStreamPeer : public QuicSimpleServerStream {
@@ -90,14 +91,16 @@ class MockQuicSimpleServerSession : public QuicSimpleServerSession {
                                 connection,
                                 owner,
                                 crypto_config) {
-    set_max_open_streams(kMaxStreamsForTest);
+    set_max_open_incoming_streams(kMaxStreamsForTest);
+    set_max_open_outgoing_streams(kMaxStreamsForTest);
     ON_CALL(*this, WritevData(_, _, _, _, _, _))
         .WillByDefault(testing::Return(QuicConsumedData(0, false)));
   }
 
   ~MockQuicSimpleServerSession() override {}
 
-  MOCK_METHOD2(OnConnectionClosed, void(QuicErrorCode error, bool from_peer));
+  MOCK_METHOD2(OnConnectionClosed,
+               void(QuicErrorCode error, ConnectionCloseSource source));
   MOCK_METHOD1(CreateIncomingDynamicStream, QuicSpdyStream*(QuicStreamId id));
   MOCK_METHOD6(WritevData,
                QuicConsumedData(QuicStreamId id,
@@ -152,6 +155,7 @@ class QuicSimpleServerStreamTest
             ::net::test::CryptoTestUtils::ProofSourceForTesting())),
         session_(connection_, session_owner_, crypto_config_.get()),
         body_("hello world") {
+    FLAGS_quic_always_log_bugs_for_tests = true;
     SpdyHeaderBlock request_headers;
     request_headers[":host"] = "";
     request_headers[":authority"] = "www.google.com";
@@ -435,7 +439,7 @@ TEST_P(QuicSimpleServerStreamTest, PushResponseOnServerInitiatedStream) {
   // and send it back.
   EXPECT_CALL(session_,
               WriteHeaders(kServerInitiatedStreamId, _, false,
-                           server_initiated_stream->Priority(), nullptr));
+                           server_initiated_stream->priority(), nullptr));
   EXPECT_CALL(session_, WritevData(kServerInitiatedStreamId, _, _, _, _, _))
       .Times(1)
       .WillOnce(Return(QuicConsumedData(kBody.size(), true)));
@@ -597,5 +601,4 @@ TEST_P(QuicSimpleServerStreamTest, InvalidHeadersWithFin) {
 
 }  // namespace
 }  // namespace test
-}  // namespace tools
 }  // namespace net

@@ -33,6 +33,7 @@
 #include "core/css/resolver/StyleResolverState.h"
 #include "core/style/QuotesData.h"
 #include "core/style/ShadowList.h"
+#include "core/style/StyleMotionRotation.h"
 #include "core/style/StyleReflection.h"
 #include "core/style/StyleScrollSnapData.h"
 #include "core/style/TransformOrigin.h"
@@ -79,6 +80,7 @@ public:
     static TabSize convertLengthOrTabSpaces(StyleResolverState&, const CSSValue&);
     static Length convertLineHeight(StyleResolverState&, const CSSValue&);
     static float convertNumberOrPercentage(StyleResolverState&, const CSSValue&);
+    static StyleMotionRotation convertMotionRotation(StyleResolverState&, const CSSValue&);
     static LengthPoint convertPosition(StyleResolverState&, const CSSValue&);
     static float convertPerspective(StyleResolverState&, const CSSValue&);
     static Length convertQuirkyLength(StyleResolverState&, const CSSValue&);
@@ -105,7 +107,9 @@ public:
     static PassRefPtr<RotateTransformOperation> convertRotate(StyleResolverState&, const CSSValue&);
     static PassRefPtr<ScaleTransformOperation> convertScale(StyleResolverState&, const CSSValue&);
     static RespectImageOrientationEnum convertImageOrientation(StyleResolverState&, const CSSValue&);
-    static PassRefPtr<StylePath> convertPath(StyleResolverState&, CSSValue&);
+    static PassRefPtr<StylePath> convertPath(StyleResolverState&, const CSSValue&);
+    static PassRefPtr<StylePath> convertPathOrNone(StyleResolverState&, const CSSValue&);
+    static StyleMotionRotation convertMotionRotation(const CSSValue&);
 };
 
 template <typename T>

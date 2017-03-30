@@ -17,6 +17,7 @@
 #include "ipc/ipc_message_macros.h"
 
 #include "importer/imported_notes_entry.h"
+#include "importer/viv_importer.h"
 
 IPC_STRUCT_TRAITS_BEGIN(ImportedNotesEntry)
   IPC_STRUCT_TRAITS_MEMBER(is_folder)
@@ -25,6 +26,11 @@ IPC_STRUCT_TRAITS_BEGIN(ImportedNotesEntry)
   IPC_STRUCT_TRAITS_MEMBER(title)
   IPC_STRUCT_TRAITS_MEMBER(content)
   IPC_STRUCT_TRAITS_MEMBER(creation_time)
+IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_TRAITS_BEGIN(ImportedSpeedDialEntry)
+  IPC_STRUCT_TRAITS_MEMBER(title)
+  IPC_STRUCT_TRAITS_MEMBER(url)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(importer::ChromeProfileInfo)

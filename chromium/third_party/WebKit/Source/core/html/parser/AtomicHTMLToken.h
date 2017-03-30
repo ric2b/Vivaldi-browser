@@ -47,7 +47,7 @@ public:
         return m_doctypeData->m_forceQuirks;
     }
 
-    HTMLToken::Type type() const { return m_type; }
+    HTMLToken::TokenType type() const { return m_type; }
 
     const AtomicString& name() const
     {
@@ -165,10 +165,10 @@ public:
         case HTMLToken::StartTag:
             m_attributes.reserveInitialCapacity(token.attributes().size());
             for (const CompactHTMLToken::Attribute& attribute : token.attributes()) {
-                QualifiedName name(nullAtom, AtomicString(attribute.name), nullAtom);
+                QualifiedName name(nullAtom, AtomicString(attribute.name()), nullAtom);
                 // FIXME: This is N^2 for the number of attributes.
                 if (!findAttributeInVector(m_attributes, name))
-                    m_attributes.append(Attribute(name, AtomicString(attribute.value)));
+                    m_attributes.append(Attribute(name, AtomicString(attribute.value())));
             }
             // Fall through!
         case HTMLToken::EndTag:
@@ -182,13 +182,13 @@ public:
         }
     }
 
-    explicit AtomicHTMLToken(HTMLToken::Type type)
+    explicit AtomicHTMLToken(HTMLToken::TokenType type)
         : m_type(type)
         , m_selfClosing(false)
     {
     }
 
-    AtomicHTMLToken(HTMLToken::Type type, const AtomicString& name, const Vector<Attribute>& attributes = Vector<Attribute>())
+    AtomicHTMLToken(HTMLToken::TokenType type, const AtomicString& name, const Vector<Attribute>& attributes = Vector<Attribute>())
         : m_type(type)
         , m_name(name)
         , m_selfClosing(false)
@@ -198,7 +198,7 @@ public:
     }
 
 private:
-    HTMLToken::Type m_type;
+    HTMLToken::TokenType m_type;
 
     void initializeAttributes(const HTMLToken::AttributeList& attributes);
     QualifiedName nameForAttribute(const HTMLToken::Attribute&) const;
@@ -232,15 +232,15 @@ inline void AtomicHTMLToken::initializeAttributes(const HTMLToken::AttributeList
     m_attributes.reserveInitialCapacity(size);
     for (size_t i = 0; i < size; ++i) {
         const HTMLToken::Attribute& attribute = attributes[i];
-        if (attribute.name.isEmpty())
+        if (attribute.nameAsVector().isEmpty())
             continue;
 
-        ASSERT(attribute.nameRange.start);
-        ASSERT(attribute.nameRange.end);
-        ASSERT(attribute.valueRange.start);
-        ASSERT(attribute.valueRange.end);
+        ASSERT(attribute.nameRange().start);
+        ASSERT(attribute.nameRange().end);
+        ASSERT(attribute.valueRange().start);
+        ASSERT(attribute.valueRange().end);
 
-        AtomicString value(StringImpl::create8BitIfPossible(attribute.value));
+        AtomicString value(attribute.value8BitIfNecessary());
         const QualifiedName& name = nameForAttribute(attribute);
         // FIXME: This is N^2 for the number of attributes.
         if (!findAttributeInVector(m_attributes, name))
@@ -248,6 +248,6 @@ inline void AtomicHTMLToken::initializeAttributes(const HTMLToken::AttributeList
     }
 }
 
-}
+} // namespace blink
 
 #endif

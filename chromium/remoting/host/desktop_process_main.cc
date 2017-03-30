@@ -32,13 +32,17 @@ int DesktopProcessMain() {
       command_line->GetSwitchValueASCII(kDaemonPipeSwitchName);
 
   if (channel_name.empty())
-    return kUsageExitCode;
+    return kInvalidCommandLineExitCode;
 
   base::MessageLoopForUI message_loop;
   base::RunLoop run_loop;
   scoped_refptr<AutoThreadTaskRunner> ui_task_runner =
       new AutoThreadTaskRunner(message_loop.task_runner(),
                                run_loop.QuitClosure());
+
+  // Launch the video capture thread.
+  scoped_refptr<AutoThreadTaskRunner> video_capture_task_runner =
+      AutoThread::Create("Video capture thread", ui_task_runner);
 
   // Launch the input thread.
   scoped_refptr<AutoThreadTaskRunner> input_task_runner =
@@ -52,17 +56,13 @@ int DesktopProcessMain() {
   // Create a platform-dependent environment factory.
   scoped_ptr<DesktopEnvironmentFactory> desktop_environment_factory;
 #if defined(OS_WIN)
-  desktop_environment_factory.reset(
-      new SessionDesktopEnvironmentFactory(
-          ui_task_runner,
-          input_task_runner,
-          ui_task_runner,
-          base::Bind(&DesktopProcess::InjectSas,
-                     desktop_process.AsWeakPtr())));
+  desktop_environment_factory.reset(new SessionDesktopEnvironmentFactory(
+      ui_task_runner, video_capture_task_runner, input_task_runner,
+      ui_task_runner,
+      base::Bind(&DesktopProcess::InjectSas, desktop_process.AsWeakPtr())));
 #else  // !defined(OS_WIN)
   desktop_environment_factory.reset(new Me2MeDesktopEnvironmentFactory(
-      ui_task_runner,
-      input_task_runner,
+      ui_task_runner, video_capture_task_runner, input_task_runner,
       ui_task_runner));
 #endif  // !defined(OS_WIN)
 

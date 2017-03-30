@@ -39,6 +39,7 @@
 #include "core/dom/DocumentType.h"
 #include "core/dom/ProcessingInstruction.h"
 #include "core/dom/ScriptLoader.h"
+#include "core/dom/StyleEngine.h"
 #include "core/dom/TransformSource.h"
 #include "core/fetch/FetchInitiatorTypeNames.h"
 #include "core/fetch/RawResource.h"
@@ -416,6 +417,10 @@ bool XMLDocumentParser::updateLeafTextNode()
 
 void XMLDocumentParser::detach()
 {
+    if (m_pendingScript) {
+        m_pendingScript->removeClient(this);
+        m_pendingScript = nullptr;
+    }
     clearCurrentNodeStack();
     ScriptableDocumentParser::detach();
 }
@@ -444,7 +449,7 @@ void XMLDocumentParser::end()
         updateLeafTextNode();
         // Do not bail out if in a stopped state, but notify document that
         // parsing has finished.
-        document()->styleResolverChanged();
+        document()->styleEngine().resolverChanged(FullStyleUpdate);
     }
 
     if (isParsing())
@@ -486,7 +491,7 @@ void XMLDocumentParser::notifyFinished(Resource* unusedResource)
     bool wasCanceled = m_pendingScript->wasCanceled();
 
     m_pendingScript->removeClient(this);
-    m_pendingScript = 0;
+    m_pendingScript = nullptr;
 
     RefPtrWillBeRawPtr<Element> e = m_scriptElement;
     m_scriptElement = nullptr;
@@ -673,7 +678,7 @@ static void* openFunc(const char* uri)
         XMLDocumentParserScope scope(0);
         // FIXME: We should restore the original global error handler as well.
         FetchRequest request(ResourceRequest(url), FetchInitiatorTypeNames::xml, ResourceFetcher::defaultResourceOptions());
-        ResourcePtr<Resource> resource = RawResource::fetchSynchronously(request, document->fetcher());
+        RefPtrWillBeRawPtr<Resource> resource = RawResource::fetchSynchronously(request, document->fetcher());
         if (resource && !resource->errorOccurred()) {
             data = resource->resourceBuffer();
             finalURL = resource->response().url();
@@ -802,7 +807,6 @@ XMLDocumentParser::XMLDocumentParser(Document& document, FrameView* frameView)
     , m_requestingScript(false)
     , m_finishCalled(false)
     , m_xmlErrors(&document)
-    , m_pendingScript(0)
     , m_scriptStartPosition(TextPosition::belowRangePosition())
     , m_parsingFragment(false)
 {
@@ -826,7 +830,6 @@ XMLDocumentParser::XMLDocumentParser(DocumentFragment* fragment, Element* parent
     , m_requestingScript(false)
     , m_finishCalled(false)
     , m_xmlErrors(&fragment->document())
-    , m_pendingScript(0)
     , m_scriptStartPosition(TextPosition::belowRangePosition())
     , m_parsingFragment(true)
 {
@@ -873,15 +876,12 @@ XMLParserContext::~XMLParserContext()
 
 XMLDocumentParser::~XMLDocumentParser()
 {
+    ASSERT(!m_pendingScript);
 #if !ENABLE(OILPAN)
     // The XMLDocumentParser will always be detached before being destroyed.
     ASSERT(m_currentNodeStack.isEmpty());
     ASSERT(!m_currentNode);
 #endif
-
-    // FIXME: m_pendingScript handling should be moved into XMLDocumentParser.cpp!
-    if (m_pendingScript)
-        m_pendingScript->removeClient(this);
 }
 
 DEFINE_TRACE(XMLDocumentParser)
@@ -892,6 +892,7 @@ DEFINE_TRACE(XMLDocumentParser)
 #endif
     visitor->trace(m_leafTextNode);
     visitor->trace(m_xmlErrors);
+    visitor->trace(m_pendingScript);
     visitor->trace(m_scriptElement);
     ScriptableDocumentParser::trace(visitor);
 }
@@ -1035,13 +1036,13 @@ void XMLDocumentParser::startElementNs(const AtomicString& localName, const Atom
     TrackExceptionState exceptionState;
     handleNamespaceAttributes(prefixedAttributes, libxmlNamespaces, nbNamespaces, exceptionState);
     if (exceptionState.hadException()) {
-        setAttributes(newElement.get(), prefixedAttributes, parserContentPolicy());
+        setAttributes(newElement.get(), prefixedAttributes, getParserContentPolicy());
         stopParsing();
         return;
     }
 
     handleElementAttributes(prefixedAttributes, libxmlAttributes, nbAttributes, m_prefixToNamespaceMap, exceptionState);
-    setAttributes(newElement.get(), prefixedAttributes, parserContentPolicy());
+    setAttributes(newElement.get(), prefixedAttributes, getParserContentPolicy());
     if (exceptionState.hadException()) {
         stopParsing();
         return;
@@ -1070,8 +1071,11 @@ void XMLDocumentParser::startElementNs(const AtomicString& localName, const Atom
     if (isHTMLHtmlElement(*newElement))
         toHTMLHtmlElement(*newElement).insertedByParser();
 
-    if (!m_parsingFragment && isFirstElement && document()->frame())
+    if (!m_parsingFragment && isFirstElement && document()->frame()) {
         document()->frame()->loader().dispatchDocumentElementAvailable();
+        document()->frame()->loader().runScriptsAtDocumentElementAvailable();
+        // runScriptsAtDocumentElementAvailable might have invalidated the document.
+    }
 }
 
 void XMLDocumentParser::endElementNs()
@@ -1095,7 +1099,7 @@ void XMLDocumentParser::endElementNs()
     if (m_currentNode->isElementNode())
         toElement(n.get())->finishParsingChildren();
 
-    if (!scriptingContentIsAllowed(parserContentPolicy()) && n->isElementNode() && toScriptLoaderIfPossible(toElement(n))) {
+    if (!scriptingContentIsAllowed(getParserContentPolicy()) && n->isElementNode() && toScriptLoaderIfPossible(toElement(n))) {
         popCurrentNode();
         n->remove(IGNORE_EXCEPTION);
         return;
@@ -1541,9 +1545,9 @@ void XMLDocumentParser::doEnd()
         document()->setTransformSource(adoptPtr(new TransformSource(doc)));
         // Make the document think it's done, so it will apply XSL stylesheets.
         document()->setParsingState(Document::FinishedParsing);
-        document()->styleResolverChanged();
+        document()->styleEngine().resolverChanged(FullStyleUpdate);
 
-        // styleResolverChanged() call can detach the parser and null out its
+        // resolverChanged() call can detach the parser and null out its
         // document. In that case, we just bail out.
         if (isDetached())
             return;

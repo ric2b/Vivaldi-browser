@@ -77,10 +77,10 @@ typedef enum {
 
 /* Output data format for qcms_transform_get_input|output_trc_rgba() */
 typedef enum {
-	QCMS_TRC_PARAMETRIC,
-	QCMS_TRC_FLOAT,
-	QCMS_TRC_HALF_FLOAT, // XXX: only type implemented.
-	QCMS_TRC_USHORT,
+	QCMS_TRC_PARAMETRIC, // Not implemented.
+	QCMS_TRC_FLOAT,      // Not implemented.
+	QCMS_TRC_HALF_FLOAT, // IEE754: binary16.
+	QCMS_TRC_USHORT,     // 0.16 fixed point.
 } qcms_trc_type;
 
 typedef struct {
@@ -131,6 +131,8 @@ void qcms_profile_precache_output_transform(qcms_profile *profile);
 
 size_t qcms_profile_get_vcgt_channel_length(qcms_profile *profile);
 qcms_bool qcms_profile_get_vcgt_rgb_channels(qcms_profile *profile, unsigned short *data);
+
+float qcms_profile_ntsc_relative_gamut_size(qcms_profile *profile);
 
 qcms_transform* qcms_transform_create(
 		qcms_profile *in, qcms_data_type in_type,

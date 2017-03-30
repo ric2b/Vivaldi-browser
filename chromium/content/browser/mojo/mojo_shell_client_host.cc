@@ -18,11 +18,11 @@
 #include "content/public/common/mojo_shell_connection.h"
 #include "ipc/ipc_sender.h"
 #include "mojo/converters/network/network_type_converters.h"
-#include "mojo/shell/public/cpp/application_impl.h"
+#include "mojo/edk/embedder/embedder.h"
+#include "mojo/edk/embedder/platform_channel_pair.h"
+#include "mojo/edk/embedder/scoped_platform_handle.h"
+#include "mojo/shell/public/cpp/connector.h"
 #include "mojo/shell/public/interfaces/application_manager.mojom.h"
-#include "third_party/mojo/src/mojo/edk/embedder/embedder.h"
-#include "third_party/mojo/src/mojo/edk/embedder/platform_channel_pair.h"
-#include "third_party/mojo/src/mojo/edk/embedder/scoped_platform_handle.h"
 
 namespace content {
 namespace {
@@ -30,15 +30,9 @@ namespace {
 const char kMojoShellInstanceURL[] = "mojo_shell_instance_url";
 const char kMojoPlatformFile[] = "mojo_platform_file";
 
-void DidCreateChannel(mojo::embedder::ChannelInfo* info) {}
-
 base::PlatformFile PlatformFileFromScopedPlatformHandle(
-    mojo::embedder::ScopedPlatformHandle handle) {
-#if defined(OS_POSIX)
-  return handle.release().fd;
-#elif defined(OS_WIN)
+    mojo::edk::ScopedPlatformHandle handle) {
   return handle.release().handle;
-#endif
 }
 
 class InstanceURL : public base::SupportsUserData::Data {
@@ -80,16 +74,6 @@ void SetMojoPlatformFile(RenderProcessHost* render_process_host,
                                    new InstanceShellHandle(platform_file));
 }
 
-void CallRegisterProcessWithBroker(base::ProcessId pid,
-                                   MojoHandle client_pipe) {
-  mojo::shell::mojom::ApplicationManagerPtr application_manager;
-  MojoShellConnection::Get()->GetApplication()->ConnectToService(
-      "mojo:shell", &application_manager);
-  application_manager->RegisterProcessWithBroker(
-      static_cast<uint32_t>(pid),
-      mojo::ScopedHandle(mojo::Handle(client_pipe)));
-}
-
 class PIDSender : public RenderProcessHostObserver {
  public:
   PIDSender(
@@ -127,24 +111,32 @@ class PIDSender : public RenderProcessHostObserver {
 }  // namespace
 
 void RegisterChildWithExternalShell(int child_process_id,
+                                    int instance_id,
                                     RenderProcessHost* render_process_host) {
   // Some process types get created before the main message loop.
   if (!MojoShellConnection::Get())
     return;
 
   // Create the channel to be shared with the target process.
-  mojo::embedder::HandlePassingInformation handle_passing_info;
-  mojo::embedder::PlatformChannelPair platform_channel_pair;
+  mojo::edk::HandlePassingInformation handle_passing_info;
+  mojo::edk::PlatformChannelPair platform_channel_pair;
 
   // Give one end to the shell so that it can create an instance.
-  mojo::embedder::ScopedPlatformHandle platform_channel =
+  mojo::edk::ScopedPlatformHandle parent_pipe =
       platform_channel_pair.PassServerHandle();
-  mojo::ScopedMessagePipeHandle handle(mojo::embedder::CreateChannel(
-      std::move(platform_channel), base::Bind(&DidCreateChannel),
-      base::ThreadTaskRunnerHandle::Get()));
+
+  // Send the other end to the child via Chrome IPC.
+  base::PlatformFile client_file = PlatformFileFromScopedPlatformHandle(
+      platform_channel_pair.PassClientHandle());
+  SetMojoPlatformFile(render_process_host, client_file);
+
+  mojo::ScopedMessagePipeHandle request_pipe =
+      mojo::edk::CreateMessagePipe(std::move(parent_pipe));
+
   mojo::shell::mojom::ApplicationManagerPtr application_manager;
-  MojoShellConnection::Get()->GetApplication()->ConnectToService(
+  MojoShellConnection::Get()->GetConnector()->ConnectToInterface(
       "mojo:shell", &application_manager);
+
   // The content of the URL/qualifier we pass is actually meaningless, it's only
   // important that they're unique per process.
   // TODO(beng): We need to specify a restrictive CapabilityFilter here that
@@ -152,8 +144,8 @@ void RegisterChildWithExternalShell(int child_process_id,
   //             specification is best determined (not here, this is a common
   //             chokepoint for all process types) and how to wire it through.
   //             http://crbug.com/555393
-  std::string url =
-      base::StringPrintf("exe:chrome_renderer%d", child_process_id);
+  std::string url = base::StringPrintf(
+      "exe:chrome_renderer%d_%d", child_process_id, instance_id);
 
   mojo::shell::mojom::PIDReceiverPtr pid_receiver;
   mojo::InterfaceRequest<mojo::shell::mojom::PIDReceiver> request =
@@ -161,15 +153,10 @@ void RegisterChildWithExternalShell(int child_process_id,
   new PIDSender(render_process_host, std::move(pid_receiver));
 
   application_manager->CreateInstanceForHandle(
-      mojo::ScopedHandle(mojo::Handle(handle.release().value())),
+      mojo::ScopedHandle(mojo::Handle(request_pipe.release().value())),
       url,
       CreateCapabilityFilterForRenderer(),
       std::move(request));
-
-  // Send the other end to the child via Chrome IPC.
-  base::PlatformFile client_file = PlatformFileFromScopedPlatformHandle(
-      platform_channel_pair.PassClientHandle());
-  SetMojoPlatformFile(render_process_host, client_file);
 
   // Store the URL on the RPH so client code can access it later via
   // GetMojoApplicationInstanceURL().
@@ -192,28 +179,6 @@ void SendExternalMojoShellHandleToChild(
     return;
   render_process_host->Send(new MojoMsg_BindExternalMojoShellHandle(
       IPC::GetFileHandleForProcess(client_file->get(), process_handle, true)));
-}
-
-mojo::embedder::ScopedPlatformHandle RegisterProcessWithBroker(
-    base::ProcessId pid) {
-  mojo::embedder::PlatformChannelPair platform_channel_pair;
-
-  MojoHandle platform_handle_wrapper;
-  MojoResult rv = mojo::embedder::CreatePlatformHandleWrapper(
-      platform_channel_pair.PassServerHandle(), &platform_handle_wrapper);
-  CHECK_EQ(rv, MOJO_RESULT_OK);
-
-  if (BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    CallRegisterProcessWithBroker(pid, platform_handle_wrapper);
-  } else {
-    BrowserThread::PostTask(
-        BrowserThread::UI,
-        FROM_HERE,
-        base::Bind(CallRegisterProcessWithBroker, pid,
-                   platform_handle_wrapper));
-  }
-
-  return platform_channel_pair.PassClientHandle();
 }
 
 }  // namespace content

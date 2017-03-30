@@ -30,16 +30,28 @@
 
 #include "platform/scroll/ScrollAnimator.h"
 
+#include "cc/animation/scroll_offset_animation_curve.h"
 #include "platform/TraceEvent.h"
+#include "platform/animation/CompositorAnimation.h"
+#include "platform/graphics/CompositorFactory.h"
 #include "platform/graphics/GraphicsLayer.h"
+#include "platform/scroll/MainThreadScrollingReason.h"
 #include "platform/scroll/ScrollableArea.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebCompositorAnimation.h"
 #include "public/platform/WebCompositorSupport.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/PassRefPtr.h"
 
 namespace blink {
+
+namespace {
+
+WebLayer* toWebLayer(GraphicsLayer* layer)
+{
+    return layer ? layer->platformLayer() : nullptr;
+}
+
+} // namespace
 
 PassOwnPtrWillBeRawPtr<ScrollAnimatorBase> ScrollAnimatorBase::create(ScrollableArea* scrollableArea)
 {
@@ -96,61 +108,87 @@ ScrollResultOneDimensional ScrollAnimator::userScroll(
     TRACE_EVENT0("blink", "ScrollAnimator::scroll");
 
     if (granularity == ScrollByPrecisePixel) {
-        if (hasRunningAnimation()) {
-            abortAnimation();
-            resetAnimationState();
-        }
+        // Cancel scroll animation because asked to instant scroll.
+        if (hasRunningAnimation())
+            cancelAnimation();
         return ScrollAnimatorBase::userScroll(orientation, granularity, step, delta);
     }
+
+    bool needsPostAnimationCleanup = m_runState == RunState::PostAnimationCleanup;
+    if (m_runState == RunState::PostAnimationCleanup)
+        resetAnimationState();
 
     float usedPixelDelta = computeDeltaToConsume(orientation, step * delta);
     FloatPoint pixelDelta = (orientation == VerticalScrollbar
         ? FloatPoint(0, usedPixelDelta) : FloatPoint(usedPixelDelta, 0));
-
     FloatPoint targetPos = desiredTargetPosition();
     targetPos.moveBy(pixelDelta);
 
+    if (willAnimateToOffset(targetPos)) {
+        m_lastGranularity = granularity;
+        // Report unused delta only if there is no animation running. See
+        // comment below regarding scroll latching.
+        return ScrollResultOneDimensional(/* didScroll */ true, /* unusedScrollDelta */ 0);
+    }
+
+    // If the run state when this method was called was PostAnimationCleanup and
+    // we're not starting an animation, stay in PostAnimationCleanup state so
+    // that the main thread scrolling reason can be removed.
+    if (needsPostAnimationCleanup)
+        m_runState = RunState::PostAnimationCleanup;
+
+    // Report unused delta only if there is no animation and we are not
+    // starting one. This ensures we latch for the duration of the
+    // animation rather than animating multiple scrollers at the same time.
+    return ScrollResultOneDimensional(/* didScroll */ false, delta);
+}
+
+bool ScrollAnimator::willAnimateToOffset(const FloatPoint& targetPos)
+{
+    if (m_runState == RunState::PostAnimationCleanup)
+        resetAnimationState();
+
+    if (m_runState == RunState::WaitingToCancelOnCompositor) {
+        // Ignore user scroll if WaitingToCancelOnCompositor. Can be in this
+        // state when holding down an arrow.
+        // TODO(ymalik): Handle this case by either updating the target on the
+        // current scroll or starting a new animation (see crbug.com/599876).
+        return true;
+    }
+
     if (m_animationCurve) {
-        if ((targetPos - m_targetOffset).isZero()) {
-            // Report unused delta only if there is no animation running. See
-            // comment below regarding scroll latching.
-            return ScrollResultOneDimensional(/* didScroll */ true, /* unusedScrollDelta */ 0);
-        }
+        if ((targetPos - m_targetOffset).isZero())
+            return true;
 
         m_targetOffset = targetPos;
         ASSERT(m_runState == RunState::RunningOnMainThread
             || m_runState == RunState::RunningOnCompositor
-            || m_runState == RunState::RunningOnCompositorButNeedsUpdate);
-
-        if (m_runState == RunState::RunningOnCompositor
-            || m_runState == RunState::RunningOnCompositorButNeedsUpdate) {
-            if (registerAndScheduleAnimation())
-                m_runState = RunState::RunningOnCompositorButNeedsUpdate;
-            return ScrollResultOneDimensional(/* didScroll */ true, /* unusedScrollDelta */ 0);
-        }
+            || m_runState == RunState::RunningOnCompositorButNeedsUpdate
+            || m_runState == RunState::RunningOnCompositorButNeedsTakeover);
 
         // Running on the main thread, simply update the target offset instead
         // of sending to the compositor.
-        m_animationCurve->updateTarget(m_timeFunction() - m_startTime,
-            compositorOffsetFromBlinkOffset(targetPos));
-        return ScrollResultOneDimensional(/* didScroll */ true, /* unusedScrollDelta */ 0);
+        if (m_runState == RunState::RunningOnMainThread) {
+            m_animationCurve->updateTarget(m_timeFunction() - m_startTime,
+                compositorOffsetFromBlinkOffset(targetPos));
+            return true;
+        }
+
+        if (registerAndScheduleAnimation())
+            m_runState = RunState::RunningOnCompositorButNeedsUpdate;
+        return true;
     }
 
-    if ((targetPos - currentPosition()).isZero()) {
-        // Report unused delta only if there is no animation and we are not
-        // starting one. This ensures we latch for the duration of the
-        // animation rather than animating multiple scrollers at the same time.
-        return ScrollResultOneDimensional(/* didScroll */ false, delta);
-    }
+    if ((targetPos - currentPosition()).isZero())
+        return false;
 
     m_targetOffset = targetPos;
     m_startTime = m_timeFunction();
-    m_lastGranularity = granularity;
 
     if (registerAndScheduleAnimation())
         m_runState = RunState::WaitingToSendToCompositor;
 
-    return ScrollResultOneDimensional(/* didScroll */ true, /* unusedScrollDelta */ 0);
+    return true;
 }
 
 void ScrollAnimator::scrollToOffsetWithoutAnimation(const FloatPoint& offset)
@@ -181,7 +219,7 @@ void ScrollAnimator::tickAnimation(double monotonicTime)
     m_currentPosY = offset.y();
 
     if (isFinished)
-        resetAnimationState();
+        m_runState = RunState::PostAnimationCleanup;
     else
         scrollableArea()->scheduleAnimation();
 
@@ -189,8 +227,52 @@ void ScrollAnimator::tickAnimation(double monotonicTime)
     notifyPositionChanged();
 }
 
+void ScrollAnimator::postAnimationCleanupAndReset()
+{
+    // Remove the temporary main thread scrolling reason that was added while
+    // main thread had scheduled an animation.
+    removeMainThreadScrollingReason();
+
+    resetAnimationState();
+}
+
+bool ScrollAnimator::sendAnimationToCompositor()
+{
+    if (m_scrollableArea->shouldScrollOnMainThread())
+        return false;
+
+    OwnPtr<CompositorAnimation> animation = adoptPtr(
+        CompositorFactory::current().createAnimation(
+            *m_animationCurve,
+            CompositorTargetProperty::SCROLL_OFFSET));
+    // Being here means that either there is an animation that needs
+    // to be sent to the compositor, or an animation that needs to
+    // be updated (a new scroll event before the previous animation
+    // is finished). In either case, the start time is when the
+    // first animation was initiated. This re-targets the animation
+    // using the current time on main thread.
+    animation->setStartTime(m_startTime);
+
+    int animationId = animation->id();
+    int animationGroupId = animation->group();
+
+    bool sentToCompositor = addAnimation(animation.release());
+    if (sentToCompositor) {
+        m_runState = RunState::RunningOnCompositor;
+        m_compositorAnimationId = animationId;
+        m_compositorAnimationGroupId = animationGroupId;
+    }
+
+    return sentToCompositor;
+}
+
 void ScrollAnimator::updateCompositorAnimations()
 {
+    if (m_runState == RunState::PostAnimationCleanup) {
+        postAnimationCleanupAndReset();
+        return;
+    }
+
     if (m_compositorAnimationId && m_runState != RunState::RunningOnCompositor
         && m_runState != RunState::RunningOnCompositorButNeedsUpdate) {
         // If the current run state is WaitingToSendToCompositor but we have a
@@ -198,14 +280,21 @@ void ScrollAnimator::updateCompositorAnimations()
         // compositor animation that needs to be removed here before the new
         // animation is added below.
         ASSERT(m_runState == RunState::WaitingToCancelOnCompositor
-            || m_runState == RunState::WaitingToSendToCompositor);
+            || m_runState == RunState::WaitingToSendToCompositor
+            || m_runState == RunState::RunningOnCompositorButNeedsTakeover);
 
-        abortAnimation();
+        if (m_runState == RunState::RunningOnCompositorButNeedsTakeover) {
+            // The animation is already aborted when the call to
+            // ::takeoverCompositorAnimation is made.
+            m_runState = RunState::WaitingToSendToCompositor;
+        } else {
+            abortAnimation();
+        }
 
         m_compositorAnimationId = 0;
         m_compositorAnimationGroupId = 0;
         if (m_runState == RunState::WaitingToCancelOnCompositor) {
-            resetAnimationState();
+            postAnimationCleanupAndReset();
             return;
         }
     }
@@ -226,45 +315,44 @@ void ScrollAnimator::updateCompositorAnimations()
         }
 
         if (!m_animationCurve) {
-            m_animationCurve = adoptPtr(Platform::current()->compositorSupport()
-                ->createScrollOffsetAnimationCurve(
-                    compositorOffsetFromBlinkOffset(m_targetOffset),
-                    WebCompositorAnimationCurve::TimingFunctionTypeEaseInOut,
-                    m_lastGranularity == ScrollByPixel ?
-                        WebScrollOffsetAnimationCurve::ScrollDurationInverseDelta :
-                        WebScrollOffsetAnimationCurve::ScrollDurationConstant));
+            m_animationCurve = adoptPtr(CompositorFactory::current().createScrollOffsetAnimationCurve(
+                compositorOffsetFromBlinkOffset(m_targetOffset),
+                CompositorAnimationCurve::TimingFunctionTypeEaseInOut,
+                m_lastGranularity == ScrollByPixel ?
+                    CompositorScrollOffsetAnimationCurve::ScrollDurationInverseDelta :
+                    CompositorScrollOffsetAnimationCurve::ScrollDurationConstant));
             m_animationCurve->setInitialValue(compositorOffsetFromBlinkOffset(currentPosition()));
         }
 
-        bool sentToCompositor = false;
-        if (!m_scrollableArea->shouldScrollOnMainThread()) {
-            OwnPtr<WebCompositorAnimation> animation = adoptPtr(
-                Platform::current()->compositorSupport()->createAnimation(
-                    *m_animationCurve,
-                    WebCompositorAnimation::TargetPropertyScrollOffset));
-            // Being here means that either there is an animation that needs
-            // to be sent to the compositor, or an animation that needs to
-            // be updated (a new scroll event before the previous animation
-            // is finished). In either case, the start time is when the
-            // first animation was initiated. This re-targets the animation
-            // using the current time on main thread.
-            animation->setStartTime(m_startTime);
-
-            int animationId = animation->id();
-            int animationGroupId = animation->group();
-
-            sentToCompositor = addAnimation(animation.release());
-            if (sentToCompositor) {
-                m_runState = RunState::RunningOnCompositor;
-                m_compositorAnimationId = animationId;
-                m_compositorAnimationGroupId = animationGroupId;
-            }
-        }
-
+        bool runningOnMainThread = false;
+        bool sentToCompositor = sendAnimationToCompositor();
         if (!sentToCompositor) {
-            if (registerAndScheduleAnimation())
+            runningOnMainThread = registerAndScheduleAnimation();
+            if (runningOnMainThread)
                 m_runState = RunState::RunningOnMainThread;
         }
+
+        // Main thread should deal with the scroll animations it started.
+        if (sentToCompositor || runningOnMainThread)
+            addMainThreadScrollingReason();
+        else
+            removeMainThreadScrollingReason();
+    }
+}
+
+void ScrollAnimator::addMainThreadScrollingReason()
+{
+    if (WebLayer* scrollLayer = toWebLayer(scrollableArea()->layerForScrolling())) {
+        scrollLayer->addMainThreadScrollingReasons(
+            MainThreadScrollingReason::kAnimatingScrollOnMainThread);
+    }
+}
+
+void ScrollAnimator::removeMainThreadScrollingReason()
+{
+    if (WebLayer* scrollLayer = toWebLayer(scrollableArea()->layerForScrolling())) {
+        scrollLayer->clearMainThreadScrollingReasons(
+            MainThreadScrollingReason::kAnimatingScrollOnMainThread);
     }
 }
 
@@ -280,15 +368,47 @@ void ScrollAnimator::notifyCompositorAnimationFinished(int groupId)
     ScrollAnimatorCompositorCoordinator::compositorAnimationFinished(groupId);
 }
 
+void ScrollAnimator::notifyAnimationTakeover(
+    double monotonicTime,
+    double animationStartTime,
+    scoped_ptr<cc::AnimationCurve> curve)
+{
+    // If there is already an animation running and the compositor asks to take
+    // over an animation, do nothing to avoid judder.
+    if (hasRunningAnimation())
+        return;
+
+    cc::ScrollOffsetAnimationCurve* scrollOffsetAnimationCurve =
+        curve->ToScrollOffsetAnimationCurve();
+    FloatPoint targetValue(scrollOffsetAnimationCurve->target_value().x(),
+        scrollOffsetAnimationCurve->target_value().y());
+    if (willAnimateToOffset(targetValue)) {
+        m_animationCurve = adoptPtr(
+            CompositorFactory::current().createScrollOffsetAnimationCurve(
+                std::move(scrollOffsetAnimationCurve)));
+        m_startTime = animationStartTime;
+    }
+}
+
 void ScrollAnimator::cancelAnimation()
 {
     ScrollAnimatorCompositorCoordinator::cancelAnimation();
 }
 
-void ScrollAnimator::layerForCompositedScrollingDidChange(
-    WebCompositorAnimationTimeline* timeline)
+void ScrollAnimator::takeoverCompositorAnimation()
 {
-    reattachCompositorPlayerIfNeeded(timeline);
+    if (m_runState == RunState::RunningOnCompositor
+        || m_runState ==  RunState::RunningOnCompositorButNeedsUpdate)
+        removeMainThreadScrollingReason();
+
+    ScrollAnimatorCompositorCoordinator::takeoverCompositorAnimation();
+}
+
+void ScrollAnimator::layerForCompositedScrollingDidChange(
+    CompositorAnimationTimeline* timeline)
+{
+    if (reattachCompositorPlayerIfNeeded(timeline) && m_animationCurve)
+        addMainThreadScrollingReason();
 }
 
 bool ScrollAnimator::registerAndScheduleAnimation()

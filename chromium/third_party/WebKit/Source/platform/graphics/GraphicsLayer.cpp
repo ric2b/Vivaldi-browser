@@ -32,9 +32,12 @@
 #include "platform/DragImage.h"
 #include "platform/JSONValues.h"
 #include "platform/TraceEvent.h"
+#include "platform/animation/CompositorAnimation.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/BitmapImage.h"
+#include "platform/graphics/CompositorFactory.h"
+#include "platform/graphics/CompositorFilterOperations.h"
 #include "platform/graphics/FirstPaintInvalidationTracking.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsLayerFactory.h"
@@ -46,9 +49,7 @@
 #include "platform/scroll/ScrollableArea.h"
 #include "platform/text/TextStream.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebCompositorAnimation.h"
 #include "public/platform/WebCompositorSupport.h"
-#include "public/platform/WebFilterOperations.h"
 #include "public/platform/WebFloatPoint.h"
 #include "public/platform/WebFloatRect.h"
 #include "public/platform/WebLayer.h"
@@ -96,7 +97,6 @@ GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
     , m_backgroundColor(Color::transparent)
     , m_opacity(1)
     , m_blendMode(WebBlendModeNormal)
-    , m_scrollBlocksOn(WebScrollBlocksOnNone)
     , m_hasTransformOrigin(false)
     , m_contentsOpaque(false)
     , m_shouldFlattenTransform(true)
@@ -131,9 +131,6 @@ GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
     m_layer = adoptPtr(Platform::current()->compositorSupport()->createContentLayer(m_contentLayerDelegate.get()));
     m_layer->layer()->setDrawsContent(m_drawsContent && m_contentsVisible);
     m_layer->layer()->setLayerClient(this);
-
-    // TODO(rbyers): Expose control over this to the web - crbug.com/489802:
-    setScrollBlocksOn(WebScrollBlocksOnStartTouch | WebScrollBlocksOnWheelEvent);
 }
 
 GraphicsLayer::~GraphicsLayer()
@@ -160,9 +157,11 @@ GraphicsLayer::~GraphicsLayer()
     ASSERT(!m_parent);
 }
 
-IntRect GraphicsLayer::visualRect() const
+LayoutRect GraphicsLayer::visualRect() const
 {
-    return enclosingIntRect(FloatRect(FloatPoint(0, 0), size()));
+    LayoutRect bounds = LayoutRect(FloatPoint(), size());
+    bounds.move(offsetFromLayoutObjectWithSubpixelAccumulation());
+    return bounds;
 }
 
 void GraphicsLayer::setDrawDebugRedFillForTesting(bool enabled)
@@ -303,6 +302,11 @@ void GraphicsLayer::setOffsetDoubleFromLayoutObject(const DoubleSize& offset, Sh
         setNeedsDisplay();
 }
 
+LayoutSize GraphicsLayer::offsetFromLayoutObjectWithSubpixelAccumulation() const
+{
+    return LayoutSize(offsetFromLayoutObject()) + client()->subpixelAccumulation();
+}
+
 IntRect GraphicsLayer::interestRect()
 {
     return m_previousInterestRect;
@@ -311,7 +315,7 @@ IntRect GraphicsLayer::interestRect()
 void GraphicsLayer::paint(const IntRect* interestRect, GraphicsContext::DisabledMode disabledMode)
 {
     if (paintWithoutCommit(interestRect, disabledMode))
-        paintController().commitNewDisplayItems();
+        paintController().commitNewDisplayItems(offsetFromLayoutObjectWithSubpixelAccumulation());
 }
 
 bool GraphicsLayer::paintWithoutCommit(const IntRect* interestRect, GraphicsContext::DisabledMode disabledMode)
@@ -359,8 +363,15 @@ bool GraphicsLayer::paintWithoutCommit(const IntRect* interestRect, GraphicsCont
 void GraphicsLayer::notifyFirstPaintToClient()
 {
     if (!m_painted) {
-        m_painted = true;
-        m_client->notifyFirstPaint();
+        DisplayItemList& itemList = m_paintController->newDisplayItemList();
+        for (DisplayItem& item : itemList) {
+            DisplayItem::Type type = item.type();
+            if (DisplayItem::isDrawingType(type) && type != DisplayItem::DocumentBackground && type != DisplayItem::DebugRedFill && static_cast<const DrawingDisplayItem&>(item).picture()) {
+                m_painted = true;
+                m_client->notifyFirstPaint();
+                break;
+            }
+        }
     }
     if (!m_textPainted && m_paintController->textPainted()) {
         m_textPainted = true;
@@ -569,7 +580,7 @@ static bool compareFloatRects(const FloatRect& a, const FloatRect& b)
 template <typename T>
 static PassRefPtr<JSONArray> pointAsJSONArray(const T& point)
 {
-    RefPtr<JSONArray> array = adoptRef(new JSONArray);
+    RefPtr<JSONArray> array = JSONArray::create();
     array->pushNumber(point.x());
     array->pushNumber(point.y());
     return array;
@@ -578,7 +589,7 @@ static PassRefPtr<JSONArray> pointAsJSONArray(const T& point)
 template <typename T>
 static PassRefPtr<JSONArray> sizeAsJSONArray(const T& size)
 {
-    RefPtr<JSONArray> array = adoptRef(new JSONArray);
+    RefPtr<JSONArray> array = JSONArray::create();
     array->pushNumber(size.width());
     array->pushNumber(size.height());
     return array;
@@ -587,7 +598,7 @@ static PassRefPtr<JSONArray> sizeAsJSONArray(const T& size)
 template <typename T>
 static PassRefPtr<JSONArray> rectAsJSONArray(const T& rect)
 {
-    RefPtr<JSONArray> array = adoptRef(new JSONArray);
+    RefPtr<JSONArray> array = JSONArray::create();
     array->pushNumber(rect.x());
     array->pushNumber(rect.y());
     array->pushNumber(rect.width());
@@ -602,9 +613,9 @@ static double roundCloseToZero(double number)
 
 static PassRefPtr<JSONArray> transformAsJSONArray(const TransformationMatrix& t)
 {
-    RefPtr<JSONArray> array = adoptRef(new JSONArray);
+    RefPtr<JSONArray> array = JSONArray::create();
     {
-        RefPtr<JSONArray> row = adoptRef(new JSONArray);
+        RefPtr<JSONArray> row = JSONArray::create();
         row->pushNumber(roundCloseToZero(t.m11()));
         row->pushNumber(roundCloseToZero(t.m12()));
         row->pushNumber(roundCloseToZero(t.m13()));
@@ -612,7 +623,7 @@ static PassRefPtr<JSONArray> transformAsJSONArray(const TransformationMatrix& t)
         array->pushArray(row);
     }
     {
-        RefPtr<JSONArray> row = adoptRef(new JSONArray);
+        RefPtr<JSONArray> row = JSONArray::create();
         row->pushNumber(roundCloseToZero(t.m21()));
         row->pushNumber(roundCloseToZero(t.m22()));
         row->pushNumber(roundCloseToZero(t.m23()));
@@ -620,7 +631,7 @@ static PassRefPtr<JSONArray> transformAsJSONArray(const TransformationMatrix& t)
         array->pushArray(row);
     }
     {
-        RefPtr<JSONArray> row = adoptRef(new JSONArray);
+        RefPtr<JSONArray> row = JSONArray::create();
         row->pushNumber(roundCloseToZero(t.m31()));
         row->pushNumber(roundCloseToZero(t.m32()));
         row->pushNumber(roundCloseToZero(t.m33()));
@@ -628,7 +639,7 @@ static PassRefPtr<JSONArray> transformAsJSONArray(const TransformationMatrix& t)
         array->pushArray(row);
     }
     {
-        RefPtr<JSONArray> row = adoptRef(new JSONArray);
+        RefPtr<JSONArray> row = JSONArray::create();
         row->pushNumber(roundCloseToZero(t.m41()));
         row->pushNumber(roundCloseToZero(t.m42()));
         row->pushNumber(roundCloseToZero(t.m43()));
@@ -647,7 +658,7 @@ static String pointerAsString(const void* ptr)
 
 PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags, RenderingContextMap& renderingContextMap) const
 {
-    RefPtr<JSONObject> json = adoptRef(new JSONObject);
+    RefPtr<JSONObject> json = JSONObject::create();
 
     if (flags & LayerTreeIncludesDebugInfo) {
         json->setString("this", pointerAsString(this));
@@ -719,7 +730,7 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags, Rend
             Vector<FloatRect>& rects = it->value.invalidationRects;
             if (!rects.isEmpty()) {
                 std::sort(rects.begin(), rects.end(), &compareFloatRects);
-                RefPtr<JSONArray> rectsJSON = adoptRef(new JSONArray);
+                RefPtr<JSONArray> rectsJSON = JSONArray::create();
                 for (auto& rect : rects) {
                     if (rect.isEmpty())
                         continue;
@@ -732,7 +743,7 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags, Rend
         if (flags & LayerTreeIncludesPaintInvalidationObjects) {
             Vector<String>& clients = it->value.invalidationObjects;
             if (!clients.isEmpty()) {
-                RefPtr<JSONArray> clientsJSON = adoptRef(new JSONArray);
+                RefPtr<JSONArray> clientsJSON = JSONArray::create();
                 for (auto& clientString : clients)
                     clientsJSON->pushString(clientString);
                 json->setArray("paintInvalidationClients", clientsJSON);
@@ -741,7 +752,7 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags, Rend
     }
 
     if ((flags & LayerTreeIncludesPaintingPhases) && m_paintingPhase) {
-        RefPtr<JSONArray> paintingPhasesJSON = adoptRef(new JSONArray);
+        RefPtr<JSONArray> paintingPhasesJSON = JSONArray::create();
         if (m_paintingPhase & GraphicsLayerPaintBackground)
             paintingPhasesJSON->pushString("GraphicsLayerPaintBackground");
         if (m_paintingPhase & GraphicsLayerPaintForeground)
@@ -766,16 +777,23 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags, Rend
 
     if (flags & (LayerTreeIncludesDebugInfo | LayerTreeIncludesCompositingReasons)) {
         bool debug = flags & LayerTreeIncludesDebugInfo;
-        RefPtr<JSONArray> compositingReasonsJSON = adoptRef(new JSONArray);
+        RefPtr<JSONArray> compositingReasonsJSON = JSONArray::create();
         for (size_t i = 0; i < kNumberOfCompositingReasons; ++i) {
             if (m_debugInfo.compositingReasons() & kCompositingReasonStringMap[i].reason)
                 compositingReasonsJSON->pushString(debug ? kCompositingReasonStringMap[i].description : kCompositingReasonStringMap[i].shortName);
         }
         json->setArray("compositingReasons", compositingReasonsJSON);
+
+        RefPtr<JSONArray> squashingDisallowedReasonsJSON = JSONArray::create();
+        for (size_t i = 0; i < kNumberOfSquashingDisallowedReasons; ++i) {
+            if (m_debugInfo.squashingDisallowedReasons() & kSquashingDisallowedReasonStringMap[i].reason)
+                squashingDisallowedReasonsJSON->pushString(debug ? kSquashingDisallowedReasonStringMap[i].description : kSquashingDisallowedReasonStringMap[i].shortName);
+        }
+        json->setArray("squashingDisallowedReasons", squashingDisallowedReasonsJSON);
     }
 
     if (m_children.size()) {
-        RefPtr<JSONArray> childrenJSON = adoptRef(new JSONArray);
+        RefPtr<JSONArray> childrenJSON = JSONArray::create();
         for (size_t i = 0; i < m_children.size(); i++)
             childrenJSON->pushObject(m_children[i]->layerTreeAsJSON(flags, renderingContextMap));
         json->setArray("children", childrenJSON);
@@ -825,6 +843,11 @@ String GraphicsLayer::debugName(cc::Layer* layer) const
 void GraphicsLayer::setCompositingReasons(CompositingReasons reasons)
 {
     m_debugInfo.setCompositingReasons(reasons);
+}
+
+void GraphicsLayer::setSquashingDisallowedReasons(SquashingDisallowedReasons reasons)
+{
+    m_debugInfo.setSquashingDisallowedReasons(reasons);
 }
 
 void GraphicsLayer::setOwnerNodeId(int nodeId)
@@ -1003,14 +1026,6 @@ void GraphicsLayer::setBlendMode(WebBlendMode blendMode)
     platformLayer()->setBlendMode(blendMode);
 }
 
-void GraphicsLayer::setScrollBlocksOn(WebScrollBlocksOn scrollBlocksOn)
-{
-    if (m_scrollBlocksOn == scrollBlocksOn)
-        return;
-    m_scrollBlocksOn = scrollBlocksOn;
-    platformLayer()->setScrollBlocksOn(scrollBlocksOn);
-}
-
 void GraphicsLayer::setIsRootForIsolatedGroup(bool isolated)
 {
     if (m_isRootForIsolatedGroup == isolated)
@@ -1107,15 +1122,11 @@ void GraphicsLayer::setContentsToImage(Image* image, RespectImageOrientationEnum
     setContentsTo(m_imageLayer ? m_imageLayer->layer() : 0);
 }
 
-bool GraphicsLayer::addAnimation(PassOwnPtr<WebCompositorAnimation> popAnimation)
+bool GraphicsLayer::addAnimation(PassOwnPtr<CompositorAnimation> animation)
 {
-    OwnPtr<WebCompositorAnimation> animation(std::move(popAnimation));
     ASSERT(animation);
     platformLayer()->setAnimationDelegate(this);
-
-    // Remove any existing animations with the same animation id and target property.
-    platformLayer()->removeAnimation(animation->id(), animation->targetProperty());
-    return platformLayer()->addAnimation(animation.leakPtr());
+    return platformLayer()->addAnimation(animation->releaseCCAnimation());
 }
 
 void GraphicsLayer::pauseAnimation(int animationId, double timeOffset)
@@ -1141,21 +1152,17 @@ WebLayer* GraphicsLayer::platformLayer() const
 void GraphicsLayer::setFilters(const FilterOperations& filters)
 {
     SkiaImageFilterBuilder builder;
-    OwnPtr<WebFilterOperations> webFilters = adoptPtr(Platform::current()->compositorSupport()->createFilterOperations());
-    FilterOutsets outsets = filters.outsets();
-    builder.setCropOffset(FloatSize(outsets.left(), outsets.top()));
+    OwnPtr<CompositorFilterOperations> webFilters = adoptPtr(CompositorFactory::current().createFilterOperations());
     builder.buildFilterOperations(filters, webFilters.get());
-    m_layer->layer()->setFilters(*webFilters);
+    m_layer->layer()->setFilters(webFilters->asFilterOperations());
 }
 
 void GraphicsLayer::setBackdropFilters(const FilterOperations& filters)
 {
     SkiaImageFilterBuilder builder;
-    OwnPtr<WebFilterOperations> webFilters = adoptPtr(Platform::current()->compositorSupport()->createFilterOperations());
-    FilterOutsets outsets = filters.outsets();
-    builder.setCropOffset(FloatSize(outsets.left(), outsets.top()));
+    OwnPtr<CompositorFilterOperations> webFilters = adoptPtr(CompositorFactory::current().createFilterOperations());
     builder.buildFilterOperations(filters, webFilters.get());
-    m_layer->layer()->setBackgroundFilters(*webFilters);
+    m_layer->layer()->setBackgroundFilters(webFilters->asFilterOperations());
 }
 
 void GraphicsLayer::setFilterQuality(SkFilterQuality filterQuality)

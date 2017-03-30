@@ -41,16 +41,6 @@ public:
     public:
         virtual ~WebGLAttachment();
 
-        virtual GLsizei width() const = 0;
-        virtual GLsizei height() const = 0;
-        virtual GLsizei depth() const = 0;
-        virtual GLenum format() const = 0;
-        // For texture attachment, type() returns the type of the attached texture.
-        // For renderbuffer attachment, the type of the renderbuffer may vary with GL implementation.
-        // To avoid confusion, it would be better to not implement type() for renderbuffer attachment and
-        // we should always use the internalformat of the renderbuffer and avoid using type() API.
-        virtual GLenum type() const = 0;
-        virtual bool isCubeComplete() const = 0;
         virtual WebGLSharedObject* object() const = 0;
         virtual bool isSharedObject(WebGLSharedObject*) const = 0;
         virtual bool valid() const = 0;
@@ -78,19 +68,10 @@ public:
     void removeAttachmentFromBoundFramebuffer(GLenum target, GLenum attachment);
     WebGLSharedObject* getAttachmentObject(GLenum) const;
 
-    GLenum colorBufferFormat() const;
-
-    // This should always be called before drawArray, drawElements, clear,
-    // readPixels, copyTexImage2D, copyTexSubImage2D if this framebuffer is
-    // currently bound.
-    // Return false if the framebuffer is incomplete.
-    bool onAccess(WebGraphicsContext3D*, const char** reason);
-
-    // Software version of glCheckFramebufferStatus(), except that when
-    // FRAMEBUFFER_COMPLETE is returned, it is still possible for
-    // glCheckFramebufferStatus() to return FRAMEBUFFER_UNSUPPORTED,
-    // depending on hardware implementation.
-    GLenum checkStatus(const char** reason) const;
+    // WebGL 1 specific:
+    //   1) can't allow depth_stencil for depth/stencil attachments, and vice versa.
+    //   2) no conflicting DEPTH/STENCIL/DEPTH_STENCIL attachments.
+    GLenum checkDepthStencilStatus(const char** reason) const;
 
     bool hasEverBeenBound() const { return object() && m_hasEverBeenBound; }
 
@@ -107,10 +88,6 @@ public:
 
     GLenum getReadBuffer() const { return m_readBuffer; }
 
-    // If readbuffer is GL_NONE or no image is attached, return false.
-    // Note: it's ok for format or type to be nullptr.
-    bool getReadBufferFormatAndType(GLenum* format, GLenum* type) const;
-
     DECLARE_VIRTUAL_TRACE();
 
 protected:
@@ -121,7 +98,6 @@ protected:
 
 private:
     WebGLAttachment* getAttachment(GLenum attachment) const;
-    bool isAttachmentComplete(WebGLAttachment* attachedObject, GLenum attachment, const char** reason) const;
 
     // Check if the framebuffer is currently bound.
     bool isBound(GLenum target) const;

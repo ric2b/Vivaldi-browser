@@ -11,7 +11,13 @@
 
 #include "components/safe_browsing_db/database_manager.h"
 
+namespace net {
+class URLRequestContextGetter;
+}
+
 namespace safe_browsing {
+
+struct V4ProtocolConfig;
 
 // This is a non-pure-virtual implementation of the SafeBrowsingDatabaseManager
 // interface.  It's used in tests by overriding only the functions that get
@@ -31,16 +37,20 @@ class TestSafeBrowsingDatabaseManager
                         Client* client) override;
   bool CheckExtensionIDs(const std::set<std::string>& extension_ids,
                          Client* client) override;
+  bool CheckResourceUrl(const GURL& url, Client* client) override;
   bool MatchCsdWhitelistUrl(const GURL& url) override;
   bool MatchMalwareIP(const std::string& ip_address) override;
   bool MatchDownloadWhitelistUrl(const GURL& url) override;
   bool MatchDownloadWhitelistString(const std::string& str) override;
   bool MatchInclusionWhitelistUrl(const GURL& url) override;
+  bool MatchModuleWhitelistString(const std::string& str) override;
   bool IsMalwareKillSwitchOn() override;
   bool IsCsdWhitelistKillSwitchOn() override;
   void CancelCheck(Client* client) override;
   void CheckApiBlacklistUrl(const GURL& url, Client* client) override;
-  void StartOnIOThread() override;
+  void StartOnIOThread(
+      net::URLRequestContextGetter* request_context_getter,
+      const V4ProtocolConfig& config) override;
   void StopOnIOThread(bool shutdown) override;
 
  protected:

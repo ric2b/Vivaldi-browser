@@ -61,12 +61,10 @@
   [Use this issue tracker
   query](https://code.google.com/p/chromium/issues/list?can=2&q=status%3Aunconfirmed&sort=-id&num=1000).
 
-* Press **h** to bring up a preview of the bug text.
-
-* Use **j** and **k** to advance through bugs.
+* Read the title of the bug.
 
 * If a bug looks like it might be network/download/safe-browsing related,
-  middle click (or command-click on OSX) to open in new tab.
+  middle click (or command-click on OSX) to open it in a new tab.
 
 * If a user provides a crash ID for a crasher for a bug that could be
   net-related, look at the crash stack at
@@ -79,22 +77,26 @@
 
 * If network causes are possible, ask for a net-internals log (If it's not a
   browser crash) and attach the most specific internals-network label that's
-  applicable.  If there isn't an applicable narrower label, a clear owner for
-  the issue, or there are multiple possibilities, attach the internals-network
-  label and proceed with further investigation.
+  applicable.  If there isn't an applicable narrower component, a clear owner
+  for the issue, or there are multiple possibilities, attach the
+  Internals>Network component and proceed with further investigation.
 
-* If non-network causes also seem possible, attach those labels as well.
+* If non-network causes also seem possible, attach those components as well.
 
-## Investigating Cr-Internals-Network bugs
+## Investigating component=Internals>Network bugs
 
 * It's recommended that while on triage duty, you subscribe to the
-  Cr-Internals-Network label.  To do this, go to the issue tracker and click on
-  [Subscriptions](https://code.google.com/p/chromium/issues/subscriptions).
-  Enter "Cr-Internals-Network" and click submit.
+  Internals>Network component (but not its subcomponents). To do this, go
+  to the issue tracker and then click "Saved Queries".
+  Add a query with these settings:
+    * Saved query name: Network Bug Triage
+    * Project: chromium
+    * Query: component=Internals>Network
+    * Subscription options: Notify Immediately
 
-* Look through uncomfirmed and untriaged Cr-Internals-Network bugs,
+* Look through uncomfirmed and untriaged component=Internals>Network bugs,
   prioritizing those updated within the last week. [Use this issue tracker
-  query](https://code.google.com/p/chromium/issues/list?can=2&q=Cr%3DInternals-Network+-status%3AAssigned+-status%3AStarted+-status%3AAvailable+&sort=-modified).
+  query](https://bugs.chromium.org/p/chromium/issues/list?can=2&q=component%3DInternals%3ENetwork+-status%3AAssigned+-status%3AStarted+-status%3AAvailable&sort=-modified&colspec=ID+Pri+M+Stars+ReleaseBlock+Component+Status+Owner+Summary+OS+Modified&x=m&y=releaseblock&cells=ids).
 
 * If more information is needed from the reporter, ask for it and add the
   Needs-Feedback label.  If the reporter has answered an earlier request for
@@ -107,28 +109,28 @@
   it Type-Bug-Security.  If it has privacy implication (History, cookies
   discoverable by an entity that shouldn't be able to do so, incognito state
   being saved in memory or on disk beyond the lifetime of incognito tabs, etc),
-  mark it Cr-Privacy.
+  mark it with component Privacy.
 
-* For bugs that already have a more specific network label, go ahead and remove
-  the Cr-Internals-Network label and move on.
+* For bugs that already have a more specific network component, go ahead and
+  remove the Internals>Network component and move on.
 
 * Try to figure out if it's really a network bug.  See common non-network
-  labels section for description of common labels needed for issues incorrectly
-  tagged as Cr-Internals-Network.
+  components section for description of common components for issues incorrectly
+  tagged as Internals>Network.
 
-* If it's not, attach appropriate labels and go no further.
+* If it's not, attach appropriate labels/components and go no further.
 
-* If it may be a network bug, attach additional possibly relevant labels if
+* If it may be a network bug, attach additional possibly relevant component if
   any, and continue investigating.  Once you either determine it's a
-  non-network bug, or figure out accurate more specific network labels, your
+  non-network bug, or figure out accurate more specific network components, your
   job is done, though you should still ask for a net-internals dump if it seems
   likely to be useful.
 
 * Note that ChromeOS-specific network-related code (Captive portal detection,
   connectivity detection, login, etc) may not all have appropriate more
-  specific labels, but are not in areas handled by the network stack team.
-  Just make sure those have the OS-Chrome label, and any more specific labels
-  if applicable, and then move on.
+  specific subcomponents, but are not in areas handled by the network stack
+  team. Just make sure those have the OS-Chrome label, and any more specific
+  labels if applicable, and then move on.
 
 * Gather data and investigate.
     * Remember to add the Needs-Feedback label whenever waiting for the user to
@@ -142,8 +144,8 @@
       https://sites.google.com/a/chromium.org/dev/for-testers/providing-network-details.
       Can just grab the link from about:net-internals, as needed.
 
-* Try to figure out what's going on, and which more specific network label is
-  most appropriate.
+* Try to figure out what's going on, and which more specific network component
+  is most appropriate.
 
 * If it's a regression, browse through the git history of relevant files to try
   and figure out when it regressed.  CC authors / primary reviewers of any
@@ -156,8 +158,8 @@
   Write up a net-internals tips and tricks docs.
 
 * If it appears to be a bug in the unowned core of the network stack (i.e. no
-  sublabel applies, or only the Cr-Internals-Network-HTTP sublabel applies, and
-  there's no clear owner), try to figure out the exact cause.
+  subcomponent applies, or only the Internals>Network>HTTP subcomponent
+  applies, and there's no clear owner), try to figure out the exact cause.
 
 ## Monitoring UMA histograms and Chirp/Gasper alerts
 
@@ -222,7 +224,7 @@ the action you've taken and why, including issue link if an issue was filed.
 
 ## Dealing with old bugs
 
-* For all network issues (Even those with owners, or a more specific labels):
+* For all network issues (Even those with owners, or a more specific component):
 
     * If the issue has had the Needs-Feedback label for over a month, verify it
       is waiting on feedback from the user.  If not, remove the label.
@@ -237,7 +239,7 @@ the action you've taken and why, including issue link if an issue was filed.
         * Otherwise, ask reporters if the issue is still present, and attach
           the Needs-Feedback label.
 
-* Old unconfirmed or untriaged Cr-Internals-Network issues can be investigated
+* Old unconfirmed or untriaged Internals>Network issues can be investigated
   just like newer ones.  Crashers should generally be given higher priority,
   since we can verify if they still occur, and then newer issues, as they're
   more likely to still be present, and more likely to have a still responsive

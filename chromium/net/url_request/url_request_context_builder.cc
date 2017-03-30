@@ -11,7 +11,6 @@
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/thread_task_runner_handle.h"
@@ -179,14 +178,20 @@ URLRequestContextBuilder::HttpNetworkSessionParams::HttpNetworkSessionParams()
       host_mapping_rules(NULL),
       testing_fixed_http_port(0),
       testing_fixed_https_port(0),
-      next_protos(NextProtosDefaults()),
-      use_alternative_services(true),
+      enable_spdy31(true),
+      enable_http2(true),
+      parse_alternative_services(false),
+      enable_alternative_service_with_different_host(false),
       enable_quic(false),
       quic_max_server_configs_stored_in_properties(0),
       quic_delay_tcp_race(false),
       quic_max_number_of_lossy_connections(0),
+      quic_prefer_aes(false),
       quic_packet_loss_threshold(1.0f),
-      quic_idle_connection_timeout_seconds(kIdleConnectionTimeoutSeconds) {}
+      quic_idle_connection_timeout_seconds(kIdleConnectionTimeoutSeconds),
+      quic_close_sessions_on_ip_change(false),
+      quic_migrate_sessions_on_network_change(false),
+      quic_migrate_sessions_early(false) {}
 
 URLRequestContextBuilder::HttpNetworkSessionParams::~HttpNetworkSessionParams()
 {}
@@ -236,8 +241,8 @@ void URLRequestContextBuilder::DisableHttpCache() {
 
 void URLRequestContextBuilder::SetSpdyAndQuicEnabled(bool spdy_enabled,
                                                      bool quic_enabled) {
-  http_network_session_params_.next_protos =
-      NextProtosWithSpdyAndQuic(spdy_enabled, quic_enabled);
+  http_network_session_params_.enable_spdy31 = spdy_enabled;
+  http_network_session_params_.enable_http2 = spdy_enabled;
   http_network_session_params_.enable_quic = quic_enabled;
 }
 
@@ -385,11 +390,15 @@ scoped_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
       http_network_session_params_.testing_fixed_http_port;
   network_session_params.testing_fixed_https_port =
       http_network_session_params_.testing_fixed_https_port;
-  network_session_params.use_alternative_services =
-      http_network_session_params_.use_alternative_services;
-  network_session_params.trusted_spdy_proxy =
-      http_network_session_params_.trusted_spdy_proxy;
-  network_session_params.next_protos = http_network_session_params_.next_protos;
+  network_session_params.enable_spdy31 =
+      http_network_session_params_.enable_spdy31;
+  network_session_params.enable_http2 =
+      http_network_session_params_.enable_http2;
+  network_session_params.parse_alternative_services =
+      http_network_session_params_.parse_alternative_services;
+  network_session_params.enable_alternative_service_with_different_host =
+      http_network_session_params_
+          .enable_alternative_service_with_different_host;
   network_session_params.enable_quic = http_network_session_params_.enable_quic;
   network_session_params.quic_max_server_configs_stored_in_properties =
       http_network_session_params_.quic_max_server_configs_stored_in_properties;
@@ -405,6 +414,16 @@ scoped_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
       http_network_session_params_.quic_connection_options;
   network_session_params.quic_host_whitelist =
       http_network_session_params_.quic_host_whitelist;
+  network_session_params.quic_close_sessions_on_ip_change =
+      http_network_session_params_.quic_close_sessions_on_ip_change;
+  network_session_params.quic_migrate_sessions_on_network_change =
+      http_network_session_params_.quic_migrate_sessions_on_network_change;
+  network_session_params.quic_user_agent_id =
+      http_network_session_params_.quic_user_agent_id;
+  network_session_params.quic_prefer_aes =
+      http_network_session_params_.quic_prefer_aes;
+  network_session_params.quic_migrate_sessions_early =
+      http_network_session_params_.quic_migrate_sessions_early;
 
   storage->set_http_network_session(
       make_scoped_ptr(new HttpNetworkSession(network_session_params)));

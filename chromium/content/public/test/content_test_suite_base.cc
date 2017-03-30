@@ -34,6 +34,7 @@
 #include "content/browser/android/browser_jni_registrar.h"
 #include "content/common/android/common_jni_registrar.h"
 #include "media/base/android/media_jni_registrar.h"
+#include "media/capture/video/android/capture_jni_registrar.h"
 #include "net/android/net_jni_registrar.h"
 #include "ui/android/ui_android_jni_registrar.h"
 #include "ui/base/android/ui_base_jni_registrar.h"
@@ -88,13 +89,14 @@ void ContentTestSuiteBase::Initialize() {
   content::android::RegisterCommonJni(env);
   content::android::RegisterBrowserJni(env);
   gfx::android::RegisterJni(env);
+  media::RegisterCaptureJni(env);
   media::RegisterJni(env);
   net::android::RegisterJni(env);
   ui::android::RegisterJni(env);
+  ui::RegisterUIAndroidJni(env);
   ui::gl::android::RegisterJni(env);
   ui::events::android::RegisterJni(env);
 #if !defined(USE_AURA)
-  ui::RegisterUIAndroidJni(env);
   ui::shell_dialogs::RegisterJni(env);
   content::Compositor::Initialize();
 #endif

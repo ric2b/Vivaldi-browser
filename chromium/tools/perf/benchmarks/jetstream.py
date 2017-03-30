@@ -31,6 +31,7 @@ from telemetry.value import list_of_scalar_values
 
 
 class _JetstreamMeasurement(page_test.PageTest):
+
   def __init__(self):
     super(_JetstreamMeasurement, self).__init__()
 
@@ -78,7 +79,7 @@ class _JetstreamMeasurement(page_test.PageTest):
         None, 'Score', 'score', all_scores))
 
 
-@benchmark.Disabled('android', 'xp')  # crbug.com/381742
+@benchmark.Disabled('android')
 class Jetstream(perf_benchmark.PerfBenchmark):
   test = _JetstreamMeasurement
 

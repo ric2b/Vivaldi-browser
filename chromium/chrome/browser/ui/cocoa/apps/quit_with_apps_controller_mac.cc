@@ -6,8 +6,6 @@
 
 #include "base/command_line.h"
 #include "base/i18n/number_formatting.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/apps/app_window_registry_util.h"
@@ -17,13 +15,15 @@
 #include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/browser_iterator.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/browser/app_window/app_window.h"
@@ -135,9 +135,7 @@ bool QuitWithAppsController::ShouldQuit() {
 
   if (hosted_app_quit_notification_) {
     bool hosted_apps_open = false;
-    const BrowserList* browser_list =
-        BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_NATIVE);
-    for (Browser* browser : *browser_list) {
+    for (Browser* browser : *BrowserList::GetInstance()) {
       if (!browser->is_app())
         continue;
 
@@ -171,7 +169,7 @@ bool QuitWithAppsController::ShouldQuit() {
   // quitting. If there are no browser windows, always show the notification.
   bool suppress_always = !g_browser_process->local_state()->GetBoolean(
       prefs::kNotifyWhenAppsKeepChromeAlive);
-  if (!chrome::BrowserIterator().done() &&
+  if (!BrowserList::GetInstance()->empty() &&
       (suppress_for_session_ || suppress_always)) {
     return false;
   }

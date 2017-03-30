@@ -22,7 +22,6 @@
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/tabs/media_indicator_button.h"
 #include "chrome/browser/ui/views/tabs/tab_controller.h"
-#include "chrome/browser/ui/views/theme_image_mapper.h"
 #include "chrome/browser/ui/views/touch_uma/touch_uma.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
@@ -34,8 +33,8 @@
 #include "third_party/skia/include/pathops/SkPathOps.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/models/list_selection_model.h"
-#include "ui/base/resource/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/animation/animation_container.h"
@@ -69,9 +68,6 @@ using base::UserMetricsAction;
 
 namespace {
 
-// How long the pulse throb takes.
-const int kPulseDurationMs = 200;
-
 // Width of touch tabs.
 const int kTouchWidth = 120;
 
@@ -93,16 +89,6 @@ const double kSelectedTabOpacity = 0.3;
 
 // Inactive selected tabs have their throb value scaled by this.
 const double kSelectedTabThrobScale = 0.95 - kSelectedTabOpacity;
-
-// Durations for the various parts of the pinned tab title animation.
-const int kPinnedTitleChangeAnimationDuration1MS = 1600;
-const int kPinnedTitleChangeAnimationStart1MS = 0;
-const int kPinnedTitleChangeAnimationEnd1MS = 1900;
-const int kPinnedTitleChangeAnimationDuration2MS = 0;
-const int kPinnedTitleChangeAnimationDuration3MS = 550;
-const int kPinnedTitleChangeAnimationStart3MS = 150;
-const int kPinnedTitleChangeAnimationEnd3MS = 800;
-const int kPinnedTitleChangeAnimationIntervalMS = 40;
 
 // Offset from the right edge for the start of the pinned title change
 // animation.
@@ -143,26 +129,11 @@ float GetUnscaledEndcapWidth() {
   return GetLayoutInsets(TAB).left() - 0.5f;
 }
 
-chrome::HostDesktopType GetHostDesktopType(views::View* view) {
-  // Widget is NULL when tabs are detached.
-  views::Widget* widget = view->GetWidget();
-  return chrome::GetHostDesktopTypeForNativeView(
-      widget ? widget->GetNativeView() : NULL);
-}
-
-// Stop()s |animation| and then deletes it. We do this rather than just deleting
-// so that the delegate is notified before the destruction.
-void StopAndDeleteAnimation(scoped_ptr<gfx::Animation> animation) {
-  if (animation)
-    animation->Stop();
-}
-
 void DrawHighlight(gfx::Canvas* canvas,
                    const SkPoint& p,
                    SkScalar radius,
-                   SkAlpha alpha) {
-  const SkColor colors[2] = { SkColorSetA(SK_ColorWHITE, alpha),
-                              SkColorSetA(SK_ColorWHITE, 0) };
+                   SkColor color) {
+  const SkColor colors[2] = { color, SkColorSetA(color, 0) };
   skia::RefPtr<SkShader> shader = skia::AdoptRef(SkGradientShader::CreateRadial(
       p, radius, colors, nullptr, 2, SkShader::kClamp_TileMode));
   SkPaint paint;
@@ -439,12 +410,63 @@ void Tab::ThrobberView::OnPaint(gfx::Canvas* canvas) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// ImageCacheEntry
+// Tab::ImageCacheEntryMetadata
 
-Tab::ImageCacheEntry::ImageCacheEntry()
-    : resource_id(-1),
-      scale_factor(ui::SCALE_FACTOR_NONE) {
+struct Tab::ImageCacheEntryMetadata {
+  ImageCacheEntryMetadata(bool incognito,
+                          int resource_id,
+                          ui::ScaleFactor scale_factor,
+                          const gfx::Size& size);
+  ~ImageCacheEntryMetadata();
+
+  // Making this a non-member would require a friend declaration in Tab.  Bleh.
+  bool operator==(const ImageCacheEntryMetadata& rhs) const;
+
+  // Whether the resource is drawn in an incognito window.  This is only set to
+  // true when Material Design is enabled, since before MD tabs in normal and
+  // incognito windows look the same.
+  bool incognito;
+
+  int resource_id;
+  ui::ScaleFactor scale_factor;
+  gfx::Size size;
+};
+
+Tab::ImageCacheEntryMetadata::ImageCacheEntryMetadata(
+    bool incognito,
+    int resource_id,
+    ui::ScaleFactor scale_factor,
+    const gfx::Size& size)
+    : incognito(incognito),
+      resource_id(resource_id),
+      scale_factor(scale_factor),
+      size(size) {
+  DCHECK_NE(ui::SCALE_FACTOR_NONE, scale_factor);
 }
+
+Tab::ImageCacheEntryMetadata::~ImageCacheEntryMetadata() {}
+
+bool Tab::ImageCacheEntryMetadata::operator==(
+    const ImageCacheEntryMetadata& rhs) const {
+  return incognito == rhs.incognito && resource_id == rhs.resource_id &&
+      scale_factor == rhs.scale_factor && size == rhs.size;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Tab::ImageCacheEntry
+
+struct Tab::ImageCacheEntry {
+  ImageCacheEntry(const ImageCacheEntryMetadata& metadata,
+                  const gfx::ImageSkia& image);
+  ~ImageCacheEntry();
+
+  ImageCacheEntryMetadata metadata;
+  gfx::ImageSkia image;
+};
+
+Tab::ImageCacheEntry::ImageCacheEntry(const ImageCacheEntryMetadata& metadata,
+                                      const gfx::ImageSkia& image)
+    : metadata(metadata), image(image) {}
 
 Tab::ImageCacheEntry::~ImageCacheEntry() {}
 
@@ -453,7 +475,6 @@ Tab::ImageCacheEntry::~ImageCacheEntry() {}
 
 // static
 const char Tab::kViewClassName[] = "Tab";
-const SkColor Tab::kInactiveTabColor = SkColorSetRGB(0xD0, 0xD0, 0xD0);
 Tab::TabImages Tab::active_images_ = {0};
 Tab::TabImages Tab::inactive_images_ = {0};
 Tab::TabImages Tab::mask_images_ = {0};
@@ -462,7 +483,7 @@ Tab::ImageCache* Tab::image_cache_ = NULL;
 ////////////////////////////////////////////////////////////////////////////////
 // Tab, public:
 
-Tab::Tab(TabController* controller)
+Tab::Tab(TabController* controller, gfx::AnimationContainer* container)
     : controller_(controller),
       closing_(false),
       dragging_(false),
@@ -470,6 +491,9 @@ Tab::Tab(TabController* controller)
       favicon_hiding_offset_(0),
       immersive_loading_step_(0),
       should_display_crashed_favicon_(false),
+      pulse_animation_(new gfx::ThrobAnimation(this)),
+      crash_icon_animation_(new FaviconCrashAnimation(this)),
+      animation_container_(container),
       throbber_(nullptr),
       media_indicator_button_(nullptr),
       close_button_(nullptr),
@@ -529,14 +553,43 @@ Tab::Tab(TabController* controller)
   AddChildView(close_button_);
 
   set_context_menu_controller(this);
+
+  const int kPulseDurationMs = 200;
+  pulse_animation_->SetSlideDuration(kPulseDurationMs);
+  pulse_animation_->SetContainer(animation_container_.get());
+
+  const int kPinnedTitleChangeAnimationDuration1MS = 1600;
+  const int kPinnedTitleChangeAnimationStart1MS = 0;
+  const int kPinnedTitleChangeAnimationEnd1MS = 1900;
+  const int kPinnedTitleChangeAnimationDuration2MS = 0;
+  const int kPinnedTitleChangeAnimationDuration3MS = 550;
+  const int kPinnedTitleChangeAnimationStart3MS = 150;
+  const int kPinnedTitleChangeAnimationEnd3MS = 800;
+  const int kPinnedTitleChangeAnimationIntervalMS = 40;
+  gfx::MultiAnimation::Parts parts;
+  parts.push_back(gfx::MultiAnimation::Part(
+      kPinnedTitleChangeAnimationDuration1MS,
+      kPinnedTitleChangeAnimationStart1MS,
+      kPinnedTitleChangeAnimationEnd1MS,
+      gfx::Tween::EASE_OUT));
+  parts.push_back(gfx::MultiAnimation::Part(
+      kPinnedTitleChangeAnimationDuration2MS,
+      gfx::Tween::ZERO));
+  parts.push_back(gfx::MultiAnimation::Part(
+      kPinnedTitleChangeAnimationDuration3MS,
+      kPinnedTitleChangeAnimationStart3MS,
+      kPinnedTitleChangeAnimationEnd3MS,
+      gfx::Tween::EASE_IN));
+  const base::TimeDelta timeout =
+      base::TimeDelta::FromMilliseconds(kPinnedTitleChangeAnimationIntervalMS);
+  pinned_title_change_animation_.reset(new gfx::MultiAnimation(parts, timeout));
+  pinned_title_change_animation_->SetContainer(animation_container_.get());
+  pinned_title_change_animation_->set_delegate(this);
+
+  hover_controller_.SetAnimationContainer(animation_container_.get());
 }
 
 Tab::~Tab() {
-}
-
-void Tab::SetAnimationContainer(gfx::AnimationContainer* container) {
-  animation_container_ = container;
-  hover_controller_.SetAnimationContainer(container);
 }
 
 bool Tab::IsActive() const {
@@ -546,6 +599,10 @@ bool Tab::IsActive() const {
 void Tab::ActiveStateChanged() {
   OnButtonColorMaybeChanged();
   media_indicator_button_->UpdateEnabledForMuteToggle();
+  Layout();
+}
+
+void Tab::MediaStateChanged() {
   Layout();
 }
 
@@ -573,17 +630,14 @@ void Tab::SetData(const TabRendererData& data) {
   }
   title_->SetText(title);
 
-  if (data_.IsCrashed()) {
-    if (!should_display_crashed_favicon_ && !crash_icon_animation_) {
-      data_.media_state = TAB_MEDIA_STATE_NONE;
-      crash_icon_animation_.reset(new FaviconCrashAnimation(this));
-      crash_icon_animation_->Start();
-    }
-  } else {
-    if (crash_icon_animation_)
-        crash_icon_animation_.reset();
+  if (!data_.IsCrashed()) {
+    crash_icon_animation_->Stop();
     should_display_crashed_favicon_ = false;
     favicon_hiding_offset_ = 0;
+  } else if (!should_display_crashed_favicon_ &&
+             !crash_icon_animation_->is_animating()) {
+    data_.media_state = TAB_MEDIA_STATE_NONE;
+    crash_icon_animation_->Start();
   }
 
   if (data_.media_state != old.media_state)
@@ -611,48 +665,20 @@ void Tab::UpdateLoadingAnimation(TabRendererData::NetworkState state) {
 }
 
 void Tab::StartPulse() {
-  pulse_animation_.reset(new gfx::ThrobAnimation(this));
-  pulse_animation_->SetSlideDuration(kPulseDurationMs);
-  if (animation_container_.get())
-    pulse_animation_->SetContainer(animation_container_.get());
   pulse_animation_->StartThrobbing(std::numeric_limits<int>::max());
 }
 
 void Tab::StopPulse() {
-  StopAndDeleteAnimation(std::move(pulse_animation_));
+  pulse_animation_->Stop();
 }
 
 void Tab::StartPinnedTabTitleAnimation() {
-  if (!data().pinned)
-    return;
-  if (!pinned_title_change_animation_) {
-    gfx::MultiAnimation::Parts parts;
-    parts.push_back(
-        gfx::MultiAnimation::Part(kPinnedTitleChangeAnimationDuration1MS,
-                                 gfx::Tween::EASE_OUT));
-    parts.push_back(
-        gfx::MultiAnimation::Part(kPinnedTitleChangeAnimationDuration2MS,
-                                 gfx::Tween::ZERO));
-    parts.push_back(
-        gfx::MultiAnimation::Part(kPinnedTitleChangeAnimationDuration3MS,
-                                 gfx::Tween::EASE_IN));
-    parts[0].start_time_ms = kPinnedTitleChangeAnimationStart1MS;
-    parts[0].end_time_ms = kPinnedTitleChangeAnimationEnd1MS;
-    parts[2].start_time_ms = kPinnedTitleChangeAnimationStart3MS;
-    parts[2].end_time_ms = kPinnedTitleChangeAnimationEnd3MS;
-    base::TimeDelta timeout = base::TimeDelta::FromMilliseconds(
-        kPinnedTitleChangeAnimationIntervalMS);
-    pinned_title_change_animation_.reset(
-        new gfx::MultiAnimation(parts, timeout));
-    if (animation_container_.get())
-      pinned_title_change_animation_->SetContainer(animation_container_.get());
-    pinned_title_change_animation_->set_delegate(this);
-  }
-  pinned_title_change_animation_->Start();
+  if (data().pinned)
+    pinned_title_change_animation_->Start();
 }
 
 void Tab::StopPinnedTabTitleAnimation() {
-  StopAndDeleteAnimation(std::move(pinned_title_change_animation_));
+  pinned_title_change_animation_->Stop();
 }
 
 int Tab::GetWidthOfLargestSelectableRegion() const {
@@ -734,9 +760,8 @@ float Tab::GetInverseDiagonalSlope() {
 void Tab::AnimationProgressed(const gfx::Animation* animation) {
   // Ignore if the pulse animation is being performed on active tab because
   // it repaints the same image. See |Tab::PaintTabBackground()|.
-  if (animation == pulse_animation_.get() && IsActive())
-    return;
-  SchedulePaint();
+  if ((animation != pulse_animation_.get()) || !IsActive())
+    SchedulePaint();
 }
 
 void Tab::AnimationCanceled(const gfx::Animation* animation) {
@@ -751,21 +776,19 @@ void Tab::AnimationEnded(const gfx::Animation* animation) {
 // Tab, views::ButtonListener overrides:
 
 void Tab::ButtonPressed(views::Button* sender, const ui::Event& event) {
-  if (media_indicator_button_ && media_indicator_button_->visible()) {
-    if (media_indicator_button_->enabled())
-      content::RecordAction(UserMetricsAction("CloseTab_MuteToggleAvailable"));
-    else if (data_.media_state == TAB_MEDIA_STATE_AUDIO_PLAYING)
-      content::RecordAction(UserMetricsAction("CloseTab_AudioIndicator"));
-    else
-      content::RecordAction(UserMetricsAction("CloseTab_RecordingIndicator"));
-  } else {
+  if (!media_indicator_button_ || !media_indicator_button_->visible())
     content::RecordAction(UserMetricsAction("CloseTab_NoMediaIndicator"));
-  }
+  else if (media_indicator_button_->enabled())
+    content::RecordAction(UserMetricsAction("CloseTab_MuteToggleAvailable"));
+  else if (data_.media_state == TAB_MEDIA_STATE_AUDIO_PLAYING)
+    content::RecordAction(UserMetricsAction("CloseTab_AudioIndicator"));
+  else
+    content::RecordAction(UserMetricsAction("CloseTab_RecordingIndicator"));
 
   const CloseTabSource source =
       (event.type() == ui::ET_MOUSE_RELEASED &&
-       (event.flags() & ui::EF_FROM_TOUCH) == 0) ? CLOSE_TAB_FROM_MOUSE :
-      CLOSE_TAB_FROM_TOUCH;
+       !(event.flags() & ui::EF_FROM_TOUCH)) ? CLOSE_TAB_FROM_MOUSE
+                                             : CLOSE_TAB_FROM_TOUCH;
   DCHECK_EQ(close_button_, sender);
   controller_->CloseTab(this, source);
   if (event.type() == ui::ET_GESTURE_TAP)
@@ -898,10 +921,7 @@ void Tab::OnPaint(gfx::Canvas* canvas) {
 }
 
 void Tab::Layout() {
-  gfx::Rect lb = GetContentsBounds();
-  if (lb.IsEmpty())
-    return;
-
+  const gfx::Rect lb = GetContentsBounds();
   showing_icon_ = ShouldShowIcon();
   // See comments in IconCapacity().
   const int extra_padding =
@@ -1187,9 +1207,9 @@ void Tab::PaintTab(gfx::Canvas* canvas) {
 void Tab::PaintImmersiveTab(gfx::Canvas* canvas) {
   // Use transparency for the draw-attention animation.
   int alpha = 255;
-  if (pulse_animation_ && pulse_animation_->is_animating() && !data().pinned) {
+  if (pulse_animation_->is_animating() && !data().pinned) {
     alpha = pulse_animation_->CurrentValueBetween(
-        255, static_cast<int>(255 * kImmersiveTabMinThrobOpacity));
+        255, gfx::ToRoundedInt(255 * kImmersiveTabMinThrobOpacity));
   }
 
   // Draw a gray rectangle to represent the tab. This works for pinned tabs as
@@ -1237,8 +1257,7 @@ void Tab::PaintTabBackground(gfx::Canvas* canvas) {
     PaintTabBackgroundUsingFillId(canvas, true, kActiveTabFillId,
                                   has_custom_image, y_offset);
   } else {
-    if (pinned_title_change_animation_ &&
-        pinned_title_change_animation_->is_animating())
+    if (pinned_title_change_animation_->is_animating())
       PaintInactiveTabBackgroundWithTitleChange(canvas);
     else
       PaintInactiveTabBackground(canvas);
@@ -1258,13 +1277,16 @@ void Tab::PaintInactiveTabBackgroundWithTitleChange(gfx::Canvas* canvas) {
   const int kPinnedTitleChangeGradientRadius = 20;
   const float radius = kPinnedTitleChangeGradientRadius;
   double x = radius;
-  int alpha = 255;
+  SkColor hover_color =
+      GetThemeProvider()->GetColor(ThemeProperties::COLOR_TOOLBAR);
   if (pinned_title_change_animation_->current_part_index() == 0) {
     x = pinned_title_change_animation_->CurrentValueBetween(
             width() + radius - kPinnedTitleChangeInitialXOffset, radius);
   } else if (pinned_title_change_animation_->current_part_index() == 2) {
     x = pinned_title_change_animation_->CurrentValueBetween(radius, -radius);
-    alpha = pinned_title_change_animation_->CurrentValueBetween(255, 0);
+    const int alpha =
+        pinned_title_change_animation_->CurrentValueBetween(255, 0);
+    hover_color = SkColorSetA(hover_color, static_cast<SkAlpha>(alpha));
   }
   SkPoint p;
   p.set(SkDoubleToScalar(x), 0);
@@ -1276,14 +1298,14 @@ void Tab::PaintInactiveTabBackgroundWithTitleChange(gfx::Canvas* canvas) {
     GetFillPath(scale, &fill);
     canvas->ClipPath(fill, true);
     p.scale(SkFloatToScalar(scale));
-    DrawHighlight(canvas, p, SkFloatToScalar(radius * scale), alpha);
+    DrawHighlight(canvas, p, SkFloatToScalar(radius * scale), hover_color);
   } else {
     gfx::Canvas background_canvas(size(), canvas->image_scale(), false);
     PaintInactiveTabBackground(&background_canvas);
     gfx::ImageSkia background_image(background_canvas.ExtractImageRep());
     canvas->DrawImageInt(background_image, 0, 0);
     gfx::Canvas hover_canvas(size(), canvas->image_scale(), false);
-    DrawHighlight(&hover_canvas, p, SkFloatToScalar(radius), alpha);
+    DrawHighlight(&hover_canvas, p, SkFloatToScalar(radius), hover_color);
     gfx::ImageSkia hover_image = gfx::ImageSkiaOperations::CreateMaskedImage(
         gfx::ImageSkia(hover_canvas.ExtractImageRep()), background_image);
     canvas->DrawImageInt(hover_image, 0, 0);
@@ -1293,9 +1315,6 @@ void Tab::PaintInactiveTabBackgroundWithTitleChange(gfx::Canvas* canvas) {
 void Tab::PaintInactiveTabBackground(gfx::Canvas* canvas) {
   bool has_custom_image;
   int fill_id = controller_->GetBackgroundResourceId(&has_custom_image);
-  // Explicitly map the id so we cache correctly.
-  const chrome::HostDesktopType host_desktop_type = GetHostDesktopType(this);
-  fill_id = chrome::MapThemeImage(host_desktop_type, fill_id);
 
   // If the theme is providing a custom background image, then its top edge
   // should be at the top of the tab. Otherwise, we assume that the background
@@ -1307,22 +1326,29 @@ void Tab::PaintInactiveTabBackground(gfx::Canvas* canvas) {
 
   // We only cache the image when it's the default image and we're not hovered,
   // to avoid caching a background image that isn't the same for all tabs.
-  if (!has_custom_image && !hover_controller_.ShouldDraw()) {
-    ui::ScaleFactor scale_factor =
-        ui::GetSupportedScaleFactor(canvas->image_scale());
-    gfx::ImageSkia cached_image(GetCachedImage(fill_id, size(), scale_factor));
-    if (cached_image.width() == 0) {
-      gfx::Canvas tmp_canvas(size(), canvas->image_scale(), false);
-      PaintTabBackgroundUsingFillId(&tmp_canvas, false, fill_id, false,
-                                    y_offset);
-      cached_image = gfx::ImageSkia(tmp_canvas.ExtractImageRep());
-      SetCachedImage(fill_id, scale_factor, cached_image);
-    }
-    canvas->DrawImageInt(cached_image, 0, 0);
-  } else {
+  if (has_custom_image || hover_controller_.ShouldDraw()) {
     PaintTabBackgroundUsingFillId(canvas, false, fill_id, has_custom_image,
                                   y_offset);
+    return;
   }
+
+  const ImageCacheEntryMetadata metadata(
+      ui::MaterialDesignController::IsModeMaterial() &&
+          controller_->IsIncognito(),
+      fill_id, ui::GetSupportedScaleFactor(canvas->image_scale()), size());
+  auto it = std::find_if(
+      image_cache_->begin(), image_cache_->end(),
+      [&metadata](const ImageCacheEntry& e) { return e.metadata == metadata; });
+  if (it == image_cache_->end()) {
+    gfx::Canvas tmp_canvas(size(), canvas->image_scale(), false);
+    PaintTabBackgroundUsingFillId(&tmp_canvas, false, fill_id, false, y_offset);
+    image_cache_->emplace_front(metadata,
+                                gfx::ImageSkia(tmp_canvas.ExtractImageRep()));
+    if (image_cache_->size() > kMaxImageCacheSize)
+      image_cache_->pop_back();
+    it = image_cache_->begin();
+  }
+  canvas->DrawImageInt(it->image, 0, 0);
 }
 
 void Tab::PaintTabBackgroundUsingFillId(gfx::Canvas* canvas,
@@ -1330,7 +1356,9 @@ void Tab::PaintTabBackgroundUsingFillId(gfx::Canvas* canvas,
                                         int fill_id,
                                         bool has_custom_image,
                                         int y_offset) {
-  gfx::ImageSkia* fill_image = GetThemeProvider()->GetImageSkiaNamed(fill_id);
+  const ui::ThemeProvider* tp = GetThemeProvider();
+  const SkColor toolbar_color = tp->GetColor(ThemeProperties::COLOR_TOOLBAR);
+  gfx::ImageSkia* fill_image = tp->GetImageSkiaNamed(fill_id);
   // The tab image needs to be lined up with the background image
   // so that it feels partially transparent.  These offsets represent the tab
   // position within the frame background image.
@@ -1341,7 +1369,8 @@ void Tab::PaintTabBackgroundUsingFillId(gfx::Canvas* canvas,
       std::max(SkFloatToScalar(width() / 4.f), kMinHoverRadius);
   const bool draw_hover = !is_active && hover_controller_.ShouldDraw();
   SkPoint hover_location(PointToSkPoint(hover_controller_.location()));
-  const SkAlpha hover_alpha = hover_controller_.GetAlpha();
+  const SkColor hover_color =
+      SkColorSetA(toolbar_color, hover_controller_.GetAlpha());
 
   if (ui::MaterialDesignController::IsModeMaterial()) {
     gfx::ScopedCanvas scoped_canvas(canvas);
@@ -1362,13 +1391,14 @@ void Tab::PaintTabBackgroundUsingFillId(gfx::Canvas* canvas,
                              height());
       } else {
         paint.setColor(
-            is_active ? SkColorSetRGB(0xF2, 0xF2, 0xF2) : kInactiveTabColor);
+            is_active ? toolbar_color
+                      : tp->GetColor(ThemeProperties::COLOR_BACKGROUND_TAB));
         canvas->DrawRect(gfx::ScaleToEnclosingRect(GetLocalBounds(), scale),
                          paint);
       }
       if (draw_hover) {
         hover_location.scale(SkFloatToScalar(scale));
-        DrawHighlight(canvas, hover_location, radius * scale, hover_alpha);
+        DrawHighlight(canvas, hover_location, radius * scale, hover_color);
       }
     }
 
@@ -1382,7 +1412,7 @@ void Tab::PaintTabBackgroundUsingFillId(gfx::Canvas* canvas,
       canvas->sk_canvas()->clipRect(
           SkRect::MakeWH(width() * scale, height() * scale - 1));
     }
-    paint.setARGB(0x40, 0x00, 0x00, 0x00);
+    paint.setColor(tp->GetColor(ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR));
     canvas->DrawPath(stroke, paint);
   } else {
     if (draw_hover) {
@@ -1395,7 +1425,7 @@ void Tab::PaintTabBackgroundUsingFillId(gfx::Canvas* canvas,
       canvas->DrawImageInt(background_image, 0, 0);
 
       gfx::Canvas hover_canvas(size(), canvas->image_scale(), false);
-      DrawHighlight(&hover_canvas, hover_location, radius, hover_alpha);
+      DrawHighlight(&hover_canvas, hover_location, radius, hover_color);
       gfx::ImageSkia result = gfx::ImageSkiaOperations::CreateMaskedImage(
           gfx::ImageSkia(hover_canvas.ExtractImageRep()), background_image);
       canvas->DrawImageInt(result, 0, 0);
@@ -1578,9 +1608,8 @@ double Tab::GetThrobValue() {
 
   // Showing both the pulse and title change animation at the same time is too
   // much.
-  if (pulse_animation_ && pulse_animation_->is_animating() &&
-      (!pinned_title_change_animation_ ||
-       !pinned_title_change_animation_->is_animating())) {
+  if (pulse_animation_->is_animating() &&
+      !pinned_title_change_animation_->is_animating()) {
     val += pulse_animation_->GetCurrentValue() * offset;
   } else if (hover_controller_.ShouldDraw()) {
     val += hover_controller_.GetAnimationValue() * offset;
@@ -1622,7 +1651,7 @@ void Tab::ScheduleIconPaint() {
     return;
 
   // Extends the area to the bottom when the crash animation is in progress.
-  if (crash_icon_animation_)
+  if (crash_icon_animation_->is_animating())
     bounds.set_height(height() - bounds.y());
   bounds.set_x(GetMirroredXForRect(bounds));
   SchedulePaintInRect(bounds);
@@ -1738,32 +1767,4 @@ void Tab::LoadTabImages() {
   mask_images_.image_r = rb.GetImageSkiaNamed(IDR_TAB_ALPHA_RIGHT);
   mask_images_.l_width = mask_images_.image_l->width();
   mask_images_.r_width = mask_images_.image_r->width();
-}
-
-// static
-gfx::ImageSkia Tab::GetCachedImage(int resource_id,
-                                   const gfx::Size& size,
-                                   ui::ScaleFactor scale_factor) {
-  for (ImageCache::const_iterator i = image_cache_->begin();
-       i != image_cache_->end(); ++i) {
-    if (i->resource_id == resource_id && i->scale_factor == scale_factor &&
-        i->image.size() == size) {
-      return i->image;
-    }
-  }
-  return gfx::ImageSkia();
-}
-
-// static
-void Tab::SetCachedImage(int resource_id,
-                         ui::ScaleFactor scale_factor,
-                         const gfx::ImageSkia& image) {
-  DCHECK_NE(scale_factor, ui::SCALE_FACTOR_NONE);
-  ImageCacheEntry entry;
-  entry.resource_id = resource_id;
-  entry.scale_factor = scale_factor;
-  entry.image = image;
-  image_cache_->push_front(entry);
-  if (image_cache_->size() > kMaxImageCacheSize)
-    image_cache_->pop_back();
 }

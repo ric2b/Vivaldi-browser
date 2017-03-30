@@ -66,15 +66,30 @@
   <release seq="1" allow_pseudo="false">
     <messages fallback_to_english="true">
       <!-- content area context menus. -->
-      <message name="IDS_CONTENT_CONTEXT_OPENLINKBACKGROUNDTAB" desc="The name of the Open Link in Background Tab command in the content area context menu">
-        Open link in background tab
-      </message>
-      <message name="IDS_CONTENT_CONTEXT_RELOADIMAGE" desc="The name of the Reload Image command in the content area context menu">
-        &amp;Reload image
-      </message>
-      <message name="IDS_CONTENT_CONTEXT_PASTE_AND_GO" desc="The name of the 'Paste and go'command in the content area context menu">
-        Paste and go
-      </message>
+
+      <if expr="not use_titlecase">
+        <message name="IDS_CONTENT_CONTEXT_OPENLINKBACKGROUNDTAB" desc="The name of the Open Link in Background Tab command in the content area context menu">
+          Open link in background tab
+        </message>
+        <message name="IDS_CONTENT_CONTEXT_RELOADIMAGE" desc="The name of the Reload Image command in the content area context menu">
+          &amp;Reload image
+        </message>
+        <message name="IDS_CONTENT_CONTEXT_PASTE_AND_GO" desc="The name of the 'Paste and go'command in the content area context menu">
+          Paste and go
+        </message>
+      </if>
+
+      <if expr="use_titlecase">
+        <message name="IDS_CONTENT_CONTEXT_OPENLINKBACKGROUNDTAB" desc="In Title Case: The name of the Open Link in Background Tab command in the content area context menu">
+          Open Link in Background Tab
+        </message>
+        <message name="IDS_CONTENT_CONTEXT_RELOADIMAGE" desc="In Title Case: The name of the Reload Image command in the content area context menu">
+          &amp;Reload Image
+        </message>
+        <message name="IDS_CONTENT_CONTEXT_PASTE_AND_GO" desc="In Title Case: The name of the 'Paste and go'command in the content area context menu">
+          Paste and Go
+        </message>
+      </if>
 
       <part file="vivaldi_bookmark_strings.grdp" />
       <part file="vivaldi_context_menu_strings.grdp" />

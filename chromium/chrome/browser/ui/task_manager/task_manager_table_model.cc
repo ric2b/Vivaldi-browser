@@ -10,7 +10,6 @@
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -23,6 +22,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/nacl/browser/nacl_browser.h"
 #include "components/nacl/common/nacl_switches.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/common/result_codes.h"
 #include "third_party/WebKit/public/web/WebCache.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -270,9 +270,11 @@ TaskManagerTableModel::TaskManagerTableModel(int64_t refresh_flags,
       is_nacl_debugging_flag_enabled_(false) {
 #endif  // !defined(DISABLE_NACL)
   DCHECK(delegate);
+  StartUpdating();
 }
 
 TaskManagerTableModel::~TaskManagerTableModel() {
+  StopUpdating();
 }
 
 int TaskManagerTableModel::RowCount() {
@@ -584,23 +586,6 @@ void TaskManagerTableModel::OnTasksRefreshed(
   OnRefresh();
 }
 
-void TaskManagerTableModel::StartUpdating() {
-  TaskManagerInterface::GetTaskManager()->AddObserver(this);
-  tasks_ = observed_task_manager()->GetTaskIdsList();
-  OnRefresh();
-
-  // In order for the scrollbar of the TableView to work properly on startup of
-  // the task manager, we must invoke TableModelObserver::OnModelChanged() which
-  // in turn will invoke TableView::NumRowsChanged(). This will adjust the
-  // vertical scrollbar correctly. crbug.com/570966.
-  if (table_model_observer_)
-    table_model_observer_->OnModelChanged();
-}
-
-void TaskManagerTableModel::StopUpdating() {
-  observed_task_manager()->RemoveObserver(this);
-}
-
 void TaskManagerTableModel::ActivateTask(int row_index) {
   observed_task_manager()->ActivateTask(tasks_[row_index]);
 }
@@ -797,6 +782,23 @@ void TaskManagerTableModel::ToggleColumnVisibility(int column_id) {
   table_view_delegate_->SetColumnVisibility(column_id, new_visibility);
   columns_settings_->SetBoolean(GetColumnIdAsString(column_id), new_visibility);
   UpdateRefreshTypes(column_id, new_visibility);
+}
+
+void TaskManagerTableModel::StartUpdating() {
+  TaskManagerInterface::GetTaskManager()->AddObserver(this);
+  tasks_ = observed_task_manager()->GetTaskIdsList();
+  OnRefresh();
+
+  // In order for the scrollbar of the TableView to work properly on startup of
+  // the task manager, we must invoke TableModelObserver::OnModelChanged() which
+  // in turn will invoke TableView::NumRowsChanged(). This will adjust the
+  // vertical scrollbar correctly. crbug.com/570966.
+  if (table_model_observer_)
+    table_model_observer_->OnModelChanged();
+}
+
+void TaskManagerTableModel::StopUpdating() {
+  observed_task_manager()->RemoveObserver(this);
 }
 
 void TaskManagerTableModel::OnRefresh() {

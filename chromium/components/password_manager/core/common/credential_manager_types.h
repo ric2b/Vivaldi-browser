@@ -12,6 +12,7 @@
 #include "base/compiler_specific.h"
 #include "base/strings/string16.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace autofill {
 struct PasswordForm;
@@ -33,6 +34,7 @@ enum class CredentialType {
 struct CredentialInfo {
   CredentialInfo();
   CredentialInfo(const autofill::PasswordForm& form, CredentialType form_type);
+  CredentialInfo(const CredentialInfo& other);
   ~CredentialInfo();
 
   bool operator==(const CredentialInfo& rhs) const;
@@ -54,9 +56,8 @@ struct CredentialInfo {
   // Corresponds to WebPasswordCredential's password property.
   base::string16 password;
 
-  // Corresponds to WebFederatedCredential's federation property, which is an
-  // origin serialized as a URL (e.g. "https://example.com/").
-  GURL federation;
+  // Corresponds to WebFederatedCredential's provider property.
+  url::Origin federation;
 };
 
 // Create a new autofill::PasswordForm object based on |info|, valid in the

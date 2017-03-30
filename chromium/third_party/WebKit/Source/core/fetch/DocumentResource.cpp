@@ -30,7 +30,7 @@
 
 namespace blink {
 
-ResourcePtr<DocumentResource> DocumentResource::fetchSVGDocument(FetchRequest& request, ResourceFetcher* fetcher)
+PassRefPtrWillBeRawPtr<DocumentResource> DocumentResource::fetchSVGDocument(FetchRequest& request, ResourceFetcher* fetcher)
 {
     ASSERT(request.resourceRequest().frameType() == WebURLRequest::FrameTypeNone);
     request.mutableResourceRequest().setRequestContext(WebURLRequest::RequestContextImage);
@@ -67,7 +67,7 @@ String DocumentResource::encoding() const
 
 void DocumentResource::checkNotify()
 {
-    if (m_data) {
+    if (m_data && mimeTypeAllowed()) {
         StringBuilder decodedText;
         decodedText.append(m_decoder->decode(m_data->data(), m_data->size()));
         decodedText.append(m_decoder->flush());
@@ -78,9 +78,21 @@ void DocumentResource::checkNotify()
     Resource::checkNotify();
 }
 
+bool DocumentResource::mimeTypeAllowed() const
+{
+    ASSERT(getType() == SVGDocument);
+    AtomicString mimeType = response().mimeType();
+    if (response().isHTTP())
+        mimeType = httpContentType();
+    return mimeType == "image/svg+xml"
+        || mimeType == "text/xml"
+        || mimeType == "application/xml"
+        || mimeType == "application/xhtml+xml";
+}
+
 PassRefPtrWillBeRawPtr<Document> DocumentResource::createDocument(const KURL& url)
 {
-    switch (type()) {
+    switch (getType()) {
     case SVGDocument:
         return XMLDocument::createSVG(DocumentInit(url));
     default:
@@ -90,4 +102,4 @@ PassRefPtrWillBeRawPtr<Document> DocumentResource::createDocument(const KURL& ur
     }
 }
 
-}
+} // namespace blink

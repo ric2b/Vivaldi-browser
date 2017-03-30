@@ -26,6 +26,7 @@ class Value;
 namespace content {
 class RenderProcessHost;
 class RenderViewHost;
+class RenderWidgetHostView;
 class ServiceRegistry;
 class SiteInstance;
 
@@ -73,6 +74,10 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // Returns the process for this frame.
   virtual RenderProcessHost* GetProcess() = 0;
 
+  // Returns the RenderWidgetHostView that can be used to control focus and
+  // visibility for this frame.
+  virtual RenderWidgetHostView* GetView() = 0;
+
   // Returns the current RenderFrameHost of the parent frame, or nullptr if
   // there is no parent. The result may be in a different process than the
   // current RenderFrameHost.
@@ -99,13 +104,7 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   virtual bool IsCrossProcessSubframe() = 0;
 
   // Returns the last committed URL of the frame.
-  //
-  // The URL is only accurate if this RenderFrameHost is current in the frame
-  // tree -- i.e., it would be visited by WebContents::ForEachFrame. In
-  // particular, this method may return a misleading value if called from
-  // WebContentsObserver::RenderFrameCreated, since non-current frames can be
-  // passed to that observer method.
-  virtual GURL GetLastCommittedURL() = 0;
+  virtual const GURL& GetLastCommittedURL() = 0;
 
   // Returns the last committed origin of the frame.
   //
@@ -187,6 +186,19 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // Returns whether the RenderFrame in the renderer process has been created
   // and still has a connection.  This is valid for all frames.
   virtual bool IsRenderFrameLive() = 0;
+
+  // Get the number of proxies to this frame, in all processes. Exposed for
+  // use by resource metrics.
+  virtual int GetProxyCount() = 0;
+
+#if defined(OS_ANDROID)
+  // Selects and zooms to the find result nearest to the point (x,y)
+  // defined in find-in-page coordinates.
+  virtual void ActivateNearestFindResult(int request_id, float x, float y) = 0;
+
+  // Asks the renderer process to send the rects of the current find matches.
+  virtual void RequestFindMatchRects(int current_version) = 0;
+#endif
 
  private:
   // This interface should only be implemented inside content.

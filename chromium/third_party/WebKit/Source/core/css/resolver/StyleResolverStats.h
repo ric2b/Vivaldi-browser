@@ -47,7 +47,7 @@ public:
 
     void reset();
     bool allCountersEnabled() const;
-    PassRefPtr<TracedValue> toTracedValue() const;
+    PassOwnPtr<TracedValue> toTracedValue() const;
 
     unsigned sharedStyleLookups;
     unsigned sharedStyleCandidates;
@@ -77,7 +77,7 @@ private:
     }
 };
 
-#define INCREMENT_STYLE_STATS_COUNTER(resolver, counter, n) ((resolver).stats() && ((resolver).stats()-> counter += n));
+#define INCREMENT_STYLE_STATS_COUNTER(styleEngine, counter, n) ((styleEngine).stats() && ((styleEngine).stats()-> counter += n));
 
 } // namespace blink
 

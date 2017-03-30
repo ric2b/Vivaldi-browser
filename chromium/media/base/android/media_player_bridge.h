@@ -64,7 +64,6 @@ class MEDIA_EXPORT MediaPlayerBridge : public MediaPlayerAndroid {
   void Pause(bool is_media_related_action) override;
   void SeekTo(base::TimeDelta timestamp) override;
   void Release() override;
-  void SetVolume(double volume) override;
   bool HasVideo() const override;
   bool HasAudio() const override;
   int GetVideoWidth() override;
@@ -96,6 +95,7 @@ class MEDIA_EXPORT MediaPlayerBridge : public MediaPlayerAndroid {
 
   // MediaPlayerAndroid implementation.
   void OnVideoSizeChanged(int width, int height) override;
+  void OnMediaError(int error_type) override;
   void OnPlaybackComplete() override;
   void OnMediaInterrupted() override;
   void OnMediaPrepared() override;
@@ -108,6 +108,9 @@ class MEDIA_EXPORT MediaPlayerBridge : public MediaPlayerAndroid {
 
  private:
   friend class MediaPlayerBridgeTest;
+
+  // MediaPlayerAndroid implementation
+  void UpdateEffectiveVolumeInternal(double effective_volume) override;
 
   // Set the data source for the media player.
   void SetDataSource(const std::string& url);
@@ -194,11 +197,21 @@ class MEDIA_EXPORT MediaPlayerBridge : public MediaPlayerAndroid {
 
   base::TimeDelta last_time_update_timestamp_;
 
-  // Volume of playback.
-  double volume_;
-
   // Whether user credentials are allowed to be passed.
   bool allow_credentials_;
+
+  // Helper variables for UMA reporting.
+
+  // Whether the preparation for playback or the playback is currently going on.
+  // This flag is set in Start() and cleared in Pause() and Release(). Used for
+  // UMA reporting only.
+  bool is_active_;
+
+  // Whether there has been any errors in the active state.
+  bool has_error_;
+
+  // The flag is set if Start() has been called at least once.
+  bool has_ever_started_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   base::WeakPtrFactory<MediaPlayerBridge> weak_factory_;

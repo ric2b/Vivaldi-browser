@@ -35,11 +35,10 @@ class WebsiteSettingsPopupAndroid : public WebsiteSettingsUI {
                               content::WebContents* web_contents);
   ~WebsiteSettingsPopupAndroid() override;
   void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
-  void OnPermissionSettingChanged(
+  void RecordWebsiteSettingsAction(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
-      jint type,
-      jint setting);
+      jint action);
 
   // WebsiteSettingsUI implementations.
   void SetCookieInfo(const CookieInfoList& cookie_info_list) override;

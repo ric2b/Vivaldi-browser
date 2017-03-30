@@ -17,8 +17,8 @@
 #include "build/build_config.h"
 
 #include "content/common/gpu/gpu_channel.h"
-#include "content/common/gpu/gpu_messages.h"
 #include "content/common/gpu/media/gpu_video_accelerator_util.h"
+#include "content/common/gpu/media_messages.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/common/command_buffer.h"
 #include "ipc/ipc_message_macros.h"
@@ -103,7 +103,7 @@ class GpuVideoDecodeAccelerator::MessageFilter : public IPC::MessageFilter {
     IPC_BEGIN_MESSAGE_MAP(MessageFilter, msg)
       IPC_MESSAGE_FORWARD(AcceleratedVideoDecoderMsg_Decode, owner_,
                           GpuVideoDecodeAccelerator::OnDecode)
-      IPC_MESSAGE_UNHANDLED(return false;)
+      IPC_MESSAGE_UNHANDLED(return false)
     IPC_END_MESSAGE_MAP()
     return true;
   }
@@ -332,7 +332,7 @@ void GpuVideoDecodeAccelerator::Initialize(
     IPC::Message* init_done_msg) {
   DCHECK(!video_decode_accelerator_);
 
-  if (!stub_->channel()->AddRoute(host_route_id_, this)) {
+  if (!stub_->channel()->AddRoute(host_route_id_, stub_->stream_id(), this)) {
     DLOG(ERROR) << "Initialize(): failed to add route";
     SendCreateDecoderReply(init_done_msg, false);
   }
@@ -494,21 +494,6 @@ void GpuVideoDecodeAccelerator::OnSetCdm(int cdm_id) {
 void GpuVideoDecodeAccelerator::OnDecode(
     const AcceleratedVideoDecoderMsg_Decode_Params& params) {
   DCHECK(video_decode_accelerator_);
-  if (params.bitstream_buffer_id < 0) {
-    DLOG(ERROR) << "BitstreamBuffer id " << params.bitstream_buffer_id
-                << " out of range";
-    if (child_task_runner_->BelongsToCurrentThread()) {
-      NotifyError(media::VideoDecodeAccelerator::INVALID_ARGUMENT);
-    } else {
-      child_task_runner_->PostTask(
-          FROM_HERE,
-          base::Bind(&GpuVideoDecodeAccelerator::NotifyError,
-                     base::Unretained(this),
-                     media::VideoDecodeAccelerator::INVALID_ARGUMENT));
-    }
-    return;
-  }
-
   media::BitstreamBuffer bitstream_buffer(params.bitstream_buffer_id,
                                           params.buffer_handle, params.size,
                                           params.presentation_timestamp);

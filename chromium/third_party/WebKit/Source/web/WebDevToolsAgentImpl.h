@@ -31,11 +31,11 @@
 #ifndef WebDevToolsAgentImpl_h
 #define WebDevToolsAgentImpl_h
 
-#include "core/inspector/InspectorFrontendChannel.h"
+#include "core/inspector/InspectorPageAgent.h"
 #include "core/inspector/InspectorRuntimeAgent.h"
-#include "core/inspector/InspectorStateClient.h"
 #include "core/inspector/InspectorTracingAgent.h"
 #include "platform/heap/Handle.h"
+#include "platform/inspector_protocol/FrontendChannel.h"
 #include "public/platform/WebSize.h"
 #include "public/platform/WebThread.h"
 #include "public/web/WebDevToolsAgent.h"
@@ -51,7 +51,6 @@ class GraphicsLayer;
 class InspectedFrames;
 class InspectorInspectorAgent;
 class InspectorOverlay;
-class InspectorPageAgent;
 class InspectorResourceContentLoader;
 class LocalFrame;
 class Page;
@@ -68,14 +67,18 @@ class WebLocalFrameImpl;
 class WebString;
 class WebViewImpl;
 
+namespace protocol {
+class Value;
+}
+
 class WebDevToolsAgentImpl final
     : public NoBaseWillBeGarbageCollectedFinalized<WebDevToolsAgentImpl>
     , public WebDevToolsAgent
-    , public InspectorStateClient
     , public InspectorEmulationAgent::Client
     , public InspectorTracingAgent::Client
+    , public InspectorPageAgent::Client
     , public InspectorRuntimeAgent::Client
-    , public InspectorFrontendChannel
+    , public protocol::FrontendChannel
     , private WebThread::TaskObserver {
 public:
     static PassOwnPtrWillBeRawPtr<WebDevToolsAgentImpl> create(WebLocalFrameImpl*, WebDevToolsAgentClient*);
@@ -106,14 +109,12 @@ public:
     void continueProgram() override;
     void dispatchOnInspectorBackend(int sessionId, const WebString& message) override;
     void inspectElementAt(const WebPoint&) override;
+    void failedToRequestDevTools() override;
     void evaluateInWebInspector(long callId, const WebString& script) override;
     WebString evaluateInWebInspectorOverlay(const WebString& script) override;
 
 private:
     WebDevToolsAgentImpl(WebLocalFrameImpl*, WebDevToolsAgentClient*, PassOwnPtrWillBeRawPtr<InspectorOverlay>);
-
-    // InspectorStateClient implementation.
-    void updateInspectorStateCookie(const WTF::String&) override;
 
     // InspectorTracingAgent::Client implementation.
     void enableTracing(const WTF::String& categoryFilter) override;
@@ -125,9 +126,14 @@ private:
     // InspectorRuntimeAgent::Client implementation.
     void resumeStartup() override;
 
-    // InspectorFrontendChannel implementation.
-    void sendProtocolResponse(int sessionId, int callId, PassRefPtr<JSONObject> message) override;
-    void sendProtocolNotification(PassRefPtr<JSONObject> message) override;
+    // InspectorPageAgent::Client implementation.
+    void pageLayoutInvalidated(bool resized) override;
+    void setPausedInDebuggerMessage(const String&) override;
+    void waitForCreateWindow(LocalFrame*) override;
+
+    // protocol::FrontendChannel implementation.
+    void sendProtocolResponse(int sessionId, int callId, PassRefPtr<protocol::DictionaryValue> message) override;
+    void sendProtocolNotification(PassRefPtr<protocol::DictionaryValue> message) override;
     void flush() override;
 
     // WebThread::TaskObserver implementation.
@@ -144,9 +150,7 @@ private:
 #endif
 
     RefPtrWillBeMember<InstrumentingAgents> m_instrumentingAgents;
-    OwnPtrWillBeMember<InjectedScriptManager> m_injectedScriptManager;
     OwnPtrWillBeMember<InspectorResourceContentLoader> m_resourceContentLoader;
-    OwnPtrWillBeMember<InspectorCompositeState> m_state;
     OwnPtrWillBeMember<InspectorOverlay> m_overlay;
     OwnPtrWillBeMember<InspectedFrames> m_inspectedFrames;
 
@@ -159,15 +163,16 @@ private:
     RawPtrWillBeMember<PageRuntimeAgent> m_pageRuntimeAgent;
     RawPtrWillBeMember<PageConsoleAgent> m_pageConsoleAgent;
 
-    RefPtrWillBeMember<InspectorBackendDispatcher> m_inspectorBackendDispatcher;
-    OwnPtr<InspectorFrontend> m_inspectorFrontend;
+    RefPtr<protocol::Dispatcher> m_inspectorBackendDispatcher;
+    OwnPtr<protocol::Frontend> m_inspectorFrontend;
     InspectorAgentRegistry m_agents;
     bool m_deferredAgentsInitialized;
 
-    typedef Vector<std::pair<int, RefPtr<JSONObject>>> NotificationQueue;
+    typedef Vector<std::pair<int, RefPtr<protocol::Value>>> NotificationQueue;
     NotificationQueue m_notificationQueue;
     int m_sessionId;
     String m_stateCookie;
+    bool m_stateMuted;
 
     friend class DebuggerTask;
 };

@@ -4,8 +4,6 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
@@ -33,6 +31,8 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/profile_management_switches.h"
@@ -352,8 +352,6 @@ IN_PROC_BROWSER_TEST_F(InlineLoginUIBrowserTest, OneProcessLimit) {
   ASSERT_EQ(info1.pid, info2.pid);
   ASSERT_NE(info1.pid, info3.pid);
 }
-
-#if !defined(OS_CHROMEOS)
 
 IN_PROC_BROWSER_TEST_F(InlineLoginUIBrowserTest, CanOfferNoProfile) {
   std::string error_message;
@@ -758,8 +756,6 @@ IN_PROC_BROWSER_TEST_F(InlineLoginHelperBrowserTest,
   base::MessageLoop::current()->RunUntilIdle();
 }
 
-#endif  // OS_CHROMEOS
-
 class InlineLoginUISafeIframeBrowserTest : public InProcessBrowserTest {
  public:
   FooWebUIProvider& foo_provider() { return foo_provider_; }
@@ -822,17 +818,10 @@ IN_PROC_BROWSER_TEST_F(InlineLoginUISafeIframeBrowserTest, NoWebUIInIframe) {
   ui_test_utils::NavigateToURL(browser(), url);
 }
 
-// Flaky on CrOS, http://crbug.com/364759.
-#if defined(OS_CHROMEOS)
-#define MAYBE_TopFrameNavigationDisallowed DISABLED_TopFrameNavigationDisallowed
-#else
-#define MAYBE_TopFrameNavigationDisallowed TopFrameNavigationDisallowed
-#endif
-
 // Make sure that the gaia iframe cannot trigger top-frame navigation.
 // TODO(guohui): flaky on trybot crbug/364759.
 IN_PROC_BROWSER_TEST_F(InlineLoginUISafeIframeBrowserTest,
-    MAYBE_TopFrameNavigationDisallowed) {
+    TopFrameNavigationDisallowed) {
   // Loads into gaia iframe a web page that attempts to deframe on load.
   GURL deframe_url(embedded_test_server()->GetURL("/login/deframe.html"));
   GURL url(net::AppendOrReplaceQueryParameter(GetSigninPromoURL(), "frameUrl",
@@ -867,7 +856,6 @@ IN_PROC_BROWSER_TEST_F(InlineLoginUISafeIframeBrowserTest,
   EXPECT_EQ(GURL("about:blank"), contents->GetVisibleURL());
 }
 
-#if !defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(InlineLoginUISafeIframeBrowserTest,
     ConfirmationRequiredForNonsecureSignin) {
   FakeGaia fake_gaia;
@@ -896,4 +884,3 @@ IN_PROC_BROWSER_TEST_F(InlineLoginUISafeIframeBrowserTest,
   run_loop.Run();
   base::MessageLoop::current()->RunUntilIdle();
 }
-#endif // OS_CHROMEOS

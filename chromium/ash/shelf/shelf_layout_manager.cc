@@ -37,6 +37,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "ui/aura/client/cursor_client.h"
+#include "ui/aura/mus/mus_util.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/compositor/layer.h"
@@ -271,15 +272,12 @@ ShelfAlignment ShelfLayoutManager::GetAlignment() const {
 }
 
 gfx::Rect ShelfLayoutManager::GetIdealBounds() {
-  gfx::Rect bounds(
-      ScreenUtil::GetDisplayBoundsInParent(shelf_->GetNativeView()));
-  int width = 0, height = 0;
-  GetShelfSize(&width, &height);
+  gfx::Rect rect(ScreenUtil::GetDisplayBoundsInParent(shelf_->GetNativeView()));
   return SelectValueForShelfAlignment(
-      gfx::Rect(bounds.x(), bounds.bottom() - height, bounds.width(), height),
-      gfx::Rect(bounds.x(), bounds.y(), width, bounds.height()),
-      gfx::Rect(bounds.right() - width, bounds.y(), width, bounds.height()),
-      gfx::Rect(bounds.x(), bounds.y(), bounds.width(), height));
+      gfx::Rect(rect.x(), rect.bottom() - kShelfSize, rect.width(), kShelfSize),
+      gfx::Rect(rect.x(), rect.y(), kShelfSize, rect.height()),
+      gfx::Rect(rect.right() - kShelfSize, rect.y(), kShelfSize, rect.height()),
+      gfx::Rect(rect.x(), rect.y(), rect.width(), kShelfSize));
 }
 
 void ShelfLayoutManager::LayoutShelf() {
@@ -294,8 +292,7 @@ void ShelfLayoutManager::LayoutShelf() {
     // the ShelfView for a vertical shelf are set when |shelf_|'s bounds
     // are changed via UpdateBoundsAndOpacity(). This sets the origin and the
     // dimension in the other direction.
-    shelf_->shelf()->SetShelfViewBounds(
-        target_bounds.shelf_bounds_in_shelf);
+    shelf_->shelf()->SetShelfViewBounds(target_bounds.shelf_bounds_in_shelf);
     // Update insets in ShelfWindowTargeter when shelf bounds change.
     FOR_EACH_OBSERVER(ShelfLayoutManagerObserver, observers_,
                       WillChangeVisibilityState(visibility_state()));
@@ -371,7 +368,7 @@ void ShelfLayoutManager::UpdateAutoHideState() {
       if (!auto_hide_timer_.IsRunning()) {
         mouse_over_shelf_when_auto_hide_timer_started_ =
             shelf_->GetWindowBoundsInScreen().Contains(
-                Shell::GetScreen()->GetCursorScreenPoint());
+                gfx::Screen::GetScreen()->GetCursorScreenPoint());
       }
       auto_hide_timer_.Start(
           FROM_HERE,
@@ -683,9 +680,12 @@ void ShelfLayoutManager::UpdateBoundsAndOpacity(
       status_animation_setter.AddObserver(observer);
 
     GetLayer(shelf_)->SetOpacity(target_bounds.opacity);
-    shelf_->SetBounds(ScreenUtil::ConvertRectToScreen(
-        shelf_->GetNativeView()->parent(),
-        target_bounds.shelf_bounds_in_root));
+    // mash::wm::ShelfLayout manages window bounds when running mash_shell.
+    if (!aura::GetMusWindow(shelf_->GetNativeWindow())) {
+      shelf_->SetBounds(ScreenUtil::ConvertRectToScreen(
+          shelf_->GetNativeView()->parent(),
+          target_bounds.shelf_bounds_in_root));
+    }
 
     GetLayer(shelf_->status_area_widget())->SetOpacity(
         target_bounds.status_opacity);
@@ -705,10 +705,13 @@ void ShelfLayoutManager::UpdateBoundsAndOpacity(
                         target_bounds.shelf_bounds_in_root.x());
     status_bounds.set_y(status_bounds.y() +
                         target_bounds.shelf_bounds_in_root.y());
-    shelf_->status_area_widget()->SetBounds(
-        ScreenUtil::ConvertRectToScreen(
-            shelf_->status_area_widget()->GetNativeView()->parent(),
-            status_bounds));
+    // mash::wm::ShelfLayout manages window bounds when running mash_shell.
+    if (!aura::GetMusWindow(shelf_->GetNativeWindow())) {
+      shelf_->status_area_widget()->SetBounds(
+          ScreenUtil::ConvertRectToScreen(
+              shelf_->status_area_widget()->GetNativeView()->parent(),
+              status_bounds));
+    }
     if (!state_.is_screen_locked) {
       gfx::Insets insets;
       // If user session is blocked (login to new user session or add user to
@@ -732,38 +735,14 @@ void ShelfLayoutManager::StopAnimating() {
   GetLayer(shelf_->status_area_widget())->GetAnimator()->StopAnimating();
 }
 
-void ShelfLayoutManager::GetShelfSize(int* width, int* height) {
-  *width = *height = 0;
-  gfx::Size status_size(
-      shelf_->status_area_widget()->GetWindowBoundsInScreen().size());
-  if (IsHorizontalAlignment())
-    *height = kShelfSize;
-  else
-    *width = kShelfSize;
-}
-
-void ShelfLayoutManager::AdjustBoundsBasedOnAlignment(int inset,
-                                                      gfx::Rect* bounds) const {
-  bounds->Inset(SelectValueForShelfAlignment(
-      gfx::Insets(0, 0, inset, 0),
-      gfx::Insets(0, inset, 0, 0),
-      gfx::Insets(0, 0, 0, inset),
-      gfx::Insets(inset, 0, 0, 0)));
-}
-
-void ShelfLayoutManager::CalculateTargetBounds(
-    const State& state,
-    TargetBounds* target_bounds) {
+void ShelfLayoutManager::CalculateTargetBounds(const State& state,
+                                               TargetBounds* target_bounds) {
   gfx::Rect available_bounds =
       ScreenUtil::GetShelfDisplayBoundsInRoot(root_window_);
   gfx::Rect status_size(
       shelf_->status_area_widget()->GetWindowBoundsInScreen().size());
-  int shelf_width = 0, shelf_height = 0;
-  GetShelfSize(&shelf_width, &shelf_height);
-  if (IsHorizontalAlignment())
-    shelf_width = available_bounds.width();
-  else
-    shelf_height = available_bounds.height();
+  int shelf_width = PrimaryAxisValue(available_bounds.width(), kShelfSize);
+  int shelf_height = PrimaryAxisValue(kShelfSize, available_bounds.height());
 
   if (state.visibility_state == SHELF_AUTO_HIDE &&
       state.auto_hide_state == SHELF_AUTO_HIDE_HIDDEN) {
@@ -1007,7 +986,7 @@ gfx::Rect ShelfLayoutManager::GetAutoHideShowShelfRegionInScreen() const {
 
 ShelfAutoHideState ShelfLayoutManager::CalculateAutoHideState(
     ShelfVisibilityState visibility_state) const {
-  if (visibility_state != SHELF_AUTO_HIDE || !shelf_)
+  if (visibility_state != SHELF_AUTO_HIDE || !shelf_ || !shelf_->shelf())
     return SHELF_AUTO_HIDE_HIDDEN;
 
   Shell* shell = Shell::GetInstance();
@@ -1085,7 +1064,7 @@ ShelfAutoHideState ShelfLayoutManager::CalculateAutoHideState(
   }
 
   gfx::Point cursor_position_in_screen =
-      Shell::GetScreen()->GetCursorScreenPoint();
+      gfx::Screen::GetScreen()->GetCursorScreenPoint();
   if (shelf_region.Contains(cursor_position_in_screen))
     return SHELF_AUTO_HIDE_SHOWN;
 

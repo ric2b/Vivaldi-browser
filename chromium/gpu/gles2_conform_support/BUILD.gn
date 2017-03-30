@@ -29,11 +29,14 @@ config("gles2_conform_test_warnings") {
       # GTFVecBase.h contains static no-inline functions in a header :-/
       "-Wno-unused-function",
       "-Wno-unused-variable",
+
+      # There are some implicit conversions from "int" to "char" in
+      # GTFExtensionTestSurfacelessContext.c.
+      "-Wno-constant-conversion",
     ]
   }
 }
 
-import("//build/config/allocator.gni")
 import("//testing/test.gni")
 
 # GYP version: gpu/gles2_conform_support/gles2_conform_support.gyp:gles2_conform_support
@@ -63,10 +66,6 @@ executable("gles2_conform_support") {
       "native/egl_native_aura.cc",
       "native/egl_native_x11.cc",
     ]
-  }
-  if (use_allocator != "none") {
-    # See http://crbug.com/162998#c4 for why this is needed.
-    deps += [ "//base/allocator" ]
   }
 }
 
@@ -173,15 +172,6 @@ if (internal_gles2_conform_tests) {
     #     ],
     #    },
   }
-}
-
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("gles2_conform_test_run") {
-  testonly = true
-  deps = [
-    ":gles2_conform_test",
-  ]
 }
 
 test("gles2_conform_test") {

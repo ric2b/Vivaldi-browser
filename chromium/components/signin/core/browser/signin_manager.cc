@@ -8,11 +8,11 @@
 #include <vector>
 
 #include "base/metrics/histogram_macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
 #include "components/signin/core/browser/signin_client.h"
@@ -149,10 +149,11 @@ void SigninManager::HandleAuthError(const GoogleServiceAuthError& error) {
 }
 
 void SigninManager::SignOut(
-    signin_metrics::ProfileSignout signout_source_metric) {
+    signin_metrics::ProfileSignout signout_source_metric,
+    signin_metrics::SignoutDelete signout_delete_metric) {
   DCHECK(IsInitialized());
 
-  signin_metrics::LogSignout(signout_source_metric);
+  signin_metrics::LogSignout(signout_source_metric, signout_delete_metric);
   if (!IsAuthenticated()) {
     if (AuthInProgress()) {
       // If the user is in the process of signing in, then treat a call to
@@ -230,7 +231,8 @@ void SigninManager::Initialize(PrefService* local_state) {
   if ((!account_id.empty() && !IsAllowedUsername(user)) || !IsSigninAllowed()) {
     // User is signed in, but the username is invalid - the administrator must
     // have changed the policy since the last signin, so sign out the user.
-    SignOut(signin_metrics::SIGNIN_PREF_CHANGED_DURING_SIGNIN);
+    SignOut(signin_metrics::SIGNIN_PREF_CHANGED_DURING_SIGNIN,
+            signin_metrics::SignoutDelete::IGNORE_METRIC);
   }
 
   if (account_tracker_service()->GetMigrationState() ==
@@ -253,7 +255,8 @@ void SigninManager::OnGoogleServicesUsernamePatternChanged() {
       !IsAllowedUsername(GetAuthenticatedAccountInfo().email)) {
     // Signed in user is invalid according to the current policy so sign
     // the user out.
-    SignOut(signin_metrics::GOOGLE_SERVICE_NAME_PATTERN_CHANGED);
+    SignOut(signin_metrics::GOOGLE_SERVICE_NAME_PATTERN_CHANGED,
+            signin_metrics::SignoutDelete::IGNORE_METRIC);
   }
 }
 
@@ -266,7 +269,8 @@ bool SigninManager::IsSigninAllowed() const {
 
 void SigninManager::OnSigninAllowedPrefChanged() {
   if (!IsSigninAllowed())
-    SignOut(signin_metrics::SIGNOUT_PREF_CHANGED);
+    SignOut(signin_metrics::SIGNOUT_PREF_CHANGED,
+            signin_metrics::SignoutDelete::IGNORE_METRIC);
 }
 
 // static

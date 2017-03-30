@@ -48,7 +48,6 @@ public class Preferences extends AppCompatActivity implements
 
     public static final String EXTRA_SHOW_FRAGMENT = "show_fragment";
     public static final String EXTRA_SHOW_FRAGMENT_ARGUMENTS = "show_fragment_args";
-    public static final String EXTRA_DISPLAY_HOME_AS_UP = "display_home_as_up";
 
     private static final String TAG = "Preferences";
 
@@ -88,9 +87,8 @@ public class Preferences extends AppCompatActivity implements
 
         String initialFragment = getIntent().getStringExtra(EXTRA_SHOW_FRAGMENT);
         Bundle initialArguments = getIntent().getBundleExtra(EXTRA_SHOW_FRAGMENT_ARGUMENTS);
-        boolean displayHomeAsUp = getIntent().getBooleanExtra(EXTRA_DISPLAY_HOME_AS_UP, true);
 
-        if (displayHomeAsUp) getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+        getSupportActionBar().setDisplayHomeAsUpEnabled(true);
 
         // If savedInstanceState is non-null, then the activity is being
         // recreated and super.onCreate() has already recreated the fragment.
@@ -191,7 +189,7 @@ public class Preferences extends AppCompatActivity implements
         super.onCreateOptionsMenu(menu);
         // By default, every screen in Settings shows a "Help & feedback" menu item.
         MenuItem help = menu.add(
-                Menu.NONE, R.id.menu_id_help_general, Menu.CATEGORY_SECONDARY, R.string.menu_help);
+                Menu.NONE, R.id.menu_id_general_help, Menu.CATEGORY_SECONDARY, R.string.menu_help);
         help.setIcon(R.drawable.ic_help_and_feedback);
         return true;
     }
@@ -210,7 +208,7 @@ public class Preferences extends AppCompatActivity implements
         if (item.getItemId() == android.R.id.home) {
             finish();
             return true;
-        } else if (item.getItemId() == R.id.menu_id_help_general) {
+        } else if (item.getItemId() == R.id.menu_id_general_help) {
             HelpAndFeedback.getInstance(this).show(this, getString(R.string.help_context_settings),
                     Profile.getLastUsedProfile(), null);
             return true;

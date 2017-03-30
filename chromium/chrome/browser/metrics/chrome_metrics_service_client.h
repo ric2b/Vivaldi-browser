@@ -28,7 +28,7 @@ class PluginMetricsProvider;
 class PrefRegistrySimple;
 class PrefService;
 
-#if !defined(OS_CHROMEOS) && !defined(OS_IOS)
+#if !defined(OS_CHROMEOS)
 class SigninStatusMetricsProvider;
 #endif
 
@@ -83,8 +83,11 @@ class ChromeMetricsServiceClient
   // Completes the two-phase initialization of ChromeMetricsServiceClient.
   void Initialize();
 
-  // Callback that continues the init task by loading plugin information.
+  // Callback that continues the init task by getting a Bluetooth Adapter.
   void OnInitTaskGotHardwareClass();
+
+  // Callback that continues the init task by loading plugin information.
+  void OnInitTaskGotBluetoothAdapter();
 
   // Called after the Plugin init task has been completed that continues the
   // init task by launching a task to gather Google Update statistics.
@@ -149,9 +152,11 @@ class ChromeMetricsServiceClient
 
   content::NotificationRegistrar registrar_;
 
+#if defined(OS_CHROMEOS)
   // On ChromeOS, holds a weak pointer to the ChromeOSMetricsProvider instance
   // that has been registered with MetricsService. On other platforms, is NULL.
   ChromeOSMetricsProvider* chromeos_metrics_provider_;
+#endif
 
   // Saved callback received from CollectFinalMetricsForLog().
   base::Closure collect_final_metrics_done_callback_;

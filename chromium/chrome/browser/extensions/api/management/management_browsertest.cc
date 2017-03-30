@@ -8,7 +8,6 @@
 #include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
@@ -25,6 +24,7 @@
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_types.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_view_host.h"
@@ -624,8 +624,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest,
       browser()->profile())->extension_service();
   ExtensionRegistry* registry = ExtensionRegistry::Get(browser()->profile());
   const char kExtensionId[] = "ogjcoiohnmldgjemafoockdghcjciccf";
-  extensions::ExtensionUpdater::CheckParams params;
-  service->updater()->set_default_check_params(params);
   const size_t size_before = registry->enabled_extensions().size();
   base::FilePath basedir = test_data_dir_.AppendASCII("autoupdate");
   ASSERT_TRUE(registry->disabled_extensions().is_empty());

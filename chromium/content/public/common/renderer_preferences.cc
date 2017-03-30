@@ -56,6 +56,9 @@ RendererPreferences::RendererPreferences()
       serve_resources_only_from_cache(false)
 {}
 
+RendererPreferences::RendererPreferences(const RendererPreferences& other) =
+    default;
+
 RendererPreferences::~RendererPreferences() { }
 
 }  // namespace content

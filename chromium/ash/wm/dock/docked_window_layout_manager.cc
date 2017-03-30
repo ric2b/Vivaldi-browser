@@ -426,8 +426,8 @@ DockedWindowLayoutManager::~DockedWindowLayoutManager() {
 
 void DockedWindowLayoutManager::Shutdown() {
   if (shelf_ && shelf_->shelf_widget()) {
-    ShelfLayoutManager* shelf_layout_manager = ShelfLayoutManager::ForShelf(
-        shelf_->shelf_widget()->GetNativeWindow());
+    ShelfLayoutManager* shelf_layout_manager =
+        shelf_->shelf_widget()->shelf_layout_manager();
     shelf_layout_manager->RemoveObserver(this);
     shelf_observer_.reset();
   }
@@ -540,8 +540,8 @@ void DockedWindowLayoutManager::SetShelf(Shelf* shelf) {
   DCHECK(!shelf_);
   shelf_ = shelf;
   if (shelf_->shelf_widget()) {
-    ShelfLayoutManager* shelf_layout_manager = ShelfLayoutManager::ForShelf(
-        shelf_->shelf_widget()->GetNativeWindow());
+    ShelfLayoutManager* shelf_layout_manager =
+        shelf_->shelf_widget()->shelf_layout_manager();
     shelf_layout_manager->AddObserver(this);
     shelf_observer_.reset(new ShelfWindowObserver(this));
   }
@@ -614,8 +614,9 @@ bool DockedWindowLayoutManager::CanDockWindow(
   }
   // If a window is tall and cannot be resized down to maximum height allowed
   // then it cannot be docked.
-  const gfx::Rect work_area =
-      Shell::GetScreen()->GetDisplayNearestWindow(dock_container_).work_area();
+  const gfx::Rect work_area = gfx::Screen::GetScreen()
+                                  ->GetDisplayNearestWindow(dock_container_)
+                                  .work_area();
   if (GetWindowHeightCloseTo(window, work_area.height()) > work_area.height())
     return false;
   // Cannot dock on the other size from an existing dock.
@@ -755,7 +756,7 @@ void DockedWindowLayoutManager::SetChildBounds(
     return;
   // Whenever one of our windows is moved or resized enforce layout.
   ShelfLayoutManager* shelf_layout =
-      ShelfLayoutManager::ForShelf(dock_container_);
+      shelf_->shelf_widget()->shelf_layout_manager();
   if (shelf_layout)
     shelf_layout->UpdateVisibilityState();
 }
@@ -932,8 +933,9 @@ void DockedWindowLayoutManager::OnWindowActivated(
 void DockedWindowLayoutManager::MaybeMinimizeChildrenExcept(
     aura::Window* child) {
   // Minimize any windows that don't fit without overlap.
-  const gfx::Rect work_area =
-      Shell::GetScreen()->GetDisplayNearestWindow(dock_container_).work_area();
+  const gfx::Rect work_area = gfx::Screen::GetScreen()
+                                  ->GetDisplayNearestWindow(dock_container_)
+                                  .work_area();
   int available_room = work_area.height();
   bool gap_needed = !!child;
   if (child)
@@ -978,8 +980,8 @@ void DockedWindowLayoutManager::RestoreDockedWindow(
   // Always place restored window at the bottom shuffling the other windows up.
   // TODO(varkha): add a separate container for docked windows to keep track
   // of ordering.
-  gfx::Display display = Shell::GetScreen()->GetDisplayNearestWindow(
-      dock_container_);
+  gfx::Display display =
+      gfx::Screen::GetScreen()->GetDisplayNearestWindow(dock_container_);
   const gfx::Rect work_area = display.work_area();
 
   // Evict the window if it can no longer be docked because of its height.
@@ -1112,8 +1114,9 @@ void DockedWindowLayoutManager::Relayout() {
   }
 
   // Position docked windows as well as the window being dragged.
-  gfx::Rect work_area =
-      Shell::GetScreen()->GetDisplayNearestWindow(dock_container_).work_area();
+  gfx::Rect work_area = gfx::Screen::GetScreen()
+                            ->GetDisplayNearestWindow(dock_container_)
+                            .work_area();
   if (shelf_observer_)
     work_area.Subtract(shelf_observer_->shelf_bounds_in_screen());
   int available_room = CalculateWindowHeightsAndRemainingRoom(work_area,
@@ -1276,8 +1279,9 @@ void DockedWindowLayoutManager::FanOutChildren(
 void DockedWindowLayoutManager::UpdateDockBounds(
     DockedWindowLayoutManagerObserver::Reason reason) {
   int dock_inset = docked_width_ + (docked_width_ > 0 ? kMinDockGap : 0);
-  const gfx::Rect work_area =
-      Shell::GetScreen()->GetDisplayNearestWindow(dock_container_).work_area();
+  const gfx::Rect work_area = gfx::Screen::GetScreen()
+                                  ->GetDisplayNearestWindow(dock_container_)
+                                  .work_area();
   gfx::Rect bounds = gfx::Rect(
       alignment_ == DOCKED_ALIGNMENT_RIGHT && dock_inset > 0 ?
           dock_container_->bounds().right() - dock_inset:

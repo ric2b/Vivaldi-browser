@@ -62,7 +62,7 @@ interface Document : Node {
     [NewObject, RaisesException, MeasureAs=DocumentCreateAttribute] Attr createAttribute(DOMString localName);
     [NewObject, RaisesException, MeasureAs=DocumentCreateAttributeNS] Attr createAttributeNS(DOMString? namespaceURI, DOMString qualifiedName);
 
-    [NewObject, RaisesException] Event createEvent(DOMString eventType);
+    [NewObject, RaisesException, CallWith=ExecutionContext] Event createEvent(DOMString eventType);
 
     [NewObject] Range createRange();
 
@@ -113,8 +113,8 @@ interface Document : Node {
     // FIXME: There are two open() methods in the spec.
     [Custom, CustomElementCallbacks, RaisesException] void open();
     [RaisesException] void close();
-    [CallWith=ActiveWindow, CustomElementCallbacks, RaisesException] void write(DOMString... text);
-    [CallWith=ActiveWindow, CustomElementCallbacks, RaisesException] void writeln(DOMString... text);
+    [CallWith=FirstWindow, CustomElementCallbacks, RaisesException] void write(DOMString... text);
+    [CallWith=FirstWindow, CustomElementCallbacks, RaisesException] void writeln(DOMString... text);
 
     // user interaction
     [ImplementedAs=domWindow] readonly attribute Window? defaultView;
@@ -195,7 +195,6 @@ interface Document : Node {
     readonly attribute VisibilityState visibilityState;
 
     // Non-standard APIs
-    [DeprecateAs=DocumentDefaultCharset, TreatReturnedNullStringAs=Undefined] readonly attribute DOMString defaultCharset;
     [MeasureAs=DocumentCaretRangeFromPoint] Range caretRangeFromPoint([Default=Undefined] optional long x, [Default=Undefined] optional long y);
 
     // Deprecated prefixed page visibility API.

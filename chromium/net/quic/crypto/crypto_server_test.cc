@@ -259,7 +259,7 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
 
   void ShouldSucceed(const CryptoHandshakeMessage& message) {
     bool called = false;
-    IPAddressNumber server_ip;
+    IPAddress server_ip;
     config_.ValidateClientHello(message, client_address_.address(), server_ip,
                                 supported_versions_.front(), &clock_,
                                 &crypto_proof_,
@@ -277,7 +277,7 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
   void ShouldFailMentioning(const char* error_substr,
                             const CryptoHandshakeMessage& message,
                             bool* called) {
-    IPAddressNumber server_ip;
+    IPAddress server_ip;
     config_.ValidateClientHello(
         message, client_address_.address(), server_ip,
         supported_versions_.front(), &clock_, &crypto_proof_,
@@ -288,7 +288,7 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
                                const ValidateCallback::Result& result,
                                bool should_succeed,
                                const char* error_substr) {
-    IPAddressNumber server_ip;
+    IPAddress server_ip;
     string error_details;
     QuicConnectionId server_designated_connection_id =
         rand_for_id_generation_.RandUint64();
@@ -371,21 +371,22 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
   }
 
   string XlctHexString() {
-    const vector<string>* certs;
-    IPAddressNumber server_ip;
+    scoped_refptr<ProofSource::Chain> chain;
+    IPAddress server_ip;
     string sig;
     string cert_sct;
     scoped_ptr<ProofSource> proof_source(
         CryptoTestUtils::ProofSourceForTesting());
-    if (!proof_source->GetProof(server_ip, "", "", false, &certs, &sig,
+    if (!proof_source->GetProof(server_ip, "", "", false, &chain, &sig,
                                 &cert_sct) ||
-        certs->empty()) {
+        chain->certs.empty()) {
       return "#0100000000000000";
     }
 
     std::ostringstream xlct_stream;
-    uint64_t xlct =
-        QuicUtils::FNV1a_64_Hash(certs->at(0).c_str(), certs->at(0).length());
+    uint64_t xlct = QuicUtils::FNV1a_64_Hash(chain->certs.at(0).c_str(),
+                                             chain->certs.at(0).length());
+
     return "#" + base::HexEncode(reinterpret_cast<char*>(&xlct), sizeof(xlct));
   }
 
@@ -827,7 +828,6 @@ TEST_P(CryptoServerTest, NoServerNonce) {
 }
 
 TEST_P(CryptoServerTest, ProofForSuppliedServerConfig) {
-  ValueRestore<bool> old_flag(&FLAGS_quic_use_primary_config_for_proof, true);
   client_address_ = IPEndPoint(Loopback6(), 1234);
   // clang-format off
   CryptoHandshakeMessage msg = CryptoTestUtils::Message(
@@ -1166,7 +1166,7 @@ TEST_P(AsyncStrikeServerVerificationTest, AsyncReplayProtection) {
   out_.set_tag(0);
 
   bool called = false;
-  IPAddressNumber server_ip;
+  IPAddress server_ip;
   config_.ValidateClientHello(msg, client_address_.address(), server_ip,
                               client_version_, &clock_, &crypto_proof_,
                               new ValidateCallback(this, true, "", &called));

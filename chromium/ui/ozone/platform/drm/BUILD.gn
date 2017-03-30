@@ -10,6 +10,8 @@ declare_args() {
   use_drm_atomic = false
 }
 
+visibility = [ "//ui/ozone/*" ]
+
 pkg_config("libdrm") {
   packages = [ "libdrm" ]
 }
@@ -78,6 +80,8 @@ source_set("gbm") {
     "gpu/hardware_display_plane_manager.h",
     "gpu/hardware_display_plane_manager_legacy.cc",
     "gpu/hardware_display_plane_manager_legacy.h",
+    "gpu/inter_thread_messaging_proxy.cc",
+    "gpu/inter_thread_messaging_proxy.h",
     "gpu/overlay_plane.cc",
     "gpu/overlay_plane.h",
     "gpu/page_flip_request.cc",
@@ -87,19 +91,14 @@ source_set("gbm") {
     "gpu/scanout_buffer.h",
     "gpu/screen_manager.cc",
     "gpu/screen_manager.h",
-    "host/channel_observer.h",
     "host/drm_cursor.cc",
     "host/drm_cursor.h",
-    "host/drm_cursor_core.cc",
-    "host/drm_cursor_core.h",
     "host/drm_device_handle.cc",
     "host/drm_device_handle.h",
     "host/drm_display_host.cc",
     "host/drm_display_host.h",
     "host/drm_display_host_manager.cc",
     "host/drm_display_host_manager.h",
-    "host/drm_display_host_manager_core.cc",
-    "host/drm_display_host_manager_core.h",
     "host/drm_gpu_platform_support_host.cc",
     "host/drm_gpu_platform_support_host.h",
     "host/drm_native_display_delegate.cc",
@@ -112,6 +111,8 @@ source_set("gbm") {
     "host/drm_window_host.h",
     "host/drm_window_host_manager.cc",
     "host/drm_window_host_manager.h",
+    "host/gpu_thread_adapter.h",
+    "host/gpu_thread_observer.h",
     "ozone_platform_gbm.cc",
     "ozone_platform_gbm.h",
   ]
@@ -133,6 +134,8 @@ source_set("gbm") {
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/ozone:ozone_base",
+    "//ui/ozone/common",
+    "//ui/platform_window",
   ]
 
   configs += [ ":libdrm" ]
@@ -189,7 +192,8 @@ source_set("gbm_unittests") {
     "//skia",
     "//testing/gtest",
     "//ui/gfx",
-    "//ui/ozone",
+    "//ui/ozone:platform",
+    "//ui/ozone/common",
   ]
 
   public_configs = [ ":libdrm" ]

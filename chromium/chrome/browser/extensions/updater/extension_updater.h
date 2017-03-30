@@ -119,12 +119,6 @@ class ExtensionUpdater : public ExtensionDownloaderDelegate,
   // code should just call CheckSoon().
   bool WillCheckSoon() const;
 
-  // Changes the params that are used for the automatic periodic update checks,
-  // as well as for explicit calls to CheckSoon.
-  void set_default_check_params(const CheckParams& params) {
-    default_params_ = params;
-  }
-
   // Overrides the extension cache with |extension_cache| for testing.
   void SetExtensionCacheForTesting(ExtensionCache* extension_cache);
 
@@ -143,6 +137,7 @@ class ExtensionUpdater : public ExtensionDownloaderDelegate,
                    bool file_ownership_passed,
                    const std::set<int>& request_ids,
                    const InstallCallback& callback);
+    FetchedCRXFile(const FetchedCRXFile& other);
     ~FetchedCRXFile();
 
     CRXFileInfo info;
@@ -154,6 +149,7 @@ class ExtensionUpdater : public ExtensionDownloaderDelegate,
 
   struct InProgressCheck {
     InProgressCheck();
+    InProgressCheck(const InProgressCheck& other);
     ~InProgressCheck();
 
     bool install_immediately;
@@ -270,8 +266,6 @@ class ExtensionUpdater : public ExtensionDownloaderDelegate,
   // Fetched CRX files waiting to be installed.
   std::stack<FetchedCRXFile> fetched_crx_files_;
   FetchedCRXFile current_crx_file_;
-
-  CheckParams default_params_;
 
   ExtensionCache* extension_cache_;
 

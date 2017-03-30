@@ -31,6 +31,7 @@
 #import "core/style/ShadowList.h"
 #import "platform/LayoutTestSupport.h"
 #import "platform/PlatformResourceLoader.h"
+#import "platform/Theme.h"
 #import "platform/graphics/BitmapImage.h"
 #import "platform/mac/ColorMac.h"
 #import "platform/mac/LocalCurrentGraphicsContext.h"
@@ -116,8 +117,9 @@ namespace blink {
 using namespace HTMLNames;
 
 LayoutThemeMac::LayoutThemeMac()
-    : m_notificationObserver(AdoptNS, [[BlinkLayoutThemeNotificationObserver alloc] initWithTheme:this])
-    , m_painter(*this)
+    : LayoutTheme(platformTheme())
+    , m_notificationObserver(AdoptNS, [[BlinkLayoutThemeNotificationObserver alloc] initWithTheme:this])
+    , m_painter(*this, platformTheme())
 {
     [[NSNotificationCenter defaultCenter] addObserver:m_notificationObserver.get()
                                              selector:@selector(systemColorsDidChange:)
@@ -473,19 +475,19 @@ void LayoutThemeMac::addVisualOverflow(const LayoutObject& object, IntRect& rect
 {
     ControlPart part = object.style()->appearance();
 
-#if USE(NEW_THEME)
-    switch (part) {
-    case CheckboxPart:
-    case RadioPart:
-    case PushButtonPart:
-    case SquareButtonPart:
-    case ButtonPart:
-    case InnerSpinButtonPart:
-        return LayoutTheme::addVisualOverflow(object, rect);
-    default:
-        break;
+    if (hasPlatformTheme()) {
+        switch (part) {
+        case CheckboxPart:
+        case RadioPart:
+        case PushButtonPart:
+        case SquareButtonPart:
+        case ButtonPart:
+        case InnerSpinButtonPart:
+            return LayoutTheme::addVisualOverflow(object, rect);
+        default:
+            break;
+        }
     }
-#endif
 
     float zoomLevel = object.style()->effectiveZoom();
 
@@ -1084,7 +1086,7 @@ String LayoutThemeMac::fileListNameForWidth(Locale& locale, const FileList* file
         strToTruncate = locale.queryString(WebLocalizedString::FileButtonNoFileSelectedLabel);
     } else if (fileList->length() == 1) {
         File* file = fileList->item(0);
-        if (file->userVisibility() == File::IsUserVisible)
+        if (file->getUserVisibility() == File::IsUserVisible)
             strToTruncate = [[NSFileManager defaultManager] displayNameAtPath:(fileList->item(0)->path())];
         else
             strToTruncate = file->name();
@@ -1102,7 +1104,7 @@ NSView* FlippedView()
     return view;
 }
 
-LayoutTheme& LayoutTheme::theme()
+LayoutTheme& LayoutTheme::nativeTheme()
 {
     DEFINE_STATIC_REF(LayoutTheme, layoutTheme, (LayoutThemeMac::create()));
     return *layoutTheme;

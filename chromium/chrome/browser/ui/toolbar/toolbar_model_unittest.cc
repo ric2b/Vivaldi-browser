@@ -21,6 +21,7 @@
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "components/google/core/browser/google_switches.h"
 #include "components/search/search.h"
+#include "components/search_engines/template_url_service.h"
 #include "components/toolbar/toolbar_model.h"
 #include "components/variations/entropy_provider.h"
 #include "content/public/browser/navigation_entry.h"
@@ -145,9 +146,7 @@ struct TestItem {
 class ToolbarModelTest : public BrowserWithTestWindowTest {
  public:
   ToolbarModelTest();
-  ToolbarModelTest(Browser::Type browser_type,
-                   chrome::HostDesktopType host_desktop_type,
-                   bool hosted_app);
+  ToolbarModelTest(Browser::Type browser_type, bool hosted_app);
   ~ToolbarModelTest() override;
 
   // BrowserWithTestWindowTest:
@@ -169,14 +168,8 @@ class ToolbarModelTest : public BrowserWithTestWindowTest {
 ToolbarModelTest::ToolbarModelTest() {
 }
 
-ToolbarModelTest::ToolbarModelTest(
-    Browser::Type browser_type,
-    chrome::HostDesktopType host_desktop_type,
-    bool hosted_app)
-    : BrowserWithTestWindowTest(browser_type,
-                                host_desktop_type,
-                                hosted_app) {
-}
+ToolbarModelTest::ToolbarModelTest(Browser::Type browser_type, bool hosted_app)
+    : BrowserWithTestWindowTest(browser_type, hosted_app) {}
 
 ToolbarModelTest::~ToolbarModelTest() {
 }
@@ -260,10 +253,7 @@ class PopupToolbarModelTest : public ToolbarModelTest {
 };
 
 PopupToolbarModelTest::PopupToolbarModelTest()
-      : ToolbarModelTest(Browser::TYPE_POPUP,
-                         chrome::HOST_DESKTOP_TYPE_NATIVE,
-                         false) {
-}
+    : ToolbarModelTest(Browser::TYPE_POPUP, false) {}
 
 PopupToolbarModelTest::~PopupToolbarModelTest() {
 }
@@ -350,6 +340,15 @@ TEST_F(ToolbarModelTest, GoogleBaseURL) {
   UIThreadSearchTermsData::SetGoogleBaseURL(std::string());
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       switches::kGoogleBaseURL, "http://www.foo.com/");
+
+  // For the default search engine to reflect the new Google base URL we just
+  // set, the TemplateURLService has to know the base URL changed. Normally the
+  // GoogleURLTracker is the source of such change notifications, but since here
+  // we're modifying the base URL value directly by changing the command-line
+  // flags, we need to manually tell TemplateURLService to check for changes.
+  TemplateURLServiceFactory::GetInstance()->GetForProfile(profile())->
+      GoogleBaseURLChanged();
+
   NavigateAndCheckText(
       GURL("http://www.foo.com/search?q=tractor+supply&espv=1"),
       base::ASCIIToUTF16("tractor supply"), true, true);

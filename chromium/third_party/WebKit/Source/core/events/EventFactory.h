@@ -34,11 +34,12 @@
 namespace blink {
 
 class Event;
+class ExecutionContext;
 
 class EventFactoryBase {
     USING_FAST_MALLOC(EventFactoryBase);
 public:
-    virtual PassRefPtrWillBeRawPtr<Event> create(const String& eventType) = 0;
+    virtual PassRefPtrWillBeRawPtr<Event> create(ExecutionContext*, const String& eventType) = 0;
     virtual ~EventFactoryBase() { }
 
 protected:
@@ -52,9 +53,9 @@ public:
         return adoptPtr(new EventFactory());
     }
 
-    PassRefPtrWillBeRawPtr<Event> create(const String& eventType) override;
+    PassRefPtrWillBeRawPtr<Event> create(ExecutionContext*, const String& eventType) override;
 };
 
-}
+} // namespace blink
 
 #endif

@@ -17,7 +17,7 @@ FakeModelTypeService::CreateMetadataChangeList() {
 
 syncer::SyncError FakeModelTypeService::MergeSyncData(
     scoped_ptr<MetadataChangeList> metadata_change_list,
-    EntityDataList entity_data_list) {
+    EntityDataMap entity_data_map) {
   return syncer::SyncError();
 }
 
@@ -27,9 +27,7 @@ syncer::SyncError FakeModelTypeService::ApplySyncChanges(
   return syncer::SyncError();
 }
 
-void FakeModelTypeService::LoadMetadata(MetadataCallback callback) {}
-
-void FakeModelTypeService::GetData(ClientKeyList client_keys,
+void FakeModelTypeService::GetData(ClientTagList client_tags,
                                    DataCallback callback) {}
 
 void FakeModelTypeService::GetAllData(DataCallback callback) {}
@@ -37,5 +35,7 @@ void FakeModelTypeService::GetAllData(DataCallback callback) {}
 std::string FakeModelTypeService::GetClientTag(const EntityData& entity_data) {
   return std::string();
 }
+
+void FakeModelTypeService::OnChangeProcessorSet() {}
 
 }  // namespace syncer_v2

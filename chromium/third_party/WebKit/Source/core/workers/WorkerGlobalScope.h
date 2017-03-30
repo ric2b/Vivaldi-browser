@@ -88,7 +88,7 @@ public:
     String userAgent() const final;
     void disableEval(const String& errorMessage) final;
 
-    WorkerOrWorkletScriptController* script() final { return m_script.get(); }
+    WorkerOrWorkletScriptController* scriptController() final { return m_scriptController.get(); }
 
     virtual void didEvaluateWorkerScript();
     void dispose();
@@ -156,7 +156,7 @@ protected:
     WorkerGlobalScope(const KURL&, const String& userAgent, WorkerThread*, double timeOrigin, PassOwnPtr<SecurityOrigin::PrivilegeData>, PassOwnPtrWillBeRawPtr<WorkerClients>);
     void applyContentSecurityPolicyFromVector(const Vector<CSPHeaderAndType>& headers);
 
-    void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtrWillBeRawPtr<ScriptCallStack>) override;
+    void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack>) override;
     void addMessageToWorkerConsole(PassRefPtrWillBeRawPtr<ConsoleMessage>);
     void setV8CacheOptions(V8CacheOptions v8CacheOptions) { m_v8CacheOptions = v8CacheOptions; }
 
@@ -191,7 +191,7 @@ private:
 
     mutable UseCounter::CountBits m_deprecationWarningBits;
 
-    OwnPtrWillBeMember<WorkerOrWorkletScriptController> m_script;
+    OwnPtrWillBeMember<WorkerOrWorkletScriptController> m_scriptController;
     WorkerThread* m_thread;
 
     RefPtrWillBeMember<WorkerInspectorController> m_workerInspectorController;

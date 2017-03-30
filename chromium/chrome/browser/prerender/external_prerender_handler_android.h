@@ -35,7 +35,8 @@ class ExternalPrerenderHandlerAndroid {
                     const base::android::JavaParamRef<jstring>& url,
                     const base::android::JavaParamRef<jstring>& referrer,
                     jint width,
-                    jint height);
+                    jint height,
+                    jboolean prerender_on_cellular);
 
   // Cancel the prerender associated with the prerender_handle_
   void CancelCurrentPrerender(
@@ -47,6 +48,13 @@ class ExternalPrerenderHandlerAndroid {
   static bool HasPrerenderedUrl(Profile* profile,
                                 GURL url,
                                 content::WebContents* web_contents);
+
+  // Whether the PrerenderManager associated with the given profile has any
+  // prerenders for the url, and the prerender has finished loading.
+  static bool HasPrerenderedAndFinishedLoadingUrl(
+      Profile* profile,
+      GURL url,
+      content::WebContents* web_contents);
 
   static bool RegisterExternalPrerenderHandlerAndroid(JNIEnv* env);
 

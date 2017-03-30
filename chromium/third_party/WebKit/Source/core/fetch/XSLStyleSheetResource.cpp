@@ -35,20 +35,20 @@
 
 namespace blink {
 
-ResourcePtr<XSLStyleSheetResource> XSLStyleSheetResource::fetchSynchronously(FetchRequest& request, ResourceFetcher* fetcher)
+PassRefPtrWillBeRawPtr<XSLStyleSheetResource> XSLStyleSheetResource::fetchSynchronously(FetchRequest& request, ResourceFetcher* fetcher)
 {
     request.mutableResourceRequest().setTimeoutInterval(10);
     request.mutableResourceRequest().setRequestContext(WebURLRequest::RequestContextXSLT);
     ResourceLoaderOptions options(request.options());
     options.synchronousPolicy = RequestSynchronously;
     request.setOptions(options);
-    ResourcePtr<XSLStyleSheetResource> resource = toXSLStyleSheetResource(fetcher->requestResource(request, XSLStyleSheetResourceFactory()));
+    RefPtrWillBeRawPtr<XSLStyleSheetResource> resource = toXSLStyleSheetResource(fetcher->requestResource(request, XSLStyleSheetResourceFactory()));
     if (resource && resource->m_data)
         resource->m_sheet = resource->decodedText();
     return resource;
 }
 
-ResourcePtr<XSLStyleSheetResource> XSLStyleSheetResource::fetch(FetchRequest& request, ResourceFetcher* fetcher)
+PassRefPtrWillBeRawPtr<XSLStyleSheetResource> XSLStyleSheetResource::fetch(FetchRequest& request, ResourceFetcher* fetcher)
 {
     ASSERT(RuntimeEnabledFeatures::xsltEnabled());
     request.mutableResourceRequest().setRequestContext(WebURLRequest::RequestContextXSLT);
@@ -68,7 +68,7 @@ XSLStyleSheetResource::XSLStyleSheetResource(const ResourceRequest& resourceRequ
 
 void XSLStyleSheetResource::didAddClient(ResourceClient* c)
 {
-    ASSERT(c->resourceClientType() == StyleSheetResourceClient::expectedType());
+    ASSERT(StyleSheetResourceClient::isExpectedType(c));
     Resource::didAddClient(c);
     if (!isLoading())
         static_cast<StyleSheetResourceClient*>(c)->setXSLStyleSheet(m_resourceRequest.url(), m_response.url(), m_sheet);

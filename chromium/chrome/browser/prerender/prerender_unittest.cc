@@ -14,7 +14,6 @@
 #include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "chrome/browser/net/prediction_options.h"
@@ -29,8 +28,11 @@
 #include "chrome/common/prerender_types.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/content_settings/core/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/test/test_browser_thread.h"
+#include "net/base/network_change_notifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
@@ -266,6 +268,13 @@ class RestorePrerenderMode {
   PrerenderManager::PrerenderManagerMode prev_mode_;
 };
 
+class MockNetworkChangeNotifier4G : public net::NetworkChangeNotifier {
+ public:
+  ConnectionType GetCurrentConnectionType() const override {
+    return NetworkChangeNotifier::CONNECTION_4G;
+  }
+};
+
 DummyPrerenderContents::DummyPrerenderContents(
     UnitTestPrerenderManager* test_prerender_manager,
     const GURL& url,
@@ -329,6 +338,8 @@ class PrerenderTest : public testing::Test {
     return prerender_link_manager_.get();
   }
 
+  Profile* profile() { return &profile_; }
+
   void SetConcurrency(size_t concurrency) {
     prerender_manager()->mutable_config().max_link_concurrency_per_launcher =
         concurrency;
@@ -379,6 +390,12 @@ class PrerenderTest : public testing::Test {
         chrome_browser_net::NETWORK_PREDICTION_NEVER);
   }
 
+  void EnablePrerender() {
+    profile_.GetPrefs()->SetInteger(
+        prefs::kNetworkPredictionOptions,
+        chrome_browser_net::NETWORK_PREDICTION_ALWAYS);
+  }
+
  private:
   // Needed to pass PrerenderManager's DCHECKs.
   base::MessageLoop message_loop_;
@@ -399,6 +416,15 @@ TEST_F(PrerenderTest, PrerenderRespectsDisableFlag) {
     switches::kPrerenderModeSwitchValueDisabled);
   prerender::ConfigurePrerender(*command_line);
   ASSERT_FALSE(PrerenderManager::IsPrerenderingPossible());
+}
+
+TEST_F(PrerenderTest, PrerenderRespectsThirdPartyCookiesPref) {
+  GURL url("http://www.google.com/");
+  RestorePrerenderMode restore_prerender_mode;
+  ASSERT_TRUE(PrerenderManager::IsPrerenderingPossible());
+
+  profile()->GetPrefs()->SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  EXPECT_FALSE(AddSimplePrerender(url));
 }
 
 TEST_F(PrerenderTest, FoundTest) {
@@ -1040,10 +1066,73 @@ TEST_F(PrerenderTest, OmniboxNotAllowedWhenDisabled) {
       GURL("http://www.example.com"), NULL, gfx::Size()));
 }
 
-TEST_F(PrerenderTest, LinkRelNotAllowedWhenDisabled) {
+TEST_F(PrerenderTest, LinkRelStillAllowedWhenDisabled) {
   DisablePrerender();
-  EXPECT_FALSE(AddSimplePrerender(
-      GURL("http://www.example.com")));
+  GURL url("http://www.google.com/");
+  DummyPrerenderContents* prerender_contents =
+      prerender_manager()->CreateNextPrerenderContents(
+          url, ORIGIN_LINK_REL_PRERENDER_CROSSDOMAIN, FINAL_STATUS_USED);
+  EXPECT_TRUE(AddSimplePrerender(url));
+  EXPECT_TRUE(prerender_contents->prerendering_has_started());
+  ASSERT_EQ(prerender_contents, prerender_manager()->FindAndUseEntry(url));
+}
+
+TEST_F(PrerenderTest, LinkRelAllowedOnCellular) {
+  EnablePrerender();
+  GURL url("http://www.example.com");
+  scoped_ptr<net::NetworkChangeNotifier> mock(
+      new MockNetworkChangeNotifier4G);
+  EXPECT_TRUE(net::NetworkChangeNotifier::IsConnectionCellular(
+      net::NetworkChangeNotifier::GetConnectionType()));
+  DummyPrerenderContents* prerender_contents =
+      prerender_manager()->CreateNextPrerenderContents(
+          url, ORIGIN_LINK_REL_PRERENDER_CROSSDOMAIN, FINAL_STATUS_USED);
+  EXPECT_TRUE(AddSimplePrerender(url));
+  EXPECT_TRUE(prerender_contents->prerendering_has_started());
+  ASSERT_EQ(prerender_contents, prerender_manager()->FindAndUseEntry(url));
+}
+
+TEST_F(PrerenderTest, PrerenderNotAllowedOnCellularWithExternalOrigin) {
+  EnablePrerender();
+  scoped_ptr<net::NetworkChangeNotifier> mock(
+      new MockNetworkChangeNotifier4G);
+  EXPECT_TRUE(net::NetworkChangeNotifier::IsConnectionCellular(
+      net::NetworkChangeNotifier::GetConnectionType()));
+  GURL url("http://www.google.com/");
+  DummyPrerenderContents* prerender_contents =
+      prerender_manager()->CreateNextPrerenderContents(
+          url,
+          ORIGIN_EXTERNAL_REQUEST,
+          FINAL_STATUS_MANAGER_SHUTDOWN);
+  scoped_ptr<PrerenderHandle> prerender_handle(
+      prerender_manager()->AddPrerenderFromExternalRequest(
+          url, content::Referrer(), nullptr, kSize));
+  EXPECT_FALSE(prerender_handle);
+  EXPECT_FALSE(prerender_contents->prerendering_has_started());
+}
+
+TEST_F(PrerenderTest,PrerenderAllowedOnCellularWithForcedOrigin) {
+  EnablePrerender();
+  scoped_ptr<net::NetworkChangeNotifier> mock(
+      new MockNetworkChangeNotifier4G);
+  EXPECT_TRUE(net::NetworkChangeNotifier::IsConnectionCellular(
+      net::NetworkChangeNotifier::GetConnectionType()));
+  GURL url("http://www.google.com/");
+  DummyPrerenderContents* prerender_contents =
+      prerender_manager()->CreateNextPrerenderContents(
+          url,
+          ORIGIN_EXTERNAL_REQUEST_FORCED_CELLULAR,
+          FINAL_STATUS_USED);
+  scoped_ptr<PrerenderHandle> prerender_handle(
+      prerender_manager()->AddPrerenderOnCellularFromExternalRequest(
+          url, content::Referrer(), nullptr, kSize));
+  EXPECT_TRUE(prerender_handle);
+  EXPECT_TRUE(prerender_handle->IsPrerendering());
+  EXPECT_TRUE(prerender_contents->prerendering_has_started());
+  EXPECT_EQ(prerender_contents, prerender_handle->contents());
+  EXPECT_EQ(ORIGIN_EXTERNAL_REQUEST_FORCED_CELLULAR,
+    prerender_handle->contents()->origin());
+  ASSERT_EQ(prerender_contents, prerender_manager()->FindAndUseEntry(url));
 }
 
 TEST_F(PrerenderTest, LinkManagerCancel) {

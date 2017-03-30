@@ -20,6 +20,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
+#include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
 #include "net/base/socket_performance_watcher.h"
 #include "net/base/socket_performance_watcher_factory.h"
@@ -35,13 +36,13 @@
 #include "net/quic/port_suggester.h"
 #include "net/quic/quic_chromium_client_session.h"
 #include "net/quic/quic_chromium_connection_helper.h"
+#include "net/quic/quic_chromium_packet_reader.h"
+#include "net/quic/quic_chromium_packet_writer.h"
 #include "net/quic/quic_clock.h"
 #include "net/quic/quic_connection.h"
 #include "net/quic/quic_crypto_client_stream_factory.h"
-#include "net/quic/quic_default_packet_writer.h"
 #include "net/quic/quic_flags.h"
 #include "net/quic/quic_http_stream.h"
-#include "net/quic/quic_packet_reader.h"
 #include "net/quic/quic_protocol.h"
 #include "net/quic/quic_server_id.h"
 #include "net/socket/client_socket_factory.h"
@@ -59,6 +60,7 @@
 #endif
 
 using std::min;
+using NetworkHandle = net::NetworkChangeNotifier::NetworkHandle;
 
 namespace net {
 
@@ -190,6 +192,7 @@ class QuicStreamFactory::Job {
   scoped_ptr<QuicServerInfo> server_info_;
   bool started_another_job_;
   const BoundNetLog net_log_;
+  int num_sent_client_hellos_;
   QuicChromiumClientSession* session_;
   CompletionCallback callback_;
   AddressList address_list_;
@@ -221,6 +224,7 @@ QuicStreamFactory::Job::Job(QuicStreamFactory* factory,
       server_info_(server_info),
       started_another_job_(false),
       net_log_(net_log),
+      num_sent_client_hellos_(0),
       session_(nullptr),
       weak_factory_(this) {}
 
@@ -238,6 +242,7 @@ QuicStreamFactory::Job::Job(QuicStreamFactory* factory,
       was_alternative_service_recently_broken_(false),  // unused
       started_another_job_(false),                      // unused
       net_log_(session->net_log()),                     // unused
+      num_sent_client_hellos_(0),
       session_(session),
       weak_factory_(this) {}
 
@@ -459,6 +464,17 @@ int QuicStreamFactory::Job::DoResumeConnect() {
 }
 
 int QuicStreamFactory::Job::DoConnectComplete(int rv) {
+  if (session_ && session_->error() == QUIC_CRYPTO_HANDSHAKE_STATELESS_REJECT) {
+    num_sent_client_hellos_ += session_->GetNumSentClientHellos();
+    if (num_sent_client_hellos_ >= QuicCryptoClientStream::kMaxClientHellos) {
+      return ERR_QUIC_HANDSHAKE_FAILED;
+    }
+    // The handshake was rejected statelessly, so create another connection
+    // to resume the handshake.
+    io_state_ = STATE_CONNECT;
+    return OK;
+  }
+
   if (rv != OK)
     return rv;
 
@@ -568,8 +584,10 @@ QuicStreamFactory::QuicStreamFactory(
     bool delay_tcp_race,
     int max_server_configs_stored_in_properties,
     bool close_sessions_on_ip_change,
+    bool disable_quic_on_timeout_with_open_streams,
     int idle_connection_timeout_seconds,
     bool migrate_sessions_on_network_change,
+    bool migrate_sessions_early,
     const QuicTagVector& connection_options)
     : require_confirmation_(true),
       host_resolver_(host_resolver),
@@ -619,11 +637,16 @@ QuicStreamFactory::QuicStreamFactory(
       migrate_sessions_on_network_change_(
           migrate_sessions_on_network_change &&
           NetworkChangeNotifier::AreNetworkHandlesSupported()),
+      migrate_sessions_early_(migrate_sessions_early &&
+                              migrate_sessions_on_network_change_),
       port_seed_(random_generator_->RandUint64()),
       check_persisted_supports_quic_(true),
       has_initialized_data_(false),
+      status_(OPEN),
       task_runner_(nullptr),
       weak_factory_(this) {
+  if (disable_quic_on_timeout_with_open_streams)
+    threshold_timeouts_with_open_streams_ = 1;
   DCHECK(transport_security_state_);
   DCHECK(http_server_properties_);
   crypto_config_.set_user_agent_id(user_agent_id);
@@ -657,8 +680,14 @@ QuicStreamFactory::QuicStreamFactory(
         new PropertiesBasedQuicServerInfoFactory(http_server_properties_));
   }
 
-  DCHECK(
-      !(close_sessions_on_ip_change_ && migrate_sessions_on_network_change_));
+  // migrate_sessions_early should only be set to true if
+  // migrate_sessions_on_network_change is set to true.
+  if (migrate_sessions_early)
+    DCHECK(migrate_sessions_on_network_change);
+  // close_sessions_on_ip_change and migrate_sessions_on_network_change should
+  // never be simultaneously set to true.
+  DCHECK(!(close_sessions_on_ip_change && migrate_sessions_on_network_change));
+
   if (migrate_sessions_on_network_change_) {
     NetworkChangeNotifier::AddNetworkObserver(this);
   } else if (close_sessions_on_ip_change_) {
@@ -667,7 +696,7 @@ QuicStreamFactory::QuicStreamFactory(
 }
 
 QuicStreamFactory::~QuicStreamFactory() {
-  CloseAllSessions(ERR_ABORTED, QUIC_INTERNAL_ERROR);
+  CloseAllSessions(ERR_ABORTED, QUIC_CONNECTION_CANCELLED);
   while (!all_sessions_.empty()) {
     delete all_sessions_.begin()->first;
     all_sessions_.erase(all_sessions_.begin());
@@ -946,9 +975,8 @@ const char* QuicStreamFactory::QuicDisabledReasonString() const {
   }
 }
 
-bool QuicStreamFactory::IsQuicDisabled(uint16_t port) {
-  return QuicDisabledReason(port) !=
-         QuicChromiumClientSession::QUIC_DISABLED_NOT;
+bool QuicStreamFactory::IsQuicDisabled(uint16_t port) const {
+  return status_ != OPEN;
 }
 
 bool QuicStreamFactory::OnHandshakeConfirmed(QuicChromiumClientSession* session,
@@ -977,6 +1005,8 @@ bool QuicStreamFactory::OnHandshakeConfirmed(QuicChromiumClientSession* session,
                  max_number_of_lossy_connections_));
   }
 
+  MaybeDisableQuic(port);
+
   bool is_quic_disabled = IsQuicDisabled(port);
   if (is_quic_disabled) {
     // Close QUIC connection if Quic is disabled for this port.
@@ -988,6 +1018,22 @@ bool QuicStreamFactory::OnHandshakeConfirmed(QuicChromiumClientSession* session,
       UMA_HISTOGRAM_SPARSE_SLOWLY("Net.QuicStreamFactory.QuicIsDisabled", port);
   }
   return is_quic_disabled;
+}
+
+void QuicStreamFactory::OnTcpJobCompleted(bool succeeded) {
+  if (status_ != CLOSED)
+    return;
+
+  // If QUIC connections are failing while TCP connections are working,
+  // then stop using QUIC. On the other hand if both QUIC and TCP are
+  // failing, then attempt to use QUIC again.
+  if (succeeded) {
+    status_ = DISABLED;
+    return;
+  }
+
+  status_ = OPEN;
+  num_timeouts_with_open_streams_ = 0;
 }
 
 void QuicStreamFactory::OnIdleSession(QuicChromiumClientSession* session) {}
@@ -1060,6 +1106,7 @@ void QuicStreamFactory::MaybeDisableQuic(QuicChromiumClientSession* session) {
         num_public_resets_post_handshake_, 0, 20, 10);
   }
 
+  MaybeDisableQuic(port);
   if (IsQuicDisabled(port)) {
     if (disabled_reason ==
         QuicChromiumClientSession::QUIC_DISABLED_PUBLIC_RESET_POST_HANDSHAKE) {
@@ -1074,6 +1121,35 @@ void QuicStreamFactory::MaybeDisableQuic(QuicChromiumClientSession* session) {
                               disabled_reason,
                               QuicChromiumClientSession::QUIC_DISABLED_MAX);
   }
+}
+
+void QuicStreamFactory::MaybeDisableQuic(uint16_t port) {
+  if (status_ == DISABLED)
+    return;
+
+  QuicChromiumClientSession::QuicDisabledReason disabled_reason =
+      QuicDisabledReason(port);
+  if (disabled_reason == QuicChromiumClientSession::QUIC_DISABLED_NOT) {
+    DCHECK_EQ(OPEN, status_);
+    return;
+  }
+
+  if (disabled_reason ==
+      QuicChromiumClientSession::QUIC_DISABLED_TIMEOUT_WITH_OPEN_STREAMS) {
+    // When QUIC there are too many timeouts with open stream, the factory
+    // should be closed. When TCP jobs complete, they will move the factory
+    // to either fully disabled or back to open.
+    status_ = CLOSED;
+    DCHECK(IsQuicDisabled(port));
+    DCHECK_NE(QuicChromiumClientSession::QuicDisabledReason(port),
+              QuicChromiumClientSession::QUIC_DISABLED_NOT);
+    return;
+  }
+
+  status_ = DISABLED;
+  DCHECK(IsQuicDisabled(port));
+  DCHECK_NE(QuicChromiumClientSession::QuicDisabledReason(port),
+            QuicChromiumClientSession::QUIC_DISABLED_NOT);
 }
 
 void QuicStreamFactory::OnSessionClosed(QuicChromiumClientSession* session) {
@@ -1120,6 +1196,7 @@ void QuicStreamFactory::CancelRequest(QuicStreamRequest* request) {
 }
 
 void QuicStreamFactory::CloseAllSessions(int error, QuicErrorCode quic_error) {
+  UMA_HISTOGRAM_SPARSE_SLOWLY("Net.QuicSession.CloseAllSessionsError", -error);
   while (!active_sessions_.empty()) {
     size_t initial_size = active_sessions_.size();
     active_sessions_.begin()->second->CloseSessionOnError(error, quic_error);
@@ -1160,45 +1237,47 @@ void QuicStreamFactory::ClearCachedStatesInCryptoConfig() {
 }
 
 void QuicStreamFactory::OnIPAddressChanged() {
+  num_timeouts_with_open_streams_ = 0;
+  status_ = OPEN;
   CloseAllSessions(ERR_NETWORK_CHANGED, QUIC_IP_ADDRESS_CHANGED);
   set_require_confirmation(true);
 }
 
-void QuicStreamFactory::OnNetworkConnected(
-    NetworkChangeNotifier::NetworkHandle network) {}
+void QuicStreamFactory::OnNetworkConnected(NetworkHandle network) {
+  num_timeouts_with_open_streams_ = 0;
+  status_ = OPEN;
+}
 
-void QuicStreamFactory::OnNetworkMadeDefault(
-    NetworkChangeNotifier::NetworkHandle network) {}
+void QuicStreamFactory::OnNetworkMadeDefault(NetworkHandle network) {}
 
-void QuicStreamFactory::OnNetworkDisconnected(
-    NetworkChangeNotifier::NetworkHandle network) {
+void QuicStreamFactory::OnNetworkDisconnected(NetworkHandle network) {
   MaybeMigrateOrCloseSessions(network, /*force_close=*/true);
   set_require_confirmation(true);
 }
 
 // This method is expected to only be called when migrating from Cellular to
 // WiFi on Android.
-void QuicStreamFactory::OnNetworkSoonToDisconnect(
-    NetworkChangeNotifier::NetworkHandle network) {
+void QuicStreamFactory::OnNetworkSoonToDisconnect(NetworkHandle network) {
   MaybeMigrateOrCloseSessions(network, /*force_close=*/false);
 }
 
-void QuicStreamFactory::MaybeMigrateOrCloseSessions(
-    NetworkChangeNotifier::NetworkHandle network,
-    bool force_close) {
-  DCHECK_NE(NetworkChangeNotifier::kInvalidNetworkHandle, network);
-
-  // Find a new network that sessions bound to |network| can be migrated to.
+NetworkHandle QuicStreamFactory::FindAlternateNetwork(
+    NetworkHandle old_network) {
+  // Find a new network that sessions bound to |old_network| can be migrated to.
   NetworkChangeNotifier::NetworkList network_list;
   NetworkChangeNotifier::GetConnectedNetworks(&network_list);
-  NetworkChangeNotifier::NetworkHandle new_network =
-      NetworkChangeNotifier::kInvalidNetworkHandle;
-  for (NetworkChangeNotifier::NetworkHandle n : network_list) {
-    if (n != network) {
-      new_network = n;
-      break;
+  for (NetworkHandle new_network : network_list) {
+    if (new_network != old_network) {
+      return new_network;
     }
   }
+  return NetworkChangeNotifier::kInvalidNetworkHandle;
+}
+
+void QuicStreamFactory::MaybeMigrateOrCloseSessions(NetworkHandle network,
+                                                    bool force_close) {
+  DCHECK_NE(NetworkChangeNotifier::kInvalidNetworkHandle, network);
+  NetworkHandle new_network = FindAlternateNetwork(network);
 
   QuicStreamFactory::SessionIdMap::iterator it = all_sessions_.begin();
   while (it != all_sessions_.end()) {
@@ -1228,46 +1307,64 @@ void QuicStreamFactory::MaybeMigrateOrCloseSessions(
       }
       continue;
     }
-
-    // Use OS-specified port for socket (DEFAULT_BIND) instead of
-    // using the PortSuggester since the connection is being migrated
-    // and not being newly created.
-    scoped_ptr<DatagramClientSocket> socket(
-        client_socket_factory_->CreateDatagramClientSocket(
-            DatagramSocket::DEFAULT_BIND, RandIntCallback(),
-            session->net_log().net_log(), session->net_log().source()));
-
-    QuicConnection* connection = session->connection();
-    if (ConfigureSocket(socket.get(), connection->peer_address(),
-                        new_network) != OK) {
-      session->CloseSessionOnError(ERR_NETWORK_CHANGED, QUIC_INTERNAL_ERROR);
-      HistogramMigrationStatus(MIGRATION_STATUS_INTERNAL_ERROR);
-      continue;
-    }
-
-    scoped_ptr<QuicPacketReader> new_reader(new QuicPacketReader(
-        socket.get(), clock_.get(), session, yield_after_packets_,
-        yield_after_duration_, session->net_log()));
-    scoped_ptr<QuicPacketWriter> new_writer(
-        new QuicDefaultPacketWriter(socket.get()));
-
-    if (!session->MigrateToSocket(std::move(socket), std::move(new_reader),
-                                  std::move(new_writer))) {
-      session->CloseSessionOnError(ERR_NETWORK_CHANGED,
-                                   QUIC_CONNECTION_MIGRATION_TOO_MANY_CHANGES);
-      HistogramMigrationStatus(MIGRATION_STATUS_TOO_MANY_CHANGES);
-    } else {
-      HistogramMigrationStatus(MIGRATION_STATUS_SUCCESS);
-    }
+    MigrateSessionToNetwork(session, new_network);
   }
 }
 
+void QuicStreamFactory::MaybeMigrateSessionEarly(
+    QuicChromiumClientSession* session) {
+  if (!migrate_sessions_early_) {
+    return;
+  }
+  NetworkHandle new_network =
+      FindAlternateNetwork(session->GetDefaultSocket()->GetBoundNetwork());
+  if (new_network == NetworkChangeNotifier::kInvalidNetworkHandle) {
+    // No alternate network found.
+    return;
+  }
+  OnSessionGoingAway(session);
+  MigrateSessionToNetwork(session, new_network);
+}
+
+void QuicStreamFactory::MigrateSessionToNetwork(
+    QuicChromiumClientSession* session,
+    NetworkHandle new_network) {
+  // Use OS-specified port for socket (DEFAULT_BIND) instead of
+  // using the PortSuggester since the connection is being migrated
+  // and not being newly created.
+  scoped_ptr<DatagramClientSocket> socket(
+      client_socket_factory_->CreateDatagramClientSocket(
+          DatagramSocket::DEFAULT_BIND, RandIntCallback(),
+          session->net_log().net_log(), session->net_log().source()));
+  QuicConnection* connection = session->connection();
+  if (ConfigureSocket(socket.get(), connection->peer_address(), new_network) !=
+      OK) {
+    session->CloseSessionOnError(ERR_NETWORK_CHANGED, QUIC_INTERNAL_ERROR);
+    HistogramMigrationStatus(MIGRATION_STATUS_INTERNAL_ERROR);
+    return;
+  }
+  scoped_ptr<QuicChromiumPacketReader> new_reader(new QuicChromiumPacketReader(
+      socket.get(), clock_.get(), session, yield_after_packets_,
+      yield_after_duration_, session->net_log()));
+  scoped_ptr<QuicPacketWriter> new_writer(
+      new QuicChromiumPacketWriter(socket.get()));
+
+  if (!session->MigrateToSocket(std::move(socket), std::move(new_reader),
+                                std::move(new_writer))) {
+    session->CloseSessionOnError(ERR_NETWORK_CHANGED,
+                                 QUIC_CONNECTION_MIGRATION_TOO_MANY_CHANGES);
+    HistogramMigrationStatus(MIGRATION_STATUS_TOO_MANY_CHANGES);
+    return;
+  }
+  HistogramMigrationStatus(MIGRATION_STATUS_SUCCESS);
+}
+
 void QuicStreamFactory::OnSSLConfigChanged() {
-  CloseAllSessions(ERR_CERT_DATABASE_CHANGED, QUIC_INTERNAL_ERROR);
+  CloseAllSessions(ERR_CERT_DATABASE_CHANGED, QUIC_CONNECTION_CANCELLED);
 }
 
 void QuicStreamFactory::OnCertAdded(const X509Certificate* cert) {
-  CloseAllSessions(ERR_CERT_DATABASE_CHANGED, QUIC_INTERNAL_ERROR);
+  CloseAllSessions(ERR_CERT_DATABASE_CHANGED, QUIC_CONNECTION_CANCELLED);
 }
 
 void QuicStreamFactory::OnCACertChanged(const X509Certificate* cert) {
@@ -1280,7 +1377,7 @@ void QuicStreamFactory::OnCACertChanged(const X509Certificate* cert) {
   // Since the OnCACertChanged method doesn't tell us what
   // kind of change it is, we have to flush the socket
   // pools to be safe.
-  CloseAllSessions(ERR_CERT_DATABASE_CHANGED, QUIC_INTERNAL_ERROR);
+  CloseAllSessions(ERR_CERT_DATABASE_CHANGED, QUIC_CONNECTION_CANCELLED);
 }
 
 bool QuicStreamFactory::HasActiveSession(const QuicServerId& server_id) const {
@@ -1294,10 +1391,9 @@ bool QuicStreamFactory::HasActiveJob(const QuicServerId& key) const {
   return ContainsKey(active_jobs_, key);
 }
 
-int QuicStreamFactory::ConfigureSocket(
-    DatagramClientSocket* socket,
-    IPEndPoint addr,
-    NetworkChangeNotifier::NetworkHandle network) {
+int QuicStreamFactory::ConfigureSocket(DatagramClientSocket* socket,
+                                       IPEndPoint addr,
+                                       NetworkHandle network) {
   if (enable_non_blocking_io_ &&
       client_socket_factory_ == ClientSocketFactory::GetDefaultFactory()) {
 #if defined(OS_WIN)
@@ -1341,7 +1437,7 @@ int QuicStreamFactory::ConfigureSocket(
   socket->GetLocalAddress(&local_address_);
   if (check_persisted_supports_quic_) {
     check_persisted_supports_quic_ = false;
-    IPAddressNumber last_address;
+    IPAddress last_address;
     if (http_server_properties_->GetSupportsQuic(&last_address) &&
         last_address == local_address_.address()) {
       require_confirmation_ = false;
@@ -1399,16 +1495,15 @@ int QuicStreamFactory::CreateSession(const QuicServerId& server_id,
         base::ThreadTaskRunnerHandle::Get().get(), clock_.get(),
         random_generator_));
   }
-
-  QuicDefaultPacketWriter* writer = new QuicDefaultPacketWriter(socket.get());
   QuicConnectionId connection_id = random_generator_->RandUint64();
+  InitializeCachedStateInCryptoConfig(server_id, server_info, &connection_id);
+
+  QuicChromiumPacketWriter* writer = new QuicChromiumPacketWriter(socket.get());
   QuicConnection* connection = new QuicConnection(
       connection_id, addr, helper_.get(), writer, true /* owns_writer */,
       Perspective::IS_CLIENT, supported_versions_);
   writer->SetConnection(connection);
   connection->SetMaxPacketLength(max_packet_length_);
-
-  InitializeCachedStateInCryptoConfig(server_id, server_info);
 
   QuicConfig config = config_;
   config.SetSocketReceiveBufferToSend(socket_receive_buffer_size_);
@@ -1443,7 +1538,8 @@ int QuicStreamFactory::CreateSession(const QuicServerId& server_id,
       clock_.get(), transport_security_state_, std::move(server_info),
       server_id, yield_after_packets_, yield_after_duration_, cert_verify_flags,
       config, &crypto_config_, network_connection_.GetDescription(),
-      dns_resolution_end_time, base::ThreadTaskRunnerHandle::Get().get(),
+      dns_resolution_end_time, &push_promise_index_,
+      base::ThreadTaskRunnerHandle::Get().get(),
       std::move(socket_performance_watcher), net_log.net_log());
 
   all_sessions_[*session] = server_id;  // owning pointer
@@ -1499,15 +1595,19 @@ bool QuicStreamFactory::CryptoConfigCacheIsEmpty(
 
 void QuicStreamFactory::InitializeCachedStateInCryptoConfig(
     const QuicServerId& server_id,
-    const scoped_ptr<QuicServerInfo>& server_info) {
-  // |server_info| will be NULL, if a non-empty server config already exists in
-  // the memory cache. This is a minor optimization to avoid LookupOrCreate.
-  if (!server_info)
-    return;
-
+    const scoped_ptr<QuicServerInfo>& server_info,
+    QuicConnectionId* connection_id) {
   QuicCryptoClientConfig::CachedState* cached =
       crypto_config_.LookupOrCreate(server_id);
+  if (cached->has_server_designated_connection_id())
+    *connection_id = cached->GetNextServerDesignatedConnectionId();
+
   if (!cached->IsEmpty())
+    return;
+
+  // |server_info| will be NULL, if a non-empty server config already exists in
+  // the memory cache.
+  if (!server_info)
     return;
 
   // TODO(rtenneti): Delete the following histogram after collecting stats.
@@ -1557,7 +1657,7 @@ void QuicStreamFactory::MaybeInitialize() {
     server_info.reset(quic_server_info_factory_->GetForServer(server_id));
     if (server_info->WaitForDataReady(callback) == OK) {
       DVLOG(1) << "Initialized server config for: " << server_id.ToString();
-      InitializeCachedStateInCryptoConfig(server_id, server_info);
+      InitializeCachedStateInCryptoConfig(server_id, server_info, nullptr);
     }
   }
 }

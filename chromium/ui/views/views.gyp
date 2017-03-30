@@ -27,12 +27,20 @@
       'animation/ink_drop_animation_observer.h',
       'animation/ink_drop_delegate.h',
       'animation/ink_drop_host.h',
+      'animation/ink_drop_host_view.cc',
+      'animation/ink_drop_host_view.h',
+      'animation/ink_drop_hover.cc',
+      'animation/ink_drop_hover.h',
       'animation/ink_drop_painted_layer_delegates.cc',
       'animation/ink_drop_painted_layer_delegates.h',
       'animation/ink_drop_state.cc',
       'animation/ink_drop_state.h',
       'animation/scroll_animator.cc',
       'animation/scroll_animator.h',
+      'animation/flood_fill_ink_drop_animation.cc',
+      'animation/flood_fill_ink_drop_animation.h',
+      'animation/square_ink_drop_animation.cc',
+      'animation/square_ink_drop_animation.h',
       'background.cc',
       'background.h',
       'border.cc',
@@ -59,6 +67,8 @@
       'cocoa/tooltip_manager_mac.mm',
       'cocoa/views_nswindow_delegate.h',
       'cocoa/views_nswindow_delegate.mm',
+      'cocoa/views_scrollbar_bridge.h',
+      'cocoa/views_scrollbar_bridge.mm',
       'cocoa/widget_owner_nswindow_adapter.h',
       'cocoa/widget_owner_nswindow_adapter.mm',
       'color_chooser/color_chooser_listener.h',
@@ -126,8 +136,6 @@
       'controls/menu/menu_message_loop.h',
       'controls/menu/menu_message_loop_mac.cc',
       'controls/menu/menu_message_loop_mac.h',
-      'controls/menu/menu_message_pump_dispatcher_win.cc',
-      'controls/menu/menu_message_pump_dispatcher_win.h',
       'controls/menu/menu_model_adapter.cc',
       'controls/menu/menu_model_adapter.h',
       'controls/menu/menu_runner.cc',
@@ -172,6 +180,8 @@
       'controls/scrollbar/base_scroll_bar_button.h',
       'controls/scrollbar/base_scroll_bar_thumb.cc',
       'controls/scrollbar/base_scroll_bar_thumb.h',
+      'controls/scrollbar/cocoa_scroll_bar.h',
+      'controls/scrollbar/cocoa_scroll_bar.mm',
       'controls/scrollbar/native_scroll_bar.cc',
       'controls/scrollbar/native_scroll_bar.h',
       'controls/scrollbar/native_scroll_bar_views.cc',
@@ -280,7 +290,7 @@
       'style/mac/dialog_button_border_mac.h',
       'style/platform_style.cc',
       'style/platform_style.h',
-      'style/platform_style_mac.cc',
+      'style/platform_style_mac.mm',
       'view.cc',
       'view.h',
       'view_constants.cc',
@@ -374,8 +384,6 @@
       'bubble/tray_bubble_view.cc',
       'bubble/tray_bubble_view.h',
       'controls/menu/display_change_listener_aura.cc',
-      'controls/menu/menu_event_dispatcher.cc',
-      'controls/menu/menu_event_dispatcher.h',
       'controls/menu/menu_key_event_handler.cc',
       'controls/menu/menu_key_event_handler.h',
       'controls/menu/menu_message_loop_aura.cc',
@@ -410,19 +418,10 @@
       'widget/window_reorderer.cc',
       'widget/window_reorderer.h',
     ],
-    'views_android_sources': [
-      'controls/menu/menu_config_android.cc',
-      'widget/android/android_focus_rules.cc',
-      'widget/android/android_focus_rules.h',
-      'widget/android/native_widget_android.cc',
-      'widget/android/native_widget_android.h',
-    ],
     'views_desktop_aura_sources': [
       'widget/desktop_aura/desktop_capture_client.cc',
       'widget/desktop_aura/desktop_capture_client.h',
       'widget/desktop_aura/desktop_cursor_loader_updater.h',
-      'widget/desktop_aura/desktop_dispatcher_client.cc',
-      'widget/desktop_aura/desktop_dispatcher_client.h',
       'widget/desktop_aura/desktop_drop_target_win.cc',
       'widget/desktop_aura/desktop_drop_target_win.h',
       'widget/desktop_aura/desktop_event_client.cc',
@@ -483,10 +482,18 @@
       'widget/desktop_aura/desktop_window_tree_host_ozone.cc',
     ],
     'views_test_support_sources': [
+      'animation/test/flood_fill_ink_drop_animation_test_api.cc',
+      'animation/test/flood_fill_ink_drop_animation_test_api.h',
       'animation/test/ink_drop_animation_test_api.cc',
       'animation/test/ink_drop_animation_test_api.h',
+      'animation/test/square_ink_drop_animation_test_api.cc',
+      'animation/test/square_ink_drop_animation_test_api.h',
+      'animation/test/test_ink_drop_animation_observer.cc',
+      'animation/test/test_ink_drop_animation_observer.h',
       'animation/test/test_ink_drop_host.cc',
       'animation/test/test_ink_drop_host.h',
+      'animation/test/test_ink_drop_delegate.cc',
+      'animation/test/test_ink_drop_delegate.h',
       'controls/textfield/textfield_test_api.cc',
       'controls/textfield/textfield_test_api.h',
       'test/capture_tracking_view.cc',
@@ -544,7 +551,10 @@
       'accessible_pane_view_unittest.cc',
       'animation/bounds_animator_unittest.cc',
       'animation/ink_drop_animation_controller_factory_unittest.cc',
+      'animation/ink_drop_animation_controller_impl_unittest.cc',
       'animation/ink_drop_animation_unittest.cc',
+      'animation/ink_drop_hover_unittest.cc',
+      'animation/square_ink_drop_animation_unittest.cc',
       'bubble/bubble_border_unittest.cc',
       'bubble/bubble_delegate_unittest.cc',
       'bubble/bubble_frame_view_unittest.cc',
@@ -589,6 +599,8 @@
       'layout/grid_layout_unittest.cc',
       'rect_based_targeting_utils_unittest.cc',
       'run_all_unittests.cc',
+      'run_all_unittests.h',
+      'run_all_unittests_main.cc',
       'style/mac/dialog_button_border_mac_unittest.cc',
       'view_model_unittest.cc',
       'view_model_utils_unittest.cc',
@@ -607,6 +619,7 @@
       'widget/desktop_widget_unittest.cc',
     ],
     'views_unittests_aura_sources': [
+      'accessibility/ax_aura_obj_cache_unittest.cc',
       'controls/native/native_view_host_aura_unittest.cc',
       'corewm/tooltip_controller_unittest.cc',
       'touchui/touch_selection_controller_impl_unittest.cc',
@@ -669,7 +682,7 @@
         '<@(views_sources)',
       ],
       'conditions': [
-        ['use_ash==0', {
+        ['use_aura==0', {
           'sources!': [
             'bubble/tray_bubble_view.cc',
             'bubble/tray_bubble_view.h',
@@ -853,6 +866,7 @@
         '../events/events.gyp:events_test_support',
         '../gfx/gfx.gyp:gfx',
         '../gfx/gfx.gyp:gfx_geometry',
+        '../native_theme/native_theme.gyp:native_theme',
         '../resources/ui_resources.gyp:ui_resources',
         '../resources/ui_resources.gyp:ui_test_pak',
         '../strings/ui_strings.gyp:ui_strings',
@@ -888,17 +902,6 @@
               ],
             },
           },
-        }],
-        ['OS=="win" and win_use_allocator_shim==1', {
-          'dependencies': [
-            '../../base/allocator/allocator.gyp:allocator',
-          ],
-        }],
-        ['OS=="linux" and use_allocator!="none"', {
-           # See http://crbug.com/162998#c4 for why this is needed.
-          'dependencies': [
-            '../../base/allocator/allocator.gyp:allocator',
-          ],
         }],
         ['use_x11==1', {
           'dependencies': [
@@ -948,6 +951,32 @@
     },  # target_name: views_unittests
   ],  # targets
   'conditions': [
+    ['test_isolation_mode != "noop"', {
+      'targets': [
+        {
+          'target_name': 'views_unittests_run',
+          'type': 'none',
+          'dependencies': [
+            'views_unittests',
+          ],
+          'includes': [
+            '../../build/isolate.gypi',
+          ],
+          'sources': [
+            'views_unittests.isolate',
+          ],
+          'conditions': [
+            ['use_x11==1',
+              {
+                'dependencies': [
+                  '../../tools/xdisplaycheck/xdisplaycheck.gyp:xdisplaycheck',
+                ],
+              }
+            ],
+          ],
+        },
+      ],
+    }],
     ['OS=="mac"', {
       'targets': [
         {
@@ -970,6 +999,8 @@
           'sources': [
             'cocoa/bridged_native_widget_interactive_uitest.mm',
             'run_all_unittests.cc',
+            'run_all_unittests.h',
+            'run_all_unittests_main.cc',
             'widget/native_widget_mac_interactive_uitest.mm',
           ],
           'conditions': [

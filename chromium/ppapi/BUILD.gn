@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/features.gni")
+
 assert(!is_android || enable_plugins,
        "//ppapi should not be referenced when is_android && !enable_plugins")
 
@@ -119,7 +121,6 @@ test("ppapi_unittests") {
   ]
 
   deps = [
-    "//base/allocator",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//gpu/ipc",
@@ -131,6 +132,7 @@ test("ppapi_unittests") {
     "//ppapi/proxy:test_support",
     "//ppapi/shared_impl",
     "//ppapi/shared_impl:test_support",
+    "//skia",
     "//testing/gmock",
     "//testing/gtest",
     "//ui/surface",
@@ -144,7 +146,6 @@ test("ppapi_perftests") {
   ]
 
   deps = [
-    "//base/allocator",
     "//base/test:test_support",
     "//ppapi/proxy",
     "//ppapi/proxy:test_support",
@@ -369,12 +370,8 @@ if (enable_nacl) {
       ":copy_test_files",
       ":ppapi_nacl_tests_copy(//build/toolchain/nacl:clang_newlib_${target_cpu})",
       ":ppapi_nacl_tests(//build/toolchain/nacl:glibc_${target_cpu})",
+      ":ppapi_nacl_tests(//build/toolchain/nacl:newlib_pnacl)",
+      ":ppapi_nacl_tests(//build/toolchain/nacl:newlib_pnacl_nonsfi)",
     ]
-    if (enable_pnacl) {
-      data_deps += [
-        ":ppapi_nacl_tests(//build/toolchain/nacl:newlib_pnacl)",
-        ":ppapi_nacl_tests(//build/toolchain/nacl:newlib_pnacl_nonsfi)",
-      ]
-    }
   }
 }

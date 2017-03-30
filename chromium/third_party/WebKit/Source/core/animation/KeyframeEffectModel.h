@@ -42,7 +42,6 @@
 #include "platform/heap/Handle.h"
 #include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/Vector.h"
 
@@ -55,10 +54,10 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
 public:
     // FIXME: Implement accumulation.
 
-    using PropertySpecificKeyframeVector = Vector<OwnPtr<Keyframe::PropertySpecificKeyframe>>;
+    using PropertySpecificKeyframeVector = Vector<RefPtr<Keyframe::PropertySpecificKeyframe>>;
     class PropertySpecificKeyframeGroup {
     public:
-        void appendKeyframe(PassOwnPtr<Keyframe::PropertySpecificKeyframe>);
+        void appendKeyframe(PassRefPtr<Keyframe::PropertySpecificKeyframe>);
         const PropertySpecificKeyframeVector& keyframes() const { return m_keyframes; }
 
     private:
@@ -112,7 +111,7 @@ public:
     bool snapshotAllCompositorKeyframes(Element&, const ComputedStyle* baseStyle);
 
     template<typename T>
-    inline void forEachInterpolation(const T& callback) { m_interpolationEffect->forEachInterpolation(callback); }
+    inline void forEachInterpolation(const T& callback) { m_interpolationEffect.forEachInterpolation(callback); }
 
     static KeyframeVector normalizedKeyframesForInspector(const KeyframeVector& keyframes) { return normalizedKeyframes(keyframes); }
 
@@ -138,14 +137,14 @@ protected:
 
     // Lazily computes the groups of property-specific keyframes.
     void ensureKeyframeGroups() const;
-    void ensureInterpolationEffect(Element* = nullptr, const ComputedStyle* baseStyle = nullptr) const;
+    void ensureInterpolationEffectPopulated(Element* = nullptr, const ComputedStyle* baseStyle = nullptr) const;
 
     KeyframeVector m_keyframes;
     // The spec describes filtering the normalized keyframes at sampling time
     // to get the 'property-specific keyframes'. For efficiency, we cache the
     // property-specific lists.
     mutable OwnPtr<KeyframeGroupMap> m_keyframeGroups;
-    mutable RefPtr<InterpolationEffect> m_interpolationEffect;
+    mutable InterpolationEffect m_interpolationEffect;
     mutable int m_lastIteration;
     mutable double m_lastFraction;
     mutable double m_lastIterationDuration;
@@ -156,6 +155,7 @@ protected:
     friend class KeyframeEffectModelTest;
 };
 
+// Time independent representation of an Animation's keyframes.
 template <class Keyframe>
 class KeyframeEffectModel final : public KeyframeEffectModelBase {
 public:

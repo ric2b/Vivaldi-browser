@@ -73,7 +73,6 @@ struct KeywordSearchTermVisit;
 class PageUsageData;
 class URLDatabase;
 class VisitDelegate;
-class VisitFilter;
 class WebHistoryService;
 
 // The history service records page titles, and visit times, as well as
@@ -150,7 +149,7 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
   // Returns a pointer to the TypedUrlSyncableService owned by HistoryBackend.
   // This method should only be called from the history thread, because the
   // returned service is intended to be accessed only via the history thread.
-  virtual TypedUrlSyncableService* GetTypedUrlSyncableService() const;
+  TypedUrlSyncableService* GetTypedUrlSyncableService() const;
 
   // KeyedService:
   void Shutdown() override;
@@ -343,22 +342,6 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
       int result_count,
       int days_back,
       const QueryMostVisitedURLsCallback& callback,
-      base::CancelableTaskTracker* tracker);
-
-  // Request the |result_count| URLs filtered and sorted based on the |filter|.
-  // If |extended_info| is true, additional data will be provided in the
-  // results. Computing this additional data is expensive, likely to become
-  // more expensive as additional data points are added in future changes, and
-  // not useful in most cases. Set |extended_info| to true only if you
-  // explicitly require the additional data.
-  typedef base::Callback<void(const FilteredURLList*)>
-      QueryFilteredURLsCallback;
-
-  base::CancelableTaskTracker::TaskId QueryFilteredURLs(
-      int result_count,
-      const VisitFilter& filter,
-      bool extended_info,
-      const QueryFilteredURLsCallback& callback,
       base::CancelableTaskTracker* tracker);
 
   // Statistics ----------------------------------------------------------------
@@ -588,10 +571,13 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
   friend class ::HistoryQuickProviderTest;
   friend class HistoryServiceTest;
   friend class ::HistoryURLProvider;
-  friend class ::HistoryURLProviderTest;
   friend class ::InMemoryURLIndexTest;
   friend class ::SyncBookmarkDataTypeControllerTest;
   friend class ::TestingProfile;
+  friend scoped_ptr<HistoryService> CreateHistoryService(
+      const base::FilePath& history_dir,
+      const std::string& accept_languages,
+      bool create_db);
 
   // Called on shutdown, this will tell the history backend to complete and
   // will release pointers to it. No other functions should be called once

@@ -14,8 +14,6 @@
 
 #include "chrome/browser/ui/tabs/tab_utils.h"
 
-extern extensions::WebViewGuest* s_current_webviewguest;
-
 
 namespace extensions {
 

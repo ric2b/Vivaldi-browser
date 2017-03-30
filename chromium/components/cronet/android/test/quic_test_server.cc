@@ -11,9 +11,9 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/threading/thread.h"
+#include "components/cronet/android/test/cronet_test_util.h"
 #include "jni/QuicTestServer_jni.h"
 #include "net/base/ip_endpoint.h"
-#include "net/base/net_util.h"
 #include "net/base/test_data_directory.h"
 #include "net/quic/crypto/proof_source_chromium.h"
 #include "net/tools/quic/quic_in_memory_cache.h"
@@ -23,11 +23,10 @@ namespace cronet {
 
 namespace {
 
-static const char kServerHost[] = "test.example.com";
 static const int kServerPort = 6121;
 
 base::Thread* g_quic_server_thread = nullptr;
-net::tools::QuicSimpleServer* g_quic_server = nullptr;
+net::QuicSimpleServer* g_quic_server = nullptr;
 
 void StartOnServerThread(const base::FilePath& test_files_root) {
   DCHECK(g_quic_server_thread->task_runner()->BelongsToCurrentThread());
@@ -36,10 +35,10 @@ void StartOnServerThread(const base::FilePath& test_files_root) {
   // Set up in-memory cache.
   base::FilePath file_dir = test_files_root.Append("quic_data");
   CHECK(base::PathExists(file_dir)) << "Quic data does not exist";
-  net::tools::QuicInMemoryCache::GetInstance()->InitializeFromDirectory(
+  net::QuicInMemoryCache::GetInstance()->InitializeFromDirectory(
       file_dir.value());
   net::IPAddressNumber ip;
-  net::ParseIPLiteralToNumber(kServerHost, &ip);
+  net::ParseIPLiteralToNumber(kFakeQuicDomain, &ip);
   net::QuicConfig config;
 
   // Set up server certs.
@@ -52,8 +51,8 @@ void StartOnServerThread(const base::FilePath& test_files_root) {
       directory.Append("quic_test.example.com.crt"),
       directory.Append("quic_test.example.com.key.pkcs8"),
       directory.Append("quic_test.example.com.key.sct")));
-  g_quic_server = new net::tools::QuicSimpleServer(
-      proof_source, config, net::QuicSupportedVersions());
+  g_quic_server = new net::QuicSimpleServer(proof_source, config,
+                                            net::QuicSupportedVersions());
 
   // Start listening.
   int rv = g_quic_server->Listen(net::IPEndPoint(ip, kServerPort));
@@ -98,7 +97,7 @@ void ShutdownQuicTestServer(JNIEnv* env,
 ScopedJavaLocalRef<jstring> GetServerHost(
     JNIEnv* env,
     const JavaParamRef<jclass>& /*jcaller*/) {
-  return base::android::ConvertUTF8ToJavaString(env, kServerHost);
+  return base::android::ConvertUTF8ToJavaString(env, kFakeQuicDomain);
 }
 
 int GetServerPort(JNIEnv* env, const JavaParamRef<jclass>& /*jcaller*/) {

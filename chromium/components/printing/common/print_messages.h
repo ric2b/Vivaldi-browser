@@ -31,6 +31,7 @@
 
 struct PrintMsg_Print_Params {
   PrintMsg_Print_Params();
+  PrintMsg_Print_Params(const PrintMsg_Print_Params& other);
   ~PrintMsg_Print_Params();
 
   // Resets the members of the struct to 0.
@@ -42,8 +43,6 @@ struct PrintMsg_Print_Params {
   int margin_top;
   int margin_left;
   double dpi;
-  double min_shrink;
-  double max_shrink;
   int desired_dpi;
   int document_cookie;
   bool selection_only;
@@ -61,6 +60,7 @@ struct PrintMsg_Print_Params {
 
 struct PrintMsg_PrintPages_Params {
   PrintMsg_PrintPages_Params();
+  PrintMsg_PrintPages_Params(const PrintMsg_PrintPages_Params& other);
   ~PrintMsg_PrintPages_Params();
 
   // Resets the members of the struct to 0.
@@ -118,12 +118,6 @@ IPC_STRUCT_TRAITS_BEGIN(PrintMsg_Print_Params)
 
   // Specifies dots per inch.
   IPC_STRUCT_TRAITS_MEMBER(dpi)
-
-  // Minimum shrink factor. See PrintSettings::min_shrink for more information.
-  IPC_STRUCT_TRAITS_MEMBER(min_shrink)
-
-  // Maximum shrink factor. See PrintSettings::max_shrink for more information.
-  IPC_STRUCT_TRAITS_MEMBER(max_shrink)
 
   // Desired apparent dpi on paper.
   IPC_STRUCT_TRAITS_MEMBER(desired_dpi)
@@ -358,14 +352,6 @@ IPC_MESSAGE_ROUTED1(PrintMsg_PrintPreview,
 #endif  // defined(ENABLE_PRINT_PREVIEW)
 
 // Messages sent from the renderer to the browser.
-
-#if defined(OS_WIN)
-// Duplicates a shared memory handle from the renderer to the browser. Then
-// the renderer can flush the handle.
-IPC_SYNC_MESSAGE_ROUTED1_1(PrintHostMsg_DuplicateSection,
-                           base::SharedMemoryHandle /* renderer handle */,
-                           base::SharedMemoryHandle /* browser handle */)
-#endif
 
 // Check if printing is enabled.
 IPC_SYNC_MESSAGE_ROUTED0_1(PrintHostMsg_IsPrintingEnabled,

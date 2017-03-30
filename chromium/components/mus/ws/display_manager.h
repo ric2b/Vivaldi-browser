@@ -12,8 +12,11 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/strings/string16.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
+#include "components/mus/public/interfaces/window_manager.mojom.h"
+#include "components/mus/public/interfaces/window_manager_constants.mojom.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "components/mus/ws/display_manager_delegate.h"
 #include "mojo/public/cpp/bindings/callback.h"
@@ -22,6 +25,7 @@
 
 namespace cc {
 class CompositorFrame;
+class CopyOutputRequest;
 class SurfaceIdAllocator;
 class SurfaceManager;
 }  // namespace cc
@@ -31,7 +35,7 @@ class GpuState;
 }  // namespace gles2
 
 namespace mojo {
-class ApplicationImpl;
+class Connector;
 }  // namespace mojo
 
 namespace ui {
@@ -53,12 +57,13 @@ class EventDispatcher;
 class ServerWindow;
 
 // DisplayManager is used to connect the root ServerWindow to a display.
+// TODO(sky): rename this given we have a mojom type with the same name now.
 class DisplayManager {
  public:
   virtual ~DisplayManager() {}
 
   static DisplayManager* Create(
-      mojo::ApplicationImpl* app_impl,
+      mojo::Connector* connector,
       const scoped_refptr<GpuState>& gpu_state,
       const scoped_refptr<SurfacesState>& surfaces_state);
 
@@ -72,7 +77,13 @@ class DisplayManager {
 
   virtual void SetTitle(const base::string16& title) = 0;
 
+  virtual void SetCapture() = 0;
+
+  virtual void ReleaseCapture() = 0;
+
   virtual void SetCursorById(int32_t cursor) = 0;
+
+  virtual mojom::Rotation GetRotation() = 0;
 
   virtual const mojom::ViewportMetrics& GetViewportMetrics() = 0;
 
@@ -81,6 +92,9 @@ class DisplayManager {
 
   // Returns true if a compositor frame has been submitted but not drawn yet.
   virtual bool IsFramePending() const = 0;
+
+  virtual void RequestCopyOfOutput(
+      scoped_ptr<cc::CopyOutputRequest> output_request) = 0;
 
   // Overrides factory for testing. Default (NULL) value indicates regular
   // (non-test) environment.
@@ -98,7 +112,7 @@ class DisplayManager {
 class DefaultDisplayManager : public DisplayManager,
                               public ui::PlatformWindowDelegate {
  public:
-  DefaultDisplayManager(mojo::ApplicationImpl* app_impl,
+  DefaultDisplayManager(mojo::Connector* connector,
                         const scoped_refptr<GpuState>& gpu_state,
                         const scoped_refptr<SurfacesState>& surfaces_state);
   ~DefaultDisplayManager() override;
@@ -109,11 +123,16 @@ class DefaultDisplayManager : public DisplayManager,
                      const gfx::Rect& bounds) override;
   void SetViewportSize(const gfx::Size& size) override;
   void SetTitle(const base::string16& title) override;
+  void SetCapture() override;
+  void ReleaseCapture() override;
   void SetCursorById(int32_t cursor) override;
   const mojom::ViewportMetrics& GetViewportMetrics() override;
+  mojom::Rotation GetRotation() override;
   void UpdateTextInputState(const ui::TextInputState& state) override;
   void SetImeVisibility(bool visible) override;
   bool IsFramePending() const override;
+  void RequestCopyOfOutput(
+      scoped_ptr<cc::CopyOutputRequest> output_request) override;
 
  private:
   void WantToDraw();
@@ -143,7 +162,7 @@ class DefaultDisplayManager : public DisplayManager,
   void OnAcceleratedWidgetDestroyed() override;
   void OnActivationChanged(bool active) override;
 
-  mojo::ApplicationImpl* app_impl_;
+  mojo::Connector* connector_;
   scoped_refptr<GpuState> gpu_state_;
   scoped_refptr<SurfacesState> surfaces_state_;
   DisplayManagerDelegate* delegate_;

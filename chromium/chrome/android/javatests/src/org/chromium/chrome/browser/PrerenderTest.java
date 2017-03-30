@@ -6,24 +6,21 @@ package org.chromium.chrome.browser;
 
 import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE;
 
+import android.os.Environment;
 import android.test.FlakyTest;
 import android.test.MoreAsserts;
 import android.test.suitebuilder.annotation.LargeTest;
-import android.view.KeyEvent;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.chrome.R;
-import org.chromium.chrome.browser.omnibox.UrlBar;
 import org.chromium.chrome.browser.prerender.ExternalPrerenderHandler;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeTabbedActivityTestBase;
-import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.PrerenderTestHelper;
-import org.chromium.chrome.test.util.TestHttpServerClient;
 import org.chromium.chrome.test.util.browser.TabTitleObserver;
-import org.chromium.content.browser.test.util.KeyUtils;
+import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.base.PageTransition;
 
 import java.util.concurrent.TimeoutException;
@@ -34,6 +31,22 @@ import java.util.concurrent.TimeoutException;
  * Tests are disabled on low-end devices. These only support one renderer for performance reasons.
  */
 public class PrerenderTest extends ChromeTabbedActivityTestBase {
+
+    private EmbeddedTestServer mTestServer;
+
+    @Override
+    protected void setUp() throws Exception {
+        super.setUp();
+        mTestServer = EmbeddedTestServer.createAndStartFileServer(
+                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+    }
+
+    @Override
+    protected void tearDown() throws Exception {
+        mTestServer.stopAndDestroyServer();
+        super.tearDown();
+    }
+
     /**
      * We are using Autocomplete Action Predictor to decide whether or not to prerender.
     /* Without any training data the default action should be no-prerender.
@@ -42,8 +55,8 @@ public class PrerenderTest extends ChromeTabbedActivityTestBase {
     @Restriction({RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     @Feature({"TabContents"})
     public void testNoPrerender() throws InterruptedException {
-        String testUrl = TestHttpServerClient.getUrl(
-                "chrome/test/data/android/prerender/google.html");
+        String testUrl = mTestServer.getURL(
+                "/chrome/test/data/android/prerender/google.html");
         final Tab tab = getActivity().getActivityTab();
 
         // Mimic user behavior: touch to focus then type some URL.
@@ -67,18 +80,17 @@ public class PrerenderTest extends ChromeTabbedActivityTestBase {
     */
     @FlakyTest
     public void testPrerenderNotDead() throws InterruptedException, TimeoutException {
-        String testUrl = TestHttpServerClient.getUrl(
-                "chrome/test/data/android/prerender/google.html");
-        PrerenderTestHelper.prerenderUrlAndFocusOmnibox(testUrl, this);
+        String testUrl = mTestServer.getURL(
+                "/chrome/test/data/android/prerender/google.html");
         final Tab tab = getActivity().getActivityTab();
+        PrerenderTestHelper.prerenderUrl(testUrl, tab);
         // Navigate should use the prerendered version.
-        assertEquals(TabLoadStatus.FULL_PRERENDERED_PAGE_LOAD,
-                loadUrlInTab(testUrl, PageTransition.TYPED | PageTransition.FROM_ADDRESS_BAR, tab));
+        assertEquals(TabLoadStatus.FULL_PRERENDERED_PAGE_LOAD, loadUrl(testUrl));
 
         // Prerender again with new text; make sure we get something different.
         String newTitle = "Welcome to the YouTube";
-        testUrl = TestHttpServerClient.getUrl("chrome/test/data/android/prerender/youtube.html");
-        PrerenderTestHelper.prerenderUrlAndFocusOmnibox(testUrl, this);
+        testUrl = mTestServer.getURL("/chrome/test/data/android/prerender/youtube.html");
+        PrerenderTestHelper.prerenderUrl(testUrl, tab);
 
         // Make sure the current tab title is NOT from the prerendered page.
         MoreAsserts.assertNotEqual(newTitle, tab.getTitle());
@@ -86,9 +98,7 @@ public class PrerenderTest extends ChromeTabbedActivityTestBase {
         TabTitleObserver observer = new TabTitleObserver(tab, newTitle);
 
         // Now commit and see the new title.
-        final UrlBar urlBar = (UrlBar) getActivity().findViewById(R.id.url_bar);
-        assertNotNull("urlBar is null", urlBar);
-        KeyUtils.singleKeyEventView(getInstrumentation(), urlBar, KeyEvent.KEYCODE_ENTER);
+        loadUrl(testUrl);
 
         observer.waitForTitleUpdate(5);
         assertEquals(newTitle, tab.getTitle());
@@ -102,19 +112,9 @@ public class PrerenderTest extends ChromeTabbedActivityTestBase {
     @Restriction({RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     @Feature({"TabContents"})
     public void testPageLoadFinishNotification() throws InterruptedException {
-        String url = TestHttpServerClient.getUrl("chrome/test/data/android/prerender/google.html");
-        PrerenderTestHelper.prerenderUrlAndFocusOmnibox(url, this);
-        // Now let's press enter to validate the suggestion. The prerendered page should be
-        // committed and we should get a page load finished notification (which would trigger the
-        // page load).
-        ChromeTabUtils.waitForTabPageLoaded(getActivity().getActivityTab(), new Runnable() {
-            @Override
-            public void run() {
-                final UrlBar urlBar = (UrlBar) getActivity().findViewById(R.id.url_bar);
-                assertNotNull("urlBar is null", urlBar);
-                KeyUtils.singleKeyEventView(getInstrumentation(), urlBar, KeyEvent.KEYCODE_ENTER);
-            }
-        });
+        String url = mTestServer.getURL("/chrome/test/data/android/prerender/google.html");
+        PrerenderTestHelper.prerenderUrl(url, getActivity().getActivityTab());
+        loadUrl(url);
     }
 
     /**
@@ -123,24 +123,23 @@ public class PrerenderTest extends ChromeTabbedActivityTestBase {
      * Note that this bug happened with the instant code. Now that we use Wicked Fast, we don't
      * deal with infobars ourselves.
      */
+    /*
     @LargeTest
     @Restriction({RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     @Feature({"TabContents"})
+    */
+    @DisabledTest  // Prerenderer disables infobars. crbug.com/588808
     public void testInfoBarDismissed() throws InterruptedException {
-        final String url = TestHttpServerClient.getUrl(
-                "chrome/test/data/geolocation/geolocation_on_load.html");
-        final ExternalPrerenderHandler handler = PrerenderTestHelper.prerenderUrlAndFocusOmnibox(
-                url, this);
+        final String url = mTestServer.getURL(
+                "/chrome/test/data/geolocation/geolocation_on_load.html");
+        final ExternalPrerenderHandler handler =
+                PrerenderTestHelper.prerenderUrl(url, getActivity().getActivityTab());
 
-        // Let's clear the URL bar, this will discard the prerendered WebContents and close the
+        // Cancel the prerender. This will discard the prerendered WebContents and close the
         // infobars.
-        final UrlBar urlBar = (UrlBar) getActivity().findViewById(R.id.url_bar);
-        assertNotNull(urlBar);
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                urlBar.requestFocus();
-                urlBar.setText("");
                 handler.cancelCurrentPrerender();
             }
         });

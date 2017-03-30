@@ -51,7 +51,7 @@ void FetchContext::setFirstPartyForCookies(ResourceRequest&)
 {
 }
 
-CachePolicy FetchContext::cachePolicy() const
+CachePolicy FetchContext::getCachePolicy() const
 {
     return CachePolicyVerify;
 }
@@ -65,11 +65,11 @@ void FetchContext::dispatchWillSendRequest(unsigned long, ResourceRequest&, cons
 {
 }
 
-void FetchContext::dispatchDidLoadResourceFromMemoryCache(const Resource*)
+void FetchContext::dispatchDidLoadResourceFromMemoryCache(const Resource*, WebURLRequest::FrameType, WebURLRequest::RequestContext)
 {
 }
 
-void FetchContext::dispatchDidReceiveResponse(unsigned long, const ResourceResponse&, ResourceLoader*)
+void FetchContext::dispatchDidReceiveResponse(unsigned long, const ResourceResponse&, WebURLRequest::FrameType, WebURLRequest::RequestContext, ResourceLoader*)
 {
 }
 

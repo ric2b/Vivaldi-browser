@@ -11,16 +11,16 @@
 #include "components/mus/ws/operation.h"
 #include "components/mus/ws/server_window.h"
 #include "components/mus/ws/window_coordinate_conversions.h"
+#include "components/mus/ws/window_manager_factory_service.h"
 #include "components/mus/ws/window_tree_host_connection.h"
 #include "components/mus/ws/window_tree_impl.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
 #include "mojo/converters/input_events/input_events_type_converters.h"
 #include "mojo/converters/surfaces/surfaces_type_converters.h"
-#include "mojo/shell/public/cpp/application_connection.h"
+#include "mojo/shell/public/cpp/connection.h"
 #include "ui/gfx/geometry/size_conversions.h"
 
 namespace mus {
-
 namespace ws {
 
 ConnectionManager::ConnectionManager(
@@ -32,7 +32,8 @@ ConnectionManager::ConnectionManager(
       next_host_id_(0),
       current_operation_(nullptr),
       in_destructor_(false),
-      next_wm_change_id_(0) {}
+      next_wm_change_id_(0),
+      got_valid_frame_decorations_(false) {}
 
 ConnectionManager::~ConnectionManager() {
   in_destructor_ = true;
@@ -152,17 +153,22 @@ WindowTreeImpl* ConnectionManager::EmbedAtWindow(
     ServerWindow* root,
     uint32_t policy_bitmask,
     mojom::WindowTreeClientPtr client) {
-  mojom::WindowTreePtr service_ptr;
+  mojom::WindowTreePtr tree_ptr;
   ClientConnection* client_connection =
       delegate_->CreateClientConnectionForEmbedAtWindow(
-          this, GetProxy(&service_ptr), root, policy_bitmask,
-          std::move(client));
-  AddConnection(client_connection);
-  client_connection->service()->Init(client_connection->client(),
-                                     std::move(service_ptr));
+          this, GetProxy(&tree_ptr), root, policy_bitmask, std::move(client));
+  AddConnection(make_scoped_ptr(client_connection), std::move(tree_ptr));
   OnConnectionMessagedClient(client_connection->service()->id());
-
   return client_connection->service();
+}
+
+void ConnectionManager::AddConnection(
+    scoped_ptr<ClientConnection> owned_connection,
+    mojom::WindowTreePtr tree_ptr) {
+  ClientConnection* connection = owned_connection.release();
+  CHECK_EQ(0u, connection_map_.count(connection->service()->id()));
+  connection_map_[connection->service()->id()] = connection;
+  connection->service()->Init(connection->client(), std::move(tree_ptr));
 }
 
 WindowTreeImpl* ConnectionManager::GetConnection(
@@ -254,6 +260,20 @@ WindowTreeHostImpl* ConnectionManager::GetActiveWindowTreeHost() {
   return host_connection_map_.begin()->first;
 }
 
+void ConnectionManager::AddDisplayManagerBinding(
+    mojo::InterfaceRequest<mojom::DisplayManager> request) {
+  display_manager_bindings_.AddBinding(this, std::move(request));
+}
+
+void ConnectionManager::CreateWindowManagerFactoryService(
+    mojo::InterfaceRequest<mojom::WindowManagerFactoryService> request) {
+  if (window_manager_factory_service_)
+    return;
+
+  window_manager_factory_service_.reset(
+      new WindowManagerFactoryService(std::move(request)));
+}
+
 uint32_t ConnectionManager::GenerateWindowManagerChangeId(
     WindowTreeImpl* source,
     uint32_t client_change_id) {
@@ -278,27 +298,29 @@ void ConnectionManager::WindowManagerChangeCompleted(
 void ConnectionManager::WindowManagerCreatedTopLevelWindow(
     WindowTreeImpl* wm_connection,
     uint32_t window_manager_change_id,
-    Id transport_window_id) {
+    const ServerWindow* window) {
   InFlightWindowManagerChange change;
   if (!GetAndClearInFlightWindowManagerChange(window_manager_change_id,
                                               &change)) {
     return;
   }
+  if (!window) {
+    WindowManagerSentBogusMessage();
+    return;
+  }
 
-  const WindowId window_id(WindowIdFromTransportId(transport_window_id));
-  const ServerWindow* window = GetWindow(window_id);
   WindowTreeImpl* connection = GetConnection(change.connection_id);
   // The window manager should have created the window already, and it should
   // be ready for embedding.
   if (!connection->IsWaitingForNewTopLevelWindow(window_manager_change_id) ||
       !window || window->id().connection_id != wm_connection->id() ||
       !window->children().empty() || GetConnectionWithRoot(window)) {
-    WindowManagerSentBogusMessage(connection);
+    WindowManagerSentBogusMessage();
     return;
   }
 
   connection->OnWindowManagerCreatedTopLevelWindow(
-      window_manager_change_id, change.client_change_id, window_id);
+      window_manager_change_id, change.client_change_id, window);
 }
 
 void ConnectionManager::ProcessWindowBoundsChanged(
@@ -319,6 +341,13 @@ void ConnectionManager::ProcessClientAreaChanged(
     pair.second->service()->ProcessClientAreaChanged(
         window, new_client_area, new_additional_client_areas,
         IsOperationSource(pair.first));
+  }
+}
+
+void ConnectionManager::ProcessLostCapture(const ServerWindow* window) {
+  for (auto& pair : connection_map_) {
+    pair.second->service()->ProcessLostCapture(window,
+                                               IsOperationSource(pair.first));
   }
 }
 
@@ -387,6 +416,24 @@ void ConnectionManager::ProcessViewportMetricsChanged(
     pair.second->service()->ProcessViewportMetricsChanged(
         host, old_metrics, new_metrics, IsOperationSource(pair.first));
   }
+
+  if (!got_valid_frame_decorations_)
+    return;
+}
+
+void ConnectionManager::ProcessFrameDecorationValuesChanged(
+    WindowTreeHostImpl* host) {
+  if (!got_valid_frame_decorations_) {
+    got_valid_frame_decorations_ = true;
+    display_manager_observers_.ForAllPtrs([this](
+        mojom::DisplayManagerObserver* observer) { CallOnDisplays(observer); });
+    return;
+  }
+
+  display_manager_observers_.ForAllPtrs(
+      [this, &host](mojom::DisplayManagerObserver* observer) {
+        CallOnDisplayChanged(observer, host);
+      });
 }
 
 bool ConnectionManager::GetAndClearInFlightWindowManagerChange(
@@ -416,16 +463,69 @@ void ConnectionManager::FinishOperation() {
   current_operation_ = nullptr;
 }
 
-void ConnectionManager::AddConnection(ClientConnection* connection) {
-  DCHECK_EQ(0u, connection_map_.count(connection->service()->id()));
-  connection_map_[connection->service()->id()] = connection;
-}
-
 void ConnectionManager::MaybeUpdateNativeCursor(ServerWindow* window) {
   // This can be null in unit tests.
   WindowTreeHostImpl* impl = GetWindowTreeHostByWindow(window);
   if (impl)
     impl->MaybeChangeCursorOnWindowTreeChange();
+}
+
+void ConnectionManager::CallOnDisplays(
+    mojom::DisplayManagerObserver* observer) {
+  mojo::Array<mojom::DisplayPtr> displays(host_connection_map_.size());
+  {
+    size_t i = 0;
+    for (auto& pair : host_connection_map_) {
+      displays[i] = DisplayForHost(pair.first);
+      ++i;
+    }
+  }
+  observer->OnDisplays(std::move(displays));
+}
+
+void ConnectionManager::CallOnDisplayChanged(
+    mojom::DisplayManagerObserver* observer,
+    WindowTreeHostImpl* host) {
+  mojo::Array<mojom::DisplayPtr> displays(1);
+  displays[0] = DisplayForHost(host);
+  display_manager_observers_.ForAllPtrs(
+      [&displays](mojom::DisplayManagerObserver* observer) {
+        observer->OnDisplaysChanged(displays.Clone());
+      });
+}
+
+mojom::DisplayPtr ConnectionManager::DisplayForHost(WindowTreeHostImpl* host) {
+  size_t i = 0;
+  int next_x = 0;
+  for (auto& pair : host_connection_map_) {
+    const ServerWindow* root = host->root_window();
+    if (pair.first == host) {
+      mojom::DisplayPtr display = mojom::Display::New();
+      display = mojom::Display::New();
+      display->id = host->id();
+      display->bounds = mojo::Rect::New();
+      display->bounds->x = next_x;
+      display->bounds->y = 0;
+      display->bounds->width = root->bounds().size().width();
+      display->bounds->height = root->bounds().size().height();
+      // TODO(sky): window manager needs an API to set the work area.
+      display->work_area = display->bounds.Clone();
+      display->device_pixel_ratio =
+          host->GetViewportMetrics().device_pixel_ratio;
+      display->rotation = host->GetRotation();
+      // TODO(sky): make this real.
+      display->is_primary = i == 0;
+      // TODO(sky): make this real.
+      display->touch_support = mojom::TouchSupport::UNKNOWN;
+      display->frame_decoration_values =
+          host->frame_decoration_values().Clone();
+      return display;
+    }
+    next_x += root->bounds().size().width();
+    ++i;
+  }
+  NOTREACHED();
+  return mojom::Display::New();
 }
 
 mus::SurfacesState* ConnectionManager::GetSurfacesState() {
@@ -450,6 +550,26 @@ void ConnectionManager::ScheduleSurfaceDestruction(ServerWindow* window) {
       break;
     }
   }
+}
+
+ServerWindow* ConnectionManager::FindWindowForSurface(
+    const ServerWindow* ancestor,
+    mojom::SurfaceType surface_type,
+    const ClientWindowId& client_window_id) {
+  WindowTreeImpl* window_tree;
+  if (ancestor->id().connection_id == kInvalidConnectionId)
+    window_tree = GetWindowTreeHostByWindow(ancestor)->GetWindowTree();
+  else
+    window_tree = GetConnection(ancestor->id().connection_id);
+  if (!window_tree)
+    return nullptr;
+  if (surface_type == mojom::SurfaceType::DEFAULT) {
+    // At embed points the default surface comes from the embedded app.
+    WindowTreeImpl* connection_with_root = GetConnectionWithRoot(ancestor);
+    if (connection_with_root)
+      window_tree = connection_with_root;
+  }
+  return window_tree->GetWindowByClientId(client_window_id);
 }
 
 void ConnectionManager::OnWindowDestroyed(ServerWindow* window) {
@@ -583,6 +703,17 @@ void ConnectionManager::OnTransientWindowRemoved(
   }
 }
 
-}  // namespace ws
+void ConnectionManager::AddObserver(mojom::DisplayManagerObserverPtr observer) {
+  // Many clients key off the frame decorations to size widgets. Wait for frame
+  // decorations before notifying so that we don't have to worry about clients
+  // resizing appropriately.
+  if (!got_valid_frame_decorations_) {
+    display_manager_observers_.AddInterfacePtr(std::move(observer));
+    return;
+  }
+  CallOnDisplays(observer.get());
+  display_manager_observers_.AddInterfacePtr(std::move(observer));
+}
 
+}  // namespace ws
 }  // namespace mus

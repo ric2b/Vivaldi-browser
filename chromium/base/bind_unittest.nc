@@ -68,7 +68,7 @@ template <typename T>
 void VoidPolymorphic1(T t) {
 }
 
-#if defined(NCTEST_METHOD_ON_CONST_OBJECT)  // [r"fatal error: cannot initialize a parameter of type 'base::NoRef \*' with an lvalue of type 'typename std::enable_if<!IsMoveOnlyType<const HasRef \*const>::value, const HasRef \*const>::type' \(aka 'const base::HasRef \*const'\)"]
+#if defined(NCTEST_METHOD_ON_CONST_OBJECT)  // [r"error: no matching member function for call to 'Run'"]
 
 // Method bound to const-object.
 //
@@ -105,7 +105,7 @@ void WontCompile() {
   no_ref_const_cb.Run();
 }
 
-#elif defined(NCTEST_CONST_POINTER)  // [r"fatal error: reference to type 'base::NoRef \*const' could not bind to an lvalue of type 'typename std::enable_if<!IsMoveOnlyType<const NoRef \*const>::value, const NoRef \*const>::type' \(aka 'const base::NoRef \*const'\)"]
+#elif defined(NCTEST_CONST_POINTER)  // [r"fatal error: cannot initialize a parameter of type 'base::NoRef \*' with an lvalue of type 'const base::NoRef \*const'"]
 
 // Const argument used with non-const pointer parameter of same type.
 //
@@ -117,7 +117,7 @@ void WontCompile() {
   pointer_same_cb.Run();
 }
 
-#elif defined(NCTEST_CONST_POINTER_SUBTYPE)  // [r"fatal error: reference to type 'base::NoRefParent \*const' could not bind to an lvalue of type 'typename std::enable_if<!IsMoveOnlyType<const NoRefChild \*const>::value, const NoRefChild \*const>::type' \(aka 'const base::NoRefChild \*const'\)"]
+#elif defined(NCTEST_CONST_POINTER_SUBTYPE)  // [r"fatal error: cannot initialize a parameter of type 'base::NoRefParent \*' with an lvalue of type 'const base::NoRefChild \*const'"]
 
 // Const argument used with non-const pointer parameter of super type.
 //
@@ -194,7 +194,7 @@ void WontCompile() {
   weak_ptr_with_non_void_return_type.Run();
 }
 
-#elif defined(NCTEST_DISALLOW_ASSIGN_DIFFERENT_TYPES)  // [r"fatal error: no viable conversion from 'Callback<typename internal::BindState<typename internal::FunctorTraits<void \(\*\)\(int\)>::RunnableType, typename internal::FunctorTraits<void \(\*\)\(int\)>::RunType>::UnboundRunType>' to 'Callback<void \(\)>'"]
+#elif defined(NCTEST_DISALLOW_ASSIGN_DIFFERENT_TYPES)  // [r"fatal error: no viable conversion from 'Callback<MakeUnboundRunType<void \(\*\)\(int\)>>' to 'Callback<void \(\)>'"]
 
 // Bind result cannot be assigned to Callbacks with a mismatching type.
 void WontCompile() {

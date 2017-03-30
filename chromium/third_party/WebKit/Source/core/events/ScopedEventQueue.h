@@ -53,6 +53,7 @@ public:
 
     void incrementScopingLevel();
     void decrementScopingLevel();
+    bool shouldQueueEvents() const { return m_scopingLevel > 0; }
 
 private:
     ScopedEventQueue();
@@ -73,6 +74,6 @@ public:
     ~EventQueueScope() { ScopedEventQueue::instance()->decrementScopingLevel(); }
 };
 
-}
+} // namespace blink
 
 #endif // ScopedEventQueue_h

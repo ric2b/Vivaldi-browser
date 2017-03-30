@@ -15,7 +15,6 @@
 #include "build/build_config.h"
 #include "content/browser/background_sync/background_sync_metrics.h"
 #include "content/browser/background_sync/background_sync_network_observer.h"
-#include "content/browser/background_sync/background_sync_power_observer.h"
 #include "content/browser/background_sync/background_sync_registration_handle.h"
 #include "content/browser/background_sync/background_sync_registration_options.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -127,9 +126,8 @@ void OnSyncEventFinished(
     int request_id,
     const ServiceWorkerVersion::StatusCallback& callback,
     ServiceWorkerEventStatus status) {
-  TRACE_EVENT1("ServiceWorker", "BackgroundSyncManager::OnSyncEventFinished",
-               "Request id", request_id);
-  if (!active_version->FinishRequest(request_id))
+  if (!active_version->FinishRequest(
+          request_id, status == content::ServiceWorkerEventStatus::COMPLETED))
     return;
   callback.Run(mojo::ConvertTo<ServiceWorkerStatusCode>(status));
 }
@@ -140,6 +138,9 @@ BackgroundSyncManager::BackgroundSyncRegistrations::
     BackgroundSyncRegistrations()
     : next_id(BackgroundSyncRegistration::kInitialId) {
 }
+
+BackgroundSyncManager::BackgroundSyncRegistrations::BackgroundSyncRegistrations(
+    const BackgroundSyncRegistrations& other) = default;
 
 BackgroundSyncManager::BackgroundSyncRegistrations::
     ~BackgroundSyncRegistrations() {
@@ -164,19 +165,17 @@ BackgroundSyncManager::~BackgroundSyncManager() {
 
 BackgroundSyncManager::RegistrationKey::RegistrationKey(
     const BackgroundSyncRegistration& registration)
-    : RegistrationKey(registration.options()->tag,
-                      registration.options()->periodicity) {
-}
+    : RegistrationKey(registration.options()->tag) {}
 
 BackgroundSyncManager::RegistrationKey::RegistrationKey(
     const BackgroundSyncRegistrationOptions& options)
-    : RegistrationKey(options.tag, options.periodicity) {
-}
+    : RegistrationKey(options.tag) {}
 
-BackgroundSyncManager::RegistrationKey::RegistrationKey(
-    const std::string& tag,
-    SyncPeriodicity periodicity)
-    : value_(periodicity == SYNC_ONE_SHOT ? "o_" + tag : "p_" + tag) {
+BackgroundSyncManager::RegistrationKey::RegistrationKey(const std::string& tag)
+    : value_("o_" + tag) {
+  // Note that the "o_" prefix on the key is because at one time one-shots were
+  // prefixed with an "o_" and periodic with a "p_". Removing the "o_" requires
+  // migration.
 }
 
 void BackgroundSyncManager::Register(
@@ -188,7 +187,7 @@ void BackgroundSyncManager::Register(
 
   if (disabled_) {
     BackgroundSyncMetrics::CountRegisterFailure(
-        options.periodicity, BACKGROUND_SYNC_STATUS_STORAGE_ERROR);
+        BACKGROUND_SYNC_STATUS_STORAGE_ERROR);
     PostErrorResponse(BACKGROUND_SYNC_STATUS_STORAGE_ERROR, callback);
     return;
   }
@@ -207,29 +206,8 @@ void BackgroundSyncManager::Register(
                  MakeStatusAndRegistrationCompletion(callback)));
 }
 
-void BackgroundSyncManager::GetRegistration(
-    int64_t sw_registration_id,
-    const std::string& sync_registration_tag,
-    SyncPeriodicity periodicity,
-    const StatusAndRegistrationCallback& callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  if (disabled_) {
-    PostErrorResponse(BACKGROUND_SYNC_STATUS_STORAGE_ERROR, callback);
-    return;
-  }
-
-  RegistrationKey registration_key(sync_registration_tag, periodicity);
-
-  op_scheduler_.ScheduleOperation(base::Bind(
-      &BackgroundSyncManager::GetRegistrationImpl,
-      weak_ptr_factory_.GetWeakPtr(), sw_registration_id, registration_key,
-      MakeStatusAndRegistrationCompletion(callback)));
-}
-
 void BackgroundSyncManager::GetRegistrations(
     int64_t sw_registration_id,
-    SyncPeriodicity periodicity,
     const StatusAndRegistrationsCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -247,7 +225,7 @@ void BackgroundSyncManager::GetRegistrations(
   op_scheduler_.ScheduleOperation(
       base::Bind(&BackgroundSyncManager::GetRegistrationsImpl,
                  weak_ptr_factory_.GetWeakPtr(), sw_registration_id,
-                 periodicity, MakeStatusAndRegistrationsCompletion(callback)));
+                 MakeStatusAndRegistrationsCompletion(callback)));
 }
 
 // Given a HandleId |handle_id|, return a new handle for the same
@@ -316,8 +294,6 @@ BackgroundSyncManager::BackgroundSyncManager(
       base::Bind(&BackgroundSyncManager::OnNetworkChanged,
                  weak_ptr_factory_.GetWeakPtr())));
 #endif
-  power_observer_.reset(new BackgroundSyncPowerObserver(base::Bind(
-      &BackgroundSyncManager::OnPowerChanged, weak_ptr_factory_.GetWeakPtr())));
 }
 
 void BackgroundSyncManager::Init() {
@@ -400,8 +376,7 @@ void BackgroundSyncManager::InitDidGetDataFromBackend(
           break;
         }
 
-        RegistrationKey registration_key(registration_proto.tag(),
-                                         registration_proto.periodicity());
+        RegistrationKey registration_key(registration_proto.tag());
 
         scoped_refptr<RefCountedRegistration> ref_registration(
             new RefCountedRegistration());
@@ -410,10 +385,7 @@ void BackgroundSyncManager::InitDidGetDataFromBackend(
 
         BackgroundSyncRegistrationOptions* options = registration->options();
         options->tag = registration_proto.tag();
-        options->periodicity = registration_proto.periodicity();
-        options->min_period = registration_proto.min_period();
         options->network_state = registration_proto.network_state();
-        options->power_state = registration_proto.power_state();
 
         registration->set_id(registration_proto.id());
         registration->set_num_attempts(registration_proto.num_attempts());
@@ -448,7 +420,7 @@ void BackgroundSyncManager::RegisterCheckIfHasMainFrame(
       service_worker_context_->GetLiveRegistration(sw_registration_id);
   if (!sw_registration || !sw_registration->active_version()) {
     BackgroundSyncMetrics::CountRegisterFailure(
-        options.periodicity, BACKGROUND_SYNC_STATUS_NO_SERVICE_WORKER);
+        BACKGROUND_SYNC_STATUS_NO_SERVICE_WORKER);
     PostErrorResponse(BACKGROUND_SYNC_STATUS_NO_SERVICE_WORKER, callback);
     return;
   }
@@ -469,7 +441,7 @@ void BackgroundSyncManager::RegisterDidCheckIfMainFrame(
 
   if (!has_main_frame_client) {
     BackgroundSyncMetrics::CountRegisterFailure(
-        options.periodicity, BACKGROUND_SYNC_STATUS_NOT_ALLOWED);
+        BACKGROUND_SYNC_STATUS_NOT_ALLOWED);
     PostErrorResponse(BACKGROUND_SYNC_STATUS_NOT_ALLOWED, callback);
     return;
   }
@@ -484,14 +456,14 @@ void BackgroundSyncManager::RegisterImpl(
 
   if (disabled_) {
     BackgroundSyncMetrics::CountRegisterFailure(
-        options.periodicity, BACKGROUND_SYNC_STATUS_STORAGE_ERROR);
+        BACKGROUND_SYNC_STATUS_STORAGE_ERROR);
     PostErrorResponse(BACKGROUND_SYNC_STATUS_STORAGE_ERROR, callback);
     return;
   }
 
   if (options.tag.length() > kMaxTagLength) {
     BackgroundSyncMetrics::CountRegisterFailure(
-        options.periodicity, BACKGROUND_SYNC_STATUS_NOT_ALLOWED);
+        BACKGROUND_SYNC_STATUS_NOT_ALLOWED);
     PostErrorResponse(BACKGROUND_SYNC_STATUS_NOT_ALLOWED, callback);
     return;
   }
@@ -500,7 +472,7 @@ void BackgroundSyncManager::RegisterImpl(
       service_worker_context_->GetLiveRegistration(sw_registration_id);
   if (!sw_registration || !sw_registration->active_version()) {
     BackgroundSyncMetrics::CountRegisterFailure(
-        options.periodicity, BACKGROUND_SYNC_STATUS_NO_SERVICE_WORKER);
+        BACKGROUND_SYNC_STATUS_NO_SERVICE_WORKER);
     PostErrorResponse(BACKGROUND_SYNC_STATUS_NO_SERVICE_WORKER, callback);
     return;
   }
@@ -513,22 +485,21 @@ void BackgroundSyncManager::RegisterImpl(
   RefCountedRegistration* existing_registration_ref =
       LookupActiveRegistration(sw_registration_id, RegistrationKey(options));
   if (existing_registration_ref) {
-    if (existing_registration_ref->value()->options()->Equals(options)) {
-      BackgroundSyncRegistration* existing_registration =
-          existing_registration_ref->value();
+    DCHECK(existing_registration_ref->value()->options()->Equals(options));
+    BackgroundSyncRegistration* existing_registration =
+        existing_registration_ref->value();
 
-      BackgroundSyncMetrics::RegistrationCouldFire registration_could_fire =
-          AreOptionConditionsMet(options)
-              ? BackgroundSyncMetrics::REGISTRATION_COULD_FIRE
-              : BackgroundSyncMetrics::REGISTRATION_COULD_NOT_FIRE;
-      BackgroundSyncMetrics::CountRegisterSuccess(
-          existing_registration->options()->periodicity,
-          registration_could_fire,
-          BackgroundSyncMetrics::REGISTRATION_IS_DUPLICATE);
+    BackgroundSyncMetrics::RegistrationCouldFire registration_could_fire =
+        AreOptionConditionsMet(options)
+            ? BackgroundSyncMetrics::REGISTRATION_COULD_FIRE
+            : BackgroundSyncMetrics::REGISTRATION_COULD_NOT_FIRE;
+    BackgroundSyncMetrics::CountRegisterSuccess(
+        registration_could_fire,
+        BackgroundSyncMetrics::REGISTRATION_IS_DUPLICATE);
 
     if (existing_registration->IsFiring()) {
       existing_registration->set_sync_state(
-          BACKGROUND_SYNC_STATE_REREGISTERED_WHILE_FIRING);
+          BackgroundSyncState::REREGISTERED_WHILE_FIRING);
     }
 
     base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -537,9 +508,6 @@ void BackgroundSyncManager::RegisterImpl(
             callback, BACKGROUND_SYNC_STATUS_OK,
             base::Passed(CreateRegistrationHandle(existing_registration_ref))));
     return;
-    } else {
-      existing_registration_ref->value()->SetUnregisteredState();
-    }
   }
 
   scoped_refptr<RefCountedRegistration> new_ref_registration(
@@ -574,15 +542,6 @@ void BackgroundSyncManager::DisableAndClearManager(
   }
 
   disabled_ = true;
-
-  for (auto& sw_id_and_registrations : active_registrations_) {
-    for (auto& key_and_registration :
-         sw_id_and_registrations.second.registration_map) {
-      BackgroundSyncRegistration* registration =
-          key_and_registration.second->value();
-      registration->SetUnregisteredState();
-    }
-  }
 
   active_registrations_.clear();
 
@@ -670,11 +629,8 @@ void BackgroundSyncManager::StoreRegistrations(
         registrations_proto.add_registration();
     registration_proto->set_id(registration.id());
     registration_proto->set_tag(registration.options()->tag);
-    registration_proto->set_periodicity(registration.options()->periodicity);
-    registration_proto->set_min_period(registration.options()->min_period);
     registration_proto->set_network_state(
         registration.options()->network_state);
-    registration_proto->set_power_state(registration.options()->power_state);
     registration_proto->set_num_attempts(registration.num_attempts());
     registration_proto->set_delay_until(
         registration.delay_until().ToInternalValue());
@@ -700,7 +656,6 @@ void BackgroundSyncManager::RegisterDidStore(
   if (status == SERVICE_WORKER_ERROR_NOT_FOUND) {
     // The service worker registration is gone.
     BackgroundSyncMetrics::CountRegisterFailure(
-        new_registration->options()->periodicity,
         BACKGROUND_SYNC_STATUS_STORAGE_ERROR);
     active_registrations_.erase(sw_registration_id);
     PostErrorResponse(BACKGROUND_SYNC_STATUS_STORAGE_ERROR, callback);
@@ -711,7 +666,6 @@ void BackgroundSyncManager::RegisterDidStore(
     LOG(ERROR) << "BackgroundSync failed to store registration due to backend "
                   "failure.";
     BackgroundSyncMetrics::CountRegisterFailure(
-        new_registration->options()->periodicity,
         BACKGROUND_SYNC_STATUS_STORAGE_ERROR);
     DisableAndClearManager(base::Bind(
         callback, BACKGROUND_SYNC_STATUS_STORAGE_ERROR,
@@ -724,7 +678,7 @@ void BackgroundSyncManager::RegisterDidStore(
           ? BackgroundSyncMetrics::REGISTRATION_COULD_FIRE
           : BackgroundSyncMetrics::REGISTRATION_COULD_NOT_FIRE;
   BackgroundSyncMetrics::CountRegisterSuccess(
-      new_registration->options()->periodicity, registration_could_fire,
+      registration_could_fire,
       BackgroundSyncMetrics::REGISTRATION_IS_NOT_DUPLICATE);
 
   FireReadyEvents();
@@ -784,7 +738,7 @@ void BackgroundSyncManager::GetDataFromBackend(
                                                           callback);
 }
 
-void BackgroundSyncManager::FireOneShotSync(
+void BackgroundSyncManager::DispatchSyncEvent(
     BackgroundSyncRegistrationHandle::HandleId handle_id,
     const scoped_refptr<ServiceWorkerVersion>& active_version,
     BackgroundSyncEventLastChance last_chance,
@@ -794,9 +748,10 @@ void BackgroundSyncManager::FireOneShotSync(
 
   if (active_version->running_status() != ServiceWorkerVersion::RUNNING) {
     active_version->RunAfterStartWorker(
-        callback, base::Bind(&BackgroundSyncManager::FireOneShotSync,
-                             weak_ptr_factory_.GetWeakPtr(), handle_id,
-                             active_version, last_chance, callback));
+        base::Bind(&BackgroundSyncManager::DispatchSyncEvent,
+                   weak_ptr_factory_.GetWeakPtr(), handle_id, active_version,
+                   last_chance, callback),
+        callback);
     return;
   }
 
@@ -862,183 +817,8 @@ void BackgroundSyncManager::ReleaseRegistrationHandle(
   registration_handle_ids_.Remove(handle_id);
 }
 
-void BackgroundSyncManager::Unregister(
-    int64_t sw_registration_id,
-    BackgroundSyncRegistrationHandle::HandleId handle_id,
-    const StatusCallback& callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  BackgroundSyncRegistration* registration =
-      GetRegistrationForHandle(handle_id);
-  DCHECK(registration);
-
-  if (disabled_) {
-    BackgroundSyncMetrics::CountUnregister(
-        registration->options()->periodicity,
-        BACKGROUND_SYNC_STATUS_STORAGE_ERROR);
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback, BACKGROUND_SYNC_STATUS_STORAGE_ERROR));
-    return;
-  }
-
-  op_scheduler_.ScheduleOperation(base::Bind(
-      &BackgroundSyncManager::UnregisterImpl, weak_ptr_factory_.GetWeakPtr(),
-      sw_registration_id, RegistrationKey(*registration), registration->id(),
-      registration->options()->periodicity, MakeStatusCompletion(callback)));
-}
-
-void BackgroundSyncManager::UnregisterImpl(
-    int64_t sw_registration_id,
-    const RegistrationKey& registration_key,
-    BackgroundSyncRegistration::RegistrationId sync_registration_id,
-    SyncPeriodicity periodicity,
-    const StatusCallback& callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  if (disabled_) {
-    BackgroundSyncMetrics::CountUnregister(
-        periodicity, BACKGROUND_SYNC_STATUS_STORAGE_ERROR);
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback, BACKGROUND_SYNC_STATUS_STORAGE_ERROR));
-    return;
-  }
-
-  RefCountedRegistration* existing_registration =
-      LookupActiveRegistration(sw_registration_id, registration_key);
-
-  if (!existing_registration ||
-      existing_registration->value()->id() != sync_registration_id) {
-    BackgroundSyncMetrics::CountUnregister(periodicity,
-                                           BACKGROUND_SYNC_STATUS_NOT_FOUND);
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback, BACKGROUND_SYNC_STATUS_NOT_FOUND));
-    return;
-  }
-
-  existing_registration->value()->SetUnregisteredState();
-
-  RemoveActiveRegistration(sw_registration_id, registration_key);
-
-  StoreRegistrations(sw_registration_id,
-                     base::Bind(&BackgroundSyncManager::UnregisterDidStore,
-                                weak_ptr_factory_.GetWeakPtr(),
-                                sw_registration_id, periodicity, callback));
-}
-
-void BackgroundSyncManager::UnregisterDidStore(int64_t sw_registration_id,
-                                               SyncPeriodicity periodicity,
-                                               const StatusCallback& callback,
-                                               ServiceWorkerStatusCode status) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  if (status == SERVICE_WORKER_ERROR_NOT_FOUND) {
-    // ServiceWorker was unregistered.
-    BackgroundSyncMetrics::CountUnregister(
-        periodicity, BACKGROUND_SYNC_STATUS_STORAGE_ERROR);
-    active_registrations_.erase(sw_registration_id);
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback, BACKGROUND_SYNC_STATUS_STORAGE_ERROR));
-    return;
-  }
-
-  if (status != SERVICE_WORKER_OK) {
-    LOG(ERROR) << "BackgroundSync failed to unregister due to backend failure.";
-    BackgroundSyncMetrics::CountUnregister(
-        periodicity, BACKGROUND_SYNC_STATUS_STORAGE_ERROR);
-    DisableAndClearManager(
-        base::Bind(callback, BACKGROUND_SYNC_STATUS_STORAGE_ERROR));
-    return;
-  }
-
-  BackgroundSyncMetrics::CountUnregister(periodicity,
-                                         BACKGROUND_SYNC_STATUS_OK);
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, BACKGROUND_SYNC_STATUS_OK));
-}
-
-void BackgroundSyncManager::NotifyWhenFinished(
-    BackgroundSyncRegistrationHandle::HandleId handle_id,
-    const StatusAndStateCallback& callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  if (disabled_) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback, BACKGROUND_SYNC_STATUS_STORAGE_ERROR,
-                              BACKGROUND_SYNC_STATE_FAILED));
-    return;
-  }
-
-  scoped_ptr<BackgroundSyncRegistrationHandle> registration_handle =
-      DuplicateRegistrationHandle(handle_id);
-
-  op_scheduler_.ScheduleOperation(
-      base::Bind(&BackgroundSyncManager::NotifyWhenFinishedImpl,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 base::Passed(std::move(registration_handle)), callback));
-}
-
-void BackgroundSyncManager::NotifyWhenFinishedImpl(
-    scoped_ptr<BackgroundSyncRegistrationHandle> registration_handle,
-    const StatusAndStateCallback& callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  DCHECK_EQ(SYNC_ONE_SHOT, registration_handle->options()->periodicity);
-
-  if (disabled_) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback, BACKGROUND_SYNC_STATUS_STORAGE_ERROR,
-                              BACKGROUND_SYNC_STATE_FAILED));
-    return;
-  }
-
-  if (!registration_handle->registration()->HasCompleted()) {
-    registration_handle->registration()->AddFinishedCallback(
-        base::Bind(&BackgroundSyncManager::NotifyWhenFinishedInvokeCallback,
-                   weak_ptr_factory_.GetWeakPtr(), callback));
-    op_scheduler_.CompleteOperationAndRunNext();
-    return;
-  }
-
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, BACKGROUND_SYNC_STATUS_OK,
-                            registration_handle->sync_state()));
-  op_scheduler_.CompleteOperationAndRunNext();
-}
-
-void BackgroundSyncManager::NotifyWhenFinishedInvokeCallback(
-    const StatusAndStateCallback& callback,
-    BackgroundSyncState sync_state) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  callback.Run(BACKGROUND_SYNC_STATUS_OK, sync_state);
-}
-
-void BackgroundSyncManager::GetRegistrationImpl(
-    int64_t sw_registration_id,
-    const RegistrationKey& registration_key,
-    const StatusAndRegistrationCallback& callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  if (disabled_) {
-    PostErrorResponse(BACKGROUND_SYNC_STATUS_STORAGE_ERROR, callback);
-    return;
-  }
-
-  RefCountedRegistration* registration =
-      LookupActiveRegistration(sw_registration_id, registration_key);
-  if (!registration) {
-    PostErrorResponse(BACKGROUND_SYNC_STATUS_NOT_FOUND, callback);
-    return;
-  }
-
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind(callback, BACKGROUND_SYNC_STATUS_OK,
-                 base::Passed(CreateRegistrationHandle(registration))));
-}
-
 void BackgroundSyncManager::GetRegistrationsImpl(
     int64_t sw_registration_id,
-    SyncPeriodicity periodicity,
     const StatusAndRegistrationsCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -1059,10 +839,8 @@ void BackgroundSyncManager::GetRegistrationsImpl(
     const BackgroundSyncRegistrations& registrations = it->second;
     for (const auto& tag_and_registration : registrations.registration_map) {
       RefCountedRegistration* registration = tag_and_registration.second.get();
-      if (registration->value()->options()->periodicity == periodicity) {
-        out_registrations->push_back(
-            CreateRegistrationHandle(registration).release());
-      }
+      out_registrations->push_back(
+          CreateRegistrationHandle(registration).release());
     }
   }
 
@@ -1074,25 +852,18 @@ void BackgroundSyncManager::GetRegistrationsImpl(
 bool BackgroundSyncManager::AreOptionConditionsMet(
     const BackgroundSyncRegistrationOptions& options) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  return network_observer_->NetworkSufficient(options.network_state) &&
-         power_observer_->PowerSufficient(options.power_state);
+  return network_observer_->NetworkSufficient(options.network_state);
 }
 
 bool BackgroundSyncManager::IsRegistrationReadyToFire(
     const BackgroundSyncRegistration& registration) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  // TODO(jkarlin): Add support for firing periodic registrations.
-  if (registration.options()->periodicity == SYNC_PERIODIC)
-    return false;
-
-  if (registration.sync_state() != BACKGROUND_SYNC_STATE_PENDING)
+  if (registration.sync_state() != BackgroundSyncState::PENDING)
     return false;
 
   if (clock_->Now() < registration.delay_until())
     return false;
-
-  DCHECK_EQ(SYNC_ONE_SHOT, registration.options()->periodicity);
 
   return AreOptionConditionsMet(*registration.options());
 }
@@ -1106,19 +877,14 @@ void BackgroundSyncManager::RunInBackgroundIfNecessary() {
          sw_id_and_registrations.second.registration_map) {
       const BackgroundSyncRegistration& registration =
           *key_and_registration.second->value();
-      if (registration.sync_state() == BACKGROUND_SYNC_STATE_PENDING) {
-        if (registration.options()->periodicity == SYNC_ONE_SHOT) {
-          if (clock_->Now() >= registration.delay_until()) {
-            soonest_wakeup_delta = base::TimeDelta();
-          } else {
-            base::TimeDelta delay_delta =
-                registration.delay_until() - clock_->Now();
-            if (delay_delta < soonest_wakeup_delta)
-              soonest_wakeup_delta = delay_delta;
-          }
+      if (registration.sync_state() == BackgroundSyncState::PENDING) {
+        if (clock_->Now() >= registration.delay_until()) {
+          soonest_wakeup_delta = base::TimeDelta();
         } else {
-          // TODO(jkarlin): Support keeping the browser alive for periodic
-          // syncs.
+          base::TimeDelta delay_delta =
+              registration.delay_until() - clock_->Now();
+          if (delay_delta < soonest_wakeup_delta)
+            soonest_wakeup_delta = delay_delta;
         }
       }
     }
@@ -1184,7 +950,7 @@ void BackgroundSyncManager::FireReadyEventsImpl(const base::Closure& callback) {
         // The state change is not saved to persistent storage because
         // if the sync event is killed mid-sync then it should return to
         // SYNC_STATE_PENDING.
-        registration->set_sync_state(BACKGROUND_SYNC_STATE_FIRING);
+        registration->set_sync_state(BackgroundSyncState::FIRING);
       }
     }
   }
@@ -1260,15 +1026,14 @@ void BackgroundSyncManager::FireReadyEventsDidFindRegistration(
   BackgroundSyncEventLastChance last_chance =
       registration->value()->num_attempts() ==
               parameters_->max_sync_attempts - 1
-          ? BACKGROUND_SYNC_EVENT_LAST_CHANCE_IS_LAST_CHANCE
-          : BACKGROUND_SYNC_EVENT_LAST_CHANCE_IS_NOT_LAST_CHANCE;
+          ? BackgroundSyncEventLastChance::IS_LAST_CHANCE
+          : BackgroundSyncEventLastChance::IS_NOT_LAST_CHANCE;
 
   HasMainFrameProviderHost(
       service_worker_registration->pattern().GetOrigin(),
-      base::Bind(&BackgroundSyncMetrics::RecordEventStarted,
-                 registration->value()->options()->periodicity));
+      base::Bind(&BackgroundSyncMetrics::RecordEventStarted));
 
-  FireOneShotSync(
+  DispatchSyncEvent(
       handle_id, service_worker_registration->active_version(), last_chance,
       base::Bind(&BackgroundSyncManager::EventComplete,
                  weak_ptr_factory_.GetWeakPtr(), service_worker_registration,
@@ -1299,8 +1064,12 @@ void BackgroundSyncManager::EventComplete(
     ServiceWorkerStatusCode status_code) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  // Do not check for disabled as events that were firing when disabled should
-  // be allowed to complete (for NotifyWhenFinished).
+  if (disabled_) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                  base::Bind(callback));
+    return;
+  }
+
   op_scheduler_.ScheduleOperation(base::Bind(
       &BackgroundSyncManager::EventCompleteImpl, weak_ptr_factory_.GetWeakPtr(),
       service_worker_id, base::Passed(std::move(registration_handle)),
@@ -1314,10 +1083,16 @@ void BackgroundSyncManager::EventCompleteImpl(
     const base::Closure& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
+  if (disabled_) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                  base::Bind(callback));
+    return;
+  }
+
   BackgroundSyncRegistration* registration =
       registration_handle->registration();
   DCHECK(registration);
-  DCHECK(!registration->HasCompleted());
+  DCHECK_NE(BackgroundSyncState::PENDING, registration->sync_state());
 
   registration->set_num_attempts(registration->num_attempts() + 1);
 
@@ -1331,58 +1106,36 @@ void BackgroundSyncManager::EventCompleteImpl(
     HasMainFrameProviderHost(
         sw_registration->pattern().GetOrigin(),
         base::Bind(&BackgroundSyncMetrics::RecordEventResult,
-                   registration->options()->periodicity,
                    status_code == SERVICE_WORKER_OK));
   }
 
-  if (registration->options()->periodicity == SYNC_ONE_SHOT) {
-    if (registration->sync_state() ==
-        BACKGROUND_SYNC_STATE_REREGISTERED_WHILE_FIRING) {
-      registration->set_sync_state(BACKGROUND_SYNC_STATE_PENDING);
-      registration->set_num_attempts(0);
-    } else if (status_code != SERVICE_WORKER_OK) {  // Sync failed
-      bool can_retry =
-          registration->num_attempts() < parameters_->max_sync_attempts;
-      if (registration->sync_state() ==
-          BACKGROUND_SYNC_STATE_UNREGISTERED_WHILE_FIRING) {
-        registration->set_sync_state(can_retry
-                                         ? BACKGROUND_SYNC_STATE_UNREGISTERED
-                                         : BACKGROUND_SYNC_STATE_FAILED);
-        registration->RunFinishedCallbacks();
-      } else if (can_retry) {
-        registration->set_sync_state(BACKGROUND_SYNC_STATE_PENDING);
-        registration->set_delay_until(
-            clock_->Now() +
-            parameters_->initial_retry_delay *
-                pow(parameters_->retry_delay_factor,
-                    registration->num_attempts() - 1));
-      } else {
-        registration->set_sync_state(BACKGROUND_SYNC_STATE_FAILED);
-        registration->RunFinishedCallbacks();
-      }
-    } else {  // Sync succeeded
-      registration->set_sync_state(BACKGROUND_SYNC_STATE_SUCCESS);
-      registration->RunFinishedCallbacks();
-    }
+  bool registration_completed = true;
+  bool can_retry =
+      registration->num_attempts() < parameters_->max_sync_attempts;
 
-    if (registration->HasCompleted()) {
-      RegistrationKey key(*registration);
-      RefCountedRegistration* active_registration =
-          LookupActiveRegistration(service_worker_id, key);
-      if (active_registration &&
-          active_registration->value()->id() == registration->id()) {
-        RemoveActiveRegistration(service_worker_id, key);
-      }
-    }
-  } else {  // !SYNC_ONE_SHOT
-    // TODO(jkarlin): Add support for running periodic syncs. (crbug.com/479674)
-    NOTREACHED();
+  if (registration->sync_state() ==
+      BackgroundSyncState::REREGISTERED_WHILE_FIRING) {
+    registration->set_sync_state(BackgroundSyncState::PENDING);
+    registration->set_num_attempts(0);
+    registration_completed = false;
+  } else if (status_code != SERVICE_WORKER_OK &&
+             can_retry) {  // Sync failed but can retry
+    registration->set_sync_state(BackgroundSyncState::PENDING);
+    registration->set_delay_until(clock_->Now() +
+                                  parameters_->initial_retry_delay *
+                                      pow(parameters_->retry_delay_factor,
+                                          registration->num_attempts() - 1));
+    registration_completed = false;
   }
 
-  if (disabled_) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  base::Bind(callback));
-    return;
+  if (registration_completed) {
+    RegistrationKey key(*registration);
+    RefCountedRegistration* active_registration =
+        LookupActiveRegistration(service_worker_id, key);
+    if (active_registration &&
+        active_registration->value()->id() == registration->id()) {
+      RemoveActiveRegistration(service_worker_id, key);
+    }
   }
 
   StoreRegistrations(
@@ -1449,12 +1202,6 @@ void BackgroundSyncManager::OnStorageWipedImpl(const base::Closure& callback) {
 }
 
 void BackgroundSyncManager::OnNetworkChanged() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  FireReadyEvents();
-}
-
-void BackgroundSyncManager::OnPowerChanged() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   FireReadyEvents();

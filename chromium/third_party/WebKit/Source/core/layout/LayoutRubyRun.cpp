@@ -128,7 +128,7 @@ void LayoutRubyRun::addChild(LayoutObject* child, LayoutObject* beforeChild)
             // Make sure we don't leave anything in the percentage descendant
             // map before moving the children to the new base.
             if (hasPercentHeightDescendants())
-                clearPercentHeightDescendantsFrom(this);
+                clearPercentHeightDescendants();
             rubyBaseSafe()->moveChildren(newRun->rubyBaseSafe(), beforeChild);
         }
     } else {
@@ -224,11 +224,11 @@ void LayoutRubyRun::layout()
     if (!rt)
         return;
 
-    rt->setLogicalLeft(0);
+    rt->setLogicalLeft(LayoutUnit());
 
     // Place the LayoutRubyText such that its bottom is flush with the lineTop of the first line of the LayoutRubyBase.
     LayoutUnit lastLineRubyTextBottom = rt->logicalHeight();
-    LayoutUnit firstLineRubyTextTop = 0;
+    LayoutUnit firstLineRubyTextTop;
     RootInlineBox* rootBox = rt->lastRootBox();
     if (rootBox) {
         // In order to align, we have to ignore negative leading.
@@ -237,7 +237,7 @@ void LayoutRubyRun::layout()
     }
 
     if (style()->isFlippedLinesWritingMode() == (style()->rubyPosition() == RubyPositionAfter)) {
-        LayoutUnit firstLineTop = 0;
+        LayoutUnit firstLineTop;
         if (LayoutRubyBase* rb = rubyBase()) {
             RootInlineBox* rootBox = rb->firstRootBox();
             if (rootBox)

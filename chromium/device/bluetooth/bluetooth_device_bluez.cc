@@ -207,9 +207,7 @@ void BluetoothDeviceBlueZ::CreateGattConnectionImpl() {
 }
 
 void BluetoothDeviceBlueZ::DisconnectGatt() {
-  // BlueZ implementation does not use the default CreateGattConnection
-  // implementation.
-  NOTIMPLEMENTED();
+  Disconnect(base::Bind(&base::DoNothing), base::Bind(&base::DoNothing));
 }
 
 std::string BluetoothDeviceBlueZ::GetAddress() const {
@@ -244,6 +242,18 @@ uint16_t BluetoothDeviceBlueZ::GetDeviceID() const {
   uint16_t device_id = 0;
   ParseModalias(object_path_, NULL, NULL, NULL, &device_id);
   return device_id;
+}
+
+uint16_t BluetoothDeviceBlueZ::GetAppearance() const {
+  bluez::BluetoothDeviceClient::Properties* properties =
+      bluez::BluezDBusManager::Get()->GetBluetoothDeviceClient()->GetProperties(
+          object_path_);
+  DCHECK(properties);
+
+  if (!properties->appearance.is_valid())
+    return kAppearanceNotPresent;
+
+  return properties->appearance.value();
 }
 
 bool BluetoothDeviceBlueZ::IsPaired() const {

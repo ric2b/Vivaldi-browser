@@ -27,21 +27,24 @@ namespace content {
 class MultiResolutionImageResourceFetcher;
 class RenderFrame;
 
-class ImageDownloaderImpl : public image_downloader::ImageDownloader,
+class ImageDownloaderImpl : public content::mojom::ImageDownloader,
                             public RenderFrameObserver {
  public:
   static void CreateMojoService(
       RenderFrame* render_frame,
-      mojo::InterfaceRequest<image_downloader::ImageDownloader> request);
+      mojo::InterfaceRequest<content::mojom::ImageDownloader> request);
 
  private:
   ImageDownloaderImpl(
       RenderFrame* render_frame,
-      mojo::InterfaceRequest<image_downloader::ImageDownloader> request);
+      mojo::InterfaceRequest<content::mojom::ImageDownloader> request);
   ~ImageDownloaderImpl() override;
 
   // ImageDownloader methods:
-  void DownloadImage(image_downloader::DownloadRequestPtr req,
+  void DownloadImage(const mojo::String& url,
+                     bool is_favicon,
+                     uint32_t max_bitmap_size,
+                     bool bypass_cache,
                      const DownloadImageCallback& callback) override;
 
   // Requests to fetch an image. When done, the ImageDownloaderImpl

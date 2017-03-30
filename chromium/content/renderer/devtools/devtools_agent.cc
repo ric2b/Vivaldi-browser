@@ -25,10 +25,6 @@
 #include "third_party/WebKit/public/web/WebDevToolsAgent.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 
-#if defined(USE_TCMALLOC)
-#include "third_party/tcmalloc/chromium/src/gperftools/heap-profiler.h"
-#endif
-
 using blink::WebConsoleMessage;
 using blink::WebDevToolsAgent;
 using blink::WebDevToolsAgentClient;
@@ -91,6 +87,8 @@ bool DevToolsAgent::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(DevToolsAgentMsg_DispatchOnInspectorBackend,
                         OnDispatchOnInspectorBackend)
     IPC_MESSAGE_HANDLER(DevToolsAgentMsg_InspectElement, OnInspectElement)
+    IPC_MESSAGE_HANDLER(DevToolsAgentMsg_RequestNewWindow_ACK,
+                        OnRequestNewWindowACK)
     IPC_MESSAGE_HANDLER(DevToolsMsg_SetupDevToolsClient, OnSetupDevToolsClient)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
@@ -132,6 +130,15 @@ void DevToolsAgent::didExitDebugLoop() {
     widget->IgnoreAckForMouseMoveFromDebugger();
     paused_in_mouse_move_ = false;
   }
+}
+
+bool DevToolsAgent::requestDevToolsForFrame(blink::WebLocalFrame* webFrame) {
+  RenderFrameImpl* frame = RenderFrameImpl::FromWebFrame(webFrame);
+  if (!frame)
+    return false;
+  Send(new DevToolsAgentHostMsg_RequestNewWindow(routing_id(),
+      frame->GetRoutingID()));
+  return true;
 }
 
 void DevToolsAgent::enableTracing(const WebString& category_filter) {
@@ -241,6 +248,12 @@ void DevToolsAgent::OnInspectElement(int x, int y) {
     DCHECK(is_attached_);
     web_agent->inspectElementAt(WebPoint(x, y));
   }
+}
+
+void DevToolsAgent::OnRequestNewWindowACK(bool success) {
+  WebDevToolsAgent* web_agent = GetWebAgent();
+  if (web_agent && !success)
+    web_agent->failedToRequestDevTools();
 }
 
 void DevToolsAgent::AddMessageToConsole(ConsoleMessageLevel level,

@@ -15,7 +15,6 @@
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_iterator.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -506,11 +505,11 @@ bool ExtensionActionUtilsExecuteExtensionActionFunction::RunAsync() {
   // Note; we cannot use GetAssociatedWebContents since the extension is not
   // running in a tab.
   Browser* browser = nullptr;
-  for (chrome::BrowserIterator it; !it.done(); it.Next()) {
-    if ((*it)->profile() == GetProfile() &&
-        ExtensionTabUtil::GetWindowId((*it)) == *params->window_id.get() &&
-        (*it)->window()) {
-      browser = (*it);
+  for (auto* browser_it: *BrowserList::GetInstance()) {
+    if (browser_it->profile() == GetProfile() &&
+        ExtensionTabUtil::GetWindowId(browser_it) == *params->window_id.get() &&
+        browser_it->window()) {
+      browser = browser_it;
     }
   }
 

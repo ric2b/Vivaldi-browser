@@ -13,7 +13,7 @@ public class CronetException extends UrlRequestException {
         super(message, cause);
     }
 
-    CronetException(String message, int netError) {
-        super(message, null);
+    CronetException(String message, int errorCode, int cronetInternalErrorCode) {
+        super(message, errorCode, cronetInternalErrorCode);
     }
 }

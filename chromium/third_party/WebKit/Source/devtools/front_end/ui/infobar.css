@@ -11,6 +11,7 @@
     border-bottom: 1px solid rgb(171, 171, 171);
     flex-direction: column;
     align-items: stretch;
+    position: relative;
 }
 
 .infobar-warning {
@@ -47,14 +48,14 @@
 }
 
 .infobar-details-rows {
-    padding-top: 5px;
+    padding: 5px 5px 0 5px;
 }
 
 .infobar-details-row {
     display: flex;
     flex-direction: column;
     line-height: 18px;
-    padding: 5px 6px 6px 6px;
+    padding-bottom: 6px;
 }
 
 .close-button {
@@ -85,5 +86,5 @@
 .icon {
     -webkit-mask-size: 18px 18px;
     width: 18px;
-    height: 18px;
+    height: 19px;
 }

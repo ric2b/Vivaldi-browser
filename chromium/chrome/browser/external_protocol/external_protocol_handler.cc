@@ -12,9 +12,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
@@ -23,6 +20,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/common/pref_names.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/escape.h"
@@ -38,14 +38,16 @@ static bool g_accept_requests = true;
 namespace {
 
 // Functions enabling unit testing. Using a NULL delegate will use the default
-// behavior; if a delegate is provided it will be used instead.
-ShellIntegration::DefaultProtocolClientWorker* CreateShellWorker(
-    ShellIntegration::DefaultWebClientObserver* observer,
+// behavior; if a delegate is provided it will be used instead. Also, Ownership
+// of |observer| is passed to the new worker.
+shell_integration::DefaultProtocolClientWorker* CreateShellWorker(
+    shell_integration::DefaultWebClientObserver* observer,
     const std::string& protocol,
     ExternalProtocolHandler::Delegate* delegate) {
   if (!delegate)
-    return new ShellIntegration::DefaultProtocolClientWorker(observer,
-                                                             protocol);
+    return new shell_integration::DefaultProtocolClientWorker(
+        observer, protocol,
+        /*delete_observer=*/true);
 
   return delegate->CreateShellWorker(observer, protocol);
 }
@@ -94,7 +96,7 @@ void LaunchUrlWithoutSecurityCheckWithDelegate(
 // we check if that external application will be us. If it is we just ignore
 // the request.
 class ExternalDefaultProtocolObserver
-    : public ShellIntegration::DefaultWebClientObserver {
+    : public shell_integration::DefaultWebClientObserver {
  public:
   ExternalDefaultProtocolObserver(const GURL& escaped_url,
                                   int render_process_host_id,
@@ -112,19 +114,19 @@ class ExternalDefaultProtocolObserver
         has_user_gesture_(has_user_gesture) {}
 
   void SetDefaultWebClientUIState(
-      ShellIntegration::DefaultWebClientUIState state) override {
+      shell_integration::DefaultWebClientUIState state) override {
     DCHECK(base::MessageLoopForUI::IsCurrent());
 
     // If we are still working out if we're the default, or we've found
     // out we definately are the default, we end here.
-    if (state == ShellIntegration::STATE_PROCESSING) {
+    if (state == shell_integration::STATE_PROCESSING) {
       return;
     }
 
     if (delegate_)
       delegate_->FinishedProcessingCheck();
 
-    if (state == ShellIntegration::STATE_IS_DEFAULT) {
+    if (state == shell_integration::STATE_IS_DEFAULT) {
       if (delegate_)
         delegate_->BlockRequest();
       return;
@@ -145,8 +147,6 @@ class ExternalDefaultProtocolObserver
     LaunchUrlWithoutSecurityCheckWithDelegate(
         escaped_url_, render_process_host_id_, tab_contents_id_, delegate_);
   }
-
-  bool IsOwnedByWorker() override { return true; }
 
  private:
   ExternalProtocolHandler::Delegate* delegate_;
@@ -291,15 +291,11 @@ void ExternalProtocolHandler::LaunchUrlWithDelegate(
   // The worker creates tasks with references to itself and puts them into
   // message loops. When no tasks are left it will delete the observer and
   // eventually be deleted itself.
-  ShellIntegration::DefaultWebClientObserver* observer =
-      new ExternalDefaultProtocolObserver(url,
-                                          render_process_host_id,
-                                          tab_contents_id,
-                                          block_state == UNKNOWN,
-                                          page_transition,
-                                          has_user_gesture,
-                                          delegate);
-  scoped_refptr<ShellIntegration::DefaultProtocolClientWorker> worker =
+  shell_integration::DefaultWebClientObserver* observer =
+      new ExternalDefaultProtocolObserver(
+          url, render_process_host_id, tab_contents_id, block_state == UNKNOWN,
+          page_transition, has_user_gesture, delegate);
+  scoped_refptr<shell_integration::DefaultProtocolClientWorker> worker =
       CreateShellWorker(observer, escaped_url.scheme(), delegate);
 
   // Start the check process running. This will send tasks to the FILE thread

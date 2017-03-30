@@ -32,24 +32,27 @@ class MediaRouterAndroid : public MediaRouterBase {
   const MediaRoute* FindRouteBySource(const MediaSource::Id& source_id) const;
 
   // MediaRouter implementation.
-  void CreateRoute(
-      const MediaSource::Id& source_id,
-      const MediaSink::Id& sink_id,
-      const GURL& origin,
-      content::WebContents* web_contents,
-      const std::vector<MediaRouteResponseCallback>& callbacks) override;
-  void JoinRoute(
-      const MediaSource::Id& source,
-      const std::string& presentation_id,
-      const GURL& origin,
-      content::WebContents* web_contents,
-      const std::vector<MediaRouteResponseCallback>& callbacks) override;
+  void CreateRoute(const MediaSource::Id& source_id,
+                   const MediaSink::Id& sink_id,
+                   const GURL& origin,
+                   content::WebContents* web_contents,
+                   const std::vector<MediaRouteResponseCallback>& callbacks,
+                   base::TimeDelta timeout,
+                   bool off_the_record) override;
+  void JoinRoute(const MediaSource::Id& source,
+                 const std::string& presentation_id,
+                 const GURL& origin,
+                 content::WebContents* web_contents,
+                 const std::vector<MediaRouteResponseCallback>& callbacks,
+                 base::TimeDelta timeout,
+                 bool off_the_record) override;
   void ConnectRouteByRouteId(
       const MediaSource::Id& source,
       const MediaRoute::Id& route_id,
       const GURL& origin,
       content::WebContents* web_contents,
-      const std::vector<MediaRouteResponseCallback>& callbacks) override;
+      const std::vector<MediaRouteResponseCallback>& callbacks,
+      base::TimeDelta timeout) override;
   void DetachRoute(const MediaRoute::Id& route_id) override;
   void TerminateRoute(const MediaRoute::Id& route_id) override;
   void SendRouteMessage(const MediaRoute::Id& route_id,
@@ -61,7 +64,7 @@ class MediaRouterAndroid : public MediaRouterBase {
       const SendRouteMessageCallback& callback) override;
   void AddIssue(const Issue& issue) override;
   void ClearIssue(const Issue::Id& issue_id) override;
-  bool HasLocalDisplayRoute() const override;
+  void OnUserGesture() override;
 
   // The methods called by the Java counterpart.
 
@@ -122,10 +125,6 @@ class MediaRouterAndroid : public MediaRouterBase {
       PresentationSessionMessagesObserver* observer) override;
   void UnregisterPresentationSessionMessagesObserver(
       PresentationSessionMessagesObserver* observer) override;
-  void RegisterLocalMediaRoutesObserver(
-      LocalMediaRoutesObserver* observer) override;
-  void UnregisterLocalMediaRoutesObserver(
-      LocalMediaRoutesObserver* observer) override;
 
   base::android::ScopedJavaGlobalRef<jobject> java_media_router_;
 

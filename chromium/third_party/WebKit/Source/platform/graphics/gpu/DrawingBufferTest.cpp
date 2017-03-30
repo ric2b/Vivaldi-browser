@@ -59,9 +59,9 @@ WGC3Denum imageTextureTarget()
 }
 
 // The target to use when preparing a mailbox texture.
-WGC3Denum drawingBufferTextureTarget()
+WGC3Denum drawingBufferTextureTarget(bool allowImageChromium)
 {
-    if (RuntimeEnabledFeatures::webGLImageChromiumEnabled())
+    if (RuntimeEnabledFeatures::webGLImageChromiumEnabled() && allowImageChromium)
         return imageTextureTarget();
     return GL_TEXTURE_2D;
 }
@@ -77,6 +77,7 @@ public:
         , m_currentMailboxByte(0)
         , m_mostRecentlyWaitedSyncToken(0)
         , m_currentImageId(1)
+        , m_allowImageChromium(true)
     {
     }
 
@@ -107,7 +108,7 @@ public:
 
     void produceTextureDirectCHROMIUM(WebGLId texture, WGC3Denum target, const WGC3Dbyte* mailbox) override
     {
-        ASSERT_EQ(target, drawingBufferTextureTarget());
+        ASSERT_EQ(target, drawingBufferTextureTarget(m_allowImageChromium));
         ASSERT_TRUE(m_textureSizes.contains(texture));
         m_mostRecentlyProducedSize = m_textureSizes.get(texture);
     }
@@ -115,14 +116,6 @@ public:
     IntSize mostRecentlyProducedSize()
     {
         return m_mostRecentlyProducedSize;
-    }
-
-    bool insertSyncPoint(WGC3Dbyte* syncToken) override
-    {
-        static WGC3Duint syncPointGenerator = 0;
-        WGC3Duint newSyncPoint = ++syncPointGenerator;
-        memcpy(syncToken, &newSyncPoint, sizeof(newSyncPoint));
-        return true;
     }
 
     WGC3Duint64 insertFenceSyncCHROMIUM() override
@@ -144,6 +137,8 @@ public:
 
     WGC3Duint createGpuMemoryBufferImageCHROMIUM(WGC3Dsizei width, WGC3Dsizei height, WGC3Denum internalformat, WGC3Denum usage) override
     {
+        if (!m_allowImageChromium)
+            return false;
         m_imageSizes.set(m_currentImageId, IntSize(width, height));
         return m_currentImageId++;
     }
@@ -188,6 +183,11 @@ public:
         return m_currentImageId;
     }
 
+    void setAllowImageChromium(bool allow)
+    {
+        m_allowImageChromium = allow;
+    }
+
 private:
     WebGLId m_boundTexture;
     WGC3Denum m_boundTextureTarget;
@@ -198,6 +198,7 @@ private:
     WGC3Duint m_currentImageId;
     HashMap<WGC3Duint, IntSize> m_imageSizes;
     HashMap<WGC3Duint, WebGLId> m_imageToTextureMap;
+    bool m_allowImageChromium;
 };
 
 static const int initialWidth = 100;
@@ -222,8 +223,7 @@ public:
     DrawingBufferForTests(PassOwnPtr<WebGraphicsContext3D> context,
         PassOwnPtr<Extensions3DUtil> extensionsUtil,
         PreserveDrawingBuffer preserve)
-        : DrawingBuffer(context, extensionsUtil, false /* multisampleExtensionSupported */,
-            false /* packedDepthStencilExtensionSupported */, false /* discardFramebufferSupported */, preserve, WebGraphicsContext3D::Attributes())
+        : DrawingBuffer(context, extensionsUtil, false /* multisampleExtensionSupported */, false /* discardFramebufferSupported */, preserve, WebGraphicsContext3D::Attributes())
         , m_live(0)
     { }
 
@@ -464,7 +464,7 @@ TEST_F(DrawingBufferTest, verifyInsertAndWaitSyncTokenCorrectly)
 
 class DrawingBufferImageChromiumTest : public DrawingBufferTest {
 protected:
-    virtual void SetUp()
+    void SetUp() override
     {
         OwnPtr<WebGraphicsContext3DForTests> context = adoptPtr(new WebGraphicsContext3DForTests);
         m_context = context.get();
@@ -476,7 +476,7 @@ protected:
         testing::Mock::VerifyAndClearExpectations(webContext());
     }
 
-    virtual void TearDown()
+    void TearDown() override
     {
         RuntimeEnabledFeatures::setWebGLImageChromiumEnabled(false);
     }
@@ -560,12 +560,14 @@ public:
     DepthStencilTrackingContext()
         : m_nextRenderBufferId(1)
         , m_stencilAttachment(0)
-        , m_depthAttachment(0) {}
+        , m_depthAttachment(0)
+        , m_depthStencilAttachment(0) {}
     ~DepthStencilTrackingContext() override {}
 
     int numAllocatedRenderBuffer() const { return m_nextRenderBufferId - 1; }
     WebGLId stencilAttachment() const { return m_stencilAttachment; }
     WebGLId depthAttachment() const { return m_depthAttachment; }
+    WebGLId depthStencilAttachment() const { return m_depthStencilAttachment; }
 
     WebString getString(WGC3Denum type) override
     {
@@ -582,10 +584,19 @@ public:
 
     void framebufferRenderbuffer(WGC3Denum target, WGC3Denum attachment, WGC3Denum renderbuffertarget, WebGLId renderbuffer) override
     {
-        if (attachment == GL_STENCIL_ATTACHMENT) {
-            m_stencilAttachment = renderbuffer;
-        } else {
+        switch (attachment) {
+        case GL_DEPTH_ATTACHMENT:
             m_depthAttachment = renderbuffer;
+            break;
+        case GL_STENCIL_ATTACHMENT:
+            m_stencilAttachment = renderbuffer;
+            break;
+        case GL_DEPTH_STENCIL_ATTACHMENT:
+            m_depthStencilAttachment = renderbuffer;
+            break;
+        default:
+            ASSERT_NOT_REACHED();
+            break;
         }
     }
 
@@ -593,10 +604,10 @@ public:
     {
         switch (ptype) {
         case GL_DEPTH_BITS:
-            *value = m_depthAttachment ? 24 : 0;
+            *value = (m_depthAttachment || m_depthStencilAttachment) ? 24 : 0;
             return;
         case GL_STENCIL_BITS:
-            *value = m_stencilAttachment ? 8 : 0;
+            *value = (m_stencilAttachment || m_depthStencilAttachment) ? 8 : 0;
             return;
         }
         MockWebGraphicsContext3D::getIntegerv(ptype, value);
@@ -606,19 +617,18 @@ private:
     WebGLId m_nextRenderBufferId;
     WebGLId m_stencilAttachment;
     WebGLId m_depthAttachment;
+    WebGLId m_depthStencilAttachment;
 };
 
 struct DepthStencilTestCase {
-    DepthStencilTestCase(bool requestStencil, bool requestDepth, int expectedRenderBuffers, bool expectDepthStencil, const char* const testCaseName)
+    DepthStencilTestCase(bool requestStencil, bool requestDepth, int expectedRenderBuffers, const char* const testCaseName)
         : requestStencil(requestStencil)
         , requestDepth(requestDepth)
-        , expectDepthStencil(expectDepthStencil)
         , expectedRenderBuffers(expectedRenderBuffers)
         , testCaseName(testCaseName) { }
 
     bool requestStencil;
     bool requestDepth;
-    bool expectDepthStencil;
     int expectedRenderBuffers;
     const char* const testCaseName;
 };
@@ -631,10 +641,10 @@ struct DepthStencilTestCase {
 TEST(DrawingBufferDepthStencilTest, packedDepthStencilSupported)
 {
     DepthStencilTestCase cases[] = {
-        DepthStencilTestCase(false, false, false, 0, "neither"),
-        DepthStencilTestCase(true, false, true, 1, "stencil only"),
-        DepthStencilTestCase(false, true, true, 1, "depth only"),
-        DepthStencilTestCase(true, true, true, 1, "both"),
+        DepthStencilTestCase(false, false, 0, "neither"),
+        DepthStencilTestCase(true, false, 1, "stencil only"),
+        DepthStencilTestCase(false, true, 1, "depth only"),
+        DepthStencilTestCase(true, true, 1, "both"),
     };
 
     for (size_t i = 0; i < WTF_ARRAY_LENGTH(cases); i++) {
@@ -651,26 +661,28 @@ TEST(DrawingBufferDepthStencilTest, packedDepthStencilSupported)
         EXPECT_EQ(cases[i].requestDepth, drawingBuffer->getActualAttributes().depth);
         EXPECT_EQ(cases[i].requestStencil, drawingBuffer->getActualAttributes().stencil);
         EXPECT_EQ(cases[i].expectedRenderBuffers, trackingContext->numAllocatedRenderBuffer());
-        if (cases[i].expectDepthStencil) {
-            EXPECT_EQ(trackingContext->stencilAttachment(), trackingContext->depthAttachment());
-        } else if (cases[i].requestStencil || cases[i].requestDepth) {
-            EXPECT_NE(trackingContext->stencilAttachment(), trackingContext->depthAttachment());
-        } else {
-            EXPECT_EQ(0u, trackingContext->stencilAttachment());
+        if (cases[i].requestDepth || cases[i].requestStencil) {
+            EXPECT_NE(0u, trackingContext->depthStencilAttachment());
             EXPECT_EQ(0u, trackingContext->depthAttachment());
+            EXPECT_EQ(0u, trackingContext->stencilAttachment());
+        } else {
+            EXPECT_EQ(0u, trackingContext->depthStencilAttachment());
+            EXPECT_EQ(0u, trackingContext->depthAttachment());
+            EXPECT_EQ(0u, trackingContext->stencilAttachment());
         }
 
         drawingBuffer->reset(IntSize(10, 20));
         EXPECT_EQ(cases[i].requestDepth, drawingBuffer->getActualAttributes().depth);
         EXPECT_EQ(cases[i].requestStencil, drawingBuffer->getActualAttributes().stencil);
         EXPECT_EQ(cases[i].expectedRenderBuffers, trackingContext->numAllocatedRenderBuffer());
-        if (cases[i].expectDepthStencil) {
-            EXPECT_EQ(trackingContext->stencilAttachment(), trackingContext->depthAttachment());
-        } else if (cases[i].requestStencil || cases[i].requestDepth) {
-            EXPECT_NE(trackingContext->stencilAttachment(), trackingContext->depthAttachment());
-        } else {
-            EXPECT_EQ(0u, trackingContext->stencilAttachment());
+        if (cases[i].requestDepth || cases[i].requestStencil) {
+            EXPECT_NE(0u, trackingContext->depthStencilAttachment());
             EXPECT_EQ(0u, trackingContext->depthAttachment());
+            EXPECT_EQ(0u, trackingContext->stencilAttachment());
+        } else {
+            EXPECT_EQ(0u, trackingContext->depthStencilAttachment());
+            EXPECT_EQ(0u, trackingContext->depthAttachment());
+            EXPECT_EQ(0u, trackingContext->stencilAttachment());
         }
 
         drawingBuffer->beginDestruction();
@@ -694,6 +706,38 @@ TEST_F(DrawingBufferTest, verifySetIsHiddenProperlyAffectsMailboxes)
     memcpy(&waitSyncToken, mailbox.syncToken, sizeof(waitSyncToken));
     EXPECT_EQ(waitSyncToken, webContext()->mostRecentlyWaitedSyncToken());
 
+    m_drawingBuffer->beginDestruction();
+}
+
+class DrawingBufferImageChromiumFallbackTest : public DrawingBufferTest {
+protected:
+    void SetUp() override
+    {
+        OwnPtr<WebGraphicsContext3DForTests> context = adoptPtr(new WebGraphicsContext3DForTests);
+        context->setAllowImageChromium(false);
+        m_context = context.get();
+        RuntimeEnabledFeatures::setWebGLImageChromiumEnabled(true);
+        m_drawingBuffer = DrawingBufferForTests::create(context.release(),
+            IntSize(initialWidth, initialHeight), DrawingBuffer::Preserve);
+    }
+
+    void TearDown() override
+    {
+        RuntimeEnabledFeatures::setWebGLImageChromiumEnabled(false);
+    }
+};
+
+TEST_F(DrawingBufferImageChromiumFallbackTest, verifyImageChromiumFallback)
+{
+    WebExternalTextureMailbox mailbox;
+
+    IntSize initialSize(initialWidth, initialHeight);
+    m_drawingBuffer->markContentsChanged();
+    EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox, 0));
+    EXPECT_EQ(initialSize, webContext()->mostRecentlyProducedSize());
+    EXPECT_FALSE(mailbox.allowOverlay);
+
+    m_drawingBuffer->mailboxReleased(mailbox, false);
     m_drawingBuffer->beginDestruction();
 }
 

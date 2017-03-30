@@ -26,11 +26,11 @@ void OnEventDispatchComplete(PersistentNotificationStatus status) {}
 blink::WebNotificationPermission ToWebNotificationPermission(
     PermissionStatus status) {
   switch (status) {
-    case PERMISSION_STATUS_GRANTED:
+    case PermissionStatus::GRANTED:
       return blink::WebNotificationPermissionAllowed;
-    case PERMISSION_STATUS_DENIED:
+    case PermissionStatus::DENIED:
       return blink::WebNotificationPermissionDenied;
-    case PERMISSION_STATUS_ASK:
+    case PermissionStatus::ASK:
       return blink::WebNotificationPermissionDefault;
   }
 
@@ -48,8 +48,8 @@ LayoutTestNotificationManager::~LayoutTestNotificationManager() {}
 void LayoutTestNotificationManager::DisplayNotification(
     BrowserContext* browser_context,
     const GURL& origin,
-    const SkBitmap& icon,
     const PlatformNotificationData& notification_data,
+    const NotificationResources& notification_resources,
     scoped_ptr<DesktopNotificationDelegate> delegate,
     base::Closure* cancel_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -70,8 +70,8 @@ void LayoutTestNotificationManager::DisplayPersistentNotification(
     BrowserContext* browser_context,
     int64_t persistent_notification_id,
     const GURL& origin,
-    const SkBitmap& icon,
-    const PlatformNotificationData& notification_data) {
+    const PlatformNotificationData& notification_data,
+    const NotificationResources& notification_resources) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   std::string title = base::UTF16ToUTF8(notification_data.title);
 
@@ -131,6 +131,24 @@ void LayoutTestNotificationManager::SimulateClick(const std::string& title,
           notification.persistent_id,
           notification.origin,
           action_index,
+          base::Bind(&OnEventDispatchComplete));
+}
+
+void LayoutTestNotificationManager::SimulateClose(const std::string& title,
+                                                  bool by_user) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  const auto& persistent_iterator = persistent_notifications_.find(title);
+  if (persistent_iterator == persistent_notifications_.end())
+    return;
+
+  const PersistentNotification& notification = persistent_iterator->second;
+  content::NotificationEventDispatcher::GetInstance()
+      ->DispatchNotificationCloseEvent(
+          notification.browser_context,
+          notification.persistent_id,
+          notification.origin,
+          by_user,
           base::Bind(&OnEventDispatchComplete));
 }
 

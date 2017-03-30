@@ -25,7 +25,6 @@
 #define StyleFetchedImage_h
 
 #include "core/fetch/ImageResourceClient.h"
-#include "core/fetch/ResourcePtr.h"
 #include "core/style/StyleImage.h"
 
 namespace blink {
@@ -52,9 +51,8 @@ public:
     bool isLoaded() const override;
     bool errorOccurred() const override;
     LayoutSize imageSize(const LayoutObject*, float multiplier) const override;
-    bool imageHasRelativeWidth() const override;
-    bool imageHasRelativeHeight() const override;
-    void computeIntrinsicDimensions(const LayoutObject*, Length& intrinsicWidth, Length& intrinsicHeight, FloatSize& intrinsicRatio) override;
+    bool imageHasRelativeSize() const override;
+    void computeIntrinsicDimensions(const LayoutObject*, FloatSize& intrinsicSize, FloatSize& intrinsicRatio) override;
     bool usesImageContainerSize() const override;
     void addClient(LayoutObject*) override;
     void removeClient(LayoutObject*) override;
@@ -71,12 +69,12 @@ private:
 
     void dispose();
 
-    ResourcePtr<ImageResource> m_image;
+    RefPtrWillBeMember<ImageResource> m_image;
     RawPtrWillBeMember<Document> m_document;
     const KURL m_url;
 };
 
 DEFINE_STYLE_IMAGE_TYPE_CASTS(StyleFetchedImage, isImageResource());
 
-}
+} // namespace blink
 #endif

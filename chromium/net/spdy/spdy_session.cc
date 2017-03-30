@@ -29,7 +29,7 @@
 #include "crypto/ec_private_key.h"
 #include "crypto/ec_signature_creator.h"
 #include "net/base/connection_type_histograms.h"
-#include "net/base/net_util.h"
+#include "net/base/proxy_delegate.h"
 #include "net/cert/asn1_util.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/http/http_log_util.h"
@@ -38,6 +38,7 @@
 #include "net/http/http_util.h"
 #include "net/http/transport_security_state.h"
 #include "net/log/net_log.h"
+#include "net/proxy/proxy_server.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/spdy/spdy_buffer_producer.h"
 #include "net/spdy/spdy_frame_builder.h"
@@ -95,6 +96,28 @@ scoped_ptr<base::Value> NetLogSpdySynStreamSentCallback(
   dict->SetBoolean("unidirectional", unidirectional);
   dict->SetInteger("priority", static_cast<int>(spdy_priority));
   dict->SetInteger("stream_id", stream_id);
+  return std::move(dict);
+}
+
+scoped_ptr<base::Value> NetLogSpdyHeadersSentCallback(
+    const SpdyHeaderBlock* headers,
+    bool fin,
+    SpdyStreamId stream_id,
+    bool has_priority,
+    uint32_t priority,
+    SpdyStreamId parent_stream_id,
+    bool exclusive,
+    NetLogCaptureMode capture_mode) {
+  scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  dict->Set("headers", SpdyHeaderBlockToListValue(*headers, capture_mode));
+  dict->SetBoolean("fin", fin);
+  dict->SetInteger("stream_id", stream_id);
+  dict->SetBoolean("has_priority", has_priority);
+  if (has_priority) {
+    dict->SetInteger("parent_stream_id", parent_stream_id);
+    dict->SetInteger("priority", static_cast<int>(priority));
+    dict->SetBoolean("exclusive", exclusive);
+  }
   return std::move(dict);
 }
 
@@ -629,14 +652,12 @@ SpdySession::SpdySession(
     TransportSecurityState* transport_security_state,
     bool verify_domain_authentication,
     bool enable_sending_initial_data,
-    bool enable_compression,
     bool enable_ping_based_connection_checking,
     NextProto default_protocol,
     size_t session_max_recv_window_size,
     size_t stream_max_recv_window_size,
-    size_t initial_max_concurrent_streams,
     TimeFunc time_func,
-    const HostPortPair& trusted_spdy_proxy,
+    ProxyDelegate* proxy_delegate,
     NetLog* net_log)
     : in_io_loop_(false),
       spdy_session_key_(spdy_session_key),
@@ -656,9 +677,7 @@ SpdySession::SpdySession(
       read_state_(READ_STATE_DO_READ),
       write_state_(WRITE_STATE_IDLE),
       error_on_close_(OK),
-      max_concurrent_streams_(initial_max_concurrent_streams == 0
-                                  ? kInitialMaxConcurrentStreams
-                                  : initial_max_concurrent_streams),
+      max_concurrent_streams_(kInitialMaxConcurrentStreams),
       max_concurrent_pushed_streams_(kMaxConcurrentPushedStreams),
       streams_initiated_count_(0),
       streams_pushed_count_(0),
@@ -684,14 +703,13 @@ SpdySession::SpdySession(
       net_log_(BoundNetLog::Make(net_log, NetLog::SOURCE_HTTP2_SESSION)),
       verify_domain_authentication_(verify_domain_authentication),
       enable_sending_initial_data_(enable_sending_initial_data),
-      enable_compression_(enable_compression),
       enable_ping_based_connection_checking_(
           enable_ping_based_connection_checking),
       protocol_(default_protocol),
       connection_at_risk_of_loss_time_(
           base::TimeDelta::FromSeconds(kDefaultConnectionAtRiskOfLossSeconds)),
       hung_interval_(base::TimeDelta::FromSeconds(kHungIntervalSeconds)),
-      trusted_spdy_proxy_(trusted_spdy_proxy),
+      proxy_delegate_(proxy_delegate),
       time_func_(time_func),
       send_priority_dependency_(priority_dependency_enabled_default),
       weak_factory_(this) {
@@ -762,14 +780,12 @@ void SpdySession::InitializeWithSocket(
   session_recv_window_size_ = GetDefaultInitialWindowSize(protocol_);
 
   buffered_spdy_framer_.reset(
-      new BufferedSpdyFramer(NextProtoToSpdyMajorVersion(protocol_),
-                             enable_compression_));
+      new BufferedSpdyFramer(NextProtoToSpdyMajorVersion(protocol_)));
   buffered_spdy_framer_->set_visitor(this);
   buffered_spdy_framer_->set_debug_visitor(this);
   UMA_HISTOGRAM_ENUMERATION(
-      "Net.SpdyVersion2",
-      protocol_ - kProtoSPDYHistogramOffset,
-      kProtoSPDYMaximumVersion - kProtoSPDYMinimumVersion + 1);
+      "Net.SpdyVersion3", protocol_ - kProtoSPDYHistogramOffset,
+      kProtoSPDYMaximumVersion - kProtoSPDYHistogramOffset + 1);
 
   net_log_.AddEvent(
       NetLog::TYPE_HTTP2_SESSION_INITIALIZED,
@@ -862,8 +878,7 @@ int SpdySession::TryCreateStream(
   if (err != OK)
     return err;
 
-  if (!max_concurrent_streams_ ||
-      (active_streams_.size() + created_streams_.size() - num_pushed_streams_ <
+  if ((active_streams_.size() + created_streams_.size() - num_pushed_streams_ <
        max_concurrent_streams_)) {
     return CreateStream(*request, stream);
   }
@@ -970,16 +985,10 @@ base::WeakPtr<SpdyStreamRequest> SpdySession::GetNextPendingStreamRequest() {
 }
 
 void SpdySession::ProcessPendingStreamRequests() {
-  // Like |max_concurrent_streams_|, 0 means infinite for
-  // |max_requests_to_process|.
-  size_t max_requests_to_process = 0;
-  if (max_concurrent_streams_ != 0) {
-    max_requests_to_process =
-        max_concurrent_streams_ -
-        (active_streams_.size() + created_streams_.size());
-  }
-  for (size_t i = 0;
-       max_requests_to_process == 0 || i < max_requests_to_process; ++i) {
+  size_t max_requests_to_process =
+      max_concurrent_streams_ -
+      (active_streams_.size() + created_streams_.size());
+  for (size_t i = 0; i < max_requests_to_process; ++i) {
     base::WeakPtr<SpdyStreamRequest> pending_request =
         GetNextPendingStreamRequest();
     if (!pending_request)
@@ -1085,6 +1094,14 @@ scoped_ptr<SpdyFrame> SpdySession::CreateSynStream(
     syn_stream.set_unidirectional((flags & CONTROL_FLAG_UNIDIRECTIONAL) != 0);
     syn_stream.set_header_block(block);
     syn_frame.reset(buffered_spdy_framer_->SerializeFrame(syn_stream));
+
+    if (net_log().IsCapturing()) {
+      net_log().AddEvent(NetLog::TYPE_HTTP2_SESSION_SYN_STREAM,
+                         base::Bind(&NetLogSpdySynStreamSentCallback, &block,
+                                    (flags & CONTROL_FLAG_FIN) != 0,
+                                    (flags & CONTROL_FLAG_UNIDIRECTIONAL) != 0,
+                                    spdy_priority, stream_id));
+    }
   } else {
     SpdyHeadersIR headers(stream_id);
     headers.set_priority(spdy_priority);
@@ -1127,21 +1144,18 @@ scoped_ptr<SpdyFrame> SpdySession::CreateSynStream(
     headers.set_fin((flags & CONTROL_FLAG_FIN) != 0);
     headers.set_header_block(block);
     syn_frame.reset(buffered_spdy_framer_->SerializeFrame(headers));
+
+    if (net_log().IsCapturing()) {
+      net_log().AddEvent(
+          NetLog::TYPE_HTTP2_SESSION_SEND_HEADERS,
+          base::Bind(&NetLogSpdyHeadersSentCallback, &block,
+                     (flags & CONTROL_FLAG_FIN) != 0, stream_id,
+                     headers.has_priority(), headers.priority(),
+                     headers.parent_stream_id(), headers.exclusive()));
+    }
   }
 
   streams_initiated_count_++;
-
-  if (net_log().IsCapturing()) {
-    const NetLog::EventType type =
-        (GetProtocolVersion() <= SPDY3)
-            ? NetLog::TYPE_HTTP2_SESSION_SYN_STREAM
-            : NetLog::TYPE_HTTP2_SESSION_SEND_HEADERS;
-    net_log().AddEvent(type,
-                       base::Bind(&NetLogSpdySynStreamSentCallback, &block,
-                                  (flags & CONTROL_FLAG_FIN) != 0,
-                                  (flags & CONTROL_FLAG_UNIDIRECTIONAL) != 0,
-                                  spdy_priority, stream_id));
-  }
 
   return syn_frame;
 }
@@ -1471,7 +1485,9 @@ int SpdySession::DoReadComplete(int result) {
   }
 
   if (result < 0) {
-    DoDrainSession(static_cast<Error>(result), "result is < 0.");
+    DoDrainSession(
+        static_cast<Error>(result),
+        base::StringPrintf("Error %d reading from socket.", -result));
     return result;
   }
   CHECK_LE(result, kReadBufferSize);
@@ -2022,6 +2038,17 @@ bool SpdySession::GetSSLInfo(SSLInfo* ssl_info,
   *was_npn_negotiated = connection_->socket()->WasNpnNegotiated();
   *protocol_negotiated = connection_->socket()->GetNegotiatedProtocol();
   return connection_->socket()->GetSSLInfo(ssl_info);
+}
+
+Error SpdySession::GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
+                                               std::vector<uint8_t>* out) {
+  if (!is_secure_) {
+    NOTREACHED();
+    return ERR_FAILED;
+  }
+  SSLClientSocket* ssl_socket =
+      static_cast<SSLClientSocket*>(connection_->socket());
+  return ssl_socket->GetSignedEKMForTokenBinding(key, out);
 }
 
 void SpdySession::OnError(SpdyFramer::SpdyError error_code) {
@@ -2645,7 +2672,7 @@ bool SpdySession::TryCreatePushStream(SpdyStreamId stream_id,
   // TODO(mbelshe): DCHECK that this is a GET method?
 
   // Verify that the response had a URL for us.
-  GURL gurl = GetUrlFromHeaderBlock(headers, GetProtocolVersion(), true);
+  GURL gurl = GetUrlFromHeaderBlock(headers, GetProtocolVersion());
   if (!gurl.is_valid()) {
     EnqueueResetStreamFrame(stream_id,
                             request_priority,
@@ -2667,30 +2694,33 @@ bool SpdySession::TryCreatePushStream(SpdyStreamId stream_id,
     return false;
   }
 
+  DCHECK(gurl.is_valid());
+
   // Check that the pushed stream advertises the same origin as its associated
   // stream. Bypass this check if and only if this session is with a SPDY proxy
-  // that is trusted explicitly via the --trusted-spdy-proxy switch.
-  if (trusted_spdy_proxy_.Equals(host_port_pair())) {
-    // Disallow pushing of HTTPS content.
-    if (gurl.SchemeIs("https")) {
-      EnqueueResetStreamFrame(
-          stream_id,
-          request_priority,
-          RST_STREAM_REFUSED_STREAM,
-          base::StringPrintf("Rejected push of Cross Origin HTTPS content %d",
-                             associated_stream_id));
-      return false;
-    }
-  } else {
-    GURL associated_url(associated_it->second.stream->GetUrlFromHeaders());
-    if (associated_url.GetOrigin() != gurl.GetOrigin()) {
-      EnqueueResetStreamFrame(
-          stream_id,
-          request_priority,
-          RST_STREAM_REFUSED_STREAM,
-          base::StringPrintf("Rejected Cross Origin Push Stream %d",
-                             associated_stream_id));
-      return false;
+  // that is trusted explicitly as determined by the |proxy_delegate_| or if the
+  // proxy is pushing same-origin resources.
+  if (!HostPortPair::FromURL(gurl).Equals(host_port_pair())) {
+    if (proxy_delegate_ &&
+        proxy_delegate_->IsTrustedSpdyProxy(
+            ProxyServer(ProxyServer::SCHEME_HTTPS, host_port_pair()))) {
+      // Disallow pushing of HTTPS content.
+      if (gurl.SchemeIs("https")) {
+        EnqueueResetStreamFrame(
+            stream_id, request_priority, RST_STREAM_REFUSED_STREAM,
+            base::StringPrintf("Rejected push of Cross Origin HTTPS content %d",
+                               associated_stream_id));
+        return false;
+      }
+    } else {
+      GURL associated_url(associated_it->second.stream->GetUrlFromHeaders());
+      if (associated_url.GetOrigin() != gurl.GetOrigin()) {
+        EnqueueResetStreamFrame(
+            stream_id, request_priority, RST_STREAM_REFUSED_STREAM,
+            base::StringPrintf("Rejected Cross Origin Push Stream %d",
+                               associated_stream_id));
+        return false;
+      }
     }
   }
 

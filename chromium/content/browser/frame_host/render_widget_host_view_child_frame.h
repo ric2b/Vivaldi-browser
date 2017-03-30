@@ -8,8 +8,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <deque>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "build/build_config.h"
@@ -57,6 +59,15 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
       CrossProcessFrameConnector* frame_connector) {
     frame_connector_ = frame_connector;
   }
+
+  // This functions registers single-use callbacks that want to be notified when
+  // the next frame is swapped. The callback is triggered by
+  // OnSwapCompositorFrame, which is the appropriate time to request pixel
+  // readback for the frame that is about to be drawn. Once called, the callback
+  // pointer is released.
+  // TODO(wjmaclean): We should consider making this available in other view
+  // types, such as RenderWidgetHostViewAura.
+  void RegisterFrameSwappedCallback(scoped_ptr<base::Closure> callback);
 
   // RenderWidgetHostView implementation.
   void InitAsChild(gfx::NativeView parent_view) override;
@@ -129,8 +140,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void ProcessKeyboardEvent(const NativeWebKeyboardEvent& event) override;
   void ProcessMouseEvent(const blink::WebMouseEvent& event) override;
   void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event) override;
-  void TransformPointToRootCoordSpace(const gfx::Point& point,
-                                      gfx::Point* transformed_point) override;
+  gfx::Point TransformPointToRootCoordSpace(const gfx::Point& point) override;
 
 #if defined(OS_MACOSX)
   // RenderWidgetHostView implementation.
@@ -169,6 +179,12 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   // to Bind() to it.
   void SurfaceDrawn(uint32_t output_surface_id, cc::SurfaceDrawStatus drawn);
 
+  // Exposed for tests.
+  cc::SurfaceId SurfaceIdForTesting() const override;
+  CrossProcessFrameConnector* FrameConnectorForTesting() const {
+    return frame_connector_;
+  }
+
  protected:
   friend class RenderWidgetHostView;
   friend class RenderWidgetHostViewChildFrameTest;
@@ -177,15 +193,14 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   // Clears current compositor surface, if one is in use.
   void ClearCompositorSurfaceIfNecessary();
 
+  void ProcessFrameSwappedCallbacks();
+
   // The last scroll offset of the view.
   gfx::Vector2dF last_scroll_offset_;
 
   // Members will become private when RenderWidgetHostViewGuest is removed.
   // The model object.
   RenderWidgetHostImpl* host_;
-
-  // Flag determining whether we render into a compositing Surface.
-  bool use_surfaces_;
 
   // Surface-related state.
   scoped_ptr<cc::SurfaceIdAllocator> id_allocator_;
@@ -207,6 +222,16 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   }
 
  private:
+  void SubmitSurfaceCopyRequest(const gfx::Rect& src_subrect,
+                                const gfx::Size& dst_size,
+                                const ReadbackRequestCallback& callback,
+                                const SkColorType preferred_color_type);
+
+  using FrameSwappedCallbackList = std::deque<scoped_ptr<base::Closure>>;
+  // Since frame-drawn callbacks are "fire once", we use std::deque to make
+  // it convenient to swap() when processing the list.
+  FrameSwappedCallbackList frame_swapped_callbacks_;
+
   base::WeakPtrFactory<RenderWidgetHostViewChildFrame> weak_factory_;
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewChildFrame);
 };

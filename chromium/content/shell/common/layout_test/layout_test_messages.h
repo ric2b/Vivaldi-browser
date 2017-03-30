@@ -15,8 +15,8 @@
 #define IPC_MESSAGE_START LayoutTestMsgStart
 
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(content::PermissionStatus,
-                              content::PERMISSION_STATUS_GRANTED,
-                              content::PERMISSION_STATUS_ASK)
+                              content::PermissionStatus::GRANTED,
+                              content::PermissionStatus::ASK)
 
 IPC_SYNC_MESSAGE_ROUTED1_1(LayoutTestHostMsg_ReadFileToString,
                            base::FilePath /* local path */,
@@ -30,6 +30,9 @@ IPC_MESSAGE_ROUTED1(LayoutTestHostMsg_SetDatabaseQuota,
 IPC_MESSAGE_ROUTED2(LayoutTestHostMsg_SimulateWebNotificationClick,
                     std::string /* title */,
                     int /* action_index */)
+IPC_MESSAGE_ROUTED2(LayoutTestHostMsg_SimulateWebNotificationClose,
+                    std::string /* title */,
+                    bool /* by_user */)
 IPC_MESSAGE_ROUTED1(LayoutTestHostMsg_AcceptAllCookies,
                     bool /* accept */)
 IPC_MESSAGE_ROUTED0(LayoutTestHostMsg_DeleteAllCookies)

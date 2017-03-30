@@ -6,6 +6,7 @@ module arc;
 
 // Enumerates the types of wake lock the ARC instance can request from the
 // host.
+[Extensible]
 enum DisplayWakeLockType {
   // Does not allow the screen to dim, turn off, or lock; prevents
   // idle suspend.
@@ -18,8 +19,11 @@ enum DisplayWakeLockType {
 
 interface PowerHost {
   // Acquire and release wake locks on the host side.
-  OnAcquireDisplayWakeLock(DisplayWakeLockType type);
-  OnReleaseDisplayWakeLock(DisplayWakeLockType type);
+  OnAcquireDisplayWakeLock@0(DisplayWakeLockType type);
+  OnReleaseDisplayWakeLock@1(DisplayWakeLockType type);
+
+  // Checks if there is a display on.
+  [MinVersion=1] IsDisplayOn@2() => (bool is_on);
 };
 
 interface PowerInstance {

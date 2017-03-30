@@ -9,9 +9,13 @@ import android.app.ActivityManager;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
+import android.provider.Browser;
+import android.support.annotation.IntDef;
+import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.View;
@@ -33,6 +37,7 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler.IntentHandlerDelegate;
 import org.chromium.chrome.browser.IntentHandler.TabOpenType;
+import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
@@ -47,13 +52,16 @@ import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior.Overv
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EventFilter;
 import org.chromium.chrome.browser.compositor.layouts.phone.StackLayout;
 import org.chromium.chrome.browser.cookies.CookiesFetcher;
+import org.chromium.chrome.browser.customtabs.CustomTabActivity;
+import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
 import org.chromium.chrome.browser.device.DeviceClassManager;
+import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.document.DocumentUma;
-import org.chromium.chrome.browser.enhancedbookmarks.EnhancedBookmarkUtils;
 import org.chromium.chrome.browser.firstrun.FirstRunActivity;
 import org.chromium.chrome.browser.firstrun.FirstRunFlowSequencer;
 import org.chromium.chrome.browser.firstrun.FirstRunSignInProcessor;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
+import org.chromium.chrome.browser.metrics.ActivityStopMetrics;
 import org.chromium.chrome.browser.metrics.LaunchMetrics;
 import org.chromium.chrome.browser.metrics.StartupMetrics;
 import org.chromium.chrome.browser.metrics.UmaUtils;
@@ -81,6 +89,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tabmodel.TabWindowManager;
 import org.chromium.chrome.browser.toolbar.ToolbarControlContainer;
 import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.widget.emptybackground.EmptyBackgroundViewWrapper;
 import org.chromium.chrome.browser.widget.findinpage.FindToolbarManager;
 import org.chromium.content.browser.ContentVideoView;
@@ -92,6 +101,9 @@ import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.widget.Toast;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+
 /**
  * This is the main activity for ChromeMobile when not running in document mode.  All the tabs
  * are accessible via a chrome specific tab switching UI.
@@ -99,6 +111,31 @@ import org.chromium.ui.widget.Toast;
 public class ChromeTabbedActivity extends ChromeActivity implements OverviewModeObserver {
 
     private static final int FIRST_RUN_EXPERIENCE_RESULT = 101;
+    private static final int CCT_RESULT = 102;
+
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({
+        BACK_PRESSED_NOTHING_HAPPENED,
+        BACK_PRESSED_HELP_URL_CLOSED,
+        BACK_PRESSED_MINIMIZED_NO_TAB_CLOSED,
+        BACK_PRESSED_MINIMIZED_TAB_CLOSED,
+        BACK_PRESSED_TAB_CLOSED,
+        BACK_PRESSED_TAB_IS_NULL,
+        BACK_PRESSED_EXITED_TAB_SWITCHER,
+        BACK_PRESSED_EXITED_FULLSCREEN,
+        BACK_PRESSED_NAVIGATED_BACK
+    })
+    private @interface BackPressedResult {}
+    private static final int BACK_PRESSED_NOTHING_HAPPENED = 0;
+    private static final int BACK_PRESSED_HELP_URL_CLOSED = 1;
+    private static final int BACK_PRESSED_MINIMIZED_NO_TAB_CLOSED = 2;
+    private static final int BACK_PRESSED_MINIMIZED_TAB_CLOSED = 3;
+    private static final int BACK_PRESSED_TAB_CLOSED = 4;
+    private static final int BACK_PRESSED_TAB_IS_NULL = 5;
+    private static final int BACK_PRESSED_EXITED_TAB_SWITCHER = 6;
+    private static final int BACK_PRESSED_EXITED_FULLSCREEN = 7;
+    private static final int BACK_PRESSED_NAVIGATED_BACK = 8;
+    private static final int BACK_PRESSED_COUNT = 9;
 
     private static final String TAG = "ChromeTabbedActivity";
 
@@ -130,6 +167,8 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
      */
     private static final String ACTION_CLOSE_TABS =
             "com.google.android.apps.chrome.ACTION_CLOSE_TABS";
+
+    private final ActivityStopMetrics mActivityStopMetrics = new ActivityStopMetrics();
 
     private FindToolbarManager mFindToolbarManager;
 
@@ -304,6 +343,9 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
     @Override
     public void onStopWithNative() {
         super.onStopWithNative();
+
+        if (getActivityTab() != null) getActivityTab().setIsAllowedToReturnToExternalApp(false);
+
         mTabModelSelectorImpl.saveState();
         try {
             getConnectionChangeReceiver().unregisterReceiver(ChromeTabbedActivity.this);
@@ -311,6 +353,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
             // This may happen when onStop get called very early in UI test.
         }
         StartupMetrics.getInstance().recordHistogram(true);
+        mActivityStopMetrics.onStopWithNative(this);
     }
 
     @Override
@@ -461,6 +504,16 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
             getToolbarManager().initializeWithNative(mTabModelSelectorImpl, getFullscreenManager(),
                     mFindToolbarManager, mLayoutManager, mLayoutManager,
                     tabSwitcherClickHandler, newTabClickHandler, bookmarkClickHandler, null);
+            getToolbarManager().getToolbar().setReturnButtonListener(new OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (getActivityTab() == null) return;
+                    mActivityStopMetrics.setStopReason(
+                            ActivityStopMetrics.STOP_REASON_RETURN_BUTTON);
+                    RecordUserAction.record("TaskManagement.ReturnButtonClicked");
+                    sendToBackground(getActivityTab());
+                }
+            });
 
             removeWindowBackground();
 
@@ -562,7 +615,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
     private void createInitialTab() {
         String url = HomepageManager.getHomepageUri(getApplicationContext());
         if (TextUtils.isEmpty(url)) url = UrlConstants.NTP_URL;
-        getTabCreator(false).launchUrl(url, TabLaunchType.FROM_MENU_OR_OVERVIEW);
+        getTabCreator(false).launchUrl(url, TabLaunchType.FROM_CHROME_UI);
     }
 
     @Override
@@ -581,6 +634,26 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                 } else {
                     launchFirstRunExperience();
                 }
+            }
+            return true;
+        } else if (requestCode == CCT_RESULT) {
+            Log.d(TAG, "Custom Tab result: " + resultCode);
+            if (resultCode == CustomTabActivity.RESULT_STOPPED && data != null) {
+                // Open the last URL shown in the CustomTabActivity.  Unfortunately, there isn't a
+                // good TabLaunchType to use here (FROM_EXTERNAL_APP changes back behavior, e.g.),
+                // but this shouldn't be a problem once Tab reparenting lands.
+                //
+                // TODO(dfalcantara): Use real tab reparenting here when possible.  We should fall
+                //                    back to using the TabState file or URL, in that order.
+                getTabCreator(false).createNewTab(new LoadUrlParams(
+                        data.getDataString()), TabLaunchType.FROM_CHROME_UI, null);
+            } else if ((resultCode == CustomTabActivity.RESULT_BACK_PRESSED
+                    || resultCode == CustomTabActivity.RESULT_CLOSED) && data != null) {
+                // Herb UMA should have already been recorded by the CustomTabActivity.
+                Log.d(TAG, "Herb: Sending app to the background");
+                mActivityStopMetrics.setStopReason(
+                        ActivityStopMetrics.STOP_REASON_CUSTOM_TAB_STOPPED);
+                sendToBackground(null);
             }
             return true;
         }
@@ -614,7 +687,6 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
      * Internal class which performs the intent handling operations delegated by IntentHandler.
      */
     private class InternalIntentDelegate implements IntentHandler.IntentHandlerDelegate {
-
         /**
          * Processes a url view intent.
          *
@@ -646,10 +718,6 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                     int shortcutSource = intent.getIntExtra(
                             ShortcutHelper.EXTRA_SOURCE, ShortcutSource.UNKNOWN);
                     LaunchMetrics.recordHomeScreenLaunchIntoTab(url, shortcutSource);
-                    break;
-                case REUSE_APP_ID_MATCHING_TAB_ELSE_NEW_TAB:
-                    launchIntent(url, referer, headers, externalAppId, false, intent);
-                    RecordUserAction.record("MobileReceivedExternalIntent");
                     break;
                 case BRING_TAB_TO_FRONT:
                     mTabModelSelectorImpl.tryToRestoreTabStateForId(tabIdToBringToFront);
@@ -684,9 +752,11 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                         launchIntent(url, referer, headers, externalAppId, true, intent);
                     }
                     break;
+                case REUSE_APP_ID_MATCHING_TAB_ELSE_NEW_TAB:
+                    openNewTab(url, referer, headers, externalAppId, intent, false);
+                    break;
                 case OPEN_NEW_TAB:
-                    launchIntent(url, referer, headers, externalAppId, true, intent);
-                    RecordUserAction.record("MobileReceivedExternalIntent");
+                    openNewTab(url, referer, headers, externalAppId, intent, true);
                     break;
                 case OPEN_NEW_INCOGNITO_TAB:
                     if (url == null || url.equals(UrlConstants.NTP_URL)) {
@@ -694,7 +764,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                             // Used by the Account management screen to open a new incognito tab.
                             // Account management screen collects its metrics separately.
                             getTabCreator(true).launchUrl(
-                                    UrlConstants.NTP_URL, TabLaunchType.FROM_MENU_OR_OVERVIEW);
+                                    UrlConstants.NTP_URL, TabLaunchType.FROM_CHROME_UI);
                         } else {
                             getTabCreator(true).launchUrl(
                                     UrlConstants.NTP_URL, TabLaunchType.FROM_EXTERNAL_APP);
@@ -721,6 +791,48 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
         @Override
         public void processWebSearchIntent(String query) {
             assert false;
+        }
+
+        /**
+         * Opens a new Tab with the possibility of showing it in a Custom Tab, instead.
+         *
+         * See IntentHandler#processUrlViewIntent() for an explanation most of the parameters.
+         * @param forceNewTab If not handled by a Custom Tab, forces the new tab to be created.
+         */
+        private void openNewTab(String url, String referer, String headers,
+                String externalAppId, Intent intent, boolean forceNewTab) {
+            boolean isAllowedToReturnToExternalApp = IntentUtils.safeGetBooleanExtra(intent,
+                    ChromeLauncherActivity.EXTRA_IS_ALLOWED_TO_RETURN_TO_PARENT, true);
+
+            String herbFlavor = FeatureUtilities.getHerbFlavor();
+            if (isAllowedToReturnToExternalApp
+                    && ChromeLauncherActivity.canBeHijackedByHerb(intent)
+                    && TextUtils.equals(ChromeSwitches.HERB_FLAVOR_DILL, herbFlavor)) {
+                Log.d(TAG, "Sending to CustomTabActivity");
+                mActivityStopMetrics.setStopReason(
+                        ActivityStopMetrics.STOP_REASON_CUSTOM_TAB_STARTED);
+
+                Intent newIntent = ChromeLauncherActivity.createCustomTabActivityIntent(
+                        ChromeTabbedActivity.this, intent, false);
+                newIntent.putExtra(Browser.EXTRA_APPLICATION_ID, getPackageName());
+                newIntent.putExtra(
+                        CustomTabIntentDataProvider.EXTRA_IS_OPENED_BY_CHROME, true);
+                ChromeLauncherActivity.addHerbIntentExtras(ChromeTabbedActivity.this,
+                        newIntent, Uri.parse(IntentHandler.getUrlFromIntent(newIntent)));
+
+                // Launch the Activity on top of this task.
+                int updatedFlags = newIntent.getFlags();
+                updatedFlags &= ~Intent.FLAG_ACTIVITY_NEW_TASK;
+                updatedFlags &= ~Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
+                newIntent.setFlags(updatedFlags);
+                startActivityForResult(newIntent, CCT_RESULT);
+            } else {
+                // Create a new tab.
+                Tab newTab =
+                        launchIntent(url, referer, headers, externalAppId, forceNewTab, intent);
+                newTab.setIsAllowedToReturnToExternalApp(isAllowedToReturnToExternalApp);
+                RecordUserAction.record("MobileReceivedExternalIntent");
+            }
         }
     }
 
@@ -899,8 +1011,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
         final Tab currentTab = getActivityTab();
         if (id == R.id.new_tab_menu_id) {
             Tab launchedTab = getTabCreator(false).launchUrl(
-                    UrlConstants.NTP_URL,
-                    fromMenu ? TabLaunchType.FROM_MENU_OR_OVERVIEW : TabLaunchType.FROM_KEYBOARD);
+                    UrlConstants.NTP_URL, TabLaunchType.FROM_CHROME_UI);
             RecordUserAction.record("MobileMenuNewTab");
             RecordUserAction.record("MobileNewTabOpened");
             if (isTablet() && !fromMenu && !launchedTab.isHidden()) {
@@ -913,9 +1024,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                 RecordUserAction.record("MobileMenuNewIncognitoTab");
                 RecordUserAction.record("MobileNewTabOpened");
                 Tab launchedTab = getTabCreator(true).launchUrl(
-                        UrlConstants.NTP_URL,
-                        fromMenu ? TabLaunchType.FROM_MENU_OR_OVERVIEW
-                                : TabLaunchType.FROM_KEYBOARD);
+                        UrlConstants.NTP_URL, TabLaunchType.FROM_CHROME_UI);
                 if (isTablet() && !fromMenu && !launchedTab.isHidden()) {
                     getToolbarManager().setUrlBarFocus(true);
                 }
@@ -926,8 +1035,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                     @Override
                     public void run() {
                         StartupMetrics.getInstance().recordOpenedBookmarks();
-                        EnhancedBookmarkUtils.showBookmarkManager(
-                                ChromeTabbedActivity.this);
+                        BookmarkUtils.showBookmarkManager(ChromeTabbedActivity.this);
                     }
                 });
                 RecordUserAction.record("MobileMenuAllBookmarks");
@@ -970,94 +1078,126 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
         return true;
     }
 
+    private void recordBackPressedUma(String logMessage, @BackPressedResult int action) {
+        Log.i(TAG, "Back pressed: " + logMessage);
+        RecordHistogram.recordEnumeratedHistogram(
+                "Android.Activity.ChromeTabbedActivity.SystemBackAction",
+                action, BACK_PRESSED_COUNT);
+    }
+
     @Override
     public boolean handleBackPressed() {
+        RecordUserAction.record("SystemBack");
+
         if (!mUIInitialized) return false;
         final Tab currentTab = getActivityTab();
 
         if (currentTab == null) {
-            if (getToolbarManager().back()) {
-                RecordUserAction.record("SystemBackForNavigation");
-                RecordUserAction.record("MobileTabClobbered");
-            } else {
-                moveTaskToBack(true);
-            }
-            RecordUserAction.record("SystemBack");
-            Log.i(TAG, "handleBackPressed() - currentTab is null");
+            recordBackPressedUma("currentTab is null", BACK_PRESSED_TAB_IS_NULL);
+            moveTaskToBack(true);
             return true;
         }
 
         // If we are in overview mode and not a tablet, then leave overview mode on back.
         if (mLayoutManager.overviewVisible() && !isTablet()) {
+            recordBackPressedUma("Hid overview", BACK_PRESSED_EXITED_TAB_SWITCHER);
             mLayoutManager.hideOverview(true);
-            // TODO(benm): Record any user metrics in this case?
-            Log.i(TAG, "handleBackPressed() - hide overview");
             return true;
         }
 
         if (exitFullscreenIfShowing()) {
-            Log.i(TAG, "handleBackPressed() - exit fullscreen");
+            recordBackPressedUma("Exited fullscreen", BACK_PRESSED_EXITED_FULLSCREEN);
             return true;
         }
 
-        if (!getToolbarManager().back()) {
-            Log.i(TAG, "handleBackPressed() - no back stack");
-            final TabLaunchType type = currentTab.getLaunchType();
-            final String associatedApp = currentTab.getAppAssociatedWith();
-            final int parentId = currentTab.getParentId();
-            final boolean helpUrl = currentTab.getUrl().startsWith(HELP_URL_PREFIX);
+        if (getToolbarManager().back()) {
+            recordBackPressedUma("Navigating backward", BACK_PRESSED_NAVIGATED_BACK);
+            RecordUserAction.record("MobileTabClobbered");
+            return true;
+        }
 
-            // If the current tab url is HELP_URL, then the back button should close the tab to
-            // get back to the previous state. The reason for startsWith check is that the
-            // actual redirected URL is a different system language based help url.
-            if (type == TabLaunchType.FROM_MENU_OR_OVERVIEW && helpUrl) {
-                getCurrentTabModel().closeTab(currentTab);
-                Log.i(TAG, "handleBackPressed() - help url");
+        // If the current tab url is HELP_URL, then the back button should close the tab to
+        // get back to the previous state. The reason for startsWith check is that the
+        // actual redirected URL is a different system language based help url.
+        final TabLaunchType type = currentTab.getLaunchType();
+        final boolean helpUrl = currentTab.getUrl().startsWith(HELP_URL_PREFIX);
+        if (type == TabLaunchType.FROM_CHROME_UI && helpUrl) {
+            getCurrentTabModel().closeTab(currentTab);
+            recordBackPressedUma("Closed tab for help URL", BACK_PRESSED_HELP_URL_CLOSED);
+            return true;
+        }
+
+        // The current spec says that tabs are closed only when there is NO "X" visible, i.e. when
+        // the tab is NOT allowed to return to the external app.
+        boolean isAllowedToCloseTab = true;
+        String herbFlavor = FeatureUtilities.getHerbFlavor();
+        if (TextUtils.equals(ChromeSwitches.HERB_FLAVOR_BASIL, herbFlavor)
+                || TextUtils.equals(ChromeSwitches.HERB_FLAVOR_CHIVE, herbFlavor)) {
+            isAllowedToCloseTab = !currentTab.isAllowedToReturnToExternalApp();
+        }
+
+        // [true]: Reached the bottom of the back stack on a tab the user did not explicitly
+        // create (i.e. it was created by an external app or opening a link in background, etc).
+        // [false]: Reached the bottom of the back stack on a tab that the user explicitly
+        // created (e.g. selecting "new tab" from menu).
+        final int parentId = currentTab.getParentId();
+        final boolean shouldCloseTab = type == TabLaunchType.FROM_LINK
+                || (type == TabLaunchType.FROM_EXTERNAL_APP && isAllowedToCloseTab)
+                || type == TabLaunchType.FROM_LONGPRESS_FOREGROUND
+                || type == TabLaunchType.FROM_LONGPRESS_BACKGROUND
+                || (type == TabLaunchType.FROM_RESTORE && parentId != Tab.INVALID_TAB_ID);
+
+        // Minimize the app if either:
+        // - we decided not to close the tab
+        // - we decided to close the tab, but it was opened by an external app, so we will go
+        //   exit Chrome on top of closing the tab
+        final boolean minimizeApp = !shouldCloseTab || currentTab.isCreatedForExternalApp();
+
+        if (minimizeApp) {
+            if (shouldCloseTab) {
+                recordBackPressedUma("Minimized and closed tab", BACK_PRESSED_MINIMIZED_TAB_CLOSED);
+                mActivityStopMetrics.setStopReason(ActivityStopMetrics.STOP_REASON_BACK_BUTTON);
+                sendToBackground(currentTab);
+                return true;
+            } else {
+                recordBackPressedUma("Minimized, kept tab", BACK_PRESSED_MINIMIZED_NO_TAB_CLOSED);
+                mActivityStopMetrics.setStopReason(ActivityStopMetrics.STOP_REASON_BACK_BUTTON);
+                sendToBackground(null);
                 return true;
             }
-
-            // [true]: Reached the bottom of the back stack on a tab the user did not explicitly
-            // create (i.e. it was created by an external app or opening a link in background, etc).
-            // [false]: Reached the bottom of the back stack on a tab that the user explicitly
-            // created (e.g. selecting "new tab" from menu).
-            final boolean shouldCloseTab = type == TabLaunchType.FROM_LINK
-                    || type == TabLaunchType.FROM_EXTERNAL_APP
-                    || type == TabLaunchType.FROM_LONGPRESS_FOREGROUND
-                    || type == TabLaunchType.FROM_LONGPRESS_BACKGROUND
-                    || (type == TabLaunchType.FROM_RESTORE && parentId != Tab.INVALID_TAB_ID);
-
-            // Minimize the app if either:
-            // - we decided not to close the tab
-            // - we decided to close the tab, but it was opened by an external app, so we will go
-            //   exit Chrome on top of closing the tab
-            final boolean minimizeApp = !shouldCloseTab || (type == TabLaunchType.FROM_EXTERNAL_APP
-                    && !TextUtils.equals(associatedApp, getPackageName()));
-
-            if (minimizeApp) {
-                Log.i(TAG, "handleBackPressed() - moveTaskToBack");
-                moveTaskToBack(true);
-                if (shouldCloseTab) {
-                    // In the case of closing a tab upon minimalization, don't allow the close
-                    // action to happen until after our app is minimized to make sure we don't get a
-                    // brief glimpse of the newly active tab before we exit Chrome.
-                    mHandler.postDelayed(new Runnable() {
-                        @Override
-                        public void run() {
-                            getCurrentTabModel().closeTab(currentTab, false, true, false);
-                        }
-                    }, CLOSE_TAB_ON_MINIMIZE_DELAY_MS);
-                }
-            } else if (shouldCloseTab) {
-                getCurrentTabModel().closeTab(currentTab, true, false, false);
-            }
-        } else {
-            Log.i(TAG, "handleBackPressed() - moving back in navigation");
-            RecordUserAction.record("SystemBackForNavigation");
-            RecordUserAction.record("MobileTabClobbered");
+        } else if (shouldCloseTab) {
+            recordBackPressedUma("Tab closed", BACK_PRESSED_TAB_CLOSED);
+            getCurrentTabModel().closeTab(currentTab, true, false, false);
+            return true;
         }
-        RecordUserAction.record("SystemBack");
 
-        return true;
+        assert false : "The back button should have already been handled by this point";
+        recordBackPressedUma("Unhandled", BACK_PRESSED_NOTHING_HAPPENED);
+        return false;
+    }
+
+    /**
+     * Sends this Activity to the background.
+     *
+     * @param tabToClose Tab that will be closed once the app is not visible.
+     */
+    private void sendToBackground(@Nullable final Tab tabToClose) {
+        Log.i(TAG, "sendToBackground(): " + tabToClose);
+        moveTaskToBack(true);
+        if (tabToClose != null) {
+            // In the case of closing a tab upon minimization, don't allow the close action to
+            // happen until after our app is minimized to make sure we don't get a brief glimpse of
+            // the newly active tab before we exit Chrome.
+            //
+            // If the runnable doesn't run before the Activity dies, Chrome won't crash but the tab
+            // won't be closed (crbug.com/587565).
+            mHandler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    getCurrentTabModel().closeTab(tabToClose, false, true, false);
+                }
+            }, CLOSE_TAB_ON_MINIMIZE_DELAY_MS);
+        }
     }
 
     /**
@@ -1071,7 +1211,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
      *                      back to the default behavior for making that determination.
      * @param intent        The original intent.
      */
-    private void launchIntent(String url, String referer, String headers,
+    private Tab launchIntent(String url, String referer, String headers,
             String externalAppId, boolean forceNewTab, Intent intent) {
         if (mUIInitialized) {
             mLayoutManager.hideOverview(false);
@@ -1081,10 +1221,10 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
             // If the intent was launched by chrome, open the new tab in the current model.
             // Using FROM_LINK ensures the tab is parented to the current tab, which allows
             // the back button to close these tabs and restore selection to the previous tab.
-            getCurrentTabCreator().launchUrl(url, TabLaunchType.FROM_LINK, intent,
+            return getCurrentTabCreator().launchUrl(url, TabLaunchType.FROM_LINK, intent,
                     mIntentHandlingTimeMs);
         } else {
-            getTabCreator(false).launchUrlFromExternalApp(url, referer, headers,
+            return getTabCreator(false).launchUrlFromExternalApp(url, referer, headers,
                     externalAppId, forceNewTab, intent, mIntentHandlingTimeMs);
         }
     }

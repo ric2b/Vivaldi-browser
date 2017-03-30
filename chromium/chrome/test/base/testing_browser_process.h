@@ -89,10 +89,9 @@ class TestingBrowserProcess : public BrowserProcess {
   NotificationUIManager* notification_ui_manager() override;
   message_center::MessageCenter* message_center() override;
   IntranetRedirectDetector* intranet_redirect_detector() override;
-  void CreateDevToolsHttpProtocolHandler(
-      chrome::HostDesktopType host_desktop_type,
-      const std::string& ip,
-      uint16_t port) override;
+  void CreateDevToolsHttpProtocolHandler(const std::string& ip,
+                                         uint16_t port) override;
+  void CreateDevToolsAutoOpener() override;
   unsigned int AddRefModule() override;
   unsigned int ReleaseModule() override;
   bool IsShuttingDown() override;
@@ -127,7 +126,7 @@ class TestingBrowserProcess : public BrowserProcess {
 
   gcm::GCMDriver* gcm_driver() override;
   memory::TabManager* GetTabManager() override;
-  ShellIntegration::DefaultWebClientState CachedDefaultWebClientState()
+  shell_integration::DefaultWebClientState CachedDefaultWebClientState()
       override;
 
   // Set the local state for tests. Consumer is responsible for cleaning it up
@@ -151,8 +150,6 @@ class TestingBrowserProcess : public BrowserProcess {
   unsigned int module_ref_count_;
   std::string app_locale_;
 
-  // TODO(ios): Add back members as more code is compiled.
-#if !defined(OS_IOS)
 #if defined(ENABLE_CONFIGURATION_POLICY)
   scoped_ptr<policy::BrowserPolicyConnector> browser_policy_connector_;
   bool created_browser_policy_connector_ = false;
@@ -173,7 +170,6 @@ class TestingBrowserProcess : public BrowserProcess {
 #endif
 
   scoped_refptr<safe_browsing::SafeBrowsingService> sb_service_;
-#endif  // !defined(OS_IOS)
 
   scoped_ptr<network_time::NetworkTimeTracker> network_time_tracker_;
 

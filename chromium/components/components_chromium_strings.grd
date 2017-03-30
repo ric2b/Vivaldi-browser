@@ -133,30 +133,22 @@
   <release seq="1" allow_pseudo="false">
     <messages fallback_to_english="true">
       <!-- Network Error Pages -->
-      <if expr="not is_android">
+      <if expr="not is_android and not is_ios">
         <message name="IDS_ERRORPAGES_SUGGESTION_NETWORK_PREDICTION_BODY" desc="When a page fails to load, sometimes we suggest disabling predicting network actions.  These are details below a header for non Android devices.">
           Go to
           the Chromium menu &gt;
           <ph name="SETTINGS_TITLE">&lt;span jscontent="settingsTitle"&gt;&lt;/span&gt;<ex>Settings</ex></ph>
           &gt;
           <ph name="ADVANCED_TITLE">&lt;span jscontent="advancedTitle"&gt;&lt;/span&gt;<ex>Under the Hood</ex></ph>
-          and deselect &quot;<ph name="NO_PREFETCH_DESCRIPTION">&lt;span jscontent="noNetworkPredictionTitle"&gt;&lt;/span&gt;<ex>Prefetch resources to load pages more quickly</ex></ph>.&quot;
+          and deselect &quot;<ph name="NO_PREFETCH_DESCRIPTION">&lt;span jscontent="noNetworkPredictionTitle"&gt;&lt;/span&gt;<ex>Use a prediction service to load pages more quickly</ex></ph>.&quot;
           If this does not resolve the issue, we recommend selecting this option
           again for improved performance.
         </message>
-      </if>
-      <if expr="is_android">
-        <message name="IDS_ERRORPAGES_SUGGESTION_NETWORK_PREDICTION_BODY" desc="When a page fails to load, sometimes we suggest disabling predicting network actions.  These are details below a header for Android devices.  Note that on devices without mobile network (3G) capability, the setting is a checkbox, while on other devices, it is a list of three items.  The words _disable_ and _re-enabling_ can be used for both cases.">
-          Go to the Chromium menu &gt; Settings &gt; (Advanced) Privacy
-          and disable &quot;Prefetch page resources.&quot;
-          If this does not resolve the issue, we recommend re-enabling this option
-          again for improved performance.
+        <message name="IDS_ERRORPAGES_SUGGESTION_FIREWALL_CONFIG_HEADER" desc="When a webpage fails to load, in some cases we suggest reconfiguring the firewall.  This is a header above some details.">
+          Allow Chromium to access the network in your firewall or antivirus
+          settings.
         </message>
       </if>
-      <message name="IDS_ERRORPAGES_SUGGESTION_FIREWALL_CONFIG_HEADER" desc="When a webpage fails to load, in some cases we suggest reconfiguring the firewall.  This is a header above some details.">
-        Allow Chromium to access the network in your firewall or antivirus
-        settings.
-      </message>
       <message name="IDS_ERRORPAGES_SUMMARY_BLOCKED_ENROLLMENT_CHECK_PENDING" desc="Summary in the error page when the user tries to browse before the forced enrollment check has finished.">
         Chromium OS hasn’t completed its initial setup.
       </message>
@@ -165,10 +157,6 @@
           Go to
           Applications &gt; System Preferences &gt; Network &gt; Advanced &gt; Proxies
           and deselect any proxies that have been selected.
-        </message>
-      </if>
-      <if expr="is_android or is_ios">
-        <message name="IDS_ERRORPAGES_SUGGESTION_PROXY_DISABLE_PLATFORM" desc="Instructions for disabling use of a proxy server (leave empty for Android and iOS).">
         </message>
       </if>
       <if expr="not chromeos and is_posix and not is_macosx and not is_android and not is_ios">
@@ -218,6 +206,15 @@
       <!-- Version UI -->
       <message name="IDS_VERSION_UI_LICENSE" desc="The label below the copyright message, containing the URLs.">
         Chromium is made possible by the <ph name="BEGIN_LINK_CHROMIUM">&lt;a target="_blank" href="$1"&gt;</ph>Chromium<ph name="END_LINK_CHROMIUM">&lt;/a&gt;</ph> open source project and other <ph name="BEGIN_LINK_OSS">&lt;a target="_blank" href="$2"&gt;</ph>open source software<ph name="END_LINK_OSS">&lt;/a&gt;</ph>.
+      </message>
+
+      <!-- Page Info bubble -->
+      <message name="IDS_PAGE_INFO_INTERNAL_PAGE" desc="Message to display in the page info bubble when the page you are on is a chrome:// page or about:something.">
+        You are viewing a secure Chromium page.
+      </message>
+
+      <message name="IDS_SESSION_CRASHED_VIEW_MESSAGE" desc="Message shown when the last session didn't exit cleanly.">
+        Chromium didn't shut down correctly.
       </message>
     </messages>
   </release>

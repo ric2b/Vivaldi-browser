@@ -15,6 +15,7 @@
 #include "cc/resources/resource_provider.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/mailbox_holder.h"
+#include "gpu/command_buffer/common/sync_token.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
 #include "mojo/converters/surfaces/surfaces_type_converters.h"
 #include "mojo/converters/transform/transform_type_converters.h"
@@ -30,10 +31,6 @@ using mus::mojom::CompositorFrameMetadata;
 using mus::mojom::CompositorFrameMetadataPtr;
 using mus::mojom::DebugBorderQuadState;
 using mus::mojom::DebugBorderQuadStatePtr;
-using mus::mojom::Mailbox;
-using mus::mojom::MailboxPtr;
-using mus::mojom::MailboxHolder;
-using mus::mojom::MailboxHolderPtr;
 using mus::mojom::Pass;
 using mus::mojom::PassPtr;
 using mus::mojom::Quad;
@@ -120,7 +117,7 @@ TEST_F(SurfaceLibQuadTest, ColorQuad) {
 
   QuadPtr mus_quad = Quad::From<cc::DrawQuad>(*color_quad);
   ASSERT_FALSE(mus_quad.is_null());
-  EXPECT_EQ(mus::mojom::MATERIAL_SOLID_COLOR, mus_quad->material);
+  EXPECT_EQ(mus::mojom::Material::SOLID_COLOR, mus_quad->material);
   EXPECT_TRUE(Rect::From(rect).Equals(mus_quad->rect));
   EXPECT_TRUE(Rect::From(opaque_rect).Equals(mus_quad->opaque_rect));
   EXPECT_TRUE(Rect::From(visible_rect).Equals(mus_quad->visible_rect));
@@ -140,7 +137,7 @@ TEST_F(SurfaceLibQuadTest, SurfaceQuad) {
 
   QuadPtr mus_quad = Quad::From<cc::DrawQuad>(*surface_quad);
   ASSERT_FALSE(mus_quad.is_null());
-  EXPECT_EQ(mus::mojom::MATERIAL_SURFACE_CONTENT, mus_quad->material);
+  EXPECT_EQ(mus::mojom::Material::SURFACE_CONTENT, mus_quad->material);
   ASSERT_TRUE(mus_quad->surface_quad_state);
   SurfaceQuadStatePtr& mus_surface_state = mus_quad->surface_quad_state;
   EXPECT_TRUE(SurfaceId::From(arbitrary_id).Equals(mus_surface_state->surface));
@@ -164,7 +161,7 @@ TEST_F(SurfaceLibQuadTest, TextureQuad) {
 
   QuadPtr mus_quad = Quad::From<cc::DrawQuad>(*texture_quad);
   ASSERT_FALSE(mus_quad.is_null());
-  EXPECT_EQ(mus::mojom::MATERIAL_TEXTURE_CONTENT, mus_quad->material);
+  EXPECT_EQ(mus::mojom::Material::TEXTURE_CONTENT, mus_quad->material);
   ASSERT_TRUE(mus_quad->texture_quad_state);
   TextureQuadStatePtr& mus_texture_state = mus_quad->texture_quad_state;
   EXPECT_EQ(resource_id, mus_texture_state->resource_id);
@@ -182,7 +179,7 @@ TEST_F(SurfaceLibQuadTest, TextureQuad) {
 
 TEST_F(SurfaceLibQuadTest, TextureQuadEmptyVertexOpacity) {
   QuadPtr mus_texture_quad = Quad::New();
-  mus_texture_quad->material = mus::mojom::MATERIAL_TEXTURE_CONTENT;
+  mus_texture_quad->material = mus::mojom::Material::TEXTURE_CONTENT;
   TextureQuadStatePtr mus_texture_state = TextureQuadState::New();
   mus_texture_state->background_color = Color::New();
   mus_texture_quad->texture_quad_state = std::move(mus_texture_state);
@@ -201,7 +198,7 @@ TEST_F(SurfaceLibQuadTest, TextureQuadEmptyVertexOpacity) {
 
 TEST_F(SurfaceLibQuadTest, TextureQuadEmptyBackgroundColor) {
   QuadPtr mus_texture_quad = Quad::New();
-  mus_texture_quad->material = mus::mojom::MATERIAL_TEXTURE_CONTENT;
+  mus_texture_quad->material = mus::mojom::Material::TEXTURE_CONTENT;
   TextureQuadStatePtr mus_texture_state = TextureQuadState::New();
   mus_texture_state->vertex_opacity = mojo::Array<float>::New(4);
   mus_texture_quad->texture_quad_state = std::move(mus_texture_state);
@@ -385,41 +382,6 @@ TEST(SurfaceLibTest, RenderPass) {
   EXPECT_EQ(y_flipped, round_trip_texture_quad->y_flipped);
 }
 
-TEST(SurfaceLibTest, Mailbox) {
-  gpu::Mailbox mailbox;
-  mailbox.Generate();
-
-  MailboxPtr mus_mailbox = Mailbox::From(mailbox);
-  EXPECT_EQ(0, memcmp(mailbox.name, &mus_mailbox->name.storage()[0], 64));
-
-  gpu::Mailbox round_trip_mailbox = mus_mailbox.To<gpu::Mailbox>();
-  EXPECT_EQ(mailbox, round_trip_mailbox);
-}
-
-TEST(SurfaceLibTest, MailboxEmptyName) {
-  MailboxPtr mus_mailbox = Mailbox::New();
-
-  gpu::Mailbox converted_mailbox = mus_mailbox.To<gpu::Mailbox>();
-  EXPECT_TRUE(converted_mailbox.IsZero());
-}
-
-TEST(SurfaceLibTest, MailboxHolder) {
-  gpu::Mailbox mailbox;
-  mailbox.Generate();
-  uint32_t texture_target = GL_TEXTURE_2D;
-  gpu::SyncToken sync_token(7u);
-  gpu::MailboxHolder holder(mailbox, sync_token, texture_target);
-
-  MailboxHolderPtr mus_holder = MailboxHolder::From(holder);
-  EXPECT_EQ(texture_target, mus_holder->texture_target);
-  EXPECT_EQ(sync_token, mus_holder->sync_token.To<gpu::SyncToken>());
-
-  gpu::MailboxHolder round_trip_holder = mus_holder.To<gpu::MailboxHolder>();
-  EXPECT_EQ(mailbox, round_trip_holder.mailbox);
-  EXPECT_EQ(texture_target, round_trip_holder.texture_target);
-  EXPECT_EQ(sync_token, round_trip_holder.sync_token);
-}
-
 TEST(SurfaceLibTest, TransferableResource) {
   uint32_t id = 7u;
   cc::ResourceFormat format = cc::BGRA_8888;
@@ -458,7 +420,9 @@ TEST(SurfaceLibTest, TransferableResource) {
 
 TEST(SurfaceLibTest, ReturnedResource) {
   uint32_t id = 5u;
-  gpu::SyncToken sync_token(24u);
+  gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0,
+                            gpu::CommandBufferId::FromUnsafeValue(1), 24u);
+  sync_token.SetVerifyFlush();
   int count = 2;
   bool lost = false;
   cc::ReturnedResource resource;
@@ -469,7 +433,7 @@ TEST(SurfaceLibTest, ReturnedResource) {
 
   ReturnedResourcePtr mus_resource = ReturnedResource::From(resource);
   EXPECT_EQ(id, mus_resource->id);
-  EXPECT_EQ(sync_token, mus_resource->sync_token.To<gpu::SyncToken>());
+  EXPECT_EQ(sync_token, mus_resource->sync_token);
   EXPECT_EQ(count, mus_resource->count);
   EXPECT_EQ(lost, mus_resource->lost);
 
@@ -496,7 +460,7 @@ TEST_F(SurfaceLibQuadTest, DebugBorderQuad) {
 
   QuadPtr mus_quad = Quad::From<cc::DrawQuad>(*debug_border_quad);
   ASSERT_FALSE(mus_quad.is_null());
-  EXPECT_EQ(mus::mojom::MATERIAL_DEBUG_BORDER, mus_quad->material);
+  EXPECT_EQ(mus::mojom::Material::DEBUG_BORDER, mus_quad->material);
   EXPECT_TRUE(Rect::From(rect).Equals(mus_quad->rect));
   EXPECT_TRUE(Rect::From(opaque_rect).Equals(mus_quad->opaque_rect));
   EXPECT_TRUE(Rect::From(visible_rect).Equals(mus_quad->visible_rect));

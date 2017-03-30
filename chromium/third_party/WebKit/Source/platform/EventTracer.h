@@ -31,13 +31,21 @@
 #ifndef EventTracer_h
 #define EventTracer_h
 
+#include "base/memory/ref_counted.h"
 #include "platform/PlatformExport.h"
 #include "wtf/Allocator.h"
+#include "wtf/PassOwnPtr.h"
 #include "wtf/RefCounted.h"
-#include "wtf/RefPtr.h"
 #include "wtf/text/WTFString.h"
 
 #include <stdint.h>
+
+namespace base {
+namespace trace_event {
+class ConvertableToTraceFormat;
+class TraceEventMemoryOverhead;
+}
+}
 
 // This will mark the trace event as disabled by default. The user will need
 // to explicitly enable the event.
@@ -45,17 +53,12 @@
 
 namespace blink {
 
+class TracedValue;
+
 namespace TraceEvent {
 typedef uint64_t TraceEventHandle;
 typedef intptr_t TraceEventAPIAtomicWord;
-
-class PLATFORM_EXPORT ConvertableToTraceFormat : public RefCounted<ConvertableToTraceFormat> {
-public:
-    virtual String asTraceFormat() const = 0;
-    virtual ~ConvertableToTraceFormat() { }
-};
-
-}
+} // namespace TraceEvent
 
 // FIXME: Make these global variables thread-safe. Make a value update atomic.
 PLATFORM_EXPORT extern TraceEvent::TraceEventAPIAtomicWord* traceSamplingState[3];
@@ -68,6 +71,7 @@ public:
     static TraceEvent::TraceEventHandle addTraceEvent(char phase,
         const unsigned char* categoryEnabledFlag,
         const char* name,
+        const char* scope,
         unsigned long long id,
         unsigned long long bindId,
         double timestamp,
@@ -75,12 +79,13 @@ public:
         const char* argNames[],
         const unsigned char argTypes[],
         const unsigned long long argValues[],
-        PassRefPtr<TraceEvent::ConvertableToTraceFormat>,
-        PassRefPtr<TraceEvent::ConvertableToTraceFormat>,
+        PassOwnPtr<TracedValue>,
+        PassOwnPtr<TracedValue>,
         unsigned flags);
     static TraceEvent::TraceEventHandle addTraceEvent(char phase,
         const unsigned char* categoryEnabledFlag,
         const char* name,
+        const char* scope,
         unsigned long long id,
         unsigned long long bindId,
         double timestamp,
@@ -91,6 +96,21 @@ public:
         unsigned flags);
     static void updateTraceEventDuration(const unsigned char* categoryEnabledFlag, const char* name, TraceEvent::TraceEventHandle);
     static double systemTraceTime();
+
+private:
+    static TraceEvent::TraceEventHandle addTraceEvent(char phase,
+        const unsigned char* categoryEnabledFlag,
+        const char* name,
+        const char* scope,
+        unsigned long long id,
+        unsigned long long bindId,
+        double timestamp,
+        int numArgs,
+        const char* argNames[],
+        const unsigned char argTypes[],
+        const unsigned long long argValues[],
+        const scoped_refptr<base::trace_event::ConvertableToTraceFormat>* convertables,
+        unsigned flags);
 };
 
 } // namespace blink

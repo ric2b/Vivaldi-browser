@@ -12,7 +12,6 @@
 #include "base/cpu.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/sys_info.h"
 #include "base/time/time.h"
@@ -28,6 +27,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/media/webrtc_logging_messages.h"
 #include "chromeos/settings/cros_settings_names.h"
+#include "components/prefs/pref_service.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -36,7 +36,6 @@
 #include "gpu/config/gpu_info.h"
 #include "net/base/address_family.h"
 #include "net/base/ip_address_number.h"
-#include "net/base/net_util.h"
 #include "net/url_request/url_request_context_getter.h"
 
 #if defined(OS_LINUX)

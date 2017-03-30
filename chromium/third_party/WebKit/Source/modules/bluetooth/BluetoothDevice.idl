@@ -13,10 +13,13 @@ enum VendorIDSource {
 
 [
     GarbageCollected,
+    DependentLifetime,
     RuntimeEnabled=WebBluetooth,
-] interface BluetoothDevice
+    // TODO(https://crbug.com/584113) Enable Web Bluetooth Experiment.
+    // OriginTrialEnabled=WebBluetooth,
+] interface BluetoothDevice : EventTarget
 // Implement ServiceEventHandlers interface: http://crbug.com/421670
-// : ServiceEventHandlers 
+// : ServiceEventHandlers
 {
 // Implement BluetoothDevice interface: http://crbug.com/421668
     [DeprecateAs=BluetoothDeviceInstanceId, ImplementedAs=id] readonly attribute DOMString instanceID;
@@ -28,7 +31,9 @@ enum VendorIDSource {
     readonly    attribute unsigned long?             vendorID;
     readonly    attribute unsigned long?             productID;
     readonly    attribute unsigned long?             productVersion;
-//    readonly    attribute BluetoothGATTRemoteServer? gattServer;
+    readonly    attribute BluetoothRemoteGATTServer  gatt;
     readonly    attribute UUID[]                     uuids;
-    [CallWith=ScriptState] Promise<BluetoothGATTRemoteServer> connectGATT ();
+    [CallWith=ScriptState, DeprecateAs=BluetoothDeviceConnectGATT] Promise<BluetoothRemoteGATTServer> connectGATT ();
+
+    attribute EventHandler ongattserverdisconnected;
 };

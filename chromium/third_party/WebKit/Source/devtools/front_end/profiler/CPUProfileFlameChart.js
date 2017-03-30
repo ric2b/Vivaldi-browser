@@ -72,6 +72,15 @@ WebInspector.CPUFlameChartDataProvider.prototype = {
     },
 
     /**
+     * @return {number}
+     * @override
+     */
+    groupSeparatorHeight: function()
+    {
+        return 5;
+    },
+
+    /**
      * @override
      * @param {number} startTime
      * @param {number} endTime
@@ -180,7 +189,7 @@ WebInspector.CPUFlameChartDataProvider.prototype = {
 
         this._maxStackDepth = maxDepth;
 
-        this._timelineData = new WebInspector.FlameChart.TimelineData(entryLevels, entryTotalTimes, entryStartTimes);
+        this._timelineData = new WebInspector.FlameChart.TimelineData(entryLevels, entryTotalTimes, entryStartTimes, null);
 
         /** @type {!Array.<!ProfilerAgent.CPUProfileNode>} */
         this._entryNodes = entryNodes;
@@ -229,7 +238,7 @@ WebInspector.CPUFlameChartDataProvider.prototype = {
         var totalTime = this._millisecondsToString(timelineData.entryTotalTimes[entryIndex]);
         pushEntryInfoRow(WebInspector.UIString("Self time"), selfTime);
         pushEntryInfoRow(WebInspector.UIString("Total time"), totalTime);
-        var callFrame = /** @type {!ConsoleAgent.CallFrame} */ (node);
+        var callFrame = /** @type {!RuntimeAgent.CallFrame} */ (node);
         var text = (new WebInspector.Linkifier()).linkifyConsoleCallFrame(this._target, callFrame).textContent;
         pushEntryInfoRow(WebInspector.UIString("URL"), text);
         pushEntryInfoRow(WebInspector.UIString("Aggregated self time"), Number.secondsToString(node.selfTime / 1000, true));
@@ -285,7 +294,9 @@ WebInspector.CPUFlameChartDataProvider.prototype = {
     entryColor: function(entryIndex)
     {
         var node = this._entryNodes[entryIndex];
-        return this._colorGenerator.colorForID(node.functionName + ":" + node.url);
+        // For idle and program, we want different 'shades of gray', so we fallback to functionName as scriptId = 0
+        // For rest of nodes e.g eval scripts, if url is empty then scriptId will be guaranteed to be non-zero
+        return this._colorGenerator.colorForID(node.url || (node.scriptId !== "0" ? node.scriptId : node.functionName));
     },
 
     /**
@@ -356,12 +367,13 @@ WebInspector.CPUFlameChartDataProvider.colorGenerator = function()
 {
     if (!WebInspector.CPUFlameChartDataProvider._colorGenerator) {
         var colorGenerator = new WebInspector.FlameChart.ColorGenerator(
-            { min: 180, max: 310, count: 7 },
+            { min: 30, max: 330 },
             { min: 50, max: 80, count: 5 },
             { min: 80, max: 90, count: 3 });
-        colorGenerator.setColorForID("(idle):", "hsl(0, 0%, 94%)");
-        colorGenerator.setColorForID("(program):", "hsl(0, 0%, 80%)");
-        colorGenerator.setColorForID("(garbage collector):", "hsl(0, 0%, 80%)");
+
+        colorGenerator.setColorForID("(idle)", "hsl(0, 0%, 94%)");
+        colorGenerator.setColorForID("(program)", "hsl(0, 0%, 80%)");
+        colorGenerator.setColorForID("(garbage collector)", "hsl(0, 0%, 80%)");
         WebInspector.CPUFlameChartDataProvider._colorGenerator = colorGenerator;
     }
     return WebInspector.CPUFlameChartDataProvider._colorGenerator;
@@ -382,7 +394,7 @@ WebInspector.CPUProfileFlameChart = function(dataProvider)
     this._overviewPane = new WebInspector.CPUProfileFlameChart.OverviewPane(dataProvider);
     this._overviewPane.show(this.element);
 
-    this._mainPane = new WebInspector.FlameChart(dataProvider, this._overviewPane, true);
+    this._mainPane = new WebInspector.FlameChart(dataProvider, this._overviewPane);
     this._mainPane.show(this.element);
     this._mainPane.addEventListener(WebInspector.FlameChart.Events.EntrySelected, this._onEntrySelected, this);
     this._overviewPane.addEventListener(WebInspector.OverviewGrid.Events.WindowChanged, this._onWindowChanged, this);

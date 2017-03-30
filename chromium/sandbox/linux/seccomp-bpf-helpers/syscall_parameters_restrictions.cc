@@ -52,6 +52,10 @@
 #define PR_SET_TIMERSLACK_PID 41
 #endif
 
+#ifndef PR_SET_PTRACER
+#define PR_SET_PTRACER 0x59616d61
+#endif
+
 #endif  // defined(OS_ANDROID)
 
 #if defined(__arm__) && !defined(MAP_STACK)
@@ -143,7 +147,7 @@ ResultExpr RestrictPrctl() {
       .CASES((PR_GET_NAME, PR_SET_NAME, PR_GET_DUMPABLE, PR_SET_DUMPABLE
 #if defined(OS_ANDROID)
               ,
-              PR_SET_VMA, PR_SET_TIMERSLACK_PID
+              PR_SET_VMA, PR_SET_TIMERSLACK_PID, PR_SET_PTRACER
 #endif
               ),
              Allow())
@@ -305,8 +309,16 @@ ResultExpr RestrictClockID() {
   static_assert(4 == sizeof(clockid_t), "clockid_t is not 32bit");
   const Arg<clockid_t> clockid(0);
   return Switch(clockid)
-      .CASES((CLOCK_MONOTONIC, CLOCK_MONOTONIC_COARSE, CLOCK_PROCESS_CPUTIME_ID,
-              CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID),
+      .CASES((
+#if defined(OS_ANDROID)
+              CLOCK_BOOTTIME,
+#endif
+              CLOCK_MONOTONIC,
+              CLOCK_MONOTONIC_COARSE,
+              CLOCK_PROCESS_CPUTIME_ID,
+              CLOCK_REALTIME,
+              CLOCK_REALTIME_COARSE,
+              CLOCK_THREAD_CPUTIME_ID),
              Allow())
       .Default(CrashSIGSYS());
 }

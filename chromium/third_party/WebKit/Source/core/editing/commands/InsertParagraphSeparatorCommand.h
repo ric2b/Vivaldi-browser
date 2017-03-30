@@ -44,12 +44,12 @@ public:
 private:
     InsertParagraphSeparatorCommand(Document&, bool useDefaultParagraphElement, bool pasteBlockquoteIntoUnquotedArea);
 
-    void doApply() override;
+    void doApply(EditingState*) override;
 
     void calculateStyleBeforeInsertion(const Position&);
-    void applyStyleAfterInsertion(Element* originalEnclosingBlock);
+    void applyStyleAfterInsertion(Element* originalEnclosingBlock, EditingState*);
     void getAncestorsInsideBlock(const Node* insertionNode, Element* outerBlock, WillBeHeapVector<RefPtrWillBeMember<Element>>& ancestors);
-    PassRefPtrWillBeRawPtr<Element> cloneHierarchyUnderNewBlock(const WillBeHeapVector<RefPtrWillBeMember<Element>>& ancestors, PassRefPtrWillBeRawPtr<Element> blockToInsert);
+    PassRefPtrWillBeRawPtr<Element> cloneHierarchyUnderNewBlock(const WillBeHeapVector<RefPtrWillBeMember<Element>>& ancestors, PassRefPtrWillBeRawPtr<Element> blockToInsert, EditingState*);
 
     bool shouldUseDefaultParagraphElement(Element*) const;
 
@@ -61,6 +61,6 @@ private:
     bool m_pasteBlockquoteIntoUnquotedArea;
 };
 
-}
+} // namespace blink
 
 #endif

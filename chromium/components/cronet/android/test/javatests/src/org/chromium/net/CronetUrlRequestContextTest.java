@@ -953,11 +953,40 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
         builder.setDataReductionProxyOptions("mnop", "qrst", "uvwx");
         builder.setStoragePath(CronetTestFramework.getTestStorage(getContext()));
         nativeVerifyUrlRequestContextConfig(
-                CronetUrlRequestContext.createNativeUrlRequestContextConfig(builder),
+                CronetUrlRequestContext.createNativeUrlRequestContextConfig(getContext(), builder),
                 CronetTestFramework.getTestStorage(getContext()));
     }
 
     // Verifies that CronetEngine.Builder config from testCronetEngineBuilderConfig() is properly
     // translated to a native UrlRequestContextConfig.
     private static native void nativeVerifyUrlRequestContextConfig(long config, String storagePath);
+
+    private static class TestBadLibraryLoader extends CronetEngine.Builder.LibraryLoader {
+        private boolean mWasCalled = false;
+
+        public void loadLibrary(String libName) {
+            // Report that this method was called, but don't load the library
+            mWasCalled = true;
+        }
+
+        boolean wasCalled() {
+            return mWasCalled;
+        }
+    }
+
+    @SmallTest
+    @Feature({"Cronet"})
+    public void testSkipLibraryLoading() throws Exception {
+        CronetEngine.Builder builder = new CronetEngine.Builder(getContext());
+        TestBadLibraryLoader loader = new TestBadLibraryLoader();
+        builder.setLibraryLoader(loader).setLibraryName("cronet_tests");
+        try {
+            // ensureInitialized() calls native code to check the version right after library load
+            // and will error with the message below if library loading was skipped
+            CronetLibraryLoader.ensureInitialized(getContext(), builder);
+            fail("Native library should not be loaded");
+        } catch (UnsatisfiedLinkError e) {
+            assertTrue(loader.wasCalled());
+        }
+    }
 }

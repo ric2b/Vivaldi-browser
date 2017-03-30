@@ -152,6 +152,10 @@ class CreditCard : public AutofillDataModel {
   // Determines if |this| is a local version of the server card |other|.
   bool IsLocalDuplicateOfServerCard(const CreditCard& other) const;
 
+  // Determines if |this| has the same number as |other|. If either is a masked
+  // server card, compares the last four digits only.
+  bool HasSameNumberAs(const CreditCard& other) const;
+
   // Equality operators compare GUIDs, origins, and the contents.
   // Usage metadata (use count, use date, modification date) are NOT compared.
   bool operator==(const CreditCard& credit_card) const;
@@ -203,8 +207,9 @@ class CreditCard : public AutofillDataModel {
   base::string16 Expiration4DigitYearAsString() const;
   base::string16 Expiration2DigitYearAsString() const;
 
-  // Sets |expiration_month_| to the integer conversion of |text|.
-  void SetExpirationMonthFromString(const base::string16& text,
+  // Sets |expiration_month_| to the integer conversion of |text| and returns
+  // whether the operation was successful.
+  bool SetExpirationMonthFromString(const base::string16& text,
                                     const std::string& app_locale);
 
   // Sets |expiration_year_| to the integer conversion of |text|.

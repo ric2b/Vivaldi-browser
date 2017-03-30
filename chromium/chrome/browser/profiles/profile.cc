@@ -6,7 +6,6 @@
 
 #include <string>
 
-#include "base/prefs/pref_service.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/first_run/first_run.h"
@@ -17,6 +16,7 @@
 #include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_prefs.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "components/sync_driver/sync_prefs.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/notification_service.h"
@@ -142,7 +142,7 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(prefs::kDataSaverEnabled, false);
   data_reduction_proxy::RegisterSyncableProfilePrefs(registry);
 
-#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS) && !defined(OS_IOS)
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
   // Preferences related to the avatar bubble and user manager tutorials.
   registry->RegisterIntegerPref(prefs::kProfileAvatarTutorialShown, 0);
 #endif
@@ -152,6 +152,16 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
 #endif
 
 #if defined(ENABLE_MEDIA_ROUTER)
+#if defined(GOOGLE_CHROME_BUILD)
+  registry->RegisterBooleanPref(
+      prefs::kMediaRouterCloudServicesPrefSet,
+      false,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterBooleanPref(
+      prefs::kMediaRouterEnableCloudServices,
+      false,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+#endif  // defined(GOOGLE_CHROME_BUILD)
   registry->RegisterBooleanPref(
       prefs::kMediaRouterFirstRunFlowAcknowledged,
       false,

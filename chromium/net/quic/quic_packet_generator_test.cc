@@ -51,7 +51,8 @@ class MockDelegate : public QuicPacketGenerator::DelegateInterface {
   MOCK_METHOD1(PopulateAckFrame, void(QuicAckFrame*));
   MOCK_METHOD1(PopulateStopWaitingFrame, void(QuicStopWaitingFrame*));
   MOCK_METHOD1(OnSerializedPacket, void(SerializedPacket* packet));
-  MOCK_METHOD2(CloseConnection, void(QuicErrorCode, bool));
+  MOCK_METHOD2(OnUnrecoverableError,
+               void(QuicErrorCode, ConnectionCloseSource));
   MOCK_METHOD0(OnResetFecGroup, void());
 
   void SetCanWriteAnything() {
@@ -124,16 +125,16 @@ class QuicPacketGeneratorTest : public ::testing::TestWithParam<FecSendPolicy> {
 
   ~QuicPacketGeneratorTest() override {
     for (SerializedPacket& packet : packets_) {
-      delete packet.packet;
-      delete packet.retransmittable_frames;
+      delete[] packet.encrypted_buffer;
+      QuicUtils::ClearSerializedPacket(&packet);
     }
   }
 
   void SavePacket(SerializedPacket* packet) {
+    packet->encrypted_buffer = QuicUtils::CopyBuffer(*packet);
     packets_.push_back(*packet);
-    ASSERT_FALSE(packet->packet->owns_buffer());
-    scoped_ptr<QuicEncryptedPacket> encrypted_deleter(packets_.back().packet);
-    packets_.back().packet = packets_.back().packet->Clone();
+    packet->encrypted_buffer = nullptr;
+    packet->retransmittable_frames.clear();
   }
 
  protected:
@@ -158,15 +159,16 @@ class QuicPacketGeneratorTest : public ::testing::TestWithParam<FecSendPolicy> {
         contents.num_mtu_discovery_frames + num_retransmittable_frames;
 
     if (num_retransmittable_frames == 0) {
-      ASSERT_TRUE(packet.retransmittable_frames == nullptr);
+      ASSERT_TRUE(packet.retransmittable_frames.empty());
     } else {
-      ASSERT_TRUE(packet.retransmittable_frames != nullptr);
+      ASSERT_FALSE(packet.retransmittable_frames.empty());
       EXPECT_EQ(num_retransmittable_frames,
-                packet.retransmittable_frames->frames().size());
+                packet.retransmittable_frames.size());
     }
 
-    ASSERT_TRUE(packet.packet != nullptr);
-    ASSERT_TRUE(simple_framer_.ProcessPacket(*packet.packet));
+    ASSERT_TRUE(packet.encrypted_buffer != nullptr);
+    ASSERT_TRUE(simple_framer_.ProcessPacket(
+        QuicEncryptedPacket(packet.encrypted_buffer, packet.encrypted_length)));
     EXPECT_EQ(num_frames, simple_framer_.num_frames());
     EXPECT_EQ(contents.num_ack_frames, simple_framer_.ack_frames().size());
     EXPECT_EQ(contents.num_connection_close_frames,
@@ -189,10 +191,11 @@ class QuicPacketGeneratorTest : public ::testing::TestWithParam<FecSendPolicy> {
   void CheckPacketHasSingleStreamFrame(size_t packet_index) {
     ASSERT_GT(packets_.size(), packet_index);
     const SerializedPacket& packet = packets_[packet_index];
-    ASSERT_TRUE(packet.retransmittable_frames != nullptr);
-    EXPECT_EQ(1u, packet.retransmittable_frames->frames().size());
-    ASSERT_TRUE(packet.packet != nullptr);
-    ASSERT_TRUE(simple_framer_.ProcessPacket(*packet.packet));
+    ASSERT_FALSE(packet.retransmittable_frames.empty());
+    EXPECT_EQ(1u, packet.retransmittable_frames.size());
+    ASSERT_TRUE(packet.encrypted_buffer != nullptr);
+    ASSERT_TRUE(simple_framer_.ProcessPacket(
+        QuicEncryptedPacket(packet.encrypted_buffer, packet.encrypted_length)));
     EXPECT_EQ(1u, simple_framer_.num_frames());
     EXPECT_EQ(1u, simple_framer_.stream_frames().size());
   }
@@ -206,9 +209,10 @@ class QuicPacketGeneratorTest : public ::testing::TestWithParam<FecSendPolicy> {
   void CheckPacketIsFec(size_t packet_index, QuicPacketNumber fec_group) {
     ASSERT_GT(packets_.size(), packet_index);
     const SerializedPacket& packet = packets_[packet_index];
-    ASSERT_TRUE(packet.retransmittable_frames == nullptr);
-    ASSERT_TRUE(packet.packet != nullptr);
-    ASSERT_TRUE(simple_framer_.ProcessPacket(*packet.packet));
+    ASSERT_TRUE(packet.retransmittable_frames.empty());
+    ASSERT_TRUE(packet.encrypted_buffer != nullptr);
+    ASSERT_TRUE(simple_framer_.ProcessPacket(
+        QuicEncryptedPacket(packet.encrypted_buffer, packet.encrypted_length)));
     EXPECT_TRUE(simple_framer_.header().fec_flag);
   }
 
@@ -415,7 +419,7 @@ TEST_P(QuicPacketGeneratorTest, ConsumeData_Handshake) {
 
   ASSERT_EQ(1u, packets_.size());
   ASSERT_EQ(kDefaultMaxPacketSize, generator_.GetMaxPacketLength());
-  EXPECT_EQ(kDefaultMaxPacketSize, packets_[0].packet->length());
+  EXPECT_EQ(kDefaultMaxPacketSize, packets_[0].encrypted_length);
 }
 
 TEST_P(QuicPacketGeneratorTest, ConsumeData_EmptyData) {
@@ -693,7 +697,7 @@ TEST_P(QuicPacketGeneratorTest, ConsumeData_FramesPreviouslyQueued) {
   size_t length =
       NullEncrypter().GetCiphertextSize(0) +
       GetPacketHeaderSize(
-          creator_->connection_id_length(), true, /*include_path_id=*/false,
+          creator_->connection_id_length(), kIncludeVersion, !kIncludePathId,
           QuicPacketCreatorPeer::NextPacketNumberLength(creator_),
           NOT_IN_FEC_GROUP) +
       // Add an extra 3 bytes for the payload and 1 byte so BytesFree is larger
@@ -1415,8 +1419,8 @@ TEST_P(QuicPacketGeneratorTest, SetMaxPacketLength_Initial) {
   // ensure that |max_packet_length_| does not get changed incorrectly by the
   // generator after first packet is serialized.
   ASSERT_EQ(3u, packets_.size());
-  EXPECT_EQ(packet_len, packets_[0].packet->length());
-  EXPECT_EQ(packet_len, packets_[1].packet->length());
+  EXPECT_EQ(packet_len, packets_[0].encrypted_length);
+  EXPECT_EQ(packet_len, packets_[1].encrypted_length);
   CheckAllPacketsHaveSingleStreamFrame();
 }
 
@@ -1463,8 +1467,8 @@ TEST_P(QuicPacketGeneratorTest, SetMaxPacketLength_Middle) {
   // We expect first data chunk to get fragmented, but the second one to fit
   // into a single packet.
   ASSERT_EQ(3u, packets_.size());
-  EXPECT_EQ(kDefaultMaxPacketSize, packets_[0].packet->length());
-  EXPECT_LE(kDefaultMaxPacketSize, packets_[2].packet->length());
+  EXPECT_EQ(kDefaultMaxPacketSize, packets_[0].encrypted_length);
+  EXPECT_LE(kDefaultMaxPacketSize, packets_[2].encrypted_length);
   CheckAllPacketsHaveSingleStreamFrame();
 }
 
@@ -1515,7 +1519,7 @@ TEST_P(QuicPacketGeneratorTest, SetMaxPacketLength_Midpacket) {
   // We expect the first packet to contain two frames, and to not reflect the
   // packet size change.
   ASSERT_EQ(1u, packets_.size());
-  EXPECT_EQ(kDefaultMaxPacketSize, packets_[0].packet->length());
+  EXPECT_EQ(kDefaultMaxPacketSize, packets_[0].encrypted_length);
 
   PacketContents contents;
   contents.num_stream_frames = 2;
@@ -1575,8 +1579,8 @@ TEST_P(QuicPacketGeneratorTest, SetMaxPacketLength_MidpacketFlush) {
   // We expect the first packet to be underfilled, and the second packet be up
   // to the new max packet size.
   ASSERT_EQ(2u, packets_.size());
-  EXPECT_GT(kDefaultMaxPacketSize, packets_[0].packet->length());
-  EXPECT_EQ(packet_len, packets_[1].packet->length());
+  EXPECT_GT(kDefaultMaxPacketSize, packets_[0].encrypted_length);
+  EXPECT_EQ(packet_len, packets_[1].encrypted_length);
 
   CheckAllPacketsHaveSingleStreamFrame();
 }
@@ -1596,7 +1600,7 @@ TEST_P(QuicPacketGeneratorTest, GenerateMtuDiscoveryPacket_Simple) {
 
   EXPECT_FALSE(generator_.HasQueuedFrames());
   ASSERT_EQ(1u, packets_.size());
-  EXPECT_EQ(target_mtu, packets_[0].packet->length());
+  EXPECT_EQ(target_mtu, packets_[0].encrypted_length);
 
   PacketContents contents;
   contents.num_mtu_discovery_frames = 1;
@@ -1643,9 +1647,9 @@ TEST_P(QuicPacketGeneratorTest, GenerateMtuDiscoveryPacket_SurroundedByData) {
   EXPECT_FALSE(generator_.HasQueuedFrames());
 
   ASSERT_EQ(5u, packets_.size());
-  EXPECT_EQ(kDefaultMaxPacketSize, packets_[0].packet->length());
-  EXPECT_EQ(target_mtu, packets_[2].packet->length());
-  EXPECT_EQ(kDefaultMaxPacketSize, packets_[3].packet->length());
+  EXPECT_EQ(kDefaultMaxPacketSize, packets_[0].encrypted_length);
+  EXPECT_EQ(target_mtu, packets_[2].encrypted_length);
+  EXPECT_EQ(kDefaultMaxPacketSize, packets_[3].encrypted_length);
 
   PacketContents probe_contents;
   probe_contents.num_mtu_discovery_frames = 1;
@@ -1678,7 +1682,8 @@ TEST_P(QuicPacketGeneratorTest, DontCrashOnInvalidStopWaiting) {
 
   // This will not serialize any packets, because of the invalid frame.
   EXPECT_CALL(delegate_,
-              CloseConnection(QUIC_FAILED_TO_SERIALIZE_PACKET, false));
+              OnUnrecoverableError(QUIC_FAILED_TO_SERIALIZE_PACKET,
+                                   ConnectionCloseSource::FROM_SELF));
   EXPECT_DFATAL(generator_.FinishBatchOperations(),
                 "packet_number_length 1 is too small "
                 "for least_unacked_delta: 1001");

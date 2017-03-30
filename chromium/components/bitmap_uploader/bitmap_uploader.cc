@@ -16,10 +16,7 @@
 #include "mojo/converters/surfaces/surfaces_utils.h"
 #include "mojo/public/c/gles2/chromium_extension.h"
 #include "mojo/public/c/gles2/gles2.h"
-#include "mojo/services/network/public/interfaces/url_loader.mojom.h"
-#include "mojo/shell/public/cpp/application_impl.h"
-#include "mojo/shell/public/cpp/connect.h"
-#include "mojo/shell/public/interfaces/shell.mojom.h"
+#include "mojo/shell/public/cpp/connector.h"
 
 namespace bitmap_uploader {
 namespace {
@@ -29,8 +26,6 @@ const uint32_t g_transparent_color = 0x00000000;
 void LostContext(void*) {
   // TODO(fsamuel): Figure out if there's something useful to do here.
 }
-
-void OnGotContentHandlerID(uint32_t content_handler_id) {}
 
 }  // namespace
 
@@ -51,19 +46,11 @@ BitmapUploader::~BitmapUploader() {
   MojoGLES2DestroyContext(gles2_context_);
 }
 
-void BitmapUploader::Init(mojo::Shell* shell) {
-  surface_ = window_->RequestSurface(mus::mojom::SURFACE_TYPE_DEFAULT);
+void BitmapUploader::Init(mojo::Connector* connector) {
+  surface_ = window_->RequestSurface(mus::mojom::SurfaceType::DEFAULT);
   surface_->BindToThread();
 
-  mojo::ServiceProviderPtr gpu_service_provider;
-  mojo::URLRequestPtr request2(mojo::URLRequest::New());
-  request2->url = mojo::String::From("mojo:mus");
-  shell->ConnectToApplication(std::move(request2),
-                              mojo::GetProxy(&gpu_service_provider), nullptr,
-                              mojo::CreatePermissiveCapabilityFilter(),
-                              base::Bind(&OnGotContentHandlerID));
-  ConnectToService(gpu_service_provider.get(), &gpu_service_);
-
+  connector->ConnectToInterface("mojo:mus", &gpu_service_);
   mus::mojom::CommandBufferPtr gles2_client;
   gpu_service_->CreateOffscreenGLES2Context(GetProxy(&gles2_client));
   gles2_context_ = MojoGLES2CreateContext(
@@ -128,9 +115,9 @@ void BitmapUploader::Upload() {
                     GL_UNSIGNED_BYTE,
                     &((*bitmap_)[0]));
 
-    GLbyte mailbox[GL_MAILBOX_SIZE_CHROMIUM];
-    glGenMailboxCHROMIUM(mailbox);
-    glProduceTextureCHROMIUM(GL_TEXTURE_2D, mailbox);
+    gpu::Mailbox mailbox;
+    glGenMailboxCHROMIUM(mailbox.name);
+    glProduceTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
 
     const GLuint64 fence_sync = glInsertFenceSyncCHROMIUM();
     glShallowFlushCHROMIUM();
@@ -142,24 +129,17 @@ void BitmapUploader::Upload() {
         mus::mojom::TransferableResource::New();
     resource->id = next_resource_id_++;
     resource_to_texture_id_map_[resource->id] = texture_id;
-    resource->format = mus::mojom::RESOURCE_FORMAT_RGBA_8888;
+    resource->format = mus::mojom::ResourceFormat::RGBA_8888;
     resource->filter = GL_LINEAR;
     resource->size = bitmap_size.Clone();
-    mus::mojom::MailboxHolderPtr mailbox_holder =
-        mus::mojom::MailboxHolder::New();
-    mailbox_holder->mailbox = mus::mojom::Mailbox::New();
-    for (int i = 0; i < GL_MAILBOX_SIZE_CHROMIUM; ++i)
-      mailbox_holder->mailbox->name.push_back(mailbox[i]);
-    mailbox_holder->texture_target = GL_TEXTURE_2D;
-    mailbox_holder->sync_token =
-        mus::mojom::SyncToken::From<gpu::SyncToken>(sync_token);
-    resource->mailbox_holder = std::move(mailbox_holder);
+    resource->mailbox_holder =
+        gpu::MailboxHolder(mailbox, sync_token, GL_TEXTURE_2D);
     resource->read_lock_fences_enabled = false;
     resource->is_software = false;
     resource->is_overlay_candidate = false;
 
     mus::mojom::QuadPtr quad = mus::mojom::Quad::New();
-    quad->material = mus::mojom::MATERIAL_TEXTURE_CONTENT;
+    quad->material = mus::mojom::Material::TEXTURE_CONTENT;
 
     mojo::RectPtr rect = mojo::Rect::New();
     if (width_ <= bounds.width() && height_ <= bounds.height()) {
@@ -205,7 +185,7 @@ void BitmapUploader::Upload() {
 
   if (color_ != g_transparent_color) {
     mus::mojom::QuadPtr quad = mus::mojom::Quad::New();
-    quad->material = mus::mojom::MATERIAL_SOLID_COLOR;
+    quad->material = mus::mojom::Material::SOLID_COLOR;
     quad->rect = mojo::Rect::From(bounds);
     quad->opaque_rect = mojo::Rect::New();
     quad->visible_rect = mojo::Rect::From(bounds);
@@ -260,7 +240,7 @@ void BitmapUploader::ReturnResources(
     mus::mojom::ReturnedResourcePtr resource = std::move(resources[i]);
     DCHECK_EQ(1, resource->count);
     glWaitSyncTokenCHROMIUM(
-        resource->sync_token.To<gpu::SyncToken>().GetConstData());
+        resource->sync_token.GetConstData());
     uint32_t texture_id = resource_to_texture_id_map_[resource->id];
     DCHECK_NE(0u, texture_id);
     resource_to_texture_id_map_.erase(resource->id);

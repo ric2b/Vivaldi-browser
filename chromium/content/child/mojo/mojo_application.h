@@ -38,9 +38,7 @@ class MojoApplication {
   void OnActivate(const IPC::PlatformFileForTransit& file);
 
   scoped_refptr<base::SequencedTaskRunner> io_task_runner_;
-
   ChannelInit channel_init_;
-
   ServiceRegistryImpl service_registry_;
 
   DISALLOW_COPY_AND_ASSIGN(MojoApplication);

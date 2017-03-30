@@ -17,6 +17,8 @@
 #ifndef SkUserConfig_DEFINED
 #define SkUserConfig_DEFINED
 
+#include "skia/ext/skia_histogram.h"
+
 /*  SkTypes.h, the root of the public header files, does the following trick:
 
     #include <SkPreConfig.h>
@@ -214,6 +216,13 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #   define SK_SUPPORT_LEGACY_GETDEVICE
 #endif
 
+// Workaround for poor anisotropic mipmap quality,
+// pending Skia ripmap support.
+// (https://bugs.chromium.org/p/skia/issues/detail?id=4863)
+#ifndef    SK_SUPPORT_LEGACY_ANISOTROPIC_MIPMAP_SCALE
+#   define SK_SUPPORT_LEGACY_ANISOTROPIC_MIPMAP_SCALE
+#endif
+
 #ifndef    SK_SUPPORT_LEGACY_REFENCODEDDATA_NOCTX
 #   define SK_SUPPORT_LEGACY_REFENCODEDDATA_NOCTX
 #endif
@@ -226,16 +235,8 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #   define SK_IGNORE_GPU_DITHER
 #endif
 
-#ifndef    SK_SUPPORT_LEGACY_HQ_DOWNSAMPLING
-#   define SK_SUPPORT_LEGACY_HQ_DOWNSAMPLING
-#endif
-
-#ifndef    SK_SUPPORT_LEGACY_PATH_MEASURE_TVALUE
-#   define SK_SUPPORT_LEGACY_PATH_MEASURE_TVALUE
-#endif
-
-#ifndef    SK_SUPPORT_LEGACY_BITMAP_FILTER
-#   define SK_SUPPORT_LEGACY_BITMAP_FILTER
+#ifndef    SK_SUPPORT_LEGACY_EVAL_CUBIC
+#   define SK_SUPPORT_LEGACY_EVAL_CUBIC
 #endif
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi

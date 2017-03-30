@@ -45,6 +45,7 @@ AutomationUtil.findNodePre = function(cur, dir, pred) {
     child = dir == Dir.BACKWARD ?
         child.previousSibling : child.nextSibling;
   }
+  return null;
 };
 
 /**
@@ -70,6 +71,8 @@ AutomationUtil.findNodePost = function(cur, dir, pred) {
 
   if (pred(cur))
     return cur;
+
+  return null;
 };
 
 /**
@@ -90,9 +93,9 @@ AutomationUtil.findNodePost = function(cur, dir, pred) {
 AutomationUtil.findNextNode = function(cur, dir, pred, opt_restrictions) {
   var restrictions = {};
   opt_restrictions = opt_restrictions || {leaf: undefined,
-                                          root: undefined,
-                                          visit: undefined,
-                                          skipInitialSubtree: false};
+      root: undefined,
+      visit: undefined,
+      skipInitialSubtree: !AutomationPredicate.container(cur)};
   restrictions.leaf = opt_restrictions.leaf || function(node) {
     // Treat nodes matched by |pred| as leaves except for containers.
     return !AutomationPredicate.container(node) && pred(node);
@@ -115,44 +118,22 @@ AutomationUtil.findNextNode = function(cur, dir, pred, opt_restrictions) {
 /**
  * Given nodes a_1, ..., a_n starting at |cur| in pre order traversal, apply
  * |pred| to a_i and a_(i - 1) until |pred| is satisfied.  Returns a_(i - 1) or
- * a_i (depending on opt_options.before) or null if no match was found.
+ * a_i (depending on opt_before) or null if no match was found.
  * @param {!AutomationNode} cur
  * @param {Dir} dir
  * @param {AutomationPredicate.Binary} pred
- * @param {{filter: (AutomationPredicate.Unary|undefined),
- *      before: boolean?}=} opt_options
- *     filter - Filters which candidate nodes to consider. Defaults to leaf
- *         only.
- *     before - True to return a_(i - 1); a_i otherwise. Defaults to false.
+ * @param {boolean=} opt_before True to return a_(i - 1); a_i otherwise.
+ *                              Defaults to false.
  * @return {AutomationNode}
  */
-AutomationUtil.findNodeUntil = function(cur, dir, pred, opt_options) {
-  opt_options =
-      opt_options || {filter: AutomationPredicate.leaf, before: false};
-  if (!opt_options.filter)
-    opt_options.filter = AutomationPredicate.leaf;
-
-  var before = null;
-  var after = null;
-  var prev = cur;
-  AutomationUtil.findNextNode(cur,
-      dir,
-      function(candidate) {
-        if (!opt_options.filter(candidate))
-          return false;
-
-        var satisfied = pred(prev, candidate);
-
-        prev = candidate;
-        if (!satisfied)
-          before = candidate;
-        else
-          after = candidate;
-        return satisfied;
-      },
-      {leaf: AutomationPredicate.leaf, skipInitialSubtree: true});
-
-  return opt_options.before ? before : after;
+AutomationUtil.findNodeUntil = function(cur, dir, pred, opt_before) {
+  var before = cur;
+  var after = before;
+  do {
+    before = after;
+    after = AutomationUtil.findNextNode(before, dir, AutomationPredicate.leaf);
+  } while (after && !pred(before, after));
+  return opt_before ? before : after;
 };
 
 /**

@@ -175,9 +175,7 @@ TEST(VerifySignedDataTest, EcdsaPrime256v1Sha512UsingEcmqvKey) {
 }
 
 TEST(VerifySignedDataTest, RsaPkcs1Sha1KeyParamsAbsent) {
-  // TODO(eroman): This should fail! (key algoritm parsing is too permissive)
-  // See https://crbug.com/522228
-  RunTestCase(SUCCESS, "rsa-pkcs1-sha1-key-params-absent.pem");
+  RunTestCase(FAILURE, "rsa-pkcs1-sha1-key-params-absent.pem");
 }
 
 TEST(VerifySignedDataTest, RsaPssSha1Salt20UsingPssKeyNoParams) {
@@ -211,15 +209,11 @@ TEST(VerifySignedDataTest, EcdsaPrime256v1Sha512SpkiParamsNull) {
 }
 
 TEST(VerifySignedDataTest, RsaPkcs1Sha256UsingIdEaRsa) {
-  // TODO(eroman): This should fail! (shouldn't recognize this weird OID).
-  // See https://crbug.com/522228
-  RunTestCase(SUCCESS, "rsa-pkcs1-sha256-using-id-ea-rsa.pem");
+  RunTestCase(FAILURE, "rsa-pkcs1-sha256-using-id-ea-rsa.pem");
 }
 
 TEST(VerifySignedDataTest, RsaPkcs1Sha256SpkiNonNullParams) {
-  // TODO(eroman): This should fail! (shouldn't recognize bogus params in rsa
-  // SPKI). See https://crbug.com/522228
-  RunTestCase(SUCCESS, "rsa-pkcs1-sha256-spki-non-null-params.pem");
+  RunTestCase(FAILURE, "rsa-pkcs1-sha256-spki-non-null-params.pem");
 }
 
 TEST(VerifySignedDataTest, EcdsaPrime256v1Sha512UnusedBitsSignature) {

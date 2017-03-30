@@ -84,11 +84,19 @@ public:
     bool selectionStartHasSpellingMarkerFor(int from, int length) const;
     void updateMarkersForWordsAffectedByEditing(bool onlyHandleWordsContainingSelection);
     void cancelCheck();
-    void chunkAndMarkAllMisspellingsAndBadGrammar(Node*);
+    void chunkAndMarkAllMisspellingsAndBadGrammar(Node*, const EphemeralRange&);
     void requestTextChecking(const Element&);
 
     // Exposed for testing only
     SpellCheckRequester& spellCheckRequester() const { return *m_spellCheckRequester; }
+
+    // The leak detector will report leaks should queued requests be posted
+    // while it GCs repeatedly, as the requests keep their associated element
+    // alive.
+    //
+    // Hence allow the leak detector to effectively stop the spell checker to
+    // ensure leak reporting stability.
+    void prepareForLeakDetection();
 
 private:
     explicit SpellChecker(LocalFrame&);

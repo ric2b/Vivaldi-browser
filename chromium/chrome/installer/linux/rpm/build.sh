@@ -112,9 +112,22 @@ do_package() {
       grep -vF libffmpeg.so)"
 
   # Compare the expected dependency list to the generated list.
+  #
+  # In this comparison, we allow ld-linux.so's symbol version "GLIBC_2.3"
+  # to be present but don't require it, because it is hard to predict
+  # whether it will be generated.  Referencing a __thread
+  # (thread-local/TLS) variable *sometimes* causes the compiler to generate
+  # a reference to __tls_get_addr() (depending on compiler options such as
+  # -fPIC vs. -fPIE).  This function has symbol version "GLIBC_2.3".  The
+  # linker *sometimes* optimizes away the __tls_get_addr() call using
+  # link-time code rewriting, but it might leave the symbol dependency in
+  # place -- there are no guarantees.
   BAD_DIFF=0
-  diff "$SCRIPTDIR/expected_deps_$ARCHITECTURE" \
-      <(echo "${DETECTED_DEPENDS}") || BAD_DIFF=1
+  diff -u "$SCRIPTDIR/expected_deps_$ARCHITECTURE" \
+      <(echo "${DETECTED_DEPENDS}" | \
+        LANG=C sort | \
+        grep -v '^ld-linux.*\(GLIBC_2\.3\)') \
+      || BAD_DIFF=1
   if [ $BAD_DIFF -ne 0 ] && [ -z "${IGNORE_DEPS_CHANGES:-}" ]; then
     echo
     echo "ERROR: Shared library dependencies changed!"
@@ -125,11 +138,21 @@ do_package() {
     exit $BAD_DIFF
   fi
 
-  # libgdk_pixbuf is added in LSB 3.2 and no longer explicitly required.
-  # libcairo, libpangocairo, libasound are in LSB 4. and no longer explicitly
-  # required.
+  # lsb implies many dependencies.
+  #
+  # libcurl was for NPAPI Flash. TODO(thestig): Remove?
+  #
+  # nss (bundled) is optional in LSB 4.0. Also specify a more recent version
+  # for security and stability updates.
+  #
+  # libstdc++.so.6 is for C++11 support.
+  #
+  # wget is for uploading crash reports with Breakpad.
+  #
   # xdg-utils is still optional in LSB 4.0.
-  # nss (bundled) is optional in LSB 4.0.
+  #
+  # zlib may not need to be there. It should be included with LSB.
+  # TODO(thestig): Figure out why there is an entry for zlib.
   #
   # We want to depend on the system SSL certs so wget can upload crash reports
   # securely, but there's no common capability between the distros. Bugs filed:
@@ -139,8 +162,12 @@ do_package() {
   #
   # We want to depend on liberation-fonts as well, but there is no such package
   # for Fedora. https://bugzilla.redhat.com/show_bug.cgi?id=1252564
-  DEPENDS="libcurl.so.4${EMPTY_VERSION}${PKG_ARCH}, \
-  libnss3.so(NSS_3.14.3)${PKG_ARCH}, \
+  # TODO(thestig): Use the liberation-fonts package once its available on all
+  # supported distros.
+  DEPENDS=" \
+  libcurl.so.4${EMPTY_VERSION}${PKG_ARCH}, \
+  libnss3.so(NSS_3.19.1)${PKG_ARCH}, \
+  libstdc++.so.6(GLIBCXX_3.4.18)${PKG_ARCH}, \
   wget, \
   xdg-utils, \
   zlib, \

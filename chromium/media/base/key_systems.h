@@ -16,8 +16,7 @@
 
 namespace media {
 
-// Provides an interface for querying registered key systems. The exposed API is
-// only intended to support unprefixed EME.
+// Provides an interface for querying registered key systems.
 //
 // Many of the original static methods are still available, they should be
 // migrated into this interface over time (or removed).
@@ -71,58 +70,34 @@ class MEDIA_EXPORT KeySystems {
   virtual ~KeySystems() {};
 };
 
-// Prefixed EME API only supports prefixed (webkit-) key system name for
-// certain key systems. But internally only unprefixed key systems are
-// supported. The following two functions help convert between prefixed and
-// unprefixed key system names.
-
-// Gets the unprefixed key system name for |key_system|.
-MEDIA_EXPORT std::string GetUnprefixedKeySystemName(
-    const std::string& key_system);
-
-// Gets the prefixed key system name for |key_system|.
-MEDIA_EXPORT std::string GetPrefixedKeySystemName(
-    const std::string& key_system);
-
+// TODO(ddorwin): WebContentDecryptionModuleSessionImpl::initializeNewSession()
+// is violating this rule! https://crbug.com/249976.
 // Use for prefixed EME only!
 MEDIA_EXPORT bool IsSupportedKeySystemWithInitDataType(
     const std::string& key_system,
     EmeInitDataType init_data_type);
 
-// Use for prefixed EME only!
-// Returns whether |key_system| is a real supported key system that can be
-// instantiated.
-// Abstract parent |key_system| strings will return false.
-MEDIA_EXPORT bool PrefixedIsSupportedConcreteKeySystem(
-    const std::string& key_system);
-
-// Use for prefixed EME only!
-// Returns whether |key_system| supports the specified media type and codec(s).
-// To be used with prefixed EME only as it generates UMAs based on the query.
-MEDIA_EXPORT bool PrefixedIsSupportedKeySystemWithMediaMimeType(
-    const std::string& mime_type,
-    const std::vector<std::string>& codecs,
-    const std::string& key_system);
-
 // Returns a name for |key_system| suitable to UMA logging.
 MEDIA_EXPORT std::string GetKeySystemNameForUMA(const std::string& key_system);
 
-// Returns whether AesDecryptor can be used for the given |concrete_key_system|.
-MEDIA_EXPORT bool CanUseAesDecryptor(const std::string& concrete_key_system);
+// Returns whether AesDecryptor can be used for the given |key_system|.
+MEDIA_EXPORT bool CanUseAesDecryptor(const std::string& key_system);
 
 #if defined(ENABLE_PEPPER_CDMS)
-// Returns the Pepper MIME type for |concrete_key_system|.
-// Returns empty string if |concrete_key_system| is unknown or not Pepper-based.
-MEDIA_EXPORT std::string GetPepperType(
-    const std::string& concrete_key_system);
+// Returns the Pepper MIME type for |key_system|.
+// Returns empty string if |key_system| is unknown or not Pepper-based.
+MEDIA_EXPORT std::string GetPepperType(const std::string& key_system);
 #endif
 
 #if defined(UNIT_TEST)
 // Helper functions to add container/codec types for testing purposes.
-MEDIA_EXPORT void AddContainerMask(const std::string& container, uint32_t mask);
+// Call AddCodecMask() first to ensure the mask values passed to
+// AddMimeTypeCodecMask() already exist.
 MEDIA_EXPORT void AddCodecMask(EmeMediaType media_type,
                                const std::string& codec,
                                uint32_t mask);
+MEDIA_EXPORT void AddMimeTypeCodecMask(const std::string& mime_type,
+                                       uint32_t mask);
 #endif  // defined(UNIT_TEST)
 
 }  // namespace media

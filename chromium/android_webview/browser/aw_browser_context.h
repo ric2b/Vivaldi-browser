@@ -9,7 +9,6 @@
 
 #include "android_webview/browser/aw_download_manager_delegate.h"
 #include "android_webview/browser/aw_message_port_service.h"
-#include "android_webview/browser/aw_metrics_service_client.h"
 #include "android_webview/browser/aw_ssl_host_state_delegate.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
@@ -36,10 +35,6 @@ class DataReductionProxyConfigurator;
 class DataReductionProxyIOData;
 class DataReductionProxyService;
 class DataReductionProxySettings;
-}
-
-namespace net {
-class CookieStore;
 }
 
 namespace policy {
@@ -85,9 +80,8 @@ class AwBrowserContext : public content::BrowserContext,
   static void SetDataReductionProxyEnabled(bool enabled);
   static void SetLegacyCacheRemovalDelayForTest(int delay_ms);
 
-  // These map to BrowserMainParts::Pre/PostMainMessageLoopRun.
+  // Maps to BrowserMainParts::PreMainMessageLoopRun.
   void PreMainMessageLoopRun();
-  void PostMainMessageLoopRun();
 
   // These methods map to Add methods in visitedlink::VisitedLinkMaster.
   void AddVisitedURLs(const std::vector<GURL>& urls);
@@ -151,7 +145,6 @@ class AwBrowserContext : public content::BrowserContext,
   base::FilePath context_storage_path_;
 
   JniDependencyFactory* native_factory_;
-  scoped_refptr<net::CookieStore> cookie_store_;
   scoped_refptr<AwURLRequestContextGetter> url_request_context_getter_;
   scoped_refptr<AwQuotaManagerBridge> quota_manager_bridge_;
   scoped_ptr<AwFormDatabaseService> form_database_service_;

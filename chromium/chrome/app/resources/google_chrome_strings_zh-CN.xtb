@@ -3,7 +3,6 @@
 <translationbundle lang="zh-CN">
 <translation id="1001534784610492198">安装程序存档文件损坏或无效。请重新下载 Google Chrome。</translation>
 <translation id="1013290471399003443">Chrome 已证实此网站的证书是由<ph name="ISSUER" />签发的。服务器提供了有效的 Certificate Transparency 信息。</translation>
-<translation id="1016765312371154165">Chrome 未正确关闭。</translation>
 <translation id="103396972844768118">与您的 Chrome 数据相关的重要信息</translation>
 <translation id="1035334672863811645">登录 Chrome</translation>
 <translation id="1061441684050139317">Chrome 需要具有麦克风使用权限，才能批准此网站的分享请求。</translation>
@@ -51,7 +50,6 @@
 <translation id="2397416548179033562">显示 Chrome 菜单</translation>
 <translation id="2429317896000329049">由于您的网域停用了同步功能，Google Chrome无法同步您的数据。</translation>
 <translation id="2485422356828889247">卸载</translation>
-<translation id="2576431527583832481">Chrome 浏览器刚刚经过了改进！新版本已推出。</translation>
 <translation id="2580411288591421699">无法安装与当前运行版本相同的 Google Chrome 浏览器。请关闭 Google Chrome 浏览器，然后重试。</translation>
 <translation id="2582790009689336987">Google Chrome 将不再支持此 Linux 系统，因此这台计算机很快将停止接收 Google Chrome 更新。</translation>
 <translation id="2588322182880276190">Chrome 徽标</translation>
@@ -112,7 +110,6 @@
 <translation id="4633000520311261472">为了提高 Chrome 的安全性，系统停用了一些未列在 <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />中、可能是在您不知情的情况下添加的扩展程序。</translation>
 <translation id="4700157086864140907">Google Chrome会将您在浏览器中输入的内容发送到Google服务器，并使用Google搜索所用的拼写检查技术，因而可为您提供更智能的拼写检查功能。</translation>
 <translation id="4728575227883772061">未知错误导致安装失败。如果 Google Chrome 浏览器正在运行，请将其关闭，然后重试。</translation>
-<translation id="473775607612524610">更新</translation>
 <translation id="4743926867934016338">接受并搜索</translation>
 <translation id="4751441238232965030">此计算机很快将停止接收 32 位 Google Chrome 更新。请升级到 64 位 Google Chrome。</translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
@@ -209,7 +206,6 @@
 <translation id="7808348361785373670">从Chrome中移除…</translation>
 <translation id="7825851276765848807">由于未指定的错误导致安装失败。请重新下载 Google Chrome 浏览器。</translation>
 <translation id="7890208801193284374">如果您与亲朋好友共用计算机，他们将能够使用单独的帐户进行浏览，并可随心所欲地设置Chrome。</translation>
-<translation id="8000275528373650868">Google Chrome 浏览器要求操作系统必须为 Windows Vista 或者 Windows XP SP2 或更高版本。</translation>
 <translation id="8005540215158006229">Chrome 浏览器即将准备就绪。</translation>
 <translation id="8008534537613507642">重新安装Chrome</translation>
 <translation id="8030318113982266900">正在将您的设备更新至“<ph name="CHANNEL_NAME" />”版…</translation>
@@ -238,6 +234,7 @@
 <translation id="8851136666856101339">主体内容</translation>
 <translation id="8862326446509486874">您的权限不足，无法进行系统级安装。请尝试以管理员身份再次运行安装程序。</translation>
 <translation id="9026991721384951619">您的帐户登录详细信息已过期，Chrome操作系统无法同步您的数据。</translation>
+<translation id="9067395829937117663">Google Chrome 要求操作系统必须为 Windows 7 或更高版本。</translation>
 <translation id="9102715433345326100">这是恶意文件，Chrome 已将其拦截。</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />警告<ph name="END_BOLD" />：Google Chrome 浏览器无法阻止扩展程序记录您的浏览记录。要在隐身模式下停用此扩展程序，请取消选中此选项。</translation>
 <translation id="911206726377975832">同时删除您的浏览数据吗？</translation>

@@ -7,9 +7,6 @@
 #include <string>
 
 #include "base/guid.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/pref_service_factory.h"
-#include "base/prefs/testing_pref_store.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_manager.h"
@@ -22,6 +19,9 @@
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/os_crypt/os_crypt.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/pref_service_factory.h"
+#include "components/prefs/testing_pref_store.h"
 #include "components/signin/core/browser/account_fetcher_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/common/signin_pref_names.h"
@@ -62,7 +62,7 @@ scoped_ptr<PrefService> PrefServiceForTesting() {
                                 AccountTrackerService::MIGRATION_NOT_STARTED);
   registry->RegisterInt64Pref(AccountFetcherService::kLastUpdatePref, 0);
 
-  base::PrefServiceFactory factory;
+  PrefServiceFactory factory;
   factory.set_user_prefs(make_scoped_refptr(new TestingPrefStore()));
   return factory.Create(registry.get());
 }
@@ -310,6 +310,39 @@ void SetServerCreditCards(AutofillTable* table,
 
     table->UnmaskServerCreditCard(card, card.number());
   }
+}
+
+void FillUploadField(AutofillUploadContents::Field* field,
+                     unsigned signature,
+                     const char* name,
+                     const char* control_type,
+                     const char* label,
+                     const char* autocomplete,
+                     unsigned autofill_type) {
+  field->set_signature(signature);
+  if (name)
+    field->set_name(name);
+  if (control_type)
+    field->set_type(control_type);
+  if (label)
+    field->set_label(label);
+  if (autocomplete)
+    field->set_autocomplete(autocomplete);
+  field->set_autofill_type(autofill_type);
+}
+
+void FillQueryField(AutofillQueryContents::Form::Field* field,
+                    unsigned signature,
+                    const char* name,
+                    const char* control_type,
+                    const char* label) {
+  field->set_signature(signature);
+  if (name)
+    field->set_name(name);
+  if (control_type)
+    field->set_type(control_type);
+  if (label)
+    field->set_label(label);
 }
 
 }  // namespace test

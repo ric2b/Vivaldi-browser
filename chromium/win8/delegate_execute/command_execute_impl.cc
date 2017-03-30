@@ -32,7 +32,6 @@
 #include "ui/gfx/win/dpi.h"
 #include "win8/delegate_execute/chrome_util.h"
 #include "win8/delegate_execute/delegate_execute_util.h"
-#include "win8/viewer/metro_viewer_constants.h"
 
 namespace {
 // Helper function to retrieve the url from IShellItem interface passed in.
@@ -65,44 +64,6 @@ HRESULT GetUrlFromShellItem(IShellItem* shell_item, base::string16* url) {
   *url = static_cast<const wchar_t*>(name);
   AtlTrace("Retrieved url from display name %ls\n", url->c_str());
   return S_OK;
-}
-
-bool LaunchChromeBrowserProcess() {
-  base::FilePath delegate_exe_path;
-  if (!PathService::Get(base::FILE_EXE, &delegate_exe_path))
-    return false;
-
-  // First try and go up a level to find chrome.exe.
-  base::FilePath chrome_exe_path =
-      delegate_exe_path.DirName()
-                       .DirName()
-                       .Append(chrome::kBrowserProcessExecutableName);
-  if (!base::PathExists(chrome_exe_path)) {
-    // Try looking in the current directory if we couldn't find it one up in
-    // order to support developer installs.
-    chrome_exe_path =
-        delegate_exe_path.DirName()
-                         .Append(chrome::kBrowserProcessExecutableName);
-  }
-
-  if (!base::PathExists(chrome_exe_path)) {
-    AtlTrace("Could not locate vivaldi.exe at: %ls\n",
-             chrome_exe_path.value().c_str());
-    return false;
-  }
-
-  base::CommandLine cl(chrome_exe_path);
-
-  // Prevent a Chrome window from showing up on the desktop.
-  cl.AppendSwitch(switches::kSilentLaunch);
-
-  // Tell Chrome to connect to the Metro viewer process.
-  cl.AppendSwitch(switches::kViewerConnect);
-
-  base::LaunchOptions launch_options;
-  launch_options.start_hidden = true;
-
-  return base::LaunchProcess(cl, launch_options).IsValid();
 }
 
 }  // namespace
@@ -219,18 +180,8 @@ STDMETHODIMP CommandExecuteImpl::GetValue(enum AHE_TYPE* pahe) {
     return E_FAIL;
   }
 
-  EC_HOST_UI_MODE mode = GetLaunchMode();
-  *pahe = (mode == ECHUIM_DESKTOP) ? AHE_DESKTOP : AHE_IMMERSIVE;
-
-  // If we're going to return AHE_IMMERSIVE, then both the browser process and
-  // the metro viewer need to launch and connect before the user can start
-  // browsing.  However we must not launch the metro viewer until we get a
-  // call to CommandExecuteImpl::Execute().  If we wait until then to launch
-  // the browser process as well, it will appear laggy while they connect to
-  // each other, so we pre-launch the browser process now.
-  if (*pahe == AHE_IMMERSIVE && verb_ != win8::kMetroViewerConnectVerb) {
-    LaunchChromeBrowserProcess();
-  }
+  // TODO(scottmg): Can all go eventually https://crbug.com/558054.
+  *pahe = AHE_DESKTOP;
   return S_OK;
 }
 

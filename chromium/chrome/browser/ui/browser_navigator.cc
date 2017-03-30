@@ -8,7 +8,6 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -33,6 +32,7 @@
 #include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/url_constants.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_url_handler.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
@@ -82,12 +82,9 @@ bool WindowCanOpenTabs(Browser* browser) {
 
 // Finds an existing Browser compatible with |profile|, making a new one if no
 // such Browser is located.
-Browser* GetOrCreateBrowser(Profile* profile,
-                            chrome::HostDesktopType host_desktop_type) {
-  Browser* browser = chrome::FindTabbedBrowser(profile, false,
-                                               host_desktop_type);
-  return browser ? browser : new Browser(
-      Browser::CreateParams(profile, host_desktop_type));
+Browser* GetOrCreateBrowser(Profile* profile) {
+  Browser* browser = chrome::FindTabbedBrowser(profile, false);
+  return browser ? browser : new Browser(Browser::CreateParams(profile));
 }
 
 // Change some of the navigation parameters based on the particular URL.
@@ -117,7 +114,7 @@ bool AdjustNavigateParamsForURL(chrome::NavigateParams* params) {
     }
 
     params->disposition = SINGLETON_TAB;
-    params->browser = GetOrCreateBrowser(profile, params->host_desktop_type);
+    params->browser = GetOrCreateBrowser(profile);
     params->window_action = chrome::NavigateParams::SHOW_WINDOW;
   }
 
@@ -145,7 +142,7 @@ Browser* GetBrowserForDisposition(chrome::NavigateParams* params) {
         return params->browser;
       // Find a compatible window and re-execute this command in it. Otherwise
       // re-run with NEW_WINDOW.
-      return GetOrCreateBrowser(profile, params->host_desktop_type);
+      return GetOrCreateBrowser(profile);
     case SINGLETON_TAB:
     case NEW_FOREGROUND_TAB:
     case NEW_BACKGROUND_TAB:
@@ -154,7 +151,7 @@ Browser* GetBrowserForDisposition(chrome::NavigateParams* params) {
         return params->browser;
       // Find a compatible window and re-execute this command in it. Otherwise
       // re-run with NEW_WINDOW.
-      return GetOrCreateBrowser(profile, params->host_desktop_type);
+      return GetOrCreateBrowser(profile);
     case NEW_POPUP: {
       // Make a new popup window.
       // Coerce app-style if |source| represents an app.
@@ -175,29 +172,22 @@ Browser* GetBrowserForDisposition(chrome::NavigateParams* params) {
       }
 #endif
       if (app_name.empty()) {
-        Browser::CreateParams browser_params(
-            Browser::TYPE_POPUP, profile, params->host_desktop_type);
+        Browser::CreateParams browser_params(Browser::TYPE_POPUP, profile);
         browser_params.trusted_source = params->trusted_source;
         browser_params.initial_bounds = params->window_bounds;
         return new Browser(browser_params);
       }
 
       return new Browser(Browser::CreateParams::CreateForApp(
-          app_name,
-          params->trusted_source,
-          params->window_bounds,
-          profile,
-          params->host_desktop_type));
+          app_name, params->trusted_source, params->window_bounds, profile));
     }
     case NEW_WINDOW: {
       // Make a new normal browser window.
-      return new Browser(Browser::CreateParams(profile,
-                                               params->host_desktop_type));
+      return new Browser(Browser::CreateParams(profile));
     }
     case OFF_THE_RECORD:
       // Make or find an incognito window.
-      return GetOrCreateBrowser(profile->GetOffTheRecordProfile(),
-                                params->host_desktop_type);
+      return GetOrCreateBrowser(profile->GetOffTheRecordProfile());
     // The following types all result in no navigation.
     case SUPPRESS_OPEN:
     case SAVE_TO_DISK:
@@ -537,9 +527,13 @@ void Navigate(NavigateParams* params) {
       // Try to handle non-navigational URLs that popup dialogs and such, these
       // should not actually navigate.
       if (!HandleNonNavigationAboutURL(params->url)) {
+        // NOTE(andre@vivaldi.com) : We need to store the url to navigate after
+        //                          the correct WebContents has been created in
+        //                          our WebViewGuest.
+        params->target_contents->set_delayed_open_url(
+          new std::string(params->url.spec()));
         // Perform the actual navigation, tracking whether it came from the
         // renderer.
-
         LoadURLInContents(params->target_contents, params->url, params);
       }
     }

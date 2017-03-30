@@ -22,6 +22,7 @@
 #include "content/browser/indexed_db/indexed_db_leveldb_coding.h"
 #include "content/browser/indexed_db/indexed_db_value.h"
 #include "content/browser/indexed_db/leveldb/leveldb_factory.h"
+#include "content/browser/quota/mock_quota_manager_proxy.h"
 #include "content/public/test/mock_special_storage_policy.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/url_request/url_request_test_util.h"
@@ -235,12 +236,12 @@ class IndexedDBBackingStoreTest : public testing::Test {
     const GURL origin("http://localhost:81");
     task_runner_ = new base::TestSimpleTaskRunner();
     special_storage_policy_ = new MockSpecialStoragePolicy();
+    quota_manager_proxy_ = new MockQuotaManagerProxy(nullptr, nullptr);
     special_storage_policy_->SetAllUnlimited(true);
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
-    idb_context_ = new IndexedDBContextImpl(temp_dir_.path(),
-                                            special_storage_policy_.get(),
-                                            NULL,
-                                            task_runner_.get());
+    idb_context_ = new IndexedDBContextImpl(
+        temp_dir_.path(), special_storage_policy_.get(),
+        quota_manager_proxy_.get(), task_runner_.get());
     idb_factory_ = new TestIDBFactory(idb_context_.get());
     backing_store_ =
         idb_factory_->OpenBackingStoreForTest(origin, &url_request_context_);
@@ -266,6 +267,10 @@ class IndexedDBBackingStoreTest : public testing::Test {
     m_key1 = IndexedDBKey(99, blink::WebIDBKeyTypeNumber);
     m_key2 = IndexedDBKey(ASCIIToUTF16("key2"));
     m_key3 = IndexedDBKey(ASCIIToUTF16("key3"));
+  }
+
+  void TearDown() override {
+    quota_manager_proxy_->SimulateQuotaManagerDestroyed();
   }
 
   // This just checks the data that survive getting stored and recalled, e.g.
@@ -345,6 +350,7 @@ class IndexedDBBackingStoreTest : public testing::Test {
   base::ScopedTempDir temp_dir_;
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
   scoped_refptr<MockSpecialStoragePolicy> special_storage_policy_;
+  scoped_refptr<MockQuotaManagerProxy> quota_manager_proxy_;
   scoped_refptr<IndexedDBContextImpl> idb_context_;
   scoped_refptr<TestIDBFactory> idb_factory_;
   net::TestURLRequestContext url_request_context_;
@@ -935,8 +941,7 @@ TEST_F(IndexedDBBackingStoreTest, InvalidIds) {
 TEST_F(IndexedDBBackingStoreTest, CreateDatabase) {
   const base::string16 database_name(ASCIIToUTF16("db1"));
   int64_t database_id;
-  const base::string16 version(ASCIIToUTF16("old_string_version"));
-  const int64_t int_version = 9;
+  const int64_t version = 9;
 
   const int64_t object_store_id = 99;
   const base::string16 object_store_name(ASCIIToUTF16("object_store1"));
@@ -952,7 +957,7 @@ TEST_F(IndexedDBBackingStoreTest, CreateDatabase) {
 
   {
     leveldb::Status s = backing_store_->CreateIDBDatabaseMetaData(
-        database_name, version, int_version, &database_id);
+        database_name, version, &database_id);
     EXPECT_TRUE(s.ok());
     EXPECT_GT(database_id, 0);
 
@@ -996,7 +1001,6 @@ TEST_F(IndexedDBBackingStoreTest, CreateDatabase) {
 
     // database.name is not filled in by the implementation.
     EXPECT_EQ(version, database.version);
-    EXPECT_EQ(int_version, database.int_version);
     EXPECT_EQ(database_id, database.id);
 
     s = backing_store_->GetObjectStores(database.id, &database.object_stores);
@@ -1019,25 +1023,22 @@ TEST_F(IndexedDBBackingStoreTest, CreateDatabase) {
 }
 
 TEST_F(IndexedDBBackingStoreTest, GetDatabaseNames) {
-  const base::string16 string_version(ASCIIToUTF16("string_version"));
-
   const base::string16 db1_name(ASCIIToUTF16("db1"));
   const int64_t db1_version = 1LL;
   int64_t db1_id;
 
-  // Database records with DEFAULT_INT_VERSION represent stale data,
+  // Database records with DEFAULT_VERSION represent stale data,
   // and should not be enumerated.
   const base::string16 db2_name(ASCIIToUTF16("db2"));
-  const int64_t db2_version = IndexedDBDatabaseMetadata::DEFAULT_INT_VERSION;
+  const int64_t db2_version = IndexedDBDatabaseMetadata::DEFAULT_VERSION;
   int64_t db2_id;
 
-  leveldb::Status s = backing_store_->CreateIDBDatabaseMetaData(
-      db1_name, string_version, db1_version, &db1_id);
+  leveldb::Status s =
+      backing_store_->CreateIDBDatabaseMetaData(db1_name, db1_version, &db1_id);
   EXPECT_TRUE(s.ok());
   EXPECT_GT(db1_id, 0LL);
 
-  s = backing_store_->CreateIDBDatabaseMetaData(
-      db2_name, string_version, db2_version, &db2_id);
+  s = backing_store_->CreateIDBDatabaseMetaData(db2_name, db2_version, &db2_id);
   EXPECT_TRUE(s.ok());
   EXPECT_GT(db2_id, db1_id);
 

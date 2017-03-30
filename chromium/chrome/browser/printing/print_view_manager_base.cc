@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/prefs/pref_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
@@ -25,6 +24,7 @@
 #include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/prefs/pref_service.h"
 #include "components/printing/common/print_messages.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
@@ -231,7 +231,7 @@ bool PrintViewManagerBase::OnMessageReceived(const IPC::Message& message) {
   IPC_BEGIN_MESSAGE_MAP(PrintViewManagerBase, message)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidPrintPage, OnDidPrintPage)
     IPC_MESSAGE_HANDLER(PrintHostMsg_ShowInvalidPrinterSettingsError,
-                        OnShowInvalidPrinterSettingsError);
+                        OnShowInvalidPrinterSettingsError)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled || PrintManager::OnMessageReceived(message);
@@ -521,13 +521,12 @@ void PrintViewManagerBase::ReleasePrinterQuery() {
   int cookie = cookie_;
   cookie_ = 0;
 
-  printing::PrintJobManager* print_job_manager =
-      g_browser_process->print_job_manager();
+  PrintJobManager* print_job_manager = g_browser_process->print_job_manager();
   // May be NULL in tests.
   if (!print_job_manager)
     return;
 
-  scoped_refptr<printing::PrinterQuery> printer_query;
+  scoped_refptr<PrinterQuery> printer_query;
   printer_query = queue_->PopPrinterQuery(cookie);
   if (!printer_query.get())
     return;

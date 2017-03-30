@@ -144,6 +144,13 @@ HTMLSelectElement* HTMLOptGroupElement::ownerSelectElement() const
     return Traversal<HTMLSelectElement>::firstAncestor(*this);
 }
 
+String HTMLOptGroupElement::defaultToolTip() const
+{
+    if (HTMLSelectElement* select = ownerSelectElement())
+        return select->defaultToolTip();
+    return String();
+}
+
 void HTMLOptGroupElement::accessKeyAction(bool)
 {
     HTMLSelectElement* select = ownerSelectElement();
@@ -182,4 +189,4 @@ HTMLDivElement& HTMLOptGroupElement::optGroupLabelElement() const
     return *toHTMLDivElement(userAgentShadowRoot()->getElementById(ShadowElementNames::optGroupLabel()));
 }
 
-} // namespace
+} // namespace blink

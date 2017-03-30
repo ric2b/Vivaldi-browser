@@ -20,22 +20,23 @@ package cc.proto;
 
 option optimize_for = LITE_RUNTIME;
 
-// Identifies the type of cc:Layer a LayerNode represents. It is used to
-// facilitate reconstruction of a Layer of the correct type on the client.
-enum LayerType {
-  UNKNOWN = 0;
-  LAYER = 1;
-  PICTURE_LAYER = 2;
-
-  // TODO(nyquist): Add the rest of the necessary LayerTypes.
-};
-
 // Hierarchical structure for serializing the Layer tree.
 message LayerNode {
+  // Identifies the type of cc:Layer a LayerNode represents. It is used to
+  // facilitate reconstruction of a Layer of the correct type on the client.
+  enum Type {
+    UNKNOWN = 0;
+    LAYER = 1;
+    PICTURE_LAYER = 2;
+    HEADS_UP_DISPLAY_LAYER = 3;
+
+    // TODO(nyquist): Add the rest of the necessary LayerTypes.
+  };
+
   // required
   optional int32 id = 1;
   // required
-  optional LayerType type = 2;
+  optional Type type = 2;
   optional int32 parent_id = 3;
   // A List of all the children of the current LayerNode.
   repeated LayerNode children = 4;
@@ -68,6 +69,7 @@ message LayerProperties {
   optional PictureLayerProperties picture = 6;
 }
 
+// NEXT ID: 53
 message BaseLayerProperties {
   optional Point3F transform_origin = 1;
   optional uint32 background_color = 2;
@@ -75,21 +77,21 @@ message BaseLayerProperties {
   optional int64 transform_free_index = 4;
   optional int64 effect_tree_index = 5;
   optional int64 clip_tree_index = 6;
+  optional int64 scroll_tree_index = 50;
   optional Vector2dF offset_to_transform_parent = 7;
   optional bool double_sided = 8;
   optional bool draws_content = 9;
   optional bool hide_layer_and_subtree = 10;
   optional bool has_render_surface = 11;
+  optional bool subtree_property_changed = 47;
   // TODO(nyquist): Add support for FilterOperation. See crbug.com/541321.
   // repeated FilterOperation filters = 12;
   // repeated FilterOperation background_filters = 13;
   optional bool masks_to_bounds = 14;
-  optional bool should_scroll_on_main_thread = 15;
-  optional bool have_wheel_event_handlers = 16;
+  optional uint32 main_thread_scrolling_reasons = 15;
   optional bool have_scroll_event_handlers = 17;
   optional Region non_fast_scrollable_region = 18;
   optional Region touch_event_handler_region = 19;
-  optional int32 scroll_blocks_on = 20;
   optional bool contents_opaque = 21;
   optional float opacity = 22;
   optional SkXfermode.Mode blend_mode = 23;
@@ -102,6 +104,8 @@ message BaseLayerProperties {
   optional int32 num_layer_or_descendants_with_copy_request = 30;
   optional SkXfermode.Mode draw_blend_mode = 31;
   optional bool use_parent_backface_visibility = 32;
+  optional bool use_local_transform_for_backface_visibility = 51;
+  optional bool should_check_backface_visibility = 52;
   optional Transform transform = 33;
   optional bool transform_is_invertible = 34;
   optional int32 sorting_context_id = 35;
@@ -121,7 +125,6 @@ message BaseLayerProperties {
   optional Vector2dF scroll_compensation_adjustment = 45;
 
   optional Rect update_rect = 46;
-  optional bool stacking_order_changed = 47;
 
   // TODO(nyquist): Figure out what to do with LayerAnimationController.
   // optional LayerAnimationController layer_animation_controller = 48;

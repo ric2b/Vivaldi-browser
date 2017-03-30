@@ -92,23 +92,17 @@ class Port(object):
     PORT_HAS_AUDIO_CODECS_BUILT_IN = False
 
     ALL_SYSTEMS = (
-        ('snowleopard', 'x86'),
-        ('lion', 'x86'),
 
         # FIXME: We treat Retina (High-DPI) devices as if they are running
         # a different operating system version. This isn't accurate, but will work until
         # we need to test and support baselines across multiple O/S versions.
         ('retina', 'x86'),
 
-        ('mountainlion', 'x86'),
-        ('mavericks', 'x86'),
+        ('mac10.9', 'x86'),
         ('mac10.10', 'x86'),
-        ('xp', 'x86'),
+        ('mac10.11', 'x86'),
         ('win7', 'x86'),
         ('win10', 'x86'),
-        # FIXME: We handle 32bit Linux similarly to Mac retina above treating it
-        # as a different system for now.
-        ('linux32', 'x86'),
         ('precise', 'x86_64'),
         ('trusty', 'x86_64'),
         # FIXME: Technically this should be 'arm', but adding a third architecture type breaks TestConfigurationConverter.
@@ -116,16 +110,10 @@ class Port(object):
         ('icecreamsandwich', 'x86'),
         )
 
-    ALL_BASELINE_VARIANTS = [
-        'mac-mac10.10', 'mac-mavericks', 'mac-retina', 'mac-mountainlion', 'mac-lion', 'mac-snowleopard',
-        'win-win10', 'win-win7', 'win-xp'
-        'linux-trusty', 'linux-precise', 'linux-x86',
-    ]
-
     CONFIGURATION_SPECIFIER_MACROS = {
-        'mac': ['snowleopard', 'lion', 'mountainlion', 'retina', 'mavericks', 'mac10.10'],
-        'win': ['xp', 'win7', 'win10'],
-        'linux': ['linux32', 'precise', 'trusty'],
+        'mac': ['retina', 'mac10.9', 'mac10.10', 'mac10.11'],
+        'win': ['win7', 'win10'],
+        'linux': ['precise', 'trusty'],
         'android': ['icecreamsandwich'],
     }
 
@@ -225,6 +213,9 @@ class Port(object):
         self._reftest_list = {}
         self._results_directory = None
         self._virtual_test_suites = None
+
+    def __str__(self):
+        return "Port{name=%s, version=%s, architecture=%s, test_configuration=%s}" % (self._name, self._version, self._architecture, self._test_configuration)
 
     def buildbot_archives_baselines(self):
         return True
@@ -984,7 +975,7 @@ class Port(object):
 
     def version(self):
         """Returns a string indicating the version of a given platform, e.g.
-        'leopard' or 'xp'.
+        'leopard' or 'win7'.
 
         This is used to help identify the exact port when parsing test
         expectations, determining search paths, and logging information."""
@@ -1260,20 +1251,12 @@ class Port(object):
         """Ports may provide a way to abbreviate configuration specifiers to conveniently
         refer to them as one term or alias specific values to more generic ones. For example:
 
-        (xp, vista, win7) -> win # Abbreviate all Windows versions into one namesake.
+        (vista, win7) -> win # Abbreviate all Windows versions into one namesake.
         (precise, trusty) -> linux  # Change specific name of Linux distro to a more generic term.
 
         Returns a dictionary, each key representing a macro term ('win', for example),
-        and value being a list of valid configuration specifiers (such as ['xp', 'vista', 'win7'])."""
+        and value being a list of valid configuration specifiers (such as ['vista', 'win7'])."""
         return self.CONFIGURATION_SPECIFIER_MACROS
-
-    def all_baseline_variants(self):
-        """Returns a list of platform names sufficient to cover all the baselines.
-
-        The list should be sorted so that a later platform  will reuse
-        an earlier platform's baselines if they are the same (e.g.,
-        'mac10.10' should precede 'mac10.9')."""
-        return self.ALL_BASELINE_VARIANTS
 
     def _generate_all_test_configurations(self):
         """Returns a sequence of the TestConfigurations the port supports."""

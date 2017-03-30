@@ -17,6 +17,7 @@ class GURL;
 namespace content {
 
 class ServiceWorkerContextCore;
+class ServiceWorkerProviderHost;
 class ServiceWorkerVersion;
 struct ServiceWorkerClientInfo;
 struct ServiceWorkerClientQueryOptions;
@@ -25,10 +26,16 @@ namespace service_worker_client_utils {
 
 using NavigationCallback =
     base::Callback<void(ServiceWorkerStatusCode status,
-                        const std::string& client_uuid,
                         const ServiceWorkerClientInfo& client_info)>;
+using ClientCallback =
+    base::Callback<void(const ServiceWorkerClientInfo& client_info)>;
 using ServiceWorkerClients = std::vector<ServiceWorkerClientInfo>;
 using ClientsCallback = base::Callback<void(ServiceWorkerClients* clients)>;
+
+// Focuses the window client associated with |provider_host|. |callback| is
+// called with the client information on completion.
+void FocusWindowClient(ServiceWorkerProviderHost* provider_host,
+                       const ClientCallback& callback);
 
 // Opens a new window and navigates it to |url|. |callback| is called with the
 // window's client information on completion.
@@ -46,6 +53,13 @@ void NavigateClient(const GURL& url,
                     int frame_id,
                     const base::WeakPtr<ServiceWorkerContextCore>& context,
                     const NavigationCallback& callback);
+
+// Gets a client matched by |client_uuid|. |callback| is called with the client
+// information on completion.
+void GetClient(const base::WeakPtr<ServiceWorkerVersion>& controller,
+               const std::string& client_uuid,
+               const base::WeakPtr<ServiceWorkerContextCore>& context,
+               const ClientCallback& callback);
 
 // Collects clients matched with |options|. |callback| is called with the client
 // information sorted in MRU order (most recently focused order) on completion.

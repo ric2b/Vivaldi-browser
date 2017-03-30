@@ -20,6 +20,7 @@
 #include "platform/fonts/FontCache.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/ClipRecorder.h"
+#include "platform/graphics/paint/ScopedPaintChunkProperties.h"
 #include "platform/scroll/ScrollbarTheme.h"
 
 namespace blink {
@@ -34,7 +35,29 @@ void FramePainter::paint(GraphicsContext& context, const GlobalPaintFlags global
     IntRect visibleAreaWithoutScrollbars(frameView().location(), frameView().visibleContentRect().size());
     documentDirtyRect.intersect(visibleAreaWithoutScrollbars);
 
-    if (!documentDirtyRect.isEmpty()) {
+    bool shouldPaintContents = !documentDirtyRect.isEmpty();
+    bool shouldPaintScrollbars = !frameView().scrollbarsSuppressed() && (frameView().horizontalScrollbar() || frameView().verticalScrollbar());
+    if (!shouldPaintContents && !shouldPaintScrollbars)
+        return;
+
+    if (shouldPaintContents) {
+        // TODO(pdr): Creating frame paint properties here will not be needed once
+        // settings()->rootLayerScrolls() is enabled.
+        // TODO(pdr): Make this conditional on the rootLayerScrolls setting.
+        Optional<ScopedPaintChunkProperties> scopedPaintChunkProperties;
+        if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+            TransformPaintPropertyNode* transform = m_frameView->scrollTranslation() ? m_frameView->scrollTranslation() : m_frameView->preTranslation();
+            ClipPaintPropertyNode* clip = m_frameView->contentClip();
+            if (transform || clip) {
+                PaintChunkProperties properties(context.paintController().currentPaintChunkProperties());
+                if (transform)
+                    properties.transform = transform;
+                if (clip)
+                    properties.clip = clip;
+                scopedPaintChunkProperties.emplace(context.paintController(), properties);
+            }
+        }
+
         TransformRecorder transformRecorder(context, *frameView().layoutView(),
             AffineTransform::translation(frameView().x() - frameView().scrollX(), frameView().y() - frameView().scrollY()));
 
@@ -44,12 +67,20 @@ void FramePainter::paint(GraphicsContext& context, const GlobalPaintFlags global
         paintContents(context, globalPaintFlags, documentDirtyRect);
     }
 
-    // Now paint the scrollbars.
-    if (!frameView().scrollbarsSuppressed() && (frameView().horizontalScrollbar() || frameView().verticalScrollbar())) {
+    if (shouldPaintScrollbars) {
         IntRect scrollViewDirtyRect = rect.m_rect;
         IntRect visibleAreaWithScrollbars(frameView().location(), frameView().visibleContentRect(IncludeScrollbars).size());
         scrollViewDirtyRect.intersect(visibleAreaWithScrollbars);
         scrollViewDirtyRect.moveBy(-frameView().location());
+
+        Optional<ScopedPaintChunkProperties> scopedPaintChunkProperties;
+        if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+            if (TransformPaintPropertyNode* transform = m_frameView->preTranslation()) {
+                PaintChunkProperties properties(context.paintController().currentPaintChunkProperties());
+                properties.transform = transform;
+                scopedPaintChunkProperties.emplace(context.paintController(), properties);
+            }
+        }
 
         TransformRecorder transformRecorder(context, *frameView().layoutView(),
             AffineTransform::translation(frameView().x(), frameView().y()));
@@ -74,8 +105,6 @@ void FramePainter::paintContents(GraphicsContext& context, const GlobalPaintFlag
         fillWithRed = false; // Transparent, don't fill with red.
     else if (globalPaintFlags & GlobalPaintSelectionOnly)
         fillWithRed = false; // Selections are transparent, don't fill with red.
-    else if (frameView().nodeToDraw())
-        fillWithRed = false; // Element images are transparent, don't fill with red.
     else
         fillWithRed = true;
 
@@ -91,8 +120,10 @@ void FramePainter::paintContents(GraphicsContext& context, const GlobalPaintFlag
         return;
     }
 
-    RELEASE_ASSERT(!frameView().needsLayout());
-    ASSERT(document->lifecycle().state() >= DocumentLifecycle::CompositingClean);
+    if (!frameView().shouldThrottleRendering()) {
+        RELEASE_ASSERT(!frameView().needsLayout());
+        ASSERT(document->lifecycle().state() >= DocumentLifecycle::CompositingClean);
+    }
 
     TRACE_EVENT1("devtools.timeline", "Paint", "data", InspectorPaintEvent::data(layoutView, LayoutRect(rect), 0));
 
@@ -107,15 +138,11 @@ void FramePainter::paintContents(GraphicsContext& context, const GlobalPaintFlag
     if (document->printing())
         localPaintFlags |= GlobalPaintFlattenCompositingLayers | GlobalPaintPrinting;
 
-    ASSERT(!frameView().isPainting());
-    frameView().setIsPainting(true);
-
-    // frameView().nodeToDraw() is used to draw only one element (and its descendants)
-    LayoutObject* layoutObject = frameView().nodeToDraw() ? frameView().nodeToDraw()->layoutObject() : 0;
     PaintLayer* rootLayer = layoutView->layer();
 
 #if ENABLE(ASSERT)
-    layoutView->assertSubtreeIsLaidOut();
+    if (!frameView().shouldThrottleRendering())
+        layoutView->assertSubtreeIsLaidOut();
     LayoutObject::SetLayoutNeededForbiddenScope forbidSetNeedsLayout(*rootLayer->layoutObject());
 #endif
 
@@ -124,12 +151,10 @@ void FramePainter::paintContents(GraphicsContext& context, const GlobalPaintFlag
     float deviceScaleFactor = blink::deviceScaleFactor(rootLayer->layoutObject()->frame());
     context.setDeviceScaleFactor(deviceScaleFactor);
 
-    layerPainter.paint(context, LayoutRect(rect), localPaintFlags, layoutObject);
+    layerPainter.paint(context, LayoutRect(rect), localPaintFlags);
 
     if (rootLayer->containsDirtyOverlayScrollbars())
-        layerPainter.paintOverlayScrollbars(context, LayoutRect(rect), localPaintFlags, layoutObject);
-
-    frameView().setIsPainting(false);
+        layerPainter.paintOverlayScrollbars(context, LayoutRect(rect), localPaintFlags);
 
     // Regions may have changed as a result of the visibility/z-index of element changing.
     if (document->annotatedRegionsDirty())

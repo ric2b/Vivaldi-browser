@@ -42,9 +42,8 @@
 namespace blink {
 
 class DOMDataStore;
-class MainThreadDebugger;
+class ThreadDebugger;
 class StringCache;
-class V8Debugger;
 struct WrapperTypeInfo;
 
 typedef WTF::Vector<DOMDataStore*> DOMDataStoreList;
@@ -112,9 +111,6 @@ public:
     v8::Local<v8::Context> ensureScriptRegexpContext();
     void clearScriptRegexpContext();
 
-    const char* previousSamplingState() const { return m_previousSamplingState; }
-    void setPreviousSamplingState(const char* name) { m_previousSamplingState = name; }
-
     // EndOfScopeTasks are run by V8RecursionScope when control is returning
     // to C++ from script, after executing a script task (e.g. callback,
     // event) or microtasks (e.g. promise). This is explicitly needed for
@@ -123,7 +119,8 @@ public:
     void runEndOfScopeTasks();
     void clearEndOfScopeTasks();
 
-    void setScriptDebugger(PassOwnPtr<MainThreadDebugger>);
+    void setThreadDebugger(PassOwnPtr<ThreadDebugger>);
+    ThreadDebugger* threadDebugger();
 
 private:
     V8PerIsolateData();
@@ -143,8 +140,6 @@ private:
     ScopedPersistent<v8::Value> m_liveRoot;
     RefPtr<ScriptState> m_scriptRegexpScriptState;
 
-    const char* m_previousSamplingState;
-
     bool m_constructorMode;
     friend class ConstructorMode;
 
@@ -158,7 +153,7 @@ private:
     bool m_performingMicrotaskCheckpoint;
 
     Vector<OwnPtr<EndOfScopeTask>> m_endOfScopeTasks;
-    OwnPtr<MainThreadDebugger> m_scriptDebugger;
+    OwnPtr<ThreadDebugger> m_threadDebugger;
 };
 
 } // namespace blink

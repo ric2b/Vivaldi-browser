@@ -35,13 +35,13 @@
 #include "platform/heap/GarbageCollected.h"
 #include "platform/heap/StackFrameDepth.h"
 #include "platform/heap/ThreadState.h"
+#include "wtf/Allocator.h"
 #include "wtf/Assertions.h"
 #include "wtf/Atomics.h"
 #include "wtf/Deque.h"
 #include "wtf/Forward.h"
 #include "wtf/HashMap.h"
 #include "wtf/HashTraits.h"
-#include "wtf/InstanceCounter.h"
 #include "wtf/TypeTraits.h"
 
 namespace blink {
@@ -51,6 +51,7 @@ class HeapObjectHeader;
 class InlinedGlobalMarkingVisitor;
 template<typename T> class TraceTrait;
 template<typename T> class TraceEagerlyTrait;
+class ThreadState;
 class Visitor;
 
 // The TraceMethodDelegate is used to convert a trace method for type T to a TraceCallback.
@@ -60,6 +61,7 @@ class Visitor;
 // in header files where we have only forward declarations of classes.
 template<typename T, void (T::*method)(Visitor*)>
 struct TraceMethodDelegate {
+    STATIC_ONLY(TraceMethodDelegate);
     static void trampoline(Visitor* visitor, void* self)
     {
         (reinterpret_cast<T*>(self)->*method)(visitor);
@@ -385,15 +387,17 @@ private:
     bool m_isGlobalMarkingVisitor;
 };
 
-#if ENABLE(DETAILED_MEMORY_INFRA)
-template<typename T>
-struct TypenameStringTrait {
-    static const String get()
-    {
-        return WTF::extractTypeNameFromFunctionName(WTF::extractNameFunction<T>());
-    }
+class VisitorScope final {
+    STACK_ALLOCATED();
+public:
+    VisitorScope(ThreadState*, BlinkGC::GCType);
+    ~VisitorScope();
+    Visitor* visitor() const { return m_visitor.get(); }
+
+private:
+    ThreadState* m_state;
+    OwnPtr<Visitor> m_visitor;
 };
-#endif
 
 } // namespace blink
 

@@ -5,15 +5,15 @@
 import("//build/config/features.gni")
 import("//build/config/locales.gni")
 import("//build/config/ui.gni")
+import("//build_overrides/v8.gni")
 import("//chromecast/build/tests/cast_test.gni")
 import("//chromecast/chromecast.gni")
 import("//media/media_options.gni")
 import("//tools/grit/repack.gni")
 import("//ui/ozone/ozone.gni")
 
-declare_args() {
-  # TODO(slan): This most likely needs to be moved into a .gni file.
-  use_chromecast_webui = true
+if (is_android) {
+  import("//build/config/android/rules.gni")
 }
 
 if (use_playready) {
@@ -28,11 +28,10 @@ cast_test_group("cast_tests") {
   tests = [
     "//base:base_unittests",
     "//chromecast/base:cast_base_unittests",
+    "//chromecast/base/component:cast_component_unittests",
     "//chromecast/crypto:cast_crypto_unittests",
     "//content/test:content_unittests",
     "//crypto:crypto_unittests",
-    "//ipc:ipc_tests",
-    "//jingle:jingle_unittests",
     "//media:media_unittests",
     "//media/midi:midi_unittests",
     "//net:net_unittests",
@@ -42,7 +41,6 @@ cast_test_group("cast_tests") {
     "//sync:sync_unit_tests",
     "//third_party/cacheinvalidation:cacheinvalidation_unittests",
     "//ui/base:ui_base_unittests",
-    "//url:url_unittests",
   ]
 
   if (is_linux) {
@@ -108,15 +106,16 @@ cast_test_group("cast_tests") {
       "//chromecast/app:cast_shell_unittests",
       "//chromecast/browser:cast_shell_browser_test",
       "//chromecast/media:cast_media_unittests",
+      "//ipc:ipc_tests",
+      "//jingle:jingle_unittests",
+      "//url:url_unittests",
     ]
 
     # --enable-local-file-accesses => to load sample media files
     # --test-launcher-jobs=1 => so internal code can bind to port
     filters += [ "cast_shell_browser_test --no-sandbox --enable-local-file-accesses --enable-cma-media-pipeline --ozone-platform=cast --test-launcher-jobs=1" ]
 
-    # TODO(slan): Reenable this test for Desktop x86 when CQ supports it.
-    # (b/26429268)
-    if (use_alsa && !is_cast_desktop_build) {
+    if (use_alsa) {
       tests +=
           [ "//chromecast/media/cma/backend/alsa:alsa_cma_backend_unittests" ]
     }
@@ -124,11 +123,6 @@ cast_test_group("cast_tests") {
 
   if (!disable_display) {
     tests += [ "//gpu:gpu_unittests" ]
-  } else {
-    filters += [
-      # These are not supported by the backend right now. b/21737919
-      "cast_media_unittests --gtest_filter=-AudioVideoPipelineDeviceTest.VorbisPlayback:AudioVideoPipelineDeviceTest.WebmPlayback",
-    ]
   }
 }
 
@@ -221,22 +215,9 @@ repack("cast_shell_pak") {
   ]
 
   if (chromecast_branding != "public") {
-    sources +=
-        [ "$root_gen_dir/chromecast/internal/shell/app/sound_resources.pak" ]
+    sources += [ "$root_gen_dir/chromecast/internal/cast_shell_internal.pak" ]
 
-    deps += [ "//chromecast/internal/shell/app:chromecast_sound_resources" ]
-
-    if (use_chromecast_webui) {
-      sources += [
-        "$root_gen_dir/chromecast/internal/webui/app_resources.pak",
-        "$root_gen_dir/chromecast/internal/webui/cast_webui_resources.pak",
-      ]
-
-      deps += [
-        "//chromecast/internal/webui:chromecast_app_resources",
-        "//chromecast/internal/webui:chromecast_webui_resources",
-      ]
-    }
+    deps += [ "//chromecast/internal:cast_shell_internal_pak" ]
   }
 }
 
@@ -281,4 +262,33 @@ action("chromecast_locales_pak") {
            "-x",
            rebase_path("$root_out_dir/chromecast_locales"),
          ] + locales
+}
+
+if (is_android) {
+  # GYP target: chromecast.gyp:cast_shell_icudata
+  android_assets("cast_shell_apk_assets") {
+    assert(v8_use_external_startup_data)
+
+    sources = [
+      "$root_out_dir/assets/cast_shell.pak",
+    ]
+
+    deps = [
+      ":cast_shell_pak",
+      "//third_party/icu:icu_assets",
+      "//v8:v8_external_startup_data_assets",
+    ]
+  }
+
+  # GYP target: chromecast.gyp:cast_shell_apk
+  android_apk("cast_shell_apk") {
+    apk_name = "CastShell"
+    android_manifest = "$root_gen_dir/cast_shell_manifest/AndroidManifest.xml"
+    android_manifest_dep = "//chromecast/browser/android:cast_shell_manifest"
+    deps = [
+      ":cast_shell_apk_assets",
+      "//chromecast/android:libcast_shell_android",
+      "//chromecast/browser/android:cast_shell_java",
+    ]
+  }
 }

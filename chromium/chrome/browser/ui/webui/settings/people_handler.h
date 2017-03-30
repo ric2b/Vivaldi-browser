@@ -8,17 +8,22 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/prefs/pref_change_registrar.h"
 #include "base/scoped_observer.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
-#include "chrome/browser/profiles/profile_info_cache_observer.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/sync/sync_startup_tracker.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "components/sync_driver/sync_service_observer.h"
 #include "content/public/browser/web_ui_message_handler.h"
+
+#if defined(OS_CHROMEOS)
+#include "content/public/browser/notification_observer.h"
+#include "content/public/browser/notification_registrar.h"
+#endif
 
 class LoginUIService;
 class ProfileSyncService;
@@ -40,7 +45,10 @@ class PeopleHandler : public content::WebUIMessageHandler,
                       public SyncStartupTracker::Observer,
                       public LoginUIService::LoginUI,
                       public sync_driver::SyncServiceObserver,
-                      public ProfileInfoCacheObserver {
+#if defined(OS_CHROMEOS)
+                      public content::NotificationObserver,
+#endif
+                      public ProfileAttributesStorage::Observer {
  public:
   explicit PeopleHandler(Profile* profile);
   ~PeopleHandler() override;
@@ -66,13 +74,20 @@ class PeopleHandler : public content::WebUIMessageHandler,
   // sync_driver::SyncServiceObserver implementation.
   void OnStateChanged() override;
 
-  // ProfileInfoCacheObserver implementation.
+#if defined(OS_CHROMEOS)
+  // content::NotificationObserver implementation.
+  void Observe(int type,
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override;
+#endif
+
+  // ProfileAttributesStorage::Observer implementation.
   void OnProfileNameChanged(const base::FilePath& profile_path,
                             const base::string16& old_profile_name) override;
   void OnProfileAvatarChanged(const base::FilePath& profile_path) override;
 
   // Initializes the sync setup flow and shows the setup UI.
-  void OpenSyncSetup(const base::ListValue* args);
+  void OpenSyncSetup(bool creating_supervised_user);
 
   // Shows advanced configuration dialog without going through sign in dialog.
   // Kicks the sync backend if necessary with showing spinner dialog until it
@@ -197,6 +212,11 @@ class PeopleHandler : public content::WebUIMessageHandler,
 
   // Used to listen for pref changes to allow or disallow signin.
   PrefChangeRegistrar profile_pref_registrar_;
+
+#if defined(OS_CHROMEOS)
+  // Used to listen to ChromeOS user image changes.
+  content::NotificationRegistrar registrar_;
+#endif
 
   // Manages observer lifetime.
   ScopedObserver<ProfileSyncService, PeopleHandler> sync_service_observer_;

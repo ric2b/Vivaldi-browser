@@ -9,7 +9,8 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/keep_alive_types.h"
+#include "chrome/browser/lifetime/scoped_keep_alive.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_metrics.h"
@@ -21,7 +22,6 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/user_manager.h"
-#include "chrome/browser/ui/views/auto_keep_alive.h"
 #include "chrome/browser/ui/views/browser_dialogs.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -234,8 +234,10 @@ void UserManager::ShowReauthDialog(content::BrowserContext* browser_context,
 
 UserManagerView::UserManagerView()
     : web_view_(NULL),
-      keep_alive_(new AutoKeepAlive(NULL)),
       user_manager_started_showing_(base::Time()) {
+#if !defined(USE_ASH)
+  keep_alive_.reset(new ScopedKeepAlive(KeepAliveOrigin::USER_MANAGER_VIEW));
+#endif  // !defined(USE_ASH)
 }
 
 UserManagerView::~UserManagerView() {
@@ -285,14 +287,14 @@ void UserManagerView::Init(Profile* system_profile, const GURL& url) {
       profile_manager->GetLastUsedProfileDir(profile_manager->user_data_dir());
   Profile* profile = profile_manager->GetProfileByPath(last_used_profile_path);
   if (profile) {
-    Browser* browser = chrome::FindLastActiveWithProfile(profile,
-        chrome::GetActiveDesktop());
+    Browser* browser = chrome::FindLastActiveWithProfile(profile);
     if (browser) {
       gfx::NativeView native_view =
           views::Widget::GetWidgetForNativeWindow(
               browser->window()->GetNativeWindow())->GetNativeView();
-      bounds = gfx::Screen::GetScreenFor(native_view)->
-          GetDisplayNearestWindow(native_view).work_area();
+      bounds = gfx::Screen::GetScreen()
+                   ->GetDisplayNearestWindow(native_view)
+                   .work_area();
       bounds.ClampToCenteredSize(gfx::Size(UserManager::kWindowWidth,
                                            UserManager::kWindowHeight));
     }
@@ -308,10 +310,9 @@ void UserManagerView::Init(Profile* system_profile, const GURL& url) {
 
 #if defined(OS_WIN)
   // Set the app id for the task manager to the app id of its parent
-  ui::win::SetAppIdForWindow(
-      ShellIntegration::GetChromiumModelIdForProfile(
-          system_profile->GetPath()),
-      views::HWNDForWidget(GetWidget()));
+  ui::win::SetAppIdForWindow(shell_integration::GetChromiumModelIdForProfile(
+                                 system_profile->GetPath()),
+                             views::HWNDForWidget(GetWidget()));
 #endif
 
 #if defined(USE_ASH)

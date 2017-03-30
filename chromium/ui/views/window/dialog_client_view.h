@@ -9,7 +9,6 @@
 #include "base/macros.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/views/controls/button/button.h"
-#include "ui/views/focus/focus_manager.h"
 #include "ui/views/window/client_view.h"
 
 namespace views {
@@ -30,8 +29,7 @@ class Widget;
 //   | [      Footnote View       ] |
 //   +------------------------------+
 class VIEWS_EXPORT DialogClientView : public ClientView,
-                                      public ButtonListener,
-                                      public FocusChangeListener {
+                                      public ButtonListener {
  public:
   DialogClientView(Widget* widget, View* contents_view);
   ~DialogClientView() override;
@@ -52,17 +50,12 @@ class VIEWS_EXPORT DialogClientView : public ClientView,
   DialogClientView* AsDialogClientView() override;
   const DialogClientView* AsDialogClientView() const override;
 
-  // FocusChangeListener implementation:
-  void OnWillChangeFocus(View* focused_before, View* focused_now) override;
-  void OnDidChangeFocus(View* focused_before, View* focused_now) override;
-
   // View implementation:
   gfx::Size GetPreferredSize() const override;
   void Layout() override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
   void ViewHierarchyChanged(
       const ViewHierarchyChangedDetails& details) override;
-  void NativeViewHierarchyChanged() override;
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
 
   // ButtonListener implementation:
@@ -86,8 +79,6 @@ class VIEWS_EXPORT DialogClientView : public ClientView,
   void ChildVisibilityChanged(View* child) override;
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(DialogClientViewTest, FocusManager);
-
   bool has_dialog_buttons() const { return ok_button_ || cancel_button_; }
 
   // Create a dialog button of the appropriate type.
@@ -102,18 +93,13 @@ class VIEWS_EXPORT DialogClientView : public ClientView,
   // Returns the insets for the buttons and extra view.
   gfx::Insets GetButtonRowInsets() const;
 
-  // Closes the widget.
-  void Close();
+  // Sets up the focus chain for the child views. This is required since the
+  // delegate may choose to add/remove views at any time.
+  void SetupFocusChain();
 
   // The dialog buttons.
   LabelButton* ok_button_;
   LabelButton* cancel_button_;
-
-  // The button that is currently default; may be NULL.
-  LabelButton* default_button_;
-
-  // Observe |focus_manager_| to update the default button with focus changes.
-  FocusManager* focus_manager_;
 
   // The extra view shown in the row of buttons; may be NULL.
   View* extra_view_;
@@ -122,10 +108,10 @@ class VIEWS_EXPORT DialogClientView : public ClientView,
   View* footnote_view_;
 
   // True if we've notified the delegate the window is closing and the delegate
-  // allosed the close. In some situations it's possible to get two closes (see
+  // allowed the close. In some situations it's possible to get two closes (see
   // http://crbug.com/71940). This is used to avoid notifying the delegate
   // twice, which can have bad consequences.
-  bool notified_delegate_;
+  bool delegate_allowed_close_;
 
   DISALLOW_COPY_AND_ASSIGN(DialogClientView);
 };

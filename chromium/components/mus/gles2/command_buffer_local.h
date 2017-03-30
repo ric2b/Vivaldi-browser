@@ -19,6 +19,7 @@
 #include "components/mus/public/interfaces/command_buffer.mojom.h"
 #include "gpu/command_buffer/client/gpu_control.h"
 #include "gpu/command_buffer/common/command_buffer.h"
+#include "gpu/command_buffer/common/command_buffer_id.h"
 #include "gpu/command_buffer/common/command_buffer_shared.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -83,17 +84,12 @@ class CommandBufferLocal : public gpu::CommandBuffer,
                                      size_t height,
                                      unsigned internal_format,
                                      unsigned usage) override;
-  uint32_t InsertSyncPoint() override;
-  uint32_t InsertFutureSyncPoint() override;
-  void RetireSyncPoint(uint32_t sync_point) override;
-  void SignalSyncPoint(uint32_t sync_point,
-                       const base::Closure& callback) override;
-  void SignalQuery(uint32_t query, const base::Closure& callback) override;
+  void SignalQuery(uint32_t query_id, const base::Closure& callback) override;
   void SetLock(base::Lock*) override;
   bool IsGpuChannelLost() override;
   void EnsureWorkVisible() override;
   gpu::CommandBufferNamespace GetNamespaceID() const override;
-  uint64_t GetCommandBufferID() const override;
+  gpu::CommandBufferId GetCommandBufferID() const override;
   int32_t GetExtraCommandBufferData() const override;
   uint64_t GenerateFenceSyncRelease() override;
   bool IsFenceSyncRelease(uint64_t release) override;
@@ -123,7 +119,6 @@ class CommandBufferLocal : public gpu::CommandBuffer,
       mojo::ScopedSharedBufferHandle transfer_buffer,
       uint32_t size);
   bool DestroyTransferBufferOnGpuThread(int32_t id);
-  bool RetireSyncPointOnGpuThread(uint32_t sync_point);
   bool CreateImageOnGpuThread(int32_t id,
                               mojo::ScopedHandle memory_handle,
                               int32_t type,
@@ -134,6 +129,7 @@ class CommandBufferLocal : public gpu::CommandBuffer,
   bool MakeProgressOnGpuThread(base::WaitableEvent* event,
                                gpu::CommandBuffer::State* state);
   bool DeleteOnGpuThread();
+  bool SignalQueryOnGpuThread(uint32_t query_id, const base::Closure& callback);
 
   // Helper functions are called in the client thread.
   void DidLoseContextOnClientThread(uint32_t reason);
@@ -144,7 +140,6 @@ class CommandBufferLocal : public gpu::CommandBuffer,
   scoped_ptr<CommandBufferDriver> driver_;
   CommandBufferLocalClient* client_;
   scoped_refptr<base::SingleThreadTaskRunner> client_thread_task_runner_;
-  std::deque<uint32_t> sync_points_;
 
   // Members accessed on the client thread:
   gpu::CommandBuffer::State last_state_;

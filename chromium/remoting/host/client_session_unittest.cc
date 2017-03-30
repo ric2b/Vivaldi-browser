@@ -188,11 +188,6 @@ void ClientSessionTest::CreateClientSession() {
   client_session_.reset(new ClientSession(
       &session_event_handler_,
       task_runner_,  // Audio thread.
-      task_runner_,  // Input thread.
-      task_runner_,  // Capture thread.
-      task_runner_,  // Encode thread.
-      task_runner_,  // Network thread.
-      task_runner_,  // UI thread.
       std::move(connection), desktop_environment_factory_.get(),
       base::TimeDelta(), nullptr, extensions_));
 }
@@ -376,37 +371,6 @@ TEST_F(ClientSessionTest, ClampMouseEvents) {
                   EqualsMouseMoveEvent(expected_x[i], expected_y[j]));
     }
   }
-}
-
-TEST_F(ClientSessionTest, NoGnubbyAuth) {
-  CreateClientSession();
-  ConnectClientSession();
-  NotifyVideoSize();
-
-  protocol::ExtensionMessage message;
-  message.set_type("gnubby-auth");
-  message.set_data("test");
-
-  // Host should ignore gnubby messages when gnubby is disabled.
-  client_session_->DeliverClientMessage(message);
-}
-
-TEST_F(ClientSessionTest, EnableGnubbyAuth) {
-  CreateClientSession();
-  ConnectClientSession();
-  NotifyVideoSize();
-
-  // Lifetime controlled by object under test.
-  MockGnubbyAuthHandler* gnubby_auth_handler = new MockGnubbyAuthHandler();
-  client_session_->SetGnubbyAuthHandlerForTesting(gnubby_auth_handler);
-
-  // Host should ignore gnubby messages when gnubby is disabled.
-  protocol::ExtensionMessage message;
-  message.set_type("gnubby-auth");
-  message.set_data("test");
-
-  EXPECT_CALL(*gnubby_auth_handler, DeliverClientMessage(_)).Times(1);
-  client_session_->DeliverClientMessage(message);
 }
 
 // Verifies that the client's video pipeline can be reset mid-session.

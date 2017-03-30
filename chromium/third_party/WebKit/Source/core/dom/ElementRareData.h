@@ -88,7 +88,7 @@ public:
     void clearComputedStyle() { m_computedStyle = nullptr; }
 
     ClassList* classList() const { return m_classList.get(); }
-    void setClassList(PassOwnPtrWillBeRawPtr<ClassList> classList) { m_classList = classList; }
+    void setClassList(PassRefPtrWillBeRawPtr<ClassList> classList) { m_classList = classList.leakRef(); }
     void clearClassListValueForQuirksMode()
     {
         if (!m_classList)
@@ -145,8 +145,8 @@ private:
     IntSize m_savedLayerScrollOffset;
 
     OwnPtrWillBeMember<DatasetDOMStringMap> m_dataset;
-    OwnPtrWillBeMember<ClassList> m_classList;
     OwnPtrWillBeMember<ElementShadow> m_shadow;
+    RawPtrWillBeMember<ClassList> m_classList;
     OwnPtrWillBeMember<NamedNodeMap> m_attributeMap;
     OwnPtrWillBeMember<AttrNodeList> m_attrNodeList;
     OwnPtrWillBeMember<InlineCSSStyleDeclaration> m_cssomWrapper;
@@ -175,6 +175,7 @@ inline ElementRareData::ElementRareData(LayoutObject* layoutObject)
     : NodeRareData(layoutObject)
     , m_tabindex(0)
     , m_minimumSizeForResizing(defaultMinimumSizeForResizing())
+    , m_classList(nullptr)
 {
     m_isElementRareData = true;
 }
@@ -270,6 +271,6 @@ inline CompositorProxiedPropertySet& ElementRareData::ensureCompositorProxiedPro
     return *m_proxiedProperties;
 }
 
-} // namespace
+} // namespace blink
 
 #endif // ElementRareData_h

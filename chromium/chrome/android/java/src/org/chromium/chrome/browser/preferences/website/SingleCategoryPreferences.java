@@ -21,6 +21,7 @@ import android.widget.ListView;
 import android.widget.TextView;
 
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.media.cdm.MediaDrmCredentialManager;
 import org.chromium.chrome.browser.media.cdm.MediaDrmCredentialManager.MediaDrmCredentialManagerCallback;
 import org.chromium.chrome.browser.preferences.ChromeBaseCheckBoxPreference;
@@ -32,6 +33,7 @@ import org.chromium.chrome.browser.preferences.ManagedPreferenceDelegate;
 import org.chromium.chrome.browser.preferences.ManagedPreferencesUtils;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.ProtectedContentResetCredentialConfirmDialogFragment;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.widget.TintedDrawable;
 import org.chromium.ui.widget.Toast;
 
@@ -219,7 +221,7 @@ public class SingleCategoryPreferences extends PreferenceFragment
         } else if (mCategory.showPopupSites()) {
             return website.site().getPopupPermission() == ContentSetting.BLOCK;
         } else if (mCategory.showNotificationsSites()) {
-            return website.site().getPushNotificationPermission() == ContentSetting.BLOCK;
+            return website.site().getNotificationPermission() == ContentSetting.BLOCK;
         } else if (mCategory.showProtectedMediaSites()) {
             return website.site().getProtectedMediaIdentifierPermission() == ContentSetting.BLOCK;
         }
@@ -302,6 +304,7 @@ public class SingleCategoryPreferences extends PreferenceFragment
 
     @Override
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+        menu.clear();
         inflater.inflate(R.menu.website_preferences_menu, menu);
 
         MenuItem searchItem = menu.findItem(R.id.search);
@@ -328,7 +331,7 @@ public class SingleCategoryPreferences extends PreferenceFragment
         if (mCategory.showProtectedMediaSites()) {
             // Add a menu item to reset protected media identifier device credentials.
             MenuItem resetMenu =
-                    menu.add(Menu.NONE, Menu.NONE, Menu.FIRST, R.string.reset_device_credentials);
+                    menu.add(Menu.NONE, Menu.NONE, Menu.NONE, R.string.reset_device_credentials);
             resetMenu.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
                 @Override
                 public boolean onMenuItemClick(MenuItem menuItem) {
@@ -339,6 +342,24 @@ public class SingleCategoryPreferences extends PreferenceFragment
                 }
             });
         }
+
+        MenuItem help = menu.add(
+                Menu.NONE, R.id.menu_id_targeted_help, Menu.NONE, R.string.menu_help);
+        help.setIcon(R.drawable.ic_help_and_feedback);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == R.id.menu_id_targeted_help) {
+            int helpContextResId = R.string.help_context_settings;
+            if (mCategory.showProtectedMediaSites()) {
+                helpContextResId = R.string.help_context_protected_content;
+            }
+            HelpAndFeedback.getInstance(getActivity()).show(
+                    getActivity(), getString(helpContextResId), Profile.getLastUsedProfile(), null);
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -388,7 +409,7 @@ public class SingleCategoryPreferences extends PreferenceFragment
             } else if (mCategory.showPopupSites()) {
                 PrefServiceBridge.getInstance().setAllowPopupsEnabled((boolean) newValue);
             } else if (mCategory.showNotificationsSites()) {
-                PrefServiceBridge.getInstance().setPushNotificationsEnabled((boolean) newValue);
+                PrefServiceBridge.getInstance().setNotificationsEnabled((boolean) newValue);
             } else if (mCategory.showProtectedMediaSites()) {
                 PrefServiceBridge.getInstance().setProtectedMediaIdentifierEnabled(
                         (boolean) newValue);
@@ -581,7 +602,7 @@ public class SingleCategoryPreferences extends PreferenceFragment
                     globalToggle.setChecked(PrefServiceBridge.getInstance().popupsEnabled());
                 } else if (mCategory.showNotificationsSites()) {
                     globalToggle.setChecked(
-                            PrefServiceBridge.getInstance().isPushNotificationsEnabled());
+                            PrefServiceBridge.getInstance().isNotificationsEnabled());
                 } else if (mCategory.showProtectedMediaSites()) {
                     globalToggle.setChecked(
                             PrefServiceBridge.getInstance().isProtectedMediaIdentifierEnabled());

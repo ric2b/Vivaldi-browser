@@ -88,7 +88,7 @@ public abstract class BidirectionalStream {
          */
         public Builder setHttpMethod(String method) {
             if (method == null) {
-                throw new NullPointerException("Invalid method name.");
+                throw new NullPointerException("Method is required.");
             }
             mHttpMethod = method;
             return this;
@@ -261,8 +261,8 @@ public abstract class BidirectionalStream {
         /**
          * Invoked if the stream failed for any reason after {@link BidirectionalStream#start}.
          * <a href="https://tools.ietf.org/html/rfc7540#section-7">HTTP/2 error codes</a> are
-         * mapped to {@link CronetException#netError} codes. Once invoked, no further
-         * {@link BidirectionalStream.Callback} methods will be invoked.
+         * mapped to {@link UrlRequestException#getCronetInternalErrorCode} codes. Once invoked,
+         * no further {@link BidirectionalStream.Callback} methods will be invoked.
          *
          * @param stream the stream which has failed
          * @param info the response information. May be {@code null} if no response was
@@ -308,8 +308,7 @@ public abstract class BidirectionalStream {
 
     /**
      * Starts the stream, all callbacks go to the {@code callback} argument passed to {@link
-     * BidirectionalStream.Builder#BidirectionalStream.Builder BidirectionalStream.Builder()}.
-     * Should only be called once.
+     * BidirectionalStream.Builder}'s constructor. Should only be called once.
      */
     public abstract void start();
 

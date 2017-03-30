@@ -109,7 +109,6 @@
 <translation id="457845228957001925">તમારા Chromium ડેટા અંગેની મહત્વપૂર્ણ માહિતી</translation>
 <translation id="459535195905078186">Chromium એપ્લિકેશનો</translation>
 <translation id="4677944499843243528">બીજા કમ્પ્યુટર (<ph name="HOST_NAME" />) પર પ્રોફાઇલ બીજી Chromium પ્રક્રિયા (<ph name="PROCESS_ID" />) દ્વારા ઉપયોગમાં હોય એવું લાગે છે. Chromium એ પ્રોફાઇલને લૉક કરી છે જેથી તે દૂષિત ન થઈ જાય. જો તમને ખાતરી છે કે કોઈ અન્ય પ્રક્રિયાઓ આ પ્રોફાઇલનો ઉપયોગ કરી રહી નથી, તો તમે પ્રોફાઇલને અનલૉક કરી અને Chromium ને ફરીથી લોંચ કરી શકો છો.</translation>
-<translation id="473775607612524610">અપડેટ કરો</translation>
 <translation id="4743926867934016338">સ્વીકારો અને શોધો</translation>
 <translation id="4888717733111232871">mDNS ટ્રાફિકને મંજૂરી આપવા Chromium માટે ઇનબાઉન્ડ નિયમ.</translation>
 <translation id="4943838377383847465">Chromium પૃષ્ઠભૂમિ મોડમાં છે.</translation>
@@ -123,6 +122,7 @@
 <translation id="549669000822060376">કૃપા કરીને Chromium, નવીનતમ સિસ્ટમ અપડેટ્સ ઇન્સ્ટોલ કરે ત્યાં સુધી રાહ જુઓ.</translation>
 <translation id="5563479599352954471">એક ટચ વડે શોધ કરો</translation>
 <translation id="5620765574781326016">પૃષ્ઠને છોડ્યાં વિના વેબસાઇટ્સ પરના મુદ્દાઓ વિશે જાણો.</translation>
+<translation id="5634636535844844681">Chromium માટે Windows 7 અથવા તે પછીનું સંસ્કરણ આવશ્યક છે.</translation>
 <translation id="5680901439334282664">Chromium માં સાઇન ઇન કરો</translation>
 <translation id="5772805321386874569">(Chromium <ph name="BEGIN_BUTTON" />પુનઃપ્રારંભ કરવું<ph name="END_BUTTON" /> આવશ્યક છે)</translation>
 <translation id="5796460469508169315">Chromium લગભગ તૈયાર છે.</translation>
@@ -131,7 +131,6 @@
 <translation id="5859963531214966875">Chromium ના ભાવિ સંસ્કરણો હવે આ Linux સિસ્ટમનું સમર્થન કરશે નહીં.</translation>
 <translation id="5862307444128926510">Chromium માં સ્વાગત છે</translation>
 <translation id="5877064549588274448">ચેનલ બદલી. ફેરફારો લાગુ કરવા માટે તમારા ઉપકરણને પુનઃપ્રારંભ કરો.</translation>
-<translation id="5909170354645388250">Chromium માં ઉપયોગમાં નથી. સંસાધન નકશાને સમન્વયનમાં રાખવા માટે પ્લેસહોલ્ડર. તે એક તર્કની અપેક્ષા કરે છે: $1.</translation>
 <translation id="5942225298871134766">Chromium આને તમારા <ph name="SAVED_PASSWORD_LINK" /> માં સાચવશે અને આગલી વખતે તમને તેની જરૂર પડે ત્યારે યાદ રાખશે.</translation>
 <translation id="5942520288919337908"><ph name="EXTENSION_NAME" /> ને Chromium માં ઉમેરવામાં આવ્યું.</translation>
 <translation id="59625444380784159">તમારા સંપર્કોની વિગતો Chromium માં વધુ ઝડપથી ફોર્મ્સ ભરવામાં તમારી સહાય કરી શકે છે.</translation>
@@ -143,7 +142,6 @@
 <translation id="6334986366598267305">હવે તમારા Google એકાઉન્ટ સાથે અને શેર કરેલ કમ્પ્યુટર્સ પર Chromium નો ઉપયોગ કરવો વધુ સરળ છે.</translation>
 <translation id="6373523479360886564">શું તમે ખરેખર તમે Chromium ને અનઇન્સ્ટોલ કરવા માંગો છો?</translation>
 <translation id="6403826409255603130">Chromium એ એક એવું વેબ બ્રાઉઝર છે જે પ્રકાશની ગતિએ વેબપૃષ્ઠો અને એપ્લિકેશંસને ચલાવે છે. તે ઝડપી, સ્થિર અને ઉપયોગમાં સરળ છે. Google Chromium માં નિર્મિત મૉલવેર અને ફિશીંગ સુરક્ષા સાથે વેબને વધુ સુરક્ષિત રૂપે બ્રાઉઝ કરો.</translation>
-<translation id="6424492062988593837">Chrome હમણાં જ વધુ સારું થયું છે! નવું સંસ્કરણ ઉપલબ્ધ છે.</translation>
 <translation id="6475912303565314141">જ્યારે તમે Chromium શરૂ કરો ત્યારે કયું પૃષ્ઠ બતાવવામાં આવે તે તેનું પણ નિયંત્રણ કરે છે.</translation>
 <translation id="6485906693002546646">તમે તમારી Chromium સામગ્રીનું સમન્વયન કરવા માટે <ph name="PROFILE_EMAIL" /> નો ઉપયોગ કરી રહ્યાં છો. તમારી સમન્વયન પસંદગીને અપડેટ કરવા માટે અથવા Chromium ને Google એકાઉન્ટ વગર ઉપયોગ કરવા માટે, <ph name="SETTINGS_LINK" /> ની મુલાકાત લો.</translation>
 <translation id="6510925080656968729">Chromium ને અનઇન્સ્ટોલ કરો</translation>
@@ -212,7 +210,6 @@ Chromium તમારી સેટિંગ્સને પુનઃપ્રા
 <translation id="8586442755830160949">કોપિરાઇટ <ph name="YEAR" /> The Chromium Authors. સર્વાધિકાર સુરક્ષિત.</translation>
 <translation id="8621669128220841554">અનુલ્લેખિત ભૂલને કારણે ઇન્સ્ટોલેશન નિષ્ફળ રહ્યું. કૃપા કરીને Chromium ફરીથી ડાઉનલોડ કરો.</translation>
 <translation id="8628626585870903697">Chromium માં PDF વ્યૂઅર સામેલ કરતું નથી, જે પ્રિંટ પૂર્વાવલોકનને કાર્ય કરવા માટે જરૂરી છે.</translation>
-<translation id="8684913864886094367">Chromium યોગ્ય રીતે શટ ડાઉન થયું નહોતું.</translation>
 <translation id="8697124171261953979">જ્યારે તમે Chromium શરૂ કરો અથવા ઑમ્નિબૉક્સ પરથી શોધ કરો ત્યારે કયું પૃષ્ઠ બતાવવામાં આવે તે તેનું પણ નિયંત્રણ કરે છે.</translation>
 <translation id="8704119203788522458">આ તમારું Chromium છે</translation>
 <translation id="872034308864968620">Chromium ને પૃષ્ઠભૂમિમાં ચાલવા દો</translation>
@@ -229,7 +226,6 @@ Chromium તમારી સેટિંગ્સને પુનઃપ્રા
 
 કોઈપણ રીતે સાઇન ઇન કરવું બુકમાર્ક્સ, ઇતિહાસ, અને અન્ય સેટિંગ્સ જેવી Chromium માહિતીને <ph name="ACCOUNT_EMAIL_NEW" /> માં મર્જ કરશે.</translation>
 <translation id="9013087743919948559">Chromium માં ઉમેરો</translation>
-<translation id="9013262824292842194">Chromium ને Windows Vista અથવા SP1 વાળા Windows XP અથવા તે પછીનાની આવશ્યકતા છે.</translation>
 <translation id="9019929317751753759">Chromium ને સુરક્ષિત બનાવવા માટે, અમે નીચેના એક્સ્ટેન્શનને અક્ષમ કર્યું છે કે જે <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> માં સૂચિબદ્ધ નથી અને તમારી જાણ વિના ઉમેરવામાં આવ્યું હોઈ શકે છે.</translation>
 <translation id="9022552996538154597">Chromium માં સાઇન ઇન કરો</translation>
 <translation id="9036189287518468038">Chromium એપ્લિકેશન લૉંચર</translation>

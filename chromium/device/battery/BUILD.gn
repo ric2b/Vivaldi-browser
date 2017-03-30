@@ -31,9 +31,9 @@ if (!is_android) {
       ":mojo_bindings",
       "//base",
       "//base/third_party/dynamic_annotations",
+      "//mojo/edk/system",
       "//mojo/environment:chromium",
       "//mojo/public/cpp/bindings",
-      "//third_party/mojo/src/mojo/edk/system",
     ]
 
     if (is_chromeos) {
@@ -48,7 +48,7 @@ if (!is_android) {
       ]
     }
 
-    if (is_desktop_linux) {
+    if (is_linux && !is_chromeos) {
       if (use_dbus) {
         configs += [ "//build/config/linux:dbus" ]
         deps += [ "//dbus" ]

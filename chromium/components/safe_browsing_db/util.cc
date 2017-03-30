@@ -37,8 +37,10 @@ SBCachedFullHashResult::SBCachedFullHashResult(
     const base::Time& in_expire_after)
     : expire_after(in_expire_after) {}
 
-SBCachedFullHashResult::~SBCachedFullHashResult() {}
+SBCachedFullHashResult::SBCachedFullHashResult(
+    const SBCachedFullHashResult& other) = default;
 
+SBCachedFullHashResult::~SBCachedFullHashResult() {}
 
 // Listnames that browser can process.
 const char kMalwareList[] = "goog-malware-shavar";
@@ -50,17 +52,13 @@ const char kExtensionBlacklist[] = "goog-badcrxids-digestvar";
 const char kIPBlacklist[] = "goog-badip-digest256";
 const char kUnwantedUrlList[] = "goog-unwanted-shavar";
 const char kInclusionWhitelist[] = "goog-csdinclusionwhite-sha256";
+const char kModuleWhitelist[] = "goog-whitemodule-digest256";
+const char kResourceBlacklist[] = "goog-badresource-shavar";
 
-const char* kAllLists[9] = {
-    kMalwareList,
-    kPhishingList,
-    kBinUrlList,
-    kCsdWhiteList,
-    kDownloadWhiteList,
-    kExtensionBlacklist,
-    kIPBlacklist,
-    kUnwantedUrlList,
-    kInclusionWhitelist,
+const char* kAllLists[11] = {
+    kMalwareList,        kPhishingList,       kBinUrlList,  kCsdWhiteList,
+    kDownloadWhiteList,  kExtensionBlacklist, kIPBlacklist, kUnwantedUrlList,
+    kInclusionWhitelist, kModuleWhitelist, kResourceBlacklist,
 };
 
 ListType GetListId(const base::StringPiece& name) {
@@ -83,6 +81,10 @@ ListType GetListId(const base::StringPiece& name) {
     id = UNWANTEDURL;
   } else if (name == kInclusionWhitelist) {
     id = INCLUSIONWHITELIST;
+  } else if (name == kModuleWhitelist) {
+    id = MODULEWHITELIST;
+  } else if (name == kResourceBlacklist) {
+    id = RESOURCEBLACKLIST;
   } else {
     id = INVALID;
   }
@@ -117,6 +119,11 @@ bool GetListName(ListType list_id, std::string* list) {
       break;
     case INCLUSIONWHITELIST:
       *list = kInclusionWhitelist;
+      break;
+    case MODULEWHITELIST:
+      *list = kModuleWhitelist;
+    case RESOURCEBLACKLIST:
+      *list = kResourceBlacklist;
       break;
     default:
       return false;

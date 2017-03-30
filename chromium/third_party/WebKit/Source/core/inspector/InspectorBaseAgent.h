@@ -32,20 +32,23 @@
 #define InspectorBaseAgent_h
 
 #include "core/CoreExport.h"
-#include "core/InspectorBackendDispatcher.h"
 #include "core/inspector/InstrumentingAgents.h"
 #include "platform/heap/Handle.h"
+#include "platform/inspector_protocol/Dispatcher.h"
+#include "platform/inspector_protocol/Frontend.h"
+#include "platform/inspector_protocol/TypeBuilder.h"
+#include "platform/inspector_protocol/Values.h"
 #include "wtf/Forward.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
 
-class InspectorFrontend;
-class InspectorCompositeState;
-class InspectorState;
+class Frontend;
 class InstrumentingAgents;
 class LocalFrame;
+
+using protocol::Maybe;
 
 class CORE_EXPORT InspectorAgent : public NoBaseWillBeGarbageCollectedFinalized<InspectorAgent> {
     USING_FAST_MALLOC_WILL_BE_REMOVED(InspectorAgent);
@@ -55,21 +58,22 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
     virtual void init() { }
-    virtual void setFrontend(InspectorFrontend*) = 0;
+    virtual void setFrontend(protocol::Frontend*) = 0;
     virtual void clearFrontend() = 0;
     virtual void disable(ErrorString*) { }
     virtual void restore() { }
-    virtual void registerInDispatcher(InspectorBackendDispatcher*) = 0;
+    virtual void registerInDispatcher(protocol::Dispatcher*) = 0;
     virtual void discardAgent() { }
     virtual void didCommitLoadForLocalFrame(LocalFrame*) { }
     virtual void flushPendingProtocolNotifications() { }
+    virtual void setState(PassRefPtr<protocol::DictionaryValue>);
 
     String name() const { return m_name; }
-    void appended(InstrumentingAgents*, InspectorState*);
+    void appended(InstrumentingAgents*);
 
 protected:
     RawPtrWillBeMember<InstrumentingAgents> m_instrumentingAgents;
-    RawPtrWillBeMember<InspectorState> m_state;
+    RefPtr<protocol::DictionaryValue> m_state;
 
 private:
     String m_name;
@@ -79,23 +83,24 @@ class CORE_EXPORT InspectorAgentRegistry final {
     DISALLOW_NEW();
     WTF_MAKE_NONCOPYABLE(InspectorAgentRegistry);
 public:
-    InspectorAgentRegistry(InstrumentingAgents*, InspectorCompositeState*);
+    explicit InspectorAgentRegistry(InstrumentingAgents*);
     void append(PassOwnPtrWillBeRawPtr<InspectorAgent>);
 
-    void setFrontend(InspectorFrontend*);
+    void setFrontend(protocol::Frontend*);
     void clearFrontend();
-    void restore();
-    void registerInDispatcher(InspectorBackendDispatcher*);
+    void restore(const String& savedState);
+    void registerInDispatcher(protocol::Dispatcher*);
     void discardAgents();
     void flushPendingProtocolNotifications();
     void didCommitLoadForLocalFrame(LocalFrame*);
+    String state();
 
     DECLARE_TRACE();
 
 private:
     RawPtrWillBeMember<InstrumentingAgents> m_instrumentingAgents;
-    RawPtrWillBeMember<InspectorCompositeState> m_inspectorState;
-    WillBeHeapVector<OwnPtrWillBeMember<InspectorAgent> > m_agents;
+    RefPtr<protocol::DictionaryValue> m_state;
+    WillBeHeapVector<OwnPtrWillBeMember<InspectorAgent>> m_agents;
 };
 
 template<typename AgentClass, typename FrontendClass>
@@ -103,7 +108,7 @@ class InspectorBaseAgent : public InspectorAgent {
 public:
     ~InspectorBaseAgent() override { }
 
-    void setFrontend(InspectorFrontend* frontend) override
+    void setFrontend(protocol::Frontend* frontend) override
     {
         ASSERT(!m_frontend);
         m_frontend = FrontendClass::from(frontend);
@@ -117,7 +122,7 @@ public:
         m_frontend = nullptr;
     }
 
-    void registerInDispatcher(InspectorBackendDispatcher* dispatcher) final
+    void registerInDispatcher(protocol::Dispatcher* dispatcher) final
     {
         dispatcher->registerAgent(static_cast<AgentClass*>(this));
     }

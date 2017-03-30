@@ -23,7 +23,6 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -63,6 +62,7 @@
 #include "components/cloud_devices/common/printer_description.h"
 #include "components/dom_distiller/core/dom_distiller_switches.h"
 #include "components/dom_distiller/core/url_utils.h"
+#include "components/prefs/pref_service.h"
 #include "components/printing/common/print_messages.h"
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
@@ -368,10 +368,14 @@ scoped_ptr<base::DictionaryValue> GetPdfCapabilitiesOnFileThread(
   color.SaveTo(&description);
 
   static const cloud_devices::printer::MediaType kPdfMedia[] = {
-    ISO_A4,
+    ISO_A0,
+    ISO_A1,
+    ISO_A2,
     ISO_A3,
-    NA_LETTER,
+    ISO_A4,
+    ISO_A5,
     NA_LEGAL,
+    NA_LETTER,
     NA_LEDGER
   };
   const gfx::Size default_media_size = GetDefaultPdfMediaSizeMicrons();
@@ -1142,8 +1146,7 @@ void PrintPreviewHandler::HandleSignin(const base::ListValue* args) {
 
   Profile* profile = Profile::FromBrowserContext(
       preview_web_contents()->GetBrowserContext());
-  chrome::ScopedTabbedBrowserDisplayer displayer(
-      profile, chrome::GetActiveDesktop());
+  chrome::ScopedTabbedBrowserDisplayer displayer(profile);
   print_dialog_cloud::CreateCloudPrintSigninTab(
       displayer.browser(),
       add_account,

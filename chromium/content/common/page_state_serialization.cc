@@ -606,8 +606,7 @@ void ReadFrameState(SerializeObject* obj, bool is_top,
       float device_scale_factor = g_device_scale_factor_for_testing;
       if (!device_scale_factor) {
         device_scale_factor =
-            gfx::Screen::GetNativeScreen()->GetPrimaryDisplay().
-                device_scale_factor();
+            gfx::Screen::GetScreen()->GetPrimaryDisplay().device_scale_factor();
       }
       state->scroll_offset =
           gfx::Point(state->scroll_offset.x() / state->page_scale_factor,
@@ -671,6 +670,9 @@ ExplodedHttpBodyElement::ExplodedHttpBodyElement()
       file_length(-1),
       file_modification_time(std::numeric_limits<double>::quiet_NaN()) {
 }
+
+ExplodedHttpBodyElement::ExplodedHttpBodyElement(
+    const ExplodedHttpBodyElement& other) = default;
 
 ExplodedHttpBodyElement::~ExplodedHttpBodyElement() {
 }

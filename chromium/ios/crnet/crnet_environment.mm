@@ -21,11 +21,12 @@
 #include "base/macros.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/path_service.h"
-#include "base/prefs/json_pref_store.h"
-#include "base/prefs/pref_filter.h"
 #include "base/threading/worker_pool.h"
+#include "components/prefs/json_pref_store.h"
+#include "components/prefs/pref_filter.h"
 #import "components/webp_transcode/webp_network_client_factory.h"
 #include "crypto/nss_util.h"
+#include "ios/crnet/sdch_owner_pref_storage.h"
 #include "ios/net/cookies/cookie_store_ios.h"
 #include "ios/net/crn_http_protocol_handler.h"
 #include "ios/net/empty_nsurlcache.h"
@@ -46,7 +47,6 @@
 #include "net/log/write_to_file_net_log_observer.h"
 #include "net/proxy/proxy_service.h"
 #include "net/sdch/sdch_owner.h"
-#include "net/socket/next_proto.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/default_channel_id_store.h"
 #include "net/ssl/ssl_config_service_defaults.h"
@@ -347,7 +347,9 @@ void CrNetEnvironment::ConfigureSdchOnNetworkThread() {
         pref_store_worker_pool_.get(),
         scoped_ptr<PrefFilter>());
     net_pref_store_->ReadPrefsAsync(nullptr);
-    sdch_owner_->EnablePersistentStorage(net_pref_store_.get());
+    sdch_owner_->EnablePersistentStorage(
+        scoped_ptr<net::SdchOwner::PrefStorage>(
+            new SdchOwnerPrefStorage(net_pref_store_.get())));
   }
   context->set_sdch_manager(sdch_manager_.get());
 }
@@ -436,9 +438,9 @@ void CrNetEnvironment::InitializeOnNetworkThread() {
   params.network_delegate = main_context_->network_delegate();
   params.http_server_properties = main_context_->http_server_properties();
   params.net_log = main_context_->net_log();
-  params.next_protos =
-      net::NextProtosWithSpdyAndQuic(spdy_enabled(), quic_enabled());
-  params.use_alternative_services = true;
+  params.enable_spdy31 = spdy_enabled();
+  params.enable_http2 = spdy_enabled();
+  params.parse_alternative_services = false;
   params.enable_quic = quic_enabled();
   params.alternative_service_probability_threshold =
       alternate_protocol_threshold_;

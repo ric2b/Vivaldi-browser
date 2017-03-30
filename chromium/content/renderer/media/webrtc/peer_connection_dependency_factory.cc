@@ -21,6 +21,8 @@
 #include "content/common/media/media_stream_messages.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/feature_h264_with_openh264_ffmpeg.h"
+#include "content/public/common/features.h"
 #include "content/public/common/renderer_preferences.h"
 #include "content/public/common/webrtc_ip_handling_policy.h"
 #include "content/public/renderer/content_renderer_client.h"
@@ -55,6 +57,7 @@
 #include "crypto/openssl_util.h"
 #include "jingle/glue/thread_wrapper.h"
 #include "media/base/media_permission.h"
+#include "media/filters/ffmpeg_glue.h"
 #include "media/renderers/gpu_video_accelerator_factories.h"
 #include "third_party/WebKit/public/platform/WebMediaConstraints.h"
 #include "third_party/WebKit/public/platform/WebMediaStream.h"
@@ -63,8 +66,9 @@
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
-#include "third_party/libjingle/source/talk/app/webrtc/mediaconstraintsinterface.h"
+#include "third_party/webrtc/api/mediaconstraintsinterface.h"
 #include "third_party/webrtc/base/ssladapter.h"
+#include "third_party/webrtc/modules/video_coding/codecs/h264/include/h264.h"
 
 #if defined(OS_ANDROID)
 #include "media/base/android/media_codec_util.h"
@@ -259,6 +263,18 @@ void PeerConnectionDependencyFactory::CreatePeerConnectionFactory() {
 
   DVLOG(1) << "PeerConnectionDependencyFactory::CreatePeerConnectionFactory()";
 
+#if BUILDFLAG(RTC_USE_H264)
+  // Building /w |rtc_use_h264|, is the corresponding run-time feature enabled?
+  if (base::FeatureList::IsEnabled(kWebRtcH264WithOpenH264FFmpeg)) {
+    // |H264DecoderImpl| may be used which depends on FFmpeg, therefore we need
+    // to initialize FFmpeg before going further.
+    media::FFmpegGlue::InitializeFFmpeg();
+  } else {
+    // Feature is to be disabled, no need to make sure FFmpeg is initialized.
+    webrtc::DisableRtcUseH264();
+  }
+#endif
+
   base::MessageLoop::current()->AddDestructionObserver(this);
   // To allow sending to the signaling/worker threads.
   jingle_glue::JingleThreadWrapper::EnsureForCurrentMessageLoop();
@@ -396,7 +412,17 @@ PeerConnectionDependencyFactory::CreatePeerConnection(
   // which means the permission will be granted automatically. This could be the
   // case when either the experiment is not enabled or the preference is not
   // enforced.
-  scoped_ptr<media::MediaPermission> media_permission;
+  //
+  // Note on |media_permission| lifetime: |media_permission| is owned by a frame
+  // (RenderFrameImpl). It is also stored as an indirect member of
+  // RTCPeerConnectionHandler (through PeerConnection/PeerConnectionInterface ->
+  // P2PPortAllocator -> FilteringNetworkManager -> |media_permission|).
+  // The RTCPeerConnectionHandler is owned as RTCPeerConnection::m_peerHandler
+  // in Blink, which will be reset in RTCPeerConnection::stop(). Since
+  // ActiveDOMObject::stop() is guaranteed to be called before a frame is
+  // detached, it is impossible for RTCPeerConnectionHandler to outlive the
+  // frame. Therefore using a raw pointer of |media_permission| is safe here.
+  media::MediaPermission* media_permission = nullptr;
   if (!GetContentClient()
            ->renderer()
            ->ShouldEnforceWebRTCRoutingPreferences()) {
@@ -453,10 +479,8 @@ PeerConnectionDependencyFactory::CreatePeerConnection(
       if (create_media_permission) {
         content::RenderFrameImpl* render_frame =
             content::RenderFrameImpl::FromWebFrame(web_frame);
-        if (render_frame) {
-          media_permission = render_frame->CreateMediaPermissionProxy(
-              chrome_worker_thread_.task_runner());
-        }
+        if (render_frame)
+          media_permission = render_frame->GetMediaPermission();
         DCHECK(media_permission);
       }
     }
@@ -467,11 +491,10 @@ PeerConnectionDependencyFactory::CreatePeerConnection(
 
   scoped_ptr<rtc::NetworkManager> network_manager;
   if (port_config.enable_multiple_routes) {
-    media::MediaPermission* media_permission_ptr = media_permission.get();
     FilteringNetworkManager* filtering_network_manager =
         new FilteringNetworkManager(network_manager_, requesting_origin,
-                                    std::move(media_permission));
-    if (media_permission_ptr) {
+                                    media_permission);
+    if (media_permission) {
       // Start permission check earlier to reduce any impact to call set up
       // time. It's safe to use Unretained here since both destructor and
       // Initialize can only be called on the worker thread.

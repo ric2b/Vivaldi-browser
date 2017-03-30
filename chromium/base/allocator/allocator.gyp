@@ -20,17 +20,25 @@
     # e.g. for profiling (it's more rare to profile Debug builds,
     # but people sometimes need to do that).
     'disable_debugallocation%': 0,
+    'use_experimental_allocator_shim%': 0,
   },
   'targets': [
-    # Only executables and not libraries should depend on the
-    # allocator target; only the application (the final executable)
-    # knows what allocator makes sense.
+    # The only targets that should depend on allocator are 'base' and
+    # executables that don't depend, directly or indirectly, on base (a few).
+    # All the other targets get a transitive dependency on this target via base.
     {
       'target_name': 'allocator',
-      # TODO(primiano): This should be type: none for the noop cases (an empty
-      # static lib can confuse some gyp generators). Fix it once the refactoring
-      # (crbug.com/564618) bring this file to a saner state (fewer conditions).
-      'type': 'static_library',
+      'variables': {
+        'conditions': [
+          ['use_allocator!="none" or (OS=="win" and win_use_allocator_shim==1)', {
+            'allocator_target_type%': 'static_library',
+          }, {
+            'allocator_target_type%': 'none',
+          }],
+        ],
+      },
+      'type': '<(allocator_target_type)',
+      'toolsets': ['host', 'target'],
       'conditions': [
         ['OS=="win" and win_use_allocator_shim==1', {
           'msvs_settings': {
@@ -51,25 +59,21 @@
           'sources': [
             'allocator_shim_win.cc',
           ],
+          'link_settings': {
+            'msvs_settings': {
+              'VCLinkerTool': {
+                'IgnoreDefaultLibraryNames': ['libcmtd.lib', 'libcmt.lib'],
+                'AdditionalDependencies': [
+                  '<(SHARED_INTERMEDIATE_DIR)/allocator/libcmt.lib'
+                ],
+              },
+            },
+          },
           'configurations': {
             'Debug_Base': {
               'msvs_settings': {
                 'VCCLCompilerTool': {
                   'RuntimeLibrary': '0',
-                },
-              },
-            },
-          },
-          'direct_dependent_settings': {
-            'configurations': {
-              'Common_Base': {
-                'msvs_settings': {
-                  'VCLinkerTool': {
-                    'IgnoreDefaultLibraryNames': ['libcmtd.lib', 'libcmt.lib'],
-                    'AdditionalDependencies': [
-                      '<(SHARED_INTERMEDIATE_DIR)/allocator/libcmt.lib'
-                    ],
-                  },
                 },
               },
             },
@@ -337,6 +341,11 @@
                 '<(tcmalloc_dir)/src/profiler.cc',
               ],
             }],
+            ['use_experimental_allocator_shim==1', {
+              'defines': [
+                'TCMALLOC_DONT_REPLACE_SYSTEM_ALLOC',
+              ],
+            }]
           ],
           'configurations': {
             'Debug_Base': {
@@ -372,10 +381,11 @@
     },  # 'allocator' target.
   ],  # targets.
   'conditions': [
-    ['OS=="win" and component!="shared_library"', {
+    ['OS=="win" and win_use_allocator_shim==1', {
       'targets': [
         {
           'target_name': 'libcmt',
+          'toolsets': ['host', 'target'],
           'type': 'none',
           'actions': [
             {

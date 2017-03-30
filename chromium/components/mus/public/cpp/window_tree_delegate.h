@@ -9,7 +9,7 @@
 
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "mojo/services/network/public/interfaces/url_loader.mojom.h"
-#include "mojo/shell/public/interfaces/service_provider.mojom.h"
+#include "mojo/shell/public/interfaces/interface_provider.mojom.h"
 
 namespace mus {
 
@@ -33,6 +33,8 @@ class WindowTreeDelegate {
  public:
   // Called when the application implementing this interface is embedded at
   // |root|.
+  // NOTE: this is only invoked if the WindowTreeConnection is created with
+  // an InterfaceRequest.
   virtual void OnEmbed(Window* root) = 0;
 
   // Sent when another app is embedded in |root| (one of the roots of the

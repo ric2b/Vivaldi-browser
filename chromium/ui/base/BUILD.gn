@@ -2,10 +2,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
+import("//ui/base/ui_features.gni")
+import("//ui/ozone/ozone.gni")
 
 if (is_android) {
   import("//build/config/android/config.gni")
@@ -13,6 +16,39 @@ if (is_android) {
 }
 
 build_ime = !is_ios
+
+# As part of building Chrome on iOS, it is necessary to run a tool on
+# the host to load datapack and generate output in a format defined
+# by the platform (this is to support notifications).
+#
+# Introduce a standalone target that build on both 'host' and 'target'
+# toolset that just build the support to load datapack. The dependency
+# should be kept minimal to have to build too many targets with multiple
+# toolsets.
+component("ui_data_pack") {
+  sources = [
+    "resource/data_pack.cc",
+    "resource/data_pack.h",
+    "resource/data_pack_export.h",
+    "resource/resource_handle.h",
+    "resource/scale_factor.cc",
+    "resource/scale_factor.h",
+  ]
+
+  deps = [
+    "//base",
+  ]
+
+  defines = [ "UI_DATA_PACK_IMPLEMENTATION" ]
+
+  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+}
+
+buildflag_header("ui_features") {
+  header = "ui_features.h"
+  flags = [ "ENABLE_HIDPI=$enable_hidpi" ]
+}
 
 component("base") {
   output_name = "ui_base"
@@ -101,6 +137,7 @@ component("base") {
     "cursor/cursor_android.cc",
     "cursor/cursor_loader.h",
     "cursor/cursor_win.cc",
+    "default_style.h",
     "default_theme_provider_mac.mm",
     "device_form_factor.h",
     "device_form_factor_android.cc",
@@ -148,6 +185,8 @@ component("base") {
     "layout.cc",
     "layout.h",
     "layout_mac.mm",
+    "material_design/material_design_controller.cc",
+    "material_design/material_design_controller.h",
     "models/button_menu_item_model.cc",
     "models/button_menu_item_model.h",
     "models/combobox_model.cc",
@@ -178,10 +217,6 @@ component("base") {
     "nine_image_painter_factory.h",
     "page_transition_types.cc",
     "page_transition_types.h",
-    "resource/data_pack.cc",
-    "resource/data_pack.h",
-    "resource/material_design/material_design_controller.cc",
-    "resource/material_design/material_design_controller.h",
     "resource/resource_bundle.cc",
     "resource/resource_bundle.h",
     "resource/resource_bundle_android.cc",
@@ -192,7 +227,6 @@ component("base") {
     "resource/resource_bundle_win.h",
     "resource/resource_data_dll_win.cc",
     "resource/resource_data_dll_win.h",
-    "resource/resource_handle.h",
     "template_expressions.cc",
     "template_expressions.h",
     "theme_provider.cc",
@@ -318,6 +352,7 @@ component("base") {
   defines = [ "UI_BASE_IMPLEMENTATION" ]
 
   public_deps = [
+    ":ui_features",
     "//base",
     "//skia",
     "//ui/events:events_base",
@@ -331,6 +366,7 @@ component("base") {
     "//base/third_party/dynamic_annotations",
     "//net",
     "//third_party/icu",
+    "//ui/base:ui_data_pack",
     "//ui/events",
     "//ui/events/devices",
     "//ui/resources",
@@ -371,7 +407,7 @@ component("base") {
       "dragdrop/drag_utils_aura.cc",
     ]
   }
-  if (use_x11) {
+  if (use_x11 || ozone_platform_x11) {
     sources += [
       "x/x11_foreign_window_manager.cc",
       "x/x11_foreign_window_manager.h",
@@ -479,7 +515,7 @@ component("base") {
     ]
   }
 
-  if (use_x11) {
+  if (use_x11 || ozone_platform_x11) {
     #'all_dependent_settings': {
     #'ldflags': [
     #'-L<(PRODUCT_DIR)',
@@ -599,6 +635,8 @@ source_set("test_support") {
       "test/scoped_fake_nswindow_focus.mm",
       "test/scoped_fake_nswindow_fullscreen.h",
       "test/scoped_fake_nswindow_fullscreen.mm",
+      "test/scoped_preferred_scroller_style_mac.h",
+      "test/scoped_preferred_scroller_style_mac.mm",
       "test/test_clipboard.cc",
       "test/test_clipboard.h",
       "test/windowed_nsnotification_observer.h",
@@ -621,6 +659,7 @@ source_set("test_support") {
     "//base/test:test_config",
     "//skia",
     "//testing/gtest",
+    "//ui/base:ui_data_pack",
     "//ui/events:events_base",
     "//ui/events:test_support",
     "//ui/gfx",
@@ -659,16 +698,6 @@ if (is_android) {
   }
 }
 
-#
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("ui_base_unittests_run") {
-  testonly = true
-  deps = [
-    ":ui_base_unittests",
-  ]
-}
-
 # GYP version: ui/base/ui_base_tests.gyp:ui_base_unittests
 test("ui_base_unittests") {
   sources = [
@@ -678,11 +707,12 @@ test("ui_base_unittests") {
     "l10n/l10n_util_win_unittest.cc",
     "l10n/time_format_unittest.cc",
     "layout_unittest.cc",
+    "material_design/material_design_controller_unittest.cc",
     "models/tree_node_iterator_unittest.cc",
     "resource/data_pack_literal.cc",
     "resource/data_pack_unittest.cc",
-    "resource/material_design/material_design_controller_unittest.cc",
     "resource/resource_bundle_unittest.cc",
+    "resource/scale_factor_unittest.cc",
     "template_expressions_unittest.cc",
     "test/run_all_unittests.cc",
     "user_activity/user_activity_detector_unittest.cc",
@@ -743,7 +773,6 @@ test("ui_base_unittests") {
       "ime/composition_text_unittest.cc",
       "ime/input_method_base_unittest.cc",
       "ime/input_method_chromeos_unittest.cc",
-      "ime/remote_input_method_win_unittest.cc",
       "ime/win/imm32_manager_unittest.cc",
       "ime/win/tsf_input_scope_unittest.cc",
     ]
@@ -767,7 +796,6 @@ test("ui_base_unittests") {
 
   deps = [
     "//base",
-    "//base/allocator",
     "//base/test:test_support",
     "//net",
     "//skia",
@@ -776,6 +804,7 @@ test("ui_base_unittests") {
     "//third_party/icu",
     "//ui/base",
     "//ui/base:test_support",
+    "//ui/base:ui_data_pack",
     "//ui/events:events_base",
     "//ui/events:test_support",
     "//ui/gfx:test_support",

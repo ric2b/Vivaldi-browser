@@ -42,8 +42,9 @@ void GetFilePathAndQuery(const std::string& url,
   // We receive the url with chrome://fileicon/ stripped but GURL expects it.
   const GURL gurl("chrome://fileicon/" + url);
   std::string path = net::UnescapeURLComponent(
-      gurl.path().substr(1), (net::UnescapeRule::URL_SPECIAL_CHARS |
-                              net::UnescapeRule::SPACES));
+      gurl.path().substr(1),
+      net::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS |
+          net::UnescapeRule::PATH_SEPARATORS | net::UnescapeRule::SPACES);
 
   *file_path = base::FilePath::FromUTF8Unsafe(path);
   *file_path = file_path->NormalizePathSeparators();
@@ -81,6 +82,9 @@ void ParseQueryParams(const std::string& query,
 
 FileIconSource::IconRequestDetails::IconRequestDetails() : scale_factor(1.0f) {
 }
+
+FileIconSource::IconRequestDetails::IconRequestDetails(
+    const IconRequestDetails& other) = default;
 
 FileIconSource::IconRequestDetails::~IconRequestDetails() {
 }

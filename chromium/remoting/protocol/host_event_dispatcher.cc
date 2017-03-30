@@ -4,30 +4,27 @@
 
 #include "remoting/protocol/host_event_dispatcher.h"
 
-#include "base/callback_helpers.h"
 #include "net/socket/stream_socket.h"
+#include "remoting/base/compound_buffer.h"
 #include "remoting/base/constants.h"
 #include "remoting/proto/event.pb.h"
 #include "remoting/proto/internal.pb.h"
 #include "remoting/protocol/input_stub.h"
+#include "remoting/protocol/message_serialization.h"
 
 namespace remoting {
 namespace protocol {
 
 HostEventDispatcher::HostEventDispatcher()
-    : ChannelDispatcherBase(kEventChannelName),
-      input_stub_(nullptr),
-      parser_(base::Bind(&HostEventDispatcher::OnMessageReceived,
-                         base::Unretained(this)),
-              reader()) {}
-
+    : ChannelDispatcherBase(kEventChannelName) {}
 HostEventDispatcher::~HostEventDispatcher() {}
 
-void HostEventDispatcher::OnMessageReceived(scoped_ptr<EventMessage> message,
-                                            const base::Closure& done_task) {
+void HostEventDispatcher::OnIncomingMessage(scoped_ptr<CompoundBuffer> buffer) {
   DCHECK(input_stub_);
 
-  base::ScopedClosureRunner done_runner(done_task);
+  scoped_ptr<EventMessage> message = ParseMessage<EventMessage>(buffer.get());
+  if (!message)
+    return;
 
   if (!on_input_event_callback_.is_null())
     on_input_event_callback_.Run(message->timestamp());

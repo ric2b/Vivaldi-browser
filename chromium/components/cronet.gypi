@@ -3,6 +3,9 @@
 # found in the LICENSE file.
 
 {
+  'variables': {
+    'enable_bidirectional_stream%': 0,
+  },
   'conditions': [
     ['OS=="android"', {
       'targets': [
@@ -10,6 +13,7 @@
           'target_name': 'cronet_jni_headers',
           'type': 'none',
           'sources': [
+            'cronet/android/java/src/org/chromium/net/CronetBidirectionalStream.java',
             'cronet/android/java/src/org/chromium/net/CronetLibraryLoader.java',
             'cronet/android/java/src/org/chromium/net/CronetUploadDataStream.java',
             'cronet/android/java/src/org/chromium/net/CronetUrlRequest.java',
@@ -23,7 +27,7 @@
           'includes': [ '../build/jni_generator.gypi' ],
         },
         {
-          'target_name': 'cronet_url_request_java',
+          'target_name': 'chromium_url_request_java',
           'type': 'none',
           'variables': {
             'source_file': 'cronet/android/chromium_url_request.h',
@@ -45,6 +49,31 @@
             'source_file': '../net/base/network_quality_estimator.h',
           },
           'includes': [ '../build/android/java_cpp_enum.gypi' ],
+        },
+        {
+          'target_name': 'url_request_error_java',
+          'type': 'none',
+          'variables': {
+            'source_file': 'cronet/android/url_request_error.h',
+          },
+          'includes': [ '../build/android/java_cpp_enum.gypi' ],
+        },
+        {
+          # This target is a jar file containing classes that Cronet's javadocs
+          # may reference but are not included in the javadocs themselves.
+          'target_name': 'cronet_javadoc_classpath',
+          'type': 'none',
+          'variables': {
+            # Work around GYP requirement that java targets specify java_in_dir
+            # variable that contains at least one java file.
+            'java_in_dir': 'cronet/android/api',
+            'java_in_dir_suffix': '/src_dummy',
+            'run_findbugs': 1,
+          },
+          'dependencies': [
+            'url_request_error_java',
+          ],
+          'includes': [ '../build/java.gypi' ],
         },
         {
           'target_name': 'http_cache_type_java',
@@ -193,6 +222,17 @@
           'includes': [ 'cronet/cronet_static.gypi' ],
         },
         {
+          # GN version: //cronet:features
+          'target_name': 'cronet_features',
+          'includes': [ '../build/buildflag_header.gypi' ],
+          'variables': {
+             'buildflag_header_path': 'components/cronet/cronet_features.h',
+             'buildflag_flags': [
+               'ENABLE_BIDIRECTIONAL_STREAM=<(enable_bidirectional_stream)',
+            ],
+          },
+        },
+        {
           'target_name': 'libcronet',
           'type': 'shared_library',
           'sources': [
@@ -210,6 +250,7 @@
           'type': 'none',
           'dependencies': [
             'http_cache_type_java',
+            'url_request_error_java',
             'cronet_version',
             'load_states_list',
             'network_quality_observations_java',
@@ -228,7 +269,7 @@
           'dependencies': [
             '../base/base.gyp:base',
             'cronet_api',
-            'cronet_url_request_java',
+            'chromium_url_request_java',
             'libcronet',
             'net_request_priority_java',
             'network_quality_observations_java',
@@ -242,6 +283,7 @@
               '**/ChromiumUrlRequestError.java',
               '**/ChromiumUrlRequestFactory.java',
               '**/ChromiumUrlRequestPriority.java',
+              '**/CronetBidirectionalStream.java',
               '**/CronetLibraryLoader.java',
               '**/CronetUploadDataStream.java',
               '**/CronetUrlRequest.java',
@@ -352,6 +394,8 @@
             'cronet/android/test/network_change_notifier_util.h',
             'cronet/android/test/cronet_url_request_context_config_test.cc',
             'cronet/android/test/cronet_url_request_context_config_test.h',
+            'cronet/android/test/cronet_test_util.cc',
+            'cronet/android/test/cronet_test_util.h',
           ],
           'dependencies': [
             'cronet_tests_jni_headers',
@@ -376,19 +420,45 @@
           'includes': [ 'cronet/cronet_static.gypi' ],
         },
         {
-          'target_name': 'cronet_test_apk',
+          'target_name': 'cronet_test_support',
           'type': 'none',
           'dependencies': [
             'cronet_java',
             '../net/net.gyp:net_java_test_support',
+            '../third_party/netty-tcnative/netty-tcnative.gyp:netty-tcnative',
+            '../third_party/netty4/netty.gyp:netty_all',
+          ],
+          'variables': {
+            'java_in_dir': 'cronet/android/test',
+            'additional_src_dirs': [ 'cronet/android/test/javatests/src' ],
+            'run_findbugs': 1,
+          },
+          'includes': [ '../build/java.gypi' ],
+        },
+        {
+          'target_name': 'cronet_test_apk',
+          'type': 'none',
+          'dependencies': [
+            'cronet_java',
+            'cronet_test_support',
+            '../net/net.gyp:net_java_test_support',
+            '../third_party/netty-tcnative/netty-tcnative.gyp:netty-tcnative',
+            '../third_party/netty4/netty.gyp:netty_all',
           ],
           'variables': {
             'apk_name': 'CronetTest',
+            # There isn't an easy way to have a java_apk target without any Java
+            # so we'll borrow the trick from the net_test_support_apk target of
+            # pointing it at placeholder Java via java_in_dir_suffix.
             'java_in_dir': 'cronet/android/test',
+            'java_in_dir_suffix': '/src_dummy',
             'resource_dir': 'cronet/android/test/res',
             'asset_location': 'cronet/android/test/assets',
             'native_lib_target': 'libcronet_tests',
             'run_findbugs': 1,
+            'additional_bundled_libs': [
+              '>(netty_tcnative_so_file_location)',
+            ],
           },
           'includes': [ '../build/java_apk.gypi' ],
         },
@@ -419,6 +489,16 @@
             'is_test_apk': 1,
             'run_findbugs': 1,
           },
+          'conditions': [
+            ['enable_bidirectional_stream==0', {
+              'variables' : {
+                'jar_excluded_classes': [
+                  '**/BidirectionalStreamTest*',
+                  '**/TestBidirectionalStreamCallback*',
+                ],
+              },
+            },],
+          ],
           'includes': [ '../build/java_apk.gypi' ],
         },
         {
@@ -427,15 +507,16 @@
           'dependencies': [
             'cronet_java',
             'cronet_api',
+            'cronet_test_support',
           ],
           'variables': {
             'apk_name': 'CronetPerfTest',
             'java_in_dir': 'cronet/android/test/javaperftests',
-            'is_test_apk': 1,
-            'native_lib_target': 'libcronet',
+            'native_lib_target': 'libcronet_tests',
             'proguard_enabled': 'true',
             'proguard_flags_paths': [
               'cronet/android/proguard.cfg',
+              'cronet/android/test/javaperftests/proguard.cfg',
             ],
             'run_findbugs': 1,
           },
@@ -478,6 +559,7 @@
             'libcronet',
             'cronet_java',
             'cronet_api',
+            'cronet_javadoc_classpath',
             '../net/net.gyp:net_unittests_apk',
           ],
           'variables': {
@@ -602,6 +684,7 @@
                 '--input-dir=cronet/',
                 '--overview-file=<(package_dir)/README.md.html',
                 '--readme-file=cronet/README.md',
+                '--lib-java-dir=<(lib_java_dir)',
               ],
               'message': 'Generating Javadoc',
             },

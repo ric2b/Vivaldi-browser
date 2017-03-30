@@ -34,7 +34,6 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/events/Event.h"
 #include "core/events/GenericEventQueue.h"
-#include "core/html/MediaKeyError.h"
 #include "modules/encryptedmedia/ContentDecryptionModuleResultPromise.h"
 #include "modules/encryptedmedia/EncryptedMediaUtils.h"
 #include "modules/encryptedmedia/MediaKeyMessageEvent.h"
@@ -896,12 +895,12 @@ bool MediaKeySession::hasPendingActivity() const
     // Remain around if there are pending events or MediaKeys is still around
     // and we're not closed.
     WTF_LOG(Media, "MediaKeySession(%p)::hasPendingActivity %s%s%s%s", this,
-        ActiveDOMObject::hasPendingActivity() ? " ActiveDOMObject::hasPendingActivity()" : "",
+        ScriptWrappable::hasPendingActivity() ? " ScriptWrappable::hasPendingActivity()" : "",
         !m_pendingActions.isEmpty() ? " !m_pendingActions.isEmpty()" : "",
         m_asyncEventQueue->hasPendingEvents() ? " m_asyncEventQueue->hasPendingEvents()" : "",
         (m_mediaKeys && !m_isClosed) ? " m_mediaKeys && !m_isClosed" : "");
 
-    return ActiveDOMObject::hasPendingActivity()
+    return ScriptWrappable::hasPendingActivity()
         || !m_pendingActions.isEmpty()
         || m_asyncEventQueue->hasPendingEvents()
         || (m_mediaKeys && !m_isClosed);

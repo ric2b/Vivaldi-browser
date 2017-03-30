@@ -1,32 +1,69 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
+<link rel="import" href="chrome://md-settings/search_engines_page/search_engine_dialog.html">
+<link rel="import" href="chrome://md-settings/search_engines_page/search_engines_browser_proxy.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-dropdown/iron-dropdown.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-input.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-item/paper-item.html">
+<link rel="import" href="chrome://md-settings/settings_shared_css.html">
 
-<dom-module id="cr-search-engine-entry">
-  <link rel="import" type="css" href="search_engine_entry.css">
+<dom-module id="settings-search-engine-entry">
+  <link rel="import" type="css" href="chrome://md-settings/search_engines_page/search_engine_entry.css">
   <template>
-    <div class="entry">
-      <div class="inputs">
-        <paper-input id="domainField" disabled required
-            class="narrow-input" auto-validate="false"
-            value="{{engine.name}}" on-change="fieldChanged_">
-        </paper-input>
-        <paper-input id="keywordField" disabled required
-            class="narrow-input" auto-validate="false"
-            value="{{engine.keyword}}" on-change="fieldChanged_">
-        </paper-input>
-        <paper-input id="queryURLField" disabled required
-            class="wide-input" auto-validate="false"
-            value="{{engine.url}}" on-change="fieldChanged_">
-        </paper-input>
+    <style include="settings-shared"></style>
+    <style>
+      :host([is-default]) {
+        font-weight: 500;
+      }
+
+      .name-column,
+      .keyword-column {
+        flex: 3;
+      }
+
+      .url-column {
+        flex: 4;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    </style>
+
+    <template is="dom-if" if="[[showEditSearchEngineDialog_]]" restamp>
+      <settings-search-engine-dialog model="[[engine]]">
+      </settings-search-engine-dialog>
+    </template>
+    <div id="container" class="list-item">
+      <div class="name-column">
+        <span class="icon-container">
+          <template is="dom-if" if="[[engine.iconURL]]">
+            <iron-icon src="[[engine.iconURL]]"></iron-icon>
+          </template>
+          <template is="dom-if" if="[[!engine.iconURL]]">
+            <iron-icon icon="icons:find-in-page"></iron-icon>
+          </template>
+        </span>
+        <span class="name">[[engine.displayName]]</span>
       </div>
-      <div class="icons">
-        <iron-icon icon="settings" on-tap="toggleEditable_"></iron-icon>
-        <iron-icon id="checkIcon" icon="check" on-tap="makeDefault_">
-        </iron-icon>
-        <iron-icon id="deleteIcon" icon="clear" on-tap="deleteEngine_">
-        </iron-icon>
-      </div>
+      <div class="keyword-column">[[engine.keyword]]</div>
+      <div class="url-column">[[engine.url]]</div>
+        <paper-icon-button icon="more-vert" toggles active="{{editMenuOpened}}">
+        </paper-icon-button>
+        <iron-dropdown opened="{{editMenuOpened}}" horizontal-align="right"
+            vertical-align="top">
+          <div class="dropdown-content">
+            <paper-item on-tap="onMakeDefaultTap_"
+                i18n-content="searchEnginesMakeDefault"
+                hidden$="[[!engine.canBeDefault]]" id="makeDefault"></paper-item>
+            <paper-item on-tap="onEditTap_"
+                i18n-content="searchEnginesEdit"
+                hidden$="[[!engine.canBeEdited]]" id="edit"></paper-item>
+            <paper-item on-tap="onDeleteTap_"
+                i18n-content="searchEnginesRemoveFromList"
+                hidden$="[[!engine.canBeRemoved]]" id="delete"></paper-item>
+          <div>
+        </iron-dropdown>
     </div>
   </template>
   <script src="search_engine_entry.js"></script>

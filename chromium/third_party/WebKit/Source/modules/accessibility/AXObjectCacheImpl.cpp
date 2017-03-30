@@ -66,8 +66,6 @@
 #include "modules/accessibility/AXMenuListPopup.h"
 #include "modules/accessibility/AXProgressIndicator.h"
 #include "modules/accessibility/AXSVGRoot.h"
-#include "modules/accessibility/AXScrollView.h"
-#include "modules/accessibility/AXScrollbar.h"
 #include "modules/accessibility/AXSlider.h"
 #include "modules/accessibility/AXSpinButton.h"
 #include "modules/accessibility/AXTable.h"
@@ -151,23 +149,37 @@ AXObject* AXObjectCacheImpl::focusedImageMapUIElement(HTMLAreaElement* areaEleme
     return 0;
 }
 
-AXObject* AXObjectCacheImpl::focusedUIElementForPage(const Page* page)
+AXObject* AXObjectCacheImpl::focusedObject()
 {
-    if (!page->settings().accessibilityEnabled())
+    if (!accessibilityEnabled())
         return 0;
 
-    // Cross-process accessibility is not yet implemented.
-    if (!page->focusController().focusedOrMainFrame()->isLocalFrame())
+    // We don't have to return anything if the focused frame is not local;
+    // the remote frame will have its own AXObjectCacheImpl and the focused
+    // object will be sorted out by the browser process.
+    Page* page = m_document->page();
+    if (!page->focusController().focusedFrame())
         return 0;
 
-    // get the focused node in the page
-    Document* focusedDocument = toLocalFrame(page->focusController().focusedOrMainFrame())->document();
+    // Get the focused node in the page.
+    Document* focusedDocument = page->focusController().focusedFrame()->document();
     Node* focusedNode = focusedDocument->focusedElement();
     if (!focusedNode)
         focusedNode = focusedDocument;
 
-    if (isHTMLAreaElement(*focusedNode))
+    // If it's an image map, get the focused link within the image map.
+    if (isHTMLAreaElement(focusedNode))
         return focusedImageMapUIElement(toHTMLAreaElement(focusedNode));
+
+    // See if there's a page popup, for example a calendar picker.
+    Element* adjustedFocusedElement = focusedDocument->adjustedFocusedElement();
+    if (isHTMLInputElement(adjustedFocusedElement)) {
+        if (AXObject* axPopup = toHTMLInputElement(adjustedFocusedElement)->popupRootAXObject()) {
+            if (Element* focusedElementInPopup = axPopup->document()->focusedElement())
+                focusedNode = focusedElementInPopup;
+        }
+
+    }
 
     AXObject* obj = getOrCreate(focusedNode);
     if (!obj)
@@ -183,19 +195,6 @@ AXObject* AXObjectCacheImpl::focusedUIElementForPage(const Page* page)
         obj = obj->parentObjectUnignored();
 
     return obj;
-}
-
-AXObject* AXObjectCacheImpl::get(Widget* widget)
-{
-    if (!widget)
-        return 0;
-
-    AXID axID = m_widgetObjectMapping.get(widget);
-    ASSERT(!HashTraits<AXID>::isDeletedValue(axID));
-    if (!axID)
-        return 0;
-
-    return m_objects.get(axID);
 }
 
 AXObject* AXObjectCacheImpl::get(LayoutObject* layoutObject)
@@ -352,44 +351,6 @@ AXObject* AXObjectCacheImpl::createFromInlineTextBox(AbstractInlineTextBox* inli
     return AXInlineTextBox::create(inlineTextBox, *this);
 }
 
-AXObject* AXObjectCacheImpl::getOrCreate(Widget* widget)
-{
-    if (!widget)
-        return 0;
-
-    if (AXObject* obj = get(widget))
-        return obj;
-
-    AXObject* newObj = nullptr;
-    if (widget->isFrameView()) {
-        FrameView* frameView = toFrameView(widget);
-
-        // Don't create an AXScrollView for a FrameView that isn't attached to a frame,
-        // for example if it's in the process of being disposed.
-        if (frameView->frame().view() != frameView || !frameView->layoutView())
-            return 0;
-
-        newObj = AXScrollView::create(toFrameView(widget), *this);
-    } else if (widget->isScrollbar()) {
-        newObj = AXScrollbar::create(toScrollbar(widget), *this);
-    }
-
-    // Will crash later if we have two objects for the same widget.
-    ASSERT(!get(widget));
-
-    // Catch the case if an (unsupported) widget type is used. Only FrameView and ScrollBar are supported now.
-    ASSERT(newObj);
-    if (!newObj)
-        return 0;
-
-    getAXID(newObj);
-
-    m_widgetObjectMapping.set(widget, newObj->axObjectID());
-    m_objects.set(newObj->axObjectID(), newObj);
-    newObj->init();
-    return newObj;
-}
-
 AXObject* AXObjectCacheImpl::getOrCreate(Node* node)
 {
     if (!node)
@@ -478,7 +439,7 @@ AXObject* AXObjectCacheImpl::rootObject()
     if (!accessibilityEnabled())
         return 0;
 
-    return getOrCreate(m_document->view());
+    return getOrCreate(m_document);
 }
 
 AXObject* AXObjectCacheImpl::getOrCreate(AccessibilityRole role)
@@ -565,16 +526,6 @@ void AXObjectCacheImpl::remove(Node* node)
     }
 }
 
-void AXObjectCacheImpl::remove(Widget* view)
-{
-    if (!view)
-        return;
-
-    AXID axID = m_widgetObjectMapping.get(view);
-    remove(axID);
-    m_widgetObjectMapping.remove(view);
-}
-
 void AXObjectCacheImpl::remove(AbstractInlineTextBox* inlineTextBox)
 {
     if (!inlineTextBox)
@@ -629,6 +580,16 @@ void AXObjectCacheImpl::removeAXID(AXObject* object)
     ASSERT(m_idsInUse.contains(objID));
     object->setAXObjectID(0);
     m_idsInUse.remove(objID);
+
+    if (m_ariaOwnerToChildrenMapping.contains(objID)) {
+        Vector<AXID> childAXIDs = m_ariaOwnerToChildrenMapping.get(objID);
+        for (size_t i = 0; i < childAXIDs.size(); ++i)
+            m_ariaOwnedChildToOwnerMapping.remove(childAXIDs[i]);
+        m_ariaOwnerToChildrenMapping.remove(objID);
+    }
+    m_ariaOwnedChildToOwnerMapping.remove(objID);
+    m_ariaOwnedChildToRealParentMapping.remove(objID);
+    m_ariaOwnerToIdsMapping.remove(objID);
 }
 
 void AXObjectCacheImpl::selectionChanged(Node* node)
@@ -971,18 +932,6 @@ void AXObjectCacheImpl::listboxActiveIndexChanged(HTMLSelectElement* select)
     toAXListBox(obj)->activeIndexChanged();
 }
 
-void AXObjectCacheImpl::handleScrollbarUpdate(FrameView* view)
-{
-    if (!view)
-        return;
-
-    // We don't want to create a scroll view from this method, only update an existing one.
-    if (AXObject* scrollViewObject = get(view)) {
-        m_modificationCount++;
-        scrollViewObject->updateChildrenIfNecessary();
-    }
-}
-
 void AXObjectCacheImpl::handleLayoutComplete(LayoutObject* layoutObject)
 {
     if (!layoutObject)
@@ -995,6 +944,12 @@ void AXObjectCacheImpl::handleLayoutComplete(LayoutObject* layoutObject)
     // document first loads.
     if (AXObject* obj = getOrCreate(layoutObject))
         postNotification(obj, AXLayoutComplete);
+}
+
+void AXObjectCacheImpl::handleClicked(Node* node)
+{
+    if (AXObject* obj = getOrCreate(node))
+        postNotification(obj, AXClicked);
 }
 
 void AXObjectCacheImpl::handleAriaExpandedChange(Node* node)
@@ -1164,17 +1119,6 @@ bool isNodeAriaVisible(Node* node)
 
 void AXObjectCacheImpl::postPlatformNotification(AXObject* obj, AXNotification notification)
 {
-    if (obj && obj->isAXScrollbar() && notification == AXValueChanged) {
-        // Send document value changed on scrollbar value changed notification.
-        Scrollbar* scrollBar = toAXScrollbar(obj)->scrollbar();
-        if (!scrollBar || !scrollBar->parent() || !scrollBar->parent()->isFrameView())
-            return;
-        Document* document = toFrameView(scrollBar->parent())->frame().document();
-        if (document != document->topDocument())
-            return;
-        obj = get(document->layoutView());
-    }
-
     if (!obj || !obj->document() || !obj->documentFrameView() || !obj->documentFrameView()->frame().page())
         return;
 
@@ -1200,7 +1144,7 @@ void AXObjectCacheImpl::handleFocusedUIElementChanged(Node* oldFocusedNode, Node
     if (!page)
         return;
 
-    AXObject* focusedObject = focusedUIElementForPage(page);
+    AXObject* focusedObject = this->focusedObject();
     if (!focusedObject)
         return;
 
@@ -1279,10 +1223,7 @@ void AXObjectCacheImpl::handleScrolledToAnchor(const Node* anchorNode)
 
 void AXObjectCacheImpl::handleScrollPositionChanged(FrameView* frameView)
 {
-    // Prefer to fire the scroll position changed event on the frame view's child web area, if possible.
-    AXObject* targetAXObject = getOrCreate(frameView);
-    if (targetAXObject && !targetAXObject->children().isEmpty())
-        targetAXObject = targetAXObject->children()[0].get();
+    AXObject* targetAXObject = getOrCreate(frameView->frame().document());
     postPlatformNotification(targetAXObject, AXScrollPositionChanged);
 }
 
@@ -1328,7 +1269,6 @@ DEFINE_TRACE(AXObjectCacheImpl)
 {
 #if ENABLE(OILPAN)
     visitor->trace(m_document);
-    visitor->trace(m_widgetObjectMapping);
     visitor->trace(m_nodeObjectMapping);
 #endif
 

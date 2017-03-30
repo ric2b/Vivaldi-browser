@@ -126,6 +126,8 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
   // These flags should be mirrored by renderer versions in content/renderer/.
   settings.initial_debug_state.show_debug_borders =
       command_line->HasSwitch(cc::switches::kUIShowCompositedLayerBorders);
+  settings.initial_debug_state.show_fps_counter =
+      command_line->HasSwitch(cc::switches::kUIShowFPSCounter);
   settings.initial_debug_state.show_layer_animation_bounds_rects =
       command_line->HasSwitch(cc::switches::kUIShowLayerAnimationBounds);
   settings.initial_debug_state.show_paint_rects =
@@ -142,12 +144,10 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
   settings.initial_debug_state.SetRecordRenderingStats(
       command_line->HasSwitch(cc::switches::kEnableGpuBenchmarking));
 
-  if (command_line->HasSwitch(cc::switches::kDisableCompositorPropertyTrees))
-    settings.use_property_trees = false;
   settings.use_zero_copy = IsUIZeroCopyEnabled();
 
-  settings.renderer_settings.use_rgba_4444_textures =
-      command_line->HasSwitch(switches::kUIEnableRGBA4444Textures);
+  if (command_line->HasSwitch(switches::kUIEnableRGBA4444Textures))
+    settings.renderer_settings.preferred_tile_format = cc::RGBA_4444;
 
   // UI compositor always uses partial raster if not using zero-copy. Zero copy
   // doesn't currently support partial raster.

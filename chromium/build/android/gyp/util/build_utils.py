@@ -11,6 +11,7 @@ import pipes
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -77,6 +78,17 @@ def FindInDirectories(directories, filename_filter):
 
 
 def ParseGnList(gn_string):
+  # TODO(brettw) bug 573132: This doesn't handle GN escaping properly, so any
+  # weird characters like $ or \ in the strings will be corrupted.
+  #
+  # The code should import build/gn_helpers.py and then do:
+  #   parser = gn_helpers.GNValueParser(gn_string)
+  #   return return parser.ParseList()
+  # As of this writing, though, there is a CastShell build script that sends
+  # JSON through this function, and using correct GN parsing corrupts that.
+  #
+  # We need to be consistent about passing either JSON or GN lists through
+  # this function.
   return ast.literal_eval(gn_string)
 
 
@@ -198,6 +210,14 @@ def CheckZipPath(name):
     raise Exception('Absolute zip path: %s' % name)
 
 
+def IsSymlink(zip_file, name):
+  zi = zip_file.getinfo(name)
+
+  # The two high-order bytes of ZipInfo.external_attr represent
+  # UNIX permissions and file type bits.
+  return stat.S_ISLNK(zi.external_attr >> 16L)
+
+
 def ExtractAll(zip_path, path=None, no_clobber=True, pattern=None,
                predicate=None):
   if path is None:
@@ -221,7 +241,12 @@ def ExtractAll(zip_path, path=None, no_clobber=True, pattern=None,
           raise Exception(
               'Path already exists from zip: %s %s %s'
               % (zip_path, name, output_path))
-      z.extract(name, path)
+      if IsSymlink(z, name):
+        dest = os.path.join(path, name)
+        MakeDirectory(os.path.dirname(dest))
+        os.symlink(z.read(name), dest)
+      else:
+        z.extract(name, path)
 
 
 def AddToZipHermetic(zip_file, zip_path, src_path=None, data=None,
@@ -301,14 +326,18 @@ def MergeZips(output, inputs, exclude_patterns=None, path_transform=None):
   with zipfile.ZipFile(output, 'w') as out_zip:
     for in_file in inputs:
       with zipfile.ZipFile(in_file, 'r') as in_zip:
-        for name in in_zip.namelist():
+        in_zip._expected_crc = None
+        for info in in_zip.infolist():
           # Ignore directories.
-          if name[-1] == '/':
+          if info.filename[-1] == '/':
             continue
-          dst_name = path_transform(name, in_file)
+          # Don't validate CRCs. ijar sets them all to 0.
+          if hasattr(info, 'CRC'):
+            del info.CRC
+          dst_name = path_transform(info.filename, in_file)
           already_added = dst_name in added_names
           if not already_added and not MatchesGlob(dst_name, exclude_patterns):
-            AddToZipHermetic(out_zip, dst_name, data=in_zip.read(name))
+            AddToZipHermetic(out_zip, dst_name, data=in_zip.read(info))
             added_names.add(dst_name)
 
 

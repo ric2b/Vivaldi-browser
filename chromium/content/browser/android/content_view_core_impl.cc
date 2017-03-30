@@ -247,8 +247,22 @@ ContentViewCoreImpl::ContentViewCoreImpl(
   InitWebContents();
 }
 
+void ContentViewCoreImpl::AddObserver(
+    ContentViewCoreImplObserver* observer) {
+  observer_list_.AddObserver(observer);
+}
+
+void ContentViewCoreImpl::RemoveObserver(
+    ContentViewCoreImplObserver* observer) {
+  observer_list_.RemoveObserver(observer);
+}
+
 ContentViewCoreImpl::~ContentViewCoreImpl() {
   root_layer_->RemoveFromParent();
+  FOR_EACH_OBSERVER(ContentViewCoreImplObserver,
+                    observer_list_,
+                    OnContentViewCoreDestroyed());
+  observer_list_.Clear();
 
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jobject> j_obj = java_ref_.get(env);
@@ -256,6 +270,24 @@ ContentViewCoreImpl::~ContentViewCoreImpl() {
   if (!j_obj.is_null()) {
     Java_ContentViewCore_onNativeContentViewCoreDestroyed(
         env, j_obj.obj(), reinterpret_cast<intptr_t>(this));
+  }
+}
+
+void ContentViewCoreImpl::UpdateWindowAndroid(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj,
+    jlong window_android) {
+  if (window_android) {
+    DCHECK(!window_android_);
+    window_android_ = reinterpret_cast<ui::WindowAndroid*>(window_android);
+    FOR_EACH_OBSERVER(ContentViewCoreImplObserver,
+                      observer_list_,
+                      OnAttachedToWindow());
+  } else {
+    FOR_EACH_OBSERVER(ContentViewCoreImplObserver,
+                      observer_list_,
+                      OnDetachedFromWindow());
+    window_android_ = NULL;
   }
 }
 
@@ -390,7 +422,7 @@ void ContentViewCoreImpl::UpdateFrameInfo(
     bool is_mobile_optimized_hint) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (obj.is_null())
+  if (obj.is_null() || !window_android_)
     return;
 
   window_android_->set_content_offset(
@@ -1152,15 +1184,6 @@ void ContentViewCoreImpl::SelectBetweenCoordinates(
     jfloat y2) {
   SelectBetweenCoordinates(gfx::PointF(x1 / dpi_scale(), y1 / dpi_scale()),
                            gfx::PointF(x2 / dpi_scale(), y2 / dpi_scale()));
-}
-
-void ContentViewCoreImpl::MoveCaret(JNIEnv* env,
-                                    const JavaParamRef<jobject>& obj,
-                                    jfloat x,
-                                    jfloat y) {
-  RenderWidgetHostViewAndroid* rwhv = GetRenderWidgetHostViewAndroid();
-  if (rwhv)
-    rwhv->MoveCaret(gfx::Point(x / dpi_scale_, y / dpi_scale_));
 }
 
 void ContentViewCoreImpl::DismissTextHandles(JNIEnv* env,

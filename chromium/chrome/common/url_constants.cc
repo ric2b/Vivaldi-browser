@@ -18,6 +18,10 @@ namespace chrome {
 const char kCrosScheme[] = "cros";
 #endif
 
+#if defined(OS_ANDROID)
+const char kAndroidAppScheme[] = "android-app";
+#endif
+
 // Add Chrome UI URLs as necessary, in alphabetical order.
 // Be sure to add the corresponding kChromeUI*Host constant below.
 // This is a WebUI page that lists other WebUI pages.
@@ -81,6 +85,7 @@ const char kChromeUISettingsFrameURL[] = "chrome://settings-frame/";
 const char kChromeUISuggestionsURL[] = "chrome://suggestions/";
 const char kChromeUISupervisedUserPassphrasePageURL[] =
     "chrome://managed-user-passphrase/";
+const char kChromeUISyncConfirmationURL[] = "chrome://sync-confirmation/";
 const char kChromeUITermsURL[] = "chrome://terms/";
 const char kChromeUIThemeURL[] = "chrome://theme/";
 const char kChromeUIThumbnailURL[] = "chrome://thumb/";
@@ -95,6 +100,7 @@ const char kChromeUIContextualSearchPromoURL[] =
 const char kChromeUINativeScheme[] = "chrome-native";
 const char kChromeUINativeNewTabURL[] = "chrome-native://newtab/";
 const char kChromeUINativeBookmarksURL[] = "chrome-native://bookmarks/";
+const char kChromeUINativePhysicalWebURL[] = "chrome-native://physical-web/";
 const char kChromeUINativeRecentTabsURL[] = "chrome-native://recent-tabs/";
 #endif
 
@@ -130,7 +136,7 @@ const char kChromeUITabModalConfirmDialogURL[] =
     "chrome://tab-modal-confirm-dialog/";
 #endif
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 const char kChromeUICopresenceURL[] = "chrome://copresence/";
 #endif
 
@@ -166,6 +172,7 @@ const char kChromeUICrashesHost[] = "crashes";
 const char kChromeUICrashHost[] = "crash";
 const char kChromeUICreditsHost[] = "credits";
 const char kChromeUIDefaultHost[] = "version";
+const char kChromeUIDelayedHangUIHost[] = "delayeduithreadhang";
 const char kChromeUIDeviceLogHost[] = "device-log";
 const char kChromeUIDevicesHost[] = "devices";
 const char kChromeUIDevToolsHost[] = "devtools";
@@ -230,6 +237,7 @@ const char kChromeUISuggestionsHost[] = "suggestions";
 const char kChromeUISupervisedUserInternalsHost[] = "supervised-user-internals";
 const char kChromeUISupervisedUserPassphrasePageHost[] =
     "managed-user-passphrase";
+const char kChromeUISyncConfirmationHost[] = "sync-confirmation";
 const char kChromeUISyncHost[] = "sync";
 const char kChromeUISyncFileSystemInternalsHost[] = "syncfs-internals";
 const char kChromeUISyncInternalsHost[] = "sync-internals";
@@ -261,6 +269,7 @@ const char kChromeUISandboxHost[] = "sandbox";
 
 #if defined(OS_ANDROID)
 const char kChromeUIContextualSearchPromoHost[] = "contextual-search-promo";
+const char kChromeUIPhysicalWebHost[] = "physical-web";
 const char kChromeUIPopularSitesInternalsHost[] = "popular-sites-internals";
 #endif
 
@@ -312,7 +321,7 @@ const char kChromeUIMetroFlowHost[] = "make-metro";
 const char kChromeUITabModalConfirmDialogHost[] = "tab-modal-confirm-dialog";
 #endif
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 const char kChromeUICopresenceHost[] = "copresence";
 #endif
 
@@ -418,13 +427,13 @@ const char kChromeAccessibilitySettingsURL[] =
     "/chromevox/background/options.html";
 #endif  // defined(OS_CHROMEOS)
 
-#if defined(ENABLE_ONE_CLICK_SIGNIN)
+#if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
 const char kChromeSyncLearnMoreURL[] =
     "https://support.google.com/chrome/answer/165139";
 
 const char kChromeSyncMergeTroubleshootingURL[] =
     "https://support.google.com/chrome/answer/1181420#merge";
-#endif  // defined(ENABLE_ONE_CLICK_SIGNIN)
+#endif  // BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
 
 #if defined(OS_MACOSX)
 const char kChromeEnterpriseSignInLearnMoreURL[] =
@@ -643,7 +652,7 @@ const char* const kChromeHostURLs[] = {
   kChromeUISystemInfoHost,
   kChromeUIUberHost,
 #endif
-#if defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_ANDROID)
   kChromeUINetExportHost,
 #else  // non-mobile
   kChromeUICopresenceHost,
@@ -756,5 +765,11 @@ const char kMac10_678_DeprecationURL[] =
 const char kWindowsXPVistaDeprecationURL[] =
     "https://chrome.blogspot.com/2015/11/updates-to-chrome-platform-support.html";
 #endif
+
+const char kChooserBluetoothOverviewURL[] =
+    "https://support.google.com/chrome?p=bluetooth";
+
+const char kChooserUsbOverviewURL[] =
+    "https://support.google.com/chrome?p=webusb";
 
 }  // namespace chrome

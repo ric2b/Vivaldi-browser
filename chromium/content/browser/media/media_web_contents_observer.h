@@ -9,7 +9,6 @@
 
 #include <map>
 #include <set>
-#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
@@ -40,21 +39,24 @@ class CONTENT_EXPORT MediaWebContentsObserver : public WebContentsObserver {
   void WasHidden() override;
 
   bool has_audio_power_save_blocker_for_testing() const {
-    return audio_power_save_blocker_;
+    return !!audio_power_save_blocker_;
   }
 
   bool has_video_power_save_blocker_for_testing() const {
-    return video_power_save_blocker_;
+    return !!video_power_save_blocker_;
   }
 
  private:
-  void OnMediaPlayingNotification(RenderFrameHost* render_frame_host,
-                                  int64_t player_cookie,
-                                  bool has_video,
-                                  bool has_audio,
-                                  bool is_remote);
-  void OnMediaPausedNotification(RenderFrameHost* render_frame_host,
-                                 int64_t player_cookie);
+  void OnMediaDestroyed(RenderFrameHost* render_frame_host, int delegate_id);
+  void OnMediaPaused(RenderFrameHost* render_frame_host,
+                     int delegate_id,
+                     bool reached_end_of_stream);
+  void OnMediaPlaying(RenderFrameHost* render_frame_host,
+                      int delegate_id,
+                      bool has_video,
+                      bool has_audio,
+                      bool is_remote,
+                      base::TimeDelta duration);
 
   // Clear |render_frame_host|'s tracking entry for its power save blockers.
   void ClearPowerSaveBlockers(RenderFrameHost* render_frame_host);
@@ -69,8 +71,8 @@ class CONTENT_EXPORT MediaWebContentsObserver : public WebContentsObserver {
   void MaybeReleasePowerSaveBlockers();
 
   // Helper methods for adding or removing player entries in |player_map|.
-  using PlayerList = std::vector<int64_t>;
-  using ActiveMediaPlayerMap = std::map<RenderFrameHost*, PlayerList>;
+  using PlayerSet = std::set<int>;
+  using ActiveMediaPlayerMap = std::map<RenderFrameHost*, PlayerSet>;
   void AddMediaPlayerEntry(const MediaPlayerId& id,
                            ActiveMediaPlayerMap* player_map);
   // Returns true if an entry is actually removed.

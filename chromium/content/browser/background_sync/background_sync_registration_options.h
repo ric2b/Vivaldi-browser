@@ -19,10 +19,7 @@ struct CONTENT_EXPORT BackgroundSyncRegistrationOptions {
   bool Equals(const BackgroundSyncRegistrationOptions& other) const;
 
   std::string tag;
-  int64_t min_period = 0;
   SyncNetworkState network_state = NETWORK_STATE_ONLINE;
-  SyncPowerState power_state = POWER_STATE_AVOID_DRAINING;
-  SyncPeriodicity periodicity = SYNC_ONE_SHOT;
 };
 
 }  // namespace content

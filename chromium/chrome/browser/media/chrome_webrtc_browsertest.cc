@@ -14,6 +14,8 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/feature_h264_with_openh264_ffmpeg.h"
+#include "content/public/common/features.h"
 #include "content/public/test/browser_test_utils.h"
 #include "media/base/media_switches.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -40,36 +42,61 @@ class WebRtcBrowserTest : public WebRtcTestBase {
     // Flag used by TestWebAudioMediaStream to force garbage collection.
     command_line->AppendSwitchASCII(switches::kJavaScriptFlags, "--expose-gc");
   }
+
+  void RunsAudioVideoWebRTCCallInTwoTabs(std::string video_codec) {
+    if (OnWinXp()) return;
+
+    ASSERT_TRUE(embedded_test_server()->Start());
+
+    content::WebContents* left_tab =
+        OpenTestPageAndGetUserMediaInNewTab(kMainWebrtcTestHtmlPage);
+    content::WebContents* right_tab =
+        OpenTestPageAndGetUserMediaInNewTab(kMainWebrtcTestHtmlPage);
+
+    SetupPeerconnectionWithLocalStream(left_tab);
+    SetupPeerconnectionWithLocalStream(right_tab);
+
+    NegotiateCall(left_tab, right_tab, video_codec);
+
+    StartDetectingVideo(left_tab, "remote-view");
+    StartDetectingVideo(right_tab, "remote-view");
+
+#if !defined(OS_MACOSX)
+    // Video is choppy on Mac OS X. http://crbug.com/443542.
+    WaitForVideoToPlay(left_tab);
+    WaitForVideoToPlay(right_tab);
+#endif
+
+    HangUp(left_tab);
+    HangUp(right_tab);
+  }
 };
 
 IN_PROC_BROWSER_TEST_F(WebRtcBrowserTest,
-                       RunsAudioVideoWebRTCCallInTwoTabs) {
-  if (OnWinXp()) return;
-
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  content::WebContents* left_tab =
-      OpenTestPageAndGetUserMediaInNewTab(kMainWebrtcTestHtmlPage);
-  content::WebContents* right_tab =
-      OpenTestPageAndGetUserMediaInNewTab(kMainWebrtcTestHtmlPage);
-
-  SetupPeerconnectionWithLocalStream(left_tab);
-  SetupPeerconnectionWithLocalStream(right_tab);
-
-  NegotiateCall(left_tab, right_tab);
-
-  StartDetectingVideo(left_tab, "remote-view");
-  StartDetectingVideo(right_tab, "remote-view");
-
-#if !defined(OS_MACOSX)
-  // Video is choppy on Mac OS X. http://crbug.com/443542.
-  WaitForVideoToPlay(left_tab);
-  WaitForVideoToPlay(right_tab);
-#endif
-
-  HangUp(left_tab);
-  HangUp(right_tab);
+                       RunsAudioVideoWebRTCCallInTwoTabsVP8) {
+  RunsAudioVideoWebRTCCallInTwoTabs("VP8");
 }
+
+IN_PROC_BROWSER_TEST_F(WebRtcBrowserTest,
+                       RunsAudioVideoWebRTCCallInTwoTabsVP9) {
+  RunsAudioVideoWebRTCCallInTwoTabs("VP9");
+}
+
+#if BUILDFLAG(RTC_USE_H264)
+
+IN_PROC_BROWSER_TEST_F(WebRtcBrowserTest,
+                       RunsAudioVideoWebRTCCallInTwoTabsH264) {
+  // Only run test if run-time feature corresponding to |rtc_use_h264| is on.
+  if (!base::FeatureList::IsEnabled(content::kWebRtcH264WithOpenH264FFmpeg)) {
+    LOG(WARNING) << "Run-time feature WebRtcH264WithOpenH264FFmpeg disabled. "
+        "Skipping WebRtcBrowserTest.RunsAudioVideoWebRTCCallInTwoTabsH264 "
+        "(test \"OK\")";
+    return;
+  }
+  RunsAudioVideoWebRTCCallInTwoTabs("H264");
+}
+
+#endif  // BUILDFLAG(RTC_USE_H264)
 
 IN_PROC_BROWSER_TEST_F(WebRtcBrowserTest, TestWebAudioMediaStream) {
   // This tests against crash regressions for the WebAudio-MediaStream

@@ -9,7 +9,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/process/process_handle.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "mojo/shell/public/interfaces/application.mojom.h"
+#include "mojo/shell/public/interfaces/shell_client.mojom.h"
 
 #if defined(OS_WIN)
 #undef DELETE
@@ -22,6 +22,8 @@ class FilePath;
 namespace mojo {
 namespace shell {
 
+class Identity;
+
 // ApplicationManager requires implementations of NativeRunner and
 // NativeRunnerFactory to run native applications.
 class NativeRunner {
@@ -32,15 +34,16 @@ class NativeRunner {
   // thread/process.
   virtual void Start(
       const base::FilePath& app_path,
+      const Identity& target,
       bool start_sandboxed,
-      InterfaceRequest<Application> application_request,
+      InterfaceRequest<mojom::ShellClient> request,
       const base::Callback<void(base::ProcessId)>& pid_available_callback,
       const base::Closure& app_completed_callback) = 0;
 
   // Like Start(), but used to initialize the host for a child process started
-  // by someone else. Provides |application_request| via |channel|.
+  // by someone else. Provides |request| via |channel|.
   virtual void InitHost(ScopedHandle channel,
-                        InterfaceRequest<Application> application_request) = 0;
+                        InterfaceRequest<mojom::ShellClient> request) = 0;
 };
 
 class NativeRunnerFactory {

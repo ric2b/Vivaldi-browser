@@ -449,6 +449,7 @@ set_sources_assignment_filter(sources_assignment_filter)
 _native_compiler_configs = [
   "//build/config:feature_flags",
   "//build/config/compiler:compiler",
+  "//build/config/compiler:clang_stackrealign",
   "//build/config/compiler:compiler_arm_fpu",
   "//build/config/compiler:chromium_code",
   "//build/config/compiler:default_include_dirs",
@@ -465,6 +466,7 @@ if (is_win) {
     "//build/config/win:nominmax",
     "//build/config/win:unicode",
     "//build/config/win:winver",
+    "//build/config/win:vs_code_analysis",
   ]
 }
 if (current_os == "winrt_81" || current_os == "winrt_81_phone" ||

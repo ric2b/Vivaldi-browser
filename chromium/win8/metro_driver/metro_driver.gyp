@@ -65,9 +65,6 @@
           'sources': [
             'display_properties.cc',
             'display_properties.h',
-            'metro_driver.cc',
-            'metro_driver.h',
-            'metro_driver_win7.cc',
             'stdafx.h',
             'winrt_utils.cc',
             'winrt_utils.h',
@@ -75,16 +72,9 @@
           ],
           'conditions': [
             ['use_aura==1', {
-              'dependencies': [
-                '../win8.gyp:metro_viewer_constants',
-              ],
               'sources': [
-                'chrome_app_view_ash.cc',
-                'chrome_app_view_ash.h',
                 'direct3d_helper.cc',
                 'direct3d_helper.h',
-                'file_picker_ash.cc',
-                'file_picker_ash.h',
               ],
               'includes': [
                 'ime/ime.gypi',
@@ -97,8 +87,6 @@
                 'chrome_url_launch_handler.h',
                 'devices_handler.cc',
                 'devices_handler.h',
-                'file_picker.cc',
-                'file_picker.h',
                 'metro_dialog_box.cc',
                 'metro_dialog_box.h',
                 'print_document_source.cc',
@@ -113,18 +101,6 @@
                 'toast_notification_handler.h',
               ],
             }],
-          ],
-          'copies': [
-            {
-              # GN version: //win8/metro_viewer:copy_resources
-              'destination': '<(PRODUCT_DIR)',
-              'files': [
-                '<(VIVALDI)/app/other_resources/win8/Logo.png',
-                '<(VIVALDI)/app/other_resources/win8/SecondaryTile.png',
-                '<(VIVALDI)/app/other_resources/win8/SmallLogo.png',
-                'resources/chrome.VisualElementsManifest.xml',
-              ],
-            },
           ],
         },
         {

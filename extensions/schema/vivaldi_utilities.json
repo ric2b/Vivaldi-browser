@@ -123,6 +123,23 @@
             ]
           }
         ]
+      },
+      {
+        "name": "mapFocusAppWindowToWindowId",
+        "type": "function",
+        "description": "Maps focus tracking between a app window and the given window id. Once the tracking is set, focus handling is automatic.",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The ID of the app window",
+            "name": "appWindowId"
+          },
+          {
+            "type": "integer",
+            "description": "The ID of the window id.",
+            "name": "windowId"
+          }
+        ]
       }
     ]
   }

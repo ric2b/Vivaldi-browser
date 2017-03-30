@@ -164,14 +164,6 @@
         'proxy/ppapi_perftests.cc',
         'proxy/ppp_messaging_proxy_perftest.cc',
       ],
-      'conditions': [
-        # See http://crbug.com/162998#c4 for why this is needed.
-        ['OS=="linux" and use_allocator!="none"', {
-          'dependencies': [
-            '../base/allocator/allocator.gyp:allocator',
-          ],
-        }],
-      ],
     },
     {
       # GN version: //ppapi:ppapi_unittests
@@ -191,6 +183,7 @@
         '../ipc/ipc.gyp:ipc',
         '../ipc/ipc.gyp:test_support_ipc',
         '../media/media.gyp:shared_memory_support',
+        '../skia/skia.gyp:skia',
         '../testing/gmock.gyp:gmock',
         '../testing/gtest.gyp:gtest',
         '../ui/surface/surface.gyp:surface',
@@ -229,17 +222,6 @@
         'shared_impl/thread_aware_callback_unittest.cc',
         'shared_impl/time_conversion_unittest.cc',
         'shared_impl/var_tracker_unittest.cc',
-      ],
-      'conditions': [
-        [ 'os_posix == 1 and OS != "mac" and OS != "android" and OS != "ios"', {
-          'conditions': [
-            [ 'use_allocator!="none"', {
-              'dependencies': [
-                '../base/allocator/allocator.gyp:allocator',
-              ],
-            }],
-          ],
-        }],
       ],
     },
     {
@@ -681,5 +663,20 @@
     },
     # Adding a new PPAPI example? Don't forget to update the GN build.
     # See //ppapi/examples/BUILD.gn
+  ],
+  'conditions': [
+    ['test_isolation_mode != "noop"', {
+      'targets': [
+        {
+          'target_name': 'ppapi_unittests_run',
+          'type': 'none',
+          'dependencies': [
+            'ppapi_unittests',
+          ],
+          'includes': [ '../build/isolate.gypi' ],
+          'sources': [ 'ppapi_unittests.isolate' ],
+        },
+      ],
+    }],
   ],
 }

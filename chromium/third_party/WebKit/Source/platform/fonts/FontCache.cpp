@@ -31,7 +31,9 @@
 
 #include "platform/FontFamilyNames.h"
 
+#include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/fonts/AcceptLanguagesResolver.h"
 #include "platform/fonts/AlternateFontFamily.h"
 #include "platform/fonts/FontCacheClient.h"
 #include "platform/fonts/FontCacheKey.h"
@@ -72,7 +74,7 @@ static FallbackListShaperCache* gFallbackListShaperCache = nullptr;
 
 #if OS(WIN)
 bool FontCache::s_useDirectWrite = false;
-IDWriteFactory* FontCache::s_directWriteFactory = 0;
+SkFontMgr* FontCache::s_fontManager = nullptr;
 bool FontCache::s_useSubpixelPositioning = false;
 float FontCache::s_deviceScaleFactor = 1.0;
 #endif // OS(WIN)
@@ -146,6 +148,16 @@ FontVerticalDataCache& fontVerticalDataCacheInstance()
     return fontVerticalDataCache;
 }
 
+#if OS(WIN)
+void FontCache::setFontManager(const RefPtr<SkFontMgr>& fontManager)
+{
+    ASSERT(!s_fontManager);
+    s_fontManager = fontManager.get();
+    // Explicitly AddRef since we're going to hold on to the object for the life of the program.
+    s_fontManager->ref();
+}
+#endif
+
 PassRefPtr<OpenTypeVerticalData> FontCache::getVerticalData(const FontFileKey& key, const FontPlatformData& platformData)
 {
     FontVerticalDataCache& fontVerticalDataCache = fontVerticalDataCacheInstance();
@@ -158,6 +170,11 @@ PassRefPtr<OpenTypeVerticalData> FontCache::getVerticalData(const FontFileKey& k
         verticalData.clear();
     fontVerticalDataCache.set(key, verticalData);
     return verticalData;
+}
+
+void FontCache::acceptLanguagesChanged(const String& acceptLanguages)
+{
+    AcceptLanguagesResolver::acceptLanguagesChanged(acceptLanguages);
 }
 
 static FontDataCache* gFontDataCache = 0;
@@ -192,6 +209,41 @@ bool FontCache::isPlatformFontAvailable(const FontDescription& fontDescription, 
 SimpleFontData* FontCache::getNonRetainedLastResortFallbackFont(const FontDescription& fontDescription)
 {
     return getLastResortFallbackFont(fontDescription, DoNotRetain).leakRef();
+}
+
+template <FontFallbackPriority fallbackPriority>
+const Vector<AtomicString>* FontCache::initAndGetFontListForFallbackPriority(const FontDescription& fontDescription)
+{
+    DEFINE_STATIC_LOCAL(Vector<AtomicString>, fontsList, ());
+    DEFINE_STATIC_LOCAL(bool, fontsListInitialized, (false));
+    if (fontsListInitialized)
+        return &fontsList;
+
+    for (auto fontCandidate :
+        platformFontListForFallbackPriority(fallbackPriority)) {
+        if (isPlatformFontAvailable(fontDescription, fontCandidate))
+            fontsList.append(fontCandidate);
+    }
+    fontsListInitialized = true;
+    return &fontsList;
+}
+
+const Vector<AtomicString>* FontCache::fontListForFallbackPriority(const FontDescription& fontDescription, FontFallbackPriority fallbackPriority)
+{
+    // Explicit template instantiations for valid values.
+    switch (fallbackPriority) {
+    case FontFallbackPriority::Symbols:
+        return initAndGetFontListForFallbackPriority<FontFallbackPriority::Symbols>(fontDescription);
+    case FontFallbackPriority::Math:
+        return initAndGetFontListForFallbackPriority<FontFallbackPriority::Math>(fontDescription);
+    case FontFallbackPriority::EmojiText:
+        return initAndGetFontListForFallbackPriority<FontFallbackPriority::EmojiText>(fontDescription);
+    case FontFallbackPriority::EmojiEmoji:
+        return initAndGetFontListForFallbackPriority<FontFallbackPriority::EmojiEmoji>(fontDescription);
+    default:
+        ASSERT_NOT_REACHED();
+        return nullptr;
+    }
 }
 
 void FontCache::releaseFontData(const SimpleFontData* fontData)
@@ -250,7 +302,8 @@ static inline void purgeFallbackListShaperCache()
         }
         gFallbackListShaperCache->clear();
     }
-    Platform::current()->histogramCustomCounts("Blink.Fonts.ShapeCache", items, 1, 1000000, 50);
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, shapeCacheHistogram, ("Blink.Fonts.ShapeCache", 1, 1000000, 50));
+    shapeCacheHistogram.count(items);
 }
 
 void FontCache::invalidateShapeCache()

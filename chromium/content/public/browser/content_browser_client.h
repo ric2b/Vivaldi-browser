@@ -62,7 +62,7 @@ class CdmFactory;
 }
 
 namespace mojo {
-class ApplicationDelegate;
+class ShellClient;
 }
 
 namespace net {
@@ -82,6 +82,10 @@ class TargetPolicy;
 
 namespace ui {
 class SelectFilePolicy;
+}
+
+namespace url {
+class Origin;
 }
 
 namespace storage {
@@ -169,12 +173,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // own the delegate.
   virtual WebContentsViewDelegate* GetWebContentsViewDelegate(
       WebContents* web_contents);
-
-  // Get webcontents base on tabid.
-  virtual content::WebContents* GetGuestWebContentsByTabId(
-      int tab_id,
-      content::BrowserContext* browser_context,
-      bool include_incognito);
 
   // Notifies that a render process will be created. This is called before
   // the content layer adds its own BrowserMessageFilters, so that the
@@ -353,6 +351,8 @@ class CONTENT_EXPORT ContentBrowserClient {
                                   int render_process_id,
                                   int render_frame_id);
 
+  virtual bool IsDataSaverEnabled(BrowserContext* context);
+
   // Allow the embedder to control if the given cookie can be read.
   // This is called on the IO thread.
   virtual bool AllowGetCookie(const GURL& url,
@@ -383,7 +383,6 @@ class CONTENT_EXPORT ContentBrowserClient {
       const GURL& url,
       const base::string16& name,
       const base::string16& display_name,
-      unsigned long estimated_size,
       ResourceContext* context,
       const std::vector<std::pair<int, int> >& render_frames);
 
@@ -416,6 +415,12 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Allow the embedder to control whether we can use <keygen>.
   virtual bool AllowKeygen(const GURL& url, content::ResourceContext* context);
+
+  // Allow the embedder to control whether we can use Web Bluetooth.
+  // TODO(crbug.com/589228): Replace this with a use of the permission system.
+  virtual bool AllowWebBluetooth(content::BrowserContext* browser_context,
+                                 const url::Origin& requesting_origin,
+                                 const url::Origin& embedding_origin);
 
   // Allow the embedder to override the request context based on the URL for
   // certain operations, like cookie access. Returns nullptr to indicate the
@@ -665,7 +670,7 @@ class CONTENT_EXPORT ContentBrowserClient {
       RenderFrameHost* render_frame_host) {}
 
   using StaticMojoApplicationMap =
-      std::map<GURL, base::Callback<scoped_ptr<mojo::ApplicationDelegate>()>>;
+      std::map<GURL, base::Callback<scoped_ptr<mojo::ShellClient>()>>;
 
   // Registers Mojo applications to be loaded in the browser process by the
   // browser's global Mojo shell.

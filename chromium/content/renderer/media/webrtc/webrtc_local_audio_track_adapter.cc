@@ -11,7 +11,7 @@
 #include "content/renderer/media/webrtc/webrtc_audio_sink_adapter.h"
 #include "content/renderer/media/webrtc_local_audio_track.h"
 #include "content/renderer/render_thread_impl.h"
-#include "third_party/libjingle/source/talk/app/webrtc/mediastreaminterface.h"
+#include "third_party/webrtc/api/mediastreaminterface.h"
 
 namespace content {
 
@@ -149,10 +149,6 @@ void WebRtcLocalAudioTrackAdapter::SetSignalLevel(int signal_level) {
 webrtc::AudioSourceInterface* WebRtcLocalAudioTrackAdapter::GetSource() const {
   DCHECK(signaling_thread_checker_.CalledOnValidThread());
   return track_source_;
-}
-
-cricket::AudioRenderer* WebRtcLocalAudioTrackAdapter::GetRenderer() {
-  return NULL;
 }
 
 }  // namespace content

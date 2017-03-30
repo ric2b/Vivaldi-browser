@@ -32,7 +32,6 @@
 #define InspectorRuntimeAgent_h
 
 #include "core/CoreExport.h"
-#include "core/InspectorFrontend.h"
 #include "core/inspector/InspectorBaseAgent.h"
 #include "wtf/Forward.h"
 #include "wtf/Noncopyable.h"
@@ -41,16 +40,21 @@ namespace blink {
 
 class InjectedScript;
 class InjectedScriptManager;
-class JSONArray;
 class ScriptState;
 class V8Debugger;
 class V8RuntimeAgent;
 
+namespace protocol {
+class ListValue;
+}
+
 typedef String ErrorString;
 
+using protocol::Maybe;
+
 class CORE_EXPORT InspectorRuntimeAgent
-    : public InspectorBaseAgent<InspectorRuntimeAgent, InspectorFrontend::Runtime>
-    , public InspectorBackendDispatcher::RuntimeCommandHandler {
+    : public InspectorBaseAgent<InspectorRuntimeAgent, protocol::Frontend::Runtime>
+    , public protocol::Dispatcher::RuntimeCommandHandler {
     WTF_MAKE_NONCOPYABLE(InspectorRuntimeAgent);
 public:
     class Client {
@@ -62,62 +66,41 @@ public:
     };
 
     ~InspectorRuntimeAgent() override;
-    DECLARE_VIRTUAL_TRACE();
 
     // InspectorBaseAgent overrides.
-    void init() override;
-    void setFrontend(InspectorFrontend*) override;
+    void setState(PassRefPtr<protocol::DictionaryValue>) override;
+    void setFrontend(protocol::Frontend*) override;
     void clearFrontend() override;
     void restore() override;
 
     // Part of the protocol.
+    void evaluate(ErrorString*, const String& expression, const Maybe<String>& objectGroup, const Maybe<bool>& includeCommandLineAPI, const Maybe<bool>& doNotPauseOnExceptionsAndMuteConsole, const Maybe<int>& contextId, const Maybe<bool>& returnByValue, const Maybe<bool>& generatePreview, OwnPtr<protocol::Runtime::RemoteObject>* result, Maybe<bool>* wasThrown, Maybe<protocol::Runtime::ExceptionDetails>*) override;
+    void callFunctionOn(ErrorString*, const String& objectId, const String& functionDeclaration, const Maybe<protocol::Array<protocol::Runtime::CallArgument>>& arguments, const Maybe<bool>& doNotPauseOnExceptionsAndMuteConsole, const Maybe<bool>& returnByValue, const Maybe<bool>& generatePreview, OwnPtr<protocol::Runtime::RemoteObject>* result, Maybe<bool>* wasThrown) override;
+    void getProperties(ErrorString*, const String& objectId, const Maybe<bool>& ownProperties, const Maybe<bool>& accessorPropertiesOnly, const Maybe<bool>& generatePreview, OwnPtr<protocol::Array<protocol::Runtime::PropertyDescriptor>>* result, Maybe<protocol::Array<protocol::Runtime::InternalPropertyDescriptor>>* internalProperties, Maybe<protocol::Runtime::ExceptionDetails>*) override;
+    void releaseObject(ErrorString*, const String& objectId) override;
+    void releaseObjectGroup(ErrorString*, const String& objectGroup) override;
+    void run(ErrorString*) override;
     void enable(ErrorString*) override;
     void disable(ErrorString*) override;
-
-    void evaluate(ErrorString*,
-        const String& expression,
-        const String* objectGroup,
-        const bool* includeCommandLineAPI,
-        const bool* doNotPauseOnExceptionsAndMuteConsole,
-        const int* executionContextId,
-        const bool* returnByValue,
-        const bool* generatePreview,
-        RefPtr<TypeBuilder::Runtime::RemoteObject>& result,
-        TypeBuilder::OptOutput<bool>* wasThrown,
-        RefPtr<TypeBuilder::Debugger::ExceptionDetails>&) final;
-    void callFunctionOn(ErrorString*,
-                        const String& objectId,
-                        const String& expression,
-                        const RefPtr<JSONArray>* optionalArguments,
-                        const bool* doNotPauseOnExceptionsAndMuteConsole,
-                        const bool* returnByValue,
-                        const bool* generatePreview,
-                        RefPtr<TypeBuilder::Runtime::RemoteObject>& result,
-                        TypeBuilder::OptOutput<bool>* wasThrown) final;
-    void releaseObject(ErrorString*, const String& objectId) final;
-    void getProperties(ErrorString*, const String& objectId, const bool* ownProperties, const bool* accessorPropertiesOnly, const bool* generatePreview, RefPtr<TypeBuilder::Array<TypeBuilder::Runtime::PropertyDescriptor>>& result, RefPtr<TypeBuilder::Array<TypeBuilder::Runtime::InternalPropertyDescriptor>>& internalProperties, RefPtr<TypeBuilder::Debugger::ExceptionDetails>&) final;
-    void releaseObjectGroup(ErrorString*, const String& objectGroup) final;
-    void run(ErrorString*) override;
-    void isRunRequired(ErrorString*, bool* out_result) override;
-    void setCustomObjectFormatterEnabled(ErrorString*, bool) final;
+    void isRunRequired(ErrorString*, bool* result) override;
+    void setCustomObjectFormatterEnabled(ErrorString*, bool enabled) override;
+    void compileScript(ErrorString*, const String& expression, const String& sourceURL, bool persistScript, int executionContextId, Maybe<String>* scriptId, Maybe<protocol::Runtime::ExceptionDetails>*) override;
+    void runScript(ErrorString*, const String& scriptId, int executionContextId, const Maybe<String>& objectGroup, const Maybe<bool>& doNotPauseOnExceptionsAndMuteConsole, const Maybe<bool>& includeCommandLineAPI, OwnPtr<protocol::Runtime::RemoteObject>* result, Maybe<protocol::Runtime::ExceptionDetails>*) override;
 
     virtual void muteConsole() = 0;
     virtual void unmuteConsole() = 0;
 
+    V8RuntimeAgent* v8Agent() { return m_v8RuntimeAgent.get(); }
+
 protected:
-    InspectorRuntimeAgent(InjectedScriptManager*, V8Debugger*, Client*);
+    InspectorRuntimeAgent(V8Debugger*, Client*);
     virtual ScriptState* defaultScriptState() = 0;
 
-    InjectedScriptManager* injectedScriptManager() { return m_injectedScriptManager; }
     void reportExecutionContextCreated(ScriptState*, const String& type, const String& origin, const String& humanReadableName, const String& frameId);
     void reportExecutionContextDestroyed(ScriptState*);
 
     bool m_enabled;
-
-private:
-
     OwnPtr<V8RuntimeAgent> m_v8RuntimeAgent;
-    RawPtrWillBeMember<InjectedScriptManager> m_injectedScriptManager;
     Client* m_client;
 };
 

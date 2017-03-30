@@ -29,12 +29,10 @@
 #include "WebBlendMode.h"
 #include "WebColor.h"
 #include "WebCommon.h"
-#include "WebCompositorAnimation.h"
 #include "WebDoublePoint.h"
 #include "WebFloatPoint3D.h"
 #include "WebPoint.h"
 #include "WebRect.h"
-#include "WebScrollBlocksOn.h"
 #include "WebSize.h"
 #include "WebString.h"
 #include "WebVector.h"
@@ -43,13 +41,15 @@ class SkMatrix44;
 class SkImageFilter;
 
 namespace cc {
+class Animation;
 class Layer;
 class LayerClient;
+class FilterOperations;
 }
 
 namespace blink {
+
 class WebCompositorAnimationDelegate;
-class WebFilterOperations;
 class WebLayerScrollClient;
 struct WebFloatPoint;
 struct WebLayerPositionConstraint;
@@ -133,12 +133,13 @@ public:
     virtual WebColor backgroundColor() const = 0;
 
     // Clear the filters in use by passing in a newly instantiated
-    // WebFilterOperations object.
-    virtual void setFilters(const WebFilterOperations&) = 0;
+    // FilterOperations object.
+    virtual void setFilters(const cc::FilterOperations&) = 0;
 
     // Clear the background filters in use by passing in a newly instantiated
-    // WebFilterOperations object.
-    virtual void setBackgroundFilters(const WebFilterOperations&) = 0;
+    // FilterOperations object.
+    // TODO(loyso): This should use CompositorFilterOperation. crbug.com/584551
+    virtual void setBackgroundFilters(const cc::FilterOperations&) = 0;
 
     // An animation delegate is notified when animations are started and
     // stopped. The WebLayer does not take ownership of the delegate, and it is
@@ -146,16 +147,13 @@ public:
     // deleting the delegate.
     virtual void setAnimationDelegate(WebCompositorAnimationDelegate*) = 0;
 
-
     // Returns false if the animation cannot be added.
-    // Takes ownership of the WebCompositorAnimation object.
-    virtual bool addAnimation(WebCompositorAnimation*) = 0;
+    // Takes ownership of the cc::Animation object.
+    // TODO(loyso): Erase it. crbug.com/575041
+    virtual bool addAnimation(cc::Animation*) = 0;
 
     // Removes all animations with the given id.
     virtual void removeAnimation(int animationId) = 0;
-
-    // Removes all animations with the given id targeting the given property.
-    virtual void removeAnimation(int animationId, WebCompositorAnimation::TargetProperty) = 0;
 
     // Pauses all animations with the given id.
     virtual void pauseAnimation(int animationId, double timeOffset) = 0;
@@ -201,13 +199,10 @@ public:
     virtual bool userScrollableHorizontal() const = 0;
     virtual bool userScrollableVertical() const = 0;
 
-    virtual void setHaveWheelEventHandlers(bool) = 0;
-    virtual bool haveWheelEventHandlers() const = 0;
-
-    virtual void setHaveScrollEventHandlers(bool) = 0;
-    virtual bool haveScrollEventHandlers() const = 0;
-
-    virtual void setShouldScrollOnMainThread(bool) = 0;
+    // Indicates that this layer will always scroll on the main thread for the provided reason.
+    virtual void addMainThreadScrollingReasons(uint32_t) = 0;
+    virtual void clearMainThreadScrollingReasons(uint32_t mainThreadScrollingReasonsToClear) = 0;
+    virtual uint32_t mainThreadScrollingReasons() = 0;
     virtual bool shouldScrollOnMainThread() const = 0;
 
     virtual void setNonFastScrollableRegion(const WebVector<WebRect>&) = 0;
@@ -220,10 +215,6 @@ public:
     // See http://w3c.github.io/frame-timing/ for definition of terms.
     virtual void setFrameTimingRequests(const WebVector<std::pair<int64_t, WebRect>>&) = 0;
     virtual WebVector<std::pair<int64_t, WebRect>> frameTimingRequests() const = 0;
-
-    // FIXME: Make pure once cc is updated.  crbug.com/347272
-    virtual void setScrollBlocksOn(WebScrollBlocksOn) { }
-    virtual WebScrollBlocksOn scrollBlocksOn() const { return WebScrollBlocksOnNone; }
 
     virtual void setIsContainerForFixedPositionLayers(bool) = 0;
     virtual bool isContainerForFixedPositionLayers() const = 0;
@@ -243,9 +234,6 @@ public:
     // Forces this layer to use a render surface. There is no benefit in doing
     // so, but this is to facilitate benchmarks and tests.
     virtual void setForceRenderSurface(bool) = 0;
-
-    // True if the layer is not part of a tree attached to a WebLayerTreeView.
-    virtual bool isOrphan() const = 0;
 
     // Sets the cc-side layer client.
     virtual void setLayerClient(cc::LayerClient*) = 0;

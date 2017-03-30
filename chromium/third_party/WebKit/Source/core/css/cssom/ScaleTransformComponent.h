@@ -5,8 +5,8 @@
 #ifndef ScaleTransformComponent_h
 #define ScaleTransformComponent_h
 
+#include "core/css/cssom/MatrixTransformComponent.h"
 #include "core/css/cssom/TransformComponent.h"
-#include "platform/transforms/ScaleTransformOperation.h"
 
 namespace blink {
 
@@ -30,12 +30,17 @@ public:
 
     TransformComponentType type() const override { return m_is2D ? ScaleType : Scale3DType; }
 
-    String cssString() const override;
+    MatrixTransformComponent* asMatrix() const override
+    {
+        return m_is2D ? MatrixTransformComponent::scale(m_x, m_y)
+            : MatrixTransformComponent::scale3d(m_x, m_y, m_z);
+    }
+
     PassRefPtrWillBeRawPtr<CSSFunctionValue> toCSSValue() const override;
 
 private:
-    ScaleTransformComponent(double x, double y) : TransformComponent(), m_x(x), m_y(y), m_z(1), m_is2D(true) { }
-    ScaleTransformComponent(double x, double y, double z) : TransformComponent(), m_x(x), m_y(y), m_z(z), m_is2D(false) { }
+    ScaleTransformComponent(double x, double y) : m_x(x), m_y(y), m_z(1), m_is2D(true) { }
+    ScaleTransformComponent(double x, double y, double z) : m_x(x), m_y(y), m_z(z), m_is2D(false) { }
 
     double m_x;
     double m_y;

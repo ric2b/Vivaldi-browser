@@ -12,6 +12,7 @@
 #include "ui/app_list/views/app_list_view.h"
 #include "ui/aura/window.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/screen.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
@@ -22,7 +23,7 @@ namespace {
 views::Widget* CreateFirstRunWindow() {
   views::Widget::InitParams params(
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
-  params.bounds = Shell::GetScreen()->GetPrimaryDisplay().bounds();
+  params.bounds = gfx::Screen::GetScreen()->GetPrimaryDisplay().bounds();
   params.show_state = ui::SHOW_STATE_FULLSCREEN;
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
   params.parent = Shell::GetContainer(Shell::GetPrimaryRootWindow(),
@@ -50,28 +51,10 @@ views::Widget* FirstRunHelperImpl::GetOverlayWidget() {
   return widget_;
 }
 
-void FirstRunHelperImpl::OpenAppList() {
-  Shell::GetInstance()->ShowAppList(NULL);
-}
-
-void FirstRunHelperImpl::CloseAppList() {
-  Shell::GetInstance()->DismissAppList();
-}
-
-gfx::Rect FirstRunHelperImpl::GetLauncherBounds() {
-  Shelf* shelf = Shelf::ForPrimaryDisplay();
-  return shelf->GetVisibleItemsBoundsInScreen();
-}
-
 gfx::Rect FirstRunHelperImpl::GetAppListButtonBounds() {
   Shelf* shelf = Shelf::ForPrimaryDisplay();
   views::View* app_button = shelf->GetAppListButtonView();
   return app_button->GetBoundsInScreen();
-}
-
-gfx::Rect FirstRunHelperImpl::GetAppListBounds() {
-  app_list::AppListView* view = Shell::GetInstance()->GetAppListView();
-  return view->GetBoundsInScreen();
 }
 
 void FirstRunHelperImpl::Cancel() {

@@ -24,7 +24,6 @@
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_platform_file.h"
 #include "third_party/WebKit/public/platform/modules/app_banner/WebAppBannerPromptReply.h"
-#include "third_party/WebKit/public/web/WebCache.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
 
 // Singly-included section for enums and custom IPC traits.
@@ -49,8 +48,10 @@ namespace IPC {
 template <>
 struct ParamTraits<ContentSettingsPattern> {
   typedef ContentSettingsPattern param_type;
-  static void Write(Message* m, const param_type& p);
-  static bool Read(const Message* m, base::PickleIterator* iter, param_type* r);
+  static void Write(base::Pickle* m, const param_type& p);
+  static bool Read(const base::Pickle* m,
+                   base::PickleIterator* iter,
+                   param_type* r);
   static void Log(const param_type& p, std::string* l);
 };
 
@@ -160,14 +161,6 @@ IPC_STRUCT_TRAITS_BEGIN(ThemeBackgroundInfo)
   IPC_STRUCT_TRAITS_MEMBER(logo_alternate)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(blink::WebCache::UsageStats)
-  IPC_STRUCT_TRAITS_MEMBER(minDeadCapacity)
-  IPC_STRUCT_TRAITS_MEMBER(maxDeadCapacity)
-  IPC_STRUCT_TRAITS_MEMBER(capacity)
-  IPC_STRUCT_TRAITS_MEMBER(liveSize)
-  IPC_STRUCT_TRAITS_MEMBER(deadSize)
-IPC_STRUCT_TRAITS_END()
-
 IPC_ENUM_TRAITS_MAX_VALUE(NTPLoggingEventType,
                           NTP_EVENT_TYPE_LAST)
 
@@ -196,7 +189,7 @@ IPC_ENUM_TRAITS_MAX_VALUE(blink::WebAppBannerPromptReply,
 // RenderView messages
 // These are messages sent from the browser to the renderer process.
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 // For WebUI testing, this message requests JavaScript to be executed at a time
 // which is late enough to not be thrown out, and early enough to be before
 // onload events are fired.
@@ -359,8 +352,12 @@ IPC_MESSAGE_ROUTED1(ChromeViewHostMsg_LoadOfflineCopy, GURL /* url */)
 // Misc messages
 // These are messages sent from the renderer to the browser process.
 
-IPC_MESSAGE_CONTROL1(ChromeViewHostMsg_UpdatedCacheStats,
-                     blink::WebCache::UsageStats /* stats */)
+IPC_MESSAGE_CONTROL5(ChromeViewHostMsg_UpdatedCacheStats,
+                     uint64_t /* min_dead_capacity */,
+                     uint64_t /* max_dead_capacity */,
+                     uint64_t /* capacity */,
+                     uint64_t /* live_size */,
+                     uint64_t /* dead_size */)
 
 // Sent by the renderer process to check whether access to FileSystem is
 // granted by content settings.
@@ -539,11 +536,10 @@ IPC_MESSAGE_ROUTED2(ChromeViewHostMsg_SearchBoxDeleteMostVisitedItem,
 
 // Tells InstantExtended to navigate the active tab to a possibly privileged
 // URL.
-IPC_MESSAGE_ROUTED4(ChromeViewHostMsg_SearchBoxNavigate,
+IPC_MESSAGE_ROUTED3(ChromeViewHostMsg_SearchBoxNavigate,
                     int /* page_seq_no */,
                     GURL /* destination */,
-                    WindowOpenDisposition /* disposition */,
-                    bool /*is_most_visited_item_url*/)
+                    WindowOpenDisposition /* disposition */)
 
 // Tells InstantExtended to undo all most visited item deletions.
 IPC_MESSAGE_ROUTED1(ChromeViewHostMsg_SearchBoxUndoAllMostVisitedDeletions,

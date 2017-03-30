@@ -32,6 +32,7 @@
 
 #include "core/dom/Element.h"
 #include "core/fetch/DocumentResource.h"
+#include "core/svg/SVGResourceClient.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/filters/FilterOperation.h"
 #include "wtf/HashMap.h"
@@ -55,12 +56,12 @@ typedef HashMap<const PaintLayer*, PaintLayerFilterInfo*> PaintLayerFilterInfoMa
 // software and hardware-accelerated) use a different code path to paint the
 // filters (SVGFilterPainter), but both code paths use the same abstraction for
 // painting non-hardware accelerated filters (FilterEffect). Hardware
-// accelerated CSS filters use WebFilterOperations, that is backed by cc.
+// accelerated CSS filters use CompositorFilterOperations, that is backed by cc.
 //
 // PaintLayerFilterInfo is allocated when filters are present and stored in an
 // internal map (s_filterMap) to save memory as 'filter' should be a rare
 // property.
-class PaintLayerFilterInfo final : public DocumentResourceClient {
+class PaintLayerFilterInfo final : public DocumentResourceClient, public SVGResourceClient {
     USING_FAST_MALLOC(PaintLayerFilterInfo);
     WTF_MAKE_NONCOPYABLE(PaintLayerFilterInfo);
 public:
@@ -87,6 +88,8 @@ public:
     String debugName() const override { return "PaintLayerFilterInfo"; }
     void removeReferenceFilterClients();
 
+    void filterNeedsInvalidation() override;
+
 private:
     PaintLayerFilterInfo(PaintLayer*);
     ~PaintLayerFilterInfo() override;
@@ -97,13 +100,9 @@ private:
 
     static PaintLayerFilterInfoMap* s_filterMap;
 
-    // This field stores SVG reference filters (filter: url(#someElement)).
-    // It is used when SVG filters are applied to an HTML element via CSS.
-    WillBePersistentHeapVector<RefPtrWillBeMember<Element>> m_internalSVGReferences;
-
-    // Same as m_internalSVGReferences, except that the reference belongs to a
-    // different document.
-    Vector<ResourcePtr<DocumentResource>> m_externalSVGReferences;
+    // This stores SVG reference filters (filter: url(#someElement)) where the
+    // reference belongs to a different document.
+    WillBePersistentHeapVector<RefPtrWillBeMember<DocumentResource>> m_externalSVGReferences;
 };
 
 } // namespace blink

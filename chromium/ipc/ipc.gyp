@@ -81,19 +81,14 @@
           ],
         }],
         ['OS == "android"', {
+          'sources!': [
+            # These multiprocess tests don't work on Android.
+            'ipc_channel_unittest.cc',
+          ],
           'dependencies': [
             '../testing/android/native_test.gyp:native_test_native_code',
           ],
         }],
-        ['os_posix == 1 and OS != "mac" and OS != "android"', {
-          'conditions': [
-            ['use_allocator!="none"', {
-              'dependencies': [
-                '../base/allocator/allocator.gyp:allocator',
-              ],
-            }],
-          ],
-        }]
       ],
     },
     {
@@ -123,15 +118,6 @@
             '../testing/android/native_test.gyp:native_test_native_code',
           ],
         }],
-        ['os_posix == 1 and OS != "mac" and OS != "android"', {
-          'conditions': [
-            ['use_allocator!="none"', {
-              'dependencies': [
-                '../base/allocator/allocator.gyp:allocator',
-              ],
-            }],
-          ],
-        }]
       ],
     },
     {

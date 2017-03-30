@@ -7,6 +7,7 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "modules/credentialmanager/FederatedCredentialData.h"
 #include "platform/credentialmanager/PlatformFederatedCredential.h"
+#include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/WebFederatedCredential.h"
 
 namespace blink {
@@ -18,6 +19,15 @@ FederatedCredential* FederatedCredential::create(WebFederatedCredential* webFede
 
 FederatedCredential* FederatedCredential::create(const FederatedCredentialData& data, ExceptionState& exceptionState)
 {
+    if (data.id().isEmpty()) {
+        exceptionState.throwTypeError("'id' must not be empty.");
+        return nullptr;
+    }
+    if (data.provider().isEmpty()) {
+        exceptionState.throwTypeError("'provider' must not be empty.");
+        return nullptr;
+    }
+
     KURL iconURL = parseStringAsURL(data.iconURL(), exceptionState);
     KURL providerURL = parseStringAsURL(data.provider(), exceptionState);
     if (exceptionState.hadException())
@@ -31,13 +41,13 @@ FederatedCredential::FederatedCredential(WebFederatedCredential* webFederatedCre
 }
 
 FederatedCredential::FederatedCredential(const String& id, const KURL& provider, const String& name, const KURL& icon)
-    : Credential(PlatformFederatedCredential::create(id, provider, name, icon))
+    : Credential(PlatformFederatedCredential::create(id, SecurityOrigin::create(provider), name, icon))
 {
 }
 
-const KURL& FederatedCredential::provider() const
+const String FederatedCredential::provider() const
 {
-    return static_cast<PlatformFederatedCredential*>(m_platformCredential.get())->provider();
+    return static_cast<PlatformFederatedCredential*>(m_platformCredential.get())->provider()->toString();
 }
 
 } // namespace blink

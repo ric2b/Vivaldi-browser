@@ -58,7 +58,6 @@ bool ShouldRequestEarlyExit(const SyncProtocolError& error) {
     case CLIENT_DATA_OBSOLETE:
     case CLEAR_PENDING:
     case DISABLED_BY_ADMIN:
-    case USER_ROLLBACK:
       // If we send terminate sync early then |sync_cycle_ended| notification
       // would not be sent. If there were no actions then |ACTIONABLE_ERROR|
       // notification wouldnt be sent either. Then the UI layer would be left
@@ -108,12 +107,15 @@ ConfigurationParams::ConfigurationParams(
       retry_task(retry_task) {
   DCHECK(!ready_task.is_null());
 }
+ConfigurationParams::ConfigurationParams(const ConfigurationParams& other) =
+    default;
 ConfigurationParams::~ConfigurationParams() {}
 
 ClearParams::ClearParams(const base::Closure& report_success_task)
     : report_success_task(report_success_task) {
   DCHECK(!report_success_task.is_null());
 }
+ClearParams::ClearParams(const ClearParams& other) = default;
 ClearParams::~ClearParams() {}
 
 SyncSchedulerImpl::WaitInterval::WaitInterval()

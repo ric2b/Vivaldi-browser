@@ -29,6 +29,7 @@
 #include "ui/views/widget/native_widget_delegate.h"
 #include "ui/views/widget/root_view.h"
 #include "ui/views/widget/widget_deletion_observer.h"
+#include "ui/views/widget/widget_removals_observer.h"
 #include "ui/views/window/dialog_delegate.h"
 #include "ui/views/window/native_frame_view.h"
 
@@ -3213,7 +3214,8 @@ TEST_F(WidgetTest, CharMessagesAsKeyboardMessagesDoesNotCrash) {
 class SubclassWindowHelper {
  public:
   explicit SubclassWindowHelper(HWND window)
-      : window_(window) {
+      : window_(window),
+        message_to_destroy_on_(0) {
     EXPECT_EQ(instance_, nullptr);
     instance_ = this;
     EXPECT_TRUE(Subclass());
@@ -3231,6 +3233,10 @@ class SubclassWindowHelper {
 
   void Clear() {
     messages_.clear();
+  }
+
+  void set_message_to_destroy_on(unsigned int message) {
+    message_to_destroy_on_ = message;
   }
 
  private:
@@ -3258,14 +3264,20 @@ class SubclassWindowHelper {
     // Keep track of messags received for this window.
     instance_->messages_.insert(message);
 
-    return ::CallWindowProc(instance_->old_proc_, window, message, w_param,
-                            l_param);
+    LRESULT ret = ::CallWindowProc(instance_->old_proc_, window, message,
+                                   w_param, l_param);
+    if (message == instance_->message_to_destroy_on_) {
+      instance_->Unsubclass();
+      ::DestroyWindow(window);
+    }
+    return ret;
   }
 
   WNDPROC old_proc_;
   HWND window_;
   static SubclassWindowHelper* instance_;
   std::set<unsigned int> messages_;
+  unsigned int message_to_destroy_on_;
 
   DISALLOW_COPY_AND_ASSIGN(SubclassWindowHelper);
 };
@@ -3347,6 +3359,38 @@ TEST_F(WidgetTest, SysCommandMoveOnNCLButtonDownOnCaptionAndMoveTest) {
 
   widget.CloseNow();
 }
+
+// This test validates that destroying the window in the context of the
+// WM_SYSCOMMAND message with SC_MOVE does not crash.
+TEST_F(WidgetTest, DestroyInSysCommandNCLButtonDownOnCaption) {
+  Widget widget;
+  Widget::InitParams params =
+      CreateParams(Widget::InitParams::TYPE_WINDOW);
+  params.native_widget = new PlatformDesktopNativeWidget(&widget);
+  params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  widget.Init(params);
+  widget.SetBounds(gfx::Rect(0, 0, 200, 200));
+  widget.Show();
+  ::SetCursorPos(500, 500);
+
+  HWND window = widget.GetNativeWindow()->GetHost()->GetAcceleratedWidget();
+
+  SubclassWindowHelper subclass_helper(window);
+
+  // Destroying the window in the context of the WM_SYSCOMMAND message
+  // should not crash.
+  subclass_helper.set_message_to_destroy_on(WM_SYSCOMMAND);
+
+  ::PostMessage(window, WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(100, 100));
+  ::PostMessage(window, WM_NCMOUSEMOVE, HTCAPTION, MAKELPARAM(110, 110));
+  RunPendingMessages();
+
+  EXPECT_TRUE(subclass_helper.received_message(WM_NCLBUTTONDOWN));
+  EXPECT_TRUE(subclass_helper.received_message(WM_SYSCOMMAND));
+
+  widget.CloseNow();
+}
+
 #endif
 
 // Test that SetAlwaysOnTop and IsAlwaysOnTop are consistent.
@@ -3399,6 +3443,79 @@ TEST_F(WidgetTest, OnDeviceScaleFactorChanged) {
   scale_factor *= 2.0f;
   widget->GetLayer()->OnDeviceScaleFactorChanged(scale_factor);
   EXPECT_EQ(scale_factor, view->last_scale_factor());
+}
+
+namespace {
+
+class TestWidgetRemovalsObserver : public WidgetRemovalsObserver {
+ public:
+  TestWidgetRemovalsObserver() {}
+  ~TestWidgetRemovalsObserver() override {}
+
+  void OnWillRemoveView(Widget* widget, View* view) override {
+    removed_views_.insert(view);
+  }
+
+  bool DidRemoveView(View* view) {
+    return removed_views_.find(view) != removed_views_.end();
+  }
+
+ private:
+  std::set<View*> removed_views_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestWidgetRemovalsObserver);
+};
+
+}
+
+// Test that WidgetRemovalsObserver::OnWillRemoveView is called when deleting
+// a view.
+TEST_F(WidgetTest, WidgetRemovalsObserverCalled) {
+  WidgetAutoclosePtr widget(CreateTopLevelPlatformWidget());
+  TestWidgetRemovalsObserver removals_observer;
+  widget->AddRemovalsObserver(&removals_observer);
+
+  View* parent = new View();
+  widget->client_view()->AddChildView(parent);
+
+  View* child = new View();
+  parent->AddChildView(child);
+
+  widget->client_view()->RemoveChildView(parent);
+  EXPECT_TRUE(removals_observer.DidRemoveView(parent));
+  EXPECT_FALSE(removals_observer.DidRemoveView(child));
+
+  // Calling RemoveChildView() doesn't delete the view, but deleting
+  // |parent| will automatically delete |child|.
+  delete parent;
+
+  widget->RemoveRemovalsObserver(&removals_observer);
+}
+
+// Test that WidgetRemovalsObserver::OnWillRemoveView is called when moving
+// a view from one widget to another, but not when moving a view within
+// the same widget.
+TEST_F(WidgetTest, WidgetRemovalsObserverCalledWhenMovingBetweenWidgets) {
+  WidgetAutoclosePtr widget(CreateTopLevelPlatformWidget());
+  TestWidgetRemovalsObserver removals_observer;
+  widget->AddRemovalsObserver(&removals_observer);
+
+  View* parent = new View();
+  widget->client_view()->AddChildView(parent);
+
+  View* child = new View();
+  widget->client_view()->AddChildView(child);
+
+  // Reparenting the child shouldn't call the removals observer.
+  parent->AddChildView(child);
+  EXPECT_FALSE(removals_observer.DidRemoveView(child));
+
+  // Moving the child to a different widget should call the removals observer.
+  WidgetAutoclosePtr widget2(CreateTopLevelPlatformWidget());
+  widget2->client_view()->AddChildView(child);
+  EXPECT_TRUE(removals_observer.DidRemoveView(child));
+
+  widget->RemoveRemovalsObserver(&removals_observer);
 }
 
 }  // namespace test

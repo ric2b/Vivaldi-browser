@@ -11,83 +11,14 @@
 #include "chrome/browser/ui/views/profiles/avatar_menu_button.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/signin/core/common/profile_management_switches.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/font.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/label.h"
 
-#if defined(ENABLE_SUPERVISED_USERS)
-#include "chrome/browser/ui/views/profiles/supervised_user_avatar_label.h"
-#endif
-
 namespace {
 
-// Besides the frame border, there's empty space atop the window in restored
-// mode, to use to drag the window around.
-const int kNonClientRestoredExtraThickness = 11;
-
-// The titlebar never shrinks too short to show the caption button plus some
-// padding below it.
 const int kCaptionButtonHeight = 18;
-const int kTitleBarAdditionalPadding = 3;
-
-// There is a 5 px gap between the title text and the caption buttons.
-const int kTitleLogoSpacing = 5;
-
-// The frame border is only visible in restored mode and is hardcoded to 4 px on
-// each side regardless of the system window border size.
-const int kFrameBorderThickness = 4;
-
-// The titlebar has a 2 px 3D edge along the top and bottom.
-const int kTitlebarTopAndBottomEdgeThickness = 2;
-
-// The icon is inset 2 px from the left frame border.
-const int kIconLeftSpacing = 2;
-
-// There is a 4 px gap between the icon and the title text.
-const int kIconTitleSpacing = 4;
-
-// The avatar ends 2 px above the bottom of the tabstrip (which, given the
-// way the tabstrip draws its bottom edge, will appear like a 1 px gap to the
-// user).
-const int kAvatarBottomSpacing = 2;
-
-// Space between the frame border and the edge of the avatar.
-const int kAvatarOuterSpacing = 2;
-
-// Space between the edge of the avatar and the tabstrip.
-const int kAvatarInnerSpacing = 4;
-
-#if defined(ENABLE_SUPERVISED_USERS)
-// Space between the trailing edge of the avatar label and the tabstrip.
-const int kSupervisedUserAvatarLabelInnerSpacing = 10;
-#endif
-
-// How far the new avatar button is from the closest caption button.
-const int kNewAvatarButtonOffset = 5;
-
-// When the title bar is in its normal two row mode (usually the case for
-// restored windows), the New Tab button isn't at the same height as the caption
-// buttons, but the space will look cluttered if it actually slides under them,
-// so we stop it when the gap between the two is down to 5 px.
-const int kNewTabCaptionNormalSpacing = 5;
-
-// When the title bar is condensed to one row (as when maximized), the New Tab
-// button and the caption buttons are at similar vertical coordinates, so we
-// need to reserve a larger, 16 px gap to avoid looking too cluttered.
-const int kNewTabCaptionCondensedSpacing = 16;
-
-// If there are no caption buttons to the right of the New Tab button, we
-// reserve a small 5px gap, regardless of whether the window is maximized. This
-// overrides the two previous constants.
-const int kNewTabNoCaptionButtonsSpacing = 5;
-
-// The top 3 px of the tabstrip is shadow; in maximized mode we push this off
-// the top of the screen so the tabs appear flush against the screen edge.
-const int kTabstripTopShadowThickness = 3;
-
-// How far to indent the tabstrip from the left side of the screen when there
-// is no avatar icon.
-const int kTabStripIndent = -6;
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 // Default extra space between the top of the frame and the top of the window
@@ -106,6 +37,42 @@ const int kCaptionButtonSpacing = 0;
 ///////////////////////////////////////////////////////////////////////////////
 // OpaqueBrowserFrameView, public:
 
+// statics
+
+// The content edge images have a shadow built into them.
+const int OpaqueBrowserFrameViewLayout::kContentEdgeShadowThickness = 2;
+
+// Besides the frame border, there's empty space atop the window in restored
+// mode, to use to drag the window around.
+const int OpaqueBrowserFrameViewLayout::kNonClientRestoredExtraThickness = 11;
+
+// The frame border is only visible in restored mode and is hardcoded to 4 px on
+// each side regardless of the system window border size.
+const int OpaqueBrowserFrameViewLayout::kFrameBorderThickness = 4;
+
+// The titlebar has a 2 px 3D edge along the top.
+const int OpaqueBrowserFrameViewLayout::kTitlebarTopEdgeThickness = 2;
+
+// The icon is inset 1 px from the left frame border.
+const int OpaqueBrowserFrameViewLayout::kIconLeftSpacing = 1;
+
+// There is a 4 px gap between the icon and the title text.
+const int OpaqueBrowserFrameViewLayout::kIconTitleSpacing = 4;
+
+// The horizontal spacing to use in most cases when laying out things near the
+// caption button area.
+const int OpaqueBrowserFrameViewLayout::kCaptionSpacing = 5;
+
+// The minimum vertical padding between the bottom of the caption buttons and
+// the top of the content shadow.
+const int OpaqueBrowserFrameViewLayout::kCaptionButtonBottomPadding = 3;
+
+// When the title bar is condensed to one row (as when maximized), the New Tab
+// button and the caption buttons are at similar vertical coordinates, so we
+// need to reserve a larger, 16 px gap to avoid looking too cluttered.
+const int OpaqueBrowserFrameViewLayout::kNewTabCaptionCondensedSpacing = 16;
+
+
 OpaqueBrowserFrameViewLayout::OpaqueBrowserFrameViewLayout(
     OpaqueBrowserFrameViewLayoutDelegate* delegate)
     : delegate_(delegate),
@@ -122,9 +89,6 @@ OpaqueBrowserFrameViewLayout::OpaqueBrowserFrameViewLayout(
       close_button_(nullptr),
       window_icon_(nullptr),
       window_title_(nullptr),
-#if defined(ENABLE_SUPERVISED_USERS)
-      supervised_user_avatar_label_(nullptr),
-#endif
       avatar_button_(nullptr),
       new_avatar_button_(nullptr) {
   trailing_buttons_.push_back(views::FRAME_BUTTON_MINIMIZE);
@@ -144,29 +108,10 @@ void OpaqueBrowserFrameViewLayout::SetButtonOrdering(
 gfx::Rect OpaqueBrowserFrameViewLayout::GetBoundsForTabStrip(
     const gfx::Size& tabstrip_preferred_size,
     int available_width) const {
-  available_width -= trailing_button_start_;
-  available_width -= leading_button_start_;
-
-  const int caption_spacing = NewTabCaptionSpacing();
-  const int tabstrip_width = available_width - caption_spacing;
-  gfx::Rect bounds(leading_button_start_, GetTabStripInsetsTop(false),
-                   std::max(0, tabstrip_width),
+  int x = leading_button_start_ + GetLayoutInsets(AVATAR_ICON).right();
+  available_width -= x + NewTabCaptionSpacing() + trailing_button_start_;
+  return gfx::Rect(x, GetTabStripInsetsTop(false), std::max(0, available_width),
                    tabstrip_preferred_size.height());
-
-  int leading_tabstrip_indent = kTabStripIndent;
-  if (delegate_->ShouldShowAvatar() && !ShouldAvatarBeOnRight()) {
-#if defined(ENABLE_SUPERVISED_USERS)
-    if (supervised_user_avatar_label_ &&
-        supervised_user_avatar_label_->bounds().width())
-      leading_tabstrip_indent += kSupervisedUserAvatarLabelInnerSpacing;
-    else
-      leading_tabstrip_indent += kAvatarInnerSpacing;
-#else
-    leading_tabstrip_indent += kAvatarInnerSpacing;
-#endif
-  }
-  bounds.Inset(leading_tabstrip_indent, 0, 0, 0);
-  return bounds;
 }
 
 gfx::Size OpaqueBrowserFrameViewLayout::GetMinimumSize(
@@ -216,14 +161,21 @@ int OpaqueBrowserFrameViewLayout::NonClientBorderThickness() const {
 int OpaqueBrowserFrameViewLayout::NonClientTopBorderHeight(
     bool restored) const {
   if (delegate_->ShouldShowWindowTitle()) {
-    return std::max(FrameBorderThickness(restored) + delegate_->GetIconSize(),
-                    CaptionButtonY(restored) + kCaptionButtonHeight) +
-        TitlebarBottomThickness(restored);
+    // The + 2 here puts at least 1 px of space on top and bottom of the icon.
+    const int icon_height =
+        TitlebarTopThickness(restored) + delegate_->GetIconSize() + 2;
+    const int caption_button_height = CaptionButtonY(restored) +
+        kCaptionButtonHeight + kCaptionButtonBottomPadding;
+    return std::max(icon_height, caption_button_height) +
+        kContentEdgeShadowThickness;
   }
 
   int thickness = FrameBorderThickness(restored);
+  // The tab top inset is equal to the height of any shadow region above the
+  // tabs, plus a 1 px top stroke.  In maximized mode, we want to push the
+  // shadow region off the top of the screen but leave the top stroke.
   if (!restored && delegate_->IsTabStripVisible() && IsTitleBarCondensed())
-    thickness -= kTabstripTopShadowThickness;
+    thickness -= GetLayoutInsets(TAB).top() - 1;
   return thickness;
 }
 
@@ -238,15 +190,9 @@ int OpaqueBrowserFrameViewLayout::GetTabStripInsetsTop(bool restored) const {
       top : (top + kNonClientRestoredExtraThickness - exclusion);
 }
 
-int OpaqueBrowserFrameViewLayout::TitlebarBottomThickness(bool restored) const {
-  int thickness = kTitleBarAdditionalPadding;
-  // If there's a non-empty toolbar, it will render the bottom portion of the
-  // titlebar.
-  if (delegate_->IsToolbarVisible())
-    return thickness;
-  thickness += kTitlebarTopAndBottomEdgeThickness;
-  return (!restored && IsTitleBarCondensed()) ?
-      thickness : (thickness + views::NonClientFrameView::kClientEdgeThickness);
+int OpaqueBrowserFrameViewLayout::TitlebarTopThickness(bool restored) const {
+  return (restored || !IsTitleBarCondensed()) ?
+      kTitlebarTopEdgeThickness : FrameBorderThickness(false);
 }
 
 int OpaqueBrowserFrameViewLayout::CaptionButtonY(bool restored) const {
@@ -283,17 +229,15 @@ bool OpaqueBrowserFrameViewLayout::IsTitleBarCondensed() const {
 ///////////////////////////////////////////////////////////////////////////////
 // OpaqueBrowserFrameView, private:
 
-bool OpaqueBrowserFrameViewLayout::ShouldAvatarBeOnRight() const {
-  // The avatar should be shown either on the end of the left or the beginning
-  // of the right depending on which side has fewer buttons.
+bool OpaqueBrowserFrameViewLayout::ShouldIncognitoIconBeOnRight() const {
+  // The incognito should be shown either on the end of the left or the
+  // beginning of the right, depending on which side has fewer buttons.
   return trailing_buttons_.size() < leading_buttons_.size();
 }
 
 int OpaqueBrowserFrameViewLayout::NewTabCaptionSpacing() const {
-  if (!has_trailing_buttons_)
-    return kNewTabNoCaptionButtonsSpacing;
-  return IsTitleBarCondensed() ?
-      kNewTabCaptionCondensedSpacing : kNewTabCaptionNormalSpacing;
+  return (has_trailing_buttons_ && IsTitleBarCondensed()) ?
+      kNewTabCaptionCondensedSpacing : kCaptionSpacing;
 }
 
 void OpaqueBrowserFrameViewLayout::LayoutWindowControls(views::View* host) {
@@ -348,17 +292,15 @@ void OpaqueBrowserFrameViewLayout::LayoutTitleBar(views::View* host) {
     // slightly uncentered with restored windows, so when the window is
     // restored, instead of calculating the remaining space from below the
     // frame border, we calculate from below the 3D edge.
-    int unavailable_px_at_top = IsTitleBarCondensed() ?
-        frame_thickness : kTitlebarTopAndBottomEdgeThickness;
+    const int unavailable_px_at_top = TitlebarTopThickness(false);
     // When the icon is shorter than the minimum space we reserve for the
     // caption button, we vertically center it.  We want to bias rounding to
-    // put extra space above the icon, since the 3D edge (+ client edge, for
-    // restored windows) below looks (to the eye) more like additional space
-    // than does the 3D edge (or nothing at all, for maximized windows)
-    // above; hence the +1.
-    int y = unavailable_px_at_top + (NonClientTopBorderHeight(false) -
-                                     unavailable_px_at_top - size -
-                                     TitlebarBottomThickness(false) + 1) / 2;
+    // put extra space below the icon, since we'll use the same Y coordinate for
+    // the title, and the majority of the font weight is below the centerline.
+    const int icon_height =
+        unavailable_px_at_top + size + kContentEdgeShadowThickness;
+    const int y = unavailable_px_at_top +
+        (NonClientTopBorderHeight(false) - icon_height) / 2;
 
     window_icon_bounds_ = gfx::Rect(leading_button_start_ + kIconLeftSpacing, y,
                                     size, size);
@@ -375,7 +317,7 @@ void OpaqueBrowserFrameViewLayout::LayoutTitleBar(views::View* host) {
       window_title_->SetText(delegate_->GetWindowTitle());
 
       int text_width = std::max(
-          0, host->width() - trailing_button_start_ - kTitleLogoSpacing -
+          0, host->width() - trailing_button_start_ - kCaptionSpacing -
           leading_button_start_ - kIconTitleSpacing);
       window_title_->SetBounds(leading_button_start_ + kIconTitleSpacing,
                                window_icon_bounds_.y(),
@@ -403,7 +345,7 @@ void OpaqueBrowserFrameViewLayout::LayoutNewStyleAvatar(views::View* host) {
     return;
 
   int button_width = new_avatar_button_->GetPreferredSize().width();
-  int button_width_with_offset = button_width + kNewAvatarButtonOffset;
+  int button_width_with_offset = button_width + kCaptionSpacing;
 
   int button_x =
       host->width() - trailing_button_start_ - button_width_with_offset;
@@ -416,75 +358,50 @@ void OpaqueBrowserFrameViewLayout::LayoutNewStyleAvatar(views::View* host) {
   // the avatar button.
   if (!IsTitleBarCondensed()) {
     trailing_button_start_ -=
-        GetLayoutSize(NEW_TAB_BUTTON).width() + kNewTabCaptionNormalSpacing;
+        GetLayoutSize(NEW_TAB_BUTTON).width() + kCaptionSpacing;
   }
 
   new_avatar_button_->SetBounds(button_x, button_y, button_width,
                                 kCaptionButtonHeight);
 }
 
-void OpaqueBrowserFrameViewLayout::LayoutAvatar(views::View* host) {
-  // Even though the avatar is used for both incognito and profiles we always
-  // use the incognito icon to layout the avatar button. The profile icon
-  // can be customized so we can't depend on its size to perform layout.
-  gfx::ImageSkia incognito_icon = delegate_->GetOTRAvatarIcon();
+void OpaqueBrowserFrameViewLayout::LayoutIncognitoIcon(views::View* host) {
+  const int old_button_size = leading_button_start_ + trailing_button_start_;
 
-  bool avatar_on_right = ShouldAvatarBeOnRight();
-  int avatar_bottom = GetTabStripInsetsTop(false) +
-      delegate_->GetTabStripHeight() - kAvatarBottomSpacing;
-  int avatar_restored_y = avatar_bottom - incognito_icon.height();
-  int avatar_x = avatar_on_right ?
-      host->width() - trailing_button_start_ - kAvatarOuterSpacing -
-          incognito_icon.width() :
-      leading_button_start_ + kAvatarOuterSpacing;
-  int avatar_y = IsTitleBarCondensed() ?
-      (NonClientTopBorderHeight(false) + kTabstripTopShadowThickness) :
-      avatar_restored_y;
-  avatar_bounds_.SetRect(
-      avatar_x,
-      avatar_y,
-      incognito_icon.width(),
-      delegate_->ShouldShowAvatar() ? (avatar_bottom - avatar_y) : 0);
+  // Any buttons/icon/title were laid out based on the frame border thickness,
+  // but the tabstrip bounds need to be based on the non-client border thickness
+  // on any side where there aren't other buttons forcing a larger inset.
+  const bool md = ui::MaterialDesignController::IsModeMaterial();
+  int min_button_width = NonClientBorderThickness();
+  // In non-MD, the toolbar has a rounded corner that we don't want the tabstrip
+  // to overlap.
+  if (!md && !avatar_button_ && delegate_->IsToolbarVisible())
+    min_button_width += delegate_->GetToolbarLeadingCornerClientWidth();
+  leading_button_start_ = std::max(leading_button_start_, min_button_width);
+  // The trailing corner is a mirror of the leading one.
+  trailing_button_start_ = std::max(trailing_button_start_, min_button_width);
+
   if (avatar_button_) {
-    avatar_button_->set_button_on_right(avatar_on_right);
-    avatar_button_->SetBoundsRect(avatar_bounds_);
-
-    int edge_offset;
-#if defined(ENABLE_SUPERVISED_USERS)
-    if (supervised_user_avatar_label_) {
-      supervised_user_avatar_label_->SetLabelOnRight(avatar_on_right);
-      // Space between the bottom of the avatar and the bottom of the avatar
-      // label.
-      const int kSupervisedUserAvatarLabelBottomSpacing = 3;
-      gfx::Size label_size = supervised_user_avatar_label_->GetPreferredSize();
-      // The outside edge of the avatar label should be just outside that of the
-      // avatar menu button.
-      int avatar_label_x = avatar_on_right ?
-          (host->width() - trailing_button_start_ - label_size.width()) :
-          leading_button_start_;
-      gfx::Rect label_bounds(
-          avatar_label_x,
-          avatar_bottom - kSupervisedUserAvatarLabelBottomSpacing -
-            label_size.height(),
-          label_size.width(),
-          delegate_->ShouldShowAvatar() ? label_size.height() : 0);
-      supervised_user_avatar_label_->SetBoundsRect(label_bounds);
-      edge_offset = label_size.width();
+    const gfx::Insets insets(GetLayoutInsets(AVATAR_ICON));
+    const gfx::Size size(delegate_->GetOTRAvatarIcon().size());
+    const int incognito_width = insets.left() + size.width();
+    int x;
+    if (ShouldIncognitoIconBeOnRight()) {
+      trailing_button_start_ += incognito_width;
+      x = host->width() - trailing_button_start_;
     } else {
-      edge_offset = kAvatarOuterSpacing + incognito_icon.width();
+      x = leading_button_start_ + insets.left();
+      leading_button_start_ += incognito_width;
     }
-#else
-    edge_offset = kAvatarOuterSpacing + incognito_icon.width();
-#endif
-    if (avatar_on_right)
-      trailing_button_start_ += edge_offset;
-    else
-      leading_button_start_ += edge_offset;
-
-    // We just add the avatar button size to the minimum size because clicking
-    // the avatar label does the same thing as clicking the avatar button.
-    minimum_size_for_buttons_ += kAvatarOuterSpacing + incognito_icon.width();
+    const int bottom = GetTabStripInsetsTop(false) +
+        delegate_->GetTabStripHeight() - insets.bottom();
+    const int y = (md || !IsTitleBarCondensed()) ?
+        (bottom - size.height()) : FrameBorderThickness(false);
+    avatar_button_->SetBounds(x, y, size.width(), bottom - y);
   }
+
+  minimum_size_for_buttons_ +=
+      (leading_button_start_ + trailing_button_start_ - old_button_size);
 }
 
 void OpaqueBrowserFrameViewLayout::ConfigureButton(
@@ -570,14 +487,14 @@ void OpaqueBrowserFrameViewLayout::SetBoundsForButton(
       // If we're the first button on the left and maximized, add width to the
       // right hand side of the screen.
       int extra_width = (title_bar_condensed && !has_leading_buttons_) ?
-        (kFrameBorderThickness -
-         views::NonClientFrameView::kFrameShadowThickness) : 0;
+          (kFrameBorderThickness -
+               views::NonClientFrameView::kFrameShadowThickness) :
+          0;
 
-      button->SetBounds(
-          leading_button_start_,
-          caption_y - extra_height,
-          button_size.width() + extra_width,
-          button_size.height() + extra_height);
+      button->SetBounds(leading_button_start_,
+                        caption_y - extra_height,
+                        button_size.width() + extra_width,
+                        button_size.height() + extra_height);
 
       leading_button_start_ += extra_width + button_size.width();
       minimum_size_for_buttons_ += extra_width + button_size.width();
@@ -653,12 +570,6 @@ void OpaqueBrowserFrameViewLayout::SetView(int id, views::View* view) {
       }
       window_title_ = static_cast<views::Label*>(view);
       break;
-#if defined(ENABLE_SUPERVISED_USERS)
-    case VIEW_ID_SUPERVISED_USER_AVATAR_LABEL:
-      supervised_user_avatar_label_ =
-          static_cast<SupervisedUserAvatarLabel*>(view);
-      break;
-#endif
     case VIEW_ID_AVATAR_BUTTON:
       if (view) {
         DCHECK_EQ(std::string(AvatarMenuButton::kViewClassName),
@@ -690,15 +601,9 @@ void OpaqueBrowserFrameViewLayout::Layout(views::View* host) {
   LayoutWindowControls(host);
   LayoutTitleBar(host);
 
-  // We now add a single pixel to the leading spacing. We do this because the
-  // avatar and tab strip start one pixel inward compared to where things start
-  // on the trailing side.
-  leading_button_start_++;
-
   if (delegate_->IsRegularOrGuestSession())
     LayoutNewStyleAvatar(host);
-  else
-    LayoutAvatar(host);
+  LayoutIncognitoIcon(host);
 
   client_view_bounds_ = CalculateClientAreaBounds(
       host->width(), host->height());

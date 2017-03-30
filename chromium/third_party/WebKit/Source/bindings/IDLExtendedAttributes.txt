@@ -5,7 +5,7 @@
 # If you would like to add a new extended attribute or value, please:
 #     (1) add the extended attribute or value to this file
 #     (2) add an explanation to the Blink IDL extended attributes document:
-#         http://www.chromium.org/blink/webidl/blink-idl-extended-attributes
+#         idl-extended-attributes.md (in this directory)
 #     (3) add appropriate test cases to run-bindings-tests
 #
 # The syntax of this file is as follows:
@@ -31,8 +31,6 @@
 #       arbitrary, but that "X" is standard, e.g. [Attr=X], [Attr=Foo].
 #
 
-APIExperimentEnabled=*
-ActiveDOMObject
 CachedAttribute=*
 CallWith=ExecutionContext|ScriptState|ScriptArguments|ActiveWindow|FirstWindow|ThisValue
 CheckSecurity=Receiver|ReturnValue
@@ -71,6 +69,7 @@ NoImplHeader
 NoInterfaceObject
 NotEnumerable
 OnlyExposedToPrivateScript
+OriginTrialEnabled=*
 OverrideBuiltins
 PartialInterfaceImplementedAs=*
 PermissiveDictionaryConversion
@@ -93,7 +92,6 @@ SetWrapperReferenceFrom=*
 SetWrapperReferenceTo=*
 SetterCallWith=ExecutionContext|ScriptArguments|ActiveWindow|FirstWindow
 TreatNullAs=NullString|EmptyString
-TreatReturnedNullStringAs=Null|Undefined
 TreatUndefinedAs=NullString
 URL
 Unforgeable

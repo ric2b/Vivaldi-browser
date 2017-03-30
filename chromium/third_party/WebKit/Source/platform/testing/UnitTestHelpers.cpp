@@ -30,7 +30,9 @@
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "platform/SharedBuffer.h"
+#include "public/platform/FilePathConversion.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebString.h"
 #include "public/platform/WebTaskRunner.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/WebTraceLocation.h"
@@ -40,17 +42,9 @@
 namespace blink {
 namespace testing {
 
-class QuitTask : public WebTaskRunner::Task {
-public:
-    virtual void run()
-    {
-        exitRunLoop();
-    }
-};
-
 void runPendingTasks()
 {
-    Platform::current()->currentThread()->taskRunner()->postTask(BLINK_FROM_HERE, new QuitTask);
+    Platform::current()->currentThread()->taskRunner()->postTask(BLINK_FROM_HERE, bind(&exitRunLoop));
     enterRunLoop();
 }
 
@@ -65,11 +59,9 @@ String blinkRootDir()
 
 PassRefPtr<SharedBuffer> readFromFile(const String& path)
 {
-    StringUTF8Adaptor utf8(path);
-    base::FilePath file_path = base::FilePath::FromUTF8Unsafe(
-        std::string(utf8.data(), utf8.length()));
+    base::FilePath filePath = blink::WebStringToFilePath(path);
     std::string buffer;
-    base::ReadFileToString(file_path, &buffer);
+    base::ReadFileToString(filePath, &buffer);
     return SharedBuffer::create(buffer.data(), buffer.size());
 }
 
@@ -83,5 +75,10 @@ void exitRunLoop()
     base::MessageLoop::current()->QuitWhenIdle();
 }
 
+void yieldCurrentThread()
+{
+    base::PlatformThread::YieldCurrentThread();
 }
-}
+
+} // namespace testing
+} // namespace blink

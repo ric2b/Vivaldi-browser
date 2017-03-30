@@ -12,6 +12,7 @@
 #import "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/framed_browser_window.h"
 #import "chrome/browser/ui/cocoa/tabs/tab_strip_background_view.h"
 
@@ -22,8 +23,10 @@ NSString* const kSnapshotWindowAnimationID = @"SnapshotWindowAnimationID";
 NSString* const kAnimationIDKey = @"AnimationIDKey";
 
 // The fraction of the duration from AppKit's startCustomAnimation methods
-// that we want our animation to run in.
+// that we want our animation to run in. Yosemite's fraction is smaller
+// since its fullscreen transition is significantly slower.
 CGFloat const kAnimationDurationFraction = 0.5;
+CGFloat const kAnimationDurationFractionYosemite = 0.3;
 
 // This class has two simultaneous animations to resize and reposition layers.
 // These animations must use the same timing function, otherwise there will be
@@ -91,6 +94,9 @@ class FrameAndStyleLock {
   // The window which is undergoing the fullscreen transition.
   base::scoped_nsobject<FramedBrowserWindow> primaryWindow_;
 
+  // The window which is undergoing the fullscreen transition.
+  BrowserWindowController* controller_; // weak
+
   // A layer that holds a snapshot of the original state of |primaryWindow_|.
   base::scoped_nsobject<CALayer> snapshotLayer_;
 
@@ -131,6 +137,10 @@ class FrameAndStyleLock {
 
   // Locks and unlocks the FullSizeContentWindow.
   scoped_ptr<FrameAndStyleLock> lock_;
+
+  // Flag that indicates if the animation was completed. Sets to true at the
+  // end of the animation.
+  BOOL completedTransition_;
 }
 
 // Takes a snapshot of |primaryWindow_| and puts it in |snapshotLayer_|.
@@ -154,7 +164,7 @@ class FrameAndStyleLock {
 - (void)changePrimaryWindowToFinalFrame;
 
 // Override of CAAnimation delegate method.
-- (void)animationDidStop:(CAAnimation*)theAnimation finished:(BOOL)flag;
+- (void)animationDidStop:(CAAnimation*)theAnimation finished:(BOOL)finished;
 
 // Returns the layer of the root view of |window|.
 - (CALayer*)rootLayerOfWindow:(NSWindow*)window;
@@ -180,11 +190,14 @@ class FrameAndStyleLock {
 
 // -------------------------Public Methods----------------------------
 
-- (instancetype)initEnterWithWindow:(FramedBrowserWindow*)window {
-  DCHECK(window);
-  DCHECK([self rootLayerOfWindow:window]);
+- (instancetype)initEnterWithController:(BrowserWindowController*)controller {
+  DCHECK(controller);
+  DCHECK([self rootLayerOfWindow:[controller window]]);
   if ((self = [super init])) {
-    primaryWindow_.reset([window retain]);
+    controller_ = controller;
+    FramedBrowserWindow* framedBrowserWindow =
+        base::mac::ObjCCast<FramedBrowserWindow>([controller window]);
+    primaryWindow_.reset([framedBrowserWindow retain]);
 
     isEnteringFullscreen_ = YES;
     initialFrame_ = [primaryWindow_ frame];
@@ -193,19 +206,21 @@ class FrameAndStyleLock {
   return self;
 }
 
-- (instancetype)initExitWithWindow:(FramedBrowserWindow*)window
-                             frame:(NSRect)frame
-            tabStripBackgroundView:(NSView*)view {
-  DCHECK(window);
-  DCHECK([self rootLayerOfWindow:window]);
+- (instancetype)initExitWithController:(BrowserWindowController*)controller {
+  DCHECK(controller);
+  DCHECK([self rootLayerOfWindow:[controller window]]);
   if ((self = [super init])) {
-    primaryWindow_.reset([window retain]);
-    tabStripBackgroundView_.reset([view retain]);
-    isEnteringFullscreen_ = NO;
-    finalFrame_ = frame;
-    initialFrame_ = [[primaryWindow_ screen] frame];
+    controller_ = controller;
+    FramedBrowserWindow* framedBrowserWindow =
+        base::mac::ObjCCast<FramedBrowserWindow>([controller window]);
+    primaryWindow_.reset([framedBrowserWindow retain]);
 
-    lock_.reset(new FrameAndStyleLock(window));
+    isEnteringFullscreen_ = NO;
+    initialFrame_ = [[primaryWindow_ screen] frame];
+    finalFrame_ = [controller savedRegularWindowFrame];
+    tabStripBackgroundView_.reset([[controller tabStripBackgroundView] retain]);
+
+    lock_.reset(new FrameAndStyleLock(framedBrowserWindow));
   }
   return self;
 }
@@ -216,8 +231,15 @@ class FrameAndStyleLock {
   return @[ primaryWindow_.get(), snapshotWindow_.get() ];
 }
 
+- (BOOL)isTransitionCompleted {
+  return completedTransition_;
+}
+
 - (void)startCustomFullScreenAnimationWithDuration:(NSTimeInterval)duration {
-  CGFloat animationDuration = duration * kAnimationDurationFraction;
+  CGFloat durationFraction = base::mac::IsOSYosemite()
+                                 ? kAnimationDurationFractionYosemite
+                                 : kAnimationDurationFraction;
+  CGFloat animationDuration = duration * durationFraction;
   [self preparePrimaryWindowForAnimation];
   [self animatePrimaryWindowWithDuration:animationDuration];
   [self animateSnapshotWindowWithDuration:animationDuration];
@@ -230,6 +252,14 @@ class FrameAndStyleLock {
 - (NSSize)desiredWindowLayoutSize {
   return isEnteringFullscreen_ ? [primaryWindow_ frame].size
                                : [[primaryWindow_ contentView] bounds].size;
+}
+
+- (void)browserWillBeDestroyed {
+  CALayer* root = [self rootLayerOfWindow:primaryWindow_];
+  [root removeAllAnimations];
+  [snapshotLayer_ removeAllAnimations];
+
+  controller_ = nil;
 }
 
 // -------------------------Private Methods----------------------------
@@ -451,7 +481,7 @@ class FrameAndStyleLock {
   changingPrimaryWindowSize_ = NO;
 }
 
-- (void)animationDidStop:(CAAnimation*)theAnimation finished:(BOOL)flag {
+- (void)animationDidStop:(CAAnimation*)theAnimation finished:(BOOL)finished {
   NSString* animationID = [theAnimation valueForKey:kAnimationIDKey];
 
   // Remove the snapshot window.
@@ -501,6 +531,11 @@ class FrameAndStyleLock {
     CALayer* root = [self rootLayerOfWindow:primaryWindow_];
     [root removeAnimationForKey:kPrimaryWindowAnimationID];
     root.opacity = 1;
+
+    completedTransition_ = YES;
+
+    if (!isEnteringFullscreen_)
+      [controller_ exitFullscreenAnimationFinished];
   }
 }
 

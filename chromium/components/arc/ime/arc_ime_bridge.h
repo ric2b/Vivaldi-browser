@@ -6,6 +6,8 @@
 #define COMPONENTS_ARC_IME_ARC_IME_BRIDGE_H_
 
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
+#include "components/arc/arc_service.h"
 #include "components/arc/ime/arc_ime_ipc_host.h"
 #include "ui/aura/client/focus_change_observer.h"
 #include "ui/aura/env_observer.h"
@@ -30,14 +32,21 @@ class ArcBridgeService;
 
 // This class implements ui::TextInputClient and makes ARC windows behave
 // as a text input target in Chrome OS environment.
-class ArcImeBridge : public ArcImeIpcHost::Delegate,
+class ArcImeBridge : public ArcService,
+                     public ArcImeIpcHost::Delegate,
                      public aura::EnvObserver,
                      public aura::WindowObserver,
                      public aura::client::FocusChangeObserver,
                      public ui::TextInputClient {
  public:
-  explicit ArcImeBridge(ArcBridgeService* arc_bridge_service);
+  explicit ArcImeBridge(ArcBridgeService* bridge_service);
   ~ArcImeBridge() override;
+
+  // Injects the custom IPC host object for testing purpose only.
+  void SetIpcHostForTesting(scoped_ptr<ArcImeIpcHost> test_ipc_host);
+
+  // Injects the custom IME for testing purpose only.
+  void SetInputMethodForTesting(ui::InputMethod* test_input_method);
 
   // Overridden from aura::EnvObserver:
   void OnWindowInitialized(aura::Window* new_window) override;
@@ -52,6 +61,7 @@ class ArcImeBridge : public ArcImeIpcHost::Delegate,
   // Overridden from ArcImeIpcHost::Delegate:
   void OnTextInputTypeChanged(ui::TextInputType type) override;
   void OnCursorRectChanged(const gfx::Rect& rect) override;
+  void OnCancelComposition() override;
 
   // Overridden from ui::TextInputClient:
   void SetCompositionText(const ui::CompositionText& composition) override;
@@ -89,13 +99,16 @@ class ArcImeBridge : public ArcImeIpcHost::Delegate,
  private:
   ui::InputMethod* GetInputMethod();
 
-  ArcImeIpcHost ipc_host_;
+  scoped_ptr<ArcImeIpcHost> ipc_host_;
   ui::TextInputType ime_type_;
   gfx::Rect cursor_rect_;
+  bool has_composition_text_;
 
   aura::WindowTracker observing_root_windows_;
   aura::WindowTracker arc_windows_;
   aura::WindowTracker focused_arc_window_;
+
+  ui::InputMethod* test_input_method_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcImeBridge);
 };

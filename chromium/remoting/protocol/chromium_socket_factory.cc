@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/time/time.h"
 #include "jingle/glue/utils.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_endpoint.h"
@@ -18,6 +19,7 @@
 #include "remoting/protocol/socket_util.h"
 #include "third_party/webrtc/base/asyncpacketsocket.h"
 #include "third_party/webrtc/base/nethelpers.h"
+#include "third_party/webrtc/media/base/rtputils.h"
 
 namespace remoting {
 namespace protocol {
@@ -194,7 +196,12 @@ int UdpPacketSocket::SendTo(const void* data, size_t data_size,
     return EWOULDBLOCK;
   }
 
-  send_queue_.push_back(PendingPacket(data, data_size, endpoint));
+  PendingPacket packet(data, data_size, endpoint);
+  cricket::ApplyPacketOptions(
+      reinterpret_cast<uint8_t*>(packet.data->data()), data_size,
+      options.packet_time_params,
+      (base::TimeTicks::Now() - base::TimeTicks()).InMilliseconds());
+  send_queue_.push_back(packet);
   send_queue_size_ += data_size;
 
   DoSend();

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "ash/display/display_manager.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/screen_util.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_types.h"
@@ -32,7 +33,8 @@ class AshPopupAlignmentDelegateTest : public test::AshTestBase {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         keyboard::switches::kEnableVirtualKeyboard);
     test::AshTestBase::SetUp();
-    SetAlignmentDelegate(make_scoped_ptr(new AshPopupAlignmentDelegate()));
+    SetAlignmentDelegate(make_scoped_ptr(new AshPopupAlignmentDelegate(
+        ShelfLayoutManager::ForShelf(Shell::GetPrimaryRootWindow()))));
   }
 
   void TearDown() override {
@@ -60,7 +62,7 @@ class AshPopupAlignmentDelegateTest : public test::AshTestBase {
 
   void UpdateWorkArea(AshPopupAlignmentDelegate* alignment_delegate,
                       const gfx::Display& display) {
-    alignment_delegate->StartObserving(Shell::GetScreen(), display);
+    alignment_delegate->StartObserving(gfx::Screen::GetScreen(), display);
     // Update the layout
     alignment_delegate->OnDisplayWorkAreaInsetsChanged();
   }
@@ -72,12 +74,12 @@ class AshPopupAlignmentDelegateTest : public test::AshTestBase {
     }
     alignment_delegate_ = std::move(delegate);
     UpdateWorkArea(alignment_delegate_.get(),
-                   Shell::GetScreen()->GetPrimaryDisplay());
+                   gfx::Screen::GetScreen()->GetPrimaryDisplay());
   }
 
   Position GetPositionInDisplay(const gfx::Point& point) {
     const gfx::Rect& work_area =
-        Shell::GetScreen()->GetPrimaryDisplay().work_area();
+        gfx::Screen::GetScreen()->GetPrimaryDisplay().work_area();
     const gfx::Point center_point = work_area.CenterPoint();
     if (work_area.x() > point.x() || work_area.y() > point.y() ||
         work_area.right() < point.x() || work_area.bottom() < point.y()) {
@@ -98,7 +100,13 @@ class AshPopupAlignmentDelegateTest : public test::AshTestBase {
   scoped_ptr<AshPopupAlignmentDelegate> alignment_delegate_;
 };
 
-TEST_F(AshPopupAlignmentDelegateTest, ShelfAlignment) {
+#if defined(OS_WIN) && !defined(USE_ASH)
+// TODO(msw): Broken on Windows. http://crbug.com/584038
+#define MAYBE_ShelfAlignment DISABLED_ShelfAlignment
+#else
+#define MAYBE_ShelfAlignment ShelfAlignment
+#endif
+TEST_F(AshPopupAlignmentDelegateTest, MAYBE_ShelfAlignment) {
   const gfx::Rect toast_size(0, 0, 10, 10);
   UpdateDisplay("600x600");
   gfx::Point toast_point;
@@ -210,7 +218,13 @@ TEST_F(AshPopupAlignmentDelegateTest, DockedWindow) {
   EXPECT_FALSE(alignment_delegate()->IsFromLeft());
 }
 
-TEST_F(AshPopupAlignmentDelegateTest, DisplayResize) {
+#if defined(OS_WIN) && !defined(USE_ASH)
+// TODO(msw): Broken on Windows. http://crbug.com/584038
+#define MAYBE_DisplayResize DISABLED_DisplayResize
+#else
+#define MAYBE_DisplayResize DisplayResize
+#endif
+TEST_F(AshPopupAlignmentDelegateTest, MAYBE_DisplayResize) {
   const gfx::Rect toast_size(0, 0, 10, 10);
   UpdateDisplay("600x600");
   int origin_x = alignment_delegate()->GetToastOriginX(toast_size);
@@ -266,10 +280,17 @@ TEST_F(AshPopupAlignmentDelegateTest, Extended) {
   if (!SupportsMultipleDisplays())
     return;
   UpdateDisplay("600x600,800x800");
-  SetAlignmentDelegate(make_scoped_ptr(new AshPopupAlignmentDelegate()));
+  SetAlignmentDelegate(make_scoped_ptr(new AshPopupAlignmentDelegate(
+      ShelfLayoutManager::ForShelf(Shell::GetPrimaryRootWindow()))));
 
-  AshPopupAlignmentDelegate for_2nd_display;
-  UpdateWorkArea(&for_2nd_display, ScreenUtil::GetSecondaryDisplay());
+  gfx::Display second_display = ScreenUtil::GetSecondaryDisplay();
+  aura::Window* second_root =
+      Shell::GetInstance()
+          ->window_tree_host_manager()
+          ->GetRootWindowForDisplayId(second_display.id());
+  AshPopupAlignmentDelegate for_2nd_display(
+      ShelfLayoutManager::ForShelf(second_root));
+  UpdateWorkArea(&for_2nd_display, second_display);
   // Make sure that the toast position on the secondary display is
   // positioned correctly.
   EXPECT_LT(1300, for_2nd_display.GetToastOriginX(gfx::Rect(0, 0, 10, 10)));
@@ -284,10 +305,11 @@ TEST_F(AshPopupAlignmentDelegateTest, Unified) {
 
   // Reset the delegate as the primary display's shelf will be destroyed during
   // transition.
-  SetAlignmentDelegate(scoped_ptr<AshPopupAlignmentDelegate>());
+  SetAlignmentDelegate(nullptr);
 
   UpdateDisplay("600x600,800x800");
-  SetAlignmentDelegate(make_scoped_ptr(new AshPopupAlignmentDelegate()));
+  SetAlignmentDelegate(make_scoped_ptr(new AshPopupAlignmentDelegate(
+      ShelfLayoutManager::ForShelf(Shell::GetPrimaryRootWindow()))));
 
   EXPECT_GT(600,
             alignment_delegate()->GetToastOriginX(gfx::Rect(0, 0, 10, 10)));
@@ -295,7 +317,13 @@ TEST_F(AshPopupAlignmentDelegateTest, Unified) {
 
 // Tests that when the keyboard is showing that notifications appear above it,
 // and that they return to normal once the keyboard is gone.
-TEST_F(AshPopupAlignmentDelegateTest, KeyboardShowing) {
+#if defined(OS_WIN) && !defined(USE_ASH)
+// TODO(msw): Broken on Windows. http://crbug.com/584038
+#define MAYBE_KeyboardShowing DISABLED_KeyboardShowing
+#else
+#define MAYBE_KeyboardShowing KeyboardShowing
+#endif
+TEST_F(AshPopupAlignmentDelegateTest, MAYBE_KeyboardShowing) {
   ASSERT_TRUE(keyboard::IsKeyboardEnabled());
   ASSERT_TRUE(keyboard::IsKeyboardOverscrollEnabled());
 

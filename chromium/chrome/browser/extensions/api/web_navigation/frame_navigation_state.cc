@@ -28,7 +28,12 @@ const char* const kValidSchemes[] = {
 
 }  // namespace
 
-FrameNavigationState::FrameState::FrameState() {}
+FrameNavigationState::FrameState::FrameState() {
+  error_occurred = false;
+  is_iframe_srcdoc = false;
+  is_loading = false;
+  is_parsing = false;
+}
 
 // static
 bool FrameNavigationState::allow_extension_scheme_ = false;
@@ -62,9 +67,10 @@ bool FrameNavigationState::CanSendEvents(
   return IsValidUrl(it->second.url);
 }
 
-void FrameNavigationState::StartTrackingNavigation(
+void FrameNavigationState::StartTrackingDocumentLoad(
     content::RenderFrameHost* frame_host,
     const GURL& url,
+    bool is_same_page,
     bool is_error_page,
     bool is_iframe_srcdoc) {
   FrameState& frame_state = frame_host_state_map_[frame_host];
@@ -72,10 +78,10 @@ void FrameNavigationState::StartTrackingNavigation(
   frame_state.url = url;
   frame_state.is_iframe_srcdoc = is_iframe_srcdoc;
   DCHECK(!is_iframe_srcdoc || url == GURL(url::kAboutBlankURL));
-  frame_state.is_navigating = true;
-  frame_state.is_committed = false;
-  frame_state.is_server_redirected = false;
-  frame_state.is_parsing = true;
+  if (!is_same_page) {
+    frame_state.is_loading = true;
+    frame_state.is_parsing = true;
+  }
 }
 
 void FrameNavigationState::FrameHostCreated(
@@ -107,10 +113,9 @@ bool FrameNavigationState::IsValidFrame(
 GURL FrameNavigationState::GetUrl(content::RenderFrameHost* frame_host) const {
   FrameHostToStateMap::const_iterator it =
       frame_host_state_map_.find(frame_host);
-  if (it == frame_host_state_map_.end()) {
-    NOTREACHED();
+  if (it == frame_host_state_map_.end())
     return GURL();
-  }
+
   if (it->second.is_iframe_srcdoc)
     return GURL(content::kAboutSrcDocURL);
   return it->second.url;
@@ -134,22 +139,22 @@ bool FrameNavigationState::GetErrorOccurredInFrame(
   return it == frame_host_state_map_.end() || it->second.error_occurred;
 }
 
-void FrameNavigationState::SetNavigationCompleted(
+void FrameNavigationState::SetDocumentLoadCompleted(
     content::RenderFrameHost* frame_host) {
   FrameHostToStateMap::iterator it = frame_host_state_map_.find(frame_host);
   if (it == frame_host_state_map_.end()) {
     NOTREACHED();
     return;
   }
-  it->second.is_navigating = false;
+  it->second.is_loading = false;
 }
 
-bool FrameNavigationState::GetNavigationCompleted(
+bool FrameNavigationState::GetDocumentLoadCompleted(
     content::RenderFrameHost* frame_host) const {
   FrameHostToStateMap::const_iterator it =
       frame_host_state_map_.find(frame_host);
   DCHECK(it != frame_host_state_map_.end());
-  return it == frame_host_state_map_.end() || !it->second.is_navigating;
+  return it == frame_host_state_map_.end() || !it->second.is_loading;
 }
 
 void FrameNavigationState::SetParsingFinished(
@@ -168,42 +173,6 @@ bool FrameNavigationState::GetParsingFinished(
       frame_host_state_map_.find(frame_host);
   DCHECK(it != frame_host_state_map_.end());
   return it == frame_host_state_map_.end() || !it->second.is_parsing;
-}
-
-void FrameNavigationState::SetNavigationCommitted(
-    content::RenderFrameHost* frame_host) {
-  FrameHostToStateMap::iterator it = frame_host_state_map_.find(frame_host);
-  if (it == frame_host_state_map_.end()) {
-    NOTREACHED();
-    return;
-  }
-  it->second.is_committed = true;
-}
-
-bool FrameNavigationState::GetNavigationCommitted(
-    content::RenderFrameHost* frame_host) const {
-  FrameHostToStateMap::const_iterator it =
-      frame_host_state_map_.find(frame_host);
-  DCHECK(it != frame_host_state_map_.end());
-  return it != frame_host_state_map_.end() && it->second.is_committed;
-}
-
-void FrameNavigationState::SetIsServerRedirected(
-    content::RenderFrameHost* frame_host) {
-  FrameHostToStateMap::iterator it = frame_host_state_map_.find(frame_host);
-  if (it == frame_host_state_map_.end()) {
-    NOTREACHED();
-    return;
-  }
-  it->second.is_server_redirected = true;
-}
-
-bool FrameNavigationState::GetIsServerRedirected(
-    content::RenderFrameHost* frame_host) const {
-  FrameHostToStateMap::const_iterator it =
-      frame_host_state_map_.find(frame_host);
-  DCHECK(it != frame_host_state_map_.end());
-  return it != frame_host_state_map_.end() && it->second.is_server_redirected;
 }
 
 }  // namespace extensions

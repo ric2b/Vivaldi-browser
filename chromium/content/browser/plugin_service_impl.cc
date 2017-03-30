@@ -802,9 +802,7 @@ void PluginServiceImpl::GetInternalPlugins(
 
 bool PluginServiceImpl::NPAPIPluginsSupported() {
 #if defined(OS_WIN) || defined(OS_MACOSX)
-  npapi_plugins_enabled_ =
-    vivaldi::IsVivaldiRunning() ||
-      GetContentClient()->browser()->IsNPAPIEnabled();
+  npapi_plugins_enabled_ = GetContentClient()->browser()->IsNPAPIEnabled();
 #if defined(OS_WIN)
   // NPAPI plugins don't play well with Win32k renderer lockdown.
   if (npapi_plugins_enabled_)

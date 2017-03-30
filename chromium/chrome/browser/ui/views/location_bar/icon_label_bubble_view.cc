@@ -7,11 +7,13 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/location_bar/background_with_1_px_border.h"
-#include "ui/base/resource/material_design/material_design_controller.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/views/animation/ink_drop_hover.h"
+#include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/painter.h"
 
@@ -53,6 +55,14 @@ IconLabelBubbleView::IconLabelBubbleView(int contained_image,
   if (elide_in_middle)
     label_->SetElideBehavior(gfx::ELIDE_MIDDLE);
   AddChildView(label_);
+
+  // Bubbles are given the full internal height of the location bar so that all
+  // child views in the location bar have the same height. The visible height of
+  // the bubble should be smaller, so use an empty border to shrink down the
+  // content bounds so the background gets painted correctly.
+  const int padding = GetLayoutConstant(LOCATION_BAR_BUBBLE_VERTICAL_PADDING);
+  SetBorder(
+      views::Border::CreateEmptyBorder(gfx::Insets(padding, 0, padding, 0)));
 }
 
 IconLabelBubbleView::~IconLabelBubbleView() {
@@ -126,11 +136,6 @@ void IconLabelBubbleView::Layout() {
 
 void IconLabelBubbleView::OnNativeThemeChanged(
     const ui::NativeTheme* native_theme) {
-  // If the background isn't visible, the label and border won't be either, so
-  // don't bother updating them.
-  if (!ShouldShowBackground())
-    return;
-
   label_->SetEnabledColor(GetTextColor());
 
   if (!ui::MaterialDesignController::IsModeMaterial())
@@ -142,6 +147,27 @@ void IconLabelBubbleView::OnNativeThemeChanged(
       inverted ? SK_ColorWHITE : SkColorSetA(border_color, 0x13);
   set_background(new BackgroundWith1PxBorder(background_color, border_color));
   SetLabelBackgroundColor(background_color);
+}
+
+void IconLabelBubbleView::AddInkDropLayer(ui::Layer* ink_drop_layer) {
+  image()->SetPaintToLayer(true);
+  image()->SetFillsBoundsOpaquely(false);
+  InkDropHostView::AddInkDropLayer(ink_drop_layer);
+}
+
+void IconLabelBubbleView::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
+  InkDropHostView::RemoveInkDropLayer(ink_drop_layer);
+  image()->SetPaintToLayer(false);
+}
+
+scoped_ptr<views::InkDropHover> IconLabelBubbleView::CreateInkDropHover()
+    const {
+  // Location bar views don't show hover effect.
+  return nullptr;
+}
+
+SkColor IconLabelBubbleView::GetInkDropBaseColor() const {
+  return color_utils::DeriveDefaultIconColor(GetTextColor());
 }
 
 SkColor IconLabelBubbleView::GetParentBackgroundColor() const {
@@ -204,8 +230,10 @@ const char* IconLabelBubbleView::GetClassName() const {
 void IconLabelBubbleView::OnPaint(gfx::Canvas* canvas) {
   if (!ShouldShowBackground())
     return;
-  if (background_painter_)
-    background_painter_->Paint(canvas, size());
+  if (background_painter_) {
+    views::Painter::PaintPainterAt(canvas, background_painter_.get(),
+                                   GetContentsBounds());
+  }
   if (background())
     background()->Paint(canvas, this);
 }

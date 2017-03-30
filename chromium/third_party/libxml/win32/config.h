@@ -5,8 +5,7 @@
 #define HAVE_STDARG_H
 #define HAVE_MALLOC_H
 #define HAVE_ERRNO_H
-#define SEND_ARG2_CAST
-#define GETHOSTBYNAME_ARG_CAST
+#define HAVE_STDINT_H
 
 #if defined(_WIN32_WCE)
 #undef HAVE_ERRNO_H

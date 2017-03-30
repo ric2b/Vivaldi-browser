@@ -12,13 +12,13 @@
 #include "base/memory/scoped_ptr.h"
 #include "build/build_config.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/shell/browser/shell_resource_dispatcher_host_delegate.h"
 #include "content/shell/browser/shell_speech_recognition_manager_delegate.h"
 
 namespace content {
 
 class ShellBrowserContext;
 class ShellBrowserMainParts;
-class ShellResourceDispatcherHostDelegate;
 
 class ShellContentBrowserClient : public ContentBrowserClient {
  public:
@@ -47,12 +47,12 @@ class ShellContentBrowserClient : public ContentBrowserClient {
       URLRequestInterceptorScopedVector request_interceptors) override;
   bool IsHandledURL(const GURL& url) override;
   bool IsNPAPIEnabled() override;
+  void RegisterInProcessMojoApplications(
+      StaticMojoApplicationMap* apps) override;
   void RegisterOutOfProcessMojoApplications(
       OutOfProcessMojoApplicationMap* apps) override;
   void AppendExtraCommandLineSwitches(base::CommandLine* command_line,
                                       int child_process_id) override;
-  void OverrideWebkitPrefs(RenderViewHost* render_view_host,
-                           WebPreferences* prefs) override;
   void ResourceDispatcherHostCreated() override;
   AccessTokenStore* CreateAccessTokenStore() override;
   std::string GetDefaultDownloadName() override;
@@ -105,6 +105,16 @@ class ShellContentBrowserClient : public ContentBrowserClient {
   void set_select_client_certificate_callback(
       base::Closure select_client_certificate_callback) {
     select_client_certificate_callback_ = select_client_certificate_callback;
+  }
+
+ protected:
+  void set_resource_dispatcher_host_delegate(
+      scoped_ptr<ShellResourceDispatcherHostDelegate> delegate) {
+    resource_dispatcher_host_delegate_ = std::move(delegate);
+  }
+
+  void set_browser_main_parts(ShellBrowserMainParts* parts) {
+    shell_browser_main_parts_ = parts;
   }
 
  private:

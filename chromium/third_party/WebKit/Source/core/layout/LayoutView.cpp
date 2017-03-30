@@ -43,6 +43,7 @@
 #include "core/paint/PaintLayer.h"
 #include "core/paint/ViewPainter.h"
 #include "core/svg/SVGDocumentExtensions.h"
+#include "platform/Histogram.h"
 #include "platform/TraceEvent.h"
 #include "platform/TracedValue.h"
 #include "platform/geometry/FloatQuad.h"
@@ -66,7 +67,14 @@ public:
     ~HitTestLatencyRecorder()
     {
         int duration = static_cast<int>((WTF::monotonicallyIncreasingTime() - m_start) * 1000000);
-        Platform::current()->histogramCustomCounts(m_allowsChildFrameContent ? "Event.Latency.HitTestRecursive" : "Event.Latency.HitTest", duration, 0, 10000000, 100);
+
+        if (m_allowsChildFrameContent) {
+            DEFINE_STATIC_LOCAL(CustomCountHistogram, recursiveLatencyHistogram, ("Event.Latency.HitTestRecursive", 0, 10000000, 100));
+            recursiveLatencyHistogram.count(duration);
+        } else {
+            DEFINE_STATIC_LOCAL(CustomCountHistogram, latencyHistogram, ("Event.Latency.HitTest", 0, 10000000, 100));
+            latencyHistogram.count(duration);
+        }
     }
 
 private:
@@ -95,8 +103,8 @@ LayoutView::LayoutView(Document* document)
     // init LayoutObject attributes
     setInline(false);
 
-    m_minPreferredLogicalWidth = 0;
-    m_maxPreferredLogicalWidth = 0;
+    m_minPreferredLogicalWidth = LayoutUnit();
+    m_maxPreferredLogicalWidth = LayoutUnit();
 
     setPreferredLogicalWidthsDirty(MarkOnlyThis);
 
@@ -113,7 +121,8 @@ bool LayoutView::hitTest(HitTestResult& result)
     // into a child document, it could trigger a layout on the parent document, which can destroy PaintLayer
     // that are higher up in the call stack, leading to crashes.
     // Note that Document::updateLayout calls its parent's updateLayout.
-    DocumentLifecycle::PreventThrottlingScope preventThrottling(document().lifecycle());
+    // Note that if an iframe has its render pipeline throttled, it will not update layout here,
+    // and it will also not propagate the hit test into the iframe's inner document.
     frameView()->updateLifecycleToCompositingCleanPlusScrolling();
     HitTestLatencyRecorder hitTestLatencyRecorder(result.hitTestRequest().allowsChildFrameContent());
     return hitTestNoLifecycleUpdate(result);
@@ -162,12 +171,12 @@ void LayoutView::clearHitTestCache()
 
 void LayoutView::computeLogicalHeight(LayoutUnit logicalHeight, LayoutUnit, LogicalExtentComputedValues& computedValues) const
 {
-    computedValues.m_extent = viewLogicalHeightForBoxSizing();
+    computedValues.m_extent = LayoutUnit(viewLogicalHeightForBoxSizing());
 }
 
 void LayoutView::updateLogicalWidth()
 {
-    setLogicalWidth(viewLogicalWidthForBoxSizing());
+    setLogicalWidth(LayoutUnit(viewLogicalWidthForBoxSizing()));
 }
 
 bool LayoutView::isChildAllowed(LayoutObject* child, const ComputedStyle&) const
@@ -236,9 +245,9 @@ bool LayoutView::doingFullPaintInvalidation() const
 void LayoutView::layout()
 {
     if (!document().paginated())
-        setPageLogicalHeight(0);
+        setPageLogicalHeight(LayoutUnit());
 
-    if (shouldUsePrintingLayout()) {
+    if (pageLogicalHeight() && shouldUsePrintingLayout()) {
         m_minPreferredLogicalWidth = m_maxPreferredLogicalWidth = logicalWidth();
         if (!m_fragmentationContext)
             m_fragmentationContext = adoptPtr(new ViewFragmentationContext(*this));
@@ -357,7 +366,7 @@ const LayoutObject* LayoutView::pushMappingToContainer(const LayoutBoxModelObjec
             offsetForFixedPosition = LayoutSize(scrolledContentOffset());
     }
 
-    if (geometryMap.mapCoordinatesFlags() & TraverseDocumentBoundaries) {
+    if (geometryMap.getMapCoordinatesFlags() & TraverseDocumentBoundaries) {
         if (LayoutPart* parentDocLayoutObject = frame()->ownerLayoutObject()) {
             offset = -LayoutSize(m_frameView->scrollOffset());
             offset += parentDocLayoutObject->contentBoxOffset();
@@ -372,9 +381,9 @@ const LayoutObject* LayoutView::pushMappingToContainer(const LayoutBoxModelObjec
     if ((!ancestorToStopAt || container) && shouldUseTransformFromContainer(container)) {
         TransformationMatrix t;
         getTransformFromContainer(container, LayoutSize(), t);
-        geometryMap.push(this, t, false, false, false, true, offsetForFixedPosition);
+        geometryMap.push(this, t, HasTransform, offsetForFixedPosition);
     } else {
-        geometryMap.push(this, offset, false, false, false, false, offsetForFixedPosition);
+        geometryMap.push(this, offset, 0, offsetForFixedPosition);
     }
 
     return container;
@@ -429,7 +438,7 @@ void LayoutView::invalidateTreeIfNeeded(PaintInvalidationState& paintInvalidatio
         const LayoutBoxModelObject& paintInvalidationContainer = paintInvalidationState.paintInvalidationContainer();
         PaintLayer::mapRectToPaintInvalidationBacking(this, &paintInvalidationContainer, dirtyRect, &paintInvalidationState);
         invalidatePaintUsingContainer(paintInvalidationContainer, dirtyRect, PaintInvalidationFull);
-        invalidateDisplayItemClients(paintInvalidationContainer, PaintInvalidationFull);
+        invalidateDisplayItemClientsWithPaintInvalidationState(paintInvalidationContainer, paintInvalidationState, PaintInvalidationFull);
     }
     LayoutBlock::invalidateTreeIfNeeded(paintInvalidationState);
 }
@@ -570,7 +579,7 @@ IntRect LayoutView::selectionBounds()
     LayoutObject* os = m_selectionStart;
     LayoutObject* stop = layoutObjectAfterPosition(m_selectionEnd, m_selectionEndPos);
     while (os && os != stop) {
-        if ((os->canBeSelectionLeaf() || os == m_selectionStart || os == m_selectionEnd) && os->selectionState() != SelectionNone) {
+        if ((os->canBeSelectionLeaf() || os == m_selectionStart || os == m_selectionEnd) && os->getSelectionState() != SelectionNone) {
             // Blocks are responsible for painting line gaps and margin gaps. They must be examined as well.
             selRect.unite(selectionRectForLayoutObject(os));
             const LayoutBlock* cb = os->containingBlock();
@@ -597,7 +606,7 @@ void LayoutView::invalidatePaintForSelection()
     for (LayoutObject* o = m_selectionStart; o && o != end; o = o->nextInPreOrder()) {
         if (!o->canBeSelectionLeaf() && o != m_selectionStart && o != m_selectionEnd)
             continue;
-        if (o->selectionState() == SelectionNone)
+        if (o->getSelectionState() == SelectionNone)
             continue;
 
         o->setShouldInvalidateSelection();
@@ -675,13 +684,13 @@ void LayoutView::setSelection(LayoutObject* start, int startPos, LayoutObject* e
     bool exploringBackwards = false;
     bool continueExploring = os && (os != stop);
     while (continueExploring) {
-        if ((os->canBeSelectionLeaf() || os == m_selectionStart || os == m_selectionEnd) && os->selectionState() != SelectionNone) {
+        if ((os->canBeSelectionLeaf() || os == m_selectionStart || os == m_selectionEnd) && os->getSelectionState() != SelectionNone) {
             // Blocks are responsible for painting line gaps and margin gaps.  They must be examined as well.
-            oldSelectedObjects.set(os, os->selectionState());
+            oldSelectedObjects.set(os, os->getSelectionState());
             if (blockPaintInvalidationMode == PaintInvalidationNewXOROld) {
                 LayoutBlock* cb = os->containingBlock();
                 while (cb && !cb->isLayoutView()) {
-                    SelectedBlockMap::AddResult result = oldSelectedBlocks.add(cb, cb->selectionState());
+                    SelectedBlockMap::AddResult result = oldSelectedBlocks.add(cb, cb->getSelectionState());
                     if (!result.isNewEntry)
                         break;
                     cb = cb->containingBlock();
@@ -722,19 +731,17 @@ void LayoutView::setSelection(LayoutObject* start, int startPos, LayoutObject* e
         o = o->nextInPreOrder();
     }
 
-    layer()->clearBlockSelectionGapsBounds();
-
     // Now that the selection state has been updated for the new objects, walk them again and
     // put them in the new objects list.
     o = start;
     exploringBackwards = false;
     continueExploring = o && (o != stop);
     while (continueExploring) {
-        if ((o->canBeSelectionLeaf() || o == start || o == end) && o->selectionState() != SelectionNone) {
-            newSelectedObjects.set(o, o->selectionState());
+        if ((o->canBeSelectionLeaf() || o == start || o == end) && o->getSelectionState() != SelectionNone) {
+            newSelectedObjects.set(o, o->getSelectionState());
             LayoutBlock* cb = o->containingBlock();
             while (cb && !cb->isLayoutView()) {
-                SelectedBlockMap::AddResult result = newSelectedBlocks.add(cb, cb->selectionState());
+                SelectedBlockMap::AddResult result = newSelectedBlocks.add(cb, cb->getSelectionState());
                 if (!result.isNewEntry)
                     break;
                 cb = cb->containingBlock();
@@ -750,7 +757,7 @@ void LayoutView::setSelection(LayoutObject* start, int startPos, LayoutObject* e
     // Have any of the old selected objects changed compared to the new selection?
     for (SelectedObjectMap::iterator i = oldSelectedObjects.begin(); i != oldObjectsEnd; ++i) {
         LayoutObject* obj = i->key;
-        SelectionState newSelectionState = obj->selectionState();
+        SelectionState newSelectionState = obj->getSelectionState();
         SelectionState oldSelectionState = i->value;
         if (newSelectionState != oldSelectionState
             || (m_selectionStart == obj && oldStartPos != m_selectionStartPos)
@@ -769,7 +776,7 @@ void LayoutView::setSelection(LayoutObject* start, int startPos, LayoutObject* e
     SelectedBlockMap::iterator oldBlocksEnd = oldSelectedBlocks.end();
     for (SelectedBlockMap::iterator i = oldSelectedBlocks.begin(); i != oldBlocksEnd; ++i) {
         LayoutBlock* block = i->key;
-        SelectionState newSelectionState = block->selectionState();
+        SelectionState newSelectionState = block->getSelectionState();
         SelectionState oldSelectionState = i->value;
         if (newSelectionState != oldSelectionState) {
             block->setShouldInvalidateSelection();
@@ -789,7 +796,6 @@ void LayoutView::clearSelection()
     // This is correct, since destroying layout objects needs to cause eager paint invalidations.
     DisableCompositingQueryAsserts disabler;
 
-    layer()->invalidatePaintForBlockSelectionGaps();
     setSelection(0, -1, 0, -1, PaintInvalidationNewMinusOld);
 }
 
@@ -906,7 +912,7 @@ LayoutUnit LayoutView::viewLogicalHeightForPercentages() const
 {
     if (shouldUsePrintingLayout())
         return pageLogicalHeight();
-    return viewLogicalHeight();
+    return LayoutUnit(viewLogicalHeight());
 }
 
 float LayoutView::zoomFactor() const
@@ -962,16 +968,9 @@ bool LayoutView::backgroundIsKnownToBeOpaqueInRect(const LayoutRect&) const
     return m_frameView->hasOpaqueBackground();
 }
 
-double LayoutView::layoutViewportWidth() const
+FloatSize LayoutView::viewportSizeForViewportUnits() const
 {
-    float scale = m_frameView ? m_frameView->frame().pageZoomFactor() : 1;
-    return viewWidth(IncludeScrollbars) / scale;
-}
-
-double LayoutView::layoutViewportHeight() const
-{
-    float scale = m_frameView ? m_frameView->frame().pageZoomFactor() : 1;
-    return viewHeight(IncludeScrollbars) / scale;
+    return frameView() ? frameView()->viewportSizeForViewportUnits() : FloatSize();
 }
 
 void LayoutView::willBeDestroyed()

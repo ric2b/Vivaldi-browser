@@ -31,11 +31,13 @@
 #ifndef WTF_StringView_h
 #define WTF_StringView_h
 
+#include "wtf/Allocator.h"
 #include "wtf/text/StringImpl.h"
 
 namespace WTF {
 
 class WTF_EXPORT StringView {
+    DISALLOW_NEW();
 public:
     StringView()
         : m_offset(0)
@@ -101,7 +103,7 @@ private:
     unsigned m_length;
 };
 
-}
+} // namespace WTF
 
 using WTF::StringView;
 

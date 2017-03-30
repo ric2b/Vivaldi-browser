@@ -285,4 +285,4 @@ void ProgressTracker::completeProgress(unsigned long identifier)
     m_progressItems.remove(identifier);
 }
 
-}
+} // namespace blink

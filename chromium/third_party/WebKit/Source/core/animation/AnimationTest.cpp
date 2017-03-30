@@ -253,18 +253,18 @@ TEST_F(AnimationAnimationTest, StartTimePauseFinish)
     EXPECT_EQ(Animation::Pending, animation->playStateInternal());
     EXPECT_TRUE(std::isnan(animation->startTime()));
     animation->finish(exceptionState);
-    EXPECT_EQ(Animation::Paused, animation->playStateInternal());
-    EXPECT_TRUE(std::isnan(animation->startTime()));
+    EXPECT_EQ(Animation::Finished, animation->playStateInternal());
+    EXPECT_EQ(-30000, animation->startTime());
 }
 
-TEST_F(AnimationAnimationTest, PauseBeatsFinish)
+TEST_F(AnimationAnimationTest, FinishWhenPaused)
 {
     animation->pause();
     EXPECT_EQ(Animation::Pending, animation->playStateInternal());
     simulateFrame(10);
     EXPECT_EQ(Animation::Paused, animation->playStateInternal());
     animation->finish(exceptionState);
-    EXPECT_EQ(Animation::Paused, animation->playStateInternal());
+    EXPECT_EQ(Animation::Finished, animation->playStateInternal());
 }
 
 TEST_F(AnimationAnimationTest, StartTimeFinishPause)
@@ -393,14 +393,6 @@ TEST_F(AnimationAnimationTest, ReverseDoesNothingWithPlaybackRateZero)
     EXPECT_EQ(10, animation->currentTimeInternal());
 }
 
-TEST_F(AnimationAnimationTest, ReverseDoesNotSeekWithNoEffect)
-{
-    animation->setEffect(0);
-    animation->setCurrentTimeInternal(10);
-    animation->reverse();
-    EXPECT_EQ(10, animation->currentTimeInternal());
-}
-
 TEST_F(AnimationAnimationTest, ReverseSeeksToStart)
 {
     animation->setCurrentTimeInternal(-10);
@@ -448,7 +440,7 @@ TEST_F(AnimationAnimationTest, FinishAfterEffectEnd)
 {
     animation->setCurrentTime(40 * 1000);
     animation->finish(exceptionState);
-    EXPECT_EQ(30, animation->currentTimeInternal());
+    EXPECT_EQ(40, animation->currentTimeInternal());
 }
 
 TEST_F(AnimationAnimationTest, FinishBeforeStart)
@@ -813,9 +805,9 @@ TEST_F(AnimationAnimationTest, FinishAfterCancel)
     EXPECT_TRUE(std::isnan(animation->currentTime()));
     EXPECT_TRUE(std::isnan(animation->startTime()));
     animation->finish(exceptionState);
-    EXPECT_TRUE(std::isnan(animation->currentTime()));
-    EXPECT_TRUE(std::isnan(animation->startTime()));
-    EXPECT_EQ(Animation::Idle, animation->playStateInternal());
+    EXPECT_EQ(30000, animation->currentTime());
+    EXPECT_EQ(-30000, animation->startTime());
+    EXPECT_EQ(Animation::Finished, animation->playStateInternal());
 }
 
 TEST_F(AnimationAnimationTest, PauseAfterCancel)
@@ -825,8 +817,8 @@ TEST_F(AnimationAnimationTest, PauseAfterCancel)
     EXPECT_TRUE(std::isnan(animation->currentTime()));
     EXPECT_TRUE(std::isnan(animation->startTime()));
     animation->pause();
-    EXPECT_EQ(Animation::Idle, animation->playStateInternal());
-    EXPECT_TRUE(std::isnan(animation->currentTime()));
+    EXPECT_EQ(Animation::Pending, animation->playStateInternal());
+    EXPECT_EQ(0, animation->currentTime());
     EXPECT_TRUE(std::isnan(animation->startTime()));
 }
 

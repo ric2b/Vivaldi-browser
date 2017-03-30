@@ -44,9 +44,27 @@ public:
     void renderbufferStorageMultisample(GLenum, GLsizei, GLenum, GLsizei, GLsizei);
 
     /* Texture objects */
+    void texImage2D(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, GLintptr);
+    // Have to re-declair/re-define the following texImage2D functions from base class.
+    // This is because the above texImage2D() hides the name from base class.
+    void texImage2D(GLenum target, GLint level, GLint internalformat,
+        GLsizei width, GLsizei height, GLint border,
+        GLenum format, GLenum type, DOMArrayBufferView*);
+    void texImage2D(GLenum target, GLint level, GLint internalformat,
+        GLenum format, GLenum type, ImageData*);
+    void texImage2D(GLenum target, GLint level, GLint internalformat,
+        GLenum format, GLenum type, HTMLImageElement*, ExceptionState&);
+    void texImage2D(GLenum target, GLint level, GLint internalformat,
+        GLenum format, GLenum type, HTMLCanvasElement*, ExceptionState&);
+    void texImage2D(GLenum target, GLint level, GLint internalformat,
+        GLenum format, GLenum type, HTMLVideoElement*, ExceptionState&);
+    void texImage2D(GLenum target, GLint level, GLint internalformat,
+        GLenum format, GLenum type, PassRefPtrWillBeRawPtr<ImageBitmap>, ExceptionState&);
+
     void texStorage2D(GLenum, GLsizei, GLenum, GLsizei, GLsizei);
     void texStorage3D(GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLsizei);
     void texImage3D(GLenum, GLint, GLint, GLsizei, GLsizei, GLsizei, GLint, GLenum, GLenum, DOMArrayBufferView*);
+    void texImage3D(GLenum, GLint, GLint, GLsizei, GLsizei, GLsizei, GLint, GLenum, GLenum, GLintptr);
     void texSubImage3D(GLenum, GLint, GLint, GLint, GLint, GLsizei, GLsizei, GLsizei, GLenum, GLenum, DOMArrayBufferView*);
     void texSubImage3D(GLenum, GLint, GLint, GLint, GLint, GLenum, GLenum, ImageData*);
     void texSubImage3D(GLenum, GLint, GLint, GLint, GLint, GLenum, GLenum, HTMLImageElement*, ExceptionState&);
@@ -223,19 +241,18 @@ protected:
     bool validateCapability(const char* functionName, GLenum) override;
     bool validateBufferTarget(const char* functionName, GLenum target) override;
     bool validateAndUpdateBufferBindTarget(const char* functionName, GLenum, WebGLBuffer*) override;
-    WebGLTexture* validateTextureBinding(const char* functionName, GLenum target, bool useSixEnumsForCubeMap) override;
     bool validateFramebufferTarget(GLenum target) override;
-    bool validateReadPixelsFormatAndType(GLenum format, GLenum type) override;
 
-    DOMArrayBufferView::ViewType readPixelsExpectedArrayBufferViewType(GLenum type) override;
+    bool validateReadPixelsFormatAndType(GLenum format, GLenum type, DOMArrayBufferView*) override;
     WebGLFramebuffer* getFramebufferBinding(GLenum target) override;
+    WebGLFramebuffer* getReadFramebufferBinding() override;
     GLint getMaxTextureLevelForTarget(GLenum target) override;
     void renderbufferStorageImpl(GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, const char* functionName) override;
-    GLenum boundFramebufferColorFormat() override;
-    const WebGLSamplerState* getTextureUnitSamplerState(GLenum target, GLuint unit) const override;
 
-    // Helper function to validate the target for compressedTex{Sub}Image3D.
-    bool validateTexFunc3DTarget(const char* functionName, GLenum target);
+    // Helper function to check texture 3D target and texture bound to the target.
+    // Generate GL errors and return 0 if target is invalid or texture bound is
+    // null.  Otherwise, return the texture bound to the target.
+    WebGLTexture* validateTexture3DBinding(const char* functionName, GLenum target);
 
     WebGLBuffer* validateBufferDataTarget(const char* functionName, GLenum target) override;
     bool validateBufferDataUsage(const char* functionName, GLenum usage) override;
@@ -252,7 +269,6 @@ protected:
 
     PersistentWillBeMember<WebGLFramebuffer> m_readFramebufferBinding;
     PersistentWillBeMember<WebGLTransformFeedback> m_transformFeedbackBinding;
-    GLint m_maxArrayTextureLayers;
 
     std::set<GLenum> m_supportedInternalFormatsStorage;
     std::set<GLenum> m_compressedTextureFormatsETC2EAC;

@@ -25,6 +25,7 @@
 #include "device/usb/usb_device.h"
 #include "device/usb/usb_device_handle.h"
 #include "device/usb/usb_service.h"
+#include "net/base/io_buffer.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using content::BrowserThread;
@@ -152,13 +153,16 @@ class MockUsbDeviceHandle : public UsbDeviceHandle {
         FROM_HERE, base::Bind(callback, success));
   }
 
-  bool ReleaseInterface(int interface_number) override {
+  void ReleaseInterface(int interface_number,
+                        const ResultCallback& callback) override {
+    bool success = false;
     if (device_->claimed_interfaces_.find(interface_number) ==
         device_->claimed_interfaces_.end())
-      return false;
+      success = false;
 
     device_->claimed_interfaces_.erase(interface_number);
-    return true;
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(callback, success));
   }
 
   void SetInterfaceAlternateSetting(int interface_number,
@@ -351,14 +355,18 @@ class MockUsbDeviceHandle : public UsbDeviceHandle {
                               query.buffer, query.size));
   }
 
-  void IsochronousTransfer(UsbEndpointDirection direction,
-                           uint8_t endpoint,
-                           scoped_refptr<net::IOBuffer> buffer,
-                           size_t length,
-                           unsigned int packets,
-                           unsigned int packet_length,
-                           unsigned int timeout,
-                           const TransferCallback& callback) override {}
+  void IsochronousTransferIn(
+      uint8_t endpoint_number,
+      const std::vector<uint32_t>& packet_lengths,
+      unsigned int timeout,
+      const IsochronousTransferCallback& callback) override {}
+
+  void IsochronousTransferOut(
+      uint8_t endpoint_number,
+      scoped_refptr<net::IOBuffer> buffer,
+      const std::vector<uint32_t>& packet_lengths,
+      unsigned int timeout,
+      const IsochronousTransferCallback& callback) override {}
 
  protected:
   virtual ~MockUsbDeviceHandle() {}
@@ -392,28 +400,18 @@ class MockUsbDevice : public UsbDevice {
                   0,
                   base::UTF8ToUTF16(kDeviceManufacturer),
                   base::UTF8ToUTF16(kDeviceModel),
-                  base::UTF8ToUTF16(kDeviceSerial)) {
-    UsbEndpointDescriptor bulk_in;
-    bulk_in.address = 0x81;
-    bulk_in.direction = device::USB_DIRECTION_INBOUND;
-    bulk_in.maximum_packet_size = 512;
-    bulk_in.transfer_type = device::USB_TRANSFER_BULK;
-
-    UsbEndpointDescriptor bulk_out;
-    bulk_out.address = 0x01;
-    bulk_out.direction = device::USB_DIRECTION_OUTBOUND;
-    bulk_out.maximum_packet_size = 512;
-    bulk_out.transfer_type = device::USB_TRANSFER_BULK;
-
-    UsbInterfaceDescriptor interface_desc;
-    interface_desc.interface_number = 0;
-    interface_desc.alternate_setting = 0;
-    interface_desc.interface_class = T::kClass;
-    interface_desc.interface_subclass = T::kSubclass;
-    interface_desc.interface_protocol = T::kProtocol;
-    interface_desc.endpoints.push_back(bulk_in);
-    interface_desc.endpoints.push_back(bulk_out);
-
+                  base::UTF8ToUTF16(kDeviceSerial)),
+        config_desc_(1, false, false, 0) {
+    UsbInterfaceDescriptor interface_desc(0, 0, T::kClass, T::kSubclass,
+                                          T::kProtocol);
+    interface_desc.endpoints.emplace_back(0x81, device::USB_DIRECTION_INBOUND,
+                                          512, device::USB_SYNCHRONIZATION_NONE,
+                                          device::USB_TRANSFER_BULK,
+                                          device::USB_USAGE_DATA, 0);
+    interface_desc.endpoints.emplace_back(0x01, device::USB_DIRECTION_OUTBOUND,
+                                          512, device::USB_SYNCHRONIZATION_NONE,
+                                          device::USB_TRANSFER_BULK,
+                                          device::USB_USAGE_DATA, 0);
     config_desc_.interfaces.push_back(interface_desc);
   }
 

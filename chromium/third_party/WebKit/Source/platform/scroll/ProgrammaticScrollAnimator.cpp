@@ -4,13 +4,14 @@
 
 #include "platform/scroll/ProgrammaticScrollAnimator.h"
 
+#include "platform/animation/CompositorAnimation.h"
+#include "platform/animation/CompositorScrollOffsetAnimationCurve.h"
 #include "platform/geometry/IntPoint.h"
+#include "platform/graphics/CompositorFactory.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/scroll/ScrollableArea.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebCompositorAnimation.h"
 #include "public/platform/WebCompositorSupport.h"
-#include "public/platform/WebScrollOffsetAnimationCurve.h"
 
 namespace blink {
 
@@ -49,12 +50,15 @@ void ProgrammaticScrollAnimator::scrollToOffsetWithoutAnimation(const FloatPoint
 
 void ProgrammaticScrollAnimator::animateToOffset(FloatPoint offset)
 {
+    if (m_runState == RunState::PostAnimationCleanup)
+        resetAnimationState();
+
     m_startTime = 0.0;
     m_targetOffset = offset;
-    m_animationCurve = adoptPtr(Platform::current()->compositorSupport()->createScrollOffsetAnimationCurve(
+    m_animationCurve = adoptPtr(CompositorFactory::current().createScrollOffsetAnimationCurve(
         compositorOffsetFromBlinkOffset(m_targetOffset),
-        WebCompositorAnimationCurve::TimingFunctionTypeEaseInOut,
-        WebScrollOffsetAnimationCurve::ScrollDurationDeltaBased));
+        CompositorAnimationCurve::TimingFunctionTypeEaseInOut,
+        CompositorScrollOffsetAnimationCurve::ScrollDurationDeltaBased));
 
     m_scrollableArea->registerForAnimation();
     if (!m_scrollableArea->scheduleAnimation()) {
@@ -83,7 +87,7 @@ void ProgrammaticScrollAnimator::tickAnimation(double monotonicTime)
     notifyPositionChanged(IntPoint(offset.x(), offset.y()));
 
     if (isFinished) {
-        resetAnimationState();
+        m_runState = RunState::PostAnimationCleanup;
     } else if (!m_scrollableArea->scheduleAnimation()) {
         notifyPositionChanged(IntPoint(m_targetOffset.x(), m_targetOffset.y()));
         resetAnimationState();
@@ -92,6 +96,13 @@ void ProgrammaticScrollAnimator::tickAnimation(double monotonicTime)
 
 void ProgrammaticScrollAnimator::updateCompositorAnimations()
 {
+    if (m_runState == RunState::PostAnimationCleanup) {
+        // No special cleanup, simply reset animation state. We have this state
+        // here because the state machine is shared with ScrollAnimator which
+        // has to do some cleanup that requires the compositing state to be clean.
+        return resetAnimationState();
+    }
+
     if (m_compositorAnimationId && m_runState != RunState::RunningOnCompositor) {
         // If the current run state is WaitingToSendToCompositor but we have a
         // non-zero compositor animation id, there's a currently running
@@ -113,7 +124,7 @@ void ProgrammaticScrollAnimator::updateCompositorAnimations()
         bool sentToCompositor = false;
 
         if (!m_scrollableArea->shouldScrollOnMainThread()) {
-            OwnPtr<WebCompositorAnimation> animation = adoptPtr(Platform::current()->compositorSupport()->createAnimation(*m_animationCurve, WebCompositorAnimation::TargetPropertyScrollOffset));
+            OwnPtr<CompositorAnimation> animation = adoptPtr(CompositorFactory::current().createAnimation(*m_animationCurve, CompositorTargetProperty::SCROLL_OFFSET));
 
             int animationId = animation->id();
             int animationGroupId = animation->group();
@@ -138,7 +149,7 @@ void ProgrammaticScrollAnimator::updateCompositorAnimations()
     }
 }
 
-void ProgrammaticScrollAnimator::layerForCompositedScrollingDidChange(WebCompositorAnimationTimeline* timeline)
+void ProgrammaticScrollAnimator::layerForCompositedScrollingDidChange(CompositorAnimationTimeline* timeline)
 {
     reattachCompositorPlayerIfNeeded(timeline);
 

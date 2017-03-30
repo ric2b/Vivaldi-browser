@@ -19,7 +19,6 @@
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/webplugininfo.h"
-#include "net/base/net_util.h"
 
 typedef content::TestMessageHandler::MessageResponse MessageResponse;
 
@@ -284,7 +283,7 @@ bool NaClBrowserTestPnacl::IsAPnaclTest() {
 void NaClBrowserTestPnaclSubzero::SetUpCommandLine(
     base::CommandLine* command_line) {
   NaClBrowserTestPnacl::SetUpCommandLine(command_line);
-  command_line->AppendSwitch(switches::kEnablePNaClSubzero);
+  command_line->AppendSwitch(switches::kForcePNaClSubzero);
 }
 
 base::FilePath::StringType NaClBrowserTestNonSfiMode::Variant() {

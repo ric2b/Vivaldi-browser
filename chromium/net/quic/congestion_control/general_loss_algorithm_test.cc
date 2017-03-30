@@ -29,34 +29,32 @@ class GeneralLossAlgorithmTest : public ::testing::Test {
                          QuicTime::Delta::Zero(), clock_.Now());
   }
 
-  ~GeneralLossAlgorithmTest() override { STLDeleteElements(&packets_); }
+  ~GeneralLossAlgorithmTest() override {}
 
   void SendDataPacket(QuicPacketNumber packet_number) {
-    packets_.push_back(new QuicEncryptedPacket(nullptr, kDefaultLength));
-    RetransmittableFrames* frames = new RetransmittableFrames();
     QuicStreamFrame* frame = new QuicStreamFrame();
     frame->stream_id = kHeadersStreamId;
-    frames->AddFrame(QuicFrame(frame));
     SerializedPacket packet(kDefaultPathId, packet_number,
-                            PACKET_1BYTE_PACKET_NUMBER, packets_.back(), 0,
-                            frames, false, false);
+                            PACKET_1BYTE_PACKET_NUMBER, nullptr, kDefaultLength,
+                            0, false, false);
+    packet.retransmittable_frames.push_back(QuicFrame(frame));
     unacked_packets_.AddSentPacket(&packet, 0, NOT_RETRANSMISSION, clock_.Now(),
-                                   1000, true);
+                                   true);
   }
 
   void VerifyLosses(QuicPacketNumber largest_observed,
                     QuicPacketNumber* losses_expected,
                     size_t num_losses) {
     unacked_packets_.IncreaseLargestObserved(largest_observed);
-    PacketNumberSet lost_packets = loss_algorithm_.DetectLostPackets(
-        unacked_packets_, clock_.Now(), largest_observed, rtt_stats_);
+    SendAlgorithmInterface::CongestionVector lost_packets;
+    loss_algorithm_.DetectLosses(unacked_packets_, clock_.Now(), rtt_stats_,
+                                 &lost_packets);
     EXPECT_EQ(num_losses, lost_packets.size());
     for (size_t i = 0; i < num_losses; ++i) {
-      EXPECT_TRUE(ContainsKey(lost_packets, losses_expected[i]));
+      EXPECT_EQ(lost_packets[i].first, losses_expected[i]);
     }
   }
 
-  vector<QuicEncryptedPacket*> packets_;
   QuicUnackedPacketMap unacked_packets_;
   GeneralLossAlgorithm loss_algorithm_;
   RttStats rtt_stats_;

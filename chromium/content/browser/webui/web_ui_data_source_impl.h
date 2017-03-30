@@ -17,6 +17,7 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "ui/base/template_expressions.h"
 
 namespace content {
 
@@ -38,7 +39,6 @@ class CONTENT_EXPORT WebUIDataSourceImpl
   void SetDefaultResource(int resource_id) override;
   void SetRequestFilter(
       const WebUIDataSource::HandleRequestCallback& callback) override;
-  void AddMojoResources() override;
   void DisableReplaceExistingSource() override;
   void DisableContentSecurityPolicy() override;
   void OverrideContentSecurityPolicyObjectSrc(const std::string& data) override;
@@ -51,10 +51,6 @@ class CONTENT_EXPORT WebUIDataSourceImpl
   // Completes a request by sending our dictionary of localized strings.
   void SendLocalizedStringsAsJSON(
       const URLDataSource::GotDataCallback& callback);
-
-  // Completes a request by sending the file specified by |idr|.
-  void SendFromResourceBundle(
-      const URLDataSource::GotDataCallback& callback, int idr);
 
  private:
   class InternalDataSource;
@@ -85,6 +81,10 @@ class CONTENT_EXPORT WebUIDataSourceImpl
   int default_resource_;
   std::string json_path_;
   std::map<std::string, int> path_to_idr_map_;
+  // The |replacements_| is intended to replace |localized_strings_|.
+  // TODO(dschuyler): phase out |localized_strings_| in Q1 2016. (Or rename
+  // to |load_time_flags_| if the usage is reduced to storing flags only).
+  ui::TemplateReplacements replacements_;
   base::DictionaryValue localized_strings_;
   WebUIDataSource::HandleRequestCallback filter_callback_;
   bool add_csp_;
@@ -99,6 +99,6 @@ class CONTENT_EXPORT WebUIDataSourceImpl
   DISALLOW_COPY_AND_ASSIGN(WebUIDataSourceImpl);
 };
 
-}  // content
+}  // namespace content
 
 #endif  // CONTENT_BROWSER_WEBUI_WEB_UI_DATA_SOURCE_IMPL_H_

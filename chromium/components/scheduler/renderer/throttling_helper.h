@@ -30,8 +30,17 @@ class SCHEDULER_EXPORT ThrottlingHelper : public TimeDomain::Observer {
   void OnTimeDomainHasImmediateWork() override;
   void OnTimeDomainHasDelayedWork() override;
 
-  void Throttle(TaskQueue* task_queue);
-  void Unthrottle(TaskQueue* task_queue);
+  // Increments the throttled refcount and causes |task_queue| to be throttled
+  // if its not already throttled.
+  void IncreaseThrottleRefCount(TaskQueue* task_queue);
+
+  // If the refcouint is non-zero it's decremented.  If the throttled refcount
+  // becomes zero then |task_queue| is unthrottled.  If the refcount was already
+  // zero this function does nothing.
+  void DecreaseThrottleRefCount(TaskQueue* task_queue);
+
+  // Removes |task_queue| from |throttled_queues_|.
+  void UnregisterTaskQueue(TaskQueue* task_queue);
 
   const ThrottledTimeDomain* time_domain() const { return time_domain_.get(); }
 
@@ -40,13 +49,19 @@ class SCHEDULER_EXPORT ThrottlingHelper : public TimeDomain::Observer {
   const scoped_refptr<TaskQueue>& task_runner() const { return task_runner_; }
 
  private:
+  using TaskQueueMap = std::map<TaskQueue*, size_t>;
+
   void PumpThrottledTasks();
+
+  // Note |unthrottled_runtime| might be in the past. When this happens we
+  // compute the delay to the next runtime based on now rather than
+  // unthrottled_runtime.
   void MaybeSchedulePumpThrottledTasksLocked(
       const tracked_objects::Location& from_here,
       base::TimeTicks now,
       base::TimeTicks unthrottled_runtime);
 
-  std::set<TaskQueue*> throttled_queues_;
+  TaskQueueMap throttled_queues_;
   base::Closure forward_immediate_work_closure_;
   scoped_refptr<TaskQueue> task_runner_;
   RendererSchedulerImpl* renderer_scheduler_;  // NOT OWNED

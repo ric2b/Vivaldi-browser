@@ -15,37 +15,14 @@
 
 namespace cc {
 
-class LayerImpl;
+class LayerTreeImpl;
 
 // ScrollState is based on the proposal for scroll customization in blink, found
 // here: https://goo.gl/1ipTpP.
 class CC_EXPORT ScrollState {
  public:
-  static scoped_ptr<ScrollState> Create(const gfx::Vector2dF& scroll_delta,
-                                        const gfx::Point& viewport_point,
-                                        const gfx::Vector2dF& scroll_velocity,
-                                        bool is_beginning,
-                                        bool is_in_inertial_phase,
-                                        bool is_ending) {
-    return make_scoped_ptr(new ScrollState(
-        scroll_delta.x(), scroll_delta.y(), viewport_point.x(),
-        viewport_point.y(), scroll_velocity.x(), scroll_velocity.y(),
-        is_beginning, is_in_inertial_phase, is_ending));
-  }
-
-  ScrollState(double delta_x,
-              double delta_y,
-              int start_position_x,
-              int start_position_y,
-              double velocity_x,
-              double velocity_y,
-              bool is_beginning,
-              bool is_in_inertial_phase,
-              bool is_ending,
-              bool should_propagate = false,
-              bool delta_consumed_for_scroll_sequence = false,
-              bool is_direct_manipulation = false);
   explicit ScrollState(ScrollStateData data);
+  ScrollState(const ScrollState& other);
   ~ScrollState();
 
   // Reduce deltas by x, y.
@@ -84,16 +61,19 @@ class CC_EXPORT ScrollState {
     data_.is_direct_manipulation = is_direct_manipulation;
   }
 
-  void set_scroll_chain(const std::list<LayerImpl*>& scroll_chain) {
+  void set_scroll_chain_and_layer_tree(
+      const std::list<const ScrollNode*>& scroll_chain,
+      LayerTreeImpl* layer_tree_impl) {
+    layer_tree_impl_ = layer_tree_impl;
     scroll_chain_ = scroll_chain;
   }
 
-  void set_current_native_scrolling_layer(LayerImpl* layer) {
-    data_.current_native_scrolling_layer = layer;
+  void set_current_native_scrolling_node(ScrollNode* scroll_node) {
+    data_.set_current_native_scrolling_node(scroll_node);
   }
 
-  LayerImpl* current_native_scrolling_layer() const {
-    return data_.current_native_scrolling_layer;
+  ScrollNode* current_native_scrolling_node() const {
+    return data_.current_native_scrolling_node();
   }
 
   bool delta_consumed_for_scroll_sequence() const {
@@ -117,7 +97,8 @@ class CC_EXPORT ScrollState {
 
  private:
   ScrollStateData data_;
-  std::list<LayerImpl*> scroll_chain_;
+  LayerTreeImpl* layer_tree_impl_;
+  std::list<const ScrollNode*> scroll_chain_;
 };
 
 }  // namespace cc

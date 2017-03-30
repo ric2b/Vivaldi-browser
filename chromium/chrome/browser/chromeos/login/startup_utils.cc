@@ -8,8 +8,6 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
 #include "base/sys_info.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browser_process.h"
@@ -17,6 +15,8 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
 #include "components/web_resource/web_resource_pref_names.h"
 #include "content/public/browser/browser_thread.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -47,6 +47,35 @@ void SaveStringPreferenceForced(const char* pref_name,
   prefs->CommitPendingWrite();
 }
 
+// Returns the path to flag file indicating that both parts of OOBE were
+// completed.
+// On chrome device, returns /home/chronos/.oobe_completed.
+// On Linux desktop, returns {DIR_USER_DATA}/.oobe_completed.
+base::FilePath GetOobeCompleteFlagPath() {
+  // The constant is defined here so it won't be referenced directly.
+  const char kOobeCompleteFlagFilePath[] = "/home/chronos/.oobe_completed";
+
+  if (base::SysInfo::IsRunningOnChromeOS()) {
+    return base::FilePath(kOobeCompleteFlagFilePath);
+  } else {
+    base::FilePath user_data_dir;
+    PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
+    return user_data_dir.AppendASCII(".oobe_completed");
+  }
+}
+
+void CreateOobeCompleteFlagFile() {
+  // Create flag file for boot-time init scripts.
+  const base::FilePath oobe_complete_flag_path = GetOobeCompleteFlagPath();
+  if (!base::PathExists(oobe_complete_flag_path)) {
+    FILE* oobe_flag_file = base::OpenFile(oobe_complete_flag_path, "w+b");
+    if (oobe_flag_file == NULL)
+      DLOG(WARNING) << oobe_complete_flag_path.value() << " doesn't exist.";
+    else
+      base::CloseFile(oobe_flag_file);
+  }
+}
+
 }  // namespace
 
 namespace chromeos {
@@ -58,6 +87,7 @@ void StartupUtils::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(prefs::kDeviceRegistered, -1);
   registry->RegisterBooleanPref(prefs::kEnrollmentRecoveryRequired, false);
   registry->RegisterStringPref(prefs::kInitialLocale, "en-US");
+  registry->RegisterBooleanPref(prefs::kOobeControllerDetected, false);
 }
 
 // static
@@ -92,23 +122,6 @@ void StartupUtils::SaveOobePendingScreen(const std::string& screen) {
   SaveStringPreferenceForced(prefs::kOobeScreenPending, screen);
 }
 
-// Returns the path to flag file indicating that both parts of OOBE were
-// completed.
-// On chrome device, returns /home/chronos/.oobe_completed.
-// On Linux desktop, returns {DIR_USER_DATA}/.oobe_completed.
-static base::FilePath GetOobeCompleteFlagPath() {
-  // The constant is defined here so it won't be referenced directly.
-  const char kOobeCompleteFlagFilePath[] = "/home/chronos/.oobe_completed";
-
-  if (base::SysInfo::IsRunningOnChromeOS()) {
-    return base::FilePath(kOobeCompleteFlagFilePath);
-  } else {
-    base::FilePath user_data_dir;
-    PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
-    return user_data_dir.AppendASCII(".oobe_completed");
-  }
-}
-
 // static
 base::TimeDelta StartupUtils::GetTimeSinceOobeFlagFileCreation() {
   const base::FilePath oobe_complete_flag_path = GetOobeCompleteFlagPath();
@@ -116,18 +129,6 @@ base::TimeDelta StartupUtils::GetTimeSinceOobeFlagFileCreation() {
   if (base::GetFileInfo(oobe_complete_flag_path, &file_info))
     return base::Time::Now() - file_info.creation_time;
   return base::TimeDelta();
-}
-
-static void CreateOobeCompleteFlagFile() {
-  // Create flag file for boot-time init scripts.
-  const base::FilePath oobe_complete_flag_path = GetOobeCompleteFlagPath();
-  if (!base::PathExists(oobe_complete_flag_path)) {
-    FILE* oobe_flag_file = base::OpenFile(oobe_complete_flag_path, "w+b");
-    if (oobe_flag_file == NULL)
-      DLOG(WARNING) << oobe_complete_flag_path.value() << " doesn't exist.";
-    else
-      base::CloseFile(oobe_flag_file);
-  }
 }
 
 // static

@@ -51,9 +51,9 @@ void AddChromecastKeySystems(
     std::vector<::media::KeySystemInfo>* key_systems_info) {
 #if defined(WIDEVINE_CDM_AVAILABLE)
   ::media::SupportedCodecs codecs =
-      ::media::EME_CODEC_MP4_AAC | ::media::EME_CODEC_MP4_AVC1;
-  AddWidevineWithCodecs(
-      cdm::WIDEVINE,
+      ::media::EME_CODEC_MP4_AAC | ::media::EME_CODEC_MP4_AVC1 |
+      ::media::EME_CODEC_WEBM_VP8 | ::media::EME_CODEC_WEBM_VP9;
+  cdm::AddWidevineWithCodecs(
       codecs,                                // Regular codecs.
 #if defined(OS_ANDROID)
       codecs,                                // Hardware-secure codecs.

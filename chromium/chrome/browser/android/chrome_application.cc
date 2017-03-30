@@ -9,20 +9,17 @@
 #include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
-#include "base/prefs/pref_service.h"
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/net/predictor.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/safe_browsing/protocol_manager.h"
-#include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/common/chrome_content_client.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "jni/ChromeApplication_jni.h"
-#include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_store.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -34,10 +31,7 @@ namespace {
 void FlushCookiesOnIOThread(
     scoped_refptr<net::URLRequestContextGetter> getter) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  getter->GetURLRequestContext()
-      ->cookie_store()
-      ->GetCookieMonster()
-      ->FlushStore(base::Closure());
+  getter->GetURLRequestContext()->cookie_store()->FlushStore(base::Closure());
 }
 
 void FlushStoragePartition(content::StoragePartition* partition) {
@@ -72,15 +66,6 @@ void RemoveSessionCookiesForProfile(Profile* profile) {
                  make_scoped_refptr(profile->GetRequestContext())));
 }
 
-void ChangeAppStatusOnIOThread(safe_browsing::SafeBrowsingService* sb_service,
-                               jboolean foreground) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  safe_browsing::SafeBrowsingProtocolManager* proto_manager =
-      sb_service->protocol_manager();
-  if (proto_manager)
-    proto_manager->SetAppInForeground(foreground);
-}
-
 }  // namespace
 
 static ScopedJavaLocalRef<jstring> GetBrowserUserAgent(
@@ -105,16 +90,6 @@ static void RemoveSessionCookies(JNIEnv* env, const JavaParamRef<jclass>& obj) {
       g_browser_process->profile_manager()->GetLoadedProfiles();
   std::for_each(loaded_profiles.begin(), loaded_profiles.end(),
                 RemoveSessionCookiesForProfile);
-}
-
-static void ChangeAppStatus(JNIEnv* env,
-                            const JavaParamRef<jclass>& obj,
-                            jboolean foreground) {
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&ChangeAppStatusOnIOThread,
-                 base::Unretained(g_browser_process->safe_browsing_service()),
-                 foreground));
 }
 
 namespace chrome {

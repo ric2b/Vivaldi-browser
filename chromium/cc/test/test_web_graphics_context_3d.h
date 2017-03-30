@@ -8,12 +8,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
-#include "base/containers/hash_tables.h"
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -275,7 +275,6 @@ class TestWebGraphicsContext3D {
                                            GLuint io_surface_id,
                                            GLuint plane) {}
 
-  virtual GLuint insertSyncPoint();
   virtual GLuint64 insertFenceSync();
   virtual void genSyncToken(GLuint64 fence_sync, GLbyte* sync_token);
   virtual void waitSyncToken(const GLbyte* sync_token);
@@ -348,6 +347,9 @@ class TestWebGraphicsContext3D {
   void set_support_texture_rectangle(bool support) {
     test_capabilities_.gpu.texture_rectangle = support;
   }
+  void set_support_texture_half_float_linear(bool support) {
+    test_capabilities_.gpu.texture_half_float_linear = support;
+  }
 
   // When this context is lost, all contexts in its share group are also lost.
   void add_share_group_context(TestWebGraphicsContext3D* context3d) {
@@ -405,7 +407,7 @@ class TestWebGraphicsContext3D {
     GLuint BoundTexture(GLenum target);
 
    private:
-    typedef base::hash_map<GLenum, GLuint> TargetTextureMap;
+    using TargetTextureMap = std::unordered_map<GLenum, GLuint>;
     TargetTextureMap bound_textures_;
   };
 
@@ -440,10 +442,10 @@ class TestWebGraphicsContext3D {
     unsigned next_image_id;
     unsigned next_texture_id;
     unsigned next_renderbuffer_id;
-    base::ScopedPtrHashMap<unsigned, scoped_ptr<Buffer>> buffers;
-    base::hash_set<unsigned> images;
+    std::unordered_map<unsigned, scoped_ptr<Buffer>> buffers;
+    std::unordered_set<unsigned> images;
     OrderedTextureMap textures;
-    base::hash_set<unsigned> renderbuffer_set;
+    std::unordered_set<unsigned> renderbuffer_set;
 
    private:
     friend class base::RefCountedThreadSafe<Namespace>;
@@ -468,13 +470,13 @@ class TestWebGraphicsContext3D {
   int current_used_transfer_buffer_usage_bytes_;
   int max_used_transfer_buffer_usage_bytes_;
   base::Closure context_lost_callback_;
-  base::hash_set<unsigned> used_textures_;
+  std::unordered_set<unsigned> used_textures_;
   unsigned next_program_id_;
-  base::hash_set<unsigned> program_set_;
+  std::unordered_set<unsigned> program_set_;
   unsigned next_shader_id_;
-  base::hash_set<unsigned> shader_set_;
+  std::unordered_set<unsigned> shader_set_;
   unsigned next_framebuffer_id_;
-  base::hash_set<unsigned> framebuffer_set_;
+  std::unordered_set<unsigned> framebuffer_set_;
   unsigned current_framebuffer_;
   std::vector<TestWebGraphicsContext3D*> shared_contexts_;
   int max_texture_size_;

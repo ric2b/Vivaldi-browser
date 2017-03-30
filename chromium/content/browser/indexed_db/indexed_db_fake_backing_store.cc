@@ -45,8 +45,7 @@ leveldb::Status IndexedDBFakeBackingStore::GetIDBDatabaseMetaData(
 
 leveldb::Status IndexedDBFakeBackingStore::CreateIDBDatabaseMetaData(
     const base::string16& name,
-    const base::string16& version,
-    int64_t int_version,
+    int64_t version,
     int64_t* row_id) {
   return leveldb::Status::OK();
 }

@@ -32,6 +32,7 @@
 #include "public/platform/WebTraceLocation.h"
 #include "wtf/AddressSanitizer.h"
 #include "wtf/Allocator.h"
+#include "wtf/CurrentTime.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/Threading.h"
 #include "wtf/Vector.h"
@@ -66,7 +67,7 @@ public:
     double repeatInterval() const { return m_repeatInterval; }
 
     void augmentRepeatInterval(double delta) {
-        double now = monotonicallyIncreasingTime();
+        double now = timerMonotonicallyIncreasingTime();
         setNextFireTime(now, m_nextFireTime - now + delta);
         m_repeatInterval += delta;
     }
@@ -81,12 +82,12 @@ protected:
 private:
     virtual void fired() = 0;
 
-    virtual WebTaskRunner* timerTaskRunner();
+    virtual WebTaskRunner* timerTaskRunner() const;
 
     NO_LAZY_SWEEP_SANITIZE_ADDRESS
     virtual bool canFire() const { return true; }
 
-    virtual double alignedFireTime(double fireTime) const { return fireTime; }
+    double timerMonotonicallyIncreasingTime() const;
 
     void setNextFireTime(double now, double delay);
 
@@ -97,6 +98,7 @@ private:
     public:
         explicit CancellableTimerTask(TimerBase* timer) : m_timer(timer) { }
 
+        NO_LAZY_SWEEP_SANITIZE_ADDRESS
         ~CancellableTimerTask() override
         {
             if (m_timer)

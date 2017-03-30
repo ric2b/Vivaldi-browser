@@ -11,8 +11,12 @@ namespace blink {
 {% from 'utilities.cpp' import v8_value_to_local_cpp_value %}
 void {{v8_class}}::toImpl(v8::Isolate* isolate, v8::Local<v8::Value> v8Value, {{cpp_class}}& impl, ExceptionState& exceptionState)
 {
-    if (isUndefinedOrNull(v8Value))
+    if (isUndefinedOrNull(v8Value)) {
+        {% if required_member_names %}
+        exceptionState.throwTypeError("Missing required member(s): {{required_member_names|join(', ')}}.");
+        {% endif %}
         return;
+    }
     if (!v8Value->IsObject()) {
         {% if use_permissive_dictionary_conversion %}
         // Do nothing.
@@ -62,7 +66,7 @@ void {{v8_class}}::toImpl(v8::Isolate* isolate, v8::Local<v8::Value> v8Value, {{
         {% endif %}
         } else {
             {% if member.deprecate_as %}
-            UseCounter::countDeprecationIfNotPrivateScript(isolate, currentExecutionContext(isolate), UseCounter::{{member.deprecate_as}});
+            Deprecation::countDeprecationIfNotPrivateScript(isolate, currentExecutionContext(isolate), UseCounter::{{member.deprecate_as}});
             {% endif %}
             {{v8_value_to_local_cpp_value(member) | indent(12)}}
             {% if member.is_interface_type %}

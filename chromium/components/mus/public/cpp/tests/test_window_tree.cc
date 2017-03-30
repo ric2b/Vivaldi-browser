@@ -99,6 +99,16 @@ void TestWindowTree::ReorderWindow(uint32_t change_id,
 void TestWindowTree::GetWindowTree(uint32_t window_id,
                                    const GetWindowTreeCallback& callback) {}
 
+void TestWindowTree::SetCapture(uint32_t change_id, uint32_t window_id) {
+  got_change_ = true;
+  change_id_ = change_id;
+}
+
+void TestWindowTree::ReleaseCapture(uint32_t change_id, uint32_t window_id) {
+  got_change_ = true;
+  change_id_ = change_id;
+}
+
 void TestWindowTree::Embed(uint32_t window_id,
                            mojom::WindowTreeClientPtr client,
                            uint32_t policy_bitmask,
@@ -127,8 +137,7 @@ void TestWindowTree::OnWindowInputEventAck(uint32_t event_id) {
   acked_events_.insert(event_id);
 }
 
-void TestWindowTree::GetWindowManagerInternalClient(
-    mojo::AssociatedInterfaceRequest<mojom::WindowManagerInternalClient>
-        internal) {}
+void TestWindowTree::GetWindowManagerClient(
+    mojo::AssociatedInterfaceRequest<mojom::WindowManagerClient> internal) {}
 
 }  // namespace mus

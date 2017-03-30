@@ -19,7 +19,7 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
 {
   "name": "gpu driver bug list",
   // Please update the version number whenever you change this file.
-  "version": "8.46",
+  "version": "8.59",
   "entries": [
     {
       "id": 1,
@@ -1439,14 +1439,12 @@ LONG_STRING_CONST(
         "op": "<",
         "value": "346"
       },
-      "features": [
-        "disable_gl_path_rendering"
-      ]
+      "disabled_extensions": ["GL_NV_path_rendering"]
     },
     {
       "id": 124,
-      "description": "Certain Adreno 4xx drivers often crash in glProgramBinary.",
-      "cr_bugs": [486117],
+      "description": "Certain Adreno 4xx and 5xx drivers often crash in glProgramBinary.",
+      "cr_bugs": [486117, 598060],
       "os": {
         "type": "android"
       },
@@ -1454,7 +1452,7 @@ LONG_STRING_CONST(
         "op": ">=",
         "value": "103.0"
       },
-      "gl_renderer": "Adreno \\(TM\\) 4.*",
+      "gl_renderer": "Adreno \\(TM\\) [45].*",
       "features": [
         "disable_program_cache"
       ]
@@ -1582,9 +1580,7 @@ LONG_STRING_CONST(
         }
       },
       "gl_vendor": "Qualcomm.*",
-      "features": [
-        "disable_ext_srgb"
-      ]
+      "disabled_extensions": ["GL_EXT_sRGB"]
     },
     {
       "id": 135,
@@ -1635,9 +1631,7 @@ LONG_STRING_CONST(
         "op": "<",
         "value": "346"
       },
-      "features": [
-        "disable_gl_path_rendering"
-      ]
+      "disabled_extensions": ["GL_NV_path_rendering"]
     },
     {
       "id": 139,
@@ -1670,9 +1664,7 @@ LONG_STRING_CONST(
       },
       "gl_vendor": "Qualcomm",
       "gl_renderer": "Adreno \\(TM\\) 4.*", // Originally on 418.
-      "features": [
-        "disable_ext_srgb"
-      ]
+      "disabled_extensions": ["GL_EXT_sRGB"]
     },
     {
       "id": 141,
@@ -1713,6 +1705,17 @@ LONG_STRING_CONST(
       ]
     },
     {
+      "id": 144,
+      "cr_bugs": [563714],
+      "description": "Pack parameters work incorrectly with pack buffer bound",
+      "os": {
+        "type": "macosx"
+      },
+      "features": [
+        "pack_parameters_workaround_with_pack_buffer"
+      ]
+    },
+    {
       "id": 145,
       "cr_bugs": [585250],
       "description": "EGLImage ref counting across EGLContext/threads is broken",
@@ -1729,6 +1732,26 @@ LONG_STRING_CONST(
         "broken_egl_image_ref_counting"
       ]
     },
+)  // LONG_STRING_CONST macro
+// Avoid C2026 (string too big) error on VisualStudio.
+LONG_STRING_CONST(
+    {
+      "id": 146,
+      "description": "Crashes in D3D11 on specific AMD drivers",
+      "cr_bugs": [517040],
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x1002",
+      "driver_version": {
+        "op": "between",
+        "value": "15.200",
+        "value2": "15.201"
+      },
+      "features": [
+        "disable_d3d11"
+      ]
+    },
     {
       "id": 147,
       "description": "Limit max texure size to 4096 on all of Android",
@@ -1737,6 +1760,69 @@ LONG_STRING_CONST(
       },
       "features": [
         "max_texture_size_limit_4096"
+      ]
+    },
+    {
+      "id": 148,
+      "description": "Mali-4xx GPU on JB doesn't support DetachGLContext",
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "<=",
+          "value": "4.4.4"
+        }
+      },
+      "gl_renderer": ".*Mali-4.*",
+      "features": [
+        "surface_texture_cant_detach"
+      ]
+    },
+    {
+      "id": 149,
+      "description": "Direct composition flashes black initially on Win <10",
+      "cr_bugs": [588588],
+      "os": {
+        "type": "win",
+        "version": {
+          "op": "<",
+          "value": "10.0"
+        }
+      },
+      "features": [
+        "disable_direct_composition"
+      ]
+    },
+    {
+      "id": 156,
+      "cr_bugs": [598474],
+      "description": "glEGLImageTargetTexture2DOES crashes",
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "between",
+          "value": "4.4",
+          "value2": "4.4.4"
+        }
+      },
+      "gl_vendor": "Imagination.*",
+      "gl_renderer": "PowerVR SGX 544MP",
+      "features": [
+        "avda_dont_copy_pictures"
+      ]
+    },
+    {
+      "id": 158,
+      "description": "IOSurface use becomes pathologically slow over time on 10.10.",
+      "cr_bugs": [580616],
+      "os": {
+        "type": "macosx",
+        "version": {
+          "op": "=",
+          "value": "10.10"
+        }
+      },
+      "features": [
+        "disable_overlay_ca_layers"
       ]
     }
   ]

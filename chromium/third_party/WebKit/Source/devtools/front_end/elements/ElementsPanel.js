@@ -74,7 +74,7 @@ WebInspector.ElementsPanel = function()
     var sharedSidebarModel = new WebInspector.SharedSidebarModel();
     this.sidebarPanes.platformFonts = WebInspector.PlatformFontsWidget.createSidebarWrapper(sharedSidebarModel);
     this.sidebarPanes.styles = new WebInspector.StylesSidebarPane();
-    this.sidebarPanes.computedStyle = WebInspector.ComputedStyleWidget.createSidebarWrapper(this.sidebarPanes.styles, sharedSidebarModel);
+    this.sidebarPanes.computedStyle = WebInspector.ComputedStyleWidget.createSidebarWrapper(this.sidebarPanes.styles, sharedSidebarModel, this._revealProperty.bind(this));
 
     this.sidebarPanes.metrics = new WebInspector.MetricsSidebarPane();
     this.sidebarPanes.properties = WebInspector.PropertiesWidget.createSidebarWrapper();
@@ -101,6 +101,17 @@ WebInspector.ElementsPanel._elementsSidebarViewTitleSymbol = Symbol("title");
 
 WebInspector.ElementsPanel.prototype = {
     /**
+     * @param {!WebInspector.CSSProperty} cssProperty
+     */
+    _revealProperty: function(cssProperty)
+    {
+        var stylesSidebarPane = this.sidebarPanes.styles;
+        this.sidebarPaneView.selectTab(stylesSidebarPane.title());
+        stylesSidebarPane.revealProperty(/** @type {!WebInspector.CSSProperty} */(cssProperty));
+        return Promise.resolve();
+    },
+
+    /**
      * @param {!WebInspector.StylesSidebarPane} ssp
      * @return {!Element}
      */
@@ -112,7 +123,7 @@ WebInspector.ElementsPanel.prototype = {
         var filterInput = WebInspector.StylesSidebarPane.createPropertyFilterElement(WebInspector.UIString("Filter"), hbox, ssp.onFilterChanged.bind(ssp));
         filterContainerElement.appendChild(filterInput);
         var toolbar = new WebInspector.ExtensibleToolbar("styles-sidebarpane-toolbar", hbox);
-        toolbar.appendToolbarItem(WebInspector.StylesSidebarPane.createAddNewRuleButton(ssp));
+        toolbar.onLoad().then(() => toolbar.appendToolbarItem(WebInspector.StylesSidebarPane.createAddNewRuleButton(ssp)));
         toolbar.element.classList.add("styles-pane-toolbar");
         toolbar.makeToggledGray();
         var toolbarPaneContainer = container.createChild("div", "styles-sidebar-toolbar-pane-container");
@@ -374,6 +385,15 @@ WebInspector.ElementsPanel.prototype = {
         if (selectedNode) {
             selectedNode.setAsInspectedNode();
             this._lastValidSelectedNode = selectedNode;
+
+            var executionContexts = selectedNode.target().runtimeModel.executionContexts();
+            var nodeFrameId = selectedNode.frameId();
+            for (var context of executionContexts) {
+                if (context.frameId == nodeFrameId) {
+                    WebInspector.context.setFlavor(WebInspector.ExecutionContext, context);
+                    break;
+                }
+            }
         }
         WebInspector.notifications.dispatchEventToListeners(WebInspector.NotificationService.Events.SelectedNodeChanged);
         this._selectedNodeChangedForTest();

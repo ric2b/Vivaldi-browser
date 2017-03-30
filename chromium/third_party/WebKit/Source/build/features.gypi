@@ -50,8 +50,7 @@
       # Enables the Oilpan garbage-collection infrastructure.
       # If you update the default value below, be sure to update the one in
       # ../config.gyp, too!
-      'enable_oilpan%': 0,
-      'detailed_memory_infra%': 0,
+      'enable_oilpan%': 1,
       'blink_logging_always_on%': 0,
       'link_core_modules_separately%': 1,
     },
@@ -69,11 +68,6 @@
           'ENABLE_INPUT_MULTIPLE_FIELDS_UI=1',
           'WTF_USE_ICCJPEG=1',
           'WTF_USE_QCMSLIB=1'
-        ],
-      }],
-      ['OS=="mac"', {
-        'feature_defines': [
-          'WTF_USE_NEW_THEME=1'
         ],
       }],
       # Mac OS X uses Accelerate.framework FFT by default instead of FFmpeg.
@@ -95,11 +89,6 @@
       ['enable_oilpan==1', {
         'feature_defines': [
           'ENABLE_OILPAN=1',
-        ],
-      }],
-      ['detailed_memory_infra==1', {
-        'feature_defines': [
-          'ENABLE_DETAILED_MEMORY_INFRA=1',
         ],
       }],
       ['blink_logging_always_on==1', {

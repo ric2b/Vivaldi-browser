@@ -47,14 +47,16 @@ using ActiveInterpolationsMap = HashMap<PropertyHandle, ActiveInterpolations>;
 
 class InertEffect;
 
+// Represents the order in which a sequence of SampledEffects should apply.
+// This sequence is broken down to per PropertyHandle granularity.
 class CORE_EXPORT AnimationStack {
     DISALLOW_NEW();
     WTF_MAKE_NONCOPYABLE(AnimationStack);
 public:
     AnimationStack();
 
-    void add(SampledEffect* effect) { m_effects.append(effect); }
-    bool isEmpty() const { return m_effects.isEmpty(); }
+    void add(SampledEffect* sampledEffect) { m_sampledEffects.append(sampledEffect); }
+    bool isEmpty() const { return m_sampledEffects.isEmpty(); }
     bool hasActiveAnimationsOnCompositor(CSSPropertyID) const;
 
     using PropertyHandleFilter = bool (*)(const PropertyHandle&);
@@ -64,10 +66,10 @@ public:
     DECLARE_TRACE();
 
 private:
-    void removeClearedEffects();
+    void removeRedundantSampledEffects();
 
     // Effects sorted by priority. Lower priority at the start of the list.
-    HeapVector<Member<SampledEffect>> m_effects;
+    HeapVector<Member<SampledEffect>> m_sampledEffects;
 
     friend class AnimationAnimationStackTest;
 };

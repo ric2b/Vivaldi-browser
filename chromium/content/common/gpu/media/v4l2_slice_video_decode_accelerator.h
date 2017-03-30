@@ -377,12 +377,12 @@ class CONTENT_EXPORT V4L2SliceVideoDecodeAccelerator
   // The number of pictures that are sent to PictureReady and will be cleared.
   int picture_clearing_count_;
 
+  // Make the GL context current callback.
+  base::Callback<bool(void)> make_context_current_;
+
   // Used by the decoder thread to wait for AssignPictureBuffers to arrive
   // to avoid races with potential Reset requests.
   base::WaitableEvent pictures_assigned_;
-
-  // Make the GL context current callback.
-  base::Callback<bool(void)> make_context_current_;
 
   // EGL state
   EGLDisplay egl_display_;

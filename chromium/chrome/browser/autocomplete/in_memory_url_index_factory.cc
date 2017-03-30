@@ -5,15 +5,16 @@
 #include "chrome/browser/autocomplete/in_memory_url_index_factory.h"
 
 #include "base/memory/singleton.h"
-#include "base/prefs/pref_service.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/common/pref_names.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/omnibox/browser/in_memory_url_index.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/url_constants.h"
 
@@ -34,6 +35,7 @@ InMemoryURLIndexFactory::InMemoryURLIndexFactory()
           BrowserContextDependencyManager::GetInstance()) {
   DependsOn(BookmarkModelFactory::GetInstance());
   DependsOn(HistoryServiceFactory::GetInstance());
+  DependsOn(TemplateURLServiceFactory::GetInstance());
 }
 
 InMemoryURLIndexFactory::~InMemoryURLIndexFactory() {
@@ -49,6 +51,7 @@ KeyedService* InMemoryURLIndexFactory::BuildServiceInstanceFor(
       BookmarkModelFactory::GetForProfile(profile),
       HistoryServiceFactory::GetForProfile(profile,
                                            ServiceAccessType::IMPLICIT_ACCESS),
+      TemplateURLServiceFactory::GetForProfile(profile),
       content::BrowserThread::GetBlockingPool(), profile->GetPath(),
       profile->GetPrefs()->GetString(prefs::kAcceptLanguages),
       chrome_schemes_to_whitelist);

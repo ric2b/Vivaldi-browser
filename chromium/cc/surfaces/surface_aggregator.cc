@@ -9,7 +9,6 @@
 #include <map>
 
 #include "base/bind.h"
-#include "base/containers/hash_tables.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/stl_util.h"
@@ -51,7 +50,8 @@ SurfaceAggregator::SurfaceAggregator(SurfaceAggregatorClient* client,
       manager_(manager),
       provider_(provider),
       next_render_pass_id_(1),
-      aggregate_only_damaged_(aggregate_only_damaged) {
+      aggregate_only_damaged_(aggregate_only_damaged),
+      weak_factory_(this) {
   DCHECK(manager_);
 }
 
@@ -107,7 +107,7 @@ class SurfaceAggregator::RenderPassIdAllocator {
   }
 
  private:
-  base::hash_map<RenderPassId, int> id_to_index_map_;
+  std::unordered_map<RenderPassId, int, RenderPassIdHash> id_to_index_map_;
   int* next_index_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderPassIdAllocator);
@@ -122,11 +122,10 @@ static void UnrefHelper(base::WeakPtr<SurfaceFactory> surface_factory,
 
 RenderPassId SurfaceAggregator::RemapPassId(RenderPassId surface_local_pass_id,
                                             SurfaceId surface_id) {
-  RenderPassIdAllocator* allocator = render_pass_allocator_map_.get(surface_id);
-  if (!allocator) {
-    allocator = new RenderPassIdAllocator(&next_render_pass_id_);
-    render_pass_allocator_map_.set(surface_id, make_scoped_ptr(allocator));
-  }
+  scoped_ptr<RenderPassIdAllocator>& allocator =
+      render_pass_allocator_map_[surface_id];
+  if (!allocator)
+    allocator.reset(new RenderPassIdAllocator(&next_render_pass_id_));
   allocator->AddKnownPass(surface_local_pass_id);
   return allocator->Remap(surface_local_pass_id);
 }
@@ -500,6 +499,11 @@ void SurfaceAggregator::ProcessAddedAndRemovedSurfaces() {
 // return the combined damage rect.
 gfx::Rect SurfaceAggregator::PrewalkTree(SurfaceId surface_id,
                                          PrewalkResult* result) {
+  // This is for debugging a possible use after free.
+  // TODO(jbauman): Remove this once we have enough information.
+  // http://crbug.com/560181
+  base::WeakPtr<SurfaceAggregator> debug_weak_this = weak_factory_.GetWeakPtr();
+
   if (referenced_surfaces_.count(surface_id))
     return gfx::Rect();
   Surface* surface = manager_->GetSurfaceForId(surface_id);
@@ -523,25 +527,18 @@ gfx::Rect SurfaceAggregator::PrewalkTree(SurfaceId surface_id,
       surface->factory()->RefResources(frame_data->resource_list);
     provider_->ReceiveFromChild(child_id, frame_data->resource_list);
   }
+  CHECK(debug_weak_this.get());
 
   ResourceProvider::ResourceIdSet referenced_resources;
   size_t reserve_size = frame_data->resource_list.size();
-#if defined(COMPILER_MSVC)
   referenced_resources.reserve(reserve_size);
-#elif defined(COMPILER_GCC)
-  // Pre-standard hash-tables only implement resize, which behaves similarly
-  // to reserve for these keys. Resizing to 0 may also be broken (particularly
-  // on stlport).
-  // TODO(jbauman): Replace with reserve when C++11 is supported everywhere.
-  if (reserve_size)
-    referenced_resources.resize(reserve_size);
-#endif
 
   bool invalid_frame = false;
   ResourceProvider::ResourceIdMap empty_map;
   const ResourceProvider::ResourceIdMap& child_to_parent_map =
       provider_ ? provider_->GetChildToParentMap(child_id) : empty_map;
 
+  CHECK(debug_weak_this.get());
   // Each pair in the vector is a child surface and the transform from its
   // target to the root target of this surface.
   std::vector<std::pair<SurfaceId, gfx::Transform>> child_surfaces;
@@ -571,10 +568,12 @@ gfx::Rect SurfaceAggregator::PrewalkTree(SurfaceId surface_id,
 
   if (invalid_frame)
     return gfx::Rect();
+  CHECK(debug_weak_this.get());
   valid_surfaces_.insert(surface->surface_id());
 
   if (provider_)
     provider_->DeclareUsedResourcesFromChild(child_id, referenced_resources);
+  CHECK(debug_weak_this.get());
 
   gfx::Rect damage_rect;
   if (!frame_data->render_pass_list.empty()) {
@@ -593,6 +592,7 @@ gfx::Rect SurfaceAggregator::PrewalkTree(SurfaceId surface_id,
         MathUtil::MapEnclosingClippedRect(surface_info.second, surface_damage));
   }
 
+  CHECK(debug_weak_this.get());
   for (const auto& surface_id : surface_frame->metadata.referenced_surfaces) {
     if (!contained_surfaces_.count(surface_id)) {
       result->undrawn_surfaces.insert(surface_id);
@@ -600,9 +600,11 @@ gfx::Rect SurfaceAggregator::PrewalkTree(SurfaceId surface_id,
     }
   }
 
+  CHECK(debug_weak_this.get());
   if (surface->factory())
     surface->factory()->WillDrawSurface(surface->surface_id(), damage_rect);
 
+  CHECK(debug_weak_this.get());
   for (const auto& render_pass : frame_data->render_pass_list)
     result->has_copy_requests |= !render_pass->copy_requests.empty();
 

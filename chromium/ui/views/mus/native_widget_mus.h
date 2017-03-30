@@ -13,7 +13,7 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "components/mus/public/interfaces/window_manager.mojom.h"
+#include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/aura/window_tree_host_observer.h"
 #include "ui/platform_window/platform_window_delegate.h"
@@ -23,21 +23,20 @@
 namespace aura {
 namespace client {
 class DefaultCaptureClient;
+class ScreenPositionClient;
 class WindowTreeClient;
 }
 class Window;
 }
 
 namespace mojo {
-class Shell;
+class Connector;
 }
 
 namespace mus {
 class Window;
+class WindowTreeConnection;
 
-namespace mojom {
-class WindowManager;
-}
 }
 
 namespace wm {
@@ -47,7 +46,6 @@ class FocusController;
 namespace views {
 class SurfaceContextFactory;
 class WidgetDelegate;
-struct WindowManagerClientAreaInsets;
 class WindowTreeHostMus;
 
 // An implementation of NativeWidget that binds to a mus::Window. Because Aura
@@ -61,7 +59,7 @@ class VIEWS_MUS_EXPORT NativeWidgetMus : public internal::NativeWidgetPrivate,
                                          public aura::WindowTreeHostObserver {
  public:
   NativeWidgetMus(internal::NativeWidgetDelegate* delegate,
-                  mojo::Shell* shell,
+                  mojo::Connector* connector,
                   mus::Window* window,
                   mus::mojom::SurfaceType surface_type);
   ~NativeWidgetMus() override;
@@ -72,7 +70,12 @@ class VIEWS_MUS_EXPORT NativeWidgetMus : public internal::NativeWidgetPrivate,
       const Widget::InitParams& init_params,
       std::map<std::string, std::vector<uint8_t>>* properties);
 
+  // Notifies all widgets the frame constants changed in some way.
+  static void NotifyFrameChanged(mus::WindowTreeConnection* connection);
+
   mus::Window* window() { return window_; }
+
+  aura::Window* GetRootWindow();
 
   void OnPlatformWindowClosed();
   void OnActivationChanged(bool active);
@@ -200,8 +203,6 @@ class VIEWS_MUS_EXPORT NativeWidgetMus : public internal::NativeWidgetPrivate,
  private:
   mus::Window* window_;
 
-  mojo::Shell* shell_;
-
   internal::NativeWidgetDelegate* native_widget_delegate_;
 
   const mus::mojom::SurfaceType surface_type_;
@@ -217,6 +218,7 @@ class VIEWS_MUS_EXPORT NativeWidgetMus : public internal::NativeWidgetPrivate,
   scoped_ptr<wm::FocusController> focus_client_;
   scoped_ptr<aura::client::DefaultCaptureClient> capture_client_;
   scoped_ptr<aura::client::WindowTreeClient> window_tree_client_;
+  scoped_ptr<aura::client::ScreenPositionClient> screen_position_client_;
   base::WeakPtrFactory<NativeWidgetMus> close_widget_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(NativeWidgetMus);

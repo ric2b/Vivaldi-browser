@@ -161,9 +161,9 @@ TEST_F(FrameThrottlingTest, ThrottledLifecycleUpdate)
     compositeFrame();
     EXPECT_EQ(DocumentLifecycle::StyleClean, frameDocument->lifecycle().state());
 
-    // A hit test will force a complete lifecycle update.
+    // A hit test will not force a complete lifecycle update.
     webView().hitTestResultAt(WebPoint(0, 0));
-    EXPECT_EQ(DocumentLifecycle::CompositingClean, frameDocument->lifecycle().state());
+    EXPECT_EQ(DocumentLifecycle::StyleClean, frameDocument->lifecycle().state());
 }
 
 TEST_F(FrameThrottlingTest, UnthrottlingFrameSchedulesAnimation)
@@ -211,7 +211,7 @@ TEST_F(FrameThrottlingTest, MutatingThrottledFrameDoesNotCauseAnimation)
     frameElement->contentDocument()->documentElement()->setAttribute(styleAttr, "background: green");
     EXPECT_FALSE(compositor().needsAnimate());
 
-    // Moving the frame back on screen to unthrottle it.
+    // Move the frame back on screen to unthrottle it.
     frameElement->setAttribute(styleAttr, "");
     EXPECT_TRUE(compositor().needsAnimate());
 
@@ -251,6 +251,101 @@ TEST_F(FrameThrottlingTest, SynchronousLayoutInThrottledFrame)
     EXPECT_EQ(50, divElement->clientWidth());
 }
 
+TEST_F(FrameThrottlingTest, UnthrottlingTriggersRepaint)
+{
+    // Create a hidden frame which is throttled.
+    SimRequest mainResource("https://example.com/", "text/html");
+    SimRequest frameResource("https://example.com/iframe.html", "text/html");
+
+    loadURL("https://example.com/");
+    mainResource.complete("<iframe id=frame sandbox src=iframe.html></iframe>");
+    frameResource.complete("<style> html { background: green; } </style>");
+
+    // Move the frame offscreen to throttle it.
+    auto* frameElement = toHTMLIFrameElement(document().getElementById("frame"));
+    frameElement->setAttribute(styleAttr, "transform: translateY(480px)");
+    EXPECT_FALSE(frameElement->contentDocument()->view()->canThrottleRendering());
+    compositeFrame();
+    EXPECT_TRUE(frameElement->contentDocument()->view()->canThrottleRendering());
+
+    // Scroll down to unthrottle the frame. The first frame we composite after
+    // scrolling won't contain the frame yet, but will schedule another repaint.
+    webView().mainFrameImpl()->frameView()->setScrollPosition(DoublePoint(0, 480), ProgrammaticScroll);
+    auto displayItems = compositeFrame();
+    EXPECT_FALSE(displayItems.contains(SimCanvas::Rect, "green"));
+
+    // Now the frame contents should be visible again.
+    auto displayItems2 = compositeFrame();
+    EXPECT_TRUE(displayItems2.contains(SimCanvas::Rect, "green"));
+}
+
+TEST_F(FrameThrottlingTest, UnthrottlingTriggersRepaintInCompositedChild)
+{
+    // Create a hidden frame with a composited child layer.
+    SimRequest mainResource("https://example.com/", "text/html");
+    SimRequest frameResource("https://example.com/iframe.html", "text/html");
+
+    loadURL("https://example.com/");
+    mainResource.complete("<iframe id=frame sandbox src=iframe.html></iframe>");
+    frameResource.complete(
+        "<style>"
+        "div { "
+        "  width: 100px;"
+        "  height: 100px;"
+        "  background-color: green;"
+        "  transform: translateZ(0);"
+        "}"
+        "</style><div></div>");
+
+    // Move the frame offscreen to throttle it.
+    auto* frameElement = toHTMLIFrameElement(document().getElementById("frame"));
+    frameElement->setAttribute(styleAttr, "transform: translateY(480px)");
+    EXPECT_FALSE(frameElement->contentDocument()->view()->canThrottleRendering());
+    compositeFrame();
+    EXPECT_TRUE(frameElement->contentDocument()->view()->canThrottleRendering());
+
+    // Scroll down to unthrottle the frame. The first frame we composite after
+    // scrolling won't contain the frame yet, but will schedule another repaint.
+    webView().mainFrameImpl()->frameView()->setScrollPosition(DoublePoint(0, 480), ProgrammaticScroll);
+    auto displayItems = compositeFrame();
+    EXPECT_FALSE(displayItems.contains(SimCanvas::Rect, "green"));
+
+    // Now the composited child contents should be visible again.
+    auto displayItems2 = compositeFrame();
+    EXPECT_TRUE(displayItems2.contains(SimCanvas::Rect, "green"));
+}
+
+TEST_F(FrameThrottlingTest, ChangeStyleInThrottledFrame)
+{
+    // Create a hidden frame which is throttled.
+    SimRequest mainResource("https://example.com/", "text/html");
+    SimRequest frameResource("https://example.com/iframe.html", "text/html");
+
+    loadURL("https://example.com/");
+    mainResource.complete("<iframe id=frame sandbox src=iframe.html></iframe>");
+    frameResource.complete("<style> html { background: red; } </style>");
+
+    // Move the frame offscreen to throttle it.
+    auto* frameElement = toHTMLIFrameElement(document().getElementById("frame"));
+    frameElement->setAttribute(styleAttr, "transform: translateY(480px)");
+    EXPECT_FALSE(frameElement->contentDocument()->view()->canThrottleRendering());
+    compositeFrame();
+    EXPECT_TRUE(frameElement->contentDocument()->view()->canThrottleRendering());
+
+    // Change the background color of the frame's contents from red to green.
+    frameElement->contentDocument()->body()->setAttribute(styleAttr, "background: green");
+
+    // Scroll down to unthrottle the frame.
+    webView().mainFrameImpl()->frameView()->setScrollPosition(DoublePoint(0, 480), ProgrammaticScroll);
+    auto displayItems = compositeFrame();
+    EXPECT_FALSE(displayItems.contains(SimCanvas::Rect, "red"));
+    EXPECT_FALSE(displayItems.contains(SimCanvas::Rect, "green"));
+
+    // Make sure the new style shows up instead of the old one.
+    auto displayItems2 = compositeFrame();
+    EXPECT_TRUE(displayItems2.contains(SimCanvas::Rect, "green"));
+}
+
 TEST(RemoteFrameThrottlingTest, ThrottledLocalRoot)
 {
     FrameTestHelpers::TestWebViewClient viewClient;
@@ -263,9 +358,8 @@ TEST(RemoteFrameThrottlingTest, ThrottledLocalRoot)
     remoteClient.frame()->setReplicatedOrigin(WebSecurityOrigin::createUnique());
 
     WebFrameOwnerProperties properties;
-    FrameTestHelpers::TestWebFrameClient localFrameClient;
     WebRemoteFrame* rootFrame = webView->mainFrame()->toWebRemoteFrame();
-    WebLocalFrame* localFrame = rootFrame->createLocalChild(WebTreeScopeType::Document, "", WebSandboxFlags::None, &localFrameClient, nullptr, properties);
+    WebLocalFrame* localFrame = FrameTestHelpers::createLocalChild(rootFrame);
 
     WebString baseURL("http://internal.test/");
     URLTestHelpers::registerMockedURLFromBaseURL(baseURL, "simple_div.html");
@@ -279,7 +373,7 @@ TEST(RemoteFrameThrottlingTest, ThrottledLocalRoot)
     frameView->frame().securityContext()->setSecurityOrigin(SecurityOrigin::createUnique());
     frameView->updateAllLifecyclePhases();
     testing::runPendingTasks();
-    EXPECT_TRUE(frameView->shouldThrottleRendering());
+    EXPECT_TRUE(frameView->canThrottleRendering());
 
     Document* frameDocument = frameView->frame().document();
     EXPECT_EQ(DocumentLifecycle::PaintClean, frameDocument->lifecycle().state());
@@ -291,6 +385,7 @@ TEST(RemoteFrameThrottlingTest, ThrottledLocalRoot)
 
     // Update the lifecycle again. The frame's lifecycle should not advance
     // because of throttling even though it is the local root.
+    DocumentLifecycle::AllowThrottlingScope throttlingScope(frameDocument->lifecycle());
     frameView->updateAllLifecyclePhases();
     testing::runPendingTasks();
     EXPECT_EQ(DocumentLifecycle::VisualUpdatePending, frameDocument->lifecycle().state());

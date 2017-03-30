@@ -7,7 +7,9 @@
 
 #include <vector>
 
+#include "base/memory/scoped_ptr.h"
 #include "cc/animation/animation.h"
+#include "cc/animation/animation_curve.h"
 #include "cc/base/cc_export.h"
 #include "cc/output/filter_operations.h"
 #include "ui/gfx/transform.h"
@@ -15,23 +17,32 @@
 namespace cc {
 
 struct CC_EXPORT AnimationEvent {
-  enum Type { STARTED, FINISHED, ABORTED, PROPERTY_UPDATE };
+  enum Type { STARTED, FINISHED, ABORTED, PROPERTY_UPDATE, TAKEOVER };
 
   AnimationEvent(Type type,
                  int layer_id,
                  int group_id,
-                 Animation::TargetProperty target_property,
+                 TargetProperty::Type target_property,
                  base::TimeTicks monotonic_time);
+
+  AnimationEvent(const AnimationEvent& other);
+  AnimationEvent& operator=(const AnimationEvent& other);
+
+  ~AnimationEvent();
 
   Type type;
   int layer_id;
   int group_id;
-  Animation::TargetProperty target_property;
+  TargetProperty::Type target_property;
   base::TimeTicks monotonic_time;
   bool is_impl_only;
   float opacity;
   gfx::Transform transform;
   FilterOperations filters;
+
+  // For continuing a scroll offset animation on the main thread.
+  double animation_start_time;
+  scoped_ptr<AnimationCurve> curve;
 };
 
 class CC_EXPORT AnimationEvents {

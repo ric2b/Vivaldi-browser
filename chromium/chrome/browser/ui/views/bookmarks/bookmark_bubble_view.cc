@@ -27,7 +27,6 @@
 #include "grit/components_strings.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/resource/resource_bundle.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/label_button.h"
@@ -46,9 +45,6 @@ using views::ColumnSet;
 using views::GridLayout;
 
 namespace {
-
-// Width of the border of a button.
-const int kControlBorderWidth = 2;
 
 // This combobox prevents any lengthy content from stretching the bubble view.
 class UnsizedCombobox : public views::Combobox {
@@ -69,7 +65,7 @@ class UnsizedCombobox : public views::Combobox {
 BookmarkBubbleView* BookmarkBubbleView::bookmark_bubble_ = NULL;
 
 // static
-void BookmarkBubbleView::ShowBubble(
+views::Widget* BookmarkBubbleView::ShowBubble(
     views::View* anchor_view,
     const gfx::Rect& anchor_rect,
     gfx::NativeView parent_window,
@@ -79,7 +75,7 @@ void BookmarkBubbleView::ShowBubble(
     const GURL& url,
     bool already_bookmarked) {
   if (bookmark_bubble_)
-    return;
+    return nullptr;
 
   bookmark_bubble_ =
       new BookmarkBubbleView(anchor_view, observer, std::move(delegate),
@@ -88,7 +84,9 @@ void BookmarkBubbleView::ShowBubble(
     bookmark_bubble_->SetAnchorRect(anchor_rect);
     bookmark_bubble_->set_parent_window(parent_window);
   }
-  views::BubbleDelegateView::CreateBubble(bookmark_bubble_)->Show();
+  views::Widget* bubble_widget =
+      views::BubbleDelegateView::CreateBubble(bookmark_bubble_);
+  bubble_widget->Show();
   // Select the entire title textfield contents when the bubble is first shown.
   bookmark_bubble_->title_tf_->SelectAll(true);
   bookmark_bubble_->SetArrowPaintType(views::BubbleBorder::PAINT_NONE);
@@ -98,6 +96,7 @@ void BookmarkBubbleView::ShowBubble(
     const BookmarkNode* node = model->GetMostRecentlyAddedUserNodeForURL(url);
     bookmark_bubble_->observer_->OnBookmarkBubbleShown(node);
   }
+  return bubble_widget;
 }
 
 void BookmarkBubbleView::Hide() {
@@ -153,13 +152,6 @@ bool BookmarkBubbleView::AcceleratorPressed(
 }
 
 void BookmarkBubbleView::Init() {
-  views::Label* title_label = new views::Label(
-      l10n_util::GetStringUTF16(
-          newly_bookmarked_ ? IDS_BOOKMARK_BUBBLE_PAGE_BOOKMARKED :
-                              IDS_BOOKMARK_BUBBLE_PAGE_BOOKMARK));
-  ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
-  title_label->SetFontList(rb->GetFontList(ui::ResourceBundle::MediumFont));
-
   remove_button_ = new views::LabelButton(this, l10n_util::GetStringUTF16(
       IDS_BOOKMARK_BUBBLE_REMOVE_BOOKMARK));
   remove_button_->SetStyle(views::Button::STYLE_BUTTON);
@@ -184,22 +176,10 @@ void BookmarkBubbleView::Init() {
   GridLayout* layout = new GridLayout(this);
   SetLayoutManager(layout);
 
-  // Column sets used in the layout of the bubble.
-  enum ColumnSetID {
-    TITLE_COLUMN_SET_ID,
-    CONTENT_COLUMN_SET_ID,
-    SYNC_PROMO_COLUMN_SET_ID
-  };
-
-  ColumnSet* cs = layout->AddColumnSet(TITLE_COLUMN_SET_ID);
-  cs->AddPaddingColumn(0, views::kButtonHEdgeMarginNew);
-  cs->AddColumn(GridLayout::CENTER, GridLayout::CENTER, 0, GridLayout::USE_PREF,
-                0, 0);
-  cs->AddPaddingColumn(0, views::kButtonHEdgeMarginNew);
-
-  // The column layout used for middle and bottom rows.
-  cs = layout->AddColumnSet(CONTENT_COLUMN_SET_ID);
-  cs->AddPaddingColumn(0, views::kButtonHEdgeMarginNew);
+  // This column set is used for the labels and textfields as well as the
+  // buttons at the bottom.
+  const int cs_id = 0;
+  ColumnSet* cs = layout->AddColumnSet(cs_id);
   cs->AddColumn(views::kControlLabelGridAlignment, GridLayout::CENTER, 0,
                 GridLayout::USE_PREF, 0, 0);
   cs->AddPaddingColumn(0, views::kUnrelatedControlHorizontalSpacing);
@@ -213,13 +193,8 @@ void BookmarkBubbleView::Init() {
   cs->AddPaddingColumn(0, views::kRelatedButtonHSpacing);
   cs->AddColumn(GridLayout::LEADING, GridLayout::TRAILING, 0,
                 GridLayout::USE_PREF, 0, 0);
-  cs->AddPaddingColumn(0, views::kButtonHEdgeMarginNew);
 
-  layout->StartRow(0, TITLE_COLUMN_SET_ID);
-  layout->AddView(title_label);
-  layout->AddPaddingRow(0, views::kUnrelatedControlHorizontalSpacing);
-
-  layout->StartRow(0, CONTENT_COLUMN_SET_ID);
+  layout->StartRow(0, cs_id);
   views::Label* label = new views::Label(
       l10n_util::GetStringUTF16(IDS_BOOKMARK_BUBBLE_TITLE_TEXT));
   layout->AddView(label);
@@ -232,46 +207,27 @@ void BookmarkBubbleView::Init() {
 
   layout->AddPaddingRow(0, views::kUnrelatedControlHorizontalSpacing);
 
-  layout->StartRow(0, CONTENT_COLUMN_SET_ID);
+  layout->StartRow(0, cs_id);
   layout->AddView(combobox_label);
   layout->AddView(parent_combobox_, 5, 1);
 
   layout->AddPaddingRow(0, views::kRelatedControlVerticalSpacing);
 
-  layout->StartRow(0, CONTENT_COLUMN_SET_ID);
+  layout->StartRow(0, cs_id);
   layout->SkipColumns(2);
   layout->AddView(remove_button_);
   layout->AddView(edit_button_);
   layout->AddView(close_button_);
 
-  layout->AddPaddingRow(
-      0,
-      views::kUnrelatedControlVerticalSpacing - kControlBorderWidth);
-
-  if (SyncPromoUI::ShouldShowSyncPromo(profile_)) {
-    // The column layout used for the sync promo.
-    cs = layout->AddColumnSet(SYNC_PROMO_COLUMN_SET_ID);
-    // Use FIXED as we don't want the width of the promo to impact the overall
-    // width.
-    cs->AddColumn(GridLayout::FILL,
-                  GridLayout::FILL,
-                  1,
-                  GridLayout::FIXED,
-                  0,
-                  0);
-    layout->StartRow(0, SYNC_PROMO_COLUMN_SET_ID);
-
-    sync_promo_view_ =
-        new BubbleSyncPromoView(delegate_.get(), IDS_BOOKMARK_SYNC_PROMO_LINK,
-                                IDS_BOOKMARK_SYNC_PROMO_MESSAGE);
-    layout->AddView(sync_promo_view_);
-    content::RecordAction(
-        base::UserMetricsAction("Signin_Impression_FromBookmarkBubble"));
-  }
-
   AddAccelerator(ui::Accelerator(ui::VKEY_RETURN, ui::EF_NONE));
   AddAccelerator(ui::Accelerator(ui::VKEY_E, ui::EF_ALT_DOWN));
   AddAccelerator(ui::Accelerator(ui::VKEY_R, ui::EF_ALT_DOWN));
+}
+
+base::string16 BookmarkBubbleView::GetWindowTitle() const {
+  return l10n_util::GetStringUTF16(newly_bookmarked_
+                                       ? IDS_BOOKMARK_BUBBLE_PAGE_BOOKMARKED
+                                       : IDS_BOOKMARK_BUBBLE_PAGE_BOOKMARK);
 }
 
 const char* BookmarkBubbleView::GetClassName() const {
@@ -280,6 +236,18 @@ const char* BookmarkBubbleView::GetClassName() const {
 
 views::View* BookmarkBubbleView::GetInitiallyFocusedView() {
   return title_tf_;
+}
+
+scoped_ptr<views::View> BookmarkBubbleView::CreateFootnoteView() {
+  if (!SyncPromoUI::ShouldShowSyncPromo(profile_))
+    return nullptr;
+
+  content::RecordAction(
+      base::UserMetricsAction("Signin_Impression_FromBookmarkBubble"));
+
+  return scoped_ptr<views::View>(
+      new BubbleSyncPromoView(delegate_.get(), IDS_BOOKMARK_SYNC_PROMO_LINK,
+                              IDS_BOOKMARK_SYNC_PROMO_MESSAGE));
 }
 
 BookmarkBubbleView::BookmarkBubbleView(
@@ -303,10 +271,8 @@ BookmarkBubbleView::BookmarkBubbleView(
       close_button_(NULL),
       title_tf_(NULL),
       parent_combobox_(NULL),
-      sync_promo_view_(NULL),
       remove_bookmark_(false),
       apply_edits_(true) {
-  set_margins(gfx::Insets(views::kPanelVertMargin, 0, 0, 0));
   // Compensate for built-in vertical padding in the anchor view's image.
   set_anchor_view_insets(gfx::Insets(2, 0, 2, 0));
 }

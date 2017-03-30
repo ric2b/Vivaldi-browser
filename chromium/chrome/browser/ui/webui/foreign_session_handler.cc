@@ -14,8 +14,6 @@
 #include "base/bind_helpers.h"
 #include "base/i18n/time_formatting.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -29,6 +27,8 @@
 #include "chrome/common/url_constants.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
@@ -183,11 +183,8 @@ void ForeignSessionHandler::OpenForeignSessionWindows(
       window_num == kInvalidId ?
       std::vector<const ::sessions::SessionWindow*>::const_iterator(
           windows.end()) : iter_begin + 1;
-  chrome::HostDesktopType host_desktop_type =
-      chrome::GetHostDesktopTypeForNativeView(
-          web_ui->GetWebContents()->GetNativeView());
-  SessionRestore::RestoreForeignSessionWindows(
-      Profile::FromWebUI(web_ui), host_desktop_type, iter_begin, iter_end);
+  SessionRestore::RestoreForeignSessionWindows(Profile::FromWebUI(web_ui),
+                                               iter_begin, iter_end);
 }
 
 // static

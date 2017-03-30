@@ -22,16 +22,19 @@ define('main', [
   var connectToService = function(serviceProvider, iface) {
     var pipe = core.createMessagePipe();
     var service = new iface.proxyClass(new router.Router(pipe.handle0));
-    serviceProvider.connectToService(iface.name, pipe.handle1);
+    serviceProvider.getInterface(iface.name, pipe.handle1);
     return service;
   };
 
   return function() {
     domAutomationController.setAutomationId(0);
-    var shellPipe = serviceRegistry.connectToService(shellMojom.Shell.name);
-    var shell = new shellMojom.Shell.proxyClass(new router.Router(shellPipe));
-    var urlRequest = new urlMojom.URLRequest({ url: TEST_APP_URL });
-    shell.connectToApplication(urlRequest,
+    var connectorPipe =
+        serviceRegistry.connectToService(shellMojom.Connector.name);
+    var connector = new shellMojom.Connector.proxyClass(
+        new router.Router(connectorPipe));
+
+    connector.connect(
+        TEST_APP_URL, 1,
         function (services) {
           var test = connectToService(services, testMojom.TestMojoService);
           test.getRequestorURL().then(function(response) {
@@ -39,7 +42,6 @@ define('main', [
                 response.url == 'chrome://mojo-web-ui/');
           });
         },
-        function (exposedServices) {},
-        new shellMojom.CapabilityFilter({ filter: new Map([["*", ["*"]]]) }));
+        function (exposedServices) {});
   };
 });

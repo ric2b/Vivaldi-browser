@@ -16,10 +16,9 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/threading/sequenced_worker_pool.h"
-#include "base/win/scoped_handle.h"
+#include "device/bluetooth/bluetooth_classic_win.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_init_win.h"
-#include "device/bluetooth/bluetooth_low_energy_win.h"
 #include "device/bluetooth/bluetooth_service_record_win.h"
 #include "net/base/winsock_init.h"
 
@@ -53,27 +52,42 @@ std::string BluetoothAddressToCanonicalString(const BLUETOOTH_ADDRESS& btha) {
   return result;
 }
 
-device::BluetoothUUID BluetoothLowEnergyUuidToBluetoothUuid(
-    const BTH_LE_UUID& bth_le_uuid) {
-  if (bth_le_uuid.IsShortUuid) {
-    std::string uuid_hex =
-        base::StringPrintf("%04x", bth_le_uuid.Value.ShortUuid);
-    return device::BluetoothUUID(uuid_hex);
+bool BluetoothUUIDToWinBLEUUID(const device::BluetoothUUID& uuid,
+                               BTH_LE_UUID* out_win_uuid) {
+  if (!uuid.IsValid())
+    return false;
+
+  if (uuid.format() == device::BluetoothUUID::kFormat16Bit) {
+    out_win_uuid->IsShortUuid = true;
+    unsigned int data = 0;
+    int result = sscanf_s(uuid.value().c_str(), "%04x", &data);
+    if (result != 1)
+      return false;
+    out_win_uuid->Value.ShortUuid = data;
   } else {
-    return device::BluetoothUUID(
-        base::StringPrintf("%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
-                           bth_le_uuid.Value.LongUuid.Data1,
-                           bth_le_uuid.Value.LongUuid.Data2,
-                           bth_le_uuid.Value.LongUuid.Data3,
-                           bth_le_uuid.Value.LongUuid.Data4[0],
-                           bth_le_uuid.Value.LongUuid.Data4[1],
-                           bth_le_uuid.Value.LongUuid.Data4[2],
-                           bth_le_uuid.Value.LongUuid.Data4[3],
-                           bth_le_uuid.Value.LongUuid.Data4[4],
-                           bth_le_uuid.Value.LongUuid.Data4[5],
-                           bth_le_uuid.Value.LongUuid.Data4[6],
-                           bth_le_uuid.Value.LongUuid.Data4[7]));
+    out_win_uuid->IsShortUuid = false;
+    unsigned int data[11];
+    int result =
+        sscanf_s(uuid.value().c_str(),
+                 "%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x", &data[0],
+                 &data[1], &data[2], &data[3], &data[4], &data[5], &data[6],
+                 &data[7], &data[8], &data[9], &data[10]);
+    if (result != 11)
+      return false;
+    out_win_uuid->Value.LongUuid.Data1 = data[0];
+    out_win_uuid->Value.LongUuid.Data2 = data[1];
+    out_win_uuid->Value.LongUuid.Data3 = data[2];
+    out_win_uuid->Value.LongUuid.Data4[0] = data[3];
+    out_win_uuid->Value.LongUuid.Data4[1] = data[4];
+    out_win_uuid->Value.LongUuid.Data4[2] = data[5];
+    out_win_uuid->Value.LongUuid.Data4[3] = data[6];
+    out_win_uuid->Value.LongUuid.Data4[4] = data[7];
+    out_win_uuid->Value.LongUuid.Data4[5] = data[8];
+    out_win_uuid->Value.LongUuid.Data4[6] = data[9];
+    out_win_uuid->Value.LongUuid.Data4[7] = data[10];
   }
+
+  return true;
 }
 
 // Populates bluetooth adapter state using adapter_handle.
@@ -84,11 +98,14 @@ void GetAdapterState(HANDLE adapter_handle,
   bool powered = false;
   BLUETOOTH_RADIO_INFO adapter_info = {sizeof(BLUETOOTH_RADIO_INFO)};
   if (adapter_handle &&
-      ERROR_SUCCESS == BluetoothGetRadioInfo(adapter_handle,
-                                             &adapter_info)) {
+      ERROR_SUCCESS ==
+          device::win::BluetoothClassicWrapper::GetInstance()->GetRadioInfo(
+              adapter_handle, &adapter_info)) {
     name = base::SysWideToUTF8(adapter_info.szName);
     address = BluetoothAddressToCanonicalString(adapter_info.address);
-    powered = !!BluetoothIsConnectable(adapter_handle);
+    powered =
+        !!device::win::BluetoothClassicWrapper::GetInstance()->IsConnectable(
+            adapter_handle);
   }
   state->name = name;
   state->address = address;
@@ -137,11 +154,34 @@ BluetoothTaskManagerWin::DeviceState::~DeviceState() {
 BluetoothTaskManagerWin::BluetoothTaskManagerWin(
     scoped_refptr<base::SequencedTaskRunner> ui_task_runner)
     : ui_task_runner_(ui_task_runner),
+      adapter_handle_(NULL),
       discovering_(false),
-      current_logging_batch_count_(0) {
-}
+      current_logging_batch_count_(0) {}
 
 BluetoothTaskManagerWin::~BluetoothTaskManagerWin() {
+  win::BluetoothLowEnergyWrapper::DeleteInstance();
+  win::BluetoothClassicWrapper::DeleteInstance();
+}
+
+BluetoothUUID BluetoothTaskManagerWin::BluetoothLowEnergyUuidToBluetoothUuid(
+    const BTH_LE_UUID& bth_le_uuid) {
+  if (bth_le_uuid.IsShortUuid) {
+    std::string uuid_hex =
+        base::StringPrintf("%04x", bth_le_uuid.Value.ShortUuid);
+    return BluetoothUUID(uuid_hex);
+  } else {
+    return BluetoothUUID(base::StringPrintf(
+        "%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+        bth_le_uuid.Value.LongUuid.Data1, bth_le_uuid.Value.LongUuid.Data2,
+        bth_le_uuid.Value.LongUuid.Data3, bth_le_uuid.Value.LongUuid.Data4[0],
+        bth_le_uuid.Value.LongUuid.Data4[1],
+        bth_le_uuid.Value.LongUuid.Data4[2],
+        bth_le_uuid.Value.LongUuid.Data4[3],
+        bth_le_uuid.Value.LongUuid.Data4[4],
+        bth_le_uuid.Value.LongUuid.Data4[5],
+        bth_le_uuid.Value.LongUuid.Data4[6],
+        bth_le_uuid.Value.LongUuid.Data4[7]));
+  }
 }
 
 void BluetoothTaskManagerWin::AddObserver(Observer* observer) {
@@ -291,16 +331,15 @@ void BluetoothTaskManagerWin::PollAdapter() {
   if (!discovering_) {
     const BLUETOOTH_FIND_RADIO_PARAMS adapter_param =
         { sizeof(BLUETOOTH_FIND_RADIO_PARAMS) };
-    if (adapter_handle_.IsValid())
-      adapter_handle_.Close();
     HANDLE temp_adapter_handle;
-    HBLUETOOTH_RADIO_FIND handle = BluetoothFindFirstRadio(
-        &adapter_param, &temp_adapter_handle);
+    HBLUETOOTH_RADIO_FIND handle =
+        win::BluetoothClassicWrapper::GetInstance()->FindFirstRadio(
+            &adapter_param, &temp_adapter_handle);
 
     if (handle) {
-      adapter_handle_.Set(temp_adapter_handle);
+      adapter_handle_ = temp_adapter_handle;
       GetKnownDevices();
-      BluetoothFindRadioClose(handle);
+      win::BluetoothClassicWrapper::GetInstance()->FindRadioClose(handle);
     }
 
     PostAdapterStateToUi();
@@ -317,7 +356,7 @@ void BluetoothTaskManagerWin::PollAdapter() {
 void BluetoothTaskManagerWin::PostAdapterStateToUi() {
   DCHECK(bluetooth_task_runner_->RunsTasksOnCurrentThread());
   AdapterState* state = new AdapterState();
-  GetAdapterState(adapter_handle_.Get(), state);
+  GetAdapterState(adapter_handle_, state);
   ui_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&BluetoothTaskManagerWin::OnAdapterStateChanged,
@@ -331,11 +370,13 @@ void BluetoothTaskManagerWin::SetPowered(
     const BluetoothAdapter::ErrorCallback& error_callback) {
   DCHECK(bluetooth_task_runner_->RunsTasksOnCurrentThread());
   bool success = false;
-  if (adapter_handle_.IsValid()) {
-    if (!powered)
-      BluetoothEnableDiscovery(adapter_handle_.Get(), false);
-    success =
-        !!BluetoothEnableIncomingConnections(adapter_handle_.Get(), powered);
+  if (adapter_handle_) {
+    if (!powered) {
+      win::BluetoothClassicWrapper::GetInstance()->EnableDiscovery(
+          adapter_handle_, false);
+    }
+    success = !!win::BluetoothClassicWrapper::GetInstance()
+                    ->EnableIncomingConnections(adapter_handle_, powered);
   }
 
   if (success) {
@@ -349,11 +390,9 @@ void BluetoothTaskManagerWin::SetPowered(
 void BluetoothTaskManagerWin::StartDiscovery() {
   DCHECK(bluetooth_task_runner_->RunsTasksOnCurrentThread());
   ui_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&BluetoothTaskManagerWin::OnDiscoveryStarted,
-                 this,
-                 adapter_handle_.IsValid()));
-  if (!adapter_handle_.IsValid())
+      FROM_HERE, base::Bind(&BluetoothTaskManagerWin::OnDiscoveryStarted, this,
+                            !!adapter_handle_));
+  if (!adapter_handle_)
     return;
   discovering_ = true;
 
@@ -370,7 +409,7 @@ void BluetoothTaskManagerWin::StopDiscovery() {
 
 void BluetoothTaskManagerWin::DiscoverDevices(int timeout_multiplier) {
   DCHECK(bluetooth_task_runner_->RunsTasksOnCurrentThread());
-  if (!discovering_ || !adapter_handle_.IsValid()) {
+  if (!discovering_ || !adapter_handle_) {
     ui_task_runner_->PostTask(
         FROM_HERE,
         base::Bind(&BluetoothTaskManagerWin::OnDiscoveryStopped, this));
@@ -436,9 +475,10 @@ bool BluetoothTaskManagerWin::SearchClassicDevices(
   ZeroMemory(&device_info, sizeof(device_info));
   device_info.dwSize = sizeof(BLUETOOTH_DEVICE_INFO);
   HBLUETOOTH_DEVICE_FIND handle =
-      BluetoothFindFirstDevice(&device_search_params, &device_info);
+      win::BluetoothClassicWrapper::GetInstance()->FindFirstDevice(
+          &device_search_params, &device_info);
   if (!handle) {
-    int last_error = GetLastError();
+    int last_error = win::BluetoothClassicWrapper::GetInstance()->LastError();
     if (last_error == ERROR_NO_MORE_ITEMS) {
       return true;  // No devices is not an error.
     }
@@ -454,19 +494,21 @@ bool BluetoothTaskManagerWin::SearchClassicDevices(
     // Reset device info before next call (as a safety precaution).
     ZeroMemory(&device_info, sizeof(device_info));
     device_info.dwSize = sizeof(BLUETOOTH_DEVICE_INFO);
-    if (!BluetoothFindNextDevice(handle, &device_info)) {
-      int last_error = GetLastError();
+    if (!win::BluetoothClassicWrapper::GetInstance()->FindNextDevice(
+            handle, &device_info)) {
+      int last_error = win::BluetoothClassicWrapper::GetInstance()->LastError();
       if (last_error == ERROR_NO_MORE_ITEMS) {
         break;  // No more items is expected error when done enumerating.
       }
       LogPollingError("Error calling BluetoothFindNextDevice", last_error);
-      BluetoothFindDeviceClose(handle);
+      win::BluetoothClassicWrapper::GetInstance()->FindDeviceClose(handle);
       return false;
     }
   }
 
-  if (!BluetoothFindDeviceClose(handle)) {
-    LogPollingError("Error calling BluetoothFindDeviceClose", GetLastError());
+  if (!win::BluetoothClassicWrapper::GetInstance()->FindDeviceClose(handle)) {
+    LogPollingError("Error calling BluetoothFindDeviceClose",
+                    win::BluetoothClassicWrapper::GetInstance()->LastError());
     return false;
   }
   return true;
@@ -474,13 +516,16 @@ bool BluetoothTaskManagerWin::SearchClassicDevices(
 
 bool BluetoothTaskManagerWin::SearchLowEnergyDevices(
     ScopedVector<DeviceState>* device_list) {
-  if (!win::IsBluetoothLowEnergySupported())
+  if (!win::BluetoothLowEnergyWrapper::GetInstance()
+           ->IsBluetoothLowEnergySupported()) {
     return true;  // Bluetooth LE not supported is not an error.
+  }
 
   ScopedVector<win::BluetoothLowEnergyDeviceInfo> btle_devices;
   std::string error;
   bool success =
-      win::EnumerateKnownBluetoothLowEnergyDevices(&btle_devices, &error);
+      win::BluetoothLowEnergyWrapper::GetInstance()
+          ->EnumerateKnownBluetoothLowEnergyDevices(&btle_devices, &error);
   if (!success) {
     LogPollingError(error.c_str(), 0);
     return false;
@@ -525,6 +570,10 @@ bool BluetoothTaskManagerWin::DiscoverServices(
       }
     } else {
       if (!DiscoverLowEnergyDeviceServices(device->path,
+                                           service_record_states)) {
+        return false;
+      }
+      if (!SearchForGattServiceDevicePaths(device->address,
                                            service_record_states)) {
         return false;
       }
@@ -631,13 +680,16 @@ int BluetoothTaskManagerWin::DiscoverClassicDeviceServicesWorker(
 bool BluetoothTaskManagerWin::DiscoverLowEnergyDeviceServices(
     const base::FilePath& device_path,
     ScopedVector<ServiceRecordState>* service_record_states) {
-  if (!win::IsBluetoothLowEnergySupported())
+  if (!win::BluetoothLowEnergyWrapper::GetInstance()
+           ->IsBluetoothLowEnergySupported()) {
     return true;  // Bluetooth LE not supported is not an error.
+  }
 
   std::string error;
   ScopedVector<win::BluetoothLowEnergyServiceInfo> services;
-  bool success = win::EnumerateKnownBluetoothLowEnergyServices(
-      device_path, &services, &error);
+  bool success = win::BluetoothLowEnergyWrapper::GetInstance()
+                     ->EnumerateKnownBluetoothLowEnergyServices(
+                         device_path, &services, &error);
   if (!success) {
     LogPollingError(error.c_str(), 0);
     return false;
@@ -650,9 +702,105 @@ bool BluetoothTaskManagerWin::DiscoverLowEnergyDeviceServices(
     ServiceRecordState* service_state = new ServiceRecordState();
     service_state->gatt_uuid =
         BluetoothLowEnergyUuidToBluetoothUuid((*iter2)->uuid);
+    service_state->attribute_handle = (*iter2)->attribute_handle;
     service_record_states->push_back(service_state);
   }
   return true;
+}
+
+// Each GATT service of a BLE device will be listed on the machine as a BLE
+// device interface with a matching service attribute handle. This interface
+// lists all GATT service devices and matches them back to correspond GATT
+// service of the BLE device according to their address and included service
+// attribute handles, as we did not find a more neat way to bond them.
+bool BluetoothTaskManagerWin::SearchForGattServiceDevicePaths(
+    const std::string device_address,
+    ScopedVector<ServiceRecordState>* service_record_states) {
+  std::string error;
+
+  // List all known GATT service devices on the machine.
+  ScopedVector<win::BluetoothLowEnergyDeviceInfo> gatt_service_devices;
+  bool success = win::BluetoothLowEnergyWrapper::GetInstance()
+                     ->EnumerateKnownBluetoothLowEnergyGattServiceDevices(
+                         &gatt_service_devices, &error);
+  if (!success) {
+    LogPollingError(error.c_str(), 0);
+    return false;
+  }
+
+  for (auto gatt_service_device : gatt_service_devices) {
+    // Only care about the service devices with |device_address|.
+    if (BluetoothAddressToCanonicalString(gatt_service_device->address) !=
+        device_address) {
+      continue;
+    }
+
+    // Discover this service device's contained services.
+    ScopedVector<win::BluetoothLowEnergyServiceInfo> gatt_services;
+    if (!win::BluetoothLowEnergyWrapper::GetInstance()
+             ->EnumerateKnownBluetoothLowEnergyServices(
+                 gatt_service_device->path, &gatt_services, &error)) {
+      LogPollingError(error.c_str(), 0);
+      continue;
+    }
+
+    // Usually each service device correspond to one Gatt service.
+    if (gatt_services.size() > 1) {
+      LOG(WARNING) << "This GATT service device contains more than one ("
+                   << gatt_services.size() << ") services";
+    }
+
+    // Associate service device to corresponding service record. Attribute
+    // handle is unique on one device.
+    for (auto gatt_service : gatt_services) {
+      for (auto service_record_state : *service_record_states) {
+        if (service_record_state->attribute_handle ==
+            gatt_service->attribute_handle) {
+          service_record_state->path = gatt_service_device->path;
+          break;
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
+void BluetoothTaskManagerWin::GetGattIncludedCharacteristics(
+    base::FilePath service_path,
+    BluetoothUUID uuid,
+    uint16_t attribute_handle,
+    const GetGattIncludedCharacteristicsCallback& callback) {
+  HRESULT hr = S_OK;
+  scoped_ptr<BTH_LE_GATT_CHARACTERISTIC> win_characteristics_info;
+  uint16_t number_of_charateristics = 0;
+
+  BTH_LE_GATT_SERVICE win_service;
+  if (BluetoothUUIDToWinBLEUUID(uuid, &(win_service.ServiceUuid))) {
+    win_service.AttributeHandle = attribute_handle;
+    hr = win::BluetoothLowEnergyWrapper::GetInstance()
+             ->ReadCharacteristicsOfAService(service_path, &win_service,
+                                             &win_characteristics_info,
+                                             &number_of_charateristics);
+  } else {
+    hr = HRESULT_FROM_WIN32(ERROR_INVALID_PARAMETER);
+  }
+
+  ui_task_runner_->PostTask(
+      FROM_HERE, base::Bind(callback, base::Passed(&win_characteristics_info),
+                            number_of_charateristics, hr));
+}
+
+void BluetoothTaskManagerWin::PostGetGattIncludedCharacteristics(
+    const base::FilePath& service_path,
+    const BluetoothUUID& uuid,
+    uint16_t attribute_handle,
+    const GetGattIncludedCharacteristicsCallback& callback) {
+  DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
+  bluetooth_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&BluetoothTaskManagerWin::GetGattIncludedCharacteristics, this,
+                 service_path, uuid, attribute_handle, callback));
 }
 
 }  // namespace device

@@ -182,6 +182,7 @@ config("skia_library_config") {
   # matches the GYP build.
   include_dirs = [
     "//third_party/skia/include/private",
+    "//third_party/skia/include/client/android",
     "//third_party/skia/src/core",
     "//third_party/skia/src/image",
     "//third_party/skia/src/opts",
@@ -296,6 +297,7 @@ component("skia") {
     "ext/platform_device_mac.cc",
     "ext/platform_device_win.cc",
     "ext/recursive_gaussian_convolution.cc",
+    "ext/skia_histogram.cc",
     "ext/skia_memory_dump_provider.cc",
     "ext/skia_trace_memory_dump_impl.cc",
     "ext/skia_utils_base.cc",
@@ -334,7 +336,6 @@ component("skia") {
 
   # Remove unused util files include in utils.gypi
   sources -= [
-    "//third_party/skia/src/utils/SkBitmapHasher.cpp",
     "//third_party/skia/src/utils/SkBoundaryPatch.cpp",
     "//third_party/skia/src/utils/SkCamera.cpp",
     "//third_party/skia/src/utils/SkDumpCanvas.cpp",
@@ -346,7 +347,6 @@ component("skia") {
     "//third_party/skia/src/utils/SkNinePatch.cpp",
     "//third_party/skia/src/utils/SkOSFile.cpp",
     "//third_party/skia/src/utils/SkParsePath.cpp",
-    "//third_party/skia/src/utils/SkSHA1.cpp",
 
     #testing
     "//third_party/skia/src/fonts/SkGScalerContext.cpp",
@@ -458,13 +458,12 @@ component("skia") {
   ]
 
   if (is_linux) {
-    configs += [ "//build/config/linux:freetype2" ]
-
     if (use_pango) {
       configs += [ "//build/config/linux:pangocairo" ]
     }
     deps += [
       "//build/linux:fontconfig",
+      "//build/linux:freetype2",
       "//third_party/icu:icuuc",
     ]
   }
@@ -655,15 +654,6 @@ source_set("skia_opts") {
   ]
 
   visibility = [ ":skia" ]
-}
-
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("skia_unittests_run") {
-  testonly = true
-  deps = [
-    ":skia_unittests",
-  ]
 }
 
 test("skia_unittests") {

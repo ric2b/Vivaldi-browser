@@ -25,8 +25,6 @@ ServiceWorkerMessageEvent::ServiceWorkerMessageEvent(const AtomicString& type, c
     }
     if (initializer.hasPorts())
         m_ports = new MessagePortArray(initializer.ports());
-    if (initializer.hasData())
-        m_data = initializer.data();
 }
 
 ServiceWorkerMessageEvent::ServiceWorkerMessageEvent(PassRefPtr<SerializedScriptValue> data, const String& origin, const String& lastEventId, ServiceWorker* source, MessagePortArray* ports)
@@ -47,6 +45,10 @@ ServiceWorkerMessageEvent::~ServiceWorkerMessageEvent()
 
 MessagePortArray ServiceWorkerMessageEvent::ports(bool& isNull) const
 {
+    // TODO(bashi): Currently we return a copied array because the binding
+    // layer could modify the content of the array while executing JS callbacks.
+    // Avoid copying once we can make sure that the binding layer won't
+    // modify the content.
     if (m_ports) {
         isNull = false;
         return *m_ports;

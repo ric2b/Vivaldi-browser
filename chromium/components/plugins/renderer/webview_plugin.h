@@ -129,7 +129,6 @@ class WebViewPlugin : public blink::WebPlugin,
 
   // WebWidgetClient methods:
   void didInvalidateRect(const blink::WebRect&) override;
-  void didUpdateLayoutSize(const blink::WebSize&) override;
   void didChangeCursor(const blink::WebCursorInfo& cursor) override;
   void scheduleAnimation() override;
 
@@ -140,8 +139,7 @@ class WebViewPlugin : public blink::WebPlugin,
   // different parameters. We only care about implementing the WebPlugin
   // version, so we implement this method and call the default in WebFrameClient
   // (which does nothing) to correctly overload it.
-  void didReceiveResponse(blink::WebLocalFrame* frame,
-                          unsigned identifier,
+  void didReceiveResponse(unsigned identifier,
                           const blink::WebURLResponse& response) override;
 
  private:
@@ -179,6 +177,7 @@ class WebViewPlugin : public blink::WebPlugin,
   blink::WebString old_title_;
   bool finished_loading_;
   bool focused_;
+  bool is_painting_;
 };
 
 #endif  // COMPONENTS_PLUGINS_RENDERER_WEBVIEW_PLUGIN_H_

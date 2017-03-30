@@ -19,6 +19,7 @@
 #include "components/omnibox/browser/scored_history_match.h"
 
 class HistoryQuickProviderTest;
+class TemplateURLService;
 
 namespace bookmarks {
 class BookmarkModel;
@@ -73,7 +74,8 @@ class URLIndexPrivateData
       size_t cursor_position,
       size_t max_matches,
       const std::string& languages,
-      bookmarks::BookmarkModel* bookmark_model);
+      bookmarks::BookmarkModel* bookmark_model,
+      TemplateURLService* template_url_service);
 
   // Adds the history item in |row| to the index if it does not already already
   // exist and it meets the minimum 'quick' criteria. If the row already exists
@@ -184,6 +186,7 @@ class URLIndexPrivateData
                         const HistoryIDSet& history_id_set);
     // Creates a cache item for a term which has no results.
     SearchTermCacheItem();
+    SearchTermCacheItem(const SearchTermCacheItem& other);
 
     ~SearchTermCacheItem();
 
@@ -198,11 +201,13 @@ class URLIndexPrivateData
   class AddHistoryMatch : public std::unary_function<HistoryID, void> {
    public:
     AddHistoryMatch(bookmarks::BookmarkModel* bookmark_model,
+                    TemplateURLService* template_url_service,
                     const URLIndexPrivateData& private_data,
                     const std::string& languages,
                     const base::string16& lower_string,
                     const String16Vector& lower_terms,
                     const base::Time now);
+    AddHistoryMatch(const AddHistoryMatch& other);
     ~AddHistoryMatch();
 
     void operator()(const HistoryID history_id);
@@ -213,6 +218,7 @@ class URLIndexPrivateData
     friend class InMemoryURLIndexTest;
     FRIEND_TEST_ALL_PREFIXES(InMemoryURLIndexTest, AddHistoryMatch);
     bookmarks::BookmarkModel* bookmark_model_;
+    TemplateURLService* template_url_service_;
     const URLIndexPrivateData& private_data_;
     const std::string& languages_;
     ScoredHistoryMatches scored_matches_;

@@ -25,7 +25,6 @@
 
 #include "core/fetch/Resource.h"
 #include "core/fetch/ResourceClient.h"
-#include "core/fetch/ResourcePtr.h"
 #include "core/html/parser/TextResourceDecoder.h"
 
 namespace blink {
@@ -38,7 +37,7 @@ class DocumentResource final : public Resource {
 public:
     using ClientType = ResourceClient;
 
-    static ResourcePtr<DocumentResource> fetchSVGDocument(FetchRequest&, ResourceFetcher*);
+    static PassRefPtrWillBeRawPtr<DocumentResource> fetchSVGDocument(FetchRequest&, ResourceFetcher*);
     ~DocumentResource() override;
     DECLARE_VIRTUAL_TRACE();
 
@@ -54,29 +53,30 @@ private:
         SVGDocumentResourceFactory()
             : ResourceFactory(Resource::SVGDocument) { }
 
-        Resource* create(const ResourceRequest& request, const String& charset) const override
+        PassRefPtrWillBeRawPtr<Resource> create(const ResourceRequest& request, const String& charset) const override
         {
-            return new DocumentResource(request, Resource::SVGDocument);
+            return adoptRefWillBeNoop(new DocumentResource(request, Resource::SVGDocument));
         }
     };
     DocumentResource(const ResourceRequest&, Type);
 
+    bool mimeTypeAllowed() const;
     PassRefPtrWillBeRawPtr<Document> createDocument(const KURL&);
 
     RefPtrWillBeMember<Document> m_document;
     OwnPtr<TextResourceDecoder> m_decoder;
 };
 
-DEFINE_TYPE_CASTS(DocumentResource, Resource, resource, resource->type() == Resource::SVGDocument, resource.type() == Resource::SVGDocument); \
-inline DocumentResource* toDocumentResource(const ResourcePtr<Resource>& ptr) { return toDocumentResource(ptr.get()); }
+DEFINE_TYPE_CASTS(DocumentResource, Resource, resource, resource->getType() == Resource::SVGDocument, resource.getType() == Resource::SVGDocument); \
+inline DocumentResource* toDocumentResource(const RefPtrWillBeRawPtr<Resource>& ptr) { return toDocumentResource(ptr.get()); }
 
 class DocumentResourceClient : public ResourceClient {
 public:
     ~DocumentResourceClient() override {}
-    static ResourceClientType expectedType() { return DocumentType; }
-    ResourceClientType resourceClientType() const override { return expectedType(); }
+    static bool isExpectedType(ResourceClient* client) { return client->getResourceClientType() == DocumentType; }
+    ResourceClientType getResourceClientType() const final { return DocumentType; }
 };
 
-}
+} // namespace blink
 
 #endif // DocumentResource_h

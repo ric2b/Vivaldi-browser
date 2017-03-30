@@ -189,6 +189,11 @@ PasswordStoreChangeList PasswordStoreProxyMac::RemoveLoginsSyncedBetweenImpl(
   return GetBackend()->RemoveLoginsSyncedBetweenImpl(delete_begin, delete_end);
 }
 
+PasswordStoreChangeList
+PasswordStoreProxyMac::DisableAutoSignInForAllLoginsImpl() {
+  return GetBackend()->DisableAutoSignInForAllLoginsImpl();
+}
+
 bool PasswordStoreProxyMac::RemoveStatisticsCreatedBetweenImpl(
     base::Time delete_begin,
     base::Time delete_end) {
@@ -197,9 +202,8 @@ bool PasswordStoreProxyMac::RemoveStatisticsCreatedBetweenImpl(
 }
 
 ScopedVector<autofill::PasswordForm> PasswordStoreProxyMac::FillMatchingLogins(
-    const autofill::PasswordForm& form,
-    AuthorizationPromptPolicy prompt_policy) {
-  return GetBackend()->FillMatchingLogins(form, prompt_policy);
+    const autofill::PasswordForm& form) {
+  return GetBackend()->FillMatchingLogins(form);
 }
 
 bool PasswordStoreProxyMac::FillAutofillableLogins(

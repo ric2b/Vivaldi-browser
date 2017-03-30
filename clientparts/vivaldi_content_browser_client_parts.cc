@@ -4,8 +4,8 @@
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_url_handler.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"

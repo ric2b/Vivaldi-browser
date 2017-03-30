@@ -10,7 +10,6 @@
 #include <set>
 #include <string>
 
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -32,6 +31,7 @@
 #include "components/favicon/core/favicon_service.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/password_manager/core/browser/password_store.h"
+#include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -44,6 +44,7 @@
 
 #include "app/vivaldi_resources.h"
 #include "importer/imported_notes_entry.h"
+#include "importer/imported_speeddial_entry.h"
 #include "notes/notesnode.h"
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
@@ -218,8 +219,9 @@ void ProfileWriter::AddBookmarks(
       if (!child) {
         BookmarkNode::MetaInfoMap meta_info;
         meta_info["Speeddial"] = "true";
-        child = model->AddFolderWithMetaInfo(parent, parent->child_count(), *folder_name,
-                                            (bookmark->speeddial) ? &meta_info : NULL);
+        child = model->AddFolderWithMetaInfo(
+            parent, parent->child_count(), *folder_name,
+            (bookmark->speeddial) ? &meta_info : NULL);
       }
       parent = child;
     }
@@ -256,6 +258,39 @@ void ProfileWriter::AddBookmarks(
   if (import_to_top_level && !add_all_to_top_level)
     ShowBookmarkBar(profile_);
 }
+
+void ProfileWriter::AddSpeedDial(
+    const std::vector<ImportedSpeedDialEntry>& speeddial) {
+  if (speeddial.empty())
+    return;
+
+  BookmarkModel* model = BookmarkModelFactory::GetForProfile(profile_);
+  DCHECK(model->loaded());
+  const BookmarkNode* bookmark_bar = model->bookmark_bar_node();
+  const base::string16& first_folder_name =
+      l10n_util::GetStringUTF16(IDS_SPEEDDIAL_GROUP_FROM_OPERA);
+
+  model->BeginExtensiveChanges();
+
+  const BookmarkNode* top_level_folder = NULL;
+
+  base::string16 name =
+      GenerateUniqueFolderName(model, first_folder_name);
+
+  BookmarkNode::MetaInfoMap meta_info;
+  meta_info["Speeddial"] = "true";
+  top_level_folder = model->AddFolderWithMetaInfo(
+      bookmark_bar, bookmark_bar->child_count(), name, &meta_info);
+
+  for (auto& item : speeddial) {
+    if (!model->AddURL(top_level_folder, top_level_folder->child_count(),
+                       item.title, item.url))
+      break;
+  }
+
+  model->EndExtensiveChanges();
+}
+
 
 void ProfileWriter::AddNotes(const std::vector<ImportedNotesEntry> &notes,
                              const base::string16 &top_level_folder_name) {

@@ -2,7 +2,8 @@ namespace="EventTarget"
 suffix="Modules"
 
 modules/battery/BatteryManager
-modules/bluetooth/BluetoothGATTCharacteristic
+modules/bluetooth/BluetoothDevice
+modules/bluetooth/BluetoothRemoteGATTCharacteristic
 modules/compositorworker/CompositorWorker
 modules/compositorworker/CompositorWorkerGlobalScope
 modules/encryptedmedia/MediaKeySession

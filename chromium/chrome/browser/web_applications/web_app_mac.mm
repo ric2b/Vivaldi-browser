@@ -327,8 +327,7 @@ void UpdateAndLaunchShim(
 void RebuildAppAndLaunch(scoped_ptr<web_app::ShortcutInfo> shortcut_info) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (shortcut_info->extension_id == app_mode::kAppListModeId) {
-    AppListService* app_list_service =
-        AppListService::Get(chrome::HOST_DESKTOP_TYPE_NATIVE);
+    AppListService* app_list_service = AppListService::Get();
     app_list_service->CreateShortcut();
     app_list_service->Show();
     return;
@@ -435,7 +434,8 @@ void UpdateAppShortcutsSubdirLocalizedName(
     return;
 
   base::FilePath directory_name = apps_directory.BaseName().RemoveExtension();
-  base::string16 localized_name = ShellIntegration::GetAppShortcutsSubdirName();
+  base::string16 localized_name =
+      shell_integration::GetAppShortcutsSubdirName();
   NSDictionary* strings_dict = @{
       base::mac::FilePathToNSString(directory_name) :
           base::SysUTF16ToNSString(localized_name)

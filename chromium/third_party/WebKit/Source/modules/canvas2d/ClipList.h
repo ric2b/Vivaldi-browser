@@ -25,6 +25,7 @@ public:
 
     void clipPath(const SkPath&, AntiAliasingMode, const SkMatrix&);
     void playback(SkCanvas*) const;
+    const SkPath& getCurrentClipPath() const;
 
 private:
 
@@ -40,6 +41,7 @@ private:
     static const size_t cInlineClipOpCapacity = 4;
 
     WTF::Vector<ClipOp, cInlineClipOpCapacity> m_clipList;
+    SkPath m_currentClipPath;
 };
 
 } // namespace blink

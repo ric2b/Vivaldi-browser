@@ -9,7 +9,11 @@ import android.annotation.TargetApi;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanSettings;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+
 import android.os.Build;
 import android.os.ParcelUuid;
 
@@ -26,6 +30,11 @@ import java.util.UUID;
 
 /**
  * Fake implementations of android.bluetooth.* classes for testing.
+ *
+ * Fakes are contained in a single file to simplify code. Only one C++ file may
+ * access a Java file via JNI, and all of these classes are accessed by
+ * bluetooth_test_android.cc. The alternative would be a C++ .h, .cc file for
+ * each of these classes.
  */
 @JNINamespace("device")
 @TargetApi(Build.VERSION_CODES.LOLLIPOP)
@@ -38,6 +47,7 @@ class Fakes {
     static class FakeBluetoothAdapter extends Wrappers.BluetoothAdapterWrapper {
         private final FakeContext mFakeContext;
         private final FakeBluetoothLeScanner mFakeScanner;
+        private boolean mPowered = true;
         final long mNativeBluetoothTestAndroid;
 
         /**
@@ -50,10 +60,10 @@ class Fakes {
         }
 
         private FakeBluetoothAdapter(long nativeBluetoothTestAndroid) {
-            super(null, new FakeContext(), new FakeBluetoothLeScanner());
+            super(null, new FakeContext());
             mNativeBluetoothTestAndroid = nativeBluetoothTestAndroid;
             mFakeContext = (FakeContext) mContext;
-            mFakeScanner = (FakeBluetoothLeScanner) mScanner;
+            mFakeScanner = new FakeBluetoothLeScanner();
         }
 
         @CalledByNative("FakeBluetoothAdapter")
@@ -66,6 +76,10 @@ class Fakes {
          */
         @CalledByNative("FakeBluetoothAdapter")
         public void discoverLowEnergyDevice(int deviceOrdinal) {
+            if (mFakeScanner == null) {
+                return;
+            }
+
             switch (deviceOrdinal) {
                 case 1: {
                     ArrayList<ParcelUuid> uuids = new ArrayList<ParcelUuid>(2);
@@ -110,17 +124,41 @@ class Fakes {
             }
         }
 
+        @CalledByNative("FakeBluetoothAdapter")
+        public void forceIllegalStateException() {
+            if (mFakeScanner != null) {
+                mFakeScanner.forceIllegalStateException();
+            }
+        }
+
         // -----------------------------------------------------------------------------------------
         // BluetoothAdapterWrapper overrides:
 
         @Override
-        public boolean isEnabled() {
+        public boolean disable() {
+            mPowered = false;
+            nativeOnFakeAdapterStateChanged(mNativeBluetoothTestAndroid, false);
+            return true;
+        }
+
+        @Override
+        public boolean enable() {
+            mPowered = true;
+            nativeOnFakeAdapterStateChanged(mNativeBluetoothTestAndroid, true);
             return true;
         }
 
         @Override
         public String getAddress() {
             return "A1:B2:C3:D4:E5:F6";
+        }
+
+        @Override
+        public Wrappers.BluetoothLeScannerWrapper getBluetoothLeScanner() {
+            if (isEnabled()) {
+                return mFakeScanner;
+            }
+            return null;
         }
 
         @Override
@@ -131,6 +169,11 @@ class Fakes {
         @Override
         public int getScanMode() {
             return android.bluetooth.BluetoothAdapter.SCAN_MODE_NONE;
+        }
+
+        @Override
+        public boolean isEnabled() {
+            return mPowered;
         }
 
         @Override
@@ -154,6 +197,14 @@ class Fakes {
         public boolean checkPermission(String permission) {
             return mPermissions.contains(permission);
         }
+
+        @Override
+        public Intent registerReceiver(BroadcastReceiver receiver, IntentFilter filter) {
+            return null;
+        }
+
+        @Override
+        public void unregisterReceiver(BroadcastReceiver receiver) {}
     }
 
     /**
@@ -161,6 +212,7 @@ class Fakes {
      */
     static class FakeBluetoothLeScanner extends Wrappers.BluetoothLeScannerWrapper {
         public Wrappers.ScanCallbackWrapper mScanCallback;
+        private boolean mThrowException;
 
         private FakeBluetoothLeScanner() {
             super(null);
@@ -173,6 +225,9 @@ class Fakes {
                 throw new IllegalArgumentException(
                         "FakeBluetoothLeScanner does not support multiple scans.");
             }
+            if (mThrowException) {
+                throw new IllegalStateException("Adapter is off.");
+            }
             mScanCallback = callback;
         }
 
@@ -181,7 +236,14 @@ class Fakes {
             if (mScanCallback != callback) {
                 throw new IllegalArgumentException("No scan in progress.");
             }
+            if (mThrowException) {
+                throw new IllegalStateException("Adapter is off.");
+            }
             mScanCallback = null;
+        }
+
+        void forceIllegalStateException() {
+            mThrowException = true;
         }
     }
 
@@ -283,7 +345,7 @@ class Fakes {
 
         @Override
         public int getBluetoothClass_getDeviceClass() {
-            return 0x1F00; // Unspecified Device Class
+            return Wrappers.DEVICE_CLASS_UNSPECIFIED;
         }
 
         @Override
@@ -317,6 +379,11 @@ class Fakes {
         @Override
         public void disconnect() {
             nativeOnFakeBluetoothGattDisconnect(mDevice.mAdapter.mNativeBluetoothTestAndroid);
+        }
+
+        @Override
+        public void close() {
+            nativeOnFakeBluetoothGattClose(mDevice.mAdapter.mNativeBluetoothTestAndroid);
         }
 
         @Override
@@ -662,12 +729,19 @@ class Fakes {
     // ---------------------------------------------------------------------------------------------
     // BluetoothTestAndroid C++ methods declared for access from java:
 
+    // Binds to BluetoothTestAndroid::OnFakeAdapterStateChanged.
+    private static native void nativeOnFakeAdapterStateChanged(
+            long nativeBluetoothTestAndroid, boolean powered);
+
     // Binds to BluetoothTestAndroid::OnFakeBluetoothDeviceConnectGattCalled.
     private static native void nativeOnFakeBluetoothDeviceConnectGattCalled(
             long nativeBluetoothTestAndroid);
 
     // Binds to BluetoothTestAndroid::OnFakeBluetoothGattDisconnect.
     private static native void nativeOnFakeBluetoothGattDisconnect(long nativeBluetoothTestAndroid);
+
+    // Binds to BluetoothTestAndroid::OnFakeBluetoothGattClose.
+    private static native void nativeOnFakeBluetoothGattClose(long nativeBluetoothTestAndroid);
 
     // Binds to BluetoothTestAndroid::OnFakeBluetoothGattDiscoverServices.
     private static native void nativeOnFakeBluetoothGattDiscoverServices(

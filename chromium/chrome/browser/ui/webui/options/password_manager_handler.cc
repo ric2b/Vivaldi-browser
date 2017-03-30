@@ -7,7 +7,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
@@ -25,6 +24,8 @@
 #include "components/password_manager/core/browser/password_manager_constants.h"
 #include "components/password_manager/core/browser/password_ui_utils.h"
 #include "components/password_manager/core/common/experiments.h"
+#include "components/prefs/pref_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
@@ -33,7 +34,6 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/origin_util.h"
-#include "net/base/net_util.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_WIN) && defined(USE_ASH)
@@ -94,8 +94,8 @@ void PasswordManagerHandler::GetLocalizedValues(
   static const OptionsStringResource resources[] = {
       {"autoSigninTitle", IDS_PASSWORDS_AUTO_SIGNIN_TITLE},
       {"autoSigninDescription", IDS_PASSWORDS_AUTO_SIGNIN_DESCRIPTION},
-      {"savedPasswordsTitle", IDS_PASSWORDS_SHOW_PASSWORDS_TAB_TITLE},
-      {"passwordExceptionsTitle", IDS_PASSWORDS_EXCEPTIONS_TAB_TITLE},
+      {"savedPasswordsTitle", IDS_PASSWORD_MANAGER_SHOW_PASSWORDS_TAB_TITLE},
+      {"passwordExceptionsTitle", IDS_PASSWORD_MANAGER_EXCEPTIONS_TAB_TITLE},
       {"passwordSearchPlaceholder", IDS_PASSWORDS_PAGE_SEARCH_PASSWORDS},
       {"passwordShowButton", IDS_PASSWORDS_PAGE_VIEW_SHOW_BUTTON},
       {"passwordHideButton", IDS_PASSWORDS_PAGE_VIEW_HIDE_BUTTON},
@@ -240,12 +240,12 @@ void PasswordManagerHandler::SetPasswordList(
           kPasswordField,
           base::string16(saved_password->password_value.length(), ' '));
     }
-    const GURL& federation_url = saved_password->federation_url;
-    if (!federation_url.is_empty()) {
+    if (!saved_password->federation_origin.unique()) {
       entry->SetString(
           kFederationField,
-          l10n_util::GetStringFUTF16(IDS_PASSWORDS_VIA_FEDERATION,
-                                     base::UTF8ToUTF16(federation_url.host())));
+          l10n_util::GetStringFUTF16(
+              IDS_PASSWORDS_VIA_FEDERATION,
+              base::UTF8ToUTF16(saved_password->federation_origin.host())));
     }
 
     entries.Append(entry.release());

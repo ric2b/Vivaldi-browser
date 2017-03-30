@@ -141,7 +141,7 @@ SANDBOX_INTERCEPT NTSTATUS WINAPI TargetNtOpenThread64(
     PHANDLE thread, ACCESS_MASK desired_access,
     POBJECT_ATTRIBUTES object_attributes, PCLIENT_ID client_id) {
   NtOpenThreadFunction orig_fn = reinterpret_cast<
-      NtOpenThreadFunction>(g_originals[OPEN_TREAD_ID]);
+      NtOpenThreadFunction>(g_originals[OPEN_THREAD_ID]);
   return TargetNtOpenThread(orig_fn, thread, desired_access, object_attributes,
                             client_id);
 }
@@ -199,6 +199,20 @@ SANDBOX_INTERCEPT BOOL WINAPI TargetCreateProcessA64(
                               inherit_handles, flags, environment,
                               current_directory, startup_info,
                               process_information);
+}
+
+SANDBOX_INTERCEPT HANDLE WINAPI
+TargetCreateThread64(LPSECURITY_ATTRIBUTES thread_attributes,
+                     SIZE_T stack_size,
+                     LPTHREAD_START_ROUTINE start_address,
+                     PVOID parameter,
+                     DWORD creation_flags,
+                     LPDWORD thread_id) {
+  CreateThreadFunction orig_fn =
+      reinterpret_cast<CreateThreadFunction>(g_originals[CREATE_THREAD_ID]);
+  return TargetCreateThread(orig_fn, thread_attributes, stack_size,
+                            start_address, parameter, creation_flags,
+                            thread_id);
 }
 
 // -----------------------------------------------------------------------

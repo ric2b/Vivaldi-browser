@@ -24,6 +24,7 @@
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
 #include "content/browser/download/download_stats.h"
+#include "content/browser/fileapi/chrome_blob_storage_context.h"
 #include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/media/media_internals.h"
@@ -31,6 +32,7 @@
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_helper.h"
+#include "content/browser/resource_context_impl.h"
 #include "content/common/child_process_host_impl.h"
 #include "content/common/child_process_messages.h"
 #include "content/common/content_constants_internal.h"
@@ -42,7 +44,8 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
-#include "content/public/browser/download_save_info.h"
+#include "content/public/browser/download_manager.h"
+#include "content/public/browser/download_url_parameters.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/common/content_switches.h"
@@ -62,6 +65,7 @@
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "ppapi/shared_impl/file_type_conversion.h"
+#include "storage/browser/blob/blob_storage_context.h"
 #include "ui/gfx/color_profile.h"
 #include "url/gurl.h"
 
@@ -99,6 +103,21 @@ const uint32_t kFilteredMessageClasses[] = {
 base::LazyInstance<gfx::ColorProfile>::Leaky g_color_profile =
     LAZY_INSTANCE_INITIALIZER;
 #endif
+
+void DownloadUrlOnUIThread(scoped_ptr<DownloadUrlParameters> parameters) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  RenderProcessHost* render_process_host =
+      RenderProcessHost::FromID(parameters->render_process_host_id());
+  if (!render_process_host)
+    return;
+
+  BrowserContext* browser_context = render_process_host->GetBrowserContext();
+  DownloadManager* download_manager =
+      BrowserContext::GetDownloadManager(browser_context);
+  RecordDownloadSource(INITIATED_BY_RENDERER);
+  download_manager->DownloadUrl(std::move(parameters));
+}
 
 }  // namespace
 
@@ -372,19 +391,26 @@ void RenderMessageFilter::DownloadUrl(int render_view_id,
   if (!resource_context_)
     return;
 
-  scoped_ptr<DownloadSaveInfo> save_info(new DownloadSaveInfo());
-  save_info->suggested_name = suggested_name;
-  save_info->prompt_for_save_location = use_prompt;
-  scoped_ptr<net::URLRequest> request(
-      resource_context_->GetRequestContext()->CreateRequest(
-          url, net::DEFAULT_PRIORITY, NULL));
-  RecordDownloadSource(INITIATED_BY_RENDERER);
-  resource_dispatcher_host_->BeginDownload(
-      std::move(request), referrer,
-      true,  // is_content_initiated
-      resource_context_, render_process_id_, render_view_id, render_frame_id,
-      false, false, std::move(save_info), DownloadItem::kInvalidId,
-      ResourceDispatcherHostImpl::DownloadStartedCallback());
+  scoped_ptr<DownloadUrlParameters> parameters(
+      new DownloadUrlParameters(url, render_process_id_, render_view_id,
+                                render_frame_id, resource_context_));
+  parameters->set_content_initiated(true);
+  parameters->set_suggested_name(suggested_name);
+  parameters->set_prompt(use_prompt);
+  parameters->set_referrer(referrer);
+
+  if (url.SchemeIsBlob()) {
+    ChromeBlobStorageContext* blob_context =
+        GetChromeBlobStorageContextForResourceContext(resource_context_);
+    parameters->set_blob_data_handle(
+        blob_context->context()->GetBlobDataFromPublicURL(url));
+    // Don't care if the above fails. We are going to let the download go
+    // through and allow it to be interrupted so that the embedder can deal.
+  }
+
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(&DownloadUrlOnUIThread, base::Passed(&parameters)));
 }
 
 void RenderMessageFilter::OnDownloadUrl(int render_view_id,

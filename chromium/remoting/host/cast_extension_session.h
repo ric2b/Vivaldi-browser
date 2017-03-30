@@ -15,7 +15,7 @@
 #include "base/values.h"
 #include "jingle/glue/thread_wrapper.h"
 #include "remoting/host/host_extension_session.h"
-#include "third_party/libjingle/source/talk/app/webrtc/peerconnectioninterface.h"
+#include "third_party/webrtc/api/peerconnectioninterface.h"
 #include "third_party/webrtc/base/scoped_ref_ptr.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
 
@@ -66,8 +66,6 @@ class CastExtensionSession : public HostExtensionSession,
   // webrtc::PeerConnectionObserver interface.
   void OnSignalingChange(
       webrtc::PeerConnectionInterface::SignalingState new_state) override;
-  void OnStateChange(
-      webrtc::PeerConnectionObserver::StateType state_changed) override;
   void OnAddStream(webrtc::MediaStreamInterface* stream) override;
   void OnRemoveStream(webrtc::MediaStreamInterface* stream) override;
   void OnDataChannel(webrtc::DataChannelInterface* data_channel) override;
@@ -77,7 +75,6 @@ class CastExtensionSession : public HostExtensionSession,
   void OnIceGatheringChange(
       webrtc::PeerConnectionInterface::IceGatheringState new_state) override;
   void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) override;
-  void OnIceComplete() override;
 
  private:
   CastExtensionSession(

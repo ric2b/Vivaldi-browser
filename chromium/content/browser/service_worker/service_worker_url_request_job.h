@@ -92,9 +92,6 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
     // Called to signal that loading failed, and that the resource being loaded
     // was a main resource.
     virtual void MainResourceLoadFailed() {}
-
-    // Returns the origin of the page/context which initiated this request.
-    virtual GURL GetRequestingOrigin() = 0;
   };
 
   ServiceWorkerURLRequestJob(
@@ -110,6 +107,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
       RequestContextType request_context_type,
       RequestContextFrameType frame_type,
       scoped_refptr<ResourceRequestBody> body,
+      ServiceWorkerFetchType fetch_type,
       Delegate* delegate);
 
   ~ServiceWorkerURLRequestJob() override;
@@ -190,10 +188,11 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
 
   // For FORWARD_TO_SERVICE_WORKER case.
   void DidPrepareFetchEvent();
-  void DidDispatchFetchEvent(ServiceWorkerStatusCode status,
-                             ServiceWorkerFetchEventResult fetch_result,
-                             const ServiceWorkerResponse& response,
-                             scoped_refptr<ServiceWorkerVersion> version);
+  void DidDispatchFetchEvent(
+      ServiceWorkerStatusCode status,
+      ServiceWorkerFetchEventResult fetch_result,
+      const ServiceWorkerResponse& response,
+      const scoped_refptr<ServiceWorkerVersion>& version);
 
   // Populates |http_response_headers_|.
   void CreateResponseHeader(int status_code,
@@ -271,6 +270,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
   scoped_refptr<ResourceRequestBody> body_;
   scoped_ptr<storage::BlobDataHandle> request_body_blob_data_handle_;
   scoped_refptr<ServiceWorkerVersion> streaming_version_;
+  ServiceWorkerFetchType fetch_type_;
 
   ResponseBodyType response_body_type_ = UNKNOWN;
   bool did_record_result_ = false;

@@ -34,6 +34,32 @@ if (is_debug || !is_win || !is_official_build) {
 # Core targets also get wexit time destructors.
 core_config_add += [ "//build/config/compiler:wexit_time_destructors" ]
 
+if (remove_webcore_debug_symbols) {
+  core_config_remove += [ "//build/config/compiler:default_symbols" ]
+  core_config_add += [ "//build/config/compiler:no_symbols" ]
+}
+
+# Config for code that builds as part of core.
+config("config") {
+  defines = [ "BLINK_CORE_IMPLEMENTATION=1" ]
+  configs = [ ":link_core_modules_separately" ]
+
+  cflags = []
+  if (is_win) {
+    # Suppress __declspec(dllexport)/extern conflict (C4910).
+    cflags += [ "/wd4910" ]
+  }
+}
+core_config_add += [ ":config" ]
+
+# Config for linking core and modules separately in component builds.
+# Required for CoreExport.h and ModulesExport.h.
+config("link_core_modules_separately") {
+  if (is_component_build) {
+    defines = [ "LINK_CORE_MODULES_SEPARATELY=1" ]
+  }
+}
+
 config("core_include_dirs") {
   include_dirs = [
     "..",
@@ -50,7 +76,6 @@ source_set("generated") {
     ":make_core_generated",
     ":prerequisites",
     "inspector:instrumentation_sources",
-    "inspector:protocol_sources",
     "//gin",
     "//skia",
     "//third_party/WebKit/Source/bindings/core/v8:bindings_core_v8_generated",
@@ -98,7 +123,6 @@ source_set("prerequisites") {
   deps = [
     ":make_core_generated",
     "inspector:instrumentation_sources",
-    "inspector:protocol_sources",
     "//third_party/WebKit/Source/bindings/core/v8:bindings_core_v8_generated",
 
     # FIXME: don't depend on bindings_modules http://crbug.com/358074
@@ -127,7 +151,9 @@ source_set("prerequisites") {
 # and only forward some of them.
 #
 # GYP version: WebKit/Source/core/core.gyp:webcore
-source_set("core") {
+component("core") {
+  output_name = "blink_core"
+
   visibility = []  # Allow re-assignment of list.
   visibility = [ "//third_party/WebKit/*" ]
 
@@ -152,11 +178,17 @@ source_set("core") {
     ":svg",
   ]
 
-  public_configs = [ ":core_include_dirs" ]
+  if (is_win && is_debug && is_component_build) {
+    # Incremental linking doesn't work on this target in debug mode, even
+    # with symbol_level=1.
+    configs -= [ "//build/config/win:default_incremental_linking" ]
+    configs += [ "//build/config/win:no_incremental_linking" ]
+  }
 
-  # TODO(GYP) IPP libraries pkg-config. These seem to be experimental and used
-  # only on x86 Android. See also below. There should be one pkg-config call
-  # that creates a config used in both of these cases.
+  public_configs = [
+    ":core_include_dirs",
+    ":link_core_modules_separately",
+  ]
 }
 
 # GYP version: //third_party/WebKit/Source/core/core.gyp:webcore_dom
@@ -236,6 +268,7 @@ source_set("remaining") {
 
   if (is_win) {
     cflags += [ "/wd4334" ]
+    sources -= [ "layout/LayoutThemeFontProviderDefault.cpp" ]
   } else {  # !is_win
     sources -= [
       "layout/LayoutThemeFontProviderWin.cpp",
@@ -243,14 +276,12 @@ source_set("remaining") {
       "layout/LayoutThemeWin.h",
     ]
   }
+
   if (!is_linux) {
     sources -= [
       "layout/LayoutThemeLinux.cpp",
       "layout/LayoutThemeLinux.h",
     ]
-    if (!is_android) {
-      sources -= [ "layout/LayoutThemeFontProviderLinux.cpp" ]
-    }
   }
 
   if (!is_android) {
@@ -261,14 +292,6 @@ source_set("remaining") {
   }
 
   if (is_mac) {
-    sources -= [
-      "layout/LayoutThemeDefault.cpp",
-      "layout/LayoutThemeDefault.h",
-      "layout/LayoutThemeFontProvider.cpp",
-      "layout/LayoutThemeFontProvider.h",
-      "paint/ThemePainterDefault.cpp",
-      "paint/ThemePainterDefault.h",
-    ]
     libs += [ "Carbon.framework" ]
   } else {  # !is_mac
     sources -= [ "editing/commands/SmartReplaceCF.cpp" ]
@@ -289,7 +312,6 @@ source_set("testing") {
 
   deps = [
     ":core",
-    ":core_generated",
     ":generated_testing_idls",
     "//third_party/WebKit/Source/wtf:test_support",
   ]
@@ -367,9 +389,9 @@ source_set("core_generated") {
     "$blink_core_output_dir/XLinkNames.cpp",
     "$blink_core_output_dir/XMLNSNames.cpp",
     "$blink_core_output_dir/XMLNames.cpp",
-    "$blink_core_output_dir/experiments/ExperimentalFeatures.cpp",
-    "$blink_core_output_dir/experiments/ExperimentalFeatures.h",
     "$blink_core_output_dir/fetch/FetchInitiatorTypeNames.cpp",
+    "$blink_core_output_dir/origin_trials/OriginTrials.cpp",
+    "$blink_core_output_dir/origin_trials/OriginTrials.h",
 
     # Generated from HTMLEntityNames.in
     "$blink_core_output_dir/HTMLEntityTable.cpp",
@@ -385,11 +407,6 @@ source_set("core_generated") {
 
     # Additional .cpp files from the make_core_generated rules.
     "$blink_core_output_dir/XPathGrammar.cpp",
-
-    # Additional .cpp files from the inspector_protocol_sources list.
-    "$blink_core_output_dir/InspectorBackendDispatcher.cpp",
-    "$blink_core_output_dir/InspectorFrontend.cpp",
-    "$blink_core_output_dir/InspectorTypeBuilder.cpp",
 
     # Additional .cpp files from the inspector_instrumentation_sources list.
     "$blink_core_output_dir/InspectorConsoleInstrumentationInl.h",
@@ -421,7 +438,6 @@ source_set("core_generated") {
     ":make_core_generated",
     ":prerequisites",
     "inspector:instrumentation_sources",
-    "inspector:protocol_sources",
     "//gin",
     "//skia",
     "//third_party/WebKit/Source/bindings/core/v8:bindings_core_v8_generated",
@@ -468,15 +484,6 @@ source_set("core_generated") {
       "/wd4702",
     ]
   }
-
-  # TODO(GYP) More IPP libraries, see above.
-  #if ((is_linux || is_android) && use_webaudio_ipp)
-  #  ["OS in ("linux", "android") and "WTF_USE_WEBAUDIO_IPP=1" in feature_defines", {
-  #    "cflags": [
-  #      "<!@(pkg-config --cflags-only-I ipp)",
-  #    ],
-  #  }],
-  #],
 }
 
 # core_bindings_generated ------------------------------------------------------
@@ -578,7 +585,6 @@ group("make_core_generated") {
     ":make_core_generated_event_names",
     ":make_core_generated_event_target_names",
     ":make_core_generated_event_type_names",
-    ":make_core_generated_experimental_features",
     ":make_core_generated_fetch_initiator_type_names",
     ":make_core_generated_html_element_factory",
     ":make_core_generated_html_element_lookup_trie",
@@ -591,6 +597,7 @@ group("make_core_generated") {
     ":make_core_generated_media_feature_names",
     ":make_core_generated_media_features",
     ":make_core_generated_media_type_names",
+    ":make_core_generated_origin_trials",
     ":make_core_generated_private_script",
     ":make_core_generated_private_script_for_testing",
     ":make_core_generated_style_builder",
@@ -987,25 +994,25 @@ action("make_core_generated_html_element_lookup_trie") {
   deps = make_core_generated_deps
 }
 
-# "ExperimentalFeatures" action in make_core_generated from GYP.
-action("make_core_generated_experimental_features") {
-  script = "../build/scripts/make_experimental_features.py"
+# "OriginTrials" action in make_core_generated from GYP.
+action("make_core_generated_origin_trials") {
+  script = "../build/scripts/make_origin_trials.py"
 
   inputs = scripts_for_in_files + [
-             "../build/scripts/make_experimental_features.py",
+             "../build/scripts/make_origin_trials.py",
              "../platform/RuntimeEnabledFeatures.in",
-             "../build/scripts/templates/ExperimentalFeatures.cpp.tmpl",
-             "../build/scripts/templates/ExperimentalFeatures.h.tmpl",
+             "../build/scripts/templates/OriginTrials.cpp.tmpl",
+             "../build/scripts/templates/OriginTrials.h.tmpl",
            ]
   outputs = [
-    "$blink_core_output_dir/experiments/ExperimentalFeatures.cpp",
-    "$blink_core_output_dir/experiments/ExperimentalFeatures.h",
+    "$blink_core_output_dir/origin_trials/OriginTrials.cpp",
+    "$blink_core_output_dir/origin_trials/OriginTrials.h",
   ]
 
   args = [
     rebase_path("../platform/RuntimeEnabledFeatures.in", root_build_dir),
     "--output_dir",
-    "$rel_blink_core_gen_dir/experiments",
+    "$rel_blink_core_gen_dir/origin_trials",
   ]
 }
 

@@ -28,7 +28,9 @@
 #include "content/common/frame_messages.h"
 #include "content/common/gamepad_messages.h"
 #include "content/common/geofencing_messages.h"
+#include "content/common/gpu/gpu_host_messages.h"
 #include "content/common/gpu/gpu_messages.h"
+#include "content/common/gpu/media_messages.h"
 #include "content/common/indexed_db/indexed_db_messages.h"
 #include "content/common/input_messages.h"
 #include "content/common/manifest_manager_messages.h"
@@ -36,13 +38,13 @@
 #include "content/common/media/audio_messages.h"
 // TODO(xhwang): Move this to a new ifdef block.
 #include "content/common/media/cdm_messages.h"
+#include "content/common/media/media_player_delegate_messages.h"
 #include "content/common/media/media_stream_messages.h"
 #include "content/common/media/media_stream_track_metrics_host_messages.h"
 #include "content/common/media/midi_messages.h"
 #include "content/common/media/peer_connection_tracker_messages.h"
 #include "content/common/media/video_capture_messages.h"
 #include "content/common/media/webrtc_identity_messages.h"
-#include "content/common/memory_benchmark_messages.h"
 #include "content/common/memory_messages.h"
 #include "content/common/message_port_messages.h"
 #include "content/common/mime_registry_messages.h"
@@ -74,6 +76,7 @@
 #include "content/common/gin_java_bridge_messages.h"
 #include "content/common/media/media_player_messages_android.h"
 #include "content/common/media/media_session_messages_android.h"
+#include "content/common/media/surface_view_manager_messages_android.h"
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_WIN)

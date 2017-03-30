@@ -53,7 +53,8 @@ class TestAdvertisementObserver : public BluetoothAdvertisement::Observer {
 class BluetoothAdvertisementBlueZTest : public testing::Test {
  public:
   void SetUp() override {
-    bluez::BluezDBusManager::Initialize(NULL, true);
+    bluez::BluezDBusManager::Initialize(nullptr /* bus */,
+                                        true /* use_dbus_stub */);
 
     callback_count_ = 0;
     error_callback_count_ = 0;
@@ -79,6 +80,7 @@ class BluetoothAdvertisementBlueZTest : public testing::Test {
     BluetoothAdapterFactory::GetAdapter(
         base::Bind(&BluetoothAdvertisementBlueZTest::GetAdapterCallback,
                    base::Unretained(this)));
+    base::MessageLoop::current()->Run();
   }
 
   // Called whenever BluetoothAdapter is retrieved successfully.
@@ -86,6 +88,10 @@ class BluetoothAdvertisementBlueZTest : public testing::Test {
     adapter_ = adapter;
     ASSERT_NE(adapter_.get(), nullptr);
     ASSERT_TRUE(adapter_->IsInitialized());
+    if (base::MessageLoop::current() &&
+        base::MessageLoop::current()->is_running()) {
+      base::MessageLoop::current()->QuitWhenIdle();
+    }
   }
 
   scoped_ptr<BluetoothAdvertisement::Data> CreateAdvertisementData() {

@@ -3,6 +3,7 @@
 *.ncb
 *.opensdf
 *.orig
+*.pdb
 *.props
 *.pyc
 *.pyproj
@@ -97,6 +98,7 @@ vs-chromium-project.txt
 /chrome/browser/protector/internal
 /chrome/browser/resources/chromeos/quickoffice
 /chrome/browser/resources/pdf/html_office
+/chrome/browser/resources/media_router_internal/
 /chrome/browser/resources/settings_internal/
 /chrome/browser/resources/software_rendering_list
 /chrome/browser/spellchecker/internal
@@ -179,9 +181,13 @@ vs-chromium-project.txt
 /googleurl
 /gpu/gles2_conform_test
 /gyp-mac-tool
+/infra/.recipe_deps
 /internal_gyp
 /ios/build/util/CANARY_VERSION
+/ios/third_party/fishhook/src
 /ios/third_party/gcdwebserver/src
+/ios/third_party/ochamcrest/src
+/ios_internal
 /llvm
 /media/cast/logging/cast_logging_proto_lib.xml
 /media/cdm/api
@@ -285,6 +291,7 @@ vs-chromium-project.txt
 /third_party/angle
 /third_party/angle_dx11
 /third_party/apache-mime4j
+/third_party/apache-portable-runtime/src
 /third_party/apache-win32/bin/*.exe
 /third_party/apache-win32/bin/*.dll
 /third_party/apache-win32/bin/iconv/*.so
@@ -338,6 +345,7 @@ vs-chromium-project.txt
 /third_party/junit/src
 /third_party/kasko
 /third_party/khronos_glcts
+/third_party/leakcanary/src
 /third_party/leveldatabase/src
 /third_party/leveldb
 /third_party/libc++-static/libc++.a
@@ -366,6 +374,8 @@ vs-chromium-project.txt
 /third_party/mocha
 /third_party/mockito/src
 /third_party/nacl_sdk_binaries/
+/third_party/netty-tcnative/src
+/third_party/netty4/src
 /third_party/nss
 /third_party/omaha/src/omaha
 /third_party/openmax_dl/
@@ -410,6 +420,7 @@ vs-chromium-project.txt
 /third_party/v4l2capture
 /third_party/wayland/src
 /third_party/wayland-protocols/src
+/third_party/wds/src
 /third_party/webdriver/pylib
 /third_party/webdriver/python/selenium
 /third_party/webgl

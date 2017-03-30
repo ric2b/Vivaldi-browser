@@ -71,6 +71,8 @@ class TestWindowTree : public mojom::WindowTree {
                      mojom::OrderDirection direction) override;
   void GetWindowTree(uint32_t window_id,
                      const GetWindowTreeCallback& callback) override;
+  void SetCapture(uint32_t change_id, uint32_t window_id) override;
+  void ReleaseCapture(uint32_t change_id, uint32_t window_id) override;
   void Embed(uint32_t window_id,
              mojom::WindowTreeClientPtr client,
              uint32_t policy_bitmask,
@@ -86,9 +88,9 @@ class TestWindowTree : public mojom::WindowTree {
                         bool visible,
                         mojo::TextInputStatePtr state) override;
   void OnWindowInputEventAck(uint32_t event_id) override;
-  void GetWindowManagerInternalClient(
-      mojo::AssociatedInterfaceRequest<mojom::WindowManagerInternalClient>
-          internal) override;
+  void GetWindowManagerClient(
+      mojo::AssociatedInterfaceRequest<mojom::WindowManagerClient> internal)
+      override;
 
   bool got_change_;
   uint32_t change_id_;

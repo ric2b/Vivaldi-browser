@@ -38,6 +38,7 @@
 #include "core/dom/XMLDocument.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/events/Event.h"
+#include "core/events/ProgressEvent.h"
 #include "core/fetch/CrossOriginAccessControl.h"
 #include "core/fetch/FetchInitiatorTypeNames.h"
 #include "core/fetch/FetchUtils.h"
@@ -46,8 +47,8 @@
 #include "core/fileapi/File.h"
 #include "core/fileapi/FileReaderLoader.h"
 #include "core/fileapi/FileReaderLoaderClient.h"
+#include "core/frame/Deprecation.h"
 #include "core/frame/Settings.h"
-#include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/FormData.h"
 #include "core/html/HTMLDocument.h"
@@ -59,10 +60,10 @@
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/streams/Stream.h"
-#include "core/xmlhttprequest/XMLHttpRequestProgressEvent.h"
 #include "core/xmlhttprequest/XMLHttpRequestUpload.h"
 #include "platform/FileMetadata.h"
 #include "platform/HTTPNames.h"
+#include "platform/Histogram.h"
 #include "platform/Logging.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
@@ -71,7 +72,6 @@
 #include "platform/network/ParsedContentType.h"
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceRequest.h"
-#include "public/platform/Platform.h"
 #include "public/platform/WebURLRequest.h"
 #include "wtf/Assertions.h"
 #include "wtf/StdLibExtras.h"
@@ -535,7 +535,7 @@ void XMLHttpRequest::setWithCredentials(bool value, ExceptionState& exceptionSta
     // FIXME: According to XMLHttpRequest Level 2 we should throw InvalidAccessError exception here.
     // However for time being only print warning message to warn web developers.
     if (!m_async)
-        UseCounter::countDeprecation(executionContext(), UseCounter::SyncXHRWithCredentials);
+        Deprecation::countDeprecation(executionContext(), UseCounter::SyncXHRWithCredentials);
 
     m_includeCredentials = value;
 }
@@ -608,7 +608,7 @@ void XMLHttpRequest::open(const AtomicString& method, const KURL& url, bool asyn
         // Refer : https://xhr.spec.whatwg.org/#sync-warning
         // Use count for XHR synchronous requests on main thread only.
         if (!document()->processingBeforeUnload())
-            UseCounter::countDeprecation(executionContext(), UseCounter::XMLHttpRequestSynchronousInNonWorkerOutsideBeforeUnload);
+            Deprecation::countDeprecation(executionContext(), UseCounter::XMLHttpRequestSynchronousInNonWorkerOutsideBeforeUnload);
     }
 
     m_method = FetchUtils::normalizeMethod(method);
@@ -863,7 +863,7 @@ void XMLHttpRequest::createRequest(PassRefPtr<EncodedFormData> httpBody, Excepti
         dispatchProgressEvent(EventTypeNames::loadstart, 0, 0);
         if (httpBody && m_upload) {
             uploadEvents = m_upload->hasEventListeners();
-            m_upload->dispatchEvent(XMLHttpRequestProgressEvent::create(EventTypeNames::loadstart));
+            m_upload->dispatchEvent(ProgressEvent::create(EventTypeNames::loadstart, false, 0, 0));
         }
     }
 
@@ -921,12 +921,9 @@ void XMLHttpRequest::createRequest(PassRefPtr<EncodedFormData> httpBody, Excepti
         if (m_upload)
             request.setReportUploadProgress(true);
 
-        // ThreadableLoader::create can return null here, for example if we're no longer attached to a page.
-        // This is true while running onunload handlers.
-        // FIXME: Maybe we need to be able to send XMLHttpRequests from onunload, <http://bugs.webkit.org/show_bug.cgi?id=10904>.
-        // FIXME: Maybe create() can return null for other reasons too?
         ASSERT(!m_loader);
-        m_loader = ThreadableLoader::create(executionContext, this, request, options, resourceLoaderOptions);
+        m_loader = ThreadableLoader::create(executionContext, this, options, resourceLoaderOptions);
+        m_loader->start(request);
 
         return;
     }
@@ -1206,7 +1203,8 @@ void XMLHttpRequest::setRequestHeaderInternal(const AtomicString& name, const At
     if (!normalizedValue.isEmpty() && !isValidHTTPFieldContentRFC7230(normalizedValue))
         headerValueCategory = HeaderValueInvalid;
 
-    Platform::current()->histogramEnumeration("Blink.XHR.setRequestHeader.HeaderValueCategoryInRFC7230", headerValueCategory, HeaderValueCategoryByRFC7230End);
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(EnumerationHistogram, headerValueCategoryHistogram, new EnumerationHistogram("Blink.XHR.setRequestHeader.HeaderValueCategoryInRFC7230", HeaderValueCategoryByRFC7230End));
+    headerValueCategoryHistogram.count(headerValueCategory);
 }
 
 const AtomicString& XMLHttpRequest::getRequestHeader(const AtomicString& name) const

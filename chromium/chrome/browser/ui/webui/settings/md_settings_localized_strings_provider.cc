@@ -39,11 +39,16 @@ namespace {
 const char kLocalizedStringsFile[] = "strings.js";
 
 void AddCommonStrings(content::WebUIDataSource* html_source) {
-  html_source->AddLocalizedString("basicPageTitle", IDS_SETTINGS_BASIC);
-  html_source->AddLocalizedString("advancedPageTitle", IDS_SETTINGS_ADVANCED);
-  html_source->AddLocalizedString("addLabel", IDS_ADD);
-  html_source->AddLocalizedString("learnMore", IDS_LEARN_MORE);
+  html_source->AddLocalizedString("add", IDS_ADD);
   html_source->AddLocalizedString("cancel", IDS_CANCEL);
+  html_source->AddLocalizedString("disable", IDS_DISABLE);
+  html_source->AddLocalizedString("learnMore", IDS_LEARN_MORE);
+  html_source->AddLocalizedString("ok", IDS_OK);
+  html_source->AddLocalizedString("save", IDS_SAVE);
+
+  html_source->AddLocalizedString("advancedPageTitle", IDS_SETTINGS_ADVANCED);
+  html_source->AddLocalizedString("basicPageTitle", IDS_SETTINGS_BASIC);
+  html_source->AddLocalizedString("settings", IDS_SETTINGS_SETTINGS);
 }
 
 #if defined(OS_CHROMEOS)
@@ -124,6 +129,8 @@ void AddAppearanceStrings(content::WebUIDataSource* html_source) {
       "themesGalleryUrl", IDS_THEMES_GALLERY_URL);
   html_source->AddLocalizedString(
       "chooseFromWebStore", IDS_SETTINGS_WEB_STORE);
+  html_source->AddLocalizedString(
+      "openWallpaperApp", IDS_SETTINGS_OPEN_WALLPAPER_APP);
 }
 
 #if defined(OS_CHROMEOS)
@@ -151,8 +158,6 @@ void AddBluetoothStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedString(
       "bluetoothRemove", IDS_SETTINGS_BLUETOOTH_REMOVE);
   html_source->AddLocalizedString(
-      "bluetoothCancel", IDS_OPTIONS_SETTINGS_BLUETOOTH_CANCEL);
-  html_source->AddLocalizedString(
       "bluetoothScanning", IDS_OPTIONS_SETTINGS_BLUETOOTH_SCANNING);
   html_source->AddLocalizedString(
       "bluetoothAccept", IDS_OPTIONS_SETTINGS_BLUETOOTH_ACCEPT_PASSKEY);
@@ -160,8 +165,6 @@ void AddBluetoothStrings(content::WebUIDataSource* html_source) {
       "bluetoothReject", IDS_OPTIONS_SETTINGS_BLUETOOTH_REJECT_PASSKEY);
   html_source->AddLocalizedString(
       "bluetoothConnect", IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT);
-  html_source->AddLocalizedString(
-      "bluetoothCancel", IDS_OPTIONS_SETTINGS_BLUETOOTH_CANCEL);
   html_source->AddLocalizedString(
       "bluetoothDismiss", IDS_OPTIONS_SETTINGS_BLUETOOTH_DISMISS_ERROR);
 
@@ -271,8 +274,6 @@ void AddDefaultBrowserStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedString(
       "defaultBrowserDefault", IDS_SETTINGS_DEFAULT_BROWSER_DEFAULT);
   html_source->AddLocalizedString(
-      "defaultBrowserNotDefault", IDS_SETTINGS_DEFAULT_BROWSER_NOT_DEFAULT);
-  html_source->AddLocalizedString(
       "defaultBrowserMakeDefault", IDS_SETTINGS_DEFAULT_BROWSER_MAKE_DEFAULT);
   html_source->AddLocalizedString(
       "defaultBrowserUnknown", IDS_SETTINGS_DEFAULT_BROWSER_UNKNOWN);
@@ -280,6 +281,29 @@ void AddDefaultBrowserStrings(content::WebUIDataSource* html_source) {
       "defaultBrowserSecondary", IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY);
   html_source->AddLocalizedString(
       "unableToSetDefaultBrowser", IDS_SETTINGS_DEFAULT_BROWSER_ERROR);
+}
+#endif
+
+#if defined(OS_CHROMEOS)
+void AddDeviceStrings(content::WebUIDataSource* html_source) {
+  html_source->AddLocalizedString(
+      "devicePageTitle", IDS_SETTINGS_DEVICE_TITLE);
+  html_source->AddLocalizedString(
+      "touchpadTitle", IDS_SETTINGS_TOUCHPAD_TITLE);
+  html_source->AddLocalizedString(
+      "touchpadTapToClickEnabledLabel",
+      IDS_SETTINGS_TOUCHPAD_TAP_TO_CLICK_ENABLED_LABEL);
+  html_source->AddLocalizedString(
+      "scrollLabel", IDS_SETTINGS_SCROLL_LABEL);
+  html_source->AddString(
+      "naturalScrollLabel",
+      l10n_util::GetStringFUTF16(
+        IDS_SETTINGS_NATURAL_SCROLL_LABEL,
+        base::ASCIIToUTF16(chrome::kNaturalScrollHelpURL)));
+  html_source->AddLocalizedString(
+      "traditionalScrollLabel", IDS_SETTINGS_TRADITIONAL_SCROLL_LABEL);
+  html_source->AddLocalizedString(
+      "keyboardTitle", IDS_SETTINGS_KEYBOARD_TITLE);
 }
 #endif
 
@@ -292,6 +316,8 @@ void AddDownloadsStrings(content::WebUIDataSource* html_source) {
       "changeDownloadLocation", IDS_SETTINGS_CHANGE_DOWNLOAD_LOCATION);
   html_source->AddLocalizedString(
       "promptForDownload", IDS_SETTINGS_PROMPT_FOR_DOWNLOAD);
+  html_source->AddLocalizedString(
+      "disconnectGoogleDriveAccount", IDS_SETTINGS_DISCONNECT_GOOGLE_DRIVE);
 }
 
 void AddResetStrings(content::WebUIDataSource* html_source) {
@@ -485,6 +511,10 @@ void AddPasswordsAndFormsStrings(content::WebUIDataSource* html_source) {
                                   IDS_SETTINGS_PASSWORDS_DETAIL);
   html_source->AddLocalizedString("savedPasswordsHeading",
                                   IDS_SETTINGS_PASSWORDS_SAVED_HEADING);
+  html_source->AddLocalizedString("passwordExceptionsHeading",
+                                  IDS_SETTINGS_PASSWORDS_EXCEPTIONS_HEADING);
+  html_source->AddLocalizedString("deletePasswordException",
+                                  IDS_SETTINGS_PASSWORDS_DELETE_EXCEPTION);
 }
 
 void AddPeopleStrings(content::WebUIDataSource* html_source) {
@@ -492,6 +522,8 @@ void AddPeopleStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedString("manageOtherPeople",
                                   IDS_SETTINGS_PEOPLE_MANAGE_OTHER_PEOPLE);
 #if defined(OS_CHROMEOS)
+  html_source->AddLocalizedString("enableScreenlock",
+                                  IDS_SETTINGS_PEOPLE_ENABLE_SCREENLOCK);
   html_source->AddLocalizedString("changePictureTitle",
                                   IDS_SETTINGS_CHANGE_PICTURE_DIALOG_TITLE);
   html_source->AddLocalizedString("changePicturePageDescription",
@@ -506,6 +538,8 @@ void AddPeopleStrings(content::WebUIDataSource* html_source) {
                                   IDS_SETTINGS_CHANGE_PICTURE_CHOOSE_FILE);
   html_source->AddLocalizedString("profilePhoto",
                                   IDS_SETTINGS_CHANGE_PICTURE_PROFILE_PHOTO);
+  html_source->AddLocalizedString("oldPhoto",
+                                  IDS_SETTINGS_CHANGE_PICTURE_OLD_PHOTO);
   html_source->AddLocalizedString(
       "profilePhotoLoading", IDS_SETTINGS_CHANGE_PICTURE_PROFILE_LOADING_PHOTO);
   html_source->AddLocalizedString("previewAltText",
@@ -585,10 +619,6 @@ void AddPeopleStrings(content::WebUIDataSource* html_source) {
       IDS_SETTINGS_ENCRYPT_WITH_SYNC_PASSPHRASE_LEARN_MORE_LINK);
   html_source->AddLocalizedString("useDefaultSettingsButton",
                                   IDS_SETTINGS_USE_DEFAULT_SETTINGS_BUTTON);
-  // TODO(dpapad): Remove this string and use IDS_CANCEL (see AddCommonStrings
-  // at the top of this file).
-  html_source->AddLocalizedString("cancelButton", IDS_SETTINGS_CANCEL_BUTTON);
-  html_source->AddLocalizedString("okButton", IDS_SETTINGS_OK_BUTTON);
   html_source->AddLocalizedString("passphraseExplanationText",
                                   IDS_SETTINGS_PASSPHRASE_EXPLANATION_TEXT);
   html_source->AddLocalizedString("emptyPassphraseError",
@@ -649,8 +679,9 @@ void AddSearchStrings(content::WebUIDataSource* html_source) {
                                   IDS_SETTINGS_SEARCH);
   html_source->AddLocalizedString("searchExplanation",
                                   IDS_SETTINGS_SEARCH_EXPLANATION);
-  html_source->AddLocalizedString("searchManageButtonLabel",
-                                  IDS_SETTINGS_SEARCH_MANAGE_BUTTON_LABEL);
+  html_source->AddLocalizedString(
+      "searchEnginesManage",
+      IDS_SETTINGS_SEARCH_MANAGE_SEARCH_ENGINES);
   html_source->AddLocalizedString("searchOkGoogleLabel",
                                   IDS_SETTINGS_SEARCH_OK_GOOGLE_LABEL);
   html_source->AddLocalizedString(
@@ -665,26 +696,52 @@ void AddSearchEnginesStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedString("searchEnginesPageTitle",
                                   IDS_SETTINGS_SEARCH_ENGINES);
   html_source->AddLocalizedString(
-      "searchEnginesAddSearchEngineLabel",
-      IDS_SETTINGS_SEARCH_ENGINES_ADD_SEARCH_ENGINE_LABEL);
-  html_source->AddLocalizedString("searchEnginesLabel",
-                                  IDS_SETTINGS_SEARCH_ENGINES_LABEL);
+      "searchEnginesAddSearchEngine",
+      IDS_SETTINGS_SEARCH_ENGINES_ADD_SEARCH_ENGINE);
   html_source->AddLocalizedString(
-      "searchEnginesOtherLabel",
-      IDS_SETTINGS_SEARCH_ENGINES_OTHER_ENGINES_LABEL);
-  html_source->AddLocalizedString("searchEnginesDomainLabel",
-                                  IDS_SETTINGS_SEARCH_ENGINES_DOMAIN_LABEL);
-  html_source->AddLocalizedString("searchEnginesKeywordLabel",
-                                  IDS_SETTINGS_SEARCH_ENGINES_KEYWORD_LABEL);
-  html_source->AddLocalizedString("searchEnginesQueryURLLabel",
-                                  IDS_SETTINGS_SEARCH_ENGINES_QUERY_URL_LABEL);
-  html_source->AddLocalizedString("searchEnginesAddButtonLabel",
-                                  IDS_SETTINGS_SEARCH_ENGINES_ADD_BUTTON_LABEL);
+      "searchEnginesEditSearchEngine",
+      IDS_SETTINGS_SEARCH_ENGINES_EDIT_SEARCH_ENGINE);
+  html_source->AddLocalizedString(
+      "searchEnginesNotValid",
+      IDS_SETTINGS_SEARCH_ENGINES_NOT_VALID);
+  html_source->AddLocalizedString("searchEngines",
+                                  IDS_SETTINGS_SEARCH_ENGINES);
+  html_source->AddLocalizedString(
+      "searchEnginesDefault",
+      IDS_SETTINGS_SEARCH_ENGINES_DEFAULT_ENGINES);
+  html_source->AddLocalizedString(
+      "searchEnginesOther",
+      IDS_SETTINGS_SEARCH_ENGINES_OTHER_ENGINES);
+  html_source->AddLocalizedString(
+      "searchEnginesExtension",
+      IDS_SETTINGS_SEARCH_ENGINES_EXTENSION_ENGINES);
+  html_source->AddLocalizedString(
+      "searchEnginesSearchEngine",
+      IDS_SETTINGS_SEARCH_ENGINES_SEARCH_ENGINE);
+  html_source->AddLocalizedString("searchEnginesKeyword",
+                                  IDS_SETTINGS_SEARCH_ENGINES_KEYWORD);
+  html_source->AddLocalizedString("searchEnginesQueryURL",
+                                  IDS_SETTINGS_SEARCH_ENGINES_QUERY_URL);
+  html_source->AddLocalizedString(
+      "searchEnginesQueryURLExplanation",
+      IDS_SETTINGS_SEARCH_ENGINES_QUERY_URL_EXPLANATION);
+  html_source->AddLocalizedString(
+      "searchEnginesMakeDefault", IDS_SETTINGS_SEARCH_ENGINES_MAKE_DEFAULT);
+  html_source->AddLocalizedString(
+      "searchEnginesEdit", IDS_SETTINGS_SEARCH_ENGINES_EDIT);
+  html_source->AddLocalizedString(
+      "searchEnginesRemoveFromList",
+      IDS_SETTINGS_SEARCH_ENGINES_REMOVE_FROM_LIST);
+  html_source->AddLocalizedString(
+      "searchEnginesManageExtension",
+      IDS_SETTINGS_SEARCH_ENGINES_MANAGE_EXTENSION);
 }
 
 void AddSiteSettingsStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedString("siteSettingsCategoryPageTitle",
                                   IDS_SETTINGS_SITE_SETTINGS_CATEGORY);
+  html_source->AddLocalizedString("siteSettingsCategoryAllSites",
+                                  IDS_SETTINGS_SITE_SETTINGS_ALL_SITES);
   html_source->AddLocalizedString("siteSettingsCategoryCamera",
                                   IDS_SETTINGS_SITE_SETTINGS_CAMERA);
   html_source->AddLocalizedString("siteSettingsCategoryCookies",
@@ -877,6 +934,9 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source,
   AddDefaultBrowserStrings(html_source);
 #endif
   AddDateTimeStrings(html_source);
+#if defined(OS_CHROMEOS)
+  AddDeviceStrings(html_source);
+#endif
   AddDownloadsStrings(html_source);
 #if defined(OS_CHROMEOS)
   AddInternetStrings(html_source);

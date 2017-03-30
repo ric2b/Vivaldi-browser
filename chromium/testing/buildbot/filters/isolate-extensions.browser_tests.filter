@@ -1,9 +1,4 @@
-# crbug.com/417518: Get tests working with --site-per-process
--WebNavigationApiTest.*
+# List below tests to be excluded from running.
 
-# crbug.com/574997: Navigating to a file: URL for a non-existing dir.
--SSLUITest.TestMarkNonSecureAs
-
-# crbug.com/568710: Some PhishingClassifierDelegateTest are not compatible
-# with out-of-process iframes:
--PhishingClassifierDelegateTest.*
+# crbug.com/589177: ProcessManagerBrowserTest.FrameClassification is flaky with --site-per-process
+-ProcessManagerBrowserTest.FrameClassification

@@ -157,6 +157,29 @@ WebInspector.CompilerScriptMapping.prototype = {
     },
 
     /**
+     * @param {!WebInspector.Script} script
+     * @return {?WebInspector.SourceMap}
+     */
+    sourceMapForScript: function(script)
+    {
+        return this._sourceMapForScriptId[script.scriptId];
+    },
+
+    /**
+     * @param {!WebInspector.Script} script
+     */
+    maybeLoadSourceMap: function(script)
+    {
+        if (!script.sourceMapURL)
+            return;
+        if (this._pendingSourceMapLoadingCallbacks[script.sourceMapURL])
+            return;
+        if (this._sourceMapForScriptId[script.scriptId])
+            return;
+        this._processScript(script);
+    },
+
+    /**
      * @param {!WebInspector.Event} event
      */
     _sourceMapURLAdded: function(event)
@@ -172,6 +195,8 @@ WebInspector.CompilerScriptMapping.prototype = {
      */
     _processScript: function(script)
     {
+        if (WebInspector.blackboxManager.isBlackboxedURL(script.sourceURL, script.isContentScript()))
+            return;
         // Create stub UISourceCode for the time source mapping is being loaded.
         var stubUISourceCode = this._stubProject.addContentProvider(script.sourceURL, new WebInspector.StaticContentProvider(WebInspector.resourceTypes.Script, "\n\n\n\n\n// Please wait a bit.\n// Compiled script is not shown while source map is being loaded!", script.sourceURL));
         this._stubUISourceCodes.set(script.scriptId, stubUISourceCode);
@@ -187,6 +212,8 @@ WebInspector.CompilerScriptMapping.prototype = {
      */
     _sourceMapLoaded: function(script, uiSourceCodePath, sourceMap)
     {
+        WebInspector.blackboxManager.sourceMapLoaded(script, sourceMap);
+
         this._stubUISourceCodes.delete(script.scriptId);
         this._stubProject.removeFile(uiSourceCodePath);
 

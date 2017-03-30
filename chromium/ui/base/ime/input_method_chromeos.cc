@@ -57,17 +57,6 @@ InputMethodChromeOS::~InputMethodChromeOS() {
     ui::IMEBridge::Get()->SetInputContextHandler(NULL);
 }
 
-void InputMethodChromeOS::OnFocus() {
-  InputMethodBase::OnFocus();
-  OnTextInputTypeChanged(GetTextInputClient());
-}
-
-void InputMethodChromeOS::OnBlur() {
-  ConfirmCompositionText();
-  InputMethodBase::OnBlur();
-  OnTextInputTypeChanged(GetTextInputClient());
-}
-
 bool InputMethodChromeOS::OnUntranslatedIMEMessage(
     const base::NativeEvent& event,
     NativeEventResult* result) {
@@ -180,33 +169,24 @@ void InputMethodChromeOS::OnCaretBoundsChanged(const TextInputClient* client) {
   // The current text input type should not be NONE if |context_| is focused.
   DCHECK(client == GetTextInputClient());
   DCHECK(!IsTextInputTypeNone());
-  const gfx::Rect caret_rect = client->GetCaretBounds();
 
-  gfx::Rect composition_head;
-  std::vector<gfx::Rect> rects;
-  if (client->HasCompositionText()) {
-    uint32_t i = 0;
-    gfx::Rect rect;
-    while (client->GetCompositionCharacterBounds(i++, &rect))
-      rects.push_back(rect);
-  }
-
-  // Pepper don't support composition bounds, so fallback to caret bounds to
-  // avoid bad user experience (the IME window moved to upper left corner).
-  // For case of no composition at present, also use caret bounds which is
-  // required by the IME extension for certain features (e.g. physical keyboard
-  // autocorrect).
-  if (rects.empty())
-    rects.push_back(caret_rect);
-
-  composition_head = rects[0];
   if (GetEngine())
-    GetEngine()->SetCompositionBounds(rects);
+    GetEngine()->SetCompositionBounds(GetCompositionBounds(client));
 
   chromeos::IMECandidateWindowHandlerInterface* candidate_window =
       ui::IMEBridge::Get()->GetCandidateWindowHandler();
   if (!candidate_window)
     return;
+
+  const gfx::Rect caret_rect = client->GetCaretBounds();
+
+  // Pepper doesn't support composition bounds, so fall back to caret bounds to
+  // avoid a bad user experience (the IME window moved to upper left corner).
+  gfx::Rect composition_head;
+  if (client->HasCompositionText())
+    client->GetCompositionCharacterBounds(0, &composition_head);
+  else
+    composition_head = caret_rect;
   candidate_window->SetCursorBounds(caret_rect, composition_head);
 
   gfx::Range text_range;
@@ -457,14 +437,6 @@ bool InputMethodChromeOS::NeedInsertChar() const {
 
 bool InputMethodChromeOS::HasInputMethodResult() const {
   return result_text_.length() || composition_changed_;
-}
-
-bool InputMethodChromeOS::SendFakeProcessKeyEvent(bool pressed) const {
-  KeyEvent evt(pressed ? ET_KEY_PRESSED : ET_KEY_RELEASED,
-               pressed ? VKEY_PROCESSKEY : VKEY_UNKNOWN,
-               EF_IME_FABRICATED_KEY);
-  ignore_result(DispatchKeyEventPostIME(&evt));
-  return evt.stopped_propagation();
 }
 
 void InputMethodChromeOS::CommitText(const std::string& text) {

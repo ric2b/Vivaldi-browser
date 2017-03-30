@@ -117,8 +117,8 @@ class EmptyUndoDelegate : public BookmarkUndoDelegate {
 
 // BookmarkModel --------------------------------------------------------------
 
-BookmarkModel::BookmarkModel(BookmarkClient* client)
-    : client_(client),
+BookmarkModel::BookmarkModel(scoped_ptr<BookmarkClient> client)
+    : client_(std::move(client)),
       loaded_(false),
       root_(GURL()),
       bookmark_bar_node_(NULL),
@@ -133,6 +133,7 @@ BookmarkModel::BookmarkModel(BookmarkClient* client)
       undo_delegate_(nullptr),
       empty_undo_delegate_(new EmptyUndoDelegate) {
   DCHECK(client_);
+  client_->Init(this);
 }
 
 BookmarkModel::~BookmarkModel() {
@@ -665,9 +666,9 @@ const BookmarkNode* BookmarkModel::AddURL(const BookmarkNode* parent,
                                           int index,
                                           const base::string16& title,
                                           const GURL& url) {
-  return vivAddURL(parent,index,title, url, base::UTF8ToUTF16(""),base::UTF8ToUTF16(""),base::UTF8ToUTF16(""),false);
+  return vivAddURL(parent, index, title, url, base::UTF8ToUTF16(""),
+                   base::UTF8ToUTF16(""), base::UTF8ToUTF16(""), false);
 }
-
 
 const BookmarkNode* BookmarkModel::vivAddURL(const BookmarkNode* parent,
                                           int index,
@@ -947,7 +948,7 @@ void BookmarkModel::DoneLoading(scoped_ptr<BookmarkLoadDetails> details) {
 
   std::stable_sort(root_children.begin(),
                    root_children.end(),
-                   VisibilityComparator(client_));
+                   VisibilityComparator(client_.get()));
   for (size_t i = 0; i < root_children.size(); ++i)
     root_.Add(root_children[i], static_cast<int>(i));
 
@@ -1201,7 +1202,7 @@ scoped_ptr<BookmarkLoadDetails> BookmarkModel::CreateLoadDetails(
       mobile_node,
       trash_node,
       client_->GetLoadExtraNodesCallback(),
-      new BookmarkIndex(client_, accept_languages),
+      new BookmarkIndex(client_.get(), accept_languages),
       next_node_id_));
 }
 

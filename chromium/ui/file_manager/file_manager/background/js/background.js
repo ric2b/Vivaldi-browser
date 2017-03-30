@@ -290,15 +290,16 @@ var FILE_MANAGER_WINDOW_CREATE_OPTIONS = {
   bounds: {
     left: Math.round(window.screen.availWidth * 0.1),
     top: Math.round(window.screen.availHeight * 0.1),
-    width: Math.round(window.screen.availWidth * 0.8),
-    height: Math.round(window.screen.availHeight * 0.8)
+    // We choose 1000px as default window width to fit 4 columns in grid view,
+    // as long as the width doesn't exceed 80% of the screen width.
+    width: Math.min(Math.round(window.screen.availWidth * 0.8), 1000),
+    height: Math.min(Math.round(window.screen.availHeight * 0.8), 600)
   },
   frame: {
     color: '#1976d2'
   },
   minWidth: 480,
-  minHeight: 300,
-  hidden: true
+  minHeight: 300
 };
 
 /**

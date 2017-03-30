@@ -28,8 +28,9 @@ WebInspector.DevicesSettingsTab = function()
     this._list.show(this.containerElement);
 
     this._muteUpdate = false;
-    WebInspector.emulatedDevicesList.addEventListener(WebInspector.EmulatedDevicesList.Events.CustomDevicesUpdated, this._devicesUpdated, this);
-    WebInspector.emulatedDevicesList.addEventListener(WebInspector.EmulatedDevicesList.Events.StandardDevicesUpdated, this._devicesUpdated, this);
+    this._emulatedDevicesList = WebInspector.EmulatedDevicesList.instance();
+    this._emulatedDevicesList.addEventListener(WebInspector.EmulatedDevicesList.Events.CustomDevicesUpdated, this._devicesUpdated, this);
+    this._emulatedDevicesList.addEventListener(WebInspector.EmulatedDevicesList.Events.StandardDevicesUpdated, this._devicesUpdated, this);
 
     this.setDefaultFocusedElement(this._addCustomButton);
 }
@@ -48,13 +49,13 @@ WebInspector.DevicesSettingsTab.prototype = {
 
         this._list.clear();
 
-        var devices = WebInspector.emulatedDevicesList.custom().slice();
+        var devices = this._emulatedDevicesList.custom().slice();
         for (var i = 0; i < devices.length; ++i)
             this._list.appendItem(devices[i], true);
 
         this._list.appendSeparator();
 
-        devices = WebInspector.emulatedDevicesList.standard().slice();
+        devices = this._emulatedDevicesList.standard().slice();
         devices.sort(WebInspector.EmulatedDevice.deviceComparator);
         for (var i = 0; i < devices.length; ++i)
             this._list.appendItem(devices[i], false);
@@ -67,9 +68,9 @@ WebInspector.DevicesSettingsTab.prototype = {
     {
         this._muteUpdate = true;
         if (custom)
-            WebInspector.emulatedDevicesList.saveCustomDevices();
+            this._emulatedDevicesList.saveCustomDevices();
         else
-            WebInspector.emulatedDevicesList.saveStandardDevices();
+            this._emulatedDevicesList.saveStandardDevices();
         this._muteUpdate = false;
     },
 
@@ -77,7 +78,11 @@ WebInspector.DevicesSettingsTab.prototype = {
     {
         var device = new WebInspector.EmulatedDevice();
         device.deviceScaleFactor = 0;
-        this._list.addNewItem(WebInspector.emulatedDevicesList.custom().length, device);
+        device.horizontal.width = 700;
+        device.horizontal.height = 400;
+        device.vertical.width = 400;
+        device.vertical.height = 700;
+        this._list.addNewItem(this._emulatedDevicesList.custom().length, device);
     },
 
     /**
@@ -127,7 +132,7 @@ WebInspector.DevicesSettingsTab.prototype = {
      */
     removeItemRequested: function(item, index)
     {
-        WebInspector.emulatedDevicesList.removeCustomDevice(/** @type {!WebInspector.EmulatedDevice} */ (item));
+        this._emulatedDevicesList.removeCustomDevice(/** @type {!WebInspector.EmulatedDevice} */ (item));
     },
 
     /**
@@ -149,11 +154,16 @@ WebInspector.DevicesSettingsTab.prototype = {
         device.modes = [];
         device.modes.push({title: "", orientation: WebInspector.EmulatedDevice.Vertical, insets: new Insets(0, 0, 0, 0), images: null});
         device.modes.push({title: "", orientation: WebInspector.EmulatedDevice.Horizontal, insets: new Insets(0, 0, 0, 0), images: null});
-
+        device.capabilities = [];
+        var uaType = editor.control("ua-type").value;
+        if (uaType === WebInspector.DeviceModeModel.UA.Mobile || uaType === WebInspector.DeviceModeModel.UA.MobileNoTouch)
+            device.capabilities.push(WebInspector.EmulatedDevice.Capability.Mobile);
+        if (uaType === WebInspector.DeviceModeModel.UA.Mobile || uaType === WebInspector.DeviceModeModel.UA.DesktopTouch)
+            device.capabilities.push(WebInspector.EmulatedDevice.Capability.Touch);
         if (isNew)
-            WebInspector.emulatedDevicesList.addCustomDevice(device);
+            this._emulatedDevicesList.addCustomDevice(device);
         else
-            WebInspector.emulatedDevicesList.saveCustomDevices();
+            this._emulatedDevicesList.saveCustomDevices();
         this._addCustomButton.scrollIntoViewIfNeeded();
         this._addCustomButton.focus();
     },
@@ -172,6 +182,12 @@ WebInspector.DevicesSettingsTab.prototype = {
         editor.control("height").value = this._toNumericInputValue(device.vertical.height);
         editor.control("scale").value = this._toNumericInputValue(device.deviceScaleFactor);
         editor.control("user-agent").value = device.userAgent;
+        var uaType;
+        if (device.mobile())
+            uaType = device.touch() ? WebInspector.DeviceModeModel.UA.Mobile : WebInspector.DeviceModeModel.UA.MobileNoTouch;
+        else
+            uaType = device.touch() ? WebInspector.DeviceModeModel.UA.DesktopTouch : WebInspector.DeviceModeModel.UA.Desktop;
+        editor.control("ua-type").value = uaType;
         return editor;
     },
 
@@ -188,16 +204,18 @@ WebInspector.DevicesSettingsTab.prototype = {
         var content = editor.contentElement();
 
         var fields = content.createChild("div", "devices-edit-fields");
-        fields.appendChild(editor.createInput("title", "text", WebInspector.UIString("Device name"), titleValidator));
+        fields.createChild("div", "hbox").appendChild(editor.createInput("title", "text", WebInspector.UIString("Device name"), titleValidator));
         var screen = fields.createChild("div", "hbox");
-        var width = editor.createInput("width", "text", WebInspector.UIString("Width"), sizeValidator);
-        width.classList.add("device-edit-small");
-        screen.appendChild(width);
-        var height = editor.createInput("height", "text", WebInspector.UIString("height"), sizeValidator);
-        height.classList.add("device-edit-small");
-        screen.appendChild(height);
-        screen.appendChild(editor.createInput("scale", "text", WebInspector.UIString("Device pixel ratio"), scaleValidator));
-        fields.appendChild(editor.createInput("user-agent", "text", WebInspector.UIString("User agent string"), userAgentValidator));
+        screen.appendChild(editor.createInput("width", "text", WebInspector.UIString("Width"), sizeValidator));
+        screen.appendChild(editor.createInput("height", "text", WebInspector.UIString("height"), sizeValidator));
+        var dpr = editor.createInput("scale", "text", WebInspector.UIString("Device pixel ratio"), scaleValidator);
+        dpr.classList.add("device-edit-fixed");
+        screen.appendChild(dpr);
+        var ua = fields.createChild("div", "hbox");
+        ua.appendChild(editor.createInput("user-agent", "text", WebInspector.UIString("User agent string"), () => true));
+        var uaType = editor.createSelect("ua-type", [WebInspector.DeviceModeModel.UA.Mobile, WebInspector.DeviceModeModel.UA.MobileNoTouch, WebInspector.DeviceModeModel.UA.Desktop, WebInspector.DeviceModeModel.UA.DesktopTouch], () => true);
+        uaType.classList.add("device-edit-fixed");
+        ua.appendChild(uaType);
 
         return editor;
 
@@ -221,7 +239,7 @@ WebInspector.DevicesSettingsTab.prototype = {
          */
         function sizeValidator(item, index, input)
         {
-            return !WebInspector.OverridesSupport.deviceSizeValidator(input.value);
+            return WebInspector.DeviceModeModel.deviceSizeValidator(input.value);
         }
 
         /**
@@ -232,18 +250,7 @@ WebInspector.DevicesSettingsTab.prototype = {
          */
         function scaleValidator(item, index, input)
         {
-            return !WebInspector.OverridesSupport.deviceScaleFactorValidator(input.value);
-        }
-
-        /**
-         * @param {*} item
-         * @param {number} index
-         * @param {!HTMLInputElement|!HTMLSelectElement} input
-         * @return {boolean}
-         */
-        function userAgentValidator(item, index, input)
-        {
-            return true;
+            return WebInspector.DeviceModeModel.deviceScaleFactorValidator(input.value);
         }
     },
 

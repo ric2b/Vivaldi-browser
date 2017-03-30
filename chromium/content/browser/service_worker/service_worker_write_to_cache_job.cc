@@ -13,6 +13,7 @@
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_disk_cache.h"
 #include "content/browser/service_worker/service_worker_metrics.h"
+#include "content/common/net/url_request_service_worker_data.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "net/base/io_buffer.h"
@@ -41,16 +42,10 @@ const char kRedirectError[] =
     "The script resource is behind a redirect, which is disallowed.";
 const char kServiceWorkerAllowed[] = "Service-Worker-Allowed";
 
-// The net error code used when the job fails the update attempt because the new
-// script is byte-by-byte identical to the incumbent script. This error is shown
-// in DevTools and in netlog, so we want something obscure enough that it won't
-// conflict with a legitimate network error, and not too alarming if seen by
-// developers.
-// TODO(falken): Redesign this class so we don't have to fail at the network
-// stack layer just to cancel the update.
-const net::Error kIdenticalScriptError = net::ERR_FILE_EXISTS;
-
 }  // namespace
+
+const net::Error ServiceWorkerWriteToCacheJob::kIdenticalScriptError =
+    net::ERR_FILE_EXISTS;
 
 ServiceWorkerWriteToCacheJob::ServiceWorkerWriteToCacheJob(
     net::URLRequest* request,
@@ -190,6 +185,8 @@ void ServiceWorkerWriteToCacheJob::InitNetRequest(
       request()->first_party_for_cookies());
   net_request_->set_initiator(request()->initiator());
   net_request_->SetReferrer(request()->referrer());
+  net_request_->SetUserData(URLRequestServiceWorkerData::kUserDataKey,
+                            new URLRequestServiceWorkerData());
   if (extra_load_flags)
     net_request_->SetLoadFlags(net_request_->load_flags() | extra_load_flags);
 
@@ -337,8 +334,10 @@ void ServiceWorkerWriteToCacheJob::OnResponseStarted(
     version_->SetMainScriptHttpResponseInfo(net_request_->response_info());
   }
 
-  if (net_request_->response_info().network_accessed)
+  if (net_request_->response_info().network_accessed &&
+      !(net_request_->response_info().was_cached)) {
     version_->embedded_worker()->OnNetworkAccessedForScriptLoad();
+  }
 
   http_info_.reset(new net::HttpResponseInfo(net_request_->response_info()));
   scoped_refptr<HttpResponseInfoIOBuffer> info_buffer =
@@ -361,12 +360,10 @@ void ServiceWorkerWriteToCacheJob::OnWriteHeadersComplete(net::Error error) {
     NotifyStartError(net::URLRequestStatus::FromError(error));
     return;
   }
-  SetStatus(net::URLRequestStatus());
   NotifyHeadersComplete();
 }
 
 void ServiceWorkerWriteToCacheJob::OnWriteDataComplete(net::Error error) {
-  SetStatus(net::URLRequestStatus::FromError(error));
   DCHECK_NE(net::ERR_IO_PENDING, error);
   if (io_buffer_bytes_ == 0)
     error = NotifyFinishedCaching(net::URLRequestStatus::FromError(error), "");
@@ -448,7 +445,6 @@ void ServiceWorkerWriteToCacheJob::NotifyStartErrorHelper(
   net::URLRequestStatus reported_status = status;
   std::string reported_status_message = status_message;
 
-  SetStatus(reported_status);
   NotifyStartError(reported_status);
 }
 
@@ -469,8 +465,7 @@ net::Error ServiceWorkerWriteToCacheJob::NotifyFinishedCaching(
   // exists.
   if (status.status() == net::URLRequestStatus::SUCCESS &&
       !cache_writer_->did_replace()) {
-    result = kIdenticalScriptError;
-    status = net::URLRequestStatus::FromError(result);
+    status = net::URLRequestStatus::FromError(kIdenticalScriptError);
     version_->SetStartWorkerStatusCode(SERVICE_WORKER_ERROR_EXISTS);
     version_->script_cache_map()->NotifyFinishedCaching(url_, size, status,
                                                         std::string());
@@ -486,7 +481,7 @@ net::Error ServiceWorkerWriteToCacheJob::NotifyFinishedCaching(
 scoped_ptr<ServiceWorkerResponseReader>
 ServiceWorkerWriteToCacheJob::CreateCacheResponseReader() {
   if (incumbent_resource_id_ == kInvalidServiceWorkerResourceId ||
-      version_->skip_script_comparison()) {
+      !version_->pause_after_download()) {
     return nullptr;
   }
   return context_->storage()->CreateResponseReader(incumbent_resource_id_);

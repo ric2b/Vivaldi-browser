@@ -153,6 +153,27 @@ size_t RegisterChromeCrashKeys() {
     { kHungAudioThreadDetails, kSmallSize },
 #endif
     { kZeroEncodeDetails, kSmallSize },
+
+    // Temporary for http://crbug.com/575245.
+    { "swapout_frame_id", kSmallSize },
+    { "swapout_proxy_id", kSmallSize },
+    { "swapout_view_id", kSmallSize },
+    { "commit_frame_id", kSmallSize },
+    { "commit_proxy_id", kSmallSize },
+    { "commit_view_id", kSmallSize },
+    { "commit_main_render_frame_id", kSmallSize },
+    { "newproxy_proxy_id", kSmallSize },
+    { "newproxy_view_id", kSmallSize },
+    { "newproxy_opener_id", kSmallSize },
+    { "newproxy_parent_id", kSmallSize },
+    { "rvinit_view_id", kSmallSize },
+    { "rvinit_proxy_id", kSmallSize },
+    { "rvinit_main_frame_id", kSmallSize },
+    { "initrf_frame_id", kSmallSize },
+    { "initrf_proxy_id", kSmallSize },
+    { "initrf_view_id", kSmallSize },
+    { "initrf_main_frame_id", kSmallSize },
+    { "initrf_view_is_live", kSmallSize },
   };
 
   // This dynamic set of keys is used for sets of key value pairs when gathering

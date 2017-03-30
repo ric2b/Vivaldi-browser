@@ -9,6 +9,7 @@
 #include "components/mus/public/cpp/property_type_converters.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_property.h"
+#include "components/mus/public/cpp/window_tree_connection.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
 #include "ui/aura/client/default_capture_client.h"
 #include "ui/aura/client/window_tree_client.h"
@@ -29,6 +30,7 @@
 #include "ui/views/window/custom_frame_view.h"
 #include "ui/wm/core/base_focus_rules.h"
 #include "ui/wm/core/capture_controller.h"
+#include "ui/wm/core/default_screen_position_client.h"
 #include "ui/wm/core/focus_controller.h"
 
 DECLARE_WINDOW_PROPERTY_TYPE(mus::Window*);
@@ -37,6 +39,8 @@ namespace views {
 namespace {
 
 DEFINE_WINDOW_PROPERTY_KEY(mus::Window*, kMusWindow, nullptr);
+
+MUS_DEFINE_WINDOW_PROPERTY_KEY(NativeWidgetMus*, kNativeWidgetMusKey, nullptr);
 
 // TODO: figure out what this should be.
 class FocusRulesImpl : public wm::BaseFocusRules {
@@ -155,16 +159,15 @@ class ClientSideNonClientFrameView : public NonClientFrameView {
   DISALLOW_COPY_AND_ASSIGN(ClientSideNonClientFrameView);
 };
 
-mus::mojom::ResizeBehavior ResizeBehaviorFromDelegate(
-    WidgetDelegate* delegate) {
-  int32_t behavior = mus::mojom::RESIZE_BEHAVIOR_NONE;
+int ResizeBehaviorFromDelegate(WidgetDelegate* delegate) {
+  int32_t behavior = mus::mojom::kResizeBehaviorNone;
   if (delegate->CanResize())
-    behavior |= mus::mojom::RESIZE_BEHAVIOR_CAN_RESIZE;
+    behavior |= mus::mojom::kResizeBehaviorCanResize;
   if (delegate->CanMaximize())
-    behavior |= mus::mojom::RESIZE_BEHAVIOR_CAN_MAXIMIZE;
+    behavior |= mus::mojom::kResizeBehaviorCanMaximize;
   if (delegate->CanMinimize())
-    behavior |= mus::mojom::RESIZE_BEHAVIOR_CAN_MINIMIZE;
-  return static_cast<mus::mojom::ResizeBehavior>(behavior);
+    behavior |= mus::mojom::kResizeBehaviorCanMinimize;
+  return behavior;
 }
 
 }  // namespace
@@ -173,11 +176,10 @@ mus::mojom::ResizeBehavior ResizeBehaviorFromDelegate(
 // NativeWidgetMus, public:
 
 NativeWidgetMus::NativeWidgetMus(internal::NativeWidgetDelegate* delegate,
-                                 mojo::Shell* shell,
+                                 mojo::Connector* connector,
                                  mus::Window* window,
                                  mus::mojom::SurfaceType surface_type)
     : window_(window),
-      shell_(shell),
       native_widget_delegate_(delegate),
       surface_type_(surface_type),
       show_state_before_fullscreen_(ui::PLATFORM_WINDOW_STATE_UNKNOWN),
@@ -186,6 +188,23 @@ NativeWidgetMus::NativeWidgetMus(internal::NativeWidgetDelegate* delegate,
       close_widget_factory_(this) {
   // TODO(fsamuel): Figure out lifetime of |window_|.
   aura::SetMusWindow(content_, window_);
+
+  window->SetLocalProperty(kNativeWidgetMusKey, this);
+  // WindowTreeHost creates the compositor using the ContextFactory from
+  // aura::Env. Install |context_factory_| there so that |context_factory_| is
+  // picked up.
+  ui::ContextFactory* default_context_factory =
+      aura::Env::GetInstance()->context_factory();
+  // For Chrome, we need the GpuProcessTransportFactory so that renderer and
+  // browser pixels are composited into a single backing
+  // SoftwareOutputDeviceMus.
+  if (!default_context_factory) {
+    context_factory_.reset(
+        new SurfaceContextFactory(connector, window_, surface_type_));
+    aura::Env::GetInstance()->set_context_factory(context_factory_.get());
+  }
+  window_tree_host_.reset(new WindowTreeHostMus(connector, this, window_));
+  aura::Env::GetInstance()->set_context_factory(default_context_factory);
 }
 
 NativeWidgetMus::~NativeWidgetMus() {
@@ -193,6 +212,24 @@ NativeWidgetMus::~NativeWidgetMus() {
     delete native_widget_delegate_;
   else
     CloseNow();
+}
+
+// static
+void NativeWidgetMus::NotifyFrameChanged(
+    mus::WindowTreeConnection* connection) {
+  for (mus::Window* window : connection->GetRoots()) {
+    NativeWidgetMus* native_widget =
+        window->GetLocalProperty(kNativeWidgetMusKey);
+    if (native_widget && native_widget->GetWidget()->non_client_view()) {
+      native_widget->GetWidget()->non_client_view()->Layout();
+      native_widget->GetWidget()->non_client_view()->SchedulePaint();
+      native_widget->UpdateClientArea();
+    }
+  }
+}
+
+aura::Window* NativeWidgetMus::GetRootWindow() {
+  return window_tree_host_->window();
 }
 
 void NativeWidgetMus::OnPlatformWindowClosed() {
@@ -255,7 +292,8 @@ void NativeWidgetMus::ConfigurePropertiesForNewWindow(
 
   (*properties)[mus::mojom::WindowManager::kWindowType_Property] =
       mojo::TypeConverter<const std::vector<uint8_t>, int32_t>::Convert(
-          mojo::ConvertTo<mus::mojom::WindowType>(init_params.type));
+          static_cast<int32_t>(
+              mojo::ConvertTo<mus::mojom::WindowType>(init_params.type)));
   (*properties)[mus::mojom::WindowManager::kResizeBehavior_Property] =
       mojo::TypeConverter<const std::vector<uint8_t>, int32_t>::Convert(
           ResizeBehaviorFromDelegate(init_params.delegate));
@@ -273,26 +311,8 @@ void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
   window_->SetCanFocus(params.activatable ==
                        Widget::InitParams::ACTIVATABLE_YES);
 
-  // WindowTreeHost creates the compositor using the ContextFactory from
-  // aura::Env. Install |context_factory_| there so that |context_factory_| is
-  // picked up.
-  ui::ContextFactory* default_context_factory =
-      aura::Env::GetInstance()->context_factory();
-  // For Chrome, we need the GpuProcessTransportFactory so that renderer and
-  // browser pixels are composited into a single backing
-  // SoftwareOutputDeviceMus.
-  if (!default_context_factory) {
-    if (!context_factory_) {
-      context_factory_.reset(new SurfaceContextFactory(shell_, window_,
-                                                       surface_type_));
-    }
-    aura::Env::GetInstance()->set_context_factory(context_factory_.get());
-  }
-  window_tree_host_.reset(
-      new WindowTreeHostMus(shell_, this, window_, surface_type_));
   window_tree_host_->AddObserver(this);
   window_tree_host_->InitHost();
-  aura::Env::GetInstance()->set_context_factory(default_context_factory);
   window_tree_host_->window()->SetProperty(kMusWindow, window_);
 
   focus_client_.reset(new wm::FocusController(new FocusRulesImpl));
@@ -301,6 +321,10 @@ void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
                                focus_client_.get());
   aura::client::SetActivationClient(window_tree_host_->window(),
                                     focus_client_.get());
+  screen_position_client_.reset(new wm::DefaultScreenPositionClient());
+  aura::client::SetScreenPositionClient(window_tree_host_->window(),
+                                        screen_position_client_.get());
+
   window_tree_client_.reset(
       new NativeWidgetMusWindowTreeClient(window_tree_host_->window()));
   window_tree_host_->window()->AddPreTargetHandler(focus_client_.get());
@@ -323,6 +347,10 @@ void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
     if (parent_mus)
       parent_mus->AddTransientWindow(window_);
   }
+
+  // TODO(sky): deal with show state.
+  if (!params.bounds.size().IsEmpty())
+    SetBounds(params.bounds);
 
   // TODO(beng): much else, see [Desktop]NativeWidgetAura.
 

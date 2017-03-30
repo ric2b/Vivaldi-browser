@@ -10,35 +10,6 @@
   ],
   'targets': [
     {
-      'target_name': 'metro_viewer_constants',
-      'type': 'static_library',
-      'include_dirs': [
-        '..',
-      ],
-      'sources': [
-        'viewer/metro_viewer_constants.cc',
-        'viewer/metro_viewer_constants.h',
-      ],
-    },
-    {
-      'target_name': 'metro_viewer',
-      'type': '<(component)',
-      'dependencies': [
-        '../base/base.gyp:base',
-        '../ipc/ipc.gyp:ipc',
-        '../ui/aura/aura.gyp:aura',
-        '../ui/metro_viewer/metro_viewer.gyp:metro_viewer_messages',
-        'metro_viewer_constants'
-      ],
-      'sources': [
-        'viewer/metro_viewer_process_host.cc',
-        'viewer/metro_viewer_process_host.h',
-      ],
-      'defines': [
-        'METRO_VIEWER_IMPLEMENTATION',
-      ],
-    },
-    {
       'target_name': 'test_support_win8',
       'type': 'static_library',
       'dependencies': [
@@ -65,6 +36,22 @@
       'sources': [
         'test/test_registrar_constants.cc',
         'test/test_registrar_constants.h',
+      ],
+    },
+    {
+      'target_name': 'visual_elements_resources',
+      'type': 'none',
+      'copies': [
+        {
+          # GN version: //win8/visual_elements_resources
+          'destination': '<(PRODUCT_DIR)',
+          'files': [
+            '<(VIVALDI)/app/other_resources/win8/Logo.png',
+            '<(VIVALDI)/app/other_resources/win8/SecondaryTile.png',
+            '<(VIVALDI)/app/other_resources/win8/SmallLogo.png',
+            'resources/chrome.VisualElementsManifest.xml',
+          ],
+        },
       ],
     },
   ],

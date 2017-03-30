@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/hash.h"
 #include "base/single_thread_task_runner.h"
+#include "base/values.h"
 #include "cc/blink/context_provider_web_context.h"
 #include "content/renderer/media/webmediaplayer_ms.h"
 #include "content/renderer/render_thread_impl.h"
@@ -44,7 +45,8 @@ scoped_refptr<media::VideoFrame> CopyFrameToI420(
     DCHECK(frame->format() == media::PIXEL_FORMAT_ARGB ||
            frame->format() == media::PIXEL_FORMAT_XRGB ||
            frame->format() == media::PIXEL_FORMAT_I420 ||
-           frame->format() == media::PIXEL_FORMAT_UYVY);
+           frame->format() == media::PIXEL_FORMAT_UYVY ||
+           frame->format() == media::PIXEL_FORMAT_NV12);
     SkBitmap bitmap;
     bitmap.allocN32Pixels(frame->visible_rect().width(),
                           frame->visible_rect().height());
@@ -88,6 +90,11 @@ scoped_refptr<media::VideoFrame> CopyFrameToI420(
                      new_frame->stride(media::VideoFrame::kVPlane),
                      size.width(), size.height());
   }
+
+  // Transfer metadata keys.
+  base::DictionaryValue original_metadata;
+  frame->metadata()->MergeInternalValuesInto(&original_metadata);
+  new_frame->metadata()->MergeInternalValuesFrom(original_metadata);
   return new_frame;
 }
 
@@ -178,6 +185,7 @@ void WebMediaPlayerMSCompositor::EnqueueFrame(
   base::AutoLock auto_lock(current_frame_lock_);
   ++total_frame_count_;
 
+  // With algorithm off, just let |current_frame_| hold the incoming |frame|.
   if (!rendering_frame_buffer_) {
     SetCurrentFrame(frame);
     return;
@@ -193,6 +201,9 @@ void WebMediaPlayerMSCompositor::EnqueueFrame(
     return;
   }
 
+  // If we detect a bad frame without |render_time|, we switch off algorithm,
+  // because without |render_time|, algorithm cannot work.
+  // In general, this should not happen.
   base::TimeTicks render_time;
   if (!frame->metadata()->GetTimeTicks(
           media::VideoFrameMetadata::REFERENCE_TIME, &render_time)) {
@@ -204,20 +215,25 @@ void WebMediaPlayerMSCompositor::EnqueueFrame(
     return;
   }
 
-  timestamps_to_clock_times_[frame->timestamp()] = render_time;
-
-  rendering_frame_buffer_->EnqueueFrame(frame);
-
+  // The code below handles the case where UpdateCurrentFrame() callbacks stop.
+  // These callbacks can stop when the tab is hidden or the page area containing
+  // the video frame is scrolled out of view.
+  // Since some hardware decoders only have a limited number of output frames,
+  // we must aggressively release frames in this case.
   const base::TimeTicks now = base::TimeTicks::Now();
-  if (now <= last_deadline_max_)
-    return;
+  if (now > last_deadline_max_) {
+    // Note: the frame in |rendering_frame_buffer_| with lowest index is the
+    // same as |current_frame_|. Function SetCurrentFrame() handles whether
+    // to increase |dropped_frame_count_| for that frame, so here we should
+    // increase |dropped_frame_count_| by the count of all other frames.
+    dropped_frame_count_ += rendering_frame_buffer_->frames_queued() - 1;
+    rendering_frame_buffer_->Reset();
+    timestamps_to_clock_times_.clear();
+    SetCurrentFrame(frame);
+  }
 
-  // This shows vsyncs stops rendering frames. A probable cause is that the
-  // tab is not in the front. But we still have to let old frames go.
-  const base::TimeTicks deadline_max =
-      std::max(now, last_deadline_max_ + last_render_length_);
-
-  Render(deadline_max - last_render_length_, deadline_max);
+  timestamps_to_clock_times_[frame->timestamp()] = render_time;
+  rendering_frame_buffer_->EnqueueFrame(frame);
 }
 
 bool WebMediaPlayerMSCompositor::UpdateCurrentFrame(

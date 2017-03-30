@@ -71,7 +71,7 @@ import org.chromium.chrome.browser.preferences.Preferences;
 import org.chromium.chrome.browser.preferences.PreferencesLauncher;
 import org.chromium.chrome.browser.preferences.autofill.AutofillPreferences;
 import org.chromium.chrome.browser.preferences.password.SavePasswordsPreferences;
-import org.chromium.chrome.browser.preferences.privacy.PrivacyPreferences;
+import org.chromium.chrome.browser.preferences.privacy.ClearBrowsingDataPreferences;
 import org.chromium.chrome.browser.preferences.website.SingleWebsitePreferences;
 import org.chromium.chrome.browser.printing.PrintingControllerFactory;
 import org.chromium.chrome.browser.rlz.RevenueStats;
@@ -124,6 +124,7 @@ public class ChromeApplication extends ContentApplication {
     private static final String DEV_TOOLS_SERVER_SOCKET_PREFIX = "chrome";
     private static final String SESSIONS_UUID_PREF_KEY = "chromium.sync.sessions.id";
 
+    private static boolean sIsFinishedCachingNativeFlags;
     private static DocumentTabModelSelector sDocumentTabModelSelector;
 
     /**
@@ -189,6 +190,14 @@ public class ChromeApplication extends ContentApplication {
     private PrintingController mPrintingController;
 
     /**
+     * This is called during early initialization in order to set up ChildProcessLauncher
+     * for certain Chrome packaging configurations
+     */
+    public ChildProcessLauncher.ChildProcessCreationParams getChildProcessCreationParams() {
+        return null;
+    }
+
+    /**
      * This is called once per ChromeApplication instance, which get created per process
      * (browser OR renderer).  Don't stick anything in here that shouldn't be called multiple times
      * during Chrome's lifetime.
@@ -208,7 +217,8 @@ public class ChromeApplication extends ContentApplication {
                 }
 
                 // For multiwindow mode we do not track keyboard visibility.
-                return activity != null && MultiWindowUtils.getInstance().isMultiWindow(activity);
+                return activity != null
+                        && MultiWindowUtils.getInstance().isLegacyMultiWindow(activity);
             }
         });
 
@@ -247,6 +257,7 @@ public class ChromeApplication extends ContentApplication {
         assert mIsProcessInitialized;
 
         onForegroundSessionStart();
+        cacheNativeFlags();
     }
 
     /**
@@ -261,7 +272,6 @@ public class ChromeApplication extends ContentApplication {
         updatePasswordEchoState();
         updateFontSize();
         updateAcceptLanguages();
-        changeAppStatus(true);
         mVariationsSession.start(getApplicationContext());
         mPowerBroadcastReceiver.onForegroundSessionStart();
 
@@ -283,7 +293,6 @@ public class ChromeApplication extends ContentApplication {
         mBackgroundProcessing.suspendTimers();
         flushPersistentData();
         mIsStarted = false;
-        changeAppStatus(false);
         mPowerBroadcastReceiver.onForegroundSessionEnd();
 
         ChildProcessLauncher.onSentToBackground();
@@ -524,10 +533,7 @@ public class ChromeApplication extends ContentApplication {
             return;
         }
         Intent intent = PreferencesLauncher.createIntentForSettingsPage(activity,
-                PrivacyPreferences.class.getName());
-        Bundle arguments = new Bundle();
-        arguments.putBoolean(PrivacyPreferences.SHOW_CLEAR_BROWSING_DATA_EXTRA, true);
-        intent.putExtra(Preferences.EXTRA_SHOW_FRAGMENT_ARGUMENTS, arguments);
+                ClearBrowsingDataPreferences.class.getName());
         activity.startActivity(intent);
     }
 
@@ -601,12 +607,7 @@ public class ChromeApplication extends ContentApplication {
         }
     }
 
-    protected void changeAppStatus(boolean inForeground) {
-        nativeChangeAppStatus(inForeground);
-    }
-
     private static native void nativeRemoveSessionCookies();
-    private static native void nativeChangeAppStatus(boolean inForeground);
     private static native String nativeGetBrowserUserAgent();
     private static native void nativeFlushPersistentData();
 
@@ -825,7 +826,8 @@ public class ChromeApplication extends ContentApplication {
             // So cache-clearing may not be effective if URL rendering can happen before
             // OnBrowsingDataRemoverDone() is called, in which case we may have to reload as well.
             // Check if it can happen.
-            instance.clearBrowsingData(null, false, true /* cache */, false, false, false);
+            instance.clearBrowsingData(
+                    null, new int[]{ BrowsingDataType.CACHE }, TimePeriod.EVERYTHING);
         }
     }
 
@@ -854,5 +856,16 @@ public class ChromeApplication extends ContentApplication {
         if (PrefServiceBridge.getInstance().getPasswordEchoEnabled() == systemEnabled) return;
 
         PrefServiceBridge.getInstance().setPasswordEchoEnabled(systemEnabled);
+    }
+
+    /**
+     * Caches flags that are needed by Activities that launch before the native library is loaded
+     * and stores them in SharedPreferences. Because this function is called during launch after the
+     * library has loaded, they won't affect the next launch until Chrome is restarted.
+     */
+    private void cacheNativeFlags() {
+        if (sIsFinishedCachingNativeFlags) return;
+        FeatureUtilities.cacheHerbFlavor();
+        sIsFinishedCachingNativeFlags = true;
     }
 }

@@ -62,6 +62,7 @@
 
 #if defined(OS_WIN)
 #include "content/browser/compositor/software_output_device_win.h"
+#include "ui/gfx/win/rendering_window_manager.h"
 #elif defined(USE_OZONE)
 #include "content/browser/compositor/browser_compositor_overlay_candidate_validator_ozone.h"
 #include "content/browser/compositor/software_output_device_ozone.h"
@@ -102,8 +103,7 @@ GpuProcessTransportFactory::GpuProcessTransportFactory()
   ui::Layer::InitializeUILayerSettings();
   cc::SetClientNameForMetrics("Browser");
 
-  if (UseSurfacesEnabled())
-    surface_manager_ = make_scoped_ptr(new cc::SurfaceManager);
+  surface_manager_ = make_scoped_ptr(new cc::SurfaceManager);
 
   task_graph_runner_->Start("CompositorTileWorker1",
                             base::SimpleThread::Options());
@@ -123,15 +123,11 @@ GpuProcessTransportFactory::~GpuProcessTransportFactory() {
 
 scoped_ptr<WebGraphicsContext3DCommandBufferImpl>
 GpuProcessTransportFactory::CreateOffscreenCommandBufferContext() {
-#if defined(OS_ANDROID)
-  return CreateContextCommon(scoped_refptr<GpuChannelHost>(nullptr), 0);
-#else
   CauseForGpuLaunch cause =
       CAUSE_FOR_GPU_LAUNCH_WEBGRAPHICSCONTEXT3DCOMMANDBUFFERIMPL_INITIALIZE;
   scoped_refptr<GpuChannelHost> gpu_channel_host(
       BrowserGpuChannelHostFactory::instance()->EstablishGpuChannelSync(cause));
   return CreateContextCommon(gpu_channel_host, 0);
-#endif  // OS_ANDROID
 }
 
 scoped_ptr<cc::SoftwareOutputDevice>
@@ -224,6 +220,11 @@ void GpuProcessTransportFactory::CreateOutputSurface(
     data->surface = nullptr;
   }
 
+#if defined(OS_WIN)
+  gfx::RenderingWindowManager::GetInstance()->UnregisterParent(
+      compositor->widget());
+#endif
+
   bool create_gpu_output_surface =
       ShouldCreateGpuOutputSurface(compositor.get());
   if (create_gpu_output_surface) {
@@ -261,6 +262,11 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
 #endif
     create_gpu_output_surface = false;
   }
+
+#if defined(OS_WIN)
+  gfx::RenderingWindowManager::GetInstance()->RegisterParent(
+      compositor->widget());
+#endif
 
   scoped_refptr<ContextProviderCommandBuffer> context_provider;
   if (create_gpu_output_surface) {
@@ -361,10 +367,10 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
   if (data->reflector)
     data->reflector->OnSourceSurfaceReady(data->surface);
 
-  if (!UseSurfacesEnabled()) {
-    compositor->SetOutputSurface(std::move(surface));
-    return;
-  }
+#if defined(OS_WIN)
+  gfx::RenderingWindowManager::GetInstance()->DoSetParentOnChild(
+      compositor->widget());
+#endif
 
   // This gets a bit confusing. Here we have a ContextProvider in the |surface|
   // configured to render directly to this widget. We need to make an
@@ -442,6 +448,10 @@ void GpuProcessTransportFactory::RemoveCompositor(ui::Compositor* compositor) {
     DCHECK(!gl_helper_) << "Destroying the GLHelper should not cause a new "
                            "GLHelper to be created.";
   }
+#if defined(OS_WIN)
+  gfx::RenderingWindowManager::GetInstance()->UnregisterParent(
+      compositor->widget());
+#endif
 }
 
 bool GpuProcessTransportFactory::DoesCreateTestContexts() { return false; }

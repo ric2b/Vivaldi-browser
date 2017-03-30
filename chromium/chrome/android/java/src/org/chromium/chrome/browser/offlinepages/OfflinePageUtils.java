@@ -5,26 +5,19 @@
 package org.chromium.chrome.browser.offlinepages;
 
 import android.content.Context;
-import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
 import android.os.Environment;
 
 import org.chromium.base.Log;
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.enhancedbookmarks.EnhancedBookmarkUtils;
 import org.chromium.chrome.browser.snackbar.Snackbar;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.components.bookmarks.BookmarkId;
-import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.components.offlinepages.FeatureMode;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.ui.base.PageTransition;
-
-import java.util.concurrent.TimeUnit;
 
 /**
  * A class holding static util functions for offline pages.
@@ -32,8 +25,9 @@ import java.util.concurrent.TimeUnit;
 public class OfflinePageUtils {
     private static final String TAG = "OfflinePageUtils";
     /** Snackbar button types */
-    private static final int RELOAD_BUTTON = 0;
-    private static final int EDIT_BUTTON = 1;
+    public static final int RELOAD_BUTTON = 0;
+
+    private static final int SNACKBAR_DURATION = 6 * 1000; // 6 second
 
     private static final long STORAGE_ALMOST_FULL_THRESHOLD_BYTES = 10L * (1 << 20); // 10M
 
@@ -41,14 +35,14 @@ public class OfflinePageUtils {
      * Returns the number of free bytes on the storage.
      */
     public static long getFreeSpaceInBytes() {
-        return Environment.getExternalStorageDirectory().getUsableSpace();
+        return Environment.getDataDirectory().getUsableSpace();
     }
 
     /**
      * Returns the number of total bytes on the storage.
      */
     public static long getTotalSpaceInBytes() {
-        return Environment.getExternalStorageDirectory().getTotalSpace();
+        return Environment.getDataDirectory().getTotalSpace();
     }
 
     /**
@@ -56,19 +50,14 @@ public class OfflinePageUtils {
      * free up some space.
      */
     public static boolean isStorageAlmostFull() {
-        return Environment.getExternalStorageDirectory().getUsableSpace()
-                < STORAGE_ALMOST_FULL_THRESHOLD_BYTES;
+        return getFreeSpaceInBytes() < STORAGE_ALMOST_FULL_THRESHOLD_BYTES;
     }
 
     /**
      * Returns true if the network is connected.
-     * @param context Context associated with the activity.
      */
-    public static boolean isConnected(Context context) {
-        ConnectivityManager connectivityManager =
-                (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-        NetworkInfo networkInfo = connectivityManager.getActiveNetworkInfo();
-        return networkInfo != null && networkInfo.isConnected();
+    public static boolean isConnected() {
+        return NetworkChangeNotifier.isOnline();
     }
 
     /**
@@ -84,17 +73,17 @@ public class OfflinePageUtils {
         if (OfflinePageBridge.getFeatureMode() != FeatureMode.ENABLED_AS_SAVED_PAGES) {
             return stringResId;
         }
-        if (stringResId == R.string.enhanced_bookmark_action_bar_delete) {
+        if (stringResId == R.string.bookmark_action_bar_delete) {
             return R.string.offline_pages_action_bar_delete;
-        } else if (stringResId == R.string.enhanced_bookmark_action_bar_move) {
+        } else if (stringResId == R.string.bookmark_action_bar_move) {
             return R.string.offline_pages_action_bar_move;
-        } else if (stringResId == R.string.enhanced_bookmark_action_bar_search) {
+        } else if (stringResId == R.string.bookmark_action_bar_search) {
             return R.string.offline_pages_action_bar_search;
         } else if (stringResId == R.string.edit_bookmark) {
             return R.string.offline_pages_edit_item;
-        } else if (stringResId == R.string.enhanced_bookmark_drawer_all_items) {
+        } else if (stringResId == R.string.bookmark_drawer_all_items) {
             return R.string.offline_pages_all_items;
-        } else if (stringResId == R.string.enhanced_bookmark_title_bar_all_items) {
+        } else if (stringResId == R.string.bookmark_title_bar_all_items) {
             return R.string.offline_pages_all_items;
         } else if (stringResId == R.string.bookmarks) {
             return R.string.offline_pages_saved_pages;
@@ -134,62 +123,33 @@ public class OfflinePageUtils {
     }
 
     /**
-     * Retrieves the url to launch a bookmark or saved page. If latter, also marks it as
-     * accessed and reports the UMAs.
-     *
-     * @param context Context for checking connection.
-     * @param bridge Offline page bridge.
-     * @param page Offline page to get the launch url for.
-     * @param onlineUrl Online URL to launch if offline is not available.
-     * @return The launch URL.
+     * Whenever we reload an offline page, if we are online, load the online version of the page
+     * instead, on the theory that the user prefers the online version of the page.
      */
-    // TODO(fgorski): Add tests once petewil lands OfflinePageUtilsTest.
-    public static String getLaunchUrlAndMarkAccessed(
-            Context context, OfflinePageBridge bridge, OfflinePageItem page, String onlineUrl) {
-        if (page == null) return onlineUrl;
-
-        boolean isConnected = OfflinePageUtils.isConnected(context);
-        RecordHistogram.recordBooleanHistogram("OfflinePages.OnlineOnOpen", isConnected);
-
-        // When there is a network connection, we visit original URL online.
-        if (isConnected) return onlineUrl;
-
-        // TODO(fgorski): This code should be moved to markPageAccessed on the native side.
-        // The last access time was set to same as creation time when the page was created.
-        int maxMinutes = (int) TimeUnit.DAYS.toMinutes(90);
-        int minutesSinceLastOpened =
-                (int) ((System.currentTimeMillis() - page.getLastAccessTimeMs()) / (1000 * 60));
-        if (page.getCreationTimeMs() == page.getLastAccessTimeMs()) {
-            RecordHistogram.recordCustomCountHistogram("OfflinePages.FirstOpenSinceCreated",
-                    minutesSinceLastOpened, 1, maxMinutes, 50);
-        } else {
-            RecordHistogram.recordCustomCountHistogram("OfflinePages.OpenSinceLastOpen",
-                    minutesSinceLastOpened, 1, maxMinutes, 50);
+    public static void preferOnlineVersion(ChromeActivity activity, Tab tab, String newUrl) {
+        // If we are reloading an offline page, but are online, get the online version.
+        if (newUrl.equals(tab.getUrl()) && isConnected()) {
+            Log.i(TAG, "Refreshing to the online version of an offline page, since we are online");
+            LoadUrlParams params =
+                    new LoadUrlParams(tab.getOfflinePageOriginalUrl(), PageTransition.RELOAD);
+            tab.loadUrl(params);
         }
-
-        // Mark that the offline page has been accessed, that will cause last access time and access
-        // count being updated.
-        bridge.markPageAccessed(page.getBookmarkId());
-
-        // Returns the offline URL for offline access.
-        return page.getOfflineUrl();
     }
 
     /**
-     * Retrieves the url to launch a bookmark or saved page. If latter, also marks it as accessed
-     * and reports the UMAs.
-     *
-     * @parma context Context for checking connection.
-     * @param bridge Offline page bridge.
-     * @param onlineUrl Online url of a bookmark.
-     * @return The launch URL.
+     * Strips scheme from the original URL of the offline page. This is meant to be used by UI.
+     * @param onlineUrl an online URL to from which the scheme is removed
+     * @return onlineUrl without the scheme
      */
-    // TODO(fgorski): Add tests once petewil lands OfflinePageUtilsTest.
-    public static String getLaunchUrlFromOnlineUrl(
-            Context context, OfflinePageBridge bridge, String onlineUrl) {
-        if (!OfflinePageBridge.isEnabled() || bridge == null) return onlineUrl;
-        return getLaunchUrlAndMarkAccessed(
-                context, bridge, bridge.getPageByOnlineURL(onlineUrl), onlineUrl);
+    public static String stripSchemeFromOnlineUrl(String onlineUrl) {
+        // Offline pages are only saved for https:// and http:// schemes.
+        if (onlineUrl.startsWith("https://")) {
+            return onlineUrl.substring(8);
+        } else if (onlineUrl.startsWith("http://")) {
+            return onlineUrl.substring(7);
+        } else {
+            return onlineUrl;
+        }
     }
 
     /**
@@ -197,110 +157,95 @@ public class OfflinePageUtils {
      * @param activity The activity owning the tab.
      * @param tab The current tab.
      */
-    public static void showOfflineSnackbarIfNecessary(final ChromeActivity activity, Tab tab) {
-        if (tab == null || tab.isFrozen()) {
-            return;
-        }
+    public static void showOfflineSnackbarIfNecessary(ChromeActivity activity, Tab tab) {
+        showOfflineSnackbarIfNecessary(activity, tab, null);
+    }
 
-        if (!OfflinePageBridge.isEnabled()) {
-            return;
-        }
+    /**
+     * Shows the snackbar for the current tab to provide offline specific information if needed.
+     * This method is used by testing for dependency injecting a snackbar controller.
+     * @param activity The activity owning the tab.
+     * @param tab The current tab.
+     * @param snackbarController Class to show the snackbar.
+     */
+    public static void showOfflineSnackbarIfNecessary(
+            ChromeActivity activity, Tab tab, SnackbarController snackbarController) {
+        Log.d(TAG, "showOfflineSnackbarIfNecessary, controller is " + snackbarController);
+        if (tab == null || tab.isFrozen()) return;
 
-        Log.d(TAG, "showOfflineSnackbarIfNecessary called, tab " + tab);
+        if (!OfflinePageBridge.isEnabled()) return;
 
         // We only show a snackbar if we are seeing an offline page.
         if (!tab.isOfflinePage()) return;
 
-        final long bookmarkId = tab.getUserBookmarkId();
-        Context context = activity.getBaseContext();
-        final boolean connected = isConnected(context);
+        // Get a snackbar controller if we need one.
+        if (snackbarController == null) {
+            snackbarController = getSnackbarController(activity, tab);
+        }
 
+        final boolean connected = isConnected();
+
+        Log.d(TAG, "showOfflineSnackbarIfNecessary called, tabId " + tab.getId() + ", hidden "
+                        + tab.isHidden() + ", connected " + connected + ", controller "
+                        + snackbarController);
+
+        // If the tab is no longer hidden, and we have a connection while showing an offline
+        // page, offer to reload it now.
         if (!tab.isHidden() && connected) {
-            Log.d(TAG, "Showing offline page snackbar");
-            showReloadSnackbar(activity, tab.getId(), bookmarkId);
+            Log.d(TAG, "Offering to reload page, controller " + snackbarController);
+            showReloadSnackbar(activity, snackbarController);
             return;
         }
 
-        // Set up the connectivity listener to watch for connectivity.
-        tab.addObserver(new OfflinePageTabObserver(activity, tab, connected, bookmarkId));
+        // Set up the tab observer to watch for the tab being unhidden or connectivity.
+        OfflinePageTabObserver.addObserverForTab(activity, tab, connected, snackbarController);
         return;
     }
 
     /**
      * Shows the "reload" snackbar for the given tab.
+     * @param activity The activity owning the tab.
+     * @param snackbarController Class to show the snackbar.
      */
-    public static void showReloadSnackbar(
-            final ChromeActivity activity, final int tabId, final long bookmarkId) {
-        int buttonType = RELOAD_BUTTON;
-        int actionTextId = R.string.reload;
-        showOfflineSnackbar(activity, tabId, bookmarkId, buttonType, actionTextId);
-    }
-
-    public static void showEditSnackbar(
-            final ChromeActivity activity, final int tabId, final long bookmarkId) {
-        int buttonType = EDIT_BUTTON;
-        int actionTextId = R.string.enhanced_bookmark_item_edit;
-        showOfflineSnackbar(activity, tabId, bookmarkId, buttonType, actionTextId);
+    public static void showReloadSnackbar(final ChromeActivity activity,
+            final SnackbarController snackbarController) {
+        Log.d(TAG, "showReloadSnackbar called with controller " + snackbarController);
+        Context context = activity.getBaseContext();
+        final int snackbarTextId = getStringId(R.string.offline_pages_viewing_offline_page);
+        Snackbar snackbar = Snackbar.make(context.getString(snackbarTextId), snackbarController,
+                                            Snackbar.TYPE_ACTION)
+                                    .setSingleLine(false)
+                                    .setAction(context.getString(R.string.reload), RELOAD_BUTTON);
+        Log.d(TAG, "made snackbar with controller " + snackbarController);
+        snackbar.setDuration(SNACKBAR_DURATION);
+        activity.getSnackbarManager().showSnackbar(snackbar);
     }
 
     /**
-     * Shows the snackbar for the current tab to provide offline specific information.
-     * @param activity The activity owning the tab.
-     * @param tabId The ID of current tab.
-     * @param bookmarkId Bookmark ID related to the opened page.
+     * Gets a snackbar controller that we can use to show our snackbar.
      */
-    private static void showOfflineSnackbar(final ChromeActivity activity, final int tabId,
-            final long bookmarkId, final int buttonType, final int actionTextId) {
-        Context context = activity.getBaseContext();
+    private static SnackbarController getSnackbarController(
+            final ChromeActivity activity, final Tab tab) {
+        final int tabId = tab.getId();
+        Log.d(TAG, "building snackbar controller");
 
-        final int snackbarTextId = getStringId(R.string.offline_pages_viewing_offline_page);
-
-        SnackbarController snackbarController = new SnackbarController() {
+        return new SnackbarController() {
             @Override
             public void onAction(Object actionData) {
-                Tab tab = activity.getTabModelSelector().getTabById(tabId);
-                if (tab == null) return;
+                assert RELOAD_BUTTON == (int) actionData;
+                RecordUserAction.record("OfflinePages.ReloadButtonClicked");
+                Tab foundTab = activity.getTabModelSelector().getTabById(tabId);
+                if (foundTab == null) return;
 
-                int buttonType = (int) actionData;
-                switch (buttonType) {
-                    case RELOAD_BUTTON:
-                        RecordUserAction.record("OfflinePages.ReloadButtonClicked");
-                        tab.loadUrl(new LoadUrlParams(
-                                tab.getOfflinePageOriginalUrl(), PageTransition.RELOAD));
-                        break;
-                    case EDIT_BUTTON:
-                        RecordUserAction.record("OfflinePages.ViewingOffline.EditButtonClicked");
-                        EnhancedBookmarkUtils.startEditActivity(
-                                activity, new BookmarkId(bookmarkId, BookmarkType.NORMAL), null);
-                        break;
-                    default:
-                        assert false;
-                        break;
-                }
+                LoadUrlParams params = new LoadUrlParams(
+                        foundTab.getOfflinePageOriginalUrl(), PageTransition.RELOAD);
+                foundTab.loadUrl(params);
             }
 
             @Override
             public void onDismissNoAction(Object actionData) {
-                if (actionData == null) return;
-                int buttonType = (int) actionData;
-                switch (buttonType) {
-                    case RELOAD_BUTTON:
-                        RecordUserAction.record("OfflinePages.ReloadButtonNotClicked");
-                        break;
-                    case EDIT_BUTTON:
-                        RecordUserAction.record("OfflinePages.ViewingOffline.EditButtonNotClicked");
-                        break;
-                    default:
-                        assert false;
-                        break;
-                }
+                RecordUserAction.record("OfflinePages.ReloadButtonNotClicked");
             }
-
-            @Override
-            public void onDismissForEachType(boolean isTimeout) {}
         };
-        Snackbar snackbar = Snackbar.make(context.getString(snackbarTextId), snackbarController)
-                                    .setAction(context.getString(actionTextId), buttonType);
-        activity.getSnackbarManager().showSnackbar(snackbar);
     }
 }

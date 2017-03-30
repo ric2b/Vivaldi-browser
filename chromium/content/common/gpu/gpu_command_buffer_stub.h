@@ -18,6 +18,7 @@
 #include "base/time/time.h"
 #include "content/common/content_export.h"
 #include "content/common/gpu/gpu_memory_manager.h"
+#include "gpu/command_buffer/common/command_buffer_id.h"
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/command_buffer/common/gpu_memory_allocation.h"
 #include "gpu/command_buffer/service/command_buffer_service.h"
@@ -115,7 +116,7 @@ class GpuCommandBufferStub
   GpuChannel* channel() const { return channel_; }
 
   // Unique command buffer ID for this command buffer stub.
-  uint64_t command_buffer_id() const { return command_buffer_id_; }
+  gpu::CommandBufferId command_buffer_id() const { return command_buffer_id_; }
 
   // Identifies the various GpuCommandBufferStubs in the GPU process belonging
   // to the same renderer process.
@@ -137,10 +138,6 @@ class GpuCommandBufferStub
 
   void AddDestructionObserver(DestructionObserver* observer);
   void RemoveDestructionObserver(DestructionObserver* observer);
-
-  // Associates a sync point to this stub. When the stub is destroyed, it will
-  // retire all sync points that haven't been previously retired.
-  void InsertSyncPoint(uint32_t sync_point, bool retire);
 
   void SetLatencyInfoCallback(const LatencyInfoCallback& callback);
 
@@ -197,20 +194,16 @@ class GpuCommandBufferStub
 
   void OnEnsureBackbuffer();
 
-  void OnRetireSyncPoint(uint32_t sync_point);
-  bool OnWaitSyncPoint(uint32_t sync_point);
-  void OnWaitSyncPointCompleted(uint32_t sync_point);
-  void OnSignalSyncPoint(uint32_t sync_point, uint32_t id);
   void OnSignalSyncToken(const gpu::SyncToken& sync_token, uint32_t id);
   void OnSignalAck(uint32_t id);
   void OnSignalQuery(uint32_t query, uint32_t id);
 
   void OnFenceSyncRelease(uint64_t release);
   bool OnWaitFenceSync(gpu::CommandBufferNamespace namespace_id,
-                       uint64_t command_buffer_id,
+                       gpu::CommandBufferId command_buffer_id,
                        uint64_t release);
   void OnWaitFenceSyncCompleted(gpu::CommandBufferNamespace namespace_id,
-                                uint64_t command_buffer_id,
+                                gpu::CommandBufferId command_buffer_id,
                                 uint64_t release);
 
   void OnCreateImage(const GpuCommandBufferMsg_CreateImage_Params& params);
@@ -241,7 +234,7 @@ class GpuCommandBufferStub
   bool CheckContextLost();
   void CheckCompleteWaits();
   void PullTextureUpdates(gpu::CommandBufferNamespace namespace_id,
-                          uint64_t command_buffer_id,
+                          gpu::CommandBufferId command_buffer_id,
                           uint32_t release);
 
   // The lifetime of objects of this class is managed by a GpuChannel. The
@@ -265,7 +258,7 @@ class GpuCommandBufferStub
   std::vector<int32_t> requested_attribs_;
   gfx::GpuPreference gpu_preference_;
   bool use_virtualized_gl_context_;
-  const uint64_t command_buffer_id_;
+  const gpu::CommandBufferId command_buffer_id_;
   const int32_t stream_id_;
   const int32_t route_id_;
   const bool offscreen_;
@@ -276,13 +269,12 @@ class GpuCommandBufferStub
   scoped_ptr<gpu::GpuScheduler> scheduler_;
   scoped_ptr<gpu::SyncPointClient> sync_point_client_;
   scoped_refptr<gfx::GLSurface> surface_;
+  gfx::GLSurface::Format surface_format_;
 
   GpuWatchdog* watchdog_;
 
   base::ObserverList<DestructionObserver> destruction_observers_;
 
-  // A queue of sync points associated with this stub.
-  std::deque<uint32_t> sync_points_;
   bool waiting_for_sync_point_;
 
   base::TimeTicks process_delayed_work_time_;

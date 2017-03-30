@@ -91,7 +91,7 @@ void ServicePortServiceImpl::Connect(const mojo::String& target_url,
                                      const mojo::String& origin,
                                      const ConnectCallback& callback) {
   navigator_connect_context_->Connect(
-      GURL(target_url), GURL(origin), this,
+      GURL(target_url.get()), GURL(origin.get()), this,
       base::Bind(&ServicePortServiceImpl::OnConnectResult,
                  weak_ptr_factory_.GetWeakPtr(), callback));
 }
@@ -124,8 +124,8 @@ void ServicePortServiceImpl::ClosePort(int32_t port_id) {
 void ServicePortServiceImpl::OnConnectResult(const ConnectCallback& callback,
                                              int message_port_id,
                                              bool success) {
-  callback.Run(success ? SERVICE_PORT_CONNECT_RESULT_ACCEPT
-                       : SERVICE_PORT_CONNECT_RESULT_REJECT,
+  callback.Run(success ? ServicePortConnectResult::ACCEPT
+                       : ServicePortConnectResult::REJECT,
                message_port_id);
 }
 

@@ -77,7 +77,7 @@ int SVGInlineTextBox::offsetForPosition(LayoutUnit, bool) const
 
 int SVGInlineTextBox::offsetForPositionInFragment(const SVGTextFragment& fragment, LayoutUnit position, bool includePartialGlyphs) const
 {
-    LineLayoutSVGInlineText lineLayoutItem = LineLayoutSVGInlineText(this->lineLayoutItem());
+    LineLayoutSVGInlineText lineLayoutItem = LineLayoutSVGInlineText(this->getLineLayoutItem());
 
     float scalingFactor = lineLayoutItem.scalingFactor();
     ASSERT(scalingFactor);
@@ -100,14 +100,14 @@ LayoutUnit SVGInlineTextBox::positionForOffset(int) const
 {
     // SVG doesn't use the offset <-> position selection system.
     ASSERT_NOT_REACHED();
-    return 0;
+    return LayoutUnit();
 }
 
 FloatRect SVGInlineTextBox::selectionRectForTextFragment(const SVGTextFragment& fragment, int startPosition, int endPosition, const ComputedStyle& style) const
 {
     ASSERT(startPosition < endPosition);
 
-    LineLayoutSVGInlineText lineLayoutItem = LineLayoutSVGInlineText(this->lineLayoutItem());
+    LineLayoutSVGInlineText lineLayoutItem = LineLayoutSVGInlineText(this->getLineLayoutItem());
 
     float scalingFactor = lineLayoutItem.scalingFactor();
     ASSERT(scalingFactor);
@@ -136,7 +136,7 @@ LayoutRect SVGInlineTextBox::localSelectionRect(int startPosition, int endPositi
     if (startPosition >= endPosition)
         return LayoutRect();
 
-    const ComputedStyle& style = lineLayoutItem().styleRef();
+    const ComputedStyle& style = getLineLayoutItem().styleRef();
 
     FloatRect selectionRect;
     int fragmentStartPosition = 0;
@@ -168,7 +168,7 @@ void SVGInlineTextBox::paint(const PaintInfo& paintInfo, const LayoutPoint& pain
 
 TextRun SVGInlineTextBox::constructTextRun(const ComputedStyle& style, const SVGTextFragment& fragment) const
 {
-    LineLayoutText text = lineLayoutItem();
+    LineLayoutText text = getLineLayoutItem();
 
     // FIXME(crbug.com/264211): This should not be necessary but can occur if we
     //                          layout during layout. Remove this when 264211 is fixed.
@@ -230,10 +230,10 @@ void SVGInlineTextBox::paintTextMatchMarkerBackground(const PaintInfo& paintInfo
 
 LayoutRect SVGInlineTextBox::calculateBoundaries() const
 {
-    LineLayoutSVGInlineText lineLayoutItem = LineLayoutSVGInlineText(this->lineLayoutItem());
+    LineLayoutSVGInlineText lineLayoutItem = LineLayoutSVGInlineText(this->getLineLayoutItem());
     float scalingFactor = lineLayoutItem.scalingFactor();
     ASSERT(scalingFactor);
-    LayoutUnit baseline = lineLayoutItem.scaledFont().fontMetrics().floatAscent() / scalingFactor;
+    LayoutUnit baseline(lineLayoutItem.scaledFont().fontMetrics().floatAscent() / scalingFactor);
 
     LayoutRect textBoundingRect;
     for (const SVGTextFragment& fragment : m_textFragments)
@@ -247,17 +247,17 @@ bool SVGInlineTextBox::nodeAtPoint(HitTestResult& result, const HitTestLocation&
     // FIXME: integrate with InlineTextBox::nodeAtPoint better.
     ASSERT(!isLineBreak());
 
-    PointerEventsHitRules hitRules(PointerEventsHitRules::SVG_TEXT_HITTESTING, result.hitTestRequest(), lineLayoutItem().style()->pointerEvents());
-    bool isVisible = lineLayoutItem().style()->visibility() == VISIBLE;
+    PointerEventsHitRules hitRules(PointerEventsHitRules::SVG_TEXT_HITTESTING, result.hitTestRequest(), getLineLayoutItem().style()->pointerEvents());
+    bool isVisible = getLineLayoutItem().style()->visibility() == VISIBLE;
     if (isVisible || !hitRules.requireVisible) {
         if (hitRules.canHitBoundingBox
-            || (hitRules.canHitStroke && (lineLayoutItem().style()->svgStyle().hasStroke() || !hitRules.requireStroke))
-            || (hitRules.canHitFill && (lineLayoutItem().style()->svgStyle().hasFill() || !hitRules.requireFill))) {
+            || (hitRules.canHitStroke && (getLineLayoutItem().style()->svgStyle().hasStroke() || !hitRules.requireStroke))
+            || (hitRules.canHitFill && (getLineLayoutItem().style()->svgStyle().hasFill() || !hitRules.requireFill))) {
             LayoutPoint boxOrigin(x(), y());
             boxOrigin.moveBy(accumulatedOffset);
             LayoutRect rect(boxOrigin, size());
             if (locationInContainer.intersects(rect)) {
-                LineLayoutSVGInlineText lineLayoutItem = LineLayoutSVGInlineText(this->lineLayoutItem());
+                LineLayoutSVGInlineText lineLayoutItem = LineLayoutSVGInlineText(this->getLineLayoutItem());
                 ASSERT(lineLayoutItem.scalingFactor());
                 float baseline = lineLayoutItem.scaledFont().fontMetrics().floatAscent() / lineLayoutItem.scalingFactor();
 
@@ -266,7 +266,7 @@ bool SVGInlineTextBox::nodeAtPoint(HitTestResult& result, const HitTestLocation&
                     FloatQuad fragmentQuad = fragment.boundingQuad(baseline);
                     if (fragmentQuad.containsPoint(floatLocation)) {
                         lineLayoutItem.updateHitTestResult(result, locationInContainer.point() - toLayoutSize(accumulatedOffset));
-                        if (!result.addNodeToListBasedTestResult(lineLayoutItem.node(), locationInContainer, rect))
+                        if (result.addNodeToListBasedTestResult(lineLayoutItem.node(), locationInContainer, rect) == StopHitTesting)
                             return true;
                     }
                 }

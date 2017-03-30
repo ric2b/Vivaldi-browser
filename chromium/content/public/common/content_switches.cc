@@ -90,6 +90,11 @@ const char kDisableAcceleratedVideoDecode[] =
 // users with many windows/tabs and lots of memory.
 const char kDisableBackingStoreLimit[]      = "disable-backing-store-limit";
 
+// Disable backgrounding renders for occluded windows. Done for tests to avoid
+// nondeterministic behavior.
+extern const char kDisableBackgroundingOccludedWindowsForTesting[] =
+    "disable-backgrounding-occluded-windows";
+
 // Disable one or more Blink runtime-enabled features.
 // Use names from RuntimeEnabledFeatures.in, separated by commas.
 // Applied after kEnableBlinkFeatures, and after other flags that change these
@@ -132,6 +137,10 @@ const char kDisableFlashStage3d[]           = "disable-flash-stage3d";
 // Disable user gesture requirement for media playback.
 const char kDisableGestureRequirementForMediaPlayback[] =
     "disable-gesture-requirement-for-media-playback";
+
+// Disable user gesture requirement for presentation.
+const char kDisableGestureRequirementForPresentation[] =
+    "disable-gesture-requirement-for-presentation";
 
 // Disables GPU hardware acceleration.  If software renderer is not in place,
 // then the GPU process won't launch.
@@ -188,10 +197,6 @@ const char kDisableHistogramCustomizer[]    = "disable-histogram-customizer";
 // from testing, it is a bad idea from a security perspective to enable
 // this switch.
 const char kDisableKillAfterBadIPC[]        = "disable-kill-after-bad-ipc";
-
-// Enables prefixed Encrypted Media API (e.g. webkitGenerateKeyRequest()).
-const char kEnablePrefixedEncryptedMedia[] =
-    "enable-prefixed-encrypted-media";
 
 // Disables LCD text.
 const char kDisableLCDText[]                = "disable-lcd-text";
@@ -289,6 +294,9 @@ const char kDisableWebSecurity[]            = "disable-web-security";
 // Disables Blink's XSSAuditor. The XSSAuditor mitigates reflective XSS.
 const char kDisableXSSAuditor[]             = "disable-xss-auditor";
 
+// Disable gesture generation for wheel events.
+const char kDisableWheelGestures[] = "disable-wheel-gestures";
+
 // Disable rasterizer that writes directly to GPU memory associated with tiles.
 const char kDisableZeroCopy[]                = "disable-zero-copy";
 
@@ -297,6 +305,9 @@ const char kDisableZeroCopy[]                = "disable-zero-copy";
 // be a performance bottleneck. One should only enable it when automating dom
 // based tests.
 const char kDomAutomationController[]       = "dom-automation";
+
+// Causes the process to run as a download subprocess.
+const char kDownloadProcess[]               = "download";
 
 // Enable antialiasing on 2d canvas clips (as opposed to draw operations)
 const char kEnable2dCanvasClipAntialiasing[] = "enable-2d-canvas-clip-aa";
@@ -385,16 +396,12 @@ const char kEnableLogging[]                 = "enable-logging";
 // Enables the memory benchmarking extension
 const char kEnableMemoryBenchmarking[]      = "enable-memory-benchmarking";
 
-// Enable the Mojo shell connection in renderers.
-const char kEnableMojoShellConnection[] = "enable-mojo-shell-connection";
-
 // Enables the network information API.
 const char kEnableNetworkInformation[]      = "enable-network-information";
 
-// Enables non-validating reload on reload-to-refresh-content (e.g. pull-
-// to-refresh).
-const char kEnableNonValidatingReloadOnRefreshContent[] =
-    "enable-non-validating-reload-on-refresh-content";
+// Enables action button icons for the Web Notification API.
+const char kEnableNotificationActionIcons[] =
+    "enable-notification-action-icons";
 
 // Enables partial raster. Enabling this switch also enables the use of
 // persistent gpu memory buffers.
@@ -456,8 +463,8 @@ const char kEnableStatsTable[]              = "enable-stats-table";
 const char kEnableStrictMixedContentChecking[] =
     "enable-strict-mixed-content-checking";
 
-// Blocks insecure usage of number of powerful features (geolocation, for
-// example) that we haven't yet deprecated for the web at large.
+// Blocks insecure usage of a number of powerful features (device orientation,
+// for example) that we haven't yet deprecated for the web at large.
 const char kEnableStrictPowerfulFeatureRestrictions[] =
     "enable-strict-powerful-feature-restrictions";
 
@@ -489,6 +496,10 @@ const char kEnableViewport[]                = "enable-viewport";
 // Enable the Vtune profiler support.
 const char kEnableVtune[]                   = "enable-vtune-support";
 
+// Enable WebFonts intervention and trigger the signal always.
+const char kEnableWebFontsInterventionTrigger[] =
+    "enable-webfonts-intervention-trigger";
+
 // Enables WebGL extensions not yet approved by the community.
 const char kEnableWebGLDraftExtensions[] = "enable-webgl-draft-extensions";
 
@@ -497,6 +508,9 @@ const char kEnableWebGLImageChromium[] = "enable-webgl-image-chromium";
 
 // Enables interaction with virtual reality devices.
 const char kEnableWebVR[] = "enable-webvr";
+
+// Enables gesture generation for wheel events.
+const char kEnableWheelGestures[] = "enable-wheel-gestures";
 
 // Enable rasterizer that writes directly to GPU memory associated with tiles.
 const char kEnableZeroCopy[]                = "enable-zero-copy";
@@ -615,6 +629,9 @@ const char kMaxUntiledLayerWidth[]          = "max-untiled-layer-width";
 // Renderer.Memory histogram. Used in memory tests.
 const char kMemoryMetrics[]                 = "memory-metrics";
 
+// Use a Mojo-based LocalStorage implementation.
+const char kMojoLocalStorage[]              = "mojo-local-storage";
+
 // Mutes audio sent to the audio device so it is not audible during
 // automated testing.
 const char kMuteAudio[]                     = "mute-audio";
@@ -685,10 +702,15 @@ const char kPpapiPluginProcess[]            = "ppapi";
 // --no-sandbox as well or the sandbox won't allow the dialog to display.
 const char kPpapiStartupDialog[]            = "ppapi-startup-dialog";
 
-// Runs a single process for each site (i.e., group of pages from the same
-// registered domain) the user visits.  We default to using a renderer process
-// for each site instance (i.e., group of pages from the same registered
-// domain with script connections to each other).
+// Enable the "Process Per Site" process model for all domains. This mode
+// consolidates same-site pages so that they share a single process.
+//
+// More details here:
+// - http://www.chromium.org/developers/design-documents/process-models
+// - The class comment in site_instance.h, listing the supported process models.
+//
+// IMPORTANT: This isn't to be confused with --site-per-process (which is about
+// isolation, not consolidation). You probably want the other one.
 const char kProcessPerSite[]                = "process-per-site";
 
 // Runs each set of script-connected tabs (i.e., a BrowsingInstance) in its own
@@ -723,7 +745,9 @@ const char kRendererProcess[]               = "renderer";
 // or instability.
 const char kRendererProcessLimit[]          = "renderer-process-limit";
 
-// Causes the renderer process to display a dialog on launch.
+// Causes the renderer process to display a dialog on launch. Passing this flag
+// also adds kNoSandbox on Windows non-official builds, since that's needed to
+// show a dialog.
 const char kRendererStartupDialog[]         = "renderer-startup-dialog";
 
 // Reduce the default `referer` header's granularity.
@@ -757,7 +781,12 @@ const char kSingleProcess[]                 = "single-process";
 //  * <iframe>s are rendered out-of-process whenever the src= is cross-site.
 //
 // More details here:
-// http://www.chromium.org/developers/design-documents/site-isolation
+// - http://www.chromium.org/developers/design-documents/site-isolation
+// - http://www.chromium.org/developers/design-documents/process-models
+// - The class comment in site_instance.h, listing the supported process models.
+//
+// IMPORTANT: this isn't to be confused with --process-per-site (which is about
+// process consolidation, not isolation). You probably want this one.
 const char kSitePerProcess[]                = "site-per-process";
 
 // Skip gpu info collection, blacklist loading, and blacklist auto-update
@@ -766,6 +795,12 @@ const char kSitePerProcess[]                = "site-per-process";
 // content. The switch is intended only for layout tests.
 // TODO(gab): Get rid of this switch entirely.
 const char kSkipGpuDataLoading[]            = "skip-gpu-data-loading";
+
+// Skips reencoding bitmaps as PNGs when the encoded data is unavailable
+// during SKP capture.  This allows for obtaining an accurate sample of
+// the types of images on the web, rather than being weighted towards PNGs
+// that we have encoded ourselves.
+const char kSkipReencodingOnSKPCapture[]    = "skip-reencoding-on-skp-capture";
 
 // Specifies if the browser should start in fullscreen mode, like if the user
 // had pressed F11 right after startup.
@@ -820,19 +855,8 @@ const char kVideoImageTextureTarget[] = "video-image-texture-target";
 // Set when Chromium should use a mobile user agent.
 const char kUseMobileUserAgent[] = "use-mobile-user-agent";
 
-// Use normal priority for tile task worker threads.  Otherwise they may
-// be run at background priority on some platforms.
-const char kUseNormalPriorityForTileTaskWorkerThreads[] =
-    "use-normal-priority-for-tile-task-worker-threads";
-
 // Use remote compositor for the renderer.
 const char kUseRemoteCompositing[] = "use-remote-compositing";
-
-// Use the new surfaces system to handle compositor delegation.
-const char kUseSurfaces[] = "use-surfaces";
-
-// Disable the use of the new surfaces system to handle compositor delegation.
-const char kDisableSurfaces[] = "disable-surfaces";
 
 // The contents of this flag are prepended to the utility process command line.
 // Useful values might be "valgrind" or "xterm -e gdb --args".
@@ -941,8 +965,9 @@ const char kRendererWaitForJavaDebugger[] = "renderer-wait-for-java-debugger";
 const char kEnableAggressiveDOMStorageFlushing[] =
     "enable-aggressive-domstorage-flushing";
 
-// Disable web audio API.
-const char kDisableWebAudio[]               = "disable-webaudio";
+// Enable audio for desktop share.
+const char kEnableAudioSupportForDesktopShare[] =
+    "enable-audio-support-for-desktop-share";
 
 #if defined(OS_CHROMEOS)
 // Disables panel fitting (used for mirror mode).

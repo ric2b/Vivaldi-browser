@@ -5,3 +5,5 @@
 // On the form
 //    DISABLE(foo,bar)
 //    DISABLE(foo,baz)
+
+  DISABLE(PipelineIntegrationTest, BasicPlaybackHi10P)

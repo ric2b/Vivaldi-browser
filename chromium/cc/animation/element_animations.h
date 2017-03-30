@@ -8,6 +8,8 @@
 #include "base/containers/linked_list.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
+#include "cc/animation/animation_curve.h"
 #include "cc/animation/animation_delegate.h"
 #include "cc/animation/layer_animation_controller.h"
 #include "cc/animation/layer_animation_value_provider.h"
@@ -58,10 +60,10 @@ class CC_EXPORT ElementAnimations : public AnimationDelegate,
   void LayerUnregistered(int layer_id, LayerTreeType tree_type);
 
   bool has_active_value_observer_for_testing() const {
-    return active_value_observer_;
+    return !!active_value_observer_;
   }
   bool has_pending_value_observer_for_testing() const {
-    return pending_value_observer_;
+    return !!pending_value_observer_;
   }
 
   void AddPlayer(AnimationPlayer* player);
@@ -95,14 +97,18 @@ class CC_EXPORT ElementAnimations : public AnimationDelegate,
 
   // AnimationDelegate implementation
   void NotifyAnimationStarted(base::TimeTicks monotonic_time,
-                              Animation::TargetProperty target_property,
+                              TargetProperty::Type target_property,
                               int group) override;
   void NotifyAnimationFinished(base::TimeTicks monotonic_time,
-                               Animation::TargetProperty target_property,
+                               TargetProperty::Type target_property,
                                int group) override;
   void NotifyAnimationAborted(base::TimeTicks monotonic_time,
-                              Animation::TargetProperty target_property,
+                              TargetProperty::Type target_property,
                               int group) override;
+  void NotifyAnimationTakeover(base::TimeTicks monotonic_time,
+                               TargetProperty::Type target_property,
+                               double animation_start_time,
+                               scoped_ptr<AnimationCurve> curve) override;
 
   // LayerAnimationValueProvider implementation.
   gfx::ScrollOffset ScrollOffsetForAnimation() const override;

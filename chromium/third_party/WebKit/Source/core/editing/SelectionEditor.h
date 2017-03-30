@@ -27,6 +27,7 @@
 #define SelectionEditor_h
 
 #include "core/editing/FrameSelection.h"
+#include "core/events/EventDispatchResult.h"
 
 namespace blink {
 
@@ -45,6 +46,7 @@ public:
         return adoptPtrWillBeNoop(new SelectionEditor(frameSelection));
     }
     virtual ~SelectionEditor();
+    void dispose();
 
     bool hasEditableStyle() const { return m_selection.hasEditableStyle(); }
     bool isContentEditable() const { return m_selection.isContentEditable(); }
@@ -58,7 +60,7 @@ public:
     template <typename Strategy>
     const VisibleSelectionTemplate<Strategy>& visibleSelection() const;
     void setVisibleSelection(const VisibleSelection&, FrameSelection::SetSelectionOptions);
-    void setVisibleSelection(const VisibleSelectionInComposedTree&, FrameSelection::SetSelectionOptions);
+    void setVisibleSelection(const VisibleSelectionInFlatTree&, FrameSelection::SetSelectionOptions);
 
     void setIsDirectional(bool);
     void setWithoutValidation(const Position& base, const Position& extent);
@@ -75,6 +77,10 @@ public:
     // VisibleSelectionChangeObserver interface.
     void didChangeVisibleSelection() override;
 
+    // Updates |m_selection| and |m_selectionInFlatTree| with up-to-date
+    // layout if needed.
+    void updateIfNeeded();
+
     DECLARE_VIRTUAL_TRACE();
 
 private:
@@ -84,9 +90,6 @@ private:
     enum EPositionType { START, END, BASE, EXTENT }; // NOLINT
 
     LocalFrame* frame() const;
-
-    void adjustVisibleSelectionInComposedTree();
-    void adjustVisibleSelectionInDOMTree();
 
     TextDirection directionOfEnclosingBlock();
     TextDirection directionOfSelection();
@@ -109,13 +112,13 @@ private:
     void stopObservingVisibleSelectionChangeIfNecessary();
 
     LayoutUnit lineDirectionPointForBlockDirectionNavigation(EPositionType);
-    bool dispatchSelectStart();
+    DispatchEventResult dispatchSelectStart();
 
     RawPtrWillBeMember<FrameSelection> m_frameSelection;
 
     LayoutUnit m_xPosForVerticalArrowNavigation;
     VisibleSelection m_selection;
-    VisibleSelectionInComposedTree m_selectionInComposedTree;
+    VisibleSelectionInFlatTree m_selectionInFlatTree;
     bool m_observingVisibleSelection;
 
     // The range specified by the user, which may not be visually canonicalized

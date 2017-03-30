@@ -23,9 +23,9 @@ public:
     // insertion order, so the local child version takes a previous sibling to
     // ensure that it is inserted into the correct location in the list of
     // children.
-    virtual WebLocalFrame* createLocalChild(WebTreeScopeType, const WebString& name, WebSandboxFlags, WebFrameClient*, WebFrame* previousSibling, const WebFrameOwnerProperties&) = 0;
+    virtual WebLocalFrame* createLocalChild(WebTreeScopeType, const WebString& name, const WebString& uniqueName, WebSandboxFlags, WebFrameClient*, WebFrame* previousSibling, const WebFrameOwnerProperties&) = 0;
 
-    virtual WebRemoteFrame* createRemoteChild(WebTreeScopeType, const WebString& name, WebSandboxFlags, WebRemoteFrameClient*) = 0;
+    virtual WebRemoteFrame* createRemoteChild(WebTreeScopeType, const WebString& name, const WebString& uniqueName, WebSandboxFlags, WebRemoteFrameClient*) = 0;
 
     // Transfer initial drawing parameters from a local frame.
     virtual void initializeFromFrame(WebLocalFrame*) const = 0;
@@ -36,8 +36,8 @@ public:
     // Set sandbox flags replicated from another process.
     virtual void setReplicatedSandboxFlags(WebSandboxFlags) const = 0;
 
-    // Set frame name replicated from another process.
-    virtual void setReplicatedName(const WebString&) const = 0;
+    // Set frame |name| and |uniqueName| replicated from another process.
+    virtual void setReplicatedName(const WebString& name, const WebString& uniqueName) const = 0;
 
     // Set frame enforcement of strict mixed content checking replicated from another process.
     virtual void setReplicatedShouldEnforceStrictMixedContentChecking(bool) const = 0;
@@ -47,6 +47,9 @@ public:
     virtual void didStartLoading() = 0;
     virtual void didStopLoading() = 0;
 
+    // Returns true if this frame should be ignored during hittesting.
+    virtual bool isIgnoredForHitTest() const = 0;
+
     // Temporary method to allow embedders to get the script context of a
     // remote frame. This should only be used by legacy code that has not yet
     // migrated over to the new OOPI infrastructure.
@@ -54,6 +57,13 @@ public:
 
 protected:
     explicit WebRemoteFrame(WebTreeScopeType scope) : WebFrame(scope) { }
+
+    // Inherited from WebFrame, but intentionally hidden: it never makes sense
+    // to call these on a WebRemoteFrame.
+    bool isWebLocalFrame() const override = 0;
+    WebLocalFrame* toWebLocalFrame() override = 0;
+    bool isWebRemoteFrame() const override = 0;
+    WebRemoteFrame* toWebRemoteFrame() override = 0;
 };
 
 } // namespace blink

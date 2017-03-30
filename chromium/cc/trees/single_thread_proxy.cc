@@ -67,6 +67,7 @@ void SingleThreadProxy::Start(
 
     scoped_ptr<CompositorTimingHistory> compositor_timing_history(
         new CompositorTimingHistory(
+            scheduler_settings.using_synchronous_renderer_compositor,
             CompositorTimingHistory::BROWSER_UMA,
             layer_tree_host_->rendering_stats_instrumentation()));
 
@@ -98,7 +99,7 @@ void SingleThreadProxy::FinishAllRendering() {
 
 bool SingleThreadProxy::IsStarted() const {
   DCHECK(task_runner_provider_->IsMainThread());
-  return layer_tree_host_impl_;
+  return !!layer_tree_host_impl_;
 }
 
 bool SingleThreadProxy::CommitToActiveTree() const {

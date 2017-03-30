@@ -23,11 +23,11 @@
 #include "net/quic/crypto/quic_encrypter.h"
 #include "net/quic/crypto/quic_server_info.h"
 #include "net/quic/quic_chromium_connection_helper.h"
+#include "net/quic/quic_chromium_packet_reader.h"
+#include "net/quic/quic_chromium_packet_writer.h"
 #include "net/quic/quic_crypto_client_stream_factory.h"
-#include "net/quic/quic_default_packet_writer.h"
 #include "net/quic/quic_flags.h"
 #include "net/quic/quic_http_utils.h"
-#include "net/quic/quic_packet_reader.h"
 #include "net/quic/quic_packet_writer.h"
 #include "net/quic/quic_protocol.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
@@ -48,7 +48,8 @@ namespace net {
 namespace test {
 namespace {
 
-const IPEndPoint kIpEndPoint(IPAddressNumber(kIPv4AddressSize, 0), 0);
+const IPEndPoint kIpEndPoint =
+    IPEndPoint(IPAddress(std::vector<uint8_t>(kIPv4AddressSize, 0)), 0);
 const char kServerHostname[] = "test.example.com";
 const uint16_t kServerPort = 443;
 const size_t kMaxReadersPerQuicSession = 5;
@@ -63,7 +64,10 @@ class QuicChromiumClientSessionTest
             new SequencedSocketData(default_read_.get(), 1, nullptr, 0)),
         random_(0),
         helper_(base::ThreadTaskRunnerHandle::Get().get(), &clock_, &random_),
-        maker_(GetParam(), 0, &clock_, kServerHostname) {}
+        maker_(GetParam(), 0, &clock_, kServerHostname) {
+    // Advance the time, because timers do not like uninitialized times.
+    clock_.AdvanceTime(QuicTime::Delta::FromSeconds(1));
+  }
 
   void Initialize() {
     socket_factory_.AddSocketDataProvider(socket_data_.get());
@@ -72,8 +76,8 @@ class QuicChromiumClientSessionTest
                                                    base::Bind(&base::RandInt),
                                                    &net_log_, NetLog::Source());
     socket->Connect(kIpEndPoint);
-    QuicDefaultPacketWriter* writer =
-        new net::QuicDefaultPacketWriter(socket.get());
+    QuicChromiumPacketWriter* writer =
+        new net::QuicChromiumPacketWriter(socket.get());
     QuicConnection* connection = new QuicConnection(
         0, kIpEndPoint, &helper_, writer, true, Perspective::IS_CLIENT,
         SupportedVersions(GetParam()));
@@ -86,7 +90,7 @@ class QuicChromiumClientSessionTest
         kQuicYieldAfterPacketsRead,
         QuicTime::Delta::FromMilliseconds(kQuicYieldAfterDurationMilliseconds),
         /*cert_verify_flags=*/0, DefaultQuicConfig(), &crypto_config_,
-        "CONNECTION_UNKNOWN", base::TimeTicks::Now(),
+        "CONNECTION_UNKNOWN", base::TimeTicks::Now(), &push_promise_index_,
         base::ThreadTaskRunnerHandle::Get().get(),
         /*socket_performance_watcher=*/nullptr, &net_log_));
 
@@ -94,8 +98,6 @@ class QuicChromiumClientSessionTest
         ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem"));
     verify_details_.cert_verify_result.verified_cert = cert;
     verify_details_.cert_verify_result.is_issued_by_known_root = true;
-    // Advance the time, because timers do not like uninitialized times.
-    clock_.AdvanceTime(QuicTime::Delta::FromSeconds(1));
     session_->Initialize();
     session_->StartReading();
   }
@@ -110,8 +112,8 @@ class QuicChromiumClientSessionTest
 
   QuicPacketWriter* CreateQuicPacketWriter(DatagramClientSocket* socket,
                                            QuicConnection* connection) const {
-    scoped_ptr<QuicDefaultPacketWriter> writer(
-        new QuicDefaultPacketWriter(socket));
+    scoped_ptr<QuicChromiumPacketWriter> writer(
+        new QuicChromiumPacketWriter(socket));
     writer->SetConnection(connection);
     return writer.release();
   }
@@ -132,6 +134,7 @@ class QuicChromiumClientSessionTest
   TestCompletionCallback callback_;
   QuicTestPacketMaker maker_;
   ProofVerifyDetailsChromium verify_details_;
+  QuicClientPushPromiseIndex push_promise_index_;
 };
 
 INSTANTIATE_TEST_CASE_P(Tests,
@@ -154,7 +157,7 @@ TEST_P(QuicChromiumClientSessionTest, MaxNumStreams) {
 
   Initialize();
   CompleteCryptoHandshake();
-  const size_t kMaxOpenStreams = session_->get_max_open_streams();
+  const size_t kMaxOpenStreams = session_->max_open_outgoing_streams();
 
   std::vector<QuicChromiumClientStream*> streams;
   for (size_t i = 0; i < kMaxOpenStreams; i++) {
@@ -189,7 +192,7 @@ TEST_P(QuicChromiumClientSessionTest, MaxNumStreamsViaRequest) {
 
   Initialize();
   CompleteCryptoHandshake();
-  const size_t kMaxOpenStreams = session_->get_max_open_streams();
+  const size_t kMaxOpenStreams = session_->max_open_outgoing_streams();
 
   std::vector<QuicChromiumClientStream*> streams;
   for (size_t i = 0; i < kMaxOpenStreams; i++) {
@@ -349,7 +352,7 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocket) {
   EXPECT_EQ(OK, new_socket->Connect(kIpEndPoint));
 
   // Create reader and writer.
-  scoped_ptr<QuicPacketReader> new_reader(new QuicPacketReader(
+  scoped_ptr<QuicChromiumPacketReader> new_reader(new QuicChromiumPacketReader(
       new_socket.get(), &clock_, session_.get(), kQuicYieldAfterPacketsRead,
       QuicTime::Delta::FromMilliseconds(kQuicYieldAfterDurationMilliseconds),
       bound_net_log_.bound()));
@@ -393,10 +396,12 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocketMaxReaders) {
     EXPECT_EQ(OK, new_socket->Connect(kIpEndPoint));
 
     // Create reader and writer.
-    scoped_ptr<QuicPacketReader> new_reader(new QuicPacketReader(
-        new_socket.get(), &clock_, session_.get(), kQuicYieldAfterPacketsRead,
-        QuicTime::Delta::FromMilliseconds(kQuicYieldAfterDurationMilliseconds),
-        bound_net_log_.bound()));
+    scoped_ptr<QuicChromiumPacketReader> new_reader(
+        new QuicChromiumPacketReader(new_socket.get(), &clock_, session_.get(),
+                                     kQuicYieldAfterPacketsRead,
+                                     QuicTime::Delta::FromMilliseconds(
+                                         kQuicYieldAfterDurationMilliseconds),
+                                     bound_net_log_.bound()));
     scoped_ptr<QuicPacketWriter> new_writer(
         CreateQuicPacketWriter(new_socket.get(), session_->connection()));
 
@@ -449,7 +454,7 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocketReadError) {
   EXPECT_EQ(OK, new_socket->Connect(kIpEndPoint));
 
   // Create reader and writer.
-  scoped_ptr<QuicPacketReader> new_reader(new QuicPacketReader(
+  scoped_ptr<QuicChromiumPacketReader> new_reader(new QuicChromiumPacketReader(
       new_socket.get(), &clock_, session_.get(), kQuicYieldAfterPacketsRead,
       QuicTime::Delta::FromMilliseconds(kQuicYieldAfterDurationMilliseconds),
       bound_net_log_.bound()));
@@ -500,7 +505,7 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocketWriteError) {
   EXPECT_EQ(OK, new_socket->Connect(kIpEndPoint));
 
   // Create reader and writer.
-  scoped_ptr<QuicPacketReader> new_reader(new QuicPacketReader(
+  scoped_ptr<QuicChromiumPacketReader> new_reader(new QuicChromiumPacketReader(
       new_socket.get(), &clock_, session_.get(), kQuicYieldAfterPacketsRead,
       QuicTime::Delta::FromMilliseconds(kQuicYieldAfterDurationMilliseconds),
       bound_net_log_.bound()));

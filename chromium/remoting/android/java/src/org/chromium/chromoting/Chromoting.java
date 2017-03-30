@@ -36,6 +36,7 @@ import org.chromium.chromoting.accountswitcher.AccountSwitcher;
 import org.chromium.chromoting.accountswitcher.AccountSwitcherFactory;
 import org.chromium.chromoting.help.HelpContext;
 import org.chromium.chromoting.help.HelpSingleton;
+import org.chromium.chromoting.jni.Client;
 import org.chromium.chromoting.jni.ConnectionListener;
 import org.chromium.chromoting.jni.JniInterface;
 
@@ -62,6 +63,7 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
     /** Preference names for storing selected and recent accounts. */
     private static final String PREFERENCE_SELECTED_ACCOUNT = "account_name";
     private static final String PREFERENCE_RECENT_ACCOUNT_PREFIX = "recent_account_";
+    private static final String PREFERENCE_EXPERIMENTAL_FLAGS = "flags";
 
     /** User's account name (email). */
     private String mAccount;
@@ -78,8 +80,11 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
     /** Refresh button. */
     private MenuItem mRefreshButton;
 
-    /** Host list as it appears to the user. */
+    /** Host list chooser view shown when at least one host is configured. */
     private ListView mHostListView;
+
+    /** View shown when the user has no configured hosts or host list couldn't be retrieved. */
+    private View mEmptyView;
 
     /** Progress view shown instead of the host list when the host list is loading. */
     private View mProgressView;
@@ -113,6 +118,9 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
 
     private AccountSwitcher mAccountSwitcher;
 
+    /** The currently-connected Client, if any. */
+    private Client mClient;
+
     /** Shows a warning explaining that a Google account is required, then closes the activity. */
     private void showNoAccountsDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
@@ -125,9 +133,7 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
                         Intent intent = new Intent(Settings.ACTION_ADD_ACCOUNT);
                         intent.putExtra(Settings.EXTRA_ACCOUNT_TYPES,
                                 new String[] { ACCOUNT_TYPE });
-                        if (intent.resolveActivity(getPackageManager()) != null) {
-                            startActivity(intent);
-                        }
+                        ChromotingUtil.startActivitySafely(Chromoting.this, intent);
                         finish();
                     }
                 });
@@ -148,15 +154,25 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
         dialog.show();
     }
 
-    /** Shows or hides the progress indicator for loading the host list. */
-    private void setHostListProgressVisible(boolean visible) {
-        mHostListView.setVisibility(visible ? View.GONE : View.VISIBLE);
-        mProgressView.setVisibility(visible ? View.VISIBLE : View.GONE);
+    /**
+     * Displays the loading indicator. Currently this also hides the host list, but that may
+     * change.
+     */
+    private void showHostListLoadingIndicator() {
+        mHostListView.setVisibility(View.GONE);
+        mEmptyView.setVisibility(View.GONE);
+        mProgressView.setVisibility(View.VISIBLE);
+    }
 
-        // Hiding the host-list does not automatically hide the empty view, so do that here.
-        if (visible) {
-            mHostListView.getEmptyView().setVisibility(View.GONE);
-        }
+    /**
+     * Shows the appropriate view for the host list and hides the loading indicator. Shows either
+     * the host list chooser or the host list empty view, depending on whether mHosts contains any
+     * hosts.
+     */
+    private void updateHostListView() {
+        mHostListView.setVisibility(mHosts.length == 0 ? View.GONE : View.VISIBLE);
+        mEmptyView.setVisibility(mHosts.length == 0 ? View.VISIBLE : View.GONE);
+        mProgressView.setVisibility(View.GONE);
     }
 
     /**
@@ -176,7 +192,7 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
 
         // Get ahold of our view widgets.
         mHostListView = (ListView) findViewById(R.id.hostList_chooser);
-        mHostListView.setEmptyView(findViewById(R.id.hostList_empty));
+        mEmptyView = findViewById(R.id.hostList_empty);
         mHostListView.setOnItemClickListener(
                 new AdapterView.OnItemClickListener() {
                     @Override
@@ -335,8 +351,14 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
     @Override
     public void onDestroy() {
         super.onDestroy();
-        JniInterface.disconnectFromHost();
         mAccountSwitcher.destroy();
+
+        // TODO(lambroslambrou): Determine whether we really need to tear down the connection here,
+        // so we can remove this code.
+        if (mClient != null) {
+            mClient.destroy();
+            mClient = null;
+        }
     }
 
     /** Called when a child Activity exits and sends a result back to this Activity. */
@@ -352,7 +374,7 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
             } else {
                 // User denied permission or cancelled the dialog, so cancel the request.
                 mWaitingForAuthToken = false;
-                setHostListProgressVisible(false);
+                updateHostListView();
             }
         }
     }
@@ -430,6 +452,11 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
     }
 
     private void connectToHost(HostInfo host) {
+        if (mClient != null) {
+            mClient.destroy();
+        }
+
+        mClient = new Client();
         mProgressIndicator = ProgressDialog.show(
                 this,
                 host.name,
@@ -439,12 +466,17 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
                 new DialogInterface.OnCancelListener() {
                     @Override
                     public void onCancel(DialogInterface dialog) {
-                        JniInterface.disconnectFromHost();
+                        if (mClient != null) {
+                            mClient.destroy();
+                            mClient = null;
+                        }
                     }
                 });
-        SessionConnector connector = new SessionConnector(this, this, mHostListLoader);
-        mAuthenticator = new SessionAuthenticator(this, host);
-        connector.connectToHost(mAccount, mToken, host, mAuthenticator);
+
+        SessionConnector connector = new SessionConnector(mClient, this, this, mHostListLoader);
+        mAuthenticator = new SessionAuthenticator(this, mClient, host);
+        connector.connectToHost(mAccount, mToken, host, mAuthenticator,
+                getPreferences(MODE_PRIVATE).getString(PREFERENCE_EXPERIMENTAL_FLAGS, ""));
     }
 
     private void refreshHostList() {
@@ -453,7 +485,7 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
         }
 
         mTriedNewAuthToken = false;
-        setHostListProgressVisible(true);
+        showHostListLoadingIndicator();
 
         // The refresh button simply makes use of the currently-chosen account.
         requestAuthToken(false);
@@ -474,7 +506,7 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
                     @Override
                     public void onError(int errorResource) {
                         mWaitingForAuthToken = false;
-                        setHostListProgressVisible(false);
+                        updateHostListView();
                         String explanation = getString(errorResource);
                         Toast.makeText(Chromoting.this, explanation, Toast.LENGTH_LONG).show();
                     }
@@ -513,7 +545,7 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
         // Store a copy of the array, so that it can't be mutated by the HostListLoader. HostInfo
         // is an immutable type, so a shallow copy of the array is sufficient here.
         mHosts = Arrays.copyOf(hosts, hosts.length);
-        setHostListProgressVisible(false);
+        updateHostListView();
         updateUi();
     }
 
@@ -538,7 +570,7 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
 
         if (explanation != null) {
             Toast.makeText(this, explanation, Toast.LENGTH_LONG).show();
-            setHostListProgressVisible(false);
+            updateHostListView();
             return;
         }
 
@@ -556,7 +588,7 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
             Log.e(TAG, "Fresh auth token was rejected.");
             explanation = getString(R.string.error_authentication_failed);
             Toast.makeText(this, explanation, Toast.LENGTH_LONG).show();
-            setHostListProgressVisible(false);
+            updateHostListView();
         }
     }
 

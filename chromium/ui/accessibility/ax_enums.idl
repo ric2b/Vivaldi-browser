@@ -30,6 +30,7 @@
     blur,                      // Remove: http://crbug.com/392502
     checked_state_changed,     // Implicit
     children_changed,
+    clicked,
     document_selection_changed,
     focus,
     hide,                      // Remove: http://crbug.com/392502
@@ -64,6 +65,7 @@
   };
 
   enum AXRole {
+    abbr,
     alert_dialog,
     alert,
     annotation,
@@ -204,7 +206,6 @@
     enabled,   // content only
     expanded,
     focusable,
-    focused,
     haspopup,
     horizontal,
     hovered,

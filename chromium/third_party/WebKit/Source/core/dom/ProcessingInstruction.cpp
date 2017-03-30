@@ -90,7 +90,7 @@ String ProcessingInstruction::nodeName() const
     return m_target;
 }
 
-Node::NodeType ProcessingInstruction::nodeType() const
+Node::NodeType ProcessingInstruction::getNodeType() const
 {
     return PROCESSING_INSTRUCTION_NODE;
 }
@@ -165,7 +165,7 @@ void ProcessingInstruction::process(const String& href, const String& charset)
 
     String url = document().completeURL(href).string();
 
-    ResourcePtr<StyleSheetResource> resource;
+    RefPtrWillBeRawPtr<StyleSheetResource> resource = nullptr;
     FetchRequest request(ResourceRequest(document().completeURL(href)), FetchInitiatorTypeNames::processinginstruction);
     if (m_isXSL) {
         if (RuntimeEnabledFeatures::xsltEnabled())
@@ -310,6 +310,7 @@ DEFINE_TRACE(ProcessingInstruction)
     visitor->trace(m_sheet);
     visitor->trace(m_listenerForXSLT);
     CharacterData::trace(visitor);
+    ResourceOwner<StyleSheetResource>::trace(visitor);
 }
 
-} // namespace
+} // namespace blink

@@ -63,6 +63,7 @@ WHITELISTED_LICENSES = [
     'GPL (v2 or later) with Bison parser exception',
     'GPL (v2 or later) with libtool exception',
     'GPL (v2) LGPL (v2.1 or later)',
+    'GPL (v3 or later) LGPL (v2.1 or later) with Bison parser exception',
     'GPL (v3 or later) with Bison parser exception',
     'GPL with Bison parser exception',
     'ISC',
@@ -207,6 +208,9 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
     'third_party/devscripts': [
         'GPL (v2 or later)',
     ],
+    'third_party/catapult/firefighter/default/tracing/third_party/devscripts': [
+        'GPL (v2 or later)',
+    ],
     'third_party/catapult/tracing/third_party/devscripts': [
         'GPL (v2 or later)',
     ],
@@ -220,6 +224,12 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
     # https://bugs.launchpad.net/beautifulsoup/+bug/1481316
     # MIT license.
     'third_party/catapult/third_party/beautifulsoup': [
+        'UNKNOWN'
+    ],
+
+    # https://bitbucket.org/ned/coveragepy/issue/313/add-license-file-containing-2-3-or-4
+    # Apache (v2.0) license, not shipped
+    'third_party/catapult/third_party/coverage': [
         'UNKNOWN'
     ],
 
@@ -325,12 +335,6 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
         'UNKNOWN',
     ],
 
-    # https://bitbucket.org/gutworth/six/issues/129/add-license-headers-to-source-files
-    # MIT license.
-    'third_party/catapult/third_party/six': [
-        'UNKNOWN',
-    ],
-
     'third_party/expat/files/lib': [  # http://crbug.com/98121
         'UNKNOWN',
     ],
@@ -346,6 +350,9 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
         'UNKNOWN',
     ],
     'third_party/freetype2': [ # http://crbug.com/177319
+        'UNKNOWN',
+    ],
+    'third_party/freetype-android': [ # http://crbug.com/177319
         'UNKNOWN',
     ],
     'third_party/hunspell': [  # http://crbug.com/98134
@@ -426,6 +433,9 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
     'third_party/openmax_dl/dl' : [
         'Khronos Group',
     ],
+    'third_party/opus/src/autogen.sh' : [  # https://trac.xiph.org/ticket/2253#ticket
+        'UNKNOWN',
+    ],
     'third_party/boringssl': [
         # There are some files in BoringSSL which came from OpenSSL and have no
         # license in them. We don't wish to add the license header ourselves
@@ -473,6 +483,16 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
         'GPL (v2 or later)',
     ],
     'third_party/sqlite': [
+        'UNKNOWN',
+    ],
+
+    # New BSD license. http://crbug.com/98455
+    'tools/swarming_client/third_party/google': [
+        'UNKNOWN',
+    ],
+
+    # Apache v2.0.
+    'tools/swarming_client/third_party/googleapiclient': [
         'UNKNOWN',
     ],
 
@@ -580,6 +600,18 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
         'UNKNOWN',
     ],
     'tools/telemetry/third_party/pyserial': [
+        # https://sourceforge.net/p/pyserial/feature-requests/35/
+        'UNKNOWN',
+    ],
+    # Not shipped, MIT license but the header files contain no licensing info.
+    'third_party/catapult/telemetry/third_party/altgraph': [
+        'UNKNOWN',
+    ],
+    # Not shipped, MIT license but the header files contain no licensing info.
+    'third_party/catapult/telemetry/third_party/modulegraph': [
+        'UNKNOWN',
+    ],
+    'third_party/catapult/telemetry/third_party/pyserial': [
         # https://sourceforge.net/p/pyserial/feature-requests/35/
         'UNKNOWN',
     ],

@@ -24,7 +24,6 @@
 #include "chrome/browser/ui/views/frame/system_menu_model_builder.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "ui/base/hit_test.h"
-#include "ui/base/theme_provider.h"
 #include "ui/events/event_handler.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/screen.h"
@@ -52,10 +51,7 @@ BrowserFrame::BrowserFrame(BrowserView* browser_view)
     : native_browser_frame_(nullptr),
       root_view_(nullptr),
       browser_frame_view_(nullptr),
-      browser_view_(browser_view),
-      theme_provider_(
-          &ThemeService::GetThemeProviderForProfile(browser_view_->browser()
-                                                        ->profile())) {
+      browser_view_(browser_view) {
   browser_view_->set_frame(this);
   set_is_secondary_widget(false);
   // Don't focus anything on creation, selecting a tab will set the focus.
@@ -85,14 +81,6 @@ void BrowserFrame::InitBrowserFrame() {
                                              &params.show_state);
   }
 
-  if (browser_view_->browser()->profile()->IsOffTheRecord()) {
-#if defined(OS_WIN)
-    params.native_theme = ui::NativeThemeDarkWin::instance();
-#elif defined(OS_CHROMEOS)
-    params.native_theme = ui::NativeThemeDarkAura::instance();
-#endif
-  }
-
   Init(params);
 
   if (!native_browser_frame_->UsesNativeSystemMenu()) {
@@ -103,11 +91,6 @@ void BrowserFrame::InitBrowserFrame() {
 #if defined(OS_LINUX)
   browser_command_handler_.reset(new BrowserCommandHandlerLinux(browser_view_));
 #endif
-}
-
-void BrowserFrame::SetThemeProvider(scoped_ptr<ui::ThemeProvider> provider) {
-  owned_theme_provider_ = std::move(provider);
-  theme_provider_ = owned_theme_provider_.get();
 }
 
 int BrowserFrame::GetMinimizeButtonOffset() const {
@@ -181,7 +164,22 @@ bool BrowserFrame::GetAccelerator(int command_id,
 }
 
 const ui::ThemeProvider* BrowserFrame::GetThemeProvider() const {
-  return theme_provider_;
+  return &ThemeService::GetThemeProviderForProfile(
+      browser_view_->browser()->profile());
+}
+
+const ui::NativeTheme* BrowserFrame::GetNativeTheme() const {
+  if (browser_view_->browser()->profile()->GetProfileType() ==
+          Profile::INCOGNITO_PROFILE &&
+      ThemeServiceFactory::GetForProfile(browser_view_->browser()->profile())
+          ->UsingDefaultTheme()) {
+#if defined(OS_WIN)
+    return ui::NativeThemeDarkWin::instance();
+#elif defined(OS_CHROMEOS)
+    return ui::NativeThemeDarkAura::instance();
+#endif
+  }
+  return views::Widget::GetNativeTheme();
 }
 
 void BrowserFrame::SchedulePaintInRect(const gfx::Rect& rect) {
@@ -263,8 +261,6 @@ AvatarMenuButton* BrowserFrame::GetAvatarMenuButton() {
   return browser_frame_view_->avatar_button();
 }
 
-#if defined(FRAME_AVATAR_BUTTON)
-NewAvatarButton* BrowserFrame::GetNewAvatarMenuButton() {
-  return browser_frame_view_->new_avatar_button();
+views::View* BrowserFrame::GetNewAvatarMenuButton() {
+  return browser_frame_view_->GetProfileSwitcherView();
 }
-#endif

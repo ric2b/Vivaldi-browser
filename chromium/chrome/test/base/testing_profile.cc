@@ -12,7 +12,6 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/path_service.h"
-#include "base/prefs/testing_pref_store.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -21,7 +20,6 @@
 #include "chrome/browser/autocomplete/in_memory_url_index_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/chrome_bookmark_client.h"
-#include "chrome/browser/bookmarks/chrome_bookmark_client_factory.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -42,6 +40,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/storage_partition_descriptor.h"
 #include "chrome/browser/search_engines/template_url_fetcher_factory.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/sync/glue/sync_start_util.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "chrome/browser/web_data_service_factory.h"
@@ -49,7 +48,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/test/base/history_index_restore_observer.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/common/bookmark_constants.h"
@@ -66,8 +64,10 @@
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/core/refcounted_keyed_service.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
+#include "components/omnibox/browser/history_index_restore_observer.h"
 #include "components/omnibox/browser/in_memory_url_index.h"
 #include "components/policy/core/common/policy_service.h"
+#include "components/prefs/testing_pref_store.h"
 #include "components/proxy_config/pref_proxy_config_tracker.h"
 #include "components/syncable_prefs/pref_service_syncable.h"
 #include "components/syncable_prefs/testing_pref_service_syncable.h"
@@ -83,7 +83,6 @@
 #include "content/public/test/mock_resource_context.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/common/constants.h"
-#include "net/cookies/cookie_monster.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_test_util.h"
@@ -158,12 +157,9 @@ class QuittingHistoryDBTask : public history::HistoryDBTask {
 class TestExtensionURLRequestContext : public net::URLRequestContext {
  public:
   TestExtensionURLRequestContext() {
-    net::CookieMonster* cookie_monster =
-        content::CreateCookieStore(content::CookieStoreConfig())->
-            GetCookieMonster();
-    const char* const schemes[] = {extensions::kExtensionScheme};
-    cookie_monster->SetCookieableSchemes(schemes, arraysize(schemes));
-    set_cookie_store(cookie_monster);
+    content::CookieStoreConfig cookie_config;
+    cookie_config.cookieable_schemes.push_back(extensions::kExtensionScheme);
+    set_cookie_store(content::CreateCookieStore(cookie_config));
   }
 
   ~TestExtensionURLRequestContext() override { AssertNoURLRequests(); }
@@ -204,6 +200,7 @@ scoped_ptr<KeyedService> BuildInMemoryURLIndex(
       BookmarkModelFactory::GetForProfile(profile),
       HistoryServiceFactory::GetForProfile(profile,
                                            ServiceAccessType::IMPLICIT_ACCESS),
+      TemplateURLServiceFactory::GetForProfile(profile),
       content::BrowserThread::GetBlockingPool(), profile->GetPath(),
       profile->GetPrefs()->GetString(prefs::kAcceptLanguages),
       SchemeSet()));
@@ -213,10 +210,9 @@ scoped_ptr<KeyedService> BuildInMemoryURLIndex(
 
 scoped_ptr<KeyedService> BuildBookmarkModel(content::BrowserContext* context) {
   Profile* profile = Profile::FromBrowserContext(context);
-  ChromeBookmarkClient* bookmark_client =
-      ChromeBookmarkClientFactory::GetForProfile(profile);
-  scoped_ptr<BookmarkModel> bookmark_model(new BookmarkModel(bookmark_client));
-  bookmark_client->Init(bookmark_model.get());
+  scoped_ptr<BookmarkModel> bookmark_model(
+      new BookmarkModel(make_scoped_ptr(new ChromeBookmarkClient(
+          profile, ManagedBookmarkServiceFactory::GetForProfile(profile)))));
   bookmark_model->Load(profile->GetPrefs(),
                        profile->GetPrefs()->GetString(prefs::kAcceptLanguages),
                        profile->GetPath(),
@@ -591,8 +587,6 @@ void TestingProfile::CreateBookmarkModel(bool delete_file) {
   }
   ManagedBookmarkServiceFactory::GetInstance()->SetTestingFactory(
       this, ManagedBookmarkServiceFactory::GetDefaultFactory());
-  ChromeBookmarkClientFactory::GetInstance()->SetTestingFactory(
-      this, ChromeBookmarkClientFactory::GetDefaultFactory());
   // This creates the BookmarkModel.
   ignore_result(BookmarkModelFactory::GetInstance()->SetTestingFactoryAndUse(
       this, BuildBookmarkModel));
@@ -733,11 +727,10 @@ TestingProfile::GetExtensionSpecialStoragePolicy() {
 #endif
 }
 
-net::CookieMonster* TestingProfile::GetCookieMonster() {
+net::CookieStore* TestingProfile::GetCookieStore() {
   if (!GetRequestContext())
     return NULL;
-  return GetRequestContext()->GetURLRequestContext()->cookie_store()->
-      GetCookieMonster();
+  return GetRequestContext()->GetURLRequestContext()->cookie_store();
 }
 
 void TestingProfile::CreateTestingPrefService() {

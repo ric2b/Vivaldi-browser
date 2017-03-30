@@ -84,7 +84,7 @@ class TaskManager {
 
   TaskManagerModel* model() const { return model_.get(); }
 
-  void OpenAboutMemory(chrome::HostDesktopType desktop_type);
+  void OpenAboutMemory();
 
  private:
   FRIEND_TEST_ALL_PREFIXES(TaskManagerTest, Basic);
@@ -332,6 +332,7 @@ class TaskManagerModel : public base::RefCountedThreadSafe<TaskManagerModel> {
   // members indicate if a value is valid.
   struct PerResourceValues {
     PerResourceValues();
+    PerResourceValues(const PerResourceValues& other);
     ~PerResourceValues();
 
     bool is_title_valid;
@@ -361,6 +362,7 @@ class TaskManagerModel : public base::RefCountedThreadSafe<TaskManagerModel> {
   // members indicate if a value is valid.
   struct PerProcessValues {
     PerProcessValues();
+    PerProcessValues(const PerProcessValues& other);
     ~PerProcessValues();
 
     bool is_cpu_usage_valid;

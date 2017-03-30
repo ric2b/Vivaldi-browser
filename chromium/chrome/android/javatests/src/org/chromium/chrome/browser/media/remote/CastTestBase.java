@@ -5,34 +5,34 @@
 package org.chromium.chrome.browser.media.remote;
 
 import android.app.Dialog;
-import android.app.Instrumentation;
 import android.graphics.Rect;
+import android.os.Environment;
 import android.os.StrictMode;
-import android.os.SystemClock;
 import android.support.v4.app.DialogFragment;
 import android.support.v4.app.FragmentManager;
-import android.view.MotionEvent;
 import android.view.View;
 
 import junit.framework.Assert;
 
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.media.RouterTestUtils;
 import org.chromium.chrome.browser.media.remote.RemoteVideoInfo.PlayerState;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
-import org.chromium.chrome.test.util.TestHttpServerClient;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content.browser.test.util.JavaScriptUtils;
-import org.chromium.content.browser.test.util.TestTouchUtils;
 import org.chromium.content.browser.test.util.UiUtils;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.net.test.EmbeddedTestServer;
 
-import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -58,12 +58,17 @@ public abstract class CastTestBase extends ChromeActivityTestCaseBase<ChromeActi
         }
 
         @Override
-        public void onPlaybackStateChanged(PlayerState oldState, PlayerState newState) {
-            if (newState == PlayerState.PLAYING) {
-                mPlaying = true;
-            } else if (newState != PlayerState.PLAYING) {
-                mPlaying = false;
-            }
+        public void onPlaybackStateChanged(final PlayerState newState) {
+            // Use postOnUiThread to handling the latch until the current UI task has completed,
+            // this makes sure that Cast has finished handling the event.
+            ThreadUtils.postOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if ((mAwaitedStates.contains(newState))) {
+                        mLatch.countDown();
+                    }
+                }
+            });
         }
 
         @Override
@@ -78,13 +83,17 @@ public abstract class CastTestBase extends ChromeActivityTestCaseBase<ChromeActi
 
     }
 
+    private Set<PlayerState> mAwaitedStates;
+    private CountDownLatch mLatch;
+    private EmbeddedTestServer mTestServer;
+
     // The name of the route provided by the dummy cast device.
     protected static final String CAST_TEST_ROUTE = "Cast Test Route";
 
     // URLs of the default test page and video.
     protected static final String DEFAULT_VIDEO_PAGE =
-            "chrome/test/data/android/media/simple_video.html";
-    protected static final String DEFAULT_VIDEO = "chrome/test/data/android/media/test.mp4";
+            "/chrome/test/data/android/media/simple_video.html";
+    protected static final String DEFAULT_VIDEO = "/chrome/test/data/android/media/test.mp4";
 
     // Constants used to find the default video and maximise button on the page
     protected static final String VIDEO_ELEMENT = "video";
@@ -101,15 +110,16 @@ public abstract class CastTestBase extends ChromeActivityTestCaseBase<ChromeActi
     protected static final int VIEW_RETRY_MS = 100;
 
     protected static final String TEST_VIDEO_PAGE_2 =
-            "chrome/test/data/android/media/simple_video2.html";
+            "/chrome/test/data/android/media/simple_video2.html";
 
-    protected static final String TEST_VIDEO_2 = "chrome/test/data/android/media/test2.mp4";
+    protected static final String TEST_VIDEO_2 = "/chrome/test/data/android/media/test2.mp4";
 
-    protected static final String TWO_VIDEO_PAGE = "chrome/test/data/android/media/two_videos.html";
+    protected static final String TWO_VIDEO_PAGE =
+            "/chrome/test/data/android/media/two_videos.html";
 
     private static final String TAG = "CastTestBase";
 
-    private boolean mPlaying = false;
+    private MediaRouteController mMediaRouteController;
 
     private StrictMode.ThreadPolicy mOldPolicy;
 
@@ -128,10 +138,13 @@ public abstract class CastTestBase extends ChromeActivityTestCaseBase<ChromeActi
                 StrictMode.allowThreadDiskWrites();
             }
         });
+        mTestServer = EmbeddedTestServer.createAndStartFileServer(
+                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
     }
 
     @Override
     protected void tearDown() throws Exception {
+        mTestServer.stopAndDestroyServer();
         // Temporary until support library is updated, see http://crbug.com/576393.
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
@@ -147,6 +160,46 @@ public abstract class CastTestBase extends ChromeActivityTestCaseBase<ChromeActi
         startMainActivityOnBlankPage();
     }
 
+    /**
+     * Wait for cast to reach a state we are interested in.
+     * Will deadlock if called on the target's UI thread.
+     * @param states
+     */
+    protected boolean waitForStates(final Set<PlayerState> states, int waitTimeMs) {
+        mAwaitedStates = states;
+        mLatch = new CountDownLatch(1);
+        // Deal with the case where Chrome is already in the desired state
+        ThreadUtils.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (mMediaRouteController != null
+                        && states.contains(mMediaRouteController.getDisplayedPlayerState())) {
+                    mLatch.countDown();
+                }
+            }
+        });
+        try {
+            return mLatch.await(waitTimeMs, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Wait for cast to reach a state we are interested in.
+     * Will deadlock if called on the target's UI thread.
+     * @param states
+     */
+    protected boolean waitForState(final PlayerState state, int waitTimeMs) {
+        Set<PlayerState> states = new HashSet<PlayerState>();
+        states.add(state);
+        return waitForStates(states, waitTimeMs);
+    }
+
+    protected EmbeddedTestServer getTestServer() {
+        return mTestServer;
+    }
+
     protected void castAndPauseDefaultVideoFromPage(String pagePath) throws InterruptedException,
             TimeoutException {
         Rect videoRect = castDefaultVideoFromPage(pagePath);
@@ -159,7 +212,7 @@ public abstract class CastTestBase extends ChromeActivityTestCaseBase<ChromeActi
         Thread.sleep(RUN_TIME_MS);
 
         tapButton(tab, pauseButton);
-        assertTrue("Not paused", waitForState(PlayerState.PAUSED));
+        assertTrue("Not paused", waitForState(PlayerState.PAUSED, MAX_VIEW_TIME_MS));
     }
 
     private boolean videoReady(String videoElement, WebContents webContents) {
@@ -204,10 +257,8 @@ public abstract class CastTestBase extends ChromeActivityTestCaseBase<ChromeActi
 
     protected Rect prepareDefaultVideofromPage(String pagePath, Tab currentTab)
             throws InterruptedException, TimeoutException {
-        // Ensure that we don't try to reconnect
-        RemotePlaybackSettings.setShouldReconnectToRemote(getActivity(), false);
 
-        loadUrl(TestHttpServerClient.getUrl(pagePath));
+        loadUrl(mTestServer.getURL(pagePath));
 
         WebContents webContents = currentTab.getWebContents();
 
@@ -242,14 +293,11 @@ public abstract class CastTestBase extends ChromeActivityTestCaseBase<ChromeActi
             public void run() {
                 RemoteMediaPlayerController playerController =
                         RemoteMediaPlayerController.instance();
-
-                // Because of the way we fake YouTube this will get the YouTube controller if we are
-                // testing YouTube.
-                MediaRouteController routeController = playerController.getMediaRouteController(
-                        TestHttpServerClient.getUrl(DEFAULT_VIDEO),
-                        TestHttpServerClient.getUrl(DEFAULT_VIDEO_PAGE));
-                assertNotNull("Could not get MediaRouteController", routeController);
-                routeController.addUiListener(new TestListener());
+                mMediaRouteController = playerController.getMediaRouteController(
+                        mTestServer.getURL(DEFAULT_VIDEO),
+                        mTestServer.getURL(DEFAULT_VIDEO_PAGE));
+                assertNotNull("Could not get MediaRouteController", mMediaRouteController);
+                mMediaRouteController.addUiListener(new TestListener());
             }
         });
         tapCastButton(tab, videoRect);
@@ -261,50 +309,26 @@ public abstract class CastTestBase extends ChromeActivityTestCaseBase<ChromeActi
             fail();
         }
 
-        View testRouteButton = waitForRouteButton(chromecastName);
+        View testRouteButton = RouterTestUtils.waitForRouteButton(
+                getActivity(), chromecastName, MAX_VIEW_TIME_MS, VIEW_RETRY_MS);
         assertNotNull("Test route not found", testRouteButton);
 
-        mouseSingleClickView(getInstrumentation(), testRouteButton);
-    }
-
-    protected View waitForRouteButton(final String chromecastName) {
-        return waitForView(new Callable<View>() {
-            @Override
-            public View call() {
-                FragmentManager fm = getActivity().getSupportFragmentManager();
-                if (fm == null) return null;
-                DialogFragment mediaRouteListFragment = (DialogFragment) fm.findFragmentByTag(
-                        "android.support.v7.mediarouter:MediaRouteChooserDialogFragment");
-                if (mediaRouteListFragment == null || mediaRouteListFragment.getDialog() == null) {
-                    return null;
-                }
-                View mediaRouteList =
-                        mediaRouteListFragment.getDialog().findViewById(R.id.mr_chooser_list);
-                if (mediaRouteList == null) return null;
-                ArrayList<View> routesWanted = new ArrayList<View>();
-                mediaRouteList.findViewsWithText(routesWanted, chromecastName,
-                        View.FIND_VIEWS_WITH_TEXT);
-                if (routesWanted.size() == 0) return null;
-
-                return routesWanted.get(0);
-            }
-        }, MAX_VIEW_TIME_MS);
+        RouterTestUtils.mouseSingleClickView(getInstrumentation(), testRouteButton);
     }
 
     protected void checkDisconnected() {
-        for (int time = 0; time < MAX_VIEW_TIME_MS; time += VIEW_RETRY_MS) {
-            if (isDisconnected()) break;
-            sleepNoThrow(VIEW_RETRY_MS);
-        }
+        HashSet<PlayerState> disconnectedStates = new HashSet<PlayerState>();
+        disconnectedStates.add(PlayerState.FINISHED);
+        disconnectedStates.add(PlayerState.INVALIDATED);
+        waitForStates(disconnectedStates, MAX_VIEW_TIME_MS);
         // Could use assertTrue(isDisconnected()) here, but retesting the individual aspects of
         // disconnection gives more specific error messages.
-        NotificationTransportControl notificationTransportControl =
-                NotificationTransportControl.getIfExists();
-        if (notificationTransportControl != null && notificationTransportControl.isShowing()) {
+        CastNotificationControl notificationControl =
+                CastNotificationControl.getForTests();
+        if (notificationControl != null && notificationControl.isShowingForTests()) {
             fail("Failed to close notification");
         }
-        assertEquals("Video still playing?", null,
-                RemotePlaybackSettings.getUriPlaying(getActivity()));
+        assertEquals("Video still playing?", null, getUriPlaying());
         assertTrue("RemoteMediaPlayerController not stopped", !isPlayingRemotely());
     }
 
@@ -313,7 +337,7 @@ public abstract class CastTestBase extends ChromeActivityTestCaseBase<ChromeActi
         tapCastButton(tab, videoRect);
 
         // Wait for the disconnect button
-        final View disconnectButton = waitForView(new Callable<View>() {
+        final View disconnectButton = RouterTestUtils.waitForView(new Callable<View>() {
             @Override
             public View call() {
                 FragmentManager fm = getActivity().getSupportFragmentManager();
@@ -330,11 +354,11 @@ public abstract class CastTestBase extends ChromeActivityTestCaseBase<ChromeActi
                 //               https://crbug/548599
                 return dialog.findViewById(android.R.id.button1);
             }
-        }, MAX_VIEW_TIME_MS);
+        }, MAX_VIEW_TIME_MS, VIEW_RETRY_MS);
 
         assertNotNull("No disconnect button", disconnectButton);
 
-        clickButton(disconnectButton);
+        RouterTestUtils.clickButton(disconnectButton);
     }
 
     /*
@@ -343,14 +367,13 @@ public abstract class CastTestBase extends ChromeActivityTestCaseBase<ChromeActi
      */
     protected void checkVideoStarted(String testVideo) {
         // Check we have a notification
-        NotificationTransportControl notificationTransportControl = waitForCastNotification();
-        assertNotNull("No notification controller", notificationTransportControl);
-        waitForCastNotificationService(notificationTransportControl);
-        assertTrue("No notification", notificationTransportControl.isShowing());
+        CastNotificationControl notificationControl = waitForCastNotification();
+        assertNotNull("No notification controller", notificationControl);
+        assertTrue("No notification", notificationControl.isShowingForTests());
         // Check that we are playing the right video
         waitUntilVideoCurrent(testVideo);
-        assertEquals("Wrong video playing", TestHttpServerClient.getUrl(testVideo),
-                RemotePlaybackSettings.getUriPlaying(getActivity()));
+        assertEquals(
+                "Wrong video playing", mTestServer.getURL(testVideo), getUriPlaying());
 
         // Check that the RemoteMediaPlayerController and the (YouTube)MediaRouteController have
         // been set up correctly
@@ -360,32 +383,6 @@ public abstract class CastTestBase extends ChromeActivityTestCaseBase<ChromeActi
         assertTrue("Video not playing", isPlayingRemotely());
         assertTrue("Wrong sort of MediaRouteController", (playerController
                 .getCurrentlyPlayingMediaRouteController() instanceof DefaultMediaRouteController));
-    }
-
-    /**
-     * Click a button. Unlike {@link CastTestBase#mouseSingleClickView} this directly accesses the
-     * view and does not send motion events though the message queue. As such it doesn't require the
-     * view to have been created by the instrumented activity, but gives less flexibility than
-     * mouseSingleClickView. For example, if the view is hierachical, then clickButton will always
-     * act on specified view, whereas mouseSingleClickView will send the events to the appropriate
-     * child view. It is hence only really appropriate for simple views such as buttons.
-     *
-     * @param button the button to be clicked.
-     */
-    protected void clickButton(final View button) {
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-                @Override
-            public void run() {
-                // Post the actual click to the button's message queue, to ensure that it has been
-                // inflated before the click is received.
-                button.post(new Runnable() {
-                        @Override
-                    public void run() {
-                        button.performClick();
-                    }
-                });
-            }
-        });
     }
 
     protected void sleepNoThrow(long timeout) {
@@ -408,22 +405,15 @@ public abstract class CastTestBase extends ChromeActivityTestCaseBase<ChromeActi
         tapButton(tab, playPauseButton(videoRect));
     }
 
-    protected View waitForView(Callable<View> getViewCallable, int timeoutMs) {
-        for (int time = 0; time < timeoutMs; time += VIEW_RETRY_MS) {
-            try {
-                View result = getViewCallable.call();
-                if (result != null) return result;
-            } catch (Exception e) {
-                fail(e.toString());
-            }
-            sleepNoThrow(VIEW_RETRY_MS);
-        }
-        return null;
-    }
-
-    protected NotificationTransportControl waitForCastNotification() {
+    protected CastNotificationControl waitForCastNotification() {
         for (int time = 0; time < MAX_VIEW_TIME_MS; time += VIEW_RETRY_MS) {
-            NotificationTransportControl result = NotificationTransportControl.getIfExists();
+            CastNotificationControl result = ThreadUtils.runOnUiThreadBlockingNoException(
+                    new Callable<CastNotificationControl>() {
+                        @Override
+                        public CastNotificationControl call() {
+                            return CastNotificationControl.getForTests();
+                        }
+                    });
             if (result != null) {
                 return result;
             }
@@ -432,56 +422,27 @@ public abstract class CastTestBase extends ChromeActivityTestCaseBase<ChromeActi
         return null;
     }
 
-    protected NotificationTransportControl.ListenerService waitForCastNotificationService(
-            NotificationTransportControl notification) {
-        for (int time = 0; time < MAX_VIEW_TIME_MS; time += VIEW_RETRY_MS) {
-            NotificationTransportControl.ListenerService service = notification.getService();
-            if (service != null) {
-                return service;
-            }
-            sleepNoThrow(VIEW_RETRY_MS);
-        }
-        return null;
-
-    }
-
-    protected boolean waitForState(RemoteVideoInfo.PlayerState state) {
-        for (int time = 0; time < MAX_VIEW_TIME_MS; time += VIEW_RETRY_MS) {
-            RemoteMediaPlayerController playerController = RemoteMediaPlayerController
-                    .getIfExists();
-            if (playerController != null
-                    && playerController.getCurrentlyPlayingMediaRouteController() != null
-                    && playerController.getCurrentlyPlayingMediaRouteController().getPlayerState()
-                            == state) {
-                return true;
-            }
-            sleepNoThrow(VIEW_RETRY_MS);
-        }
-        return false;
-    }
-
     protected boolean waitUntilPlaying() {
-        for (int time = 0; time < MAX_VIEW_TIME_MS; time += VIEW_RETRY_MS) {
-            if (mPlaying) return true;
-            sleepNoThrow(VIEW_RETRY_MS);
-        }
-        return false;
+        return waitForState(PlayerState.PLAYING, MAX_VIEW_TIME_MS);
     }
 
     private boolean isDisconnected() {
-        NotificationTransportControl notificationTransportControl =
-                NotificationTransportControl.getIfExists();
-        if (notificationTransportControl != null && notificationTransportControl.isShowing()) {
-            return false;
-        }
-        if (RemotePlaybackSettings.getUriPlaying(getActivity()) != null) return false;
-        return !isPlayingRemotely();
+        return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Boolean>() {
+            @Override
+            public Boolean call() {
+                CastNotificationControl notificationControl = CastNotificationControl.getForTests();
+                if (notificationControl != null && notificationControl.isShowingForTests()) {
+                    return false;
+                }
+                if (getUriPlaying() != null) return false;
+                return !isPlayingRemotely();
+            }
+        });
     }
 
     private boolean waitUntilVideoCurrent(String testVideo) {
         for (int time = 0; time < MAX_VIEW_TIME_MS; time += VIEW_RETRY_MS) {
-            if (TestHttpServerClient.getUrl(testVideo).equals(
-                    RemotePlaybackSettings.getUriPlaying(getActivity()))) {
+            if (mTestServer.getURL(testVideo).equals(getUriPlaying())) {
                 return true;
             }
             sleepNoThrow(VIEW_RETRY_MS);
@@ -489,30 +450,62 @@ public abstract class CastTestBase extends ChromeActivityTestCaseBase<ChromeActi
         return false;
     }
 
+    protected String getUriPlaying() {
+        return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<String>() {
+            @Override
+            public String call() {
+                if (mMediaRouteController == null) return "";
+                return mMediaRouteController.getUriPlaying();
+            }
+        });
+    }
+
     protected long getRemotePositionMs() {
-        return getMediaRouteController().getPosition();
+        return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Long>() {
+            @Override
+            public Long call() {
+                return getMediaRouteController().getPosition();
+            }
+        });
     }
 
     protected long getRemoteDurationMs() {
-        return getMediaRouteController().getDuration();
+        return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Long>() {
+            @Override
+            public Long call() {
+                return getMediaRouteController().getDuration();
+            }
+        });
     }
 
     protected boolean isPlayingRemotely() {
-        RemoteMediaPlayerController playerController = RemoteMediaPlayerController.getIfExists();
-        if (playerController == null) return false;
-        MediaRouteController routeController = playerController
-                .getCurrentlyPlayingMediaRouteController();
-        if (routeController == null) return false;
-        return routeController.isPlaying();
+        return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Boolean>() {
+            @Override
+            public Boolean call() {
+                RemoteMediaPlayerController playerController =
+                        RemoteMediaPlayerController.getIfExists();
+                if (playerController == null) return false;
+                MediaRouteController routeController =
+                        playerController.getCurrentlyPlayingMediaRouteController();
+                if (routeController == null) return false;
+                return routeController.isPlaying();
+            }
+        });
     }
 
     protected MediaRouteController getMediaRouteController() {
-        RemoteMediaPlayerController playerController = RemoteMediaPlayerController.getIfExists();
-        assertNotNull("No RemoteMediaPlayerController", playerController);
-        MediaRouteController routeController = playerController
-                .getCurrentlyPlayingMediaRouteController();
-        assertNotNull("No MediaRouteController", routeController);
-        return routeController;
+        return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<MediaRouteController>() {
+            @Override
+            public MediaRouteController call() {
+                RemoteMediaPlayerController playerController =
+                        RemoteMediaPlayerController.getIfExists();
+                assertNotNull("No RemoteMediaPlayerController", playerController);
+                MediaRouteController routeController =
+                        playerController.getCurrentlyPlayingMediaRouteController();
+                assertNotNull("No MediaRouteController", routeController);
+                return routeController;
+            }
+        });
     }
 
     /*
@@ -560,72 +553,14 @@ public abstract class CastTestBase extends ChromeActivityTestCaseBase<ChromeActi
         ContentViewCore core = tab.getContentViewCore();
         int clickX =
                 (int) core.getRenderCoordinates().fromLocalCssToPix(
-                        ((float) (rect.left + rect.right)) / 2)
-                + core.getViewportSizeOffsetWidthPix();
+                        ((float) (rect.left + rect.right)) / 2);
         int clickY =
                 (int) core.getRenderCoordinates().fromLocalCssToPix(
                         ((float) (rect.top + rect.bottom)) / 2)
-                + core.getViewportSizeOffsetHeightPix();
+                + core.getTopControlsHeightPix();
         // Click using a virtual mouse, since a touch may result in a disambiguation pop-up.
-        mouseSingleClickView(getInstrumentation(), tab.getView(), clickX, clickY);
+        RouterTestUtils.mouseSingleClickView(getInstrumentation(), tab.getView(), clickX, clickY);
     }
 
-    private static void sendMouseAction(Instrumentation instrumentation, int action, long downTime,
-            float x, float y) {
-        long eventTime = SystemClock.uptimeMillis();
-        MotionEvent.PointerCoords coords[] = new MotionEvent.PointerCoords[1];
-        coords[0] = new MotionEvent.PointerCoords();
-        coords[0].x = x;
-        coords[0].y = y;
-        MotionEvent.PointerProperties properties[] = new MotionEvent.PointerProperties[1];
-        properties[0] = new MotionEvent.PointerProperties();
-        properties[0].id = 0;
-        properties[0].toolType = MotionEvent.TOOL_TYPE_MOUSE;
-        MotionEvent event = MotionEvent.obtain(downTime, eventTime, action, 1, properties, coords,
-                0, 0, 0.0f, 0.0f, 0, 0, 0, 0);
-        instrumentation.sendPointerSync(event);
-        instrumentation.waitForIdleSync();
-    }
-
-    /**
-     * Sends (synchronously) a single mosue click to an absolute screen coordinates.
-     *
-     * @param instrumentation Instrumentation object used by the test.
-     * @param x Screen absolute x location.
-     * @param y Screen absolute y location.
-     */
-    private static void mouseSingleClick(Instrumentation instrumentation, float x, float y) {
-        long downTime = SystemClock.uptimeMillis();
-        sendMouseAction(instrumentation, MotionEvent.ACTION_DOWN, downTime, x, y);
-        sendMouseAction(instrumentation, MotionEvent.ACTION_UP, downTime, x, y);
-    }
-
-    /**
-     * Sends (synchronously) a single mouse click to the View at the specified coordinates.
-     *
-     * @param instrumentation Instrumentation object used by the test.
-     * @param v The view the coordinates are relative to.
-     * @param x Relative x location to the view.
-     * @param y Relative y location to the view.
-     */
-    private static void mouseSingleClickView(Instrumentation instrumentation, View v, int x,
-            int y) {
-        int location[] = TestTouchUtils.getAbsoluteLocationFromRelative(v, x, y);
-        int absoluteX = location[0];
-        int absoluteY = location[1];
-        mouseSingleClick(instrumentation, absoluteX, absoluteY);
-    }
-
-    /**
-     * Sends (synchronously) a single mouse click to the center of the View.
-     *
-     * @param instrumentation Instrumentation object used by the test.
-     * @param v The view the coordinates are relative to.
-     */
-    private static void mouseSingleClickView(Instrumentation instrumentation, View v) {
-        int x = v.getWidth() / 2;
-        int y = v.getHeight() / 2;
-        mouseSingleClickView(instrumentation, v, x, y);
-    }
 
 }

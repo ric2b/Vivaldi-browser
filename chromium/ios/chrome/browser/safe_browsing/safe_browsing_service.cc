@@ -14,20 +14,20 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_change_registrar.h"
-#include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "components/prefs/pref_service.h"
 #include "ios/chrome/browser/application_context.h"
+#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/browser_state/chrome_browser_state_manager.h"
 #include "ios/chrome/browser/chrome_paths.h"
 #include "ios/chrome/browser/chrome_switches.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/safe_browsing/ping_manager.h"
 #include "ios/chrome/browser/safe_browsing/ui_manager.h"
-#include "ios/public/provider/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/public/provider/chrome/browser/browser_state/chrome_browser_state_manager.h"
 #include "ios/web/public/web_thread.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/extras/sqlite/cookie_crypto_delegate.h"
@@ -71,41 +71,67 @@ class SafeBrowsingURLRequestContextGetter
     : public net::URLRequestContextGetter {
  public:
   explicit SafeBrowsingURLRequestContextGetter(
-      SafeBrowsingService* sb_service_);
+      scoped_refptr<net::URLRequestContextGetter> system_context_getter);
 
   // Implementation for net::UrlRequestContextGetter.
   net::URLRequestContext* GetURLRequestContext() override;
   scoped_refptr<base::SingleThreadTaskRunner> GetNetworkTaskRunner()
       const override;
 
-  // Shuts down any pending requests using the getter, and nulls out
-  // |sb_service_|.
-  void SafeBrowsingServiceShuttingDown();
+  // Shuts down any pending requests using the getter, and sets |shut_down_| to
+  // true.
+  void ServiceShuttingDown();
 
  protected:
   ~SafeBrowsingURLRequestContextGetter() override;
 
  private:
-  SafeBrowsingService* sb_service_;  // Owned by BrowserProcess.
+  bool shut_down_;
+
+  scoped_refptr<net::URLRequestContextGetter> system_context_getter_;
+
+  scoped_ptr<net::URLRequestContext> safe_browsing_request_context_;
+
   scoped_refptr<base::SingleThreadTaskRunner> network_task_runner_;
 };
 
 SafeBrowsingURLRequestContextGetter::SafeBrowsingURLRequestContextGetter(
-    SafeBrowsingService* sb_service)
-    : sb_service_(sb_service),
+    scoped_refptr<net::URLRequestContextGetter> system_context_getter)
+    : shut_down_(false),
+      system_context_getter_(system_context_getter),
       network_task_runner_(
           web::WebThread::GetTaskRunnerForThread(web::WebThread::IO)) {}
 
 net::URLRequestContext*
 SafeBrowsingURLRequestContextGetter::GetURLRequestContext() {
-  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::IO);
+  DCHECK_CURRENTLY_ON(web::WebThread::IO);
 
   // Check if the service has been shut down.
-  if (!sb_service_)
+  if (shut_down_)
     return nullptr;
 
-  DCHECK(sb_service_->url_request_context_.get());
-  return sb_service_->url_request_context_.get();
+  if (!safe_browsing_request_context_) {
+    safe_browsing_request_context_.reset(new net::URLRequestContext());
+    // May be NULL in unit tests.
+    if (system_context_getter_) {
+      safe_browsing_request_context_->CopyFrom(
+          system_context_getter_->GetURLRequestContext());
+    }
+
+    scoped_refptr<net::SQLitePersistentCookieStore> sqlite_store(
+        new net::SQLitePersistentCookieStore(
+            base::FilePath(SafeBrowsingService::GetBaseFilename().value() +
+                           kCookiesFile),
+            network_task_runner_,
+            web::WebThread::GetBlockingPool()->GetSequencedTaskRunner(
+                web::WebThread::GetBlockingPool()->GetSequenceToken()),
+            false, nullptr));
+
+    safe_browsing_request_context_->set_cookie_store(
+        new net::CookieMonster(sqlite_store.get(), nullptr));
+  }
+
+  return safe_browsing_request_context_.get();
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
@@ -113,9 +139,12 @@ SafeBrowsingURLRequestContextGetter::GetNetworkTaskRunner() const {
   return network_task_runner_;
 }
 
-void SafeBrowsingURLRequestContextGetter::SafeBrowsingServiceShuttingDown() {
-  sb_service_ = nullptr;
+void SafeBrowsingURLRequestContextGetter::ServiceShuttingDown() {
+  DCHECK_CURRENTLY_ON(web::WebThread::IO);
+
+  shut_down_ = true;
   URLRequestContextGetter::NotifyContextShuttingDown();
+  safe_browsing_request_context_.reset();
 }
 
 SafeBrowsingURLRequestContextGetter::~SafeBrowsingURLRequestContextGetter() {}
@@ -167,15 +196,10 @@ SafeBrowsingService::~SafeBrowsingService() {
 }
 
 void SafeBrowsingService::Initialize() {
-  url_request_context_getter_ = new SafeBrowsingURLRequestContextGetter(this);
+  url_request_context_getter_ = new SafeBrowsingURLRequestContextGetter(
+      GetApplicationContext()->GetSystemURLRequestContext());
 
   ui_manager_ = CreateUIManager();
-
-  web::WebThread::PostTask(
-      web::WebThread::IO, FROM_HERE,
-      base::Bind(&SafeBrowsingService::InitURLRequestContextOnIOThread, this,
-                 make_scoped_refptr(
-                     GetApplicationContext()->GetSystemURLRequestContext())));
 
   // Track the safe browsing preference of existing browser states.
   // The SafeBrowsingService will be started if any existing browser state has
@@ -201,9 +225,13 @@ void SafeBrowsingService::ShutDown() {
 
   Stop(true);
 
+  // Since URLRequestContextGetters are refcounted, can't count on clearing
+  // |url_request_context_getter_| to delete it, so need to shut it down first,
+  // which will cancel any requests that are currently using it, and prevent
+  // new requests from using it as well.
   web::WebThread::PostNonNestableTask(
       web::WebThread::IO, FROM_HERE,
-      base::Bind(&SafeBrowsingService::DestroyURLRequestContextOnIOThread, this,
+      base::Bind(&SafeBrowsingURLRequestContextGetter::ServiceShuttingDown,
                  url_request_context_getter_));
 
   // Release the URLRequestContextGetter after passing it to the IOThread.  It
@@ -215,13 +243,13 @@ void SafeBrowsingService::ShutDown() {
 
 // Binhash verification is only enabled for UMA users for now.
 bool SafeBrowsingService::DownloadBinHashNeeded() const {
-  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::UI);
+  DCHECK_CURRENTLY_ON(web::WebThread::UI);
 
   return false;
 }
 
 net::URLRequestContextGetter* SafeBrowsingService::url_request_context() {
-  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::UI);
+  DCHECK_CURRENTLY_ON(web::WebThread::UI);
   return url_request_context_getter_.get();
 }
 
@@ -231,7 +259,7 @@ const scoped_refptr<SafeBrowsingUIManager>& SafeBrowsingService::ui_manager()
 }
 
 SafeBrowsingPingManager* SafeBrowsingService::ping_manager() const {
-  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::IO);
+  DCHECK_CURRENTLY_ON(web::WebThread::IO);
   return ping_manager_;
 }
 
@@ -256,38 +284,6 @@ SBThreatType SafeBrowsingService::CheckResponseFromProxyRequestHeaders(
 
 SafeBrowsingUIManager* SafeBrowsingService::CreateUIManager() {
   return new SafeBrowsingUIManager(this);
-}
-
-void SafeBrowsingService::InitURLRequestContextOnIOThread(
-    net::URLRequestContextGetter* system_url_request_context_getter) {
-  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::IO);
-  DCHECK(!url_request_context_.get());
-
-  scoped_refptr<net::SQLitePersistentCookieStore> sqlite_store(
-      new net::SQLitePersistentCookieStore(
-          base::FilePath(GetBaseFilename().value() + kCookiesFile),
-          web::WebThread::GetTaskRunnerForThread(web::WebThread::IO),
-          web::WebThread::GetBlockingPool()->GetSequencedTaskRunner(
-              web::WebThread::GetBlockingPool()->GetSequenceToken()),
-          false, nullptr));
-  scoped_refptr<net::CookieStore> cookie_store =
-      new net::CookieMonster(sqlite_store.get(), nullptr);
-
-  url_request_context_.reset(new net::URLRequestContext);
-  // |system_url_request_context_getter| may be null during tests.
-  if (system_url_request_context_getter) {
-    url_request_context_->CopyFrom(
-        system_url_request_context_getter->GetURLRequestContext());
-  }
-  url_request_context_->set_cookie_store(cookie_store.get());
-}
-
-void SafeBrowsingService::DestroyURLRequestContextOnIOThread(
-    scoped_refptr<SafeBrowsingURLRequestContextGetter> context_getter) {
-  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::IO);
-
-  context_getter->SafeBrowsingServiceShuttingDown();
-  url_request_context_.reset();
 }
 
 SafeBrowsingProtocolConfig SafeBrowsingService::GetProtocolConfig() const {
@@ -315,7 +311,7 @@ SafeBrowsingProtocolConfig SafeBrowsingService::GetProtocolConfig() const {
 
 void SafeBrowsingService::StartOnIOThread(
     net::URLRequestContextGetter* url_request_context_getter) {
-  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::IO);
+  DCHECK_CURRENTLY_ON(web::WebThread::IO);
   if (enabled_)
     return;
   enabled_ = true;
@@ -328,7 +324,7 @@ void SafeBrowsingService::StartOnIOThread(
 }
 
 void SafeBrowsingService::StopOnIOThread(bool shutdown) {
-  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::IO);
+  DCHECK_CURRENTLY_ON(web::WebThread::IO);
 
   ui_manager_->StopOnIOThread(shutdown);
 
@@ -341,7 +337,7 @@ void SafeBrowsingService::StopOnIOThread(bool shutdown) {
 }
 
 void SafeBrowsingService::Start() {
-  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::UI);
+  DCHECK_CURRENTLY_ON(web::WebThread::UI);
 
   web::WebThread::PostTask(web::WebThread::IO, FROM_HERE,
                            base::Bind(&SafeBrowsingService::StartOnIOThread,
@@ -390,12 +386,12 @@ void SafeBrowsingService::RemovePrefService(PrefService* pref_service) {
 scoped_ptr<SafeBrowsingService::StateSubscription>
 SafeBrowsingService::RegisterStateCallback(
     const base::Callback<void(void)>& callback) {
-  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::UI);
+  DCHECK_CURRENTLY_ON(web::WebThread::UI);
   return state_callback_list_.Add(callback);
 }
 
 void SafeBrowsingService::RefreshState() {
-  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::UI);
+  DCHECK_CURRENTLY_ON(web::WebThread::UI);
   // Check if any browser state requires the service to be active.
   bool enable = false;
   std::map<PrefService*, PrefChangeRegistrar*>::iterator iter;
@@ -418,7 +414,7 @@ void SafeBrowsingService::RefreshState() {
 
 void SafeBrowsingService::SendDownloadRecoveryReport(
     const std::string& report) {
-  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::UI);
+  DCHECK_CURRENTLY_ON(web::WebThread::UI);
   web::WebThread::PostTask(
       web::WebThread::IO, FROM_HERE,
       base::Bind(&SafeBrowsingService::OnSendDownloadRecoveryReport, this,
@@ -427,7 +423,7 @@ void SafeBrowsingService::SendDownloadRecoveryReport(
 
 void SafeBrowsingService::OnSendDownloadRecoveryReport(
     const std::string& report) {
-  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::IO);
+  DCHECK_CURRENTLY_ON(web::WebThread::IO);
   if (ping_manager())
     ping_manager()->ReportThreatDetails(report);
 }

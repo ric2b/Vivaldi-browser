@@ -59,18 +59,6 @@ MISSING_KEYWORD = 'Missing'
 NEEDS_REBASELINE_KEYWORD = 'NeedsRebaseline'
 NEEDS_MANUAL_REBASELINE_KEYWORD = 'NeedsManualRebaseline'
 
-# TODO(ojan): Don't add new platforms here. New mac platforms
-# should use the version number directly instead of the english
-# language names throughout the code.
-MAC_VERSION_MAPPING = {
-    'mac10.6': 'snowleopard',
-    'mac10.7': 'lion',
-    'mac10.8': 'mountainlion',
-    'mac10.9': 'mavericks',
-}
-
-INVERTED_MAC_VERSION_MAPPING = {value: name for name, value in MAC_VERSION_MAPPING.items()}
-
 
 class ParseError(Exception):
     def __init__(self, warnings):
@@ -163,8 +151,7 @@ class TestExpectationParser(object):
         self._parse_expectations(expectation_line)
 
     def _parse_specifier(self, specifier):
-        specifier = specifier.lower()
-        return MAC_VERSION_MAPPING.get(specifier, specifier)
+        return specifier.lower()
 
     def _parse_specifiers(self, expectation_line):
         if self._is_lint_mode:
@@ -230,9 +217,9 @@ class TestExpectationParser(object):
 
     # FIXME: Update the original specifiers and remove this once the old syntax is gone.
     _configuration_tokens_list = [
-        'Mac', 'Mac10.6', 'Mac10.7', 'Mac10.8', 'Mac10.9', 'Mac10.10', 'Retina',
-        'Win', 'XP', 'Win7', 'Win10',
-        'Linux', 'Linux32', 'Precise', 'Trusty',
+        'Mac', 'Mac10.9', 'Mac10.10', 'Mac10.11', 'Retina',
+        'Win', 'Win7', 'Win10',
+        'Linux', 'Precise', 'Trusty',
         'Android',
         'Release',
         'Debug',
@@ -368,6 +355,18 @@ class TestExpectationParser(object):
         if ('SKIP' in expectations or 'WONTFIX' in expectations) and len(set(expectations) - set(['SKIP', 'WONTFIX'])):
             warnings.append('A test marked Skip or WontFix must not have other expectations.')
 
+        if 'SLOW' in expectations and 'SlowTests' not in filename:
+            warnings.append('SLOW tests should ony be added to SlowTests and not to TestExpectations.')
+
+        if 'WONTFIX' in expectations and ('NeverFixTests' not in filename and 'StaleTestExpectations' not in filename):
+            warnings.append('WONTFIX tests should ony be added to NeverFixTests or StaleTestExpectations and not to TestExpectations.')
+
+        if 'NeverFixTests' in filename and expectations != ['WONTFIX', 'SKIP']:
+            warnings.append('Only WONTFIX expectations are allowed in NeverFixTests')
+
+        if 'SlowTests' in filename and expectations != ['SLOW']:
+            warnings.append('Only SLOW expectations are allowed in SlowTests')
+
         if not expectations and not has_unrecognized_expectation:
             warnings.append('Missing expectations.')
 
@@ -404,6 +403,9 @@ class TestExpectationLine(object):
         self.matching_tests = []
         self.warnings = []
         self.is_skipped_outside_expectations_file = False
+
+    def __str__(self):
+        return "TestExpectationLine{name=%s, matching_configurations=%s, original_string=%s}" % (self.name, self.matching_configurations, self.original_string)
 
     def __eq__(self, other):
         return (self.original_string == other.original_string
@@ -508,7 +510,6 @@ class TestExpectationLine(object):
         result = []
         result.extend(sorted(self.parsed_specifiers))
         result.extend(test_configuration_converter.specifier_sorter().sort_specifiers(specifiers))
-        result = [INVERTED_MAC_VERSION_MAPPING.get(specifier, specifier) for specifier in result]
         return ' '.join(result)
 
     @staticmethod

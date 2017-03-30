@@ -13,7 +13,6 @@
 #include "base/win/win_util.h"
 #include "extensions/common/api/system_display.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gfx/screen.h"
 #include "ui/gfx/win/dpi.h"
 
 namespace extensions {
@@ -80,11 +79,6 @@ void DisplayInfoProviderWin::UpdateDisplayUnitInfoForPlatform(
       break;
     }
   }
-}
-
-gfx::Screen* DisplayInfoProviderWin::GetActiveScreen() {
-  // TODO(scottmg): native screen is wrong http://crbug.com/133312
-  return gfx::Screen::GetNativeScreen();
 }
 
 // static

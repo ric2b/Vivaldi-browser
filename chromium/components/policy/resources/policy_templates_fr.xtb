@@ -152,6 +152,13 @@ Si cette règle n'est pas configurée, la valeur par défaut globale sera utilis
 <translation id="1522425503138261032">Autoriser les sites à suivre la position géographique des utilisateurs</translation>
 <translation id="152657506688053119">Liste d'URL alternatives pour le moteur de recherche par défaut</translation>
 <translation id="1530812829012954197">Toujours rendre les formats d'URL suivants dans le navigateur hôte</translation>
+<translation id="1553684822621013552">Lorsque cette règle est définie sur "True", ARC est activé pour l'utilisateur
+      (sous réserve de contrôles supplémentaires des paramètres de la règle. ARC
+      reste indisponible si le mode Éphémère ou la connexion multicompte sont
+      activés dans la session utilisateur active).
+
+      Si ce paramètre est désactivé ou s'il n'est pas configuré, les utilisateurs d'entreprise
+      ne peuvent pas utiliser ARC.</translation>
 <translation id="1561424797596341174">Remplacements de règle pour les versions de débogage de l'hôte distant</translation>
 <translation id="1583248206450240930">Utiliser <ph name="PRODUCT_FRAME_NAME" /> par défaut</translation>
 <translation id="1608755754295374538">URL autorisées à accéder aux appareils de capture audio sans avis préalable</translation>
@@ -203,6 +210,13 @@ Si cette règle n'est pas configurée, la valeur par défaut globale sera utilis
 
           Cette règle n'est respectée que si la règle "DefaultSearchProviderEnabled" est activée.</translation>
 <translation id="1859633270756049523">Limiter la durée de la session</translation>
+<translation id="1859859319036806634">Avertissement : Le traitement de secours de la version TLS sera supprimé de <ph name="PRODUCT_NAME" /> après la version 52 (vers le mois de septembre 2016), et cette règle ne sera alors plus applicable.
+
+      Auparavant, en cas d'échec d'un handshake TLS, <ph name="PRODUCT_NAME" /> tentait de se connecter à nouveau avec une version inférieure de TLS afin de contourner les bugs des serveurs HTTPS. Ce paramètre permet de configurer la version à partir de laquelle le processus de traitement de secours s'arrêtera. Si un serveur effectue correctement une négociation de version (c'est-à-dire sans interrompre la connexion), alors ce paramètre ne s'applique pas. Dans tous les cas, la connexion qui en résulte doit être conforme à SSLVersionMin.
+
+      Si cette règle n'est pas configurée ou si elle est définie sur "tls1.2", <ph name="PRODUCT_NAME" /> n'effectue plus ce traitement de secours. Notez que cela ne désactive pas la compatibilité avec les versions TLS antérieures, mais n'affecte que la façon dont <ph name="PRODUCT_NAME" /> contournera les serveurs qui comportent des bugs et qui sont incapables de procéder correctement à la négociation de version.
+
+      Sinon, si la compatibilité avec un serveur comportant des bugs doit être maintenue, cette règle peut être définie sur "tls1.1". Il s'agit là d'une solution provisoire qui exige parallèlement de dépanner le serveur rapidement.</translation>
 <translation id="1861037019115362154">Spécifie une liste de plug-ins désactivés dans <ph name="PRODUCT_NAME" /> et empêche les utilisateurs de modifier ce paramètre.
 
       Les caractères génériques "*" et "?" peuvent être utilisés pour représenter des séquences de caractères arbitraires. "*" représente un nombre arbitraire de caractères tandis que "?" représente un caractère unique facultatif. Ce dernier correspond soit à un seul caractère, soit à aucun caractère. Pour représenter les caractères "*", "?" ou "\" eux-mêmes, le caractère d'échappement "\" doit être placé devant eux.
@@ -254,6 +268,7 @@ Pour plus d'options et obtenir des exemples détaillés, accédez au site :
       Si cette règle est définie sur "True", le téléchargement des charges utiles de mise à jour automatique est effectué par <ph name="PRODUCT_OS_NAME" /> via HTTP. Si cette règle est définie sur "False", ou si elle n'est pas configurée, HTTPS est utilisé pour le téléchargement des charges utiles de mise à jour automatique.</translation>
 <translation id="2006530844219044261">Gestion de l'alimentation</translation>
 <translation id="201557587962247231">Fréquence d'importation des rapports sur l'état de l'appareil</translation>
+<translation id="2024476116966025075">Configurer le nom de domaine requis pour les clients d'accès à distance</translation>
 <translation id="2030905906517501646">Mot clé du moteur de recherche par défaut</translation>
 <translation id="206623763829450685">Indique les modèles d'authentification HTTP compatibles avec <ph name="PRODUCT_NAME" />.
 
@@ -491,6 +506,7 @@ Cette règle n'est respectée que si la règle "DefaultSearchProviderEnabled" es
       Si cette règle n'est pas définie, l'utilisateur peut décider s'il veut ou non utiliser la fonctionnalité de proxy pour la compression de données.</translation>
 <translation id="2587719089023392205">Définir <ph name="PRODUCT_NAME" /> comme navigateur par défaut</translation>
 <translation id="2592091433672667839">Durée d'inactivité préalable à l'affichage de l'économiseur d'écran sur l'écran de connexion en mode Point de vente</translation>
+<translation id="260705825237536216">Configurer les applications ARC</translation>
 <translation id="2623014935069176671">Attendre l'activité utilisateur initiale</translation>
 <translation id="262740370354162807">Activer l'envoi de documents à <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="2633084400146331575">Activer les commentaires audio</translation>
@@ -499,15 +515,6 @@ Cette règle n'est respectée que si la règle "DefaultSearchProviderEnabled" es
 Si cette règle n'est pas configurée, le paramètre "AskGeolocation" est utilisé et l'utilisateur est en mesure de le modifier.</translation>
 <translation id="2650049181907741121">Action à effectuer lorsque l'utilisateur ferme le couvercle</translation>
 <translation id="2660846099862559570">Ne jamais utiliser de proxy</translation>
-<translation id="2665596266623707739">Avertissement : Le remplacement de la version TLS 1.0 sera supprimé du produit <ph name="PRODUCT_NAME" /> après la version 47 (aux environs du mois de janvier 2016), et l'option "tls1" cessera alors de fonctionner.
-
-      En cas d'échec d'un handshake TLS, <ph name="PRODUCT_NAME" /> tentera d'établir une nouvelle connexion avec une version inférieure de TLS afin de remédier aux bugs au niveau des serveurs HTTPS. Ce paramètre configure la version au niveau de laquelle le processus de remplacement cessera de fonctionner. Si un serveur effectue correctement une négociation de version (c'est-à-dire sans interrompre la connexion), ce paramètre ne s'applique pas. Quoi qu'il en soit, la connexion qui en résulte doit être conforme à SSLVersionMin.
-
-      Si cette règle n'est pas configurée, <ph name="PRODUCT_NAME" /> utilise une version minimale par défaut qui est TLS 1.0 dans <ph name="PRODUCT_NAME" /> 44 et TLS 1.1 dans les versions ultérieures. Notez que cela ne désactive pas la compatibilité avec TLS 1.0, mais affecte simplement l'aptitude du produit <ph name="PRODUCT_NAME" /> à contourner les serveurs qui comportent des bugs et qui sont incapables de négocier correctement les versions.
-
-      Dans le cas contraire, l'une des valeurs suivantes peut être définie : "tls1", "tls1.1" ou "tls1.2". Si la compatibilité avec un serveur qui comporte des bugs doit être conservée, la règle peut être définie sur "tls1". Il s'agit là d'une solution provisoire, et le serveur devrait être corrigé dans les plus brefs délais.
-
-      La définition d'une valeur "tls1.2" entraîne la désactivation de toute requête de remplacement, mais cela risque d'avoir un impact non négligeable sur le plan de la compatibilité.</translation>
 <translation id="267596348720209223">Spécifie les codages de caractères compatibles avec le moteur de recherche. Les codages sont des noms de page de code, comme UTF-8, GB2312 et ISO-8859-1. Ils sont testés dans l'ordre indiqué. 
 
 Cette règle est facultative. Si elle n'est pas configurée, la valeur par défaut UTF-8 est utilisée. 
@@ -528,11 +535,6 @@ Cette règle n'est respectée que si la règle "DefaultSearchProviderEnabled" es
       Si vous désactivez ce paramètre, les pages Web ne peuvent pas utiliser JavaScript et l'utilisateur n'est pas en mesure de le modifier.
 
       Si vous activez ce paramètre ou si vous ne le définissez pas, les pages Web peuvent utiliser JavaScript, mais l'utilisateur n'est pas en mesure de le modifier.</translation>
-<translation id="2747783890942882652">Configure le nom de domaine hôte obligatoire pour les hôtes d'accès à distance et empêche les utilisateurs de le modifier.
-
-          En cas d'activation de ce paramètre, le partage des hôtes n'est possible que si les comptes utilisés sont enregistrés auprès du nom de domaine spécifié.
-
-          En cas de désactivation ou de non-configuration de ce paramètre, le partage des hôtes est possible avec tous les comptes.</translation>
 <translation id="2757054304033424106">Types d'extensions ou d'applications autorisés à être installés</translation>
 <translation id="2759224876420453487">Contrôler le comportement de l'utilisateur lors d'une session à plusieurs profils</translation>
 <translation id="2761483219396643566">Délai d'inactivité avant l'affichage d'un avertissement (en cas d'utilisation de la batterie)</translation>
@@ -604,6 +606,7 @@ Pour plus d'exemples détaillés, accédez à l'adresse :
       Elle indique si l'extension des certificats TLS liés au domaine doit être activée.
 
       Ce paramètre permet d'activer ces certificats à des fins de test. Ce paramètre expérimental sera supprimé à l'avenir.</translation>
+<translation id="2957506574938329824">Interdire à tous les sites de demander l'accès à des appareils Bluetooth via l'API Web Bluetooth</translation>
 <translation id="2957513448235202597">Type de compte pour l'authentification <ph name="HTTP_NEGOTIATE" /></translation>
 <translation id="2959898425599642200">Règles de contournement de proxy</translation>
 <translation id="2960691910306063964">Activer ou désactiver l'authentification sans code d'accès pour les hôtes d'accès à distance</translation>
@@ -616,6 +619,8 @@ Pour plus d'exemples détaillés, accédez à l'adresse :
                       Si elle n'est pas définie, la durée par défaut est utilisée.
 
                       La valeur de cette règle doit être indiquée en millisecondes. Les valeurs doivent être inférieures ou égales au délai d'arrêt de l'écran (le cas échéant) et au délai d'inactivité.</translation>
+<translation id="2987155890997901449">Activer ARC</translation>
+<translation id="2987227569419001736">Contrôler l'utilisation de l'API Web Bluetooth</translation>
 <translation id="2998881342848488968">Cette règle permet à <ph name="PRODUCT_OS_NAME" /> de contourner les proxy pour l'authentification du portail captif.
 
      Cette règle n'est active que si un proxy est configuré (par exemple par une règle définie par l'utilisateur dans chrome://settings ou par des extensions).
@@ -940,6 +945,7 @@ Si vous activez cette règle ou si vous ne la configurez pas, les utilisateurs p
 
           Cette règle n'est respectée que si la règle "DefaultSearchProviderEnabled" est activée.</translation>
 <translation id="4320376026953250541">Microsoft Windows XP SP2 ou version ultérieure</translation>
+<translation id="4322842393287974810">Autoriser l'application kiosque lancée automatiquement sans délai à contrôler la version de l'application <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="4325690621216251241">Ajouter un bouton de déconnexion dans la barre d'état système</translation>
 <translation id="4347908978527632940">Si la valeur est définie sur "True" et si l'utilisateur est supervisé, d'autres applications Android peuvent envoyer une requête concernant les restrictions Web de ce dernier via un fournisseur de contenu.
 
@@ -1230,6 +1236,11 @@ Si cette règle n'est pas configurée, la valeur par défaut globale sera utilis
 <translation id="5307432759655324440">Disponibilité du mode navigation privée</translation>
 <translation id="5318185076587284965">Autoriser l'hôte d'accès à distance à utiliser des serveurs de relais</translation>
 <translation id="5330684698007383292">Autoriser <ph name="PRODUCT_FRAME_NAME" /> à gérer les types de contenu suivants</translation>
+<translation id="5345267406698765263">Précise la règle relative aux applications ARC sous forme d'une chaîne JSON qui
+      peut être remise telle quelle à l'exécution d'ARC. À l'heure actuelle, ce
+      paramètre n'est utilisé que pour indiquer l'installation forcée des applications.
+
+      Si cette règle n'est pas définie, aucune application n'est installée automatiquement.</translation>
 <translation id="5365946944967967336">Afficher le bouton Accueil sur la barre d'outils</translation>
 <translation id="5366977351895725771">Si cette règle est associée à la valeur "false", la création de comptes utilisateur supervisés par cet utilisateur est désactivée. Les utilisateurs supervisés existants restent disponibles.
 
@@ -1303,6 +1314,13 @@ Si cette règle n'est pas configurée, la valeur par défaut globale sera utilis
       Si cette règle n'est pas configurée, l'utilisateur peut choisir de masquer automatiquement l'étagère ou non.</translation>
 <translation id="557658534286111200">Active ou désactive la modification des favoris</translation>
 <translation id="5586942249556966598">Ne rien faire</translation>
+<translation id="5613179474872285001">Configure le nom de domaine obligatoire du client qui sera imposé aux clients d'accès à distance et ne pourra pas être modifié par les utilisateurs.
+
+          Si ce paramètre est activé, seuls les clients du domaine indiqué peuvent se connecter à l'hôte.
+
+          Si ce paramètre est désactivé ou s'il n'est pas défini, la règle par défaut pour le type de connexion concerné est appliquée. Dans le cadre d'une assistance à distance, cela permet aux clients de n'importe quel domaine de se connecter à l'hôte. Concernant l'accès à distance à tout moment, seul le propriétaire de l'hôte peut se connecter.
+
+          Voir aussi la règle "RemoteAccessHostDomain".</translation>
 <translation id="5630352020869108293">Restaurer la dernière session</translation>
 <translation id="5645779841392247734">Autoriser les cookies sur ces sites</translation>
 <translation id="5677038592630896441">Requiert la correspondance entre le nom de l'utilisateur local et le propriétaire de l'hôte d'accès à distance.
@@ -1607,6 +1625,9 @@ Si cette règle n'est pas configurée, les utilisateurs sont autorisés à séle
 
           Si vous ne définissez pas cette règle, le clavier à l'écran est désactivé la première fois que l'écran de connexion s'affiche. Les utilisateurs peuvent activer ou désactiver à tout moment le clavier à l'écran, et son état est permanent d'un utilisateur à l'autre sur le même écran de connexion.</translation>
 <translation id="6598235178374410284">Avatar de l'utilisateur</translation>
+<translation id="6628646143828354685">Permet d'indiquer si les sites Web sont autorisés à accéder aux appareils Bluetooth à proximité. Soit l'accès est complètement bloqué, soit l'utilisateur reçoit un message chaque fois qu'un site Web souhaite accéder aux appareils Bluetooth à proximité.
+
+          Si cette règle n'est pas configurée, la valeur "3" est utilisée et peut être modifiée par l'utilisateur.</translation>
 <translation id="6636268606788232221">Configurer les paramètres de gestion de l'alimentation lorsque l'utilisateur est inactif
 
           Cette règle contrôle plusieurs paramètres pour la stratégie de gestion de l'alimentation lorsque l'utilisateur est inactif.
@@ -1699,6 +1720,7 @@ Si vous désactivez cette option ou si vous ne la définissez pas, l'outil de re
           Si vous définissez cette règle, les utilisateurs ne peuvent ni la modifier, ni l'ignorer.
 
           Si vous ne définissez pas cette règle, les options d'accessibilité ne s'affichent pas dans le menu système, mais l'utilisateur peut en activer l'affichage via la page "Paramètres".</translation>
+<translation id="6766216162565713893">Autoriser les sites à demander à l'utilisateur d'accorder l'accès à un appareil Bluetooth à proximité</translation>
 <translation id="6770454900105963262">Envoyer des rapports sur les sessions Kiosque actives</translation>
 <translation id="6774533686631353488">Autoriser les hôtes de messagerie native au niveau de l'utilisateur (installés sans autorisations de propriétaire).</translation>
 <translation id="6786747875388722282">Extensions</translation>
@@ -1741,6 +1763,13 @@ Cette règle n'est prise en compte que si la règle "DefaultSearchProviderEnable
 <translation id="6943577887654905793">Nom de préférence Mac/Linux :</translation>
 <translation id="69525503251220566">Paramètre qui active la fonctionnalité de recherche par image pour le moteur de recherche par défaut</translation>
 <translation id="6956272732789158625">Interdire à tous les sites d'utiliser la génération de clé</translation>
+<translation id="695891079107014261">Configure le nom de domaine obligatoire de l'hôte qui sera imposé aux hôtes d'accès à distance et ne pourra pas être modifié par les utilisateurs.
+
+          Si ce paramètre est activé, les hôtes ne peuvent être partagés qu'à l'aide des comptes enregistrés sur le nom de domaine spécifié.
+
+          Si ce paramètre est désactivé ou s'il n'est pas défini, les hôtes peuvent être partagés à l'aide de n'importe quel compte.
+
+          Voir aussi la règle "RemoteAccessHostClientDomain".</translation>
 <translation id="6997592395211691850">Définit si les vérifications en ligne OCSP/CRL sont requises pour les ancres d'approbation locales.</translation>
 <translation id="7003334574344702284">Lorsqu'elle est activée, cette règle force l'importation des mots de passe enregistrés à partir du navigateur par défaut précédent. Si elle est activée, cette politique affecte également la boîte de dialogue d'importation. 
 
@@ -1882,6 +1911,13 @@ Si elle est définie sur "False" ou si elle n'est pas configurée, ces publicit�
 <translation id="7340034977315324840">Indiquer les périodes d'activité de l'appareil</translation>
 <translation id="7381326101471547614">Désactiver l'utilisation du protocole SPDY dans <ph name="PRODUCT_NAME" />. Si cette règle est activée, le protocole SPDY ne sera pas disponible dans <ph name="PRODUCT_NAME" />. La désactivation de cette règle permet l'utilisation du protocole SPDY. En outre, si cette règle n'est pas définie, le protocole SPDY sera disponible.</translation>
 <translation id="7384999953864505698">Permet d'utiliser le protocole QUIC</translation>
+<translation id="7406651467768226499">Autoriser ou non l'application kiosque lancée automatiquement sans délai à contrôler la version de l'application <ph name="PRODUCT_OS_NAME" />.
+
+      Cette règle détermine si l'application kiosque lancée automatiquement sans délai est autorisée à contrôler la version de l'application <ph name="PRODUCT_OS_NAME" /> en déclarant un élément "required_platform_version" dans son fichier manifeste et en l'utilisant en tant que préfixe de version cible de la mise à jour automatique.
+
+      Si la règle est définie sur "true", la valeur de la clé du fichier manifeste "required_platform_version" de l'application kiosque lancée automatiquement sans délai est utilisée en tant que préfixe de version cible de la mise à jour automatique.
+
+      Si la règle n'est pas configurée, ou si elle est définie sur "false", la clé du fichier manifeste "required_platform_version" est ignorée et la mise à jour automatique a lieu de manière normale.</translation>
 <translation id="7417972229667085380">Pourcentage d'adaptation du délai d'inactivité en mode Présentation (abandonné)</translation>
 <translation id="7421483919690710988">Définir la taille du cache du disque de support en octets</translation>
 <translation id="7424751532654212117">Liste des exceptions à la liste des plug-ins désactivés</translation>
@@ -1993,6 +2029,7 @@ Si cette règle n'est pas configurée, la valeur par défaut globale est utilis�
       En l'absence de définition de cette règle, la valeur par défaut de 5 000 millisecondes est utilisée dans <ph name="PRODUCT_NAME" />.</translation>
 <translation id="7841880500990419427">Version minimale de TLS à utiliser en remplacement</translation>
 <translation id="7842869978353666042">Configurer les options Google Drive</translation>
+<translation id="7843525027689416831">Spécifie les indicateurs à appliquer à <ph name="PRODUCT_NAME" /> au démarrage. Ceux-ci ne sont appliqués que sur l'écran de connexion. Les indicateurs définis par cette règle ne se propagent pas dans les sessions utilisateur.</translation>
 <translation id="7848840259379156480">Permet de configurer le moteur de rendu HTML par défaut lorsque <ph name="PRODUCT_FRAME_NAME" /> est installé.
       Le paramétrage par défaut de cette stratégie autorise le navigateur hôte à effectuer le rendu. Toutefois, vous pouvez
       remplacer ce paramétrage pour que <ph name="PRODUCT_FRAME_NAME" /> assure le rendu des pages HTML pages par défaut.</translation>
@@ -2325,7 +2362,6 @@ Si vous désactivez ce paramètre ou s'il n'est pas défini, le nom canonique du
                       La valeur de cette règle doit être indiquée en millisecondes. Les valeurs doivent être inférieures au délai d'inactivité.</translation>
 <translation id="891435090623616439">codée comme une chaîne JSON, pour plus de détails voir <ph name="COMPLEX_POLICIES_URL" /></translation>
 <translation id="8947415621777543415">Indiquer l'emplacement de l'appareil</translation>
-<translation id="89493502583189945">Spécifie les indicateurs à appliquer à <ph name="PRODUCT_NAME" /> au démarrage. Ces indicateurs sont appliqués avant le démarrage de <ph name="PRODUCT_NAME" /> (avant même l'affichage de l'écran de connexion).</translation>
 <translation id="8951350807133946005">Définir le répertoire du cache disque</translation>
 <translation id="8955719471735800169">Haut de page</translation>
 <translation id="8960850473856121830">Les modèles de cette liste sont rapprochés de la source de sécurité

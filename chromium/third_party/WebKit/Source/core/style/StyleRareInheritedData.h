@@ -28,7 +28,6 @@
 #include "core/CoreExport.h"
 #include "core/css/StyleColor.h"
 #include "core/style/DataRef.h"
-#include "core/style/StyleVariableData.h"
 #include "platform/Length.h"
 #include "platform/graphics/Color.h"
 #include "platform/heap/Handle.h"
@@ -45,6 +44,7 @@ class CursorData;
 class QuotesData;
 class ShadowList;
 class StyleImage;
+class StyleVariableData;
 
 typedef RefVector<AppliedTextDecoration> AppliedTextDecorationList;
 #if ENABLE(OILPAN)
@@ -145,10 +145,14 @@ public:
 
     unsigned m_respectImageOrientation : 1;
 
+    unsigned m_snapHeightPosition : 7;
+
     AtomicString hyphenationString;
     short hyphenationLimitBefore;
     short hyphenationLimitAfter;
     short hyphenationLimitLines;
+
+    uint8_t m_snapHeightUnit;
 
     AtomicString textEmphasisCustomMark;
     RefPtr<QuotesData> quotes;

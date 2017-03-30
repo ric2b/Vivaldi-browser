@@ -113,13 +113,20 @@ class MockGLES2Decoder : public GLES2Decoder {
                     int y_offset,
                     int width,
                     int height));
+  MOCK_METHOD8(ClearLevel3D,
+               bool(Texture* texture,
+                    unsigned target,
+                    int level,
+                    unsigned format,
+                    unsigned type,
+                    int width,
+                    int height,
+                    int depth));
   MOCK_METHOD0(GetErrorState, ErrorState *());
 
   MOCK_METHOD0(GetLogger, Logger*());
   MOCK_METHOD1(SetShaderCacheCallback,
                void(const ShaderCacheCallback& callback));
-  MOCK_METHOD1(SetWaitSyncPointCallback,
-               void(const WaitSyncPointCallback& callback));
   MOCK_METHOD1(SetFenceSyncReleaseCallback,
                void(const FenceSyncReleaseCallback& callback));
   MOCK_METHOD1(SetWaitFenceSyncCallback,

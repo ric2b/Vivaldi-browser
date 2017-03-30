@@ -5,7 +5,7 @@
 ## Prerequisites
 
 *   A Mac running 10.9+.
-*   http://developer.apple.com/tools/xcode/XCode, 5+
+*   [Xcode](https://developer.apple.com/xcode), 5+.
 *   Install
     [gclient](http://dev.chromium.org/developers/how-tos/install-depot-tools),
     part of the
@@ -82,7 +82,7 @@ Run
 to disable debug symbols altogether, this makes both full rebuilds and linking
 faster (at the cost of not getting symbolized backtraces in gdb).
 
-You might also want to [install ccache](ccache_cac.md) to speed up the build.
+You might also want to [install ccache](ccache_mac.md) to speed up the build.
 
 ## Running
 
@@ -111,7 +111,7 @@ directory. You can run them from the command line:
 
 According to the
 [Chromium style guide](http://dev.chromium.org/developers/coding-style) code is
-[not allowed to have whitespace on the ends of lines](http://google-styleguide.googlecode.com/svn/trunk/cppguide.xml#Horizontal_Whitespace).
+[not allowed to have whitespace on the ends of lines](https://google.github.io/styleguide/cppguide.html#Horizontal_Whitespace).
 If you edit in Xcode, know that it loves adding whitespace to the ends of lines
 which can make editing in Xcode more painful than it should be. The
 [GTM Xcode Plugin](http://code.google.com/p/google-toolbox-for-mac/downloads/list)

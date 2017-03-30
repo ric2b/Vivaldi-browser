@@ -30,22 +30,20 @@
 
 #include "modules/websockets/WorkerWebSocketChannel.h"
 
-#include "bindings/core/v8/ScriptCallStackFactory.h"
+#include "bindings/core/v8/ScriptCallStack.h"
 #include "core/dom/CrossThreadTask.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/ExecutionContextTask.h"
 #include "core/fileapi/Blob.h"
-#include "core/inspector/ScriptCallFrame.h"
-#include "core/inspector/ScriptCallStack.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerThread.h"
 #include "modules/websockets/DocumentWebSocketChannel.h"
+#include "platform/WaitableEvent.h"
 #include "platform/heap/SafePoint.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebWaitableEvent.h"
 #include "wtf/Assertions.h"
 #include "wtf/Functional.h"
 #include "wtf/MainThread.h"
@@ -62,7 +60,7 @@ typedef WorkerWebSocketChannel::Peer Peer;
 // thread. signalWorkerThread() must be called before any getters are called.
 class WebSocketChannelSyncHelper : public GarbageCollectedFinalized<WebSocketChannelSyncHelper> {
 public:
-    static WebSocketChannelSyncHelper* create(PassOwnPtr<WebWaitableEvent> event)
+    static WebSocketChannelSyncHelper* create(PassOwnPtr<WaitableEvent> event)
     {
         return new WebSocketChannelSyncHelper(event);
     }
@@ -97,13 +95,13 @@ public:
     DEFINE_INLINE_TRACE() { }
 
 private:
-    explicit WebSocketChannelSyncHelper(PassOwnPtr<WebWaitableEvent> event)
+    explicit WebSocketChannelSyncHelper(PassOwnPtr<WaitableEvent> event)
         : m_event(event)
         , m_connectRequestResult(false)
     {
     }
 
-    OwnPtr<WebWaitableEvent> m_event;
+    OwnPtr<WaitableEvent> m_event;
     bool m_connectRequestResult;
 };
 
@@ -155,12 +153,12 @@ void WorkerWebSocketChannel::fail(const String& reason, MessageLevel level, cons
     if (!m_bridge)
         return;
 
-    RefPtrWillBeRawPtr<ScriptCallStack> callStack = currentScriptCallStack(1);
-    if (callStack && callStack->size())  {
+    RefPtr<ScriptCallStack> callStack = ScriptCallStack::capture(1);
+    if (callStack && !callStack->isEmpty())  {
         // In order to emulate the ConsoleMessage behavior,
         // we should ignore the specified url and line number if
         // we can get the JavaScript context.
-        m_bridge->fail(reason, level, callStack->at(0).sourceURL(), callStack->at(0).lineNumber());
+        m_bridge->fail(reason, level, callStack->topSourceURL(), callStack->topLineNumber());
     } else if (sourceURL.isEmpty() && !lineNumber) {
         // No information is specified by the caller - use the url
         // and the line number at the connection.
@@ -375,7 +373,7 @@ Bridge::Bridge(WebSocketChannelClient* client, WorkerGlobalScope& workerGlobalSc
     : m_client(client)
     , m_workerGlobalScope(workerGlobalScope)
     , m_loaderProxy(m_workerGlobalScope->thread()->workerLoaderProxy())
-    , m_syncHelper(WebSocketChannelSyncHelper::create(adoptPtr(Platform::current()->createWaitableEvent())))
+    , m_syncHelper(WebSocketChannelSyncHelper::create(adoptPtr(new WaitableEvent())))
     , m_peer(new Peer(this, m_loaderProxy, m_syncHelper))
 {
 }

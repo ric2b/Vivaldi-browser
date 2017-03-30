@@ -3,14 +3,53 @@
 // found in the LICENSE file.
 
 #include "platform/heap/CallbackStack.h"
+#include "wtf/PageAllocator.h"
 
 namespace blink {
 
+CallbackStack::Block::Block(Block* next, size_t blockSize)
+    : m_blockSize(blockSize)
+{
+    // Allocated block size must be a multiple of WTF::kPageAllocationGranularity.
+    ASSERT((m_blockSize * sizeof(Item)) % WTF::kPageAllocationGranularity == 0);
+    m_buffer = static_cast<Item*>(WTF::allocPages(nullptr, m_blockSize * sizeof(Item), WTF::kPageAllocationGranularity, WTF::PageAccessible));
+    RELEASE_ASSERT(m_buffer);
+
+#if ENABLE(ASSERT)
+    clear();
+#endif
+
+    m_limit = &(m_buffer[m_blockSize]);
+    m_current = &(m_buffer[0]);
+    m_next = next;
+}
+
+CallbackStack::Block::~Block()
+{
+    WTF::freePages(m_buffer, m_blockSize * sizeof(Item));
+    m_buffer = nullptr;
+    m_limit = nullptr;
+    m_current = nullptr;
+    m_next = nullptr;
+}
+
+#if ENABLE(ASSERT)
 void CallbackStack::Block::clear()
 {
+    for (size_t i = 0; i < m_blockSize; i++)
+        m_buffer[i] = Item(0, 0);
+}
+#endif
+
+void CallbackStack::Block::decommit()
+{
+#if ENABLE(ASSERT)
+    clear();
+#endif
+    WTF::discardSystemPages(m_buffer, m_blockSize * sizeof(Item));
+
     m_current = &m_buffer[0];
     m_next = nullptr;
-    clearUnused();
 }
 
 void CallbackStack::Block::invokeEphemeronCallbacks(Visitor* visitor)
@@ -35,34 +74,28 @@ bool CallbackStack::Block::hasCallbackForObject(const void* object)
 }
 #endif
 
-void CallbackStack::Block::clearUnused()
-{
-#if ENABLE(ASSERT)
-    for (size_t i = 0; i < blockSize; i++)
-        m_buffer[i] = Item(0, 0);
-#endif
-}
-
-CallbackStack::CallbackStack() : m_first(new Block(0)), m_last(m_first)
+CallbackStack::CallbackStack(size_t blockSize)
+    : m_first(new Block(nullptr, blockSize))
+    , m_last(m_first)
 {
 }
 
 CallbackStack::~CallbackStack()
 {
-    clear();
+    RELEASE_ASSERT(isEmpty());
     delete m_first;
     m_first = nullptr;
     m_last = nullptr;
 }
 
-void CallbackStack::clear()
+void CallbackStack::decommit()
 {
     Block* next;
     for (Block* current = m_first->next(); current; current = next) {
         next = current->next();
         delete current;
     }
-    m_first->clear();
+    m_first->decommit();
     m_last = m_first;
 }
 
@@ -74,7 +107,7 @@ bool CallbackStack::isEmpty() const
 CallbackStack::Item* CallbackStack::allocateEntrySlow()
 {
     ASSERT(!m_first->allocateEntry());
-    m_first = new Block(m_first);
+    m_first = new Block(m_first, m_first->blockSize());
     return m_first->allocateEntry();
 }
 
@@ -120,7 +153,7 @@ void CallbackStack::invokeOldestCallbacks(Block* from, Block* upto, Visitor* vis
     if (from == upto)
         return;
     ASSERT(from);
-    // Recurse first (blockSize at a time) so we get to the newly added entries last.
+    // Recurse first so we get to the newly added entries last.
     invokeOldestCallbacks(from->next(), upto, visitor);
     from->invokeEphemeronCallbacks(visitor);
 }
@@ -141,4 +174,4 @@ bool CallbackStack::hasCallbackForObject(const void* object)
 }
 #endif
 
-}
+} // namespace blink

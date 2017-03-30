@@ -56,6 +56,9 @@ class ExternalProcessImporterBridge : public ImporterBridge {
       const std::vector<ImportedNotesEntry>& notes,
       const base::string16& first_folder_name) override;
 
+  void AddSpeedDial(
+      const std::vector<ImportedSpeedDialEntry>& speeddials) override;
+
   void AddHomePage(const GURL& home_page) override;
 
 #if defined(OS_WIN)

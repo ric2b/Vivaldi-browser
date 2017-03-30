@@ -277,10 +277,6 @@ void QuicHeadersStream::OnDataAvailable() {
   }
 }
 
-SpdyPriority QuicHeadersStream::Priority() const {
-  return net::kV3HighestPriority;
-}
-
 void QuicHeadersStream::OnHeaders(SpdyStreamId stream_id,
                                   bool has_priority,
                                   SpdyPriority priority,
@@ -308,11 +304,6 @@ void QuicHeadersStream::OnHeaders(SpdyStreamId stream_id,
 void QuicHeadersStream::OnPushPromise(SpdyStreamId stream_id,
                                       SpdyStreamId promised_stream_id,
                                       bool end) {
-  if (!supports_push_promise_) {
-    CloseConnectionWithDetails(QUIC_INVALID_HEADERS_STREAM_DATA,
-                               "SPDY PUSH_PROMISE not supported.");
-    return;
-  }
   DCHECK_EQ(kInvalidStreamId, stream_id_);
   DCHECK_EQ(kInvalidStreamId, promised_stream_id_);
   stream_id_ = stream_id;

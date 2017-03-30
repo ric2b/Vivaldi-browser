@@ -184,7 +184,7 @@ String StylePropertySerializer::getCustomPropertyText(const PropertyValueForSeri
         result.append(' ');
     const CSSCustomPropertyDeclaration* value = toCSSCustomPropertyDeclaration(property.value());
     result.append(value->name());
-    result.appendLiteral(": ");
+    result.append(':');
     result.append(value->customCSSText());
     if (property.isImportant())
         result.appendLiteral(" !important");
@@ -435,10 +435,10 @@ String StylePropertySerializer::getPropertyValue(CSSPropertyID propertyID) const
         return get4Values(borderWidthShorthand());
     case CSSPropertyBorderStyle:
         return get4Values(borderStyleShorthand());
-    case CSSPropertyWebkitColumnRule:
-        return getShorthandValue(webkitColumnRuleShorthand());
-    case CSSPropertyWebkitColumns:
-        return getShorthandValue(webkitColumnsShorthand());
+    case CSSPropertyColumnRule:
+        return getShorthandValue(columnRuleShorthand());
+    case CSSPropertyColumns:
+        return getShorthandValue(columnsShorthand());
     case CSSPropertyFlex:
         return getShorthandValue(flexShorthand());
     case CSSPropertyFlexFlow:
@@ -659,6 +659,7 @@ String StylePropertySerializer::getLayeredShorthandValue(const StylePropertyShor
         bool useRepeatXShorthand = false;
         bool useRepeatYShorthand = false;
         bool useSingleWordShorthand = false;
+        bool foundPositionXCSSProperty = false;
         bool foundPositionYCSSProperty = false;
 
         for (unsigned propertyIndex = 0; propertyIndex < size; propertyIndex++) {
@@ -709,10 +710,10 @@ String StylePropertySerializer::getLayeredShorthandValue(const StylePropertyShor
 
             if (!(value->isInitialValue() && toCSSInitialValue(value)->isImplicit())) {
                 if (property == CSSPropertyBackgroundSize || property == CSSPropertyWebkitMaskSize) {
-                    if (foundPositionYCSSProperty)
+                    if (foundPositionYCSSProperty || foundPositionXCSSProperty)
                         layerResult.appendLiteral(" / ");
                     else
-                        continue;
+                        layerResult.appendLiteral(" 0% 0% / ");
                 } else if (!layerResult.isEmpty()) {
                     // Do this second to avoid ending up with an extra space in the output if we hit the continue above.
                     layerResult.append(' ');
@@ -729,6 +730,8 @@ String StylePropertySerializer::getLayeredShorthandValue(const StylePropertyShor
                         useSingleWordShorthand = false;
                     layerResult.append(value->cssText());
                 }
+                if (property == CSSPropertyBackgroundPositionX || property == CSSPropertyWebkitMaskPositionX)
+                    foundPositionXCSSProperty = true;
                 if (property == CSSPropertyBackgroundPositionY || property == CSSPropertyWebkitMaskPositionY) {
                     foundPositionYCSSProperty = true;
                     // background-position is a special case. If only the first offset is specified,
@@ -999,4 +1002,4 @@ bool StylePropertySerializer::shorthandHasOnlyInitialOrInheritedValue(const Styl
     return isInitialValue || isInheritedValue;
 }
 
-}
+} // namespace blink

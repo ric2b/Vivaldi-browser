@@ -10,7 +10,6 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_service.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
@@ -33,6 +32,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_controller.h"
@@ -101,12 +101,10 @@ void PrivetNotificationsListener::DeviceChanged(
     return;  // Already saw this device.
   }
 
-  linked_ptr<DeviceContext> device_context(new DeviceContext);
-
+  scoped_ptr<DeviceContext>& device_context = devices_seen_[name];
+  device_context.reset(new DeviceContext);
   device_context->notification_may_be_active = false;
   device_context->registered = !description.id.empty();
-
-  devices_seen_.insert(make_pair(name, device_context));
 
   if (!device_context->registered) {
     device_context->privet_http_resolution =

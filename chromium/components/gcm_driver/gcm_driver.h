@@ -109,14 +109,15 @@ class GCMDriver {
                 const std::vector<std::string>& sender_ids,
                 const RegisterCallback& callback);
 
-  // Unregisters all sender_ids for an app. Only works on non-Android.
+  // Unregisters all sender_ids for an app. Only works on non-Android. Will also
+  // remove any encryption keys associated with the |app_id|.
   // |app_id|: application ID.
   // |callback|: to be called once the asynchronous operation is done.
   void Unregister(const std::string& app_id,
                   const UnregisterCallback& callback);
 
   // Unregisters an (app_id, sender_id) pair from using GCM. Only works on
-  // Android.
+  // Android. Will also remove any encryption keys associated with the |app_id|.
   // TODO(jianli): Switch to using GCM's unsubscribe API.
   // |app_id|: application ID.
   // |sender_id|: the sender ID that was passed when registering.
@@ -256,14 +257,24 @@ class GCMDriver {
                         const std::string& receiver_id,
                         const OutgoingMessage& message) = 0;
 
+  // Platform-specific implementation of recording message decryption failures.
+  virtual void RecordDecryptionFailure(
+      const std::string& app_id,
+      GCMEncryptionProvider::DecryptionResult result) = 0;
+
   // Runs the Register callback.
   void RegisterFinished(const std::string& app_id,
                         const std::string& registration_id,
                         GCMClient::Result result);
 
+  // To be called when a registration for |app_id| has been unregistered, having
+  // |result| as the result of the unregistration. Will remove any encryption
+  // information associated with the |app_id| and then calls UnregisterFinished.
+  void RemoveEncryptionInfoAfterUnregister(const std::string& app_id,
+                                           GCMClient::Result result);
+
   // Runs the Unregister callback.
-  void UnregisterFinished(const std::string& app_id,
-                          GCMClient::Result result);
+  void UnregisterFinished(const std::string& app_id, GCMClient::Result result);
 
   // Runs the Send callback.
   void SendFinished(const std::string& app_id,
@@ -286,6 +297,13 @@ class GCMDriver {
   void UnregisterInternal(const std::string& app_id,
                           const std::string* sender_id,
                           const UnregisterCallback& callback);
+
+  // Dispatches the OnMessage event to the app handler associated with |app_id|
+  // if |result| indicates that it is safe to do so, or will report a decryption
+  // failure for the |app_id| otherwise.
+  void DispatchMessageInternal(const std::string& app_id,
+                               GCMEncryptionProvider::DecryptionResult result,
+                               const IncomingMessage& message);
 
   // Called after unregistration completes in order to trigger the pending
   // registration.

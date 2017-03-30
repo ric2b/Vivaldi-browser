@@ -69,6 +69,7 @@
 #include "platform/PlatformGestureEvent.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/exported/WrappedResourceResponse.h"
+#include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/paint/CullRect.h"
@@ -269,11 +270,12 @@ void WebPluginContainerImpl::setParent(Widget* widget)
 
 void WebPluginContainerImpl::setPlugin(WebPlugin* plugin)
 {
-    RELEASE_ASSERT(!m_inDispose);
-    if (plugin != m_webPlugin) {
-        m_element->resetInstance();
-        m_webPlugin = plugin;
-    }
+    if (plugin == m_webPlugin)
+        return;
+
+    m_element->resetInstance();
+    m_webPlugin = plugin;
+    m_isDisposed = false;
 }
 
 float WebPluginContainerImpl::deviceScaleFactor()
@@ -510,7 +512,7 @@ bool WebPluginContainerImpl::isRectTopmost(const WebRect& rect)
     // be valid memory once this object has started disposal. In particular, we might be being
     // disposed because the frame has already be deleted and then something else dropped the
     // last reference to the this object.
-    if (m_inDispose || !m_element)
+    if (m_isDisposed || !m_element)
         return false;
 
     LocalFrame* frame = m_element->document().frame();
@@ -532,15 +534,15 @@ bool WebPluginContainerImpl::isRectTopmost(const WebRect& rect)
 
 void WebPluginContainerImpl::requestTouchEventType(TouchEventRequestType requestType)
 {
-    if (m_touchEventRequestType == requestType)
+    if (m_touchEventRequestType == requestType || !m_element)
         return;
 
     if (m_element->document().frameHost()) {
         EventHandlerRegistry& registry = m_element->document().frameHost()->eventHandlerRegistry();
         if (requestType != TouchEventRequestTypeNone && m_touchEventRequestType == TouchEventRequestTypeNone)
-            registry.didAddEventHandler(*m_element, EventHandlerRegistry::TouchEvent);
+            registry.didAddEventHandler(*m_element, EventHandlerRegistry::TouchEventBlocking);
         else if (requestType == TouchEventRequestTypeNone && m_touchEventRequestType != TouchEventRequestTypeNone)
-            registry.didRemoveEventHandler(*m_element, EventHandlerRegistry::TouchEvent);
+            registry.didRemoveEventHandler(*m_element, EventHandlerRegistry::TouchEventBlocking);
     }
     m_touchEventRequestType = requestType;
 }
@@ -685,7 +687,7 @@ WebPluginContainerImpl::WebPluginContainerImpl(HTMLPlugInElement* element, WebPl
     , m_webLayer(nullptr)
     , m_touchEventRequestType(TouchEventRequestTypeNone)
     , m_wantsWheelEvents(false)
-    , m_inDispose(false)
+    , m_isDisposed(false)
 {
 #if ENABLE(OILPAN)
     ThreadState::current()->registerPreFinalizer(this);
@@ -704,10 +706,9 @@ WebPluginContainerImpl::~WebPluginContainerImpl()
 
 void WebPluginContainerImpl::dispose()
 {
-    m_inDispose = true;
+    m_isDisposed = true;
 
-    if (m_element && m_touchEventRequestType != TouchEventRequestTypeNone && m_element->document().frameHost())
-        m_element->document().frameHost()->eventHandlerRegistry().didRemoveEventHandler(*m_element, EventHandlerRegistry::TouchEvent);
+    requestTouchEventType(TouchEventRequestTypeNone);
 
     if (m_webPlugin) {
         RELEASE_ASSERT(!m_webPlugin->container() || m_webPlugin->container() == this);
@@ -719,8 +720,6 @@ void WebPluginContainerImpl::dispose()
         GraphicsLayer::unregisterContentsLayer(m_webLayer);
         m_webLayer = nullptr;
     }
-
-    m_element = nullptr;
 }
 
 DEFINE_TRACE(WebPluginContainerImpl)
@@ -930,7 +929,7 @@ void WebPluginContainerImpl::computeClipRectsForPlugin(
     LayoutBox* box = toLayoutBox(ownerElement->layoutObject());
 
     // Plugin frameRects are in absolute space within their frame.
-    IntRect frameRectInOwnerElementSpace = box->absoluteToLocalQuad(FloatRect(frameRect()), UseTransforms).enclosingBoundingBox();
+    FloatRect frameRectInOwnerElementSpace = box->absoluteToLocalQuad(FloatRect(frameRect()), UseTransforms).boundingBox();
 
     LayoutRect unclippedAbsoluteRect(frameRectInOwnerElementSpace);
     box->mapToVisibleRectInAncestorSpace(rootView, unclippedAbsoluteRect, nullptr);
@@ -938,17 +937,23 @@ void WebPluginContainerImpl::computeClipRectsForPlugin(
     // The frameRect is already in absolute space of the local frame to the plugin.
     windowRect = frameRect();
     // Map up to the root frame.
-    windowRect = enclosingIntRect(m_element->document().view()->layoutView()->localToAbsoluteQuad(FloatQuad(FloatRect(frameRect())), TraverseDocumentBoundaries).boundingBox());
+    LayoutRect layoutWindowRect =
+        LayoutRect(m_element->document().view()->layoutView()->localToAbsoluteQuad(FloatQuad(FloatRect(frameRect())), TraverseDocumentBoundaries).boundingBox());
     // Finally, adjust for scrolling of the root frame, which the above does not take into account.
-    windowRect.moveBy(roundedIntPoint(-rootView->viewRect().location()));
+    layoutWindowRect.moveBy(-rootView->viewRect().location());
+    windowRect = pixelSnappedIntRect(layoutWindowRect);
 
-    clippedLocalRect = enclosingIntRect(unclippedAbsoluteRect);
-    unclippedIntLocalRect = clippedLocalRect;
-    clippedLocalRect.intersect(rootView->frameView()->visibleContentRect());
+    LayoutRect layoutClippedLocalRect = unclippedAbsoluteRect;
+    LayoutRect unclippedLayoutLocalRect = layoutClippedLocalRect;
+    layoutClippedLocalRect.intersect(LayoutRect(rootView->frameView()->visibleContentRect()));
 
     // TODO(chrishtr): intentionally ignore transform, because the positioning of frameRect() does also. This is probably wrong.
-    unclippedIntLocalRect = box->absoluteToLocalQuad(FloatRect(unclippedIntLocalRect), TraverseDocumentBoundaries).enclosingBoundingBox();
-    clippedLocalRect = box->absoluteToLocalQuad(FloatRect(clippedLocalRect), TraverseDocumentBoundaries).enclosingBoundingBox();
+    unclippedIntLocalRect = box->absoluteToLocalQuad(FloatRect(unclippedLayoutLocalRect), TraverseDocumentBoundaries).enclosingBoundingBox();
+    // As a performance optimization, map the clipped rect separately if is different than the unclipped rect.
+    if (layoutClippedLocalRect != unclippedLayoutLocalRect)
+        clippedLocalRect = box->absoluteToLocalQuad(FloatRect(layoutClippedLocalRect), TraverseDocumentBoundaries).enclosingBoundingBox();
+    else
+        clippedLocalRect = unclippedIntLocalRect;
 }
 
 void WebPluginContainerImpl::calculateGeometry(IntRect& windowRect, IntRect& clipRect, IntRect& unobscuredRect, Vector<IntRect>& cutOutRects)

@@ -26,12 +26,16 @@ class TraceConfig;
 // system trace and PowerTracingAgent for BattOr power trace.
 class BASE_EXPORT TracingAgent {
  public:
+  using StartAgentTracingCallback =
+      base::Callback<void(const std::string& agent_name, bool success)>;
+  // Passing a null or empty events_str_ptr indicates that no trace data is
+  // available for the specified agent.
   using StopAgentTracingCallback = base::Callback<void(
       const std::string& agent_name,
       const std::string& events_label,
       const scoped_refptr<base::RefCountedString>& events_str_ptr)>;
   using RecordClockSyncMarkerCallback = base::Callback<void(
-      int sync_id,
+      const std::string& sync_id,
       const TimeTicks& issue_ts,
       const TimeTicks& issue_end_ts)>;
 
@@ -51,7 +55,8 @@ class BASE_EXPORT TracingAgent {
   virtual std::string GetTraceEventLabel() = 0;
 
   // Starts tracing on the tracing agent with the trace configuration.
-  virtual bool StartAgentTracing(const TraceConfig& trace_config) = 0;
+  virtual void StartAgentTracing(const TraceConfig& trace_config,
+                                 const StartAgentTracingCallback& callback) = 0;
 
   // Stops tracing on the tracing agent. The trace data will be passed back to
   // the TracingController via the callback.
@@ -82,7 +87,7 @@ class BASE_EXPORT TracingAgent {
   // The assumption is that the receiver thread knows the issuer's clock, which
   // is true in Chrome because all agent threads' clocks are Chrome clock.
   virtual void RecordClockSyncMarker(
-      int sync_id,
+      const std::string& sync_id,
       const RecordClockSyncMarkerCallback& callback);
 };
 

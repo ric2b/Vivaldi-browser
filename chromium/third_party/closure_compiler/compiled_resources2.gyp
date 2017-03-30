@@ -7,15 +7,15 @@
 # http://build.chromium.org/p/chromium.fyi/builders/Closure%20Compilation%20Linux
 #
 # Also, see our guide to Closure compilation in chrome:
-# https://code.google.com/p/chromium/wiki/ClosureCompilation
+# https://chromium.googlesource.com/chromium/src/+/master/docs/closure_compilation.md
 {
   'targets': [
     {
       'target_name': 'compile_all_resources',
       'type': 'none',
       'dependencies': [
-        '<(DEPTH)/chrome/browser/resources/downloads/compiled_resources2.gyp:*',
         '<(DEPTH)/chrome/browser/resources/md_downloads/compiled_resources2.gyp:*',
+        '<(DEPTH)/chrome/browser/resources/settings/compiled_resources2.gyp:*',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:*',
         '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:*',
       ],

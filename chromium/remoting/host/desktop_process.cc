@@ -17,6 +17,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
+#include "ipc/attachment_broker_unprivileged.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "remoting/base/auto_thread.h"
 #include "remoting/base/auto_thread_task_runner.h"
@@ -81,6 +82,9 @@ void DesktopProcess::OnChannelConnected(int32_t peer_pid) {
 
 void DesktopProcess::OnChannelError() {
   // Shutdown the desktop process.
+  IPC::AttachmentBroker* broker = IPC::AttachmentBroker::GetGlobal();
+  if (broker && !broker->IsPrivilegedBroker())
+    broker->DeregisterBrokerCommunicationChannel(daemon_channel_.get());
   daemon_channel_.reset();
   if (desktop_agent_.get()) {
     desktop_agent_->Stop();
@@ -120,16 +124,10 @@ bool DesktopProcess::Start(
       AutoThread::CreateWithType(
           "I/O thread", caller_task_runner_, base::MessageLoop::TYPE_IO);
 
-  // Launch the video capture thread.
-  scoped_refptr<AutoThreadTaskRunner> video_capture_task_runner =
-      AutoThread::Create("Video capture thread", caller_task_runner_);
-
   // Create a desktop agent.
-  desktop_agent_ = new DesktopSessionAgent(audio_task_runner,
-                                           caller_task_runner_,
-                                           input_task_runner_,
-                                           io_task_runner,
-                                           video_capture_task_runner);
+  desktop_agent_ =
+      new DesktopSessionAgent(audio_task_runner, caller_task_runner_,
+                              input_task_runner_, io_task_runner);
 
   // Start the agent and create an IPC channel to talk to it.
   IPC::PlatformFileForTransit desktop_pipe;
@@ -145,6 +143,11 @@ bool DesktopProcess::Start(
   daemon_channel_ =
       IPC::ChannelProxy::Create(daemon_channel_name_, IPC::Channel::MODE_CLIENT,
                                 this, io_task_runner.get());
+
+  IPC::AttachmentBrokerUnprivileged::CreateBrokerIfNeeded();
+  IPC::AttachmentBroker* broker = IPC::AttachmentBroker::GetGlobal();
+  if (broker && !broker->IsPrivilegedBroker())
+    broker->RegisterBrokerCommunicationChannel(daemon_channel_.get());
 
   // Pass |desktop_pipe| to the daemon.
   daemon_channel_->Send(

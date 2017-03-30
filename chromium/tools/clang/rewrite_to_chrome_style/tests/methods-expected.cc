@@ -11,12 +11,41 @@ class Task {
 
   // Tests that the declarations for methods are updated.
   void DoTheWork();
+  // Overload to test using declarations that introduce multiple shadow
+  // declarations.
+  void DoTheWork(int);
   virtual void ReallyDoTheWork() = 0;
 
   // Note: this is purposely copyable and assignable, to make sure the Clang
   // tool doesn't try to emit replacements for things that aren't explicitly
   // written.
-  // TODO(dcheng): Add an explicit test for something like operator+.
+
+  // Overloaded operators should not be rewritten.
+  Task& operator++() { return *this; }
+
+  // Conversion functions should not be rewritten.
+  explicit operator int() const { return 42; }
+
+  // These are special functions that we don't rename so that range-based
+  // for loops and STL things work.
+  void begin() {}
+  void end() {}
+  void rbegin() {}
+  void rend() {}
+  // The trace() method is used by Oilpan, we shouldn't rename it.
+  void trace() {}
+  // These are used by std::unique_lock and std::lock_guard.
+  void lock() {}
+  void unlock() {}
+  void try_lock() {}
+};
+
+class Other {
+  // Static begin/end/trace don't count, and should be renamed.
+  static void Begin() {}
+  static void End() {}
+  static void Trace() {}
+  static void Lock() {}
 };
 
 // Test that the actual method definition is also updated.
@@ -26,12 +55,16 @@ void Task::DoTheWork() {
 
 }  // namespace blink
 
-namespace Moo {
-
 // Test that overrides from outside the Blink namespace are also updated.
 class BovineTask : public blink::Task {
  public:
+  using Task::DoTheWork;
   void ReallyDoTheWork() override;
+};
+
+class SuperBovineTask : public BovineTask {
+ public:
+  using BovineTask::ReallyDoTheWork;
 };
 
 void BovineTask::ReallyDoTheWork() {
@@ -47,5 +80,3 @@ void F() {
   void (blink::Task::*p3)() = &blink::Task::ReallyDoTheWork;
   void (BovineTask::*p4)() = &BovineTask::ReallyDoTheWork;
 }
-
-}  // namespace Moo

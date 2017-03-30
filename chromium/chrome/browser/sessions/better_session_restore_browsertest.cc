@@ -12,7 +12,6 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/background/background_mode_manager.h"
@@ -30,7 +29,7 @@
 #include "chrome/browser/sessions/session_service_test_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/browser_iterator.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -42,10 +41,10 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
-#include "net/base/net_util.h"
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/base/upload_data_stream.h"
 #include "net/url_request/url_request.h"
@@ -140,7 +139,8 @@ class FakeBackgroundModeManager : public BackgroundModeManager {
   FakeBackgroundModeManager()
       : BackgroundModeManager(
             *base::CommandLine::ForCurrentProcess(),
-            &g_browser_process->profile_manager()->GetProfileInfoCache()),
+            &g_browser_process->profile_manager()->
+                GetProfileAttributesStorage()),
         background_mode_active_(false) {}
 
   void SetBackgroundModeActive(bool active) {
@@ -332,7 +332,7 @@ class BetterSessionRestoreTest : public InProcessBrowserTest {
 
     // Create a new window, which should trigger session restore.
     ui_test_utils::BrowserAddedObserver window_observer;
-    chrome::NewEmptyWindow(profile, chrome::HOST_DESKTOP_TYPE_NATIVE);
+    chrome::NewEmptyWindow(profile);
     Browser* new_browser = window_observer.WaitForSingleNewBrowser();
     chrome::DecrementKeepAliveCount();
 
@@ -486,10 +486,8 @@ IN_PROC_BROWSER_TEST_F(ContinueWhereILeftOffTest,
   // Set the startup preference to "continue where I left off" and visit a page
   // which stores a session cookie.
   StoreDataWithPage("session_cookies.html");
-  Browser* popup = new Browser(Browser::CreateParams(
-      Browser::TYPE_POPUP,
-      browser()->profile(),
-      chrome::HOST_DESKTOP_TYPE_NATIVE));
+  Browser* popup = new Browser(
+      Browser::CreateParams(Browser::TYPE_POPUP, browser()->profile()));
   popup->window()->Show();
 
   Browser* new_browser = QuitBrowserAndRestore(browser(), false);
@@ -595,8 +593,8 @@ class RestartTest : public BetterSessionRestoreTest {
  protected:
   void Restart() {
     // Simulate restarting the browser, but let the test exit peacefully.
-    for (chrome::BrowserIterator it; !it.done(); it.Next())
-      content::BrowserContext::SaveSessionState(it->profile());
+    for (auto* browser : *BrowserList::GetInstance())
+      content::BrowserContext::SaveSessionState(browser->profile());
     PrefService* pref_service = g_browser_process->local_state();
     pref_service->SetBoolean(prefs::kWasRestarted, true);
 #if defined(OS_WIN)
@@ -771,10 +769,8 @@ IN_PROC_BROWSER_TEST_F(NoSessionRestoreTest, SessionCookiesBrowserClose) {
 IN_PROC_BROWSER_TEST_F(NoSessionRestoreTest,
                        SessionCookiesBrowserCloseWithPopupOpen) {
   StoreDataWithPage("session_cookies.html");
-  Browser* popup = new Browser(Browser::CreateParams(
-      Browser::TYPE_POPUP,
-      browser()->profile(),
-      chrome::HOST_DESKTOP_TYPE_NATIVE));
+  Browser* popup = new Browser(
+      Browser::CreateParams(Browser::TYPE_POPUP, browser()->profile()));
   popup->window()->Show();
   Browser* new_browser = QuitBrowserAndRestore(browser(), false);
   NavigateAndCheckStoredData(new_browser, "session_cookies.html");
@@ -785,10 +781,8 @@ IN_PROC_BROWSER_TEST_F(NoSessionRestoreTest,
 IN_PROC_BROWSER_TEST_F(NoSessionRestoreTest,
                        SessionCookiesBrowserClosePopupLast) {
   StoreDataWithPage("session_cookies.html");
-  Browser* popup = new Browser(Browser::CreateParams(
-      Browser::TYPE_POPUP,
-      browser()->profile(),
-      chrome::HOST_DESKTOP_TYPE_NATIVE));
+  Browser* popup = new Browser(
+      Browser::CreateParams(Browser::TYPE_POPUP, browser()->profile()));
   popup->window()->Show();
   CloseBrowserSynchronously(browser());
   Browser* new_browser = QuitBrowserAndRestore(popup, false);

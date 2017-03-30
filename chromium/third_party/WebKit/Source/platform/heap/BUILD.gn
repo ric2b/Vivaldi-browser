@@ -42,6 +42,7 @@ source_set("heap") {
     "ThreadState.h",
     "ThreadingTraits.h",
     "TraceTraits.h",
+    "Visitor.cpp",
     "Visitor.h",
   ]
 
@@ -55,7 +56,9 @@ source_set("heap") {
   ]
 
   deps = [
+    "//base",
     "//third_party/WebKit/Source/platform/heap/asm",
     "//third_party/icu",
+    "//v8",
   ]
 }

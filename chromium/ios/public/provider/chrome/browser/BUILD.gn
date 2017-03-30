@@ -4,11 +4,8 @@
 
 source_set("browser") {
   sources = [
-    "browser_state/chrome_browser_state.cc",
-    "browser_state/chrome_browser_state.h",
-    "browser_state/chrome_browser_state_manager.h",
-    "chrome_browser_provider.cc",
     "chrome_browser_provider.h",
+    "chrome_browser_provider.mm",
     "geolocation_updater_provider.h",
     "geolocation_updater_provider.mm",
     "signin/chrome_identity.h",
@@ -17,8 +14,8 @@ source_set("browser") {
     "signin/chrome_identity_service.mm",
     "signin/signin_error_provider.h",
     "signin/signin_error_provider.mm",
-    "string_provider.cc",
-    "string_provider.h",
+    "ui/default_ios_web_view_factory.h",
+    "ui/default_ios_web_view_factory.mm",
     "ui/infobar_view_delegate.h",
     "ui/infobar_view_protocol.h",
     "updatable_resource_provider.h",
@@ -30,5 +27,25 @@ source_set("browser") {
     "//components/autofill/core/browser",
     "//ios/public/provider/web",
     "//ios/web",
+  ]
+}
+
+source_set("test_support") {
+  testonly = true
+
+  sources = [
+    "test_chrome_browser_provider.h",
+    "test_chrome_browser_provider.mm",
+    "test_chrome_provider_initializer.h",
+    "test_chrome_provider_initializer.mm",
+    "test_updatable_resource_provider.h",
+    "test_updatable_resource_provider.mm",
+  ]
+
+  deps = [
+    ":browser",
+    "//base",
+    "//components/signin/ios/browser:test_support",
+    "//testing/gtest",
   ]
 }

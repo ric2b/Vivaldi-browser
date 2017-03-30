@@ -6,8 +6,6 @@
 
 #include <stddef.h>
 
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/testing_pref_service.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_shutdown.h"
@@ -22,6 +20,8 @@
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/test_browser_window.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/testing_pref_service.h"
 
 typedef BrowserWithTestWindowTest BrowserListTest;
 
@@ -39,35 +39,24 @@ size_t CountAllTabs() {
 
 TEST_F(BrowserListTest, TabContentsIteratorVerifyCount) {
   // Make sure we have 1 window to start with.
-  EXPECT_EQ(1U,
-            BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_NATIVE)->size());
+  EXPECT_EQ(1U, BrowserList::GetInstance()->size());
 
   EXPECT_EQ(0U, CountAllTabs());
 
   // Create more browsers/windows.
-  Browser::CreateParams native_params(profile(),
-                                      chrome::HOST_DESKTOP_TYPE_NATIVE);
+  Browser::CreateParams native_params(profile());
   scoped_ptr<Browser> browser2(
       chrome::CreateBrowserWithTestWindowForParams(&native_params));
   // Create browser 3 and 4 on the Ash desktop (the TabContentsIterator
   // shouldn't see the difference).
-  Browser::CreateParams ash_params(profile(), chrome::HOST_DESKTOP_TYPE_ASH);
+  Browser::CreateParams ash_params(profile());
   scoped_ptr<Browser> browser3(
       chrome::CreateBrowserWithTestWindowForParams(&ash_params));
   scoped_ptr<Browser> browser4(
       chrome::CreateBrowserWithTestWindowForParams(&ash_params));
 
   // Sanity checks.
-#if defined(OS_CHROMEOS)
-  // The ash desktop is the native desktop on Chrome OS.
-  EXPECT_EQ(4U,
-            BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_NATIVE)->size());
-#else
-  EXPECT_EQ(2U,
-            BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_NATIVE)->size());
-  EXPECT_EQ(2U,
-            BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_ASH)->size());
-#endif
+  EXPECT_EQ(4U, BrowserList::GetInstance()->size());
   EXPECT_EQ(0, browser()->tab_strip_model()->count());
   EXPECT_EQ(0, browser2->tab_strip_model()->count());
   EXPECT_EQ(0, browser3->tab_strip_model()->count());
@@ -98,31 +87,20 @@ TEST_F(BrowserListTest, TabContentsIteratorVerifyCount) {
 
 TEST_F(BrowserListTest, TabContentsIteratorVerifyBrowser) {
   // Make sure we have 1 window to start with.
-  EXPECT_EQ(1U,
-            BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_NATIVE)->size());
+  EXPECT_EQ(1U, BrowserList::GetInstance()->size());
 
   // Create more browsers/windows.
-  Browser::CreateParams native_params(profile(),
-                                      chrome::HOST_DESKTOP_TYPE_NATIVE);
+  Browser::CreateParams native_params(profile());
   scoped_ptr<Browser> browser2(
       chrome::CreateBrowserWithTestWindowForParams(&native_params));
   // Create browser 3 on the Ash desktop (the TabContentsIterator shouldn't see
   // the difference).
-  Browser::CreateParams ash_params(profile(), chrome::HOST_DESKTOP_TYPE_ASH);
+  Browser::CreateParams ash_params(profile());
   scoped_ptr<Browser> browser3(
       chrome::CreateBrowserWithTestWindowForParams(&ash_params));
 
   // Sanity checks.
-#if defined(OS_CHROMEOS)
-  // The ash desktop is the native desktop on Chrome OS.
-  EXPECT_EQ(3U,
-            BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_NATIVE)->size());
-#else
-  EXPECT_EQ(2U,
-            BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_NATIVE)->size());
-  EXPECT_EQ(1U,
-            BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_ASH)->size());
-#endif
+  EXPECT_EQ(3U, BrowserList::GetInstance()->size());
   EXPECT_EQ(0, browser()->tab_strip_model()->count());
   EXPECT_EQ(0, browser2->tab_strip_model()->count());
   EXPECT_EQ(0, browser3->tab_strip_model()->count());

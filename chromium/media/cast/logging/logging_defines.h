@@ -54,6 +54,7 @@ enum EventMediaType {
 
 struct FrameEvent {
   FrameEvent();
+  FrameEvent(const FrameEvent& other);
   ~FrameEvent();
 
   RtpTimeTicks rtp_timestamp;
@@ -64,7 +65,9 @@ struct FrameEvent {
   int height;
 
   // Size of encoded frame in bytes. Only set for FRAME_ENCODED event.
-  size_t size;
+  // Note: we use uint32_t instead of size_t for byte count because this struct
+  // is sent over IPC which could span 32 & 64 bit processes.
+  uint32_t size;
 
   // Time of event logged.
   base::TimeTicks timestamp;
@@ -100,7 +103,7 @@ struct PacketEvent {
   uint32_t frame_id;
   uint16_t max_packet_id;
   uint16_t packet_id;
-  size_t size;
+  uint32_t size;
 
   // Time of event logged.
   base::TimeTicks timestamp;

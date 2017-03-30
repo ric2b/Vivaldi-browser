@@ -6,7 +6,6 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -26,6 +25,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node_data.h"
+#include "components/prefs/pref_service.h"
 #include "components/search/search.h"
 #include "components/url_formatter/url_formatter.h"
 #include "components/user_prefs/user_prefs.h"
@@ -48,7 +48,7 @@
 
 #if defined(OS_WIN)
 #include "chrome/grit/theme_resources.h"
-#include "ui/base/resource/material_design/material_design_controller.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #endif
 
@@ -125,7 +125,7 @@ class OpenURLIterator {
   DISALLOW_COPY_AND_ASSIGN(OpenURLIterator);
 };
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 bool ShouldOpenAll(gfx::NativeWindow parent,
                    const std::vector<const BookmarkNode*>& nodes) {
   int child_count = 0;
@@ -158,7 +158,7 @@ int ChildURLCountTotal(const BookmarkNode* node) {
   return result;
 }
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 // Returns in |urls|, the url and title pairs for each open tab in browser.
 void GetURLsForOpenTabs(Browser* browser,
                         std::vector<std::pair<GURL, base::string16> >* urls) {
@@ -173,7 +173,7 @@ void GetURLsForOpenTabs(Browser* browser,
 
 }  // namespace
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 void OpenAll(gfx::NativeWindow parent,
              content::PageNavigator* navigator,
              const std::vector<const BookmarkNode*>& nodes,
@@ -267,6 +267,6 @@ bool HasBookmarkURLsAllowedInIncognitoMode(
   }
   return false;
 }
-#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
+#endif  // !defined(OS_ANDROID)
 
 }  // namespace chrome

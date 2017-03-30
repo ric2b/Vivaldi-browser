@@ -52,6 +52,7 @@ Geçiş yapmak için ÜstKrktr + Alt tuşlarına basın.</translation>
 <translation id="252373100621549798">Bilinmeyen Görünüm</translation>
 <translation id="2532589005999780174">Yüksek kontrast modu</translation>
 <translation id="2562916301614567480">Özel Ağ</translation>
+<translation id="2661637000095600270">Desteklenen bir çözünürlük bulunamadığı için ekranlar yansıtılamıyor. Bunun yerine genişletilmiş masaüstüne geçiliyor. Geri bildirim raporu göndermek için tıklayın.</translation>
 <translation id="2692809339924654275"><ph name="BLUETOOTH" />: Bağlanıyor...</translation>
 <translation id="2700058918926273959">Oturumun süresi <ph name="SESSION_TIME_REMAINING" /> içinde bitiyor. Süre dolduğunda oturumunuz kapatılacaktır.</translation>
 <translation id="2727977024730340865">Düşük güçlü bir şarj cihazına takıldı. Şarj durumu güvenilir olmayabilir.</translation>
@@ -113,7 +114,6 @@ Geçiş yapmak için ÜstKrktr + Alt tuşlarına basın.</translation>
 <translation id="4250680216510889253">Hayır</translation>
 <translation id="4279490309300973883">Yansıtılıyor</translation>
 <translation id="4321179778687042513">ctrl</translation>
-<translation id="4379753398862151997">Sevgili Monitör, aramızdaki bu ilişki yürümüyor. (Bu monitör desteklenmiyor)</translation>
 <translation id="4421231901400348175">Ekranınızın kontrolü, Uzaktan Yardım kullanılarak <ph name="HELPER_NAME" /> ile paylaşılıyor.</translation>
 <translation id="4430019312045809116">Ses</translation>
 <translation id="4527045527269911712">"<ph name="DEVICE_NAME" />" adlı Bluetooth cihaz eşleme izni istiyor.</translation>
@@ -183,7 +183,6 @@ Geçiş yapmak için ÜstKrktr + Alt tuşlarına basın.</translation>
 <translation id="6650933572246256093">"<ph name="DEVICE_NAME" />" adlı Bluetooth cihaz eşleme izni istiyor. Lütfen söz konusu cihazda bu parolayı girin: <ph name="PASSKEY" /></translation>
 <translation id="6713285437468012787">"<ph name="DEVICE_NAME" />" adlı Bluetooth cihaz eşlendi ve artık tüm kullanıcılar tarafından kullanılabilir. Bu eşlemeyi Ayarlar'ı kullanarak kaldırabilirsiniz.</translation>
 <translation id="6785414152754474415">Pil %<ph name="PERCENTAGE" /> dolu ve şarj oluyor.</translation>
-<translation id="6803622936009808957">Desteklenen bir çözünürlük bulunamadığı için ekranlar yansıtılamıyor. Bunun yerine genişletilmiş masaüstüne geçiliyor.</translation>
 <translation id="683971173229319003">Ara+L</translation>
 <translation id="68610848741840742">ChromeVox (Sesli geri bildirim)</translation>
 <translation id="6911468394164995108">Başka ağa katıl...</translation>
@@ -238,6 +237,7 @@ Devre dışı bırakmak için Ctrl+Alt+Z tuşlarına basın.</translation>
 <translation id="8878886163241303700">Genişletilmiş ekran</translation>
 <translation id="8938800817013097409">USB-C cihaz (arkadaki sağ bağlantı noktası)</translation>
 <translation id="8940956008527784070">Pil gücü az (%<ph name="PERCENTAGE" />)</translation>
+<translation id="9008540565042607572">Sevgili Monitör, aramızdaki bu ilişki yürümüyor. (Bu monitör desteklenmiyor. Geri bildirim raporu göndermek için tıklayın.)</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9080206825613744995">Mikrofon kullanımda.</translation>
 <translation id="9089416786594320554">Giriş yöntemleri</translation>

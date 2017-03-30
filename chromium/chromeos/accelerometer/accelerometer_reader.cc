@@ -91,7 +91,7 @@ const int kSizeOfReading = kDataSize * kNumberOfAxes;
 bool ReadFileToInt(const base::FilePath& path, int* value) {
   std::string s;
   DCHECK(value);
-  if (!base::ReadFileToString(path, &s, kMaxAsciiUintLength)) {
+  if (!base::ReadFileToStringWithMaxSize(path, &s, kMaxAsciiUintLength)) {
     return false;
   }
   base::TrimWhitespaceASCII(s, base::TRIM_ALL, &s);
@@ -235,8 +235,8 @@ void AccelerometerFileReader::Initialize(
   // file on detecting the device.
   if (base::IsDirectoryEmpty(base::FilePath(kAccelerometerDevicePath))) {
     if (base::SysInfo::IsRunningOnChromeOS()) {
-      LOG(ERROR) << "Accelerometer device directory is empty at "
-                 << kAccelerometerDevicePath;
+      LOG(WARNING) << "Accelerometer device directory is empty at "
+                   << kAccelerometerDevicePath;
     }
     return;
   }

@@ -306,8 +306,7 @@ NSString* AVFoundationGlue::AVPlayerItemDidPlayToEndTimeNotification() {
 }
 
 NSString* AVFoundationGlue::AVPlayerItemFailedToPlayToEndTimeNotification() {
-  return g_avfoundation_handle.Get()
-      .AVPlayerItemFailedToPlayToEndTimeNotification();
+  return g_avfoundation_handle.Get().AVPlayerItemFailedToPlayToEndTimeNotification();
 }
 
 @implementation AVCaptureDeviceGlue

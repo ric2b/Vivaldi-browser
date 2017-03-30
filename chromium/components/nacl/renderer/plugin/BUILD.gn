@@ -12,31 +12,15 @@ source_set("nacl_trusted_plugin") {
     "pnacl_translate_thread.cc",
     "ppapi_entrypoints.cc",
     "service_runtime.cc",
-    "temporary_file.cc",
-    "utility.cc",
   ]
 
   deps = [
     "//base",
     "//content/public/common",
     "//media:shared_memory_support",
-    "//native_client/src/shared/gio",
-    "//native_client/src/shared/imc",
-    "//native_client/src/shared/platform",
-    "//native_client/src/trusted/desc:nrd_xfer",
-    "//native_client/src/trusted/platform_qualify:platform_qual_lib",
-    "//native_client/src/trusted/simple_service",
     "//ppapi/c",
     "//ppapi/cpp:objects",
     "//ppapi/cpp/private:internal_module",
     "//ppapi/proxy:ipc",
   ]
-
-  if (is_linux) {
-    cflags = [ "-Wno-long-long" ]
-
-    ldflags = [ "-Wl,-z,defs" ]
-
-    libs = [ "dl" ]
-  }
 }

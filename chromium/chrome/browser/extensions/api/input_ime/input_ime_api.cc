@@ -10,7 +10,10 @@
 
 namespace input_ime = extensions::api::input_ime;
 namespace KeyEventHandled = extensions::api::input_ime::KeyEventHandled;
+namespace SetComposition = extensions::api::input_ime::SetComposition;
+namespace CommitText = extensions::api::input_ime::CommitText;
 using ui::IMEEngineHandlerInterface;
+using input_method::InputMethodEngineBase;
 
 namespace ui {
 
@@ -61,7 +64,7 @@ void ImeObserver::OnBlur(int context_id) {
 
 void ImeObserver::OnKeyEvent(
     const std::string& component_id,
-    const IMEEngineHandlerInterface::KeyboardEvent& event,
+    const InputMethodEngineBase::KeyboardEvent& event,
     IMEEngineHandlerInterface::KeyEventDoneCallback& key_data) {
   if (extension_id_.empty())
     return;
@@ -75,7 +78,11 @@ void ImeObserver::OnKeyEvent(
     return;
   }
 
-  const std::string request_id = extensions::GetInputImeEventRouter(profile_)
+  extensions::InputImeEventRouter* event_router =
+      extensions::GetInputImeEventRouter(profile_);
+  if (!event_router || !event_router->GetActiveEngine(extension_id_))
+    return;
+  const std::string request_id = event_router->GetActiveEngine(extension_id_)
                                      ->AddRequest(component_id, key_data);
 
   input_ime::KeyboardEvent key_data_value;
@@ -234,6 +241,8 @@ InputImeEventRouterFactory::~InputImeEventRouterFactory() {
 }
 
 InputImeEventRouter* InputImeEventRouterFactory::GetRouter(Profile* profile) {
+  if (!profile)
+    return nullptr;
   InputImeEventRouter* router = router_map_[profile];
   if (!router) {
     router = new InputImeEventRouter(profile);
@@ -242,12 +251,82 @@ InputImeEventRouter* InputImeEventRouterFactory::GetRouter(Profile* profile) {
   return router;
 }
 
-bool InputImeKeyEventHandledFunction::RunAsync() {
+ExtensionFunction::ResponseAction InputImeKeyEventHandledFunction::Run() {
   scoped_ptr<KeyEventHandled::Params> params(
       KeyEventHandled::Params::Create(*args_));
-  GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()))
-      ->OnKeyEventHandled(extension_id(), params->request_id, params->response);
-  return true;
+  InputImeEventRouter* event_router =
+      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()));
+  InputMethodEngineBase* engine =
+      event_router ? event_router->GetActiveEngine(extension_id()) : nullptr;
+  if (engine) {
+    engine->KeyEventHandled(extension_id(), params->request_id,
+                            params->response);
+  }
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction InputImeSetCompositionFunction::Run() {
+  bool success = false;
+  InputImeEventRouter* event_router =
+      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()));
+  InputMethodEngineBase* engine =
+      event_router ? event_router->GetActiveEngine(extension_id()) : nullptr;
+  if (engine) {
+    scoped_ptr<SetComposition::Params> parent_params(
+        SetComposition::Params::Create(*args_));
+    const SetComposition::Params::Parameters& params =
+        parent_params->parameters;
+    std::vector<InputMethodEngineBase::SegmentInfo> segments;
+    if (params.segments) {
+      const std::vector<
+          linked_ptr<SetComposition::Params::Parameters::SegmentsType>>&
+          segments_args = *params.segments;
+      for (const auto& segments_arg : segments_args) {
+        EXTENSION_FUNCTION_VALIDATE(segments_arg->style !=
+                                    input_ime::UNDERLINE_STYLE_NONE);
+        InputMethodEngineBase::SegmentInfo segment_info;
+        segment_info.start = segments_arg->start;
+        segment_info.end = segments_arg->end;
+        if (segments_arg->style == input_ime::UNDERLINE_STYLE_UNDERLINE) {
+          segment_info.style = InputMethodEngineBase::SEGMENT_STYLE_UNDERLINE;
+        } else if (segments_arg->style ==
+                   input_ime::UNDERLINE_STYLE_DOUBLEUNDERLINE) {
+          segment_info.style =
+              InputMethodEngineBase::SEGMENT_STYLE_DOUBLE_UNDERLINE;
+        } else {
+          segment_info.style =
+              InputMethodEngineBase::SEGMENT_STYLE_NO_UNDERLINE;
+        }
+        segments.push_back(segment_info);
+      }
+    }
+    int selection_start =
+        params.selection_start ? *params.selection_start : params.cursor;
+    int selection_end =
+        params.selection_end ? *params.selection_end : params.cursor;
+    success = engine->SetComposition(params.context_id, params.text.c_str(),
+                                     selection_start, selection_end,
+                                     params.cursor, segments, &error_);
+  }
+  scoped_ptr<base::ListValue> output = SetComposition::Results::Create(success);
+  return RespondNow(ArgumentList(std::move(output)));
+}
+
+ExtensionFunction::ResponseAction InputImeCommitTextFunction::Run() {
+  bool success = false;
+  InputImeEventRouter* event_router =
+      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()));
+  InputMethodEngineBase* engine =
+      event_router ? event_router->GetActiveEngine(extension_id()) : nullptr;
+  if (engine) {
+    scoped_ptr<CommitText::Params> parent_params(
+        CommitText::Params::Create(*args_));
+    const CommitText::Params::Parameters& params = parent_params->parameters;
+    success =
+        engine->CommitText(params.context_id, params.text.c_str(), &error_);
+  }
+  scoped_ptr<base::ListValue> output = CommitText::Results::Create(success);
+  return RespondNow(ArgumentList(std::move(output)));
 }
 
 InputImeAPI::InputImeAPI(content::BrowserContext* context)
@@ -271,6 +350,8 @@ BrowserContextKeyedAPIFactory<InputImeAPI>* InputImeAPI::GetFactoryInstance() {
 }
 
 InputImeEventRouter* GetInputImeEventRouter(Profile* profile) {
+  if (!profile)
+    return nullptr;
   if (profile->HasOffTheRecordProfile())
     profile = profile->GetOffTheRecordProfile();
   return extensions::InputImeEventRouterFactory::GetInstance()->GetRouter(

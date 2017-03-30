@@ -9,12 +9,14 @@
 // handle. Call sites must check IsEmpty() before using return value.
 
 #include "bindings/core/v8/DOMDataStore.h"
+#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
+#include <utility>
 #include <v8.h>
 
 namespace blink {
@@ -241,6 +243,15 @@ inline v8::Local<v8::Value> toV8(const Vector<std::pair<String, T>>& value, v8::
     return object;
 }
 
+// In all cases allow script state instead of creation context + isolate.
+// Use this function only if the call site does not otherwise need the global,
+// since v8::Context::Global is heavy.
+template<typename T>
+inline v8::Local<v8::Value> toV8(T&& value, ScriptState* scriptState)
+{
+    return toV8(std::forward<T>(value), scriptState->context()->Global(), scriptState->isolate());
+}
+
 // Only declare toV8(void*,...) for checking function overload mismatch.
 // This toV8(void*,...) should be never used. So we will find mismatch
 // because of "unresolved external symbol".
@@ -250,6 +261,13 @@ inline v8::Local<v8::Value> toV8(const Vector<std::pair<String, T>>& value, v8::
 // ScriptWrappable).
 // This hack helps detect such unwanted implicit conversions from T* to bool.
 v8::Local<v8::Value> toV8(void* value, v8::Local<v8::Object> creationContext, v8::Isolate*) = delete;
+
+// Cannot define in ScriptValue because of the circular dependency between toV8 and ScriptValue
+template<typename T>
+inline ScriptValue ScriptValue::from(ScriptState* scriptState, T&& value)
+{
+    return ScriptValue(scriptState, toV8(std::forward<T>(value), scriptState));
+}
 
 } // namespace blink
 

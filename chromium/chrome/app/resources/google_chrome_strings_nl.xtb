@@ -3,7 +3,6 @@
 <translationbundle lang="nl">
 <translation id="1001534784610492198">Het archief van het installatieprogramma is beschadigd of ongeldig. Download Google Chrome opnieuw.</translation>
 <translation id="1013290471399003443">Chrome heeft geverifieerd dat <ph name="ISSUER" /> het certificaat van deze website heeft uitgegeven. De server heeft geldige certificaattransparantiegegevens geleverd.</translation>
-<translation id="1016765312371154165">Chrome is niet correct afgesloten.</translation>
 <translation id="103396972844768118">Belangrijke informatie over je Chrome-gegevens</translation>
 <translation id="1035334672863811645">inloggen bij Chrome</translation>
 <translation id="1061441684050139317">Chrome heeft microfoontoegang nodig om het item te delen met deze site.</translation>
@@ -55,7 +54,6 @@ Als je inlogt, worden Chrome-gegevens zoals bladwijzers, geschiedenis en andere 
 <translation id="2397416548179033562">Chrome-menu weergeven</translation>
 <translation id="2429317896000329049">Google Chrome kan je gegevens niet synchroniseren, omdat synchronisatie niet beschikbaar is voor je domein.</translation>
 <translation id="2485422356828889247">Installatie ongedaan maken</translation>
-<translation id="2576431527583832481">Chrome is nu nog beter! Er is een nieuwe versie beschikbaar.</translation>
 <translation id="2580411288591421699">Kan dezelfde Google Chrome-versie die momenteel actief is, niet installeren. Sluit Google Chrome en probeer het opnieuw.</translation>
 <translation id="2582790009689336987">Deze computer ontvangt binnenkort geen Google Chrome-updates meer omdat dit Linux-systeem niet meer wordt ondersteund.</translation>
 <translation id="2588322182880276190">Chrome-logo</translation>
@@ -115,7 +113,6 @@ Als je inlogt, worden Chrome-gegevens zoals bladwijzers, geschiedenis en andere 
 <translation id="4633000520311261472">Om Chrome veiliger te maken, hebben we een aantal extensies uitgeschakeld die niet worden vermeld in de <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> en mogelijk zonder je medeweten zijn geïnstalleerd.</translation>
 <translation id="4700157086864140907">Google Chrome kan een betere spellingcontrole leveren door wat je in de browser typt naar Google-servers te verzenden. Hierdoor kun je profiteren van dezelfde technologie voor spellingcontrole die ook voor Google Zoeken wordt gebruikt.</translation>
 <translation id="4728575227883772061">De installatie is mislukt wegens een onbekende fout. Als Google Chrome momenteel actief is, sluit je het programma af en probeer je het opnieuw.</translation>
-<translation id="473775607612524610">Updaten</translation>
 <translation id="4743926867934016338">Accepteren en zoeken</translation>
 <translation id="4751441238232965030">Deze computer ontvangt binnenkort geen updates meer voor de 32-bits versie van Google Chrome. Upgrade naar de 64-bits versie van Google Chrome.</translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
@@ -214,7 +211,6 @@ Sommige functies zijn wellicht niet beschikbaar. Geef een andere profieldirector
 <translation id="7808348361785373670">Verwijderen uit Chrome…</translation>
 <translation id="7825851276765848807">De installatie is mislukt vanwege een onbekende fout. Download Google Chrome opnieuw.</translation>
 <translation id="7890208801193284374">Als je een computer deelt, kunnen vrienden en familie afzonderlijk surfen en Chrome configureren zoals zij dat willen.</translation>
-<translation id="8000275528373650868">Voor Google Chrome is Windows Vista of Windows XP met SP2 of hoger vereist.</translation>
 <translation id="8005540215158006229">Chrome is bijna klaar.</translation>
 <translation id="8008534537613507642">Chrome opnieuw installeren</translation>
 <translation id="8030318113982266900">Je apparaat bijwerken naar <ph name="CHANNEL_NAME" /> kanaal...</translation>
@@ -243,6 +239,7 @@ Sommige functies zijn wellicht niet beschikbaar. Geef een andere profieldirector
 <translation id="8851136666856101339">hoofd</translation>
 <translation id="8862326446509486874">Je hebt geen rechten om op systeemniveau te installeren. Meld je aan als beheerder en voer het installatieprogramma opnieuw uit.</translation>
 <translation id="9026991721384951619">Chrome OS kan je gegevens niet synchroniseren omdat de inloggegevens voor je account zijn verouderd.</translation>
+<translation id="9067395829937117663">Voor Google Chrome is Windows 7 of hoger vereist.</translation>
 <translation id="9102715433345326100">Dit bestand is schadelijk en is daarom door Chrome geblokkeerd.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Waarschuwing:<ph name="END_BOLD" /> Google Chrome kan niet voorkomen dat extensies je browsegeschiedenis registreren. Als je deze extensie in de incognitomodus wilt uitschakelen, verwijder je het vinkje bij deze optie.</translation>
 <translation id="911206726377975832">Ook browsegegevens wissen?</translation>

@@ -23,7 +23,6 @@ extern const char kGLImplementationMockName[];
 GL_EXPORT extern const char kANGLEImplementationDefaultName[];
 GL_EXPORT extern const char kANGLEImplementationD3D9Name[];
 GL_EXPORT extern const char kANGLEImplementationD3D11Name[];
-GL_EXPORT extern const char kANGLEImplementationWARPName[];
 GL_EXPORT extern const char kANGLEImplementationOpenGLName[];
 GL_EXPORT extern const char kANGLEImplementationOpenGLESName[];
 
@@ -36,7 +35,7 @@ GL_EXPORT extern const char kDisableGpuVsync[];
 GL_EXPORT extern const char kEnableGPUServiceLogging[];
 GL_EXPORT extern const char kEnableGPUServiceTracing[];
 GL_EXPORT extern const char kGpuNoContextLost[];
-GL_EXPORT extern const char kUseDirectComposition[];
+GL_EXPORT extern const char kDisableDirectComposition[];
 
 GL_EXPORT extern const char kSupportsDualGpus[];
 

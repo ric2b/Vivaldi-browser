@@ -299,12 +299,15 @@ public class AccountManagerHelper {
     public void getAuthToken(final Account account, final String authTokenType,
             final GetAuthTokenCallback callback) {
         ConnectionRetry.runAuthTask(new AuthTask<String>() {
+            @Override
             public String run() throws AuthException {
                 return mAccountManager.getAuthToken(account, authTokenType);
             }
+            @Override
             public void onSuccess(String token) {
                 callback.tokenAvailable(token);
             }
+            @Override
             public void onFailure(boolean isTransientError) {
                 callback.tokenUnavailable(isTransientError);
             }
@@ -335,11 +338,14 @@ public class AccountManagerHelper {
             return;
         }
         ConnectionRetry.runAuthTask(new AuthTask<Boolean>() {
+            @Override
             public Boolean run() throws AuthException {
                 mAccountManager.invalidateAuthToken(authToken);
                 return true;
             }
+            @Override
             public void onSuccess(Boolean result) {}
+            @Override
             public void onFailure(boolean isTransientError) {
                 Log.e(TAG, "Failed to invalidate auth token: " + authToken);
             }
@@ -394,8 +400,7 @@ public class AccountManagerHelper {
                     try {
                         return mAuthTask.run();
                     } catch (AuthException ex) {
-                        // TODO(547048): Handle the recovery intent if it is present.
-                        Log.e(TAG, "Failed to perform auth task", ex);
+                        Log.w(TAG, "Failed to perform auth task", ex);
                         mIsTransientError.set(ex.isTransientError());
                     }
                     return null;

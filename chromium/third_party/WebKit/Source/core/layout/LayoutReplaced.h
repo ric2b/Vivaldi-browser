@@ -65,7 +65,6 @@ public:
     static const int defaultWidth;
     static const int defaultHeight;
     bool canHaveChildren() const override { return false; }
-    bool shouldPaint(const PaintInfo&, const LayoutPoint&) const;
     virtual void paintReplaced(const PaintInfo&, const LayoutPoint&) const { }
     LayoutRect localSelectionRect() const; // This is in local coordinates, but it's a physical rect (so the top left corner is physical top left).
 
@@ -79,7 +78,10 @@ protected:
     void layout() override;
 
     LayoutSize intrinsicSize() const final { return m_intrinsicSize; }
-    void computeIntrinsicRatioInformation(FloatSize& intrinsicSize, double& intrinsicRatio) const override;
+    void computeIntrinsicSizingInfo(IntrinsicSizingInfo&) const override;
+
+    void computePositionedLogicalWidth(LogicalExtentComputedValues&) const override;
+    void computePositionedLogicalHeight(LogicalExtentComputedValues&) const override;
 
     void computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth) const final;
 
@@ -102,19 +104,20 @@ protected:
 
     virtual LayoutBox* embeddedContentBox() const { return nullptr; }
 
+    PositionWithAffinity positionForPoint(const LayoutPoint&) override;
+
 private:
     void computePreferredLogicalWidths() final;
-
-    PositionWithAffinity positionForPoint(const LayoutPoint&) final;
 
     bool canBeSelectionLeaf() const override { return true; }
 
     LayoutRect selectionRectForPaintInvalidation(const LayoutBoxModelObject* paintInvalidationContainer) const final;
-    void computeAspectRatioInformationForLayoutBox(LayoutBox*, FloatSize& constrainedSize, double& intrinsicRatio) const;
+    void computeIntrinsicSizingInfoForLayoutBox(LayoutBox*, IntrinsicSizingInfo&) const;
+    FloatSize constrainIntrinsicSizeToMinMax(const IntrinsicSizingInfo&) const;
 
     mutable LayoutSize m_intrinsicSize;
 };
 
-}
+} // namespace blink
 
 #endif

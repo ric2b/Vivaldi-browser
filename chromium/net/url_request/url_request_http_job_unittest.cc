@@ -15,6 +15,7 @@
 #include "base/strings/string_split.h"
 #include "net/base/auth.h"
 #include "net/base/request_priority.h"
+#include "net/base/sdch_observer.h"
 #include "net/base/test_data_directory.h"
 #include "net/cookies/cookie_store_test_helpers.h"
 #include "net/http/http_transaction_factory.h"
@@ -22,12 +23,14 @@
 #include "net/socket/socket_test_util.h"
 #include "net/test/cert_test_util.h"
 #include "net/url_request/url_request.h"
+#include "net/url_request/url_request_job_factory_impl.h"
 #include "net/url_request/url_request_status.h"
 #include "net/url_request/url_request_test_util.h"
 #include "net/websockets/websocket_handshake_stream_base.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
+#include "url/url_constants.h"
 
 namespace net {
 
@@ -52,11 +55,19 @@ class TestURLRequestHttpJob : public URLRequestHttpJob {
 
 class URLRequestHttpJobTest : public ::testing::Test {
  protected:
-  URLRequestHttpJobTest()
-      : req_(context_.CreateRequest(GURL("http://www.example.com"),
-                                    DEFAULT_PRIORITY,
-                                    &delegate_)) {
+  URLRequestHttpJobTest() : context_(true) {
     context_.set_http_transaction_factory(&network_layer_);
+
+    // The |test_job_factory_| takes ownership of the interceptor.
+    test_job_interceptor_ = new TestJobInterceptor();
+    EXPECT_TRUE(test_job_factory_.SetProtocolHandler(
+        url::kHttpScheme, make_scoped_ptr(test_job_interceptor_)));
+    context_.set_job_factory(&test_job_factory_);
+
+    context_.Init();
+
+    req_ = context_.CreateRequest(GURL("http://www.example.com"),
+                                  DEFAULT_PRIORITY, &delegate_);
   }
 
   bool TransactionAcceptsSdchEncoding() {
@@ -91,6 +102,11 @@ class URLRequestHttpJobTest : public ::testing::Test {
   }
 
   MockNetworkLayer network_layer_;
+
+  // |test_job_interceptor_| is owned by |test_job_factory_|.
+  TestJobInterceptor* test_job_interceptor_;
+  URLRequestJobFactoryImpl test_job_factory_;
+
   TestURLRequestContext context_;
   TestDelegate delegate_;
   scoped_ptr<URLRequest> req_;
@@ -543,7 +559,7 @@ TEST_F(URLRequestHttpJobTest, TestCancelWhileReadingCookies) {
 }
 
 // Make sure that SetPriority actually sets the URLRequestHttpJob's
-// priority, both before and after start.
+// priority, before start.  Other tests handle the after start case.
 TEST_F(URLRequestHttpJobTest, SetPriorityBasic) {
   scoped_ptr<TestURLRequestHttpJob> job(new TestURLRequestHttpJob(req_.get()));
   EXPECT_EQ(DEFAULT_PRIORITY, job->priority());
@@ -553,23 +569,18 @@ TEST_F(URLRequestHttpJobTest, SetPriorityBasic) {
 
   job->SetPriority(LOW);
   EXPECT_EQ(LOW, job->priority());
-
-  job->Start();
-  EXPECT_EQ(LOW, job->priority());
-
-  job->SetPriority(MEDIUM);
-  EXPECT_EQ(MEDIUM, job->priority());
 }
 
 // Make sure that URLRequestHttpJob passes on its priority to its
 // transaction on start.
 TEST_F(URLRequestHttpJobTest, SetTransactionPriorityOnStart) {
-  scoped_ptr<TestURLRequestHttpJob> job(new TestURLRequestHttpJob(req_.get()));
-  job->SetPriority(LOW);
+  test_job_interceptor_->set_main_intercept_job(
+      make_scoped_ptr(new TestURLRequestHttpJob(req_.get())));
+  req_->SetPriority(LOW);
 
   EXPECT_FALSE(network_layer_.last_transaction());
 
-  job->Start();
+  req_->Start();
 
   ASSERT_TRUE(network_layer_.last_transaction());
   EXPECT_EQ(LOW, network_layer_.last_transaction()->priority());
@@ -578,13 +589,14 @@ TEST_F(URLRequestHttpJobTest, SetTransactionPriorityOnStart) {
 // Make sure that URLRequestHttpJob passes on its priority updates to
 // its transaction.
 TEST_F(URLRequestHttpJobTest, SetTransactionPriority) {
-  scoped_ptr<TestURLRequestHttpJob> job(new TestURLRequestHttpJob(req_.get()));
-  job->SetPriority(LOW);
-  job->Start();
+  test_job_interceptor_->set_main_intercept_job(
+      make_scoped_ptr(new TestURLRequestHttpJob(req_.get())));
+  req_->SetPriority(LOW);
+  req_->Start();
   ASSERT_TRUE(network_layer_.last_transaction());
   EXPECT_EQ(LOW, network_layer_.last_transaction()->priority());
 
-  job->SetPriority(HIGHEST);
+  req_->SetPriority(HIGHEST);
   EXPECT_EQ(HIGHEST, network_layer_.last_transaction()->priority());
 }
 
@@ -592,8 +604,9 @@ TEST_F(URLRequestHttpJobTest, SetTransactionPriority) {
 TEST_F(URLRequestHttpJobTest, SdchAdvertisementGet) {
   EnableSdch();
   req_->set_method("GET");  // Redundant with default.
-  scoped_ptr<TestURLRequestHttpJob> job(new TestURLRequestHttpJob(req_.get()));
-  job->Start();
+  test_job_interceptor_->set_main_intercept_job(
+      make_scoped_ptr(new TestURLRequestHttpJob(req_.get())));
+  req_->Start();
   EXPECT_TRUE(TransactionAcceptsSdchEncoding());
 }
 
@@ -601,9 +614,85 @@ TEST_F(URLRequestHttpJobTest, SdchAdvertisementGet) {
 TEST_F(URLRequestHttpJobTest, SdchAdvertisementPost) {
   EnableSdch();
   req_->set_method("POST");
-  scoped_ptr<TestURLRequestHttpJob> job(new TestURLRequestHttpJob(req_.get()));
-  job->Start();
+  test_job_interceptor_->set_main_intercept_job(
+      make_scoped_ptr(new TestURLRequestHttpJob(req_.get())));
+  req_->Start();
   EXPECT_FALSE(TransactionAcceptsSdchEncoding());
+}
+
+class MockSdchObserver : public SdchObserver {
+ public:
+  MockSdchObserver() {}
+  MOCK_METHOD2(OnDictionaryAdded,
+               void(const GURL& request_url, const std::string& server_hash));
+  MOCK_METHOD1(OnDictionaryRemoved, void(const std::string& server_hash));
+  MOCK_METHOD1(OnDictionaryUsed, void(const std::string& server_hash));
+  MOCK_METHOD2(OnGetDictionary,
+               void(const GURL& request_url, const GURL& dictionary_url));
+  MOCK_METHOD0(OnClearDictionaries, void());
+};
+
+class URLRequestHttpJobWithSdchSupportTest : public ::testing::Test {
+ protected:
+  URLRequestHttpJobWithSdchSupportTest() : context_(true) {
+    scoped_ptr<HttpNetworkSession::Params> params(
+        new HttpNetworkSession::Params);
+    context_.set_http_network_session_params(std::move(params));
+    context_.set_client_socket_factory(&socket_factory_);
+    context_.Init();
+  }
+
+  MockClientSocketFactory socket_factory_;
+  TestURLRequestContext context_;
+};
+
+TEST_F(URLRequestHttpJobWithSdchSupportTest, GetDictionary) {
+  MockWrite writes[] = {
+      MockWrite("GET / HTTP/1.1\r\n"
+                "Host: example.com\r\n"
+                "Connection: keep-alive\r\n"
+                "User-Agent:\r\n"
+                "Accept-Encoding: gzip, deflate, sdch\r\n"
+                "Accept-Language: en-us,fr\r\n\r\n")};
+
+  MockRead reads[] = {MockRead("HTTP/1.1 200 OK\r\n"
+                               "Get-Dictionary: /sdch.dict\r\n"
+                               "Cache-Control: max-age=120\r\n"
+                               "Content-Length: 12\r\n\r\n"),
+                      MockRead("Test Content")};
+  StaticSocketDataProvider socket_data(reads, arraysize(reads), writes,
+                                       arraysize(writes));
+  socket_factory_.AddSocketDataProvider(&socket_data);
+
+  MockSdchObserver sdch_observer;
+  SdchManager sdch_manager;
+  sdch_manager.AddObserver(&sdch_observer);
+  context_.set_sdch_manager(&sdch_manager);
+
+  // First response will be "from network" and we should have OnGetDictionary
+  // invoked.
+  GURL url("http://example.com");
+  EXPECT_CALL(sdch_observer,
+              OnGetDictionary(url, GURL("http://example.com/sdch.dict")));
+  TestDelegate delegate;
+  scoped_ptr<URLRequest> request =
+      context_.CreateRequest(url, DEFAULT_PRIORITY, &delegate);
+  request->Start();
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(request->status().is_success());
+
+  // Second response should be from cache without notification of SdchObserver
+  TestDelegate delegate2;
+  scoped_ptr<URLRequest> request2 =
+      context_.CreateRequest(url, DEFAULT_PRIORITY, &delegate2);
+  request2->Start();
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(request->status().is_success());
+
+  // Cleanup manager.
+  sdch_manager.RemoveObserver(&sdch_observer);
 }
 
 class URLRequestHttpJobWithBrotliSupportTest : public ::testing::Test {
@@ -710,12 +799,6 @@ class URLRequestHttpJobWebSocketTest
       : req_(context_.CreateRequest(GURL("ws://www.example.com"),
                                     DEFAULT_PRIORITY,
                                     &delegate_)) {
-    // The TestNetworkDelegate expects a call to NotifyBeforeURLRequest before
-    // anything else happens.
-    GURL url("ws://localhost/");
-    TestCompletionCallback dummy;
-    network_delegate_.NotifyBeforeURLRequest(
-        req_.get(), dummy.callback(), &url);
   }
 
   TestDelegate delegate_;
@@ -740,6 +823,12 @@ class MockCreateHelper : public WebSocketHandshakeStreamBase::CreateHelper {
                WebSocketHandshakeStreamBase*(const base::WeakPtr<SpdySession>&,
                                              bool));
 };
+
+// iOS doesn't support WebSockets, so these tests fail with ERR_UNKOWN_SCHEME on
+// iOS.
+// TODO(mmenke):  Hard coding features based on OS is regression prone and ugly.
+// Seems like this should use a build flag instead.
+#if !defined(OS_IOS)
 
 class FakeWebSocketHandshakeStream : public WebSocketHandshakeStreamBase {
  public:
@@ -796,6 +885,12 @@ class FakeWebSocketHandshakeStream : public WebSocketHandshakeStreamBase {
 
   bool GetRemoteEndpoint(IPEndPoint* endpoint) override { return false; }
 
+  Error GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
+                                    std::vector<uint8_t>* out) override {
+    ADD_FAILURE();
+    return ERR_NOT_IMPLEMENTED;
+  }
+
   void Drain(HttpNetworkSession* session) override {}
 
   void PopulateNetErrorDetails(NetErrorDetails* details) override { return; }
@@ -818,15 +913,13 @@ class FakeWebSocketHandshakeStream : public WebSocketHandshakeStreamBase {
 };
 
 TEST_F(URLRequestHttpJobWebSocketTest, RejectedWithoutCreateHelper) {
-  scoped_ptr<TestURLRequestHttpJob> job(new TestURLRequestHttpJob(req_.get()));
-  job->Start();
+  req_->Start();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(URLRequestStatus::FAILED, req_->status().status());
   EXPECT_EQ(ERR_DISALLOWED_URL_SCHEME, req_->status().error());
 }
 
 TEST_F(URLRequestHttpJobWebSocketTest, CreateHelperPassedThrough) {
-  scoped_ptr<TestURLRequestHttpJob> job(new TestURLRequestHttpJob(req_.get()));
   scoped_ptr<MockCreateHelper> create_helper(
       new ::testing::StrictMock<MockCreateHelper>());
   FakeWebSocketHandshakeStream* fake_handshake_stream(
@@ -838,11 +931,13 @@ TEST_F(URLRequestHttpJobWebSocketTest, CreateHelperPassedThrough) {
   req_->SetUserData(WebSocketHandshakeStreamBase::CreateHelper::DataKey(),
                     create_helper.release());
   req_->SetLoadFlags(LOAD_DISABLE_CACHE);
-  job->Start();
+  req_->Start();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(URLRequestStatus::IO_PENDING, req_->status().status());
   EXPECT_TRUE(fake_handshake_stream->initialize_stream_was_called());
 }
+
+#endif  // !defined(OS_IOS)
 
 }  // namespace
 

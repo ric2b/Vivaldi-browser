@@ -39,6 +39,7 @@ namespace blink {
 class WebGraphicsContext3D;
 class ExceptionState;
 class GraphicsContext;
+class ImageBitmapOptions;
 
 // GL types as defined in OpenGL ES 2.0 header file gl2.h from khronos.org.
 // That header cannot be included directly due to a conflict with NPAPI headers.
@@ -72,14 +73,14 @@ public:
     // Used by WebGL to do GPU-GPU textures copy if possible.
     bool copyVideoTextureToPlatformTexture(WebGraphicsContext3D*, Platform3DObject texture, GLenum internalFormat, GLenum type, bool premultiplyAlpha, bool flipY);
 
-    bool shouldDisplayPosterImage() const { return displayMode() == Poster; }
+    bool shouldDisplayPosterImage() const { return getDisplayMode() == Poster; }
 
     bool hasAvailableVideoFrame() const;
 
     KURL posterImageURL() const override;
 
     // CanvasImageSource implementation
-    PassRefPtr<Image> getSourceImageForCanvas(SourceImageStatus*, AccelerationHint) const override;
+    PassRefPtr<Image> getSourceImageForCanvas(SourceImageStatus*, AccelerationHint, SnapshotReason) const override;
     bool isVideoElement() const override { return true; }
     bool wouldTaintOrigin(SecurityOrigin*) const override;
     FloatSize elementSize() const override;
@@ -89,7 +90,7 @@ public:
 
     // ImageBitmapSource implementation
     IntSize bitmapSourceSize() const override;
-    ScriptPromise createImageBitmap(ScriptState*, EventTarget&, int sx, int sy, int sw, int sh, ExceptionState&) override;
+    ScriptPromise createImageBitmap(ScriptState*, EventTarget&, int sx, int sy, int sw, int sh, const ImageBitmapOptions&, ExceptionState&) override;
 
 private:
     HTMLVideoElement(Document&);

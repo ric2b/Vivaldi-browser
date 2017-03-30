@@ -6,14 +6,13 @@
 
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
-#include "net/base/ip_address_number.h"
+#include "net/base/ip_address.h"
 #include "net/base/port_util.h"
 
 namespace net {
@@ -72,23 +71,21 @@ const char kSrttKey[] = "srtt";
 ////////////////////////////////////////////////////////////////////////////////
 //  HttpServerPropertiesManager
 
+HttpServerPropertiesManager::PrefDelegate::~PrefDelegate() {}
+
 HttpServerPropertiesManager::HttpServerPropertiesManager(
-    PrefService* pref_service,
-    const char* pref_path,
+    PrefDelegate* pref_delegate,
     scoped_refptr<base::SequencedTaskRunner> network_task_runner)
     : pref_task_runner_(base::ThreadTaskRunnerHandle::Get()),
-      pref_service_(pref_service),
+      pref_delegate_(pref_delegate),
       setting_prefs_(false),
-      path_(pref_path),
       network_task_runner_(network_task_runner) {
-  DCHECK(pref_service);
+  DCHECK(pref_delegate_);
   pref_weak_ptr_factory_.reset(
       new base::WeakPtrFactory<HttpServerPropertiesManager>(this));
   pref_weak_ptr_ = pref_weak_ptr_factory_->GetWeakPtr();
   pref_cache_update_timer_.reset(new base::OneShotTimer);
-  pref_change_registrar_.Init(pref_service_);
-  pref_change_registrar_.Add(
-      path_,
+  pref_delegate_->StartListeningForUpdates(
       base::Bind(&HttpServerPropertiesManager::OnHttpServerPropertiesChanged,
                  base::Unretained(this)));
 }
@@ -117,7 +114,7 @@ void HttpServerPropertiesManager::ShutdownOnPrefThread() {
   // Cancel any pending updates, and stop listening for pref change updates.
   pref_cache_update_timer_->Stop();
   pref_weak_ptr_factory_.reset();
-  pref_change_registrar_.RemoveAll();
+  pref_delegate_->StopListeningForUpdates();
 }
 
 // static
@@ -337,19 +334,18 @@ const SpdySettingsMap& HttpServerPropertiesManager::spdy_settings_map()
 }
 
 bool HttpServerPropertiesManager::GetSupportsQuic(
-    IPAddressNumber* last_address) const {
+    IPAddress* last_address) const {
   DCHECK(network_task_runner_->RunsTasksOnCurrentThread());
   return http_server_properties_impl_->GetSupportsQuic(last_address);
 }
 
-void HttpServerPropertiesManager::SetSupportsQuic(
-    bool used_quic,
-    const IPAddressNumber& address) {
+void HttpServerPropertiesManager::SetSupportsQuic(bool used_quic,
+                                                  const IPAddress& address) {
   DCHECK(network_task_runner_->RunsTasksOnCurrentThread());
-  IPAddressNumber old_last_quic_addr;
+  IPAddress old_last_quic_addr;
   http_server_properties_impl_->GetSupportsQuic(&old_last_quic_addr);
   http_server_properties_impl_->SetSupportsQuic(used_quic, address);
-  IPAddressNumber new_last_quic_addr;
+  IPAddress new_last_quic_addr;
   http_server_properties_impl_->GetSupportsQuic(&new_last_quic_addr);
   if (old_last_quic_addr != new_last_quic_addr)
     ScheduleUpdatePrefsOnNetworkThread(SET_SUPPORTS_QUIC);
@@ -445,12 +441,12 @@ void HttpServerPropertiesManager::UpdateCacheFromPrefsOnPrefThread() {
   // The preferences can only be read on the pref thread.
   DCHECK(pref_task_runner_->RunsTasksOnCurrentThread());
 
-  if (!pref_service_->HasPrefPath(path_))
+  if (!pref_delegate_->HasServerProperties())
     return;
 
   bool detected_corrupted_prefs = false;
   const base::DictionaryValue& http_server_properties_dict =
-      *pref_service_->GetDictionary(path_);
+      pref_delegate_->GetServerProperties();
 
   int version = kMissingVersion;
   if (!http_server_properties_dict.GetIntegerWithoutPathExpansion(kVersionKey,
@@ -499,7 +495,7 @@ void HttpServerPropertiesManager::UpdateCacheFromPrefsOnPrefThread() {
     }
   }
 
-  IPAddressNumber* addr = new IPAddressNumber;
+  IPAddress* addr = new IPAddress;
   ReadSupportsQuic(http_server_properties_dict, addr);
 
   // String is host/port pair of spdy server.
@@ -743,7 +739,7 @@ bool HttpServerPropertiesManager::AddToAlternativeServiceMap(
 
 bool HttpServerPropertiesManager::ReadSupportsQuic(
     const base::DictionaryValue& http_server_properties_dict,
-    IPAddressNumber* last_quic_address) {
+    IPAddress* last_quic_address) {
   const base::DictionaryValue* supports_quic_dict = nullptr;
   if (!http_server_properties_dict.GetDictionaryWithoutPathExpansion(
           kSupportsQuicKey, &supports_quic_dict)) {
@@ -761,7 +757,7 @@ bool HttpServerPropertiesManager::ReadSupportsQuic(
   std::string address;
   if (!supports_quic_dict->GetStringWithoutPathExpansion(kAddressKey,
                                                          &address) ||
-      !ParseIPLiteralToNumber(address, last_quic_address)) {
+      !last_quic_address->AssignFromIPLiteral(address)) {
     DVLOG(1) << "Malformed SupportsQuic";
     return false;
   }
@@ -841,7 +837,7 @@ void HttpServerPropertiesManager::UpdateCacheFromPrefsOnNetworkThread(
     ServerList* spdy_servers,
     SpdySettingsMap* spdy_settings_map,
     AlternativeServiceMap* alternative_service_map,
-    IPAddressNumber* last_quic_address,
+    IPAddress* last_quic_address,
     ServerNetworkStatsMap* server_network_stats_map,
     QuicServerInfoMap* quic_server_info_map,
     bool detected_corrupted_prefs) {
@@ -1002,7 +998,7 @@ void HttpServerPropertiesManager::UpdatePrefsFromCacheOnNetworkThread(
     }
   }
 
-  IPAddressNumber* last_quic_addr = new IPAddressNumber;
+  IPAddress* last_quic_addr = new IPAddress;
   http_server_properties_impl_->GetSupportsQuic(last_quic_addr);
   // Update the preferences on the pref thread.
   pref_task_runner_->PostTask(
@@ -1048,7 +1044,7 @@ void HttpServerPropertiesManager::UpdatePrefsOnPrefThread(
     base::ListValue* spdy_server_list,
     SpdySettingsMap* spdy_settings_map,
     AlternativeServiceMap* alternative_service_map,
-    IPAddressNumber* last_quic_address,
+    IPAddress* last_quic_address,
     ServerNetworkStatsMap* server_network_stats_map,
     QuicServerInfoMap* quic_server_info_map,
     const base::Closure& completion) {
@@ -1117,7 +1113,7 @@ void HttpServerPropertiesManager::UpdatePrefsOnPrefThread(
     }
   }
 
-  // Persist properties to the |path_| in the MRU order.
+  // Persist properties to the prefs in the MRU order.
   base::DictionaryValue http_server_properties_dict;
   base::ListValue* servers_list = new base::ListValue;
   for (ServerPrefMap::const_reverse_iterator map_it = server_pref_map.rbegin();
@@ -1152,7 +1148,7 @@ void HttpServerPropertiesManager::UpdatePrefsOnPrefThread(
                                      &http_server_properties_dict);
 
   setting_prefs_ = true;
-  pref_service_->Set(path_, http_server_properties_dict);
+  pref_delegate_->SetServerProperties(http_server_properties_dict);
   setting_prefs_ = false;
 
   // Note that |completion| will be fired after we have written everything to
@@ -1216,15 +1212,14 @@ void HttpServerPropertiesManager::SaveAlternativeServiceToServerPrefs(
 }
 
 void HttpServerPropertiesManager::SaveSupportsQuicToPrefs(
-    const IPAddressNumber* last_quic_address,
+    const IPAddress* last_quic_address,
     base::DictionaryValue* http_server_properties_dict) {
-  if (!last_quic_address || last_quic_address->empty())
+  if (!last_quic_address || !last_quic_address->IsValid())
     return;
 
   base::DictionaryValue* supports_quic_dict = new base::DictionaryValue;
   supports_quic_dict->SetBoolean(kUsedQuicKey, true);
-  supports_quic_dict->SetString(kAddressKey,
-                                IPAddressToString(*last_quic_address));
+  supports_quic_dict->SetString(kAddressKey, last_quic_address->ToString());
   http_server_properties_dict->SetWithoutPathExpansion(kSupportsQuicKey,
                                                        supports_quic_dict);
 }

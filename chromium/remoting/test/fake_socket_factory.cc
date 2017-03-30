@@ -17,9 +17,11 @@
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "net/base/io_buffer.h"
 #include "remoting/test/leaky_bucket.h"
 #include "third_party/webrtc/base/asyncpacketsocket.h"
+#include "third_party/webrtc/media/base/rtputils.h"
 
 namespace remoting {
 
@@ -115,6 +117,10 @@ int FakeUdpSocket::SendTo(const void* data, size_t data_size,
                           const rtc::PacketOptions& options) {
   scoped_refptr<net::IOBuffer> buffer = new net::IOBuffer(data_size);
   memcpy(buffer->data(), data, data_size);
+  cricket::ApplyPacketOptions(
+      reinterpret_cast<uint8_t*>(buffer->data()), data_size,
+      options.packet_time_params,
+      (base::TimeTicks::Now() - base::TimeTicks()).InMilliseconds());
   dispatcher_->DeliverPacket(local_address_, address, buffer, data_size);
   return data_size;
 }
@@ -159,6 +165,9 @@ FakePacketSocketFactory::PendingPacket::PendingPacket(
     int data_size)
     : from(from), to(to), data(data), data_size(data_size) {
 }
+
+FakePacketSocketFactory::PendingPacket::PendingPacket(
+    const PendingPacket& other) = default;
 
 FakePacketSocketFactory::PendingPacket::~PendingPacket() {
 }

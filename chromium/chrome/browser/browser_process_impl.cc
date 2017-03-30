@@ -21,12 +21,10 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
-#include "base/prefs/json_pref_store.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -38,6 +36,7 @@
 #include "chrome/browser/component_updater/chrome_component_updater_configurator.h"
 #include "chrome/browser/component_updater/supervised_user_whitelist_installer.h"
 #include "chrome/browser/defaults.h"
+#include "chrome/browser/devtools/devtools_auto_opener.h"
 #include "chrome/browser/devtools/remote_debugging_server.h"
 #include "chrome/browser/download/download_request_limiter.h"
 #include "chrome/browser/download/download_status_updater.h"
@@ -87,6 +86,9 @@
 #include "components/net_log/chrome_net_log.h"
 #include "components/network_time/network_time_tracker.h"
 #include "components/policy/core/common/policy_service.h"
+#include "components/prefs/json_pref_store.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
 #include "components/safe_json/safe_json_parser.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/translate/core/browser/translate_download_manager.h"
@@ -123,7 +125,7 @@
 #include "components/gcm_driver/gcm_desktop_utils.h"
 #endif
 
-#if defined(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND)
 #include "chrome/browser/background/background_mode_manager.h"
 #endif
 
@@ -197,7 +199,7 @@ BrowserProcessImpl::BrowserProcessImpl(
       tearing_down_(false),
       download_status_updater_(new DownloadStatusUpdater),
       local_state_task_runner_(local_state_task_runner),
-      cached_default_web_client_state_(ShellIntegration::UNKNOWN_DEFAULT) {
+      cached_default_web_client_state_(shell_integration::UNKNOWN_DEFAULT) {
   g_browser_process = this;
   platform_part_.reset(new BrowserProcessPlatformPart());
 
@@ -286,6 +288,7 @@ void BrowserProcessImpl::StartTearDown() {
 #if !defined(OS_ANDROID)
   // Debugger must be cleaned up before ProfileManager.
   remote_debugging_server_.reset();
+  devtools_auto_opener_.reset();
 #endif
 
   // Need to clear profiles (download managers) before the io_thread_.
@@ -676,7 +679,6 @@ GpuModeManager* BrowserProcessImpl::gpu_mode_manager() {
 }
 
 void BrowserProcessImpl::CreateDevToolsHttpProtocolHandler(
-    chrome::HostDesktopType host_desktop_type,
     const std::string& ip,
     uint16_t port) {
   DCHECK(CalledOnValidThread());
@@ -684,9 +686,18 @@ void BrowserProcessImpl::CreateDevToolsHttpProtocolHandler(
   // StartupBrowserCreator::LaunchBrowser can be run multiple times when browser
   // is started with several profiles or existing browser process is reused.
   if (!remote_debugging_server_.get()) {
-    remote_debugging_server_.reset(
-        new RemoteDebuggingServer(host_desktop_type, ip, port));
+    remote_debugging_server_.reset(new RemoteDebuggingServer(ip, port));
   }
+#endif
+}
+
+void BrowserProcessImpl::CreateDevToolsAutoOpener() {
+  DCHECK(CalledOnValidThread());
+#if !defined(OS_ANDROID)
+  // StartupBrowserCreator::LaunchBrowser can be run multiple times when browser
+  // is started with several profiles or existing browser process is reused.
+  if (!devtools_auto_opener_.get())
+    devtools_auto_opener_.reset(new DevToolsAutoOpener());
 #endif
 }
 
@@ -779,7 +790,8 @@ WebRtcLogUploader* BrowserProcessImpl::webrtc_log_uploader() {
 network_time::NetworkTimeTracker* BrowserProcessImpl::network_time_tracker() {
   if (!network_time_tracker_) {
     network_time_tracker_.reset(new network_time::NetworkTimeTracker(
-        scoped_ptr<base::TickClock>(new base::DefaultTickClock()),
+        make_scoped_ptr(new base::DefaultClock()),
+        make_scoped_ptr(new base::DefaultTickClock()),
         local_state()));
   }
   return network_time_tracker_.get();
@@ -803,7 +815,7 @@ memory::TabManager* BrowserProcessImpl::GetTabManager() {
 #endif
 }
 
-ShellIntegration::DefaultWebClientState
+shell_integration::DefaultWebClientState
 BrowserProcessImpl::CachedDefaultWebClientState() {
   return cached_default_web_client_state_;
 }
@@ -819,9 +831,9 @@ void BrowserProcessImpl::RegisterPrefs(PrefRegistrySimple* registry) {
 
   registry->RegisterBooleanPref(prefs::kAllowCrossOriginAuthPrompt, false);
 
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
   registry->RegisterBooleanPref(prefs::kEulaAccepted, false);
-#endif  // defined(OS_CHROMEOS) || defined(OS_ANDROID) || defined(OS_IOS)
+#endif  // defined(OS_CHROMEOS) || defined(OS_ANDROID)
 #if defined(OS_WIN)
   if (base::win::GetVersion() >= base::win::VERSION_WIN7) {
     registry->RegisterStringPref(prefs::kRelaunchMode,
@@ -858,7 +870,7 @@ DownloadRequestLimiter* BrowserProcessImpl::download_request_limiter() {
 
 BackgroundModeManager* BrowserProcessImpl::background_mode_manager() {
   DCHECK(CalledOnValidThread());
-#if defined(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND)
   if (!background_mode_manager_.get())
     CreateBackgroundModeManager();
   return background_mode_manager_.get();
@@ -870,7 +882,7 @@ BackgroundModeManager* BrowserProcessImpl::background_mode_manager() {
 
 void BrowserProcessImpl::set_background_mode_manager_for_test(
     scoped_ptr<BackgroundModeManager> manager) {
-#if defined(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND)
   background_mode_manager_ = std::move(manager);
 #endif
 }
@@ -1017,7 +1029,7 @@ void BrowserProcessImpl::CreateLocalState() {
 
   // This preference must be kept in sync with external values; update them
   // whenever the preference or its controlling policy changes.
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
   pref_change_registrar_.Add(
       metrics::prefs::kMetricsReportingEnabled,
       base::Bind(&BrowserProcessImpl::ApplyMetricsReportingPolicy,
@@ -1056,7 +1068,7 @@ void BrowserProcessImpl::PreMainMessageLoopRun() {
   if (local_state_->IsManagedPreference(prefs::kDefaultBrowserSettingEnabled))
     ApplyDefaultBrowserPolicy();
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
   ApplyMetricsReportingPolicy();
 #endif
 
@@ -1086,7 +1098,7 @@ void BrowserProcessImpl::PreMainMessageLoopRun() {
 #endif
 #endif  // defined(ENABLE_PLUGINS)
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
   storage_monitor::StorageMonitor::Create();
 #endif
 
@@ -1119,7 +1131,7 @@ void BrowserProcessImpl::CreateNotificationUIManager() {
 }
 
 void BrowserProcessImpl::CreateBackgroundModeManager() {
-#if defined(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND)
   DCHECK(background_mode_manager_.get() == NULL);
   background_mode_manager_.reset(
       new BackgroundModeManager(*base::CommandLine::ForCurrentProcess(),
@@ -1196,8 +1208,17 @@ void BrowserProcessImpl::CreateGCMDriver() {
 
 void BrowserProcessImpl::ApplyDefaultBrowserPolicy() {
   if (local_state()->GetBoolean(prefs::kDefaultBrowserSettingEnabled)) {
-    scoped_refptr<ShellIntegration::DefaultWebClientWorker>
-        set_browser_worker = new ShellIntegration::DefaultBrowserWorker(NULL);
+    // The worker pointer is reference counted. While it is running, the
+    // message loops of the FILE and UI thread will hold references to it
+    // and it will be automatically freed once all its tasks have finished.
+    scoped_refptr<shell_integration::DefaultWebClientWorker>
+        set_browser_worker = new shell_integration::DefaultBrowserWorker(
+            nullptr,
+            /*delete_observer=*/false);
+    // The user interaction must always be disabled when applying the default
+    // browser policy since it is done at each browser startup and the result
+    // of the interaction cannot be forced.
+    set_browser_worker->set_interactive_permitted(false);
     set_browser_worker->StartSetAsDefault();
   }
 }
@@ -1208,7 +1229,7 @@ void BrowserProcessImpl::ApplyAllowCrossOriginAuthPromptPolicy() {
 }
 
 void BrowserProcessImpl::ApplyMetricsReportingPolicy() {
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
   CHECK(BrowserThread::PostTask(
       BrowserThread::FILE, FROM_HERE,
       base::Bind(
@@ -1219,9 +1240,9 @@ void BrowserProcessImpl::ApplyMetricsReportingPolicy() {
 
 void BrowserProcessImpl::CacheDefaultWebClientState() {
 #if defined(OS_CHROMEOS)
-  cached_default_web_client_state_ = ShellIntegration::IS_DEFAULT;
-#elif !defined(OS_ANDROID) && !defined(OS_IOS)
-  cached_default_web_client_state_ = ShellIntegration::GetDefaultBrowser();
+  cached_default_web_client_state_ = shell_integration::IS_DEFAULT;
+#elif !defined(OS_ANDROID)
+  cached_default_web_client_state_ = shell_integration::GetDefaultBrowser();
 #endif
 }
 

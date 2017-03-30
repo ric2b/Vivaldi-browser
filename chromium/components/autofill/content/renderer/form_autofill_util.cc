@@ -20,6 +20,7 @@
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
+#include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
@@ -804,13 +805,19 @@ void ForEachMatchingFormFieldCommon(
 
     bool is_initiating_element = (*element == initiating_element);
 
-    // Only autofill empty fields and the field that initiated the filling,
-    // i.e. the field the user is currently editing and interacting with.
+    // Only autofill empty fields (or those with the field's default value
+    // attribute) and the field that initiated the filling, i.e. the field the
+    // user is currently editing and interacting with.
     const WebInputElement* input_element = toWebInputElement(element);
+    CR_DEFINE_STATIC_LOCAL(WebString, kValue, ("value"));
     if (!force_override && !is_initiating_element &&
-        ((IsAutofillableInputElement(input_element) ||
-          IsTextAreaElement(*element)) &&
-         !element->value().isEmpty()))
+        // A text field, with a non-empty value that is NOT the value of the
+        // input field's "value" attribute, is skipped.
+        (IsAutofillableInputElement(input_element) ||
+         IsTextAreaElement(*element)) &&
+        !element->value().isEmpty() &&
+        (!element->hasAttribute(kValue) ||
+         element->getAttribute(kValue) != element->value()))
       continue;
 
     if (((filters & FILTER_DISABLED_ELEMENTS) && !element->isEnabled()) ||
@@ -1163,7 +1170,8 @@ bool ExtractFormData(const WebFormElement& form_element, FormData* data) {
   return WebFormElementToFormData(
       form_element, WebFormControlElement(),
       static_cast<form_util::ExtractMask>(form_util::EXTRACT_VALUE |
-                                          form_util::EXTRACT_OPTION_TEXT),
+                                          form_util::EXTRACT_OPTION_TEXT |
+                                          form_util::EXTRACT_OPTIONS),
       data, NULL);
 }
 
@@ -1425,7 +1433,7 @@ bool WebFormElementToFormData(
   // If the completed URL is not valid, just use the action we get from
   // WebKit.
   if (!form->action.is_valid())
-    form->action = GURL(form_element.action());
+    form->action = GURL(blink::WebStringToGURL(form_element.action()));
 
   WebVector<WebFormControlElement> control_elements;
   form_element.getFormControlElements(control_elements);

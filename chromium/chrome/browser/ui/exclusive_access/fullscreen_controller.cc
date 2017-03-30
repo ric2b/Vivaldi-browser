@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -32,13 +33,20 @@
 #include "extensions/common/extension.h"
 
 #if !defined(OS_MACOSX)
-#include "base/prefs/pref_service.h"
 #include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #endif
 
 using base::UserMetricsAction;
 using content::RenderViewHost;
 using content::WebContents;
+
+namespace {
+
+const char kBubbleReshowsHistogramName[] =
+    "ExclusiveAccess.BubbleReshowsPerSession.Fullscreen";
+
+}  // namespace
 
 FullscreenController::FullscreenController(ExclusiveAccessManager* manager)
     : ExclusiveAccessControllerBase(manager),
@@ -93,13 +101,14 @@ bool FullscreenController::IsUserAcceptedFullscreen() const {
 
 bool FullscreenController::IsFullscreenForTabOrPending(
     const WebContents* web_contents) const {
+  if (IsFullscreenForCapturedTab(web_contents))
+    return true;
   if (web_contents == exclusive_access_tab()) {
     DCHECK(web_contents ==
            exclusive_access_manager()->context()->GetActiveWebContents());
-    DCHECK(web_contents->GetCapturerCount() == 0);
     return true;
   }
-  return IsFullscreenForCapturedTab(web_contents);
+  return false;
 }
 
 bool FullscreenController::IsFullscreenCausedByTab() const {
@@ -272,11 +281,11 @@ void FullscreenController::OnTabDetachedFromView(WebContents* old_contents) {
 }
 
 void FullscreenController::OnTabClosing(WebContents* web_contents) {
-  if (IsFullscreenForCapturedTab(web_contents)) {
-    web_contents->ExitFullscreen();
-  } else {
+  if (IsFullscreenForCapturedTab(web_contents))
+    web_contents->ExitFullscreen(
+        /* will_cause_resize */ IsFullscreenCausedByTab());
+  else
     ExclusiveAccessControllerBase::OnTabClosing(web_contents);
-  }
 }
 
 void FullscreenController::WindowFullscreenStateChanged() {
@@ -300,14 +309,16 @@ bool FullscreenController::HandleUserPressedEscape() {
   WebContents* const active_web_contents =
       exclusive_access_manager()->context()->GetActiveWebContents();
   if (IsFullscreenForCapturedTab(active_web_contents)) {
-    active_web_contents->ExitFullscreen();
-    return true;
-  } else if (IsWindowFullscreenForTabOrPending()) {
-    ExitExclusiveAccessIfNecessary();
+    active_web_contents->ExitFullscreen(
+        /* will_cause_resize */ IsFullscreenCausedByTab());
     return true;
   }
 
-  return false;
+  if (!IsWindowFullscreenForTabOrPending())
+    return false;
+
+  ExitExclusiveAccessIfNecessary();
+  return true;
 }
 
 void FullscreenController::ExitExclusiveAccessToPreviousState() {
@@ -409,11 +420,17 @@ void FullscreenController::NotifyTabExclusiveAccessLost() {
     WebContents* web_contents = exclusive_access_tab();
     SetTabWithExclusiveAccess(nullptr);
     fullscreened_origin_ = GURL();
+    bool will_cause_resize = IsFullscreenCausedByTab();
     state_prior_to_tab_fullscreen_ = STATE_INVALID;
     tab_fullscreen_accepted_ = false;
-    web_contents->ExitFullscreen();
+    web_contents->ExitFullscreen(will_cause_resize);
     exclusive_access_manager()->UpdateExclusiveAccessExitBubbleContent();
   }
+}
+
+void FullscreenController::RecordBubbleReshowsHistogram(
+    int bubble_reshow_count) {
+  UMA_HISTOGRAM_COUNTS_100(kBubbleReshowsHistogramName, bubble_reshow_count);
 }
 
 void FullscreenController::ToggleFullscreenModeInternal(
@@ -495,6 +512,7 @@ void FullscreenController::EnterFullscreenModeInternal(
 }
 
 void FullscreenController::ExitFullscreenModeInternal() {
+  RecordExitingUMA();
   toggled_into_fullscreen_ = false;
 #if defined(OS_MACOSX)
   // Mac windows report a state change instantly, and so we must also clear

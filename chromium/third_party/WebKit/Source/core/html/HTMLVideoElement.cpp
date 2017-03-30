@@ -36,6 +36,7 @@
 #include "core/frame/ImageBitmap.h"
 #include "core/frame/Settings.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/imagebitmap/ImageBitmapOptions.h"
 #include "core/layout/LayoutImage.h"
 #include "core/layout/LayoutVideo.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -117,7 +118,7 @@ void HTMLVideoElement::parseAttribute(const QualifiedName& name, const AtomicStr
     if (name == posterAttr) {
         // In case the poster attribute is set after playback, don't update the
         // display state, post playback the correct state will be picked up.
-        if (displayMode() < Video || !hasAvailableVideoFrame()) {
+        if (getDisplayMode() < Video || !hasAvailableVideoFrame()) {
             // Force a poster recalc by setting m_displayMode to Unknown directly before calling updateDisplayState.
             HTMLMediaElement::setDisplayMode(Unknown);
             updateDisplayState();
@@ -167,7 +168,7 @@ const AtomicString HTMLVideoElement::imageSourceURL() const
 
 void HTMLVideoElement::setDisplayMode(DisplayMode mode)
 {
-    DisplayMode oldMode = displayMode();
+    DisplayMode oldMode = getDisplayMode();
     KURL poster = posterImageURL();
 
     if (!poster.isEmpty()) {
@@ -181,7 +182,7 @@ void HTMLVideoElement::setDisplayMode(DisplayMode mode)
 
     HTMLMediaElement::setDisplayMode(mode);
 
-    if (layoutObject() && displayMode() != oldMode)
+    if (layoutObject() && getDisplayMode() != oldMode)
         layoutObject()->updateFromElement();
 }
 
@@ -189,7 +190,7 @@ void HTMLVideoElement::updateDisplayState()
 {
     if (posterImageURL().isEmpty())
         setDisplayMode(Video);
-    else if (displayMode() < Poster)
+    else if (getDisplayMode() < Poster)
         setDisplayMode(Poster);
 }
 
@@ -220,7 +221,7 @@ bool HTMLVideoElement::hasAvailableVideoFrame() const
     if (!webMediaPlayer())
         return false;
 
-    return webMediaPlayer()->hasVideo() && webMediaPlayer()->readyState() >= WebMediaPlayer::ReadyStateHaveCurrentData;
+    return webMediaPlayer()->hasVideo() && webMediaPlayer()->getReadyState() >= WebMediaPlayer::ReadyStateHaveCurrentData;
 }
 
 void HTMLVideoElement::webkitEnterFullscreen()
@@ -284,7 +285,7 @@ KURL HTMLVideoElement::posterImageURL() const
     return document().completeURL(url);
 }
 
-PassRefPtr<Image> HTMLVideoElement::getSourceImageForCanvas(SourceImageStatus* status, AccelerationHint) const
+PassRefPtr<Image> HTMLVideoElement::getSourceImageForCanvas(SourceImageStatus* status, AccelerationHint, SnapshotReason) const
 {
     if (!hasAvailableVideoFrame()) {
         *status = InvalidSourceImageStatus;
@@ -325,14 +326,14 @@ IntSize HTMLVideoElement::bitmapSourceSize() const
     return IntSize(videoWidth(), videoHeight());
 }
 
-ScriptPromise HTMLVideoElement::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, int sx, int sy, int sw, int sh, ExceptionState& exceptionState)
+ScriptPromise HTMLVideoElement::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, int sx, int sy, int sw, int sh, const ImageBitmapOptions& options, ExceptionState& exceptionState)
 {
     ASSERT(eventTarget.toDOMWindow());
     if (networkState() == HTMLMediaElement::NETWORK_EMPTY) {
         exceptionState.throwDOMException(InvalidStateError, "The provided element has not retrieved data.");
         return ScriptPromise();
     }
-    if (readyState() <= HTMLMediaElement::HAVE_METADATA) {
+    if (getReadyState() <= HTMLMediaElement::HAVE_METADATA) {
         exceptionState.throwDOMException(InvalidStateError, "The provided element's player has no current data.");
         return ScriptPromise();
     }
@@ -340,7 +341,7 @@ ScriptPromise HTMLVideoElement::createImageBitmap(ScriptState* scriptState, Even
         exceptionState.throwDOMException(IndexSizeError, String::format("The source %s provided is 0.", sw ? "height" : "width"));
         return ScriptPromise();
     }
-    return ImageBitmapSource::fulfillImageBitmap(scriptState, ImageBitmap::create(this, IntRect(sx, sy, sw, sh), eventTarget.toDOMWindow()->document()));
+    return ImageBitmapSource::fulfillImageBitmap(scriptState, ImageBitmap::create(this, IntRect(sx, sy, sw, sh), eventTarget.toDOMWindow()->document(), options));
 }
 
 } // namespace blink

@@ -8,8 +8,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <string>
-
 #include "base/strings/string16.h"
 #include "sandbox/win/src/sandbox_types.h"
 #include "sandbox/win/src/security_level.h"
@@ -48,17 +46,17 @@ class TargetPolicy {
                            // over the resulting process and thread handles.
                            // No other parameters besides the command line are
                            // passed to the child process.
-    PROCESS_ALL_EXEC,      // Allows the creation of a process and return fill
+    PROCESS_ALL_EXEC,      // Allows the creation of a process and return full
                            // access on the returned handles.
                            // This flag can be used only when the main token of
                            // the sandboxed application is at least INTERACTIVE.
     EVENTS_ALLOW_ANY,      // Allows the creation of an event with full access.
-    EVENTS_ALLOW_READONLY, // Allows opening an even with synchronize access.
-    REG_ALLOW_READONLY,    // Allows readonly access to a registry key.
-    REG_ALLOW_ANY,         // Allows read and write access to a registry key.
-    FAKE_USER_GDI_INIT     // Fakes user32 and gdi32 initialization. This can
-                           // be used to allow the DLLs to load and initialize
-                           // even if the process cannot access that subsystem.
+    EVENTS_ALLOW_READONLY,  // Allows opening an even with synchronize access.
+    REG_ALLOW_READONLY,     // Allows readonly access to a registry key.
+    REG_ALLOW_ANY,          // Allows read and write access to a registry key.
+    FAKE_USER_GDI_INIT      // Fakes user32 and gdi32 initialization. This can
+                            // be used to allow the DLLs to load and initialize
+                            // even if the process cannot access that subsystem.
   };
 
   // Increments the reference count of this object. The reference count must
@@ -135,6 +133,9 @@ class TargetPolicy {
   virtual ResultCode SetJobLevel(JobLevel job_level,
                                  uint32_t ui_exceptions) = 0;
 
+  // Returns the job level.
+  virtual JobLevel GetJobLevel() const = 0;
+
   // Sets a hard limit on the size of the commit set for the sandboxed process.
   // If the limit is reached, the process will be terminated with
   // SBOX_FATAL_MEMORY_EXCEEDED (7012).
@@ -206,6 +207,10 @@ class TargetPolicy {
   // Returns the currently set delayed mitigation flags.
   virtual MitigationFlags GetDelayedProcessMitigations() const = 0;
 
+  // Disconnect the target from CSRSS when TargetServices::LowerToken() is
+  // called inside the target.
+  virtual void SetDisconnectCsrss() = 0;
+
   // Sets the interceptions to operate in strict mode. By default, interceptions
   // are performed in "relaxed" mode, where if something inside NTDLL.DLL is
   // already patched we attempt to intercept it anyway. Setting interceptions
@@ -246,11 +251,9 @@ class TargetPolicy {
   virtual ResultCode AddKernelObjectToClose(const wchar_t* handle_type,
                                             const wchar_t* handle_name) = 0;
 
-  // Adds a handle that will be shared with the target process.
-  // Returns the handle which was actually shared with the target. This is
-  // achieved by duplicating the handle to ensure that it is inheritable by
-  // the target. The caller should treat this as an opaque value.
-  virtual void* AddHandleToShare(HANDLE handle) = 0;
+  // Adds a handle that will be shared with the target process. Does not take
+  // ownership of the handle.
+  virtual void AddHandleToShare(HANDLE handle) = 0;
 };
 
 }  // namespace sandbox

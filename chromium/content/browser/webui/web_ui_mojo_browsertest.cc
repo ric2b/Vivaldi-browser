@@ -31,7 +31,6 @@
 #include "content/test/data/web_ui_test_mojo_bindings.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "mojo/public/js/constants.h"
 #include "mojo/test/test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
@@ -44,21 +43,10 @@ bool got_message = false;
 // up the generated file from disk and returns it.
 bool GetResource(const std::string& id,
                  const WebUIDataSource::GotDataCallback& callback) {
-  // These are handled by the WebUIDataSource that AddMojoDataSource() creates.
-  if (id == mojo::kBindingsModuleName ||
-      id == mojo::kBufferModuleName ||
-      id == mojo::kCodecModuleName ||
-      id == mojo::kConnectionModuleName ||
-      id == mojo::kConnectorModuleName ||
-      id == mojo::kUnicodeModuleName ||
-      id == mojo::kRouterModuleName ||
-      id == mojo::kValidatorModuleName)
-    return false;
-
   if (id.find(".mojom") != std::string::npos) {
     std::string contents;
     CHECK(base::ReadFileToString(mojo::test::GetFilePathForJSResource(id),
-                                 &contents, std::string::npos))
+                                 &contents))
         << id;
     base::RefCountedString* ref_contents = new base::RefCountedString;
     ref_contents->data() = contents;
@@ -70,8 +58,7 @@ bool GetResource(const std::string& id,
   CHECK(base::PathService::Get(content::DIR_TEST_DATA, &path));
   path = path.AppendASCII(id.substr(0, id.find("?")));
   std::string contents;
-  CHECK(base::ReadFileToString(path, &contents, std::string::npos))
-      << path.value();
+  CHECK(base::ReadFileToString(path, &contents)) << path.value();
   base::RefCountedString* ref_contents = new base::RefCountedString;
   ref_contents->data() = contents;
   callback.Run(ref_contents);
@@ -110,7 +97,6 @@ class TestWebUIController : public WebUIController {
       : WebUIController(web_ui), run_loop_(run_loop) {
     content::WebUIDataSource* data_source =
         WebUIDataSource::Create("mojo-web-ui");
-    data_source->AddMojoResources();
     data_source->SetRequestFilter(base::Bind(&GetResource));
     content::WebUIDataSource::Add(web_ui->GetWebContents()->GetBrowserContext(),
                                   data_source);

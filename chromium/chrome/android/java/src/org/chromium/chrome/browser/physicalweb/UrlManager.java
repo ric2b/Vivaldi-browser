@@ -14,18 +14,22 @@ import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.os.AsyncTask;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.preference.PreferenceManager;
 import android.support.v4.app.NotificationCompat;
 
 import org.chromium.base.Log;
+import org.chromium.base.ObserverList;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.notifications.NotificationConstants;
 import org.chromium.chrome.browser.notifications.NotificationManagerProxy;
 import org.chromium.chrome.browser.notifications.NotificationManagerProxyImpl;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -46,17 +50,30 @@ import java.util.Set;
  */
 class UrlManager {
     private static final String TAG = "PhysicalWeb";
-    private static final String PREFS_NAME = "org.chromium.chrome.browser.physicalweb.URL_CACHE";
-    private static final String PREFS_VERSION_KEY = "version";
-    private static final String PREFS_NEARBY_URLS_KEY = "nearby_urls";
-    private static final String PREFS_RESOLVED_URLS_KEY = "resolved_urls";
-    private static final String DEPRECATED_PREFS_URLS_KEY = "urls";
-    private static final int PREFS_VERSION = 2;
+    private static final String DEPRECATED_PREFS_NAME =
+            "org.chromium.chrome.browser.physicalweb.URL_CACHE";
+    private static final String PREFS_VERSION_KEY = "physicalweb_version";
+    private static final String PREFS_NEARBY_URLS_KEY = "physicalweb_nearby_urls";
+    private static final String PREFS_RESOLVED_URLS_KEY = "physicalweb_resolved_urls";
+    private static final int PREFS_VERSION = 3;
     private static final long STALE_NOTIFICATION_TIMEOUT_MILLIS = 30 * 60 * 1000;
     private static UrlManager sInstance = null;
     private final Context mContext;
     private NotificationManagerProxy mNotificationManager;
     private PwsClient mPwsClient;
+    private final ObserverList<Listener> mObservers;
+
+    /**
+     * Interface for observers that should be notified when the nearby URL list changes.
+     */
+    public interface Listener {
+        /**
+         * Callback called when one or more URLs are added to the URL list.
+         * @param urls A set of strings containing nearby URLs resolvable with our resolution
+         * service.
+         */
+        void onDisplayableUrlsAdded(Collection<String> urls);
+    }
 
     /**
      * Construct the UrlManager.
@@ -67,6 +84,7 @@ class UrlManager {
         mNotificationManager = new NotificationManagerProxyImpl(
                 (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE));
         mPwsClient = new PwsClientImpl();
+        mObservers = new ObserverList<Listener>();
         initSharedPreferences();
     }
 
@@ -83,6 +101,22 @@ class UrlManager {
     }
 
     /**
+     * Add an observer to be notified on changes to the nearby URL list.
+     * @param observer The observer to add.
+     */
+    public void addObserver(Listener observer) {
+        mObservers.addObserver(observer);
+    }
+
+    /**
+     * Remove an observer from the observer list.
+     * @param observer The observer to remove.
+     */
+    public void removeObserver(Listener observer) {
+        mObservers.removeObserver(observer);
+    }
+
+    /**
      * Add a URL to the store of URLs.
      * This method additionally updates the Physical Web notification.
      * @param url The URL to add.
@@ -93,8 +127,21 @@ class UrlManager {
         boolean isOnboarding = PhysicalWeb.isOnboarding(mContext);
         Set<String> nearbyUrls = getCachedNearbyUrls();
 
-        boolean isUrlListEmptyBefore = (isOnboarding && nearbyUrls.isEmpty())
-                || (!isOnboarding && getUrls().isEmpty());
+        // A URL is displayable if it is both nearby and resolved through our resolution service.
+        // When new displayable URLs are found we tell our observers. In onboarding mode we do not
+        // use our resolution service so the displayable list should always be empty. However, we
+        // still want to track the nearby URL count so we can show an opt-in notification.
+        // In normal operation, both the notification and observers are updated for changes to the
+        // displayable list.
+
+        int displayableUrlsBefore;
+        int notificationUrlsBefore;
+        if (isOnboarding) {
+            displayableUrlsBefore = 0;
+            notificationUrlsBefore = nearbyUrls.size();
+        } else {
+            displayableUrlsBefore = notificationUrlsBefore = getUrls().size();
+        }
 
         nearbyUrls.add(url);
         putCachedNearbyUrls(nearbyUrls);
@@ -103,8 +150,17 @@ class UrlManager {
             resolveUrl(url);
         }
 
-        boolean isUrlListEmptyAfter = !isOnboarding && getUrls().isEmpty();
-        updateNotification(isUrlListEmptyBefore, isUrlListEmptyAfter);
+        int displayableUrlsAfter;
+        int notificationUrlsAfter;
+        if (isOnboarding) {
+            displayableUrlsAfter = 0;
+            notificationUrlsAfter = nearbyUrls.size();
+        } else {
+            displayableUrlsAfter = notificationUrlsAfter = getUrls().size();
+        }
+
+        updateNotification(notificationUrlsBefore == 0, notificationUrlsAfter == 0);
+        notifyDisplayableUrlsChanged(displayableUrlsBefore, displayableUrlsAfter, url);
     }
 
     /**
@@ -120,9 +176,8 @@ class UrlManager {
         nearbyUrls.remove(url);
         putCachedNearbyUrls(nearbyUrls);
 
-        boolean isUrlListEmptyAfter = (isOnboarding && nearbyUrls.isEmpty())
-                || (!isOnboarding && getUrls().isEmpty());
-        updateNotification(false, isUrlListEmptyAfter);
+        int notificationUrlsAfter = isOnboarding ? nearbyUrls.size() : getUrls().size();
+        updateNotification(false, notificationUrlsAfter == 0);
     }
 
     /**
@@ -177,11 +232,14 @@ class UrlManager {
     private void addResolvedUrl(String url) {
         Log.d(TAG, "PWS resolved: %s", url);
         Set<String> resolvedUrls = getCachedResolvedUrls();
-        boolean isUrlListEmptyBefore = getUrls().isEmpty();
+        int displayableUrlsBefore = getUrls().size();
 
         resolvedUrls.add(url);
         putCachedResolvedUrls(resolvedUrls);
-        updateNotification(isUrlListEmptyBefore, getUrls().isEmpty());
+
+        int displayableUrlsAfter = getUrls().size();
+        updateNotification(displayableUrlsBefore == 0, displayableUrlsAfter == 0);
+        notifyDisplayableUrlsChanged(displayableUrlsBefore, displayableUrlsAfter, url);
     }
 
     private void removeResolvedUrl(String url) {
@@ -193,7 +251,7 @@ class UrlManager {
     }
 
     private void initSharedPreferences() {
-        SharedPreferences prefs = mContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
         int prefsVersion = prefs.getInt(PREFS_VERSION_KEY, 0);
 
         // Check the version.
@@ -202,30 +260,36 @@ class UrlManager {
         }
 
         // Stored preferences are old, upgrade to the current version.
-        SharedPreferences.Editor editor = prefs.edit();
-        editor.remove(DEPRECATED_PREFS_URLS_KEY);
-        editor.putInt(PREFS_VERSION_KEY, PREFS_VERSION);
-        editor.apply();
-
-        clearUrls();
+        // TODO(cco3): This code may be deleted around m53.
+        prefs.edit().putInt(PREFS_VERSION_KEY, PREFS_VERSION);
+        new AsyncTask<Void, Void, Void>() {
+            @Override
+            protected Void doInBackground(Void... params) {
+                SharedPreferences oldPrefs =
+                        mContext.getSharedPreferences(DEPRECATED_PREFS_NAME, Context.MODE_PRIVATE);
+                oldPrefs.edit().clear().commit();
+                return null;
+            }
+        }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
     private Set<String> getStringSetFromSharedPreferences(String preferenceName) {
         // Check the version.
-        SharedPreferences prefs = mContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        return prefs.getStringSet(preferenceName, new HashSet<String>());
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
+        // Make sure to construct a new set so it can be modified safely. See crbug.com/568369.
+        return new HashSet<String>(prefs.getStringSet(preferenceName, new HashSet<String>()));
     }
 
     private void setStringSetInSharedPreferences(String preferenceName,
                                                  Set<String> preferenceValue) {
         // Write the version.
-        SharedPreferences prefs = mContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
         SharedPreferences.Editor editor = prefs.edit();
         editor.putStringSet(preferenceName, preferenceValue);
         editor.apply();
     }
 
-    private Set<String> getCachedNearbyUrls() {
+    Set<String> getCachedNearbyUrls() {
         return getStringSetFromSharedPreferences(PREFS_NEARBY_URLS_KEY);
     }
 
@@ -233,7 +297,7 @@ class UrlManager {
         setStringSetInSharedPreferences(PREFS_NEARBY_URLS_KEY, urls);
     }
 
-    private Set<String> getCachedResolvedUrls() {
+    Set<String> getCachedResolvedUrls() {
         return getStringSetFromSharedPreferences(PREFS_RESOLVED_URLS_KEY);
     }
 
@@ -376,6 +440,18 @@ class UrlManager {
         PendingIntent pendingIntent = createClearNotificationAlarmIntent();
         AlarmManager alarmManager = (AlarmManager) mContext.getSystemService(Context.ALARM_SERVICE);
         alarmManager.cancel(pendingIntent);
+    }
+
+    private void notifyDisplayableUrlsChanged(int displayCountBefore, int displayCountAfter,
+            String url) {
+        if (displayCountAfter > displayCountBefore) {
+            Collection<String> urls = new ArrayList<String>();
+            urls.add(url);
+            Collection<String> wrappedUrls = Collections.unmodifiableCollection(urls);
+            for (Listener observer : mObservers) {
+                observer.onDisplayableUrlsAdded(wrappedUrls);
+            }
+        }
     }
 
     @VisibleForTesting

@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.notifications;
 
 import android.app.Notification;
-import android.app.PendingIntent;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
@@ -13,8 +12,6 @@ import android.graphics.BitmapFactory;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
-import android.support.v4.app.NotificationCompat;
-import android.support.v4.app.NotificationCompat.Action;
 import android.text.format.DateFormat;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
@@ -26,29 +23,16 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.ui.base.LocalizationUtils;
 
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Date;
-import java.util.List;
-
-import javax.annotation.Nullable;
 
 /**
  * Builds a notification using the given inputs. Uses RemoteViews to provide a custom layout.
  */
-public class CustomNotificationBuilder implements NotificationBuilder {
+public class CustomNotificationBuilder extends NotificationBuilderBase {
     /**
-     * Maximum length of CharSequence inputs to prevent excessive memory consumption. At current
-     * screen sizes we display about 500 characters at most, so this is a pretty generous limit, and
-     * it matches what NotificationCompat does.
+     * The maximum width of action icons in dp units.
      */
-    @VisibleForTesting static final int MAX_CHARSEQUENCE_LENGTH = 5 * 1024;
-
-    /**
-     * The maximum number of action buttons. One is for the settings button, and two more slots are
-     * for developer provided buttons.
-     */
-    private static final int MAX_ACTION_BUTTONS = 3;
+    private static final int MAX_ACTION_ICON_WIDTH_DP = 32;
 
     /**
      * The maximum number of lines of body text for the expanded state. Fewer lines are used when
@@ -90,28 +74,12 @@ public class CustomNotificationBuilder implements NotificationBuilder {
 
     private final Context mContext;
 
-    private CharSequence mTitle;
-    private CharSequence mBody;
-    private CharSequence mOrigin;
-    private CharSequence mTickerText;
-    private Bitmap mLargeIcon;
-    private int mSmallIconId;
-    private PendingIntent mContentIntent;
-    private PendingIntent mDeleteIntent;
-    private List<Action> mActions = new ArrayList<>(MAX_ACTION_BUTTONS);
-    private Action mSettingsAction;
-    private int mDefaults = Notification.DEFAULT_ALL;
-    private long[] mVibratePattern;
-
     public CustomNotificationBuilder(Context context) {
         mContext = context;
     }
 
     @Override
     public Notification build() {
-        // TODO(mvanouwerkerk): Try inheriting from StandardNotificationBuilder to reduce
-        // duplication.
-
         // A note about RemoteViews and updating notifications. When a notification is passed to the
         // {@code NotificationManager} with the same tag and id as a previous notification, an
         // in-place update will be performed. In that case, the actions of all new
@@ -151,13 +119,17 @@ public class CustomNotificationBuilder implements NotificationBuilder {
             bigView.setViewVisibility(R.id.small_icon_footer, View.VISIBLE);
         }
 
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(mContext);
+        // Note: this is not a NotificationCompat builder so be mindful of the
+        // API level of methods you call on the builder.
+        Notification.Builder builder = new Notification.Builder(mContext);
         builder.setTicker(mTickerText);
         builder.setSmallIcon(mSmallIconId);
         builder.setContentIntent(mContentIntent);
         builder.setDeleteIntent(mDeleteIntent);
         builder.setDefaults(mDefaults);
         builder.setVibrate(mVibratePattern);
+        builder.setWhen(mTimestamp);
+        builder.setOnlyAlertOnce(!mRenotify);
         builder.setContent(compactView);
 
         // Some things are duplicated in the builder to ensure the notification shows correctly on
@@ -167,92 +139,15 @@ public class CustomNotificationBuilder implements NotificationBuilder {
         builder.setSubText(mOrigin);
         builder.setLargeIcon(mLargeIcon);
         for (Action action : mActions) {
-            builder.addAction(action);
+            addActionToBuilder(builder, action);
         }
         if (mSettingsAction != null) {
-            builder.addAction(mSettingsAction);
+            addActionToBuilder(builder, mSettingsAction);
         }
 
         Notification notification = builder.build();
         notification.bigContentView = bigView;
         return notification;
-    }
-
-    @Override
-    public NotificationBuilder setTitle(CharSequence title) {
-        mTitle = limitLength(title);
-        return this;
-    }
-
-    @Override
-    public NotificationBuilder setBody(CharSequence body) {
-        mBody = limitLength(body);
-        return this;
-    }
-
-    @Override
-    public NotificationBuilder setOrigin(CharSequence origin) {
-        mOrigin = limitLength(origin);
-        return this;
-    }
-
-    @Override
-    public NotificationBuilder setTicker(CharSequence tickerText) {
-        mTickerText = limitLength(tickerText);
-        return this;
-    }
-
-    @Override
-    public NotificationBuilder setLargeIcon(Bitmap icon) {
-        mLargeIcon = icon;
-        return this;
-    }
-
-    @Override
-    public NotificationBuilder setSmallIcon(int iconId) {
-        mSmallIconId = iconId;
-        return this;
-    }
-
-    @Override
-    public NotificationBuilder setContentIntent(PendingIntent intent) {
-        mContentIntent = intent;
-        return this;
-    }
-
-    @Override
-    public NotificationBuilder setDeleteIntent(PendingIntent intent) {
-        mDeleteIntent = intent;
-        return this;
-    }
-
-    @Override
-    public NotificationBuilder addAction(int iconId, CharSequence title, PendingIntent intent) {
-        if (mActions.size() == MAX_ACTION_BUTTONS) {
-            throw new IllegalStateException(
-                    "Cannot add more than " + MAX_ACTION_BUTTONS + " actions.");
-        }
-        mActions.add(new Action(iconId, limitLength(title), intent));
-        return this;
-    }
-
-    @Override
-    public NotificationBuilder addSettingsAction(
-            int iconId, CharSequence title, PendingIntent intent) {
-        mSettingsAction = new Action(iconId, limitLength(title), intent);
-        return this;
-    }
-
-    @Override
-    public NotificationBuilder setDefaults(int defaults) {
-        mDefaults = defaults;
-        return this;
-    }
-
-    @Override
-    public NotificationBuilder setVibrate(long[] pattern) {
-        mVibratePattern = Arrays.copyOf(pattern, pattern.length);
-        return this;
     }
 
     /**
@@ -274,30 +169,41 @@ public class CustomNotificationBuilder implements NotificationBuilder {
             RemoteViews view =
                     new RemoteViews(mContext.getPackageName(), R.layout.web_notification_button);
 
-            if (action.getIcon() != 0) {
-                // TODO(mvanouwerkerk): If the icon can be provided by web developers, limit its
-                // dimensions and decide whether or not to paint it.
+            // If there is an icon then set it and add some padding.
+            if (action.iconBitmap != null || action.iconId != 0) {
+                // TODO(mvanouwerkerk): Scale down the bitmaps - crbug.com/586082.
+                // TODO(mvanouwerkerk): Paint bitmaps white for Holo - crbug.com/585840.
                 if (useMaterial()) {
                     view.setInt(R.id.button_icon, "setColorFilter", BUTTON_ICON_COLOR_MATERIAL);
                 }
-                view.setImageViewResource(R.id.button_icon, action.getIcon());
+
+                int iconWidth = 0;
+                if (action.iconBitmap != null) {
+                    view.setImageViewBitmap(R.id.button_icon, action.iconBitmap);
+                    iconWidth = action.iconBitmap.getWidth();
+                } else if (action.iconId != 0) {
+                    view.setImageViewResource(R.id.button_icon, action.iconId);
+                    BitmapFactory.Options options = new BitmapFactory.Options();
+                    options.inJustDecodeBounds = true;
+                    BitmapFactory.decodeResource(resources, action.iconId, options);
+                    iconWidth = options.outWidth;
+                }
+                iconWidth = dpToPx(
+                        Math.min(pxToDp(iconWidth, metrics), MAX_ACTION_ICON_WIDTH_DP), metrics);
 
                 // Set the padding of the button so the text does not overlap with the icon. Flip
                 // between left and right manually as RemoteViews does not expose a method that sets
                 // padding in a writing-direction independent way.
-                BitmapFactory.Options options = new BitmapFactory.Options();
-                options.inJustDecodeBounds = true;
-                BitmapFactory.decodeResource(resources, action.getIcon(), options);
                 int buttonPadding =
                         dpToPx(BUTTON_PADDING_START_DP + BUTTON_ICON_PADDING_DP, metrics)
-                        + options.outWidth;
+                        + iconWidth;
                 int buttonPaddingLeft = LocalizationUtils.isLayoutRtl() ? 0 : buttonPadding;
                 int buttonPaddingRight = LocalizationUtils.isLayoutRtl() ? buttonPadding : 0;
                 view.setViewPadding(R.id.button, buttonPaddingLeft, 0, buttonPaddingRight, 0);
             }
 
-            view.setTextViewText(R.id.button, action.getTitle());
-            view.setOnClickPendingIntent(R.id.button, action.getActionIntent());
+            view.setTextViewText(R.id.button, action.title);
+            view.setOnClickPendingIntent(R.id.button, action.intent);
             bigView.addView(R.id.buttons, view);
         }
     }
@@ -306,7 +212,7 @@ public class CustomNotificationBuilder implements NotificationBuilder {
         if (mSettingsAction == null) {
             return;
         }
-        bigView.setOnClickPendingIntent(R.id.origin, mSettingsAction.getActionIntent());
+        bigView.setOnClickPendingIntent(R.id.origin, mSettingsAction.intent);
         if (useMaterial()) {
             bigView.setInt(R.id.origin_settings_icon, "setColorFilter", BUTTON_ICON_COLOR_MATERIAL);
         }
@@ -337,17 +243,6 @@ public class CustomNotificationBuilder implements NotificationBuilder {
         }
     }
 
-    @Nullable
-    private static CharSequence limitLength(@Nullable CharSequence input) {
-        if (input == null) {
-            return input;
-        }
-        if (input.length() > MAX_CHARSEQUENCE_LENGTH) {
-            return input.subSequence(0, MAX_CHARSEQUENCE_LENGTH);
-        }
-        return input;
-    }
-
     /**
      * Scales down the maximum number of displayed lines in the body text if font scaling is greater
      * than 1.0. Never scales up the number of lines, as on some devices the notification text is
@@ -376,21 +271,27 @@ public class CustomNotificationBuilder implements NotificationBuilder {
      * @return The amount of padding to be used, in pixels.
      */
     @VisibleForTesting
-    static int calculateScaledPadding(float fontScale, DisplayMetrics displayMetrics) {
+    static int calculateScaledPadding(float fontScale, DisplayMetrics metrics) {
         float paddingScale = 1.0f;
         if (fontScale > 1.0f) {
             fontScale = Math.min(fontScale, FONT_SCALE_LARGE);
             paddingScale = (FONT_SCALE_LARGE - fontScale) / (FONT_SCALE_LARGE - 1.0f);
         }
-        return dpToPx(paddingScale * MAX_SCALABLE_PADDING_DP, displayMetrics);
+        return dpToPx(paddingScale * MAX_SCALABLE_PADDING_DP, metrics);
     }
 
     /**
      * Converts a dp value to a px value.
      */
-    private static int dpToPx(float value, DisplayMetrics displayMetrics) {
-        return Math.round(
-                TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, displayMetrics));
+    private static int dpToPx(float value, DisplayMetrics metrics) {
+        return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, metrics));
+    }
+
+    /**
+     * Converts a px value to a dp value.
+     */
+    private static int pxToDp(float value, DisplayMetrics metrics) {
+        return Math.round(value / ((float) metrics.densityDpi / DisplayMetrics.DENSITY_DEFAULT));
     }
 
     /**

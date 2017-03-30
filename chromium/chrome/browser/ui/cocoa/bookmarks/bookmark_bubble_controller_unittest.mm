@@ -186,7 +186,7 @@ TEST_F(BookmarkBubbleControllerTest, TestFillInFolder) {
 
   // Verify that the top level folders are displayed correctly.
   EXPECT_TRUE([titles containsObject:@"Other Bookmarks"]);
-  EXPECT_TRUE([titles containsObject:@"Bookmarks Bar"]);
+  EXPECT_TRUE([titles containsObject:@"Bookmarks"]); // Vivaldi name
   if (model->mobile_node()->IsVisible()) {
     EXPECT_TRUE([titles containsObject:@"Mobile Bookmarks"]);
   } else {

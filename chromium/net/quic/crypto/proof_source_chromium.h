@@ -33,17 +33,17 @@ class NET_EXPORT_PRIVATE ProofSourceChromium : public ProofSource {
                   const base::FilePath& sct_path);
 
   // ProofSource interface
-  bool GetProof(const IPAddressNumber& server_ip,
+  bool GetProof(const IPAddress& server_ip,
                 const std::string& hostname,
                 const std::string& server_config,
                 bool ecdsa_ok,
-                const std::vector<std::string>** out_certs,
+                scoped_refptr<ProofSource::Chain>* out_chain,
                 std::string* out_signature,
                 std::string* out_leaf_cert_sct) override;
 
  private:
   scoped_ptr<crypto::RSAPrivateKey> private_key_;
-  std::vector<std::string> certificates_;
+  scoped_refptr<ProofSource::Chain> chain_;
   std::string signed_certificate_timestamp_;
 
   DISALLOW_COPY_AND_ASSIGN(ProofSourceChromium);

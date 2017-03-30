@@ -2,12 +2,6 @@
     "extensions": [
         {
             "type": "@WebInspector.AppProvider",
-            "condition": "can_dock",
-            "className": "WebInspector.AdvancedAppProvider",
-            "order": 0
-        },
-        {
-            "type": "@WebInspector.AppProvider",
             "className": "WebInspector.SimpleAppProvider",
             "order": 10
         },
@@ -217,6 +211,7 @@
             "title": "Disable cache (while DevTools is open)",
             "settingName": "cacheDisabled",
             "settingType": "boolean",
+            "order": 0,
             "defaultValue": false
         },
         {
@@ -225,6 +220,16 @@
             "title": "Disable JavaScript",
             "settingName": "javaScriptDisabled",
             "settingType": "boolean",
+            "order": 1,
+            "defaultValue": false
+        },
+        {
+            "type": "setting",
+            "category": "",
+            "title": "Auto-open DevTools for popups",
+            "settingName": "autoAttachToCreatedPages",
+            "settingType": "boolean",
+            "order": 2,
             "defaultValue": false
         },
         {
@@ -264,14 +269,6 @@
         {
             "type": "setting",
             "category": "Appearance",
-            "title": "Don't show emulation warnings",
-            "settingName": "disableOverridesWarning",
-            "settingType": "boolean",
-            "defaultValue": false
-        },
-        {
-            "type": "setting",
-            "category": "Appearance",
             "title": "Don't show Chrome Data Saver warning",
             "settingName": "disableDataSaverInfobar",
             "settingType": "boolean",
@@ -289,6 +286,12 @@
             "type": "@WebInspector.SettingUI",
             "category": "Extensions",
             "className": "WebInspector.HandlerRegistry.OpenAnchorLocationSettingUI"
+        },
+        {
+            "type": "@WebInspector.SettingUI",
+            "category": "Elements",
+            "order": 3,
+            "className": "WebInspector.ShowMetricsRulersSettingUI"
         },
         {
             "type": "context-menu-item",
@@ -316,11 +319,9 @@
         "extensions",
         "host",
         "platform",
-        "sdk",
-        "emulation"
+        "sdk"
     ],
     "scripts": [
-        "AdvancedApp.js",
         "FrontendWebSocketAPI.js",
         "RenderingOptions.js",
         "SimpleApp.js",

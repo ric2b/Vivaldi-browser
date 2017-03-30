@@ -57,6 +57,7 @@ InvalidationSet::InvalidationSet(InvalidationType type)
     , m_customPseudoInvalid(false)
     , m_treeBoundaryCrossing(false)
     , m_insertionPointCrossing(false)
+    , m_invalidatesSlotted(false)
 {
 }
 
@@ -99,7 +100,20 @@ bool InvalidationSet::invalidatesElement(Element& element) const
 
 void InvalidationSet::combine(const InvalidationSet& other)
 {
-    ASSERT(m_type == other.m_type);
+    ASSERT(type() == other.type());
+    if (type() == InvalidateSiblings) {
+        SiblingInvalidationSet& siblings = toSiblingInvalidationSet(*this);
+        const SiblingInvalidationSet& otherSiblings = toSiblingInvalidationSet(other);
+
+        siblings.updateMaxDirectAdjacentSelectors(otherSiblings.maxDirectAdjacentSelectors());
+        if (otherSiblings.siblingDescendants())
+            siblings.ensureSiblingDescendants().combine(*otherSiblings.siblingDescendants());
+        if (otherSiblings.descendants())
+            siblings.ensureDescendants().combine(*otherSiblings.descendants());
+    }
+
+    if (other.invalidatesSelf())
+        setInvalidatesSelf();
 
     // No longer bother combining data structures, since the whole subtree is deemed invalid.
     if (wholeSubtreeInvalid())
@@ -110,9 +124,6 @@ void InvalidationSet::combine(const InvalidationSet& other)
         return;
     }
 
-    if (other.invalidatesSelf())
-        setInvalidatesSelf();
-
     if (other.customPseudoInvalid())
         setCustomPseudoInvalid();
 
@@ -121,6 +132,9 @@ void InvalidationSet::combine(const InvalidationSet& other)
 
     if (other.insertionPointCrossing())
         setInsertionPointCrossing();
+
+    if (other.invalidatesSlotted())
+        setInvalidatesSlotted();
 
     if (other.m_classes) {
         for (const auto& className : *other.m_classes)
@@ -216,6 +230,7 @@ void InvalidationSet::setWholeSubtreeInvalid()
     m_customPseudoInvalid = false;
     m_treeBoundaryCrossing = false;
     m_insertionPointCrossing = false;
+    m_invalidatesSlotted = false;
     m_classes = nullptr;
     m_ids = nullptr;
     m_tagNames = nullptr;
@@ -236,6 +251,8 @@ void InvalidationSet::toTracedValue(TracedValue* value) const
         value->setBoolean("treeBoundaryCrossing", true);
     if (m_insertionPointCrossing)
         value->setBoolean("insertionPointCrossing", true);
+    if (m_invalidatesSlotted)
+        value->setBoolean("invalidatesSlotted", true);
 
     if (m_ids) {
         value->beginArray("ids");
@@ -271,27 +288,33 @@ void InvalidationSet::toTracedValue(TracedValue* value) const
 #ifndef NDEBUG
 void InvalidationSet::show() const
 {
-    RefPtr<TracedValue> value = TracedValue::create();
+    OwnPtr<TracedValue> value = TracedValue::create();
     value->beginArray("InvalidationSet");
     toTracedValue(value.get());
     value->endArray();
-    fprintf(stderr, "%s\n", value->asTraceFormat().ascii().data());
+    fprintf(stderr, "%s\n", value->toString().ascii().data());
 }
 #endif // NDEBUG
 
-SiblingInvalidationSet::SiblingInvalidationSet()
+SiblingInvalidationSet::SiblingInvalidationSet(PassRefPtr<DescendantInvalidationSet> descendants)
     : InvalidationSet(InvalidateSiblings)
     , m_maxDirectAdjacentSelectors(1)
-    , m_descendantInvalidationSet(DescendantInvalidationSet::create())
+    , m_descendantInvalidationSet(descendants)
 {
 }
 
-void SiblingInvalidationSet::combine(const SiblingInvalidationSet& other)
+DescendantInvalidationSet& SiblingInvalidationSet::ensureSiblingDescendants()
 {
-    m_maxDirectAdjacentSelectors = std::max(m_maxDirectAdjacentSelectors, other.m_maxDirectAdjacentSelectors);
-    m_descendantInvalidationSet->combine(other.descendants());
+    if (!m_siblingDescendantInvalidationSet)
+        m_siblingDescendantInvalidationSet = DescendantInvalidationSet::create();
+    return *m_siblingDescendantInvalidationSet;
+}
 
-    InvalidationSet::combine(other);
+DescendantInvalidationSet& SiblingInvalidationSet::ensureDescendants()
+{
+    if (!m_descendantInvalidationSet)
+        m_descendantInvalidationSet = DescendantInvalidationSet::create();
+    return *m_descendantInvalidationSet;
 }
 
 } // namespace blink

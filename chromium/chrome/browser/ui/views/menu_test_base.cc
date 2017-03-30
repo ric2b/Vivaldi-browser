@@ -42,8 +42,7 @@ int MenuTestBase::GetMenuRunnerFlags() {
 }
 
 void MenuTestBase::SetUp() {
-  button_ = new views::MenuButton(
-      NULL, base::ASCIIToUTF16("Menu Test"), this, true);
+  button_ = new views::MenuButton(base::ASCIIToUTF16("Menu Test"), this, true);
   menu_ = new views::MenuItemView(this);
   BuildMenu(menu_);
   menu_runner_.reset(new views::MenuRunner(menu_, GetMenuRunnerFlags()));
@@ -74,8 +73,9 @@ gfx::Size MenuTestBase::GetPreferredSize() const {
   return button_->GetPreferredSize();
 }
 
-void MenuTestBase::OnMenuButtonClicked(views::View* source,
-                                       const gfx::Point& point) {
+void MenuTestBase::OnMenuButtonClicked(views::MenuButton* source,
+                                       const gfx::Point& point,
+                                       const ui::Event* event) {
   gfx::Point screen_location;
   views::View::ConvertPointToScreen(source, &screen_location);
   gfx::Rect bounds(screen_location, source->size());

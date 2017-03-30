@@ -31,6 +31,7 @@ const Tag kOid = 0x06;
 const Tag kEnumerated = 0x0A;
 const Tag kUtf8String = 0x0C;
 const Tag kPrintableString = 0x13;
+const Tag kTeletexString = 0x14;
 const Tag kIA5String = 0x16;
 const Tag kUtcTime = 0x17;
 const Tag kGeneralizedTime = 0x18;
@@ -67,11 +68,7 @@ NET_EXPORT Tag ContextSpecificConstructed(uint8_t class_number);
 
 NET_EXPORT Tag ContextSpecificPrimitive(uint8_t base);
 
-NET_EXPORT bool IsContextSpecific(Tag tag);
-
 NET_EXPORT bool IsConstructed(Tag tag);
-
-NET_EXPORT uint8_t GetTagNumber(Tag tag);
 
 }  // namespace der
 

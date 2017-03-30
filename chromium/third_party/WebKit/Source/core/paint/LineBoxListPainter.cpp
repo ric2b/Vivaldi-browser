@@ -37,8 +37,6 @@ void LineBoxListPainter::paint(const LayoutBoxModelObject& layoutObject, const P
 
     ASSERT(layoutObject.isLayoutBlock() || (layoutObject.isLayoutInline() && layoutObject.hasLayer())); // The only way an inline could paint like this is if it has a layer.
 
-    // FIXME: When Skia supports annotation rect covering (https://code.google.com/p/skia/issues/detail?id=3872),
-    // these rects may be covered line box drawings. Then we may need a dedicated paint phase.
     if (paintInfo.phase == PaintPhaseForeground && paintInfo.isPrinting())
         addPDFURLRectsForInlineChildrenRecursively(layoutObject, paintInfo, paintOffset);
 
@@ -66,7 +64,7 @@ static void invalidateLineBoxPaintOffsetsInternal(PaintController& paintControll
 {
     paintController.invalidatePaintOffset(*inlineBox);
     for (InlineBox* child = inlineBox->firstChild(); child; child = child->nextOnLine()) {
-        if (!child->lineLayoutItem().isText() && child->boxModelObject().hasSelfPaintingLayer())
+        if (!child->getLineLayoutItem().isText() && child->boxModelObject().hasSelfPaintingLayer())
             continue;
         if (child->isInlineFlowBox())
             invalidateLineBoxPaintOffsetsInternal(paintController, toInlineFlowBox(child));

@@ -20,7 +20,6 @@
 #include "media/base/decoder_buffer.h"
 #include "media/base/limits.h"
 #include "media/base/media_switches.h"
-#include "media/base/pipeline.h"
 #include "media/base/timestamp_constants.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
@@ -94,7 +93,10 @@ int FFmpegVideoDecoder::GetVideoBuffer(struct AVCodecContext* codec_context,
   if (format == PIXEL_FORMAT_UNKNOWN)
     return AVERROR(EINVAL);
   DCHECK(format == PIXEL_FORMAT_YV12 || format == PIXEL_FORMAT_YV16 ||
-         format == PIXEL_FORMAT_YV24);
+         format == PIXEL_FORMAT_YV24 || format == PIXEL_FORMAT_YUV420P9 ||
+         format == PIXEL_FORMAT_YUV420P10 || format == PIXEL_FORMAT_YUV422P9 ||
+         format == PIXEL_FORMAT_YUV422P10 || format == PIXEL_FORMAT_YUV444P9 ||
+         format == PIXEL_FORMAT_YUV444P10);
 
   gfx::Size size(codec_context->width, codec_context->height);
   const int ret = av_image_check_size(size.width(), size.height(), 0, NULL);
@@ -168,7 +170,7 @@ std::string FFmpegVideoDecoder::GetDisplayName() const {
 
 void FFmpegVideoDecoder::Initialize(const VideoDecoderConfig& config,
                                     bool low_delay,
-                                    const SetCdmReadyCB& /* set_cdm_ready_cb */,
+                                    CdmContext* /* cdm_context */,
                                     const InitCB& init_cb,
                                     const OutputCB& output_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());

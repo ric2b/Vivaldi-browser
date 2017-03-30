@@ -35,6 +35,7 @@ std::map<const std::wstring, const std::wstring>  kLanguages = {
   { L"eu",    L"Basque" },
   { L"be",    L"Belarusian" },
   { L"bg",    L"Bulgarian" },
+  { L"ca",    L"Catalan" },
   { L"zh_CN", L"Chinese (China)" },
   { L"zh_TW", L"Chinese (Taiwan)" },
   { L"hr",    L"Croatian" },

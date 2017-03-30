@@ -39,6 +39,7 @@
 #include "core/css/StylePropertySet.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/css/resolver/StyleResolverStats.h"
+#include "core/dom/StyleEngine.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/style/StyleInheritedData.h"
 #include <algorithm>
@@ -125,14 +126,16 @@ void ElementRuleCollector::collectMatchingRulesForList(const RuleDataListType* r
     if (!rules)
         return;
 
-    SelectorChecker checker(m_mode);
-    SelectorChecker::SelectorCheckingContext checkerContext(m_context.element(), SelectorChecker::VisitedMatchEnabled);
-    checkerContext.elementStyle = m_style.get();
-    checkerContext.scope = matchRequest.scope;
-    checkerContext.pseudoId = m_pseudoStyleRequest.pseudoId;
-    checkerContext.scrollbar = m_pseudoStyleRequest.scrollbar;
-    checkerContext.scrollbarPart = m_pseudoStyleRequest.scrollbarPart;
-    checkerContext.isUARule = m_matchingUARules;
+    SelectorChecker::Init init;
+    init.mode = m_mode;
+    init.isUARule = m_matchingUARules;
+    init.elementStyle = m_style.get();
+    init.scrollbar = m_pseudoStyleRequest.scrollbar;
+    init.scrollbarPart = m_pseudoStyleRequest.scrollbarPart;
+    SelectorChecker checker(init);
+    SelectorChecker::SelectorCheckingContext context(m_context.element(), SelectorChecker::VisitedMatchEnabled);
+    context.scope = matchRequest.scope;
+    context.pseudoId = m_pseudoStyleRequest.pseudoId;
 
     unsigned rejected = 0;
     unsigned fastRejected = 0;
@@ -156,8 +159,8 @@ void ElementRuleCollector::collectMatchingRulesForList(const RuleDataListType* r
             continue;
 
         SelectorChecker::MatchResult result;
-        checkerContext.selector = &ruleData.selector();
-        if (!checker.match(checkerContext, result)) {
+        context.selector = &ruleData.selector();
+        if (!checker.match(context, result)) {
             rejected++;
             continue;
         }
@@ -170,11 +173,13 @@ void ElementRuleCollector::collectMatchingRulesForList(const RuleDataListType* r
         didMatchRule(ruleData, result, cascadeOrder, matchRequest);
     }
 
-    if (StyleResolver* resolver = m_context.element()->document().styleResolver()) {
-        INCREMENT_STYLE_STATS_COUNTER(*resolver, rulesRejected, rejected);
-        INCREMENT_STYLE_STATS_COUNTER(*resolver, rulesFastRejected, fastRejected);
-        INCREMENT_STYLE_STATS_COUNTER(*resolver, rulesMatched, matched);
-    }
+    StyleEngine& styleEngine = m_context.element()->document().styleEngine();
+    if (!styleEngine.stats())
+        return;
+
+    INCREMENT_STYLE_STATS_COUNTER(styleEngine, rulesRejected, rejected);
+    INCREMENT_STYLE_STATS_COUNTER(styleEngine, rulesFastRejected, fastRejected);
+    INCREMENT_STYLE_STATS_COUNTER(styleEngine, rulesMatched, matched);
 }
 
 void ElementRuleCollector::collectMatchingRules(const MatchRequest& matchRequest, CascadeOrder cascadeOrder, bool matchingTreeBoundaryRules)
@@ -280,7 +285,7 @@ void ElementRuleCollector::sortAndTransferMatchedRules()
     // Now transfer the set of matched rules over to our list of declarations.
     for (unsigned i = 0; i < m_matchedRules.size(); i++) {
         const RuleData* ruleData = m_matchedRules[i].ruleData();
-        m_result.addMatchedProperties(&ruleData->rule()->properties(), ruleData->linkMatchType(), ruleData->propertyWhitelistType(m_matchingUARules));
+        m_result.addMatchedProperties(&ruleData->rule()->properties(), ruleData->linkMatchType(), ruleData->propertyWhitelist(m_matchingUARules));
     }
 }
 

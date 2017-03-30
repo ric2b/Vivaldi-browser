@@ -15,16 +15,16 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/prefs/json_pref_store.h"
-#include "base/prefs/persistent_pref_store.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/pref_service_factory.h"
-#include "base/prefs/pref_store.h"
-#include "base/prefs/testing_pref_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/json_pref_store.h"
+#include "components/prefs/persistent_pref_store.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/pref_service_factory.h"
+#include "components/prefs/pref_store.h"
+#include "components/prefs/testing_pref_service.h"
 #include "components/user_prefs/tracked/mock_validation_delegate.h"
 #include "components/user_prefs/tracked/pref_hash_filter.h"
 #include "components/user_prefs/tracked/pref_names.h"
@@ -144,7 +144,7 @@ class ProfilePrefStoreManagerTest : public testing::Test {
   void VerifyResetRecorded(bool reset_expected) {
     EXPECT_EQ(reset_expected, reset_recorded_);
 
-    base::PrefServiceFactory pref_service_factory;
+    PrefServiceFactory pref_service_factory;
     pref_service_factory.set_user_prefs(pref_store_);
 
     scoped_ptr<PrefService> pref_service(
@@ -158,7 +158,7 @@ class ProfilePrefStoreManagerTest : public testing::Test {
   void ClearResetRecorded() {
     reset_recorded_ = false;
 
-    base::PrefServiceFactory pref_service_factory;
+    PrefServiceFactory pref_service_factory;
     pref_service_factory.set_user_prefs(pref_store_);
 
     scoped_ptr<PrefService> pref_service(

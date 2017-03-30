@@ -34,21 +34,18 @@ SpdySessionPool::SpdySessionPool(
     SSLConfigService* ssl_config_service,
     const base::WeakPtr<HttpServerProperties>& http_server_properties,
     TransportSecurityState* transport_security_state,
-    bool enable_compression,
     bool enable_ping_based_connection_checking,
     NextProto default_protocol,
     size_t session_max_recv_window_size,
     size_t stream_max_recv_window_size,
-    size_t initial_max_concurrent_streams,
     SpdySessionPool::TimeFunc time_func,
-    const std::string& trusted_spdy_proxy)
+    ProxyDelegate* proxy_delegate)
     : http_server_properties_(http_server_properties),
       transport_security_state_(transport_security_state),
       ssl_config_service_(ssl_config_service),
       resolver_(resolver),
       verify_domain_authentication_(true),
       enable_sending_initial_data_(true),
-      enable_compression_(enable_compression),
       enable_ping_based_connection_checking_(
           enable_ping_based_connection_checking),
       // TODO(akalin): Force callers to have a valid value of
@@ -57,9 +54,8 @@ SpdySessionPool::SpdySessionPool(
                                                             : default_protocol),
       session_max_recv_window_size_(session_max_recv_window_size),
       stream_max_recv_window_size_(stream_max_recv_window_size),
-      initial_max_concurrent_streams_(initial_max_concurrent_streams),
       time_func_(time_func),
-      trusted_spdy_proxy_(HostPortPair::FromString(trusted_spdy_proxy)) {
+      proxy_delegate_(proxy_delegate) {
   DCHECK(default_protocol_ >= kProtoSPDYMinimumVersion &&
          default_protocol_ <= kProtoSPDYMaximumVersion);
   NetworkChangeNotifier::AddIPAddressObserver(this);
@@ -98,10 +94,9 @@ base::WeakPtr<SpdySession> SpdySessionPool::CreateAvailableSessionFromSocket(
   scoped_ptr<SpdySession> new_session(new SpdySession(
       key, http_server_properties_, transport_security_state_,
       verify_domain_authentication_, enable_sending_initial_data_,
-      enable_compression_, enable_ping_based_connection_checking_,
-      default_protocol_, session_max_recv_window_size_,
-      stream_max_recv_window_size_, initial_max_concurrent_streams_, time_func_,
-      trusted_spdy_proxy_, net_log.net_log()));
+      enable_ping_based_connection_checking_, default_protocol_,
+      session_max_recv_window_size_, stream_max_recv_window_size_, time_func_,
+      proxy_delegate_, net_log.net_log()));
 
   new_session->InitializeWithSocket(std::move(connection), this, is_secure,
                                     certificate_error_code);

@@ -33,8 +33,6 @@ bool ParseVersionNumbers(const std::string& version_str,
     if (StartsWith(*it, "+", CompareCase::SENSITIVE))
       return false;
 
-    // TODO(brettw) when we have a StringPiece version of StringToUint, delete
-    // this string conversion.
     unsigned int num;
     if (!StringToUint(*it, &num))
       return false;
@@ -82,6 +80,8 @@ int CompareVersionComponents(const std::vector<uint32_t>& components1,
 Version::Version() {
 }
 
+Version::Version(const Version& other) = default;
+
 Version::~Version() {
 }
 
@@ -105,13 +105,6 @@ bool Version::IsValidWildcardString(const std::string& wildcard_string) {
 
   Version version(version_string);
   return version.IsValid();
-}
-
-bool Version::IsOlderThan(const std::string& version_str) const {
-  Version proposed_ver(version_str);
-  if (!proposed_ver.IsValid())
-    return false;
-  return (CompareTo(proposed_ver) < 0);
 }
 
 int Version::CompareToWildcardString(const std::string& wildcard_string) const {
@@ -151,12 +144,6 @@ int Version::CompareToWildcardString(const std::string& wildcard_string) const {
   return 0;
 }
 
-bool Version::Equals(const Version& that) const {
-  DCHECK(IsValid());
-  DCHECK(that.IsValid());
-  return (CompareTo(that) == 0);
-}
-
 int Version::CompareTo(const Version& other) const {
   DCHECK(IsValid());
   DCHECK(other.IsValid());
@@ -173,6 +160,34 @@ const std::string Version::GetString() const {
   }
   version_str.append(UintToString(components_[count - 1]));
   return version_str;
+}
+
+bool operator==(const Version& v1, const Version& v2) {
+  return v1.CompareTo(v2) == 0;
+}
+
+bool operator!=(const Version& v1, const Version& v2) {
+  return !(v1 == v2);
+}
+
+bool operator<(const Version& v1, const Version& v2) {
+  return v1.CompareTo(v2) < 0;
+}
+
+bool operator<=(const Version& v1, const Version& v2) {
+  return v1.CompareTo(v2) <= 0;
+}
+
+bool operator>(const Version& v1, const Version& v2) {
+  return v1.CompareTo(v2) > 0;
+}
+
+bool operator>=(const Version& v1, const Version& v2) {
+  return v1.CompareTo(v2) >= 0;
+}
+
+std::ostream& operator<<(std::ostream& stream, const Version& v) {
+  return stream << v.GetString();
 }
 
 }  // namespace base

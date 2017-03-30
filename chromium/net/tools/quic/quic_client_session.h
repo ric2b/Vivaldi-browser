@@ -21,18 +21,14 @@ class QuicConnection;
 class QuicServerId;
 class ReliableQuicStream;
 
-namespace tools {
-
-// The maximum time a promises stream can be reserved without being
-// claimed by a client request.
-const int64_t kPushPromiseTimeoutSecs = 60;
-
 class QuicClientSession : public QuicClientSessionBase {
  public:
+  // Caller retains ownership of |promised_by_url|.
   QuicClientSession(const QuicConfig& config,
                     QuicConnection* connection,
                     const QuicServerId& server_id,
-                    QuicCryptoClientConfig* crypto_config);
+                    QuicCryptoClientConfig* crypto_config,
+                    QuicClientPushPromiseIndex* push_promise_index);
   ~QuicClientSession() override;
   // Set up the QuicClientSession. Must be called prior to use.
   void Initialize() override;
@@ -41,6 +37,8 @@ class QuicClientSession : public QuicClientSessionBase {
   QuicSpdyClientStream* CreateOutgoingDynamicStream(
       SpdyPriority priority) override;
   QuicCryptoClientStreamBase* GetCryptoStream() override;
+
+  bool IsAuthorized(const std::string& authority) override;
 
   // QuicClientSessionBase methods:
   void OnProofValid(const QuicCryptoClientConfig::CachedState& cached) override;
@@ -76,7 +74,12 @@ class QuicClientSession : public QuicClientSessionBase {
   QuicCryptoClientConfig* crypto_config() { return crypto_config_; }
 
  private:
+  // If an outgoing stream can be created, return true.
+  bool ShouldCreateOutgoingDynamicStream();
+
+  // If an incoming stream can be created, return true.
   bool ShouldCreateIncomingDynamicStream(QuicStreamId id);
+
   scoped_ptr<QuicCryptoClientStreamBase> crypto_stream_;
   QuicServerId server_id_;
   QuicCryptoClientConfig* crypto_config_;
@@ -88,7 +91,6 @@ class QuicClientSession : public QuicClientSessionBase {
   DISALLOW_COPY_AND_ASSIGN(QuicClientSession);
 };
 
-}  // namespace tools
 }  // namespace net
 
 #endif  // NET_TOOLS_QUIC_QUIC_CLIENT_SESSION_H_

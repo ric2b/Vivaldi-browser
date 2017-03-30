@@ -7,14 +7,12 @@ from core import perf_benchmark
 from measurements import image_decoding
 import page_sets
 
-from telemetry import benchmark
 
-@benchmark.Disabled('xp') # http://crbug.com/532181
 class ImageDecodingToughImageCases(perf_benchmark.PerfBenchmark):
   test = image_decoding.ImageDecoding
   # TODO: Rename this page set to tough_image_cases.py
   page_set = page_sets.ImageDecodingMeasurementPageSet
+
   @classmethod
   def Name(cls):
     return 'image_decoding.image_decoding_measurement'
-

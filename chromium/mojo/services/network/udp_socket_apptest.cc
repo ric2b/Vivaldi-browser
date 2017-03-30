@@ -14,8 +14,6 @@
 #include "mojo/services/network/public/cpp/udp_socket_wrapper.h"
 #include "mojo/services/network/public/interfaces/network_service.mojom.h"
 #include "mojo/services/network/public/interfaces/udp_socket.mojom.h"
-#include "mojo/shell/public/cpp/application_connection.h"
-#include "mojo/shell/public/cpp/application_impl.h"
 #include "mojo/shell/public/cpp/application_test_base.h"
 #include "net/base/net_errors.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -26,7 +24,7 @@ namespace {
 
 NetAddressPtr GetLocalHostWithAnyPort() {
   NetAddressPtr addr(NetAddress::New());
-  addr->family = NET_ADDRESS_FAMILY_IPV4;
+  addr->family = NetAddressFamily::IPV4;
   addr->ipv4 = NetAddressIPv4::New();
   addr->ipv4->port = 0;
   addr->ipv4->addr.resize(4);
@@ -326,8 +324,7 @@ class UDPSocketAppTest : public test::ApplicationTestBase {
 
   void SetUp() override {
     ApplicationTestBase::SetUp();
-    application_impl()->ConnectToService("mojo:network_service",
-                                         &network_service_);
+    connector()->ConnectToInterface("mojo:network_service", &network_service_);
     network_service_->CreateUDPSocket(GetProxy(&socket_));
   }
 

@@ -441,7 +441,7 @@ TEST(WebInputEventConversionTest, InputEventsScaling)
     {
         PlatformGestureEvent platformGestureEvent(PlatformEvent::GestureScrollUpdate, IntPoint(10, 12), IntPoint(20, 22), IntSize(25, 27), 0,
             PlatformEvent::NoModifiers, PlatformGestureSourceTouchscreen);
-        platformGestureEvent.setScrollGestureData(30, 32, 40, 42, true, true, -1 /* null plugin id */);
+        platformGestureEvent.setScrollGestureData(30, 32, ScrollByPrecisePixel, 40, 42, true, true, -1 /* null plugin id */);
         // FIXME: GestureEvent does not preserve velocityX, velocityY,
         // or preventPropagation. It also fails to scale
         // coordinates (x, y, deltaX, deltaY) to the page scale. This
@@ -943,7 +943,7 @@ TEST(WebInputEventConversionTest, PlatformWheelEventBuilder)
         EXPECT_EQ(PlatformEvent::CtrlKey, platformWheelBuilder.modifiers());
         EXPECT_TRUE(platformWheelBuilder.hasPreciseScrollingDeltas());
         EXPECT_TRUE(platformWheelBuilder.canScroll());
-        EXPECT_EQ(platformWheelBuilder.railsMode(), PlatformEvent::RailsModeHorizontal);
+        EXPECT_EQ(platformWheelBuilder.getRailsMode(), PlatformEvent::RailsModeHorizontal);
     }
 
     {
@@ -966,7 +966,7 @@ TEST(WebInputEventConversionTest, PlatformWheelEventBuilder)
         EXPECT_EQ(PlatformEvent::ShiftKey, platformWheelBuilder.modifiers());
         EXPECT_FALSE(platformWheelBuilder.hasPreciseScrollingDeltas());
         EXPECT_FALSE(platformWheelBuilder.canScroll());
-        EXPECT_EQ(platformWheelBuilder.railsMode(), PlatformEvent::RailsModeFree);
+        EXPECT_EQ(platformWheelBuilder.getRailsMode(), PlatformEvent::RailsModeFree);
     }
 
     {
@@ -989,7 +989,7 @@ TEST(WebInputEventConversionTest, PlatformWheelEventBuilder)
         EXPECT_EQ(PlatformEvent::AltKey, platformWheelBuilder.modifiers());
         EXPECT_TRUE(platformWheelBuilder.hasPreciseScrollingDeltas());
         EXPECT_FALSE(platformWheelBuilder.canScroll());
-        EXPECT_EQ(platformWheelBuilder.railsMode(), PlatformEvent::RailsModeVertical);
+        EXPECT_EQ(platformWheelBuilder.getRailsMode(), PlatformEvent::RailsModeVertical);
     }
 }
 

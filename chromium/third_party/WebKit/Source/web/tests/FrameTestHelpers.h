@@ -34,8 +34,10 @@
 #include "core/frame/Settings.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/scroll/ScrollbarTheme.h"
+#include "public/platform/WebString.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/web/WebFrameClient.h"
+#include "public/web/WebFrameOwnerProperties.h"
 #include "public/web/WebHistoryItem.h"
 #include "public/web/WebRemoteFrameClient.h"
 #include "public/web/WebViewClient.h"
@@ -47,7 +49,10 @@
 
 namespace blink {
 
+class WebFrame;
 class WebFrameWidget;
+class WebLocalFrame;
+class WebRemoteFrame;
 class WebRemoteFrameImpl;
 
 namespace FrameTestHelpers {
@@ -69,6 +74,11 @@ void reloadFrameIgnoringCache(WebFrame*);
 // Pumps pending resource requests while waiting for a frame to load. Don't use
 // this. Use one of the above helpers.
 void pumpPendingRequestsDoNotUse(WebFrame*);
+
+// Calls WebRemoteFrame::createLocalChild, but with some arguments prefilled
+// with default test values (i.e. with a default |client| or |properties| and/or
+// with a precalculated |uniqueName|).
+WebLocalFrame* createLocalChild(WebRemoteFrame* parent, const WebString& name = WebString::fromUTF8("frameName"), WebFrameClient* = nullptr, WebFrame* previousSibling = nullptr, const WebFrameOwnerProperties& = WebFrameOwnerProperties());
 
 class SettingOverrider {
 public:
@@ -102,6 +112,22 @@ private:
     bool m_originalOverlayScrollbarsEnabled;
 };
 
+class TestWebViewClient : public WebViewClient {
+public:
+    TestWebViewClient() : m_animationScheduled(false) { }
+    virtual ~TestWebViewClient() { }
+    void initializeLayerTreeView() override;
+    WebLayerTreeView* layerTreeView() override { return m_layerTreeView.get(); }
+
+    void scheduleAnimation() override { m_animationScheduled = true; }
+    bool animationScheduled() { return m_animationScheduled; }
+    void clearAnimationScheduled() { m_animationScheduled = false; }
+
+private:
+    OwnPtr<WebLayerTreeView> m_layerTreeView;
+    bool m_animationScheduled;
+};
+
 // Convenience class for handling the lifetime of a WebView and its associated mainframe in tests.
 class WebViewHelper {
     WTF_MAKE_NONCOPYABLE(WebViewHelper);
@@ -112,11 +138,13 @@ public:
     // Creates and initializes the WebView. Implicitly calls reset() first. IF a
     // WebFrameClient or a WebViewClient are passed in, they must outlive the
     // WebViewHelper.
-    WebViewImpl* initialize(bool enableJavascript = false, TestWebFrameClient* = 0, WebViewClient* = 0, void (*updateSettingsFunc)(WebSettings*) = 0);
+    WebViewImpl* initialize(bool enableJavascript = false, TestWebFrameClient* = 0, TestWebViewClient* = 0, void (*updateSettingsFunc)(WebSettings*) = 0);
 
     // Same as initialize() but also performs the initial load of the url. Only
     // returns once the load is complete.
-    WebViewImpl* initializeAndLoad(const std::string& url, bool enableJavascript = false, TestWebFrameClient* = 0, WebViewClient* = 0, void (*updateSettingsFunc)(WebSettings*) = 0);
+    WebViewImpl* initializeAndLoad(const std::string& url, bool enableJavascript = false, TestWebFrameClient* = 0, TestWebViewClient* = 0, void (*updateSettingsFunc)(WebSettings*) = 0);
+
+    void resize(WebSize);
 
     void reset();
 
@@ -128,6 +156,7 @@ private:
     WebFrameWidget* m_webViewWidget;
     SettingOverrider* m_settingOverrider;
     UseMockScrollbarSettings m_mockScrollbarSettings;
+    TestWebViewClient* m_testWebViewClient;
 };
 
 // Minimal implementation of WebFrameClient needed for unit tests that load frames. Tests that load
@@ -136,7 +165,7 @@ class TestWebFrameClient : public WebFrameClient {
 public:
     TestWebFrameClient();
 
-    WebFrame* createChildFrame(WebLocalFrame* parent, WebTreeScopeType, const WebString& frameName, WebSandboxFlags, const WebFrameOwnerProperties&) override;
+    WebFrame* createChildFrame(WebLocalFrame* parent, WebTreeScopeType, const WebString& name, const WebString& uniqueName, WebSandboxFlags, const WebFrameOwnerProperties&) override;
     void frameDetached(WebFrame*, DetachType) override;
     void didStartLoading(bool) override;
     void didStopLoading() override;
@@ -166,16 +195,6 @@ public:
 
 private:
     RawPtrWillBePersistent<WebRemoteFrameImpl> const m_frame;
-};
-
-class TestWebViewClient : public WebViewClient {
-public:
-    virtual ~TestWebViewClient() { }
-    void initializeLayerTreeView() override;
-    WebLayerTreeView* layerTreeView() override { return m_layerTreeView.get(); }
-
-private:
-    OwnPtr<WebLayerTreeView> m_layerTreeView;
 };
 
 } // namespace FrameTestHelpers

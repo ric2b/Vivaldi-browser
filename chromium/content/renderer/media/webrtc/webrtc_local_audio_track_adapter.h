@@ -13,8 +13,8 @@
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
 #include "content/common/content_export.h"
-#include "third_party/libjingle/source/talk/app/webrtc/mediastreamtrack.h"
-#include "third_party/libjingle/source/talk/media/base/audiorenderer.h"
+#include "third_party/webrtc/api/mediastreamtrack.h"
+#include "third_party/webrtc/media/base/audiorenderer.h"
 
 namespace cricket {
 class AudioRenderer;
@@ -71,7 +71,6 @@ class CONTENT_EXPORT WebRtcLocalAudioTrackAdapter
   rtc::scoped_refptr<webrtc::AudioProcessorInterface> GetAudioProcessor()
       override;
   webrtc::AudioSourceInterface* GetSource() const override;
-  cricket::AudioRenderer* GetRenderer() override;
 
   // Weak reference.
   WebRtcLocalAudioTrack* owner_;

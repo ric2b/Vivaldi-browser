@@ -31,40 +31,13 @@ class PageLoadTracker;
 
 namespace internal {
 
-extern const char kProvisionalEvents[];
-extern const char kBackgroundProvisionalEvents[];
 extern const char kErrorEvents[];
+extern const char kAbortChainSizeReload[];
+extern const char kAbortChainSizeForwardBack[];
+extern const char kAbortChainSizeNewNavigation[];
+
 
 }  // namespace internal
-
-// ProvisionalLoadEvents count all main frame navigations before they commit.
-// The events in this enum are all disjoint, and summing them yields the total
-// number of main frame provisional loads.
-//
-// If you add elements from this enum, make sure you update the enum
-// value in histograms.xml. Only add elements to the end to prevent
-// inconsistencies between versions.
-enum ProvisionalLoadEvent {
-  // This case occurs when the NavigationHandle finishes and reports
-  // !HasCommitted(), but reports no net::Error. This should not occur
-  // pre-PlzNavigate, but afterwards it should represent the navigation stopped
-  // by the user before it was ready to commit.
-  PROVISIONAL_LOAD_STOPPED,
-
-  // An aborted provisional load has error net::ERR_ABORTED. Note that this can
-  // come from some non user-initiated errors, such as downloads, or 204
-  // responses. See crbug.com/542369.
-  PROVISIONAL_LOAD_ERR_ABORTED,
-
-  // This event captures all the other ways a provisional load can fail.
-  PROVISIONAL_LOAD_ERR_FAILED_NON_ABORT,
-
-  // Counts the number of successful commits.
-  PROVISIONAL_LOAD_COMMITTED,
-
-  // Add values before this final count.
-  PROVISIONAL_LOAD_LAST_ENTRY
-};
 
 // These errors are internal to the page_load_metrics subsystem and do not
 // reflect actual errors that occur during a page load.
@@ -105,6 +78,12 @@ enum InternalErrorLoadEvent {
   // happens.
   ERR_ABORT_BEFORE_NAVIGATION_START,
 
+  // A new navigation triggers abort updates in multiple trackers in
+  // |aborted_provisional_loads_|, when usually there should only be one (the
+  // navigation that just aborted because of this one). If this happens, the
+  // latest aborted load is used to track the chain size.
+  ERR_NAVIGATION_SIGNALS_MULIPLE_ABORTED_LOADS,
+
   // Add values before this final count.
   ERR_LAST_ENTRY
 };
@@ -128,20 +107,23 @@ class PageLoadTracker {
   // class.
   PageLoadTracker(bool in_foreground,
                   PageLoadMetricsEmbedderInterface* embedder_interface,
-                  content::NavigationHandle* navigation_handle);
+                  content::NavigationHandle* navigation_handle,
+                  int abort_chain_size);
   ~PageLoadTracker();
   void Redirect(content::NavigationHandle* navigation_handle);
   void Commit(content::NavigationHandle* navigation_handle);
+  void FailedProvisionalLoad(content::NavigationHandle* navigation_handle);
   void WebContentsHidden();
   void WebContentsShown();
 
   // Returns true if the timing was successfully updated.
   bool UpdateTiming(const PageLoadTiming& timing);
-  void RecordProvisionalEvent(ProvisionalLoadEvent event);
   bool HasBackgrounded();
 
   void set_renderer_tracked(bool renderer_tracked);
-  bool renderer_tracked() { return renderer_tracked_; }
+  bool renderer_tracked() const { return renderer_tracked_; }
+
+  int aborted_chain_size() const { return aborted_chain_size_; }
 
   UserAbortType abort_type() const { return abort_type_; }
   base::TimeTicks abort_time() const { return abort_time_; }
@@ -151,17 +133,24 @@ class PageLoadTracker {
   // If the user performs some abort-like action while we are tracking this page
   // load, notify the tracker. Note that we may not classify this as an abort if
   // we've already performed a first paint.
-  void NotifyAbort(UserAbortType abort_type, const base::TimeTicks& timestamp);
-  void UpdateAbort(UserAbortType abort_type, const base::TimeTicks& timestamp);
+  void NotifyAbort(UserAbortType abort_type, base::TimeTicks timestamp);
+  void UpdateAbort(UserAbortType abort_type, base::TimeTicks timestamp);
+
+  // This method returns true if this page load has been aborted with type of
+  // ABORT_OTHER, and the |abort_cause_time| is within a sufficiently close
+  // delta to when it was aborted. Note that only provisional loads can be
+  // aborted with ABORT_OTHER. While this heuristic is coarse, it works better
+  // and is simpler than other feasible methods. See https://goo.gl/WKRG98.
+  bool IsLikelyProvisionalAbort(base::TimeTicks abort_cause_time);
 
  private:
   PageLoadExtraInfo GetPageLoadMetricsInfo();
   // Only valid to call post-commit.
   const GURL& committed_url();
 
-  void RecordTimingHistograms(const PageLoadExtraInfo& info);
   void UpdateAbortInternal(UserAbortType abort_type,
-                           const base::TimeTicks& timestamp);
+                           base::TimeTicks timestamp);
+  void LogAbortChainHistograms(ui::PageTransition committed_transition);
 
   // Whether the renderer should be sending timing IPCs to this page load.
   bool renderer_tracked_;
@@ -188,6 +177,14 @@ class PageLoadTracker {
 
   PageLoadTiming timing_;
 
+  // This is a subtle member. If a provisional load A gets aborted by
+  // provisional load B, which gets aborted by C that eventually commits, then
+  // there exists an abort chain of length 2, starting at A's navigation_start.
+  // This is useful because it allows histograming abort chain lengths based on
+  // what the last load's transition type is. i.e. holding down F-5 to spam
+  // reload will produce a long chain with the RELOAD transition.
+  const int aborted_chain_size_;
+
   // Interface to chrome features. Must outlive the class.
   PageLoadMetricsEmbedderInterface* const embedder_interface_;
 
@@ -196,8 +193,9 @@ class PageLoadTracker {
   DISALLOW_COPY_AND_ASSIGN(PageLoadTracker);
 };
 
-// MetricsWebContentsObserver logs page load UMA metrics based on
-// IPC messages received from a MetricsRenderFrameObserver.
+// MetricsWebContentsObserver tracks page loads and loading metrics
+// related data based on IPC messages received from a
+// MetricsRenderFrameObserver.
 class MetricsWebContentsObserver
     : public content::WebContentsObserver,
       public content::WebContentsUserData<MetricsWebContentsObserver> {
@@ -233,6 +231,12 @@ class MetricsWebContentsObserver
   void NotifyAbortAllLoads(UserAbortType abort_type);
   void NotifyAbortAllLoadsWithTimestamp(UserAbortType abort_type,
                                         base::TimeTicks timestamp);
+  // Notify aborted provisional loads that a new navigation occurred. This is
+  // used for more consistent attribution tracking for aborted provisional
+  // loads. This method returns the provisional load abort chain size, to
+  // instantiate the new PageLoadTracker.
+  int NotifyAbortedProvisionalLoadsNewNavigation(
+      content::NavigationHandle* new_navigation);
 
   void OnTimingUpdated(content::RenderFrameHost*, const PageLoadTiming& timing);
 

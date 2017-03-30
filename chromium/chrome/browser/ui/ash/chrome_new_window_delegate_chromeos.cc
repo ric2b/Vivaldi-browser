@@ -46,8 +46,8 @@ void ChromeNewWindowDelegateChromeos::OpenFileManager() {
 
 void ChromeNewWindowDelegateChromeos::OpenGetHelp() {
   Profile* const profile = ProfileManager::GetActiveUserProfile();
-  chrome::ShowHelpForProfile(
-      profile, chrome::HOST_DESKTOP_TYPE_ASH, chrome::HELP_SOURCE_KEYBOARD);
+  chrome::ShowHelpForProfile(profile, chrome::HOST_DESKTOP_TYPE_ASH,
+                             chrome::HELP_SOURCE_KEYBOARD);
 }
 
 void ChromeNewWindowDelegateChromeos::OpenCrosh() {
@@ -56,9 +56,7 @@ void ChromeNewWindowDelegateChromeos::OpenCrosh() {
       profile);
   if (!crosh_url.is_valid())
     return;
-  chrome::ScopedTabbedBrowserDisplayer displayer(
-      profile,
-      chrome::HOST_DESKTOP_TYPE_ASH);
+  chrome::ScopedTabbedBrowserDisplayer displayer(profile);
   Browser* browser = displayer.browser();
   content::WebContents* page = browser->OpenURL(
       content::OpenURLParams(crosh_url,

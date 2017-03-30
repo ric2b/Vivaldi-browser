@@ -36,7 +36,6 @@
 #include "core/inspector/InspectedFrames.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
-#include "platform/JSONValues.h"
 #include "platform/PlatformEvent.h"
 #include "platform/PlatformTouchEvent.h"
 #include "platform/PlatformTouchPoint.h"
@@ -44,6 +43,7 @@
 #include "platform/geometry/IntPoint.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/IntSize.h"
+#include "platform/inspector_protocol/Values.h"
 #include "wtf/CurrentTime.h"
 
 namespace {
@@ -55,18 +55,16 @@ enum Modifiers {
     ShiftKey = 1 << 3
 };
 
-unsigned GetEventModifiers(const int* modifiers)
+unsigned GetEventModifiers(int modifiers)
 {
-    if (!modifiers)
-        return 0;
     unsigned platformModifiers = 0;
-    if (*modifiers & AltKey)
+    if (modifiers & AltKey)
         platformModifiers |= blink::PlatformEvent::AltKey;
-    if (*modifiers & CtrlKey)
+    if (modifiers & CtrlKey)
         platformModifiers |= blink::PlatformEvent::CtrlKey;
-    if (*modifiers & MetaKey)
+    if (modifiers & MetaKey)
         platformModifiers |= blink::PlatformEvent::MetaKey;
-    if (*modifiers & ShiftKey)
+    if (modifiers & ShiftKey)
         platformModifiers |= blink::PlatformEvent::ShiftKey;
     return platformModifiers;
 }
@@ -111,7 +109,7 @@ void ConvertInspectorPoint(blink::LocalFrame* frame, const blink::IntPoint& poin
 namespace blink {
 
 InspectorInputAgent::InspectorInputAgent(InspectedFrames* inspectedFrames)
-    : InspectorBaseAgent<InspectorInputAgent, InspectorFrontend::Input>("Input")
+    : InspectorBaseAgent<InspectorInputAgent, protocol::Frontend::Input>("Input")
     , m_inspectedFrames(inspectedFrames)
 {
 }
@@ -120,7 +118,7 @@ InspectorInputAgent::~InspectorInputAgent()
 {
 }
 
-void InspectorInputAgent::dispatchTouchEvent(ErrorString* error, const String& type, const RefPtr<JSONArray>& touchPoints, const int* modifiers, const double* timestamp)
+void InspectorInputAgent::dispatchTouchEvent(ErrorString* error, const String& type, PassOwnPtr<protocol::Array<protocol::Input::TouchPoint>> touchPoints, const protocol::Maybe<int>& modifiers, const protocol::Maybe<double>& timestamp)
 {
     PlatformEvent::Type convertedType;
     if (type == "touchStart") {
@@ -134,40 +132,23 @@ void InspectorInputAgent::dispatchTouchEvent(ErrorString* error, const String& t
         return;
     }
 
-    unsigned convertedModifiers = GetEventModifiers(modifiers);
+    unsigned convertedModifiers = GetEventModifiers(modifiers.fromMaybe(0));
 
-    SyntheticInspectorTouchEvent event(convertedType, convertedModifiers, timestamp ? *timestamp : currentTime());
+    SyntheticInspectorTouchEvent event(convertedType, convertedModifiers, timestamp.fromMaybe(currentTime()));
 
     int autoId = 0;
-    for (auto& touchPoint : *touchPoints) {
-        RefPtr<JSONObject> pointObj;
-        String state;
-        int x, y, radiusX, radiusY, id;
-        double rotationAngle, force;
-        touchPoint->asObject(&pointObj);
-        if (!pointObj->getString("state", &state)) {
-            *error = "TouchPoint missing 'state'";
-            return;
-        }
-        if (!pointObj->getNumber("x", &x)) {
-            *error = "TouchPoint missing 'x' coordinate";
-            return;
-        }
-        if (!pointObj->getNumber("y", &y)) {
-            *error = "TouchPoint missing 'y' coordinate";
-            return;
-        }
-        if (!pointObj->getNumber("radiusX", &radiusX))
-            radiusX = 1;
-        if (!pointObj->getNumber("radiusY", &radiusY))
-            radiusY = 1;
-        if (!pointObj->getNumber("rotationAngle", &rotationAngle))
-            rotationAngle = 0.0f;
-        if (!pointObj->getNumber("force", &force))
-            force = 1.0f;
-        if (pointObj->getNumber("id", &id)) {
+    for (size_t i = 0; i < touchPoints->length(); ++i) {
+        protocol::Input::TouchPoint* point = touchPoints->get(i);
+        int radiusX = point->getRadiusX(1);
+        int radiusY = point->getRadiusY(1);
+        double rotationAngle = point->getRotationAngle(0.0);
+        double force = point->getForce(1.0);
+        int id;
+        if (point->hasId()) {
             if (autoId > 0)
                 id = -1;
+            else
+                id = point->getId(0);
             autoId = -1;
         } else {
             id = autoId++;
@@ -178,6 +159,7 @@ void InspectorInputAgent::dispatchTouchEvent(ErrorString* error, const String& t
         }
 
         PlatformTouchPoint::State convertedState;
+        String state = point->getState();
         if (state == "touchPressed") {
             convertedState = PlatformTouchPoint::TouchPressed;
         } else if (state == "touchReleased") {
@@ -196,10 +178,10 @@ void InspectorInputAgent::dispatchTouchEvent(ErrorString* error, const String& t
         // Some platforms may have flipped coordinate systems, but the given coordinates
         // assume the origin is in the top-left of the window. Convert.
         IntPoint convertedPoint, globalPoint;
-        ConvertInspectorPoint(m_inspectedFrames->root(), IntPoint(x, y), &convertedPoint, &globalPoint);
+        ConvertInspectorPoint(m_inspectedFrames->root(), IntPoint(point->getX(), point->getY()), &convertedPoint, &globalPoint);
 
-        SyntheticInspectorTouchPoint point(id++, convertedState, globalPoint, convertedPoint, radiusX, radiusY, rotationAngle, force);
-        event.append(point);
+        SyntheticInspectorTouchPoint touchPoint(id++, convertedState, globalPoint, convertedPoint, radiusX, radiusY, rotationAngle, force);
+        event.append(touchPoint);
     }
 
     m_inspectedFrames->root()->eventHandler().handleTouchEvent(event);

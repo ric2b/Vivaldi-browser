@@ -18,6 +18,7 @@
 #include "components/scheduler/renderer/task_cost_estimator.h"
 #include "components/scheduler/renderer/throttling_helper.h"
 #include "components/scheduler/renderer/user_model.h"
+#include "components/scheduler/renderer/web_view_scheduler_impl.h"
 #include "components/scheduler/scheduler_export.h"
 
 namespace base {
@@ -28,6 +29,7 @@ class ConvertableToTraceFormat;
 
 namespace scheduler {
 class RenderWidgetSchedulingState;
+class WebViewSchedulerImpl;
 class ThrottlingHelper;
 
 class SCHEDULER_EXPORT RendererSchedulerImpl
@@ -41,10 +43,10 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
 
   // RendererScheduler implementation:
   scoped_ptr<blink::WebThread> CreateMainThread() override;
-  scoped_refptr<base::SingleThreadTaskRunner> DefaultTaskRunner() override;
+  scoped_refptr<TaskQueue> DefaultTaskRunner() override;
   scoped_refptr<SingleThreadIdleTaskRunner> IdleTaskRunner() override;
-  scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner() override;
-  scoped_refptr<base::SingleThreadTaskRunner> LoadingTaskRunner() override;
+  scoped_refptr<TaskQueue> CompositorTaskRunner() override;
+  scoped_refptr<TaskQueue> LoadingTaskRunner() override;
   scoped_refptr<TaskQueue> TimerTaskRunner() override;
   scoped_refptr<TaskQueue> NewLoadingTaskRunner(const char* name) override;
   scoped_refptr<TaskQueue> NewTimerTaskRunner(const char* name) override;
@@ -74,16 +76,16 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
   void SuspendTimerQueue() override;
   void ResumeTimerQueue() override;
   void SetTimerQueueSuspensionWhenBackgroundedEnabled(bool enabled) override;
-  double CurrentTimeSeconds() const override;
-  double MonotonicallyIncreasingTimeSeconds() const override;
 
   // RenderWidgetSignals::Observer implementation:
   void SetAllRenderWidgetsHidden(bool hidden) override;
   void SetHasVisibleRenderWidgetWithTouchHandler(
       bool has_visible_render_widget_with_touch_handler) override;
 
-  // TaskQueueManager::Observer implementation:
+  // SchedulerHelper::Observer implementation:
   void OnUnregisterTaskQueue(const scoped_refptr<TaskQueue>& queue) override;
+  void OnTriedToExecuteBlockedTask(const TaskQueue& queue,
+                                   const base::PendingTask& task) override;
 
   // Returns a task runner where tasks run at the highest possible priority.
   scoped_refptr<TaskQueue> ControlTaskRunner();
@@ -92,6 +94,9 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
   void UnregisterTimeDomain(TimeDomain* time_domain);
 
   void SetExpensiveTaskBlockingAllowed(bool allowed);
+
+  void AddWebViewScheduler(WebViewSchedulerImpl* web_view_scheduler);
+  void RemoveWebViewScheduler(WebViewSchedulerImpl* web_view_scheduler);
 
   // Test helpers.
   SchedulerHelper* GetSchedulerHelperForTesting();
@@ -106,26 +111,45 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
     return helper_.real_time_domain();
   }
 
-  ThrottlingHelper* throttling_helper() { return &throttling_helper_; }
+  ThrottlingHelper* throttling_helper() { return throttling_helper_.get(); }
 
  private:
   friend class RendererSchedulerImplTest;
   friend class RendererSchedulerImplForTest;
   friend class RenderWidgetSchedulingState;
 
-  struct Policy {
-    Policy();
+  enum class TimeDomainType {
+    REAL,
+    THROTTLED,
+  };
 
-    TaskQueue::QueuePriority compositor_queue_priority;
-    TaskQueue::QueuePriority loading_queue_priority;
-    TaskQueue::QueuePriority timer_queue_priority;
-    TaskQueue::QueuePriority default_queue_priority;
+  struct TaskQueuePolicy {
+    TaskQueuePolicy()
+        : is_enabled(true),
+          priority(TaskQueue::NORMAL_PRIORITY),
+          time_domain_type(TimeDomainType::REAL) {}
+
+    bool is_enabled;
+    TaskQueue::QueuePriority priority;
+    TimeDomainType time_domain_type;
+
+    bool operator==(const TaskQueuePolicy& other) const {
+      return is_enabled == other.is_enabled && priority == other.priority &&
+             time_domain_type == other.time_domain_type;
+    }
+  };
+
+  struct Policy {
+    TaskQueuePolicy compositor_queue_policy;
+    TaskQueuePolicy loading_queue_policy;
+    TaskQueuePolicy timer_queue_policy;
+    TaskQueuePolicy default_queue_policy;
 
     bool operator==(const Policy& other) const {
-      return compositor_queue_priority == other.compositor_queue_priority &&
-             loading_queue_priority == other.loading_queue_priority &&
-             timer_queue_priority == other.timer_queue_priority &&
-             default_queue_priority == other.default_queue_priority;
+      return compositor_queue_policy == other.compositor_queue_policy &&
+             loading_queue_policy == other.loading_queue_policy &&
+             timer_queue_policy == other.timer_queue_policy &&
+             default_queue_policy == other.default_queue_policy;
     }
   };
 
@@ -250,9 +274,20 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
   // nagigation. This function does that. Must be called from the main thread.
   void ResetForNavigationLocked();
 
+  // Estimates the maximum task length that won't cause a jank based on the
+  // current system state. Must be called from the main thread.
+  base::TimeDelta EstimateLongestJankFreeTaskDuration() const;
+
+  // Log a console warning message to all WebViews in this process.
+  void BroadcastConsoleWarning(const std::string& message);
+
+  void ApplyTaskQueuePolicy(TaskQueue* task_queue,
+                            const TaskQueuePolicy& old_task_queue_policy,
+                            const TaskQueuePolicy& new_task_queue_policy) const;
+
   SchedulerHelper helper_;
   IdleHelper idle_helper_;
-  ThrottlingHelper throttling_helper_;
+  scoped_ptr<ThrottlingHelper> throttling_helper_;
   RenderWidgetSignals render_widget_scheduler_signals_;
 
   const scoped_refptr<TaskQueue> control_task_runner_;
@@ -283,7 +318,7 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
     base::TimeTicks current_policy_expiration_time;
     base::TimeTicks estimated_next_frame_begin;
     base::TimeDelta compositor_frame_interval;
-    base::TimeDelta expected_idle_duration;
+    base::TimeDelta longest_jank_free_task_duration;
     int timer_queue_suspend_count;  // TIMER_TASK_QUEUE suspended if non-zero.
     int navigation_task_expected_count;
     bool renderer_hidden;
@@ -295,9 +330,12 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
     bool timer_tasks_seem_expensive;
     bool touchstart_expected_soon;
     bool have_seen_a_begin_main_frame;
+    bool have_reported_blocking_intervention_in_current_policy;
+    bool have_reported_blocking_intervention_since_navigation;
     bool has_visible_render_widget_with_touch_handler;
     bool begin_frame_not_expected_soon;
     bool expensive_task_blocking_allowed;
+    std::set<WebViewSchedulerImpl*> web_view_schedulers_;  // Not owned.
   };
 
   struct AnyThread {

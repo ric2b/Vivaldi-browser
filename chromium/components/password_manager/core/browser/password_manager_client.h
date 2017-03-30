@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_MANAGER_CLIENT_H_
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_MANAGER_CLIENT_H_
 
+#include <vector>
+
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/scoped_vector.h"
@@ -98,12 +100,27 @@ class PasswordManagerClient {
   // password in the focused password field.
   virtual void ForceSavePassword();
 
+  // Informs the embedder that the user has manually requested to generate a
+  // password in the focused password field.
+  virtual void GeneratePassword();
+
   // Informs the embedder that automatic signing in just happened. The form
   // returned to the site is |local_forms[0]|. |local_forms| and
   // |federated_forms| contain all the local and federated credentials for the
   // site.
   virtual void NotifyUserAutoSignin(
       ScopedVector<autofill::PasswordForm> local_forms) = 0;
+
+  // Inform the embedder that automatic signin would have happened if the user
+  // had been through the first-run experience to ensure their opt-in. |form|
+  // contains the PasswordForm that would have been delivered.
+  virtual void NotifyUserCouldBeAutoSignedIn(
+      scoped_ptr<autofill::PasswordForm> form) = 0;
+
+  // Inform the embedder that the user signed in with a saved credential.
+  // |form| contains the form used.
+  virtual void NotifySuccessfulLoginWithExistingPassword(
+      const autofill::PasswordForm& form) = 0;
 
   // Called when a password is saved in an automated fashion. Embedder may
   // inform the user that this save has occured.
@@ -113,11 +130,15 @@ class PasswordManagerClient {
   // Called when a password is autofilled. |best_matches| contains the
   // PasswordForm into which a password was filled: the client may choose to
   // save this to the PasswordStore, for example. |origin| is the origin of the
-  // form into which a password was filled. Default implementation is a
-  // noop.
+  // form into which a password was filled. |federated_matches| are the stored
+  // federated matches relevant to the filled form, this argument may be null.
+  // They are never filled, but might be needed in the UI, for example. Default
+  // implementation is a noop.
   virtual void PasswordWasAutofilled(
       const autofill::PasswordFormMap& best_matches,
-      const GURL& origin) const;
+      const GURL& origin,
+      const std::vector<scoped_ptr<autofill::PasswordForm>>* federated_matches)
+      const;
 
   // Gets prefs associated with this embedder.
   virtual PrefService* GetPrefs() = 0;
@@ -132,11 +153,6 @@ class PasswordManagerClient {
 
   // Returns true if last navigation page had HTTP error i.e 5XX or 4XX
   virtual bool WasLastNavigationHTTPError() const;
-
-  // Returns the authorization prompt policy to be used with the given form.
-  // Only relevant on OSX.
-  virtual PasswordStore::AuthorizationPromptPolicy GetAuthorizationPromptPolicy(
-      const autofill::PasswordForm& form);
 
   // Returns whether any SSL certificate errors were encountered as a result of
   // the last page load.

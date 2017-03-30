@@ -54,6 +54,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.ListView;
+import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.CollectionUtil;
@@ -147,6 +148,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
 
     protected ImageView mNavigationButton;
     protected ImageButton mSecurityButton;
+    protected TextView mVerboseStatusTextView;
     protected TintedImageButton mDeleteButton;
     protected TintedImageButton mMicButton;
     protected UrlBar mUrlBar;
@@ -464,6 +466,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         PAGE,
         MAGNIFIER,
         EMPTY,
+        OFFLINE,
     }
 
     /**
@@ -679,6 +682,8 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         mSecurityButton = (ImageButton) findViewById(R.id.security_button);
         mSecurityIconType = ConnectionSecurityLevel.NONE;
 
+        mVerboseStatusTextView = (TextView) findViewById(R.id.location_bar_verbose_status);
+
         mDeleteButton = (TintedImageButton) findViewById(R.id.delete_button);
 
         mUrlBar = (UrlBar) findViewById(R.id.url_bar);
@@ -822,6 +827,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
 
         mSecurityButton.setOnClickListener(this);
         mNavigationButton.setOnClickListener(this);
+        mVerboseStatusTextView.setOnClickListener(this);
         updateMicButtonState();
         mDeleteButton.setOnClickListener(this);
         mMicButton.setOnClickListener(this);
@@ -902,7 +908,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         if (!mQueryInTheOmnibox
                 && FeatureUtilities.isDocumentMode(getContext())
                 && !TextUtils.isEmpty(mUrlBar.getText())) {
-            mUrlBar.setUrl(mToolbarDataProvider.getTab().getUrl(), null);
+            mUrlBar.setUrl(getOnlineUrlFromTab(), null);
         }
     }
 
@@ -925,7 +931,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
                 mUrlBar.setUrl("", null);
             } else {
                 mUrlBar.setUrl(
-                        mToolbarDataProvider.getText(), mToolbarDataProvider.getTab().getUrl());
+                        mToolbarDataProvider.getText(), getOnlineUrlFromTab());
             }
         }
     }
@@ -951,6 +957,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         mUrlHasFocus = hasFocus;
         mUrlContainer.onUrlFocusChanged(hasFocus);
         updateDeleteButtonVisibility();
+        updateNavigationButton();
         Tab currentTab = getCurrentTab();
         if (hasFocus) {
             if (mNativeInitialized) RecordUserAction.record("FocusLocation");
@@ -1140,6 +1147,8 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
                     mSuggestionItems.get(0).getSuggestion());
         } else if (mQueryInTheOmnibox) {
             type = NavigationButtonType.MAGNIFIER;
+        } else if (!mUrlHasFocus && getCurrentTab() != null && getCurrentTab().isOfflinePage()) {
+            type = NavigationButtonType.OFFLINE;
         } else if (isTablet) {
             type = NavigationButtonType.PAGE;
         }
@@ -1280,6 +1289,15 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
             case EMPTY:
                 mNavigationButton.setImageDrawable(null);
                 break;
+            case OFFLINE:
+                Drawable bolt = ApiCompatibilityUtils.getDrawable(
+                        getResources(), R.drawable.offline_bolt);
+                bolt.setColorFilter(ApiCompatibilityUtils.getColor(getResources(), mUseDarkColors
+                        ? R.color.locationbar_status_color
+                        : R.color.locationbar_status_color_light), PorterDuff.Mode.SRC_IN);
+                bolt.mutate();
+                mNavigationButton.setImageDrawable(bolt);
+                break;
             default:
                 assert false;
         }
@@ -1288,7 +1306,34 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
             mNavigationButton.setVisibility(VISIBLE);
         }
         mNavigationButtonType = buttonType;
+
+        updateVerboseStatusVisibility();
         updateLocationBarIconContainerVisibility();
+    }
+
+    /**
+     * Update visibility of the verbose status based on the button type and focus state of the
+     * omnibox.
+     */
+    private void updateVerboseStatusVisibility() {
+        boolean verboseStatusVisible =
+                mNavigationButtonType == NavigationButtonType.OFFLINE && !mUrlHasFocus;
+
+        int verboseStatusVisibility = verboseStatusVisible ? VISIBLE : GONE;
+
+        mVerboseStatusTextView.setTextColor(ApiCompatibilityUtils.getColor(getResources(),
+                mUseDarkColors ? R.color.locationbar_status_color
+                        : R.color.locationbar_status_color_light));
+        mVerboseStatusTextView.setVisibility(verboseStatusVisibility);
+
+        View separator = findViewById(R.id.location_bar_verbose_status_separator);
+        separator.setBackgroundColor(ApiCompatibilityUtils.getColor(getResources(), mUseDarkColors
+                ? R.color.locationbar_status_separator_color
+                : R.color.locationbar_status_separator_color_light));
+        separator.setVisibility(verboseStatusVisibility);
+
+        findViewById(R.id.location_bar_verbose_status_extra_space)
+                .setVisibility(verboseStatusVisibility);
     }
 
     /**
@@ -1722,11 +1767,11 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
     }
 
     /**
-     * Whether {@code v} is a location icon which can be clicked to show the
-     * origin info dialog.
+     * Whether {@code v} is a view (location icon, verbose status, ...) which can be clicked to
+     * show the origin info dialog.
      */
-    private boolean isLocationIcon(View v) {
-        return v == mSecurityButton || v == mNavigationButton;
+    private boolean shouldShowPageInfoForView(View v) {
+        return v == mSecurityButton || v == mNavigationButton || v == mVerboseStatusTextView;
     }
 
     @Override
@@ -1739,13 +1784,12 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
 
             startZeroSuggest();
             return;
-        } else if (!mUrlHasFocus && isLocationIcon(v)) {
+        } else if (!mUrlHasFocus && shouldShowPageInfoForView(v)) {
             Tab currentTab = getCurrentTab();
             if (currentTab != null && currentTab.getWebContents() != null) {
                 Activity activity = currentTab.getWindowAndroid().getActivity().get();
                 if (activity != null) {
-                    WebsiteSettingsPopup.show(activity, currentTab.getProfile(),
-                            currentTab.getWebContents());
+                    WebsiteSettingsPopup.show(activity, currentTab, null);
                 }
             }
         } else if (v == mMicButton) {
@@ -1765,6 +1809,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         Editable text = mUrlBar.getText();
 
         return mUrlBar.isCursorAtEndOfTypedText()
+                && !mUrlBar.isPastedText()
                 && !mUrlBar.isHandlingBatchInput()
                 && BaseInputConnection.getComposingSpanEnd(text)
                         == BaseInputConnection.getComposingSpanStart(text);
@@ -1949,7 +1994,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         Profile profile = getCurrentTab().getProfile();
         if (profile != null) mOmniboxPrerender.clear(profile);
 
-        String url = getCurrentTab().getUrl().trim();
+        String url = getOnlineUrlFromTab();
         mOriginalUrl = url;
 
         if (NativePageFactory.isNativePageUrl(url, getCurrentTab().isIncognito())) {
@@ -1988,6 +2033,19 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
     }
 
     /**
+     * Gets the URL of the web page in the tab. When displaying offline page it gets the URL of the
+     * original page.
+     */
+    private String getOnlineUrlFromTab() {
+        Tab currentTab = getCurrentTab();
+        if (currentTab == null) return "";
+        if (currentTab.isOfflinePage()) {
+            return currentTab.getOfflinePageOriginalUrl().trim();
+        }
+        return currentTab.getUrl().trim();
+    }
+
+    /**
      * Changes the text on the url bar
      * @param displayText The text (URL or search terms) for user display.
      * @param trailingText The trailing text (path portion of the URL) to be displayed separately.
@@ -2020,7 +2078,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
                 ? (SystemClock.elapsedRealtime() - mNewOmniboxEditSessionTimestamp) : -1;
         mAutocomplete.onSuggestionSelected(matchPosition, type, currentPageUrl,
                 mQueryInTheOmnibox, mUrlFocusedFromFakebox, elapsedTimeSinceModified,
-                webContents);
+                mUrlBar.getAutocompleteLength(), webContents);
         loadUrl(url, transition);
     }
 

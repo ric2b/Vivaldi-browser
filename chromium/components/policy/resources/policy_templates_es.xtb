@@ -147,6 +147,13 @@ Si esta política está establecida en "false" o no está establecida, se inhabi
 <translation id="1522425503138261032">Permitir que los sitios puedan hacer un seguimiento de la ubicación física de los usuarios</translation>
 <translation id="152657506688053119">Lista de URL alternativas para el proveedor de búsquedas predeterminado</translation>
 <translation id="1530812829012954197">Mostrar siempre los patrones de URL que se indican a continuación en el navegador del host</translation>
+<translation id="1553684822621013552">Si se asigna el valor true a esta política, se habilitará ARC para el usuario
+      (la política está sujeta a comprobaciones adicionales de la configuración de la política: ARC no estará
+      disponible si el modo efímero o el acceso múltiple están habilitados
+      en la sesión de usuario actual).
+
+      Si esta configuración se inhabilita o no se configura, los usuarios de empresas no
+      podrán utilizar ARC.</translation>
 <translation id="1561424797596341174">La política anula las compilaciones de depuración del host de acceso remoto.</translation>
 <translation id="1583248206450240930">Utilizar <ph name="PRODUCT_FRAME_NAME" /> de forma predeterminada</translation>
 <translation id="1608755754295374538">URLs a las que se concederá acceso a dispositivos de captura de audio sin confirmación</translation>
@@ -202,6 +209,13 @@ Si esta política está establecida en "false" o no está establecida, se inhabi
 
           Esta política solo se respeta si se habilita la política "DefaultSearchProviderEnabled".</translation>
 <translation id="1859633270756049523">Limitar la duración de la sesión</translation>
+<translation id="1859859319036806634">Advertencia: La alternativa de la versión de TLS se retirará de <ph name="PRODUCT_NAME" /> después de la versión 52 (en septiembre de 2016, aproximadamente) y esta política dejará de funcionar.
+
+      Cuando no es posible establecer el protocolo de enlace TLS, <ph name="PRODUCT_NAME" /> ya habrá intentado intentar establecer la conexión con una versión anterior de TLS para evitar errores en los servidores HTTPS. Esta opción configura la versión en la que se detendrá el proceso alternativo. Si un servidor lleva a cabo la negociación de la versión correctamente (es decir, sin interrumpir la conexión), esta opción no se aplica. En cualquier caso, la conexión resultante debe cumplir la política SSLVersionMin.
+
+      Si no se configura esta política o si se le asigna el valor tls1.2, <ph name="PRODUCT_NAME" /> ya no utiliza esta alternativa. Ten en cuenta que esto no inhabilita la compatibilidad con versiones más antiguas de TLS, solo determina si <ph name="PRODUCT_NAME" /> evita el uso de servidores con errores que no puedan negociar las versiones correctamente.
+
+      De lo contrario, el valor tls 1.1 puede asignarse a la política si se debe mantener la compatibilidad con un servidor con errores. Esta es una medida provisional y el servidor debería arreglarse rápidamente.</translation>
 <translation id="1861037019115362154">Permite especificar una lista de complementos inhabilitados en <ph name="PRODUCT_NAME" /> y evita que los usuarios modifiquen esta opción.
 
       Se pueden utilizar los caracteres comodín "*" y "?" para obtener coincidencias con secuencias de caracteres arbitrarios. El carácter "*" permite obtener coincidencias con un número arbitrario de caracteres y "?" especifica un único carácter opcional (puede coincidir con un carácter o con ninguno). Se puede escribir el carácter de escape ("\") delante de los caracteres "*", "?" o "\" para obtener coincidencias con los propios caracteres.
@@ -253,6 +267,7 @@ Si esta política está establecida en "false" o no está establecida, se inhabi
 Si esta política se establece en True, <ph name="PRODUCT_OS_NAME" /> intentará descargar cargas útiles de actualizaciones automáticas a través de HTTP. Si la política se establece en False o no se configura, se utilizará HTTPS para descargar cargas útiles de actualizaciones automáticas.</translation>
 <translation id="2006530844219044261">Administración de energía</translation>
 <translation id="201557587962247231">Frecuencia de subida de informes de estado del dispositivo</translation>
+<translation id="2024476116966025075">Configurar el nombre de dominio requerido para los clientes de acceso remoto</translation>
 <translation id="2030905906517501646">Palabra clave de proveedor de búsquedas predeterminadas</translation>
 <translation id="206623763829450685">Especifica los esquemas de autenticación HTTP admitidos por <ph name="PRODUCT_NAME" />.
 
@@ -488,6 +503,7 @@ Si no se establece esta política, el teclado en pantalla estará inhabilitado i
       Si no se establece esta política, la función del proxy de compresión de datos estará disponible para que el usuario decida si quiere o no utilizarla.</translation>
 <translation id="2587719089023392205">Establecer <ph name="PRODUCT_NAME" /> como navegador predeterminado</translation>
 <translation id="2592091433672667839">Duración de la inactividad antes de que se muestre el protector de pantalla en el modo de venta</translation>
+<translation id="260705825237536216">Configurar las aplicaciones ARC</translation>
 <translation id="2623014935069176671">Esperar actividad inicial del usuario</translation>
 <translation id="262740370354162807">Habilitar el envío de documentos a <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="2633084400146331575">Habilitar mensajes de voz</translation>
@@ -496,15 +512,6 @@ Si no se establece esta política, el teclado en pantalla estará inhabilitado i
           Si no se establece esta política, se usará la política AskGeolocation y el usuario podrá modificarla.</translation>
 <translation id="2650049181907741121">Acción que se realiza cuando el usuario cierra la tapa</translation>
 <translation id="2660846099862559570">No utilizar nunca un proxy</translation>
-<translation id="2665596266623707739">Advertencia: La alternativa de usar TLS 1.0 se eliminará de <ph name="PRODUCT_NAME" /> después de la versión 47 (en enero de 2016 aproximadamente) y la opción tls1 dejará de funcionar.
-
-      Cuando no es posible establecer el protocolo de enlace TLS, <ph name="PRODUCT_NAME" /> vuelve a intentar establecer la conexión con una versión inferior de TLS para evitar errores en los servidores HTTPS. Esta opción configura la versión en la que se detendrá el proceso alternativo. Si un servidor lleva a cabo la negociación de la versión correctamente (es decir, sin interrumpir la conexión), esta opción no se aplicará. En cualquier caso, la conexión resultante debe cumplir la política SSLVersionMin.
-
-      Si no se configura esta política, <ph name="PRODUCT_NAME" /> utiliza la versión mínima predeterminada, que es TLS 1.0 en <ph name="PRODUCT_NAME" /> 44 y TLS 1.1 en versiones posteriores. Ten en cuenta que, solo si <ph name="PRODUCT_NAME" /> evita el uso de servidores con errores que no puedan negociar las versiones correctamente, no se inhabilitará la compatibilidad con TLS 1.0.
-
-      De lo contrario, se puede establecer uno de los siguientes valores: tls1, tls1.1 o tls1.2. Si se debe mantener la compatibilidad con un servidor con errores, se puede configurar tls1. Se trata de una solución provisional y el servidor debería arreglarse rápidamente.
-
-     Al establecer tls1.2, se inhabilitan todos los valores alternativos pero es posible que afecte a la compatibilidad de forma significativa.</translation>
 <translation id="267596348720209223">Permite especificar las codificaciones de caracteres admitidas por el proveedor de búsquedas. Las codificaciones son nombres de páginas de códigos, como UTF-8, GB2312 o ISO-8859-1. Los intentos de uso se hacen en el orden especificado.
 
           Esta política es opcional. Si no se establece se usará el valor predeterminado, es decir, UTF-8.
@@ -525,11 +532,6 @@ Si no se establece esta política, el teclado en pantalla estará inhabilitado i
       Si no se habilita esta opción, las páginas web no podrán utilizar JavaScript y los usuarios no podrán cambiar esta configuración.
 
       Si se habilita esta opción o si no se establece, las páginas web podrán utilizar JavaScript y los usuarios podrán modificar esta configuración.</translation>
-<translation id="2747783890942882652">Permite configurar el nombre de dominio del host obligatorio que se aplicará a los hosts de acceso remoto y evita que los usuarios lo modifiquen.
-
-         Si se habilita esta opción, los hosts solo se podrán compartir con cuentas registradas en el nombre de dominio especificado.
-
-         Si se inhabilita o no se configura esta opción, los hosts se podrán compartir con cualquier cuenta.</translation>
 <translation id="2757054304033424106">Tipos de extensiones o aplicaciones que se pueden instalar</translation>
 <translation id="2759224876420453487">Controlar el comportamiento del usuario en una sesión de varios perfiles</translation>
 <translation id="2761483219396643566">Tiempo de espera de advertencia de inactividad cuando el dispositivo funciona con batería</translation>
@@ -601,6 +603,7 @@ Si se inhabilita o no se configura esta opción, los usuarios podrán decidir si
       Especifica si se debe habilitar la extensión de certificados TLS limitados a dominios.
 
       Esta opción se utiliza para habilitar la extensión de certificados TLS limitados a dominios para pruebas. Esta opción experimental se eliminará en el futuro.</translation>
+<translation id="2957506574938329824">No permitir que los sitios web soliciten acceso a los dispositivos Bluetooth a través de la API Bluetooth web</translation>
 <translation id="2957513448235202597">Tipo de cuenta para la autenticación <ph name="HTTP_NEGOTIATE" /></translation>
 <translation id="2959898425599642200">Reglas de omisión de proxy</translation>
 <translation id="2960691910306063964">Habilitar o inhabilitar la autenticación sin PIN para host de acceso remoto</translation>
@@ -613,6 +616,8 @@ Si se inhabilita o no se configura esta opción, los usuarios podrán decidir si
           Cuando no se establece esta política, se utilizará un valor de tiempo predeterminado.
 
           El valor de la política se debe especificar en milisegundos. Los valores están establecidos para ser inferiores o iguales al retraso de desconexión de pantalla (si está establecido) y al retraso de inactividad.</translation>
+<translation id="2987155890997901449">Habilitar ARC</translation>
+<translation id="2987227569419001736">Controlar el uso de la API Bluetooth web</translation>
 <translation id="2998881342848488968">Esta política permite a <ph name="PRODUCT_OS_NAME" /> omitir cualquier proxy para la autenticación de portal cautivo.
 
       Esta política solo tendrá validez si se ha configurado un proxy (por ejemplo, a través de una política o de las extensiones, o si lo ha configurado el usuario en chrome://settings).
@@ -934,6 +939,7 @@ Si esta política se establece en False, el usuario no podrá canjear ofertas.</
 
           Esta política solo se respeta si se habilita la política "DefaultSearchProviderEnabled".</translation>
 <translation id="4320376026953250541">Microsoft Windows XP SP2 o posterior</translation>
+<translation id="4322842393287974810">Permite que la aplicación de kiosco sin retardo con inicio automático controle la versión de <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="4325690621216251241">Añadir un botón para cerrar sesión en la bandeja del sistema</translation>
 <translation id="4347908978527632940">Si la política está activada y se trata de un usuario supervisado, otras aplicaciones de Android pueden consultar las restricciones web del usuario a través de un proveedor de contenido.
 
@@ -1090,7 +1096,7 @@ Si esta política está configurada, el usuario no puede cambiarla y el acceso d
           Esta política solo se respeta si se habilita la política "DefaultSearchProviderEnabled".</translation>
 <translation id="489803897780524242">Parámetro que controla la ubicación de los términos de búsqueda para el proveedor de búsquedas predeterminado</translation>
 <translation id="4899708173828500852">Habilitar la navegación segura</translation>
-<translation id="4906194810004762807">Frecuencia de actualización de la política de dispositivo</translation>
+<translation id="4906194810004762807">Frecuencia de actualización de Device Policy</translation>
 <translation id="4928632305180102854">Permite controlar la creación de nuevas cuentas de usuario en <ph name="PRODUCT_OS_NAME" />. Si el valor correspondiente a esta política se establece en "false", los usuarios que no dispongan de una cuenta previamente no podrán iniciar sesión.
 
       Si el valor correspondiente a esta política se establece en "true" o esta no se configura, se permitirá crear nuevas cuentas de usuario, siempre que <ph name="DEVICEUSERWHITELISTPROTO_POLICY_NAME" /> no evite que el usuario inicie sesión.</translation>
@@ -1220,6 +1226,11 @@ Si esta política está configurada, el usuario no puede cambiarla y el acceso d
 <translation id="5307432759655324440">Disponibilidad del modo de incógnito</translation>
 <translation id="5318185076587284965">Habilita el uso de servidores de retransmisión por parte del host de acceso remoto</translation>
 <translation id="5330684698007383292">Permitir que <ph name="PRODUCT_FRAME_NAME" /> procese los tipos de contenido que se indican a continuación</translation>
+<translation id="5345267406698765263">Especifica la política de la aplicación ARC como cadena JSON, que se puede
+      transmitir tal cual al tiempo de ejecución ARC. En este momento, esta configuración se utiliza
+      solo para especificar la instalación forzada de las aplicaciones.
+
+      Si esta política no se configura, no se instalará ninguna aplicación automáticamente.</translation>
 <translation id="5365946944967967336">Mostrar botón de página principal en la barra de herramientas</translation>
 <translation id="5366977351895725771">Si se establece el valor "false", el usuario no podrá crear usuarios supervisados, pero seguirán estando disponibles los usuarios supervisados creados anteriormente.
 
@@ -1292,6 +1303,13 @@ Si esta política está configurada, el usuario no puede cambiarla y el acceso d
       Si la política no se establece, los usuarios podrán elegir si los archivos se deben ocultar automáticamente.</translation>
 <translation id="557658534286111200">Permite habilitar o inhabilitar la edición de marcadores.</translation>
 <translation id="5586942249556966598">No hacer nada</translation>
+<translation id="5613179474872285001">Configura el nombre de dominio del cliente requerido que se impondrá a los clientes de acceso remoto y evita que los usuarios lo cambien.
+
+          Si esta configuración se habilita, solo podrán conectarse al host los clientes del dominio que se haya especificado.
+
+          Si esta configuración se inhabilita o no se establece, se aplica la política predeterminada para establecer el tipo de conexión. Para la asistencia remota, permite que los clientes de cualquier dominio puedan conectarse al host. En el caso del acceso remoto en cualquier momento, solo puede conectarse el propietario del host.
+
+          Consulta también RemoteAccessHostDomain.</translation>
 <translation id="5630352020869108293">Restaurar la última sesión</translation>
 <translation id="5645779841392247734">Permitir cookies en estos sitios</translation>
 <translation id="5677038592630896441">Es necesario que el nombre del usuario local y del propietario del host de acceso remoto coincidan.
@@ -1594,6 +1612,9 @@ Si estableces esta política, los usuarios podrán anularla temporalmente habili
 
 Si no se establece esta política, el teclado en pantalla se inhabilitará la primera vez que se muestre la pantalla de inicio de sesión. Los usuarios podrán habilitar o inhabilitar el teclado en pantalla en cualquier momento y su estado en la pantalla de inicio de sesión se mantendrá para todos los usuarios.</translation>
 <translation id="6598235178374410284">Imagen de avatar del usuario</translation>
+<translation id="6628646143828354685">Permite establecer si los sitios web pueden acceder a los dispositivos Bluetooth cercanos. Se puede bloquear completamente el acceso o se puede establecer que se pida permiso al usuario cada vez que un sitio web quiera acceder a los dispositivos Bluetooth cercanos.
+
+          Si no se establece esta política, se utilizará la política 3 y el usuario podrá cambiarla.</translation>
 <translation id="6636268606788232221">Modifica la configuración de la administración de energía cuando el usuario está inactivo.
 
           Esta política controla diferentes opciones de configuración de la estrategia de administración de energía cuando el usuario está inactivo.
@@ -1686,6 +1707,7 @@ Si esta política se establece en False, las opciones de accesibilidad no se mos
 Si estableces esta política, los usuarios no podrán cambiarla ni anularla.
 
 Si no se establece esta política, las opciones de accesibilidad no aparecerán en el menú de la bandeja del sistema, pero el usuario podrá provocar que las opciones de accesibilidad aparezcan a través de la página de configuración.</translation>
+<translation id="6766216162565713893">Permitir que los sitios web le pidan permiso al usuario para acceder a dispositivos Bluetooth cercanos</translation>
 <translation id="6770454900105963262">Informar sobre sesiones del kiosco activas</translation>
 <translation id="6774533686631353488">Permitir hosts de mensajes nativos en nivel de usuario (instalados sin permisos de administrador).</translation>
 <translation id="6786747875388722282">Extensiones</translation>
@@ -1727,6 +1749,13 @@ Si no se establece esta política, las opciones de accesibilidad no aparecerán 
 <translation id="6943577887654905793">Nombre de preferencia en Mac/Linux:</translation>
 <translation id="69525503251220566">Parámetro que proporciona una función de búsqueda por imagen para el proveedor de búsquedas predeterminado</translation>
 <translation id="6956272732789158625">No permitir que los sitios web utilicen la generación de claves</translation>
+<translation id="695891079107014261">Configura el nombre de dominio del host requerido que se impondrá a los hosts de acceso remoto y evita que los usuarios lo cambien.
+
+          Si esta configuración se habilita, los hosts solo podrán compartirse con cuentas registradas en el nombre de dominio que se haya especificado.
+
+          Si esta configuración se inhabilita o no se establece, los hosts se pueden compartir utilizando cualquier cuenta.
+
+          Consulta también RemoteAccessHostClientDomain.</translation>
 <translation id="6997592395211691850">Permite establecer si es necesario realizar comprobaciones de OCSP/CRL online para los anclajes de veracidad locales</translation>
 <translation id="7003334574344702284">Si se habilita, esta política fuerza la importación de las contraseñas guardadas desde el navegador predeterminado actual. Si está habilitada, esta política también afecta al cuadro de diálogo de importación.
 
@@ -1870,6 +1899,13 @@ Estas políticas te permiten configurar el comportamiento de <ph name="PRODUCT_O
 
       Si no se establece esta política, el protocolo SPDY estará disponible.</translation>
 <translation id="7384999953864505698">Permitir protocolo QUIC</translation>
+<translation id="7406651467768226499">Permitir que la aplicación de kiosco sin retardo con inicio automático controle la versión de <ph name="PRODUCT_OS_NAME" />.
+
+      Esta política controla si se permitirá que la aplicación de kiosco sin retardo con inicio automático controle la versión de <ph name="PRODUCT_OS_NAME" /> incluyendo required_platform_version en su archivo de manifiesto y la utilice como el prefijo de la versión de destino de actualización automática.
+
+      Si se asigna el valor true a esta política, el valor de la clave de manifiesto required_platform_version de la aplicación de kiosco sin retardo con inicio automático se utilizará como un prefijo de la versión de destino de actualización automática.
+
+      Si esta política no se configura o se le asigna el valor false, la clave de manifiesto required_platform_version se ignorará y la actualización automática se realizará con normalidad.</translation>
 <translation id="7417972229667085380">Porcentaje que permite ajustar el retraso de inactividad en el modo de presentación (política obsoleta)</translation>
 <translation id="7421483919690710988">Establecer tamaño de caché de disco de medios en bytes</translation>
 <translation id="7424751532654212117">Lista de excepciones de la lista de complementos inhabilitados</translation>
@@ -1977,6 +2013,7 @@ Si se asigna el valor false a la política, no se proporcionará información so
       Si no se establece esta política, <ph name="PRODUCT_NAME" /> utilizará el valor predeterminado de 5.000 milisegundos.</translation>
 <translation id="7841880500990419427">Versión mínima de TLS a la que recurrir</translation>
 <translation id="7842869978353666042">Opciones de configuración de Google Drive</translation>
+<translation id="7843525027689416831">Especifica las opciones que se deben aplicar a <ph name="PRODUCT_NAME" /> cuando se inicia. Las opciones especificadas solo se aplican en la pantalla de inicio de sesión. Las opciones establecidas a través de esta política no se propagan a las sesiones del usuario.</translation>
 <translation id="7848840259379156480">Permite configurar el procesador de HTML predeterminado si se ha instalado <ph name="PRODUCT_FRAME_NAME" />.
       De forma predeterminada, se permite que el navegador del host muestre las páginas HTML,
       pero puedes anular esta opción para que <ph name="PRODUCT_FRAME_NAME" /> muestre las páginas HTML de forma predeterminada.</translation>
@@ -2307,7 +2344,6 @@ En todas las plataformas, salvo en <ph name="PRODUCT_OS_NAME" />, el modo kiosco
           El valor de la política se debe especificar en milisegundos. Los valores están establecidos para ser inferiores al retraso de inactividad.</translation>
 <translation id="891435090623616439">codificado como cadena JSON, consulta <ph name="COMPLEX_POLICIES_URL" /> para obtener más información</translation>
 <translation id="8947415621777543415">Informar de ubicación del dispositivo</translation>
-<translation id="89493502583189945">Especifica las opciones que se deben aplicar a <ph name="PRODUCT_NAME" /> cuando se inicia. Las opciones especificadas se aplican antes de que se inicie <ph name="PRODUCT_NAME" /> incluso para la pantalla de inicio de sesión.</translation>
 <translation id="8951350807133946005">Establecer directorio de caché de disco</translation>
 <translation id="8955719471735800169">Volver al principio</translation>
 <translation id="8960850473856121830">Los patrones de esta lista se compararán con el origen de seguridad de la URL solicitante. Si se encuentra alguna coincidencia, se concederá acceso a dispositivos de captura de audio sin solicitarlo.

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/website_settings/permission_bubble_manager.h"
 
+#include <algorithm>
+
 #include "base/command_line.h"
 #include "base/metrics/user_metrics_action.h"
 #include "build/build_config.h"
@@ -26,8 +28,7 @@ class CancelledRequest : public PermissionBubbleRequest {
       : icon_(cancelled->GetIconId()),
         message_text_(cancelled->GetMessageText()),
         message_fragment_(cancelled->GetMessageTextFragment()),
-        user_gesture_(cancelled->HasUserGesture()),
-        hostname_(cancelled->GetRequestingHostname()) {}
+        origin_(cancelled->GetOrigin()) {}
   ~CancelledRequest() override {}
 
   int GetIconId() const override { return icon_; }
@@ -35,8 +36,7 @@ class CancelledRequest : public PermissionBubbleRequest {
   base::string16 GetMessageTextFragment() const override {
     return message_fragment_;
   }
-  bool HasUserGesture() const override { return user_gesture_; }
-  GURL GetRequestingHostname() const override { return hostname_; }
+  GURL GetOrigin() const override { return origin_; }
 
   // These are all no-ops since the placeholder is non-forwarding.
   void PermissionGranted() override {}
@@ -49,9 +49,19 @@ class CancelledRequest : public PermissionBubbleRequest {
   int icon_;
   base::string16 message_text_;
   base::string16 message_fragment_;
-  bool user_gesture_;
-  GURL hostname_;
+  GURL origin_;
 };
+
+bool IsMessageTextEqual(PermissionBubbleRequest* a,
+                        PermissionBubbleRequest* b) {
+  if (a == b)
+    return true;
+  if (a->GetMessageTextFragment() == b->GetMessageTextFragment() &&
+      a->GetOrigin() == b->GetOrigin()) {
+    return true;
+  }
+  return false;
+}
 
 }  // namespace
 
@@ -83,17 +93,14 @@ PermissionBubbleManager::~PermissionBubbleManager() {
   if (view_ != NULL)
     view_->SetDelegate(NULL);
 
-  std::vector<PermissionBubbleRequest*>::iterator requests_iter;
-  for (requests_iter = requests_.begin();
-       requests_iter != requests_.end();
-       requests_iter++) {
-    (*requests_iter)->RequestFinished();
-  }
-  for (requests_iter = queued_requests_.begin();
-       requests_iter != queued_requests_.end();
-       requests_iter++) {
-    (*requests_iter)->RequestFinished();
-  }
+  for (PermissionBubbleRequest* request : requests_)
+    request->RequestFinished();
+  for (PermissionBubbleRequest* request : queued_requests_)
+    request->RequestFinished();
+  for (PermissionBubbleRequest* request : queued_frame_requests_)
+    request->RequestFinished();
+  for (const auto& entry : duplicate_requests_)
+    entry.second->RequestFinished();
 }
 
 void PermissionBubbleManager::AddRequest(PermissionBubbleRequest* request) {
@@ -105,20 +112,22 @@ void PermissionBubbleManager::AddRequest(PermissionBubbleRequest* request) {
   // correct behavior on interstitials -- we probably want to basically queue
   // any request for which GetVisibleURL != GetLastCommittedURL.
   request_url_ = web_contents()->GetLastCommittedURL();
-  bool is_main_frame =
-      url::Origin(request_url_)
-          .IsSameOriginWith(url::Origin(request->GetRequestingHostname()));
+  bool is_main_frame = url::Origin(request_url_)
+                           .IsSameOriginWith(url::Origin(request->GetOrigin()));
 
   // Don't re-add an existing request or one with a duplicate text request.
-  // TODO(johnme): Instead of dropping duplicate requests, we should queue them
-  // and eventually run their PermissionGranted/PermissionDenied/Cancelled
-  // callback (crbug.com/577313).
-  bool same_object = false;
-  if (ExistingRequest(request, requests_, &same_object) ||
-      ExistingRequest(request, queued_requests_, &same_object) ||
-      ExistingRequest(request, queued_frame_requests_, &same_object)) {
-    if (!same_object)
-      request->RequestFinished();
+  PermissionBubbleRequest* existing_request = GetExistingRequest(request);
+  if (existing_request) {
+    // |request| is a duplicate. Add it to |duplicate_requests_| unless it's the
+    // same object as |existing_request| or an existing duplicate.
+    if (request == existing_request)
+      return;
+    auto range = duplicate_requests_.equal_range(existing_request);
+    for (auto it = range.first; it != range.second; ++it) {
+      if (request == it->second)
+        return;
+    }
+    duplicate_requests_.insert(std::make_pair(existing_request, request));
     return;
   }
 
@@ -149,15 +158,23 @@ void PermissionBubbleManager::AddRequest(PermissionBubbleRequest* request) {
 }
 
 void PermissionBubbleManager::CancelRequest(PermissionBubbleRequest* request) {
-  // First look in the queued requests, where we can simply delete the request
+  // First look in the queued requests, where we can simply finish the request
   // and go on.
   std::vector<PermissionBubbleRequest*>::iterator requests_iter;
   for (requests_iter = queued_requests_.begin();
        requests_iter != queued_requests_.end();
        requests_iter++) {
     if (*requests_iter == request) {
-      (*requests_iter)->RequestFinished();
+      RequestFinishedIncludingDuplicates(*requests_iter);
       queued_requests_.erase(requests_iter);
+      return;
+    }
+  }
+  for (requests_iter = queued_frame_requests_.begin();
+       requests_iter != queued_frame_requests_.end(); requests_iter++) {
+    if (*requests_iter == request) {
+      RequestFinishedIncludingDuplicates(*requests_iter);
+      queued_frame_requests_.erase(requests_iter);
       return;
     }
   }
@@ -173,7 +190,7 @@ void PermissionBubbleManager::CancelRequest(PermissionBubbleRequest* request) {
     // showing the dialog, or if we are showing it and it can accept the update.
     bool can_erase = !IsBubbleVisible() || view_->CanAcceptRequestUpdate();
     if (can_erase) {
-      (*requests_iter)->RequestFinished();
+      RequestFinishedIncludingDuplicates(*requests_iter);
       requests_.erase(requests_iter);
       accept_states_.erase(accepts_iter);
 
@@ -188,9 +205,23 @@ void PermissionBubbleManager::CancelRequest(PermissionBubbleRequest* request) {
     // Cancel the existing request and replace it with a dummy.
     PermissionBubbleRequest* cancelled_request =
         new CancelledRequest(*requests_iter);
-    (*requests_iter)->RequestFinished();
+    RequestFinishedIncludingDuplicates(*requests_iter);
     *requests_iter = cancelled_request;
     return;
+  }
+
+  // Since |request| wasn't found in queued_requests_, queued_frame_requests_ or
+  // requests_ it must have been marked as a duplicate. We can't search
+  // duplicate_requests_ by value, so instead use GetExistingRequest to find the
+  // key (request it was duped against), and iterate through duplicates of that.
+  PermissionBubbleRequest* existing_request = GetExistingRequest(request);
+  auto range = duplicate_requests_.equal_range(existing_request);
+  for (auto it = range.first; it != range.second; ++it) {
+    if (request == it->second) {
+      it->second->RequestFinished();
+      duplicate_requests_.erase(it);
+      return;
+    }
   }
 
   NOTREACHED();  // Callers should not cancel requests that are not pending.
@@ -286,10 +317,11 @@ void PermissionBubbleManager::Accept() {
   for (requests_iter = requests_.begin(), accepts_iter = accept_states_.begin();
        requests_iter != requests_.end();
        requests_iter++, accepts_iter++) {
-    if (*accepts_iter)
-      (*requests_iter)->PermissionGranted();
-    else
-      (*requests_iter)->PermissionDenied();
+    if (*accepts_iter) {
+      PermissionGrantedIncludingDuplicates(*requests_iter);
+    } else {
+      PermissionDeniedIncludingDuplicates(*requests_iter);
+    }
   }
   FinalizeBubble();
 }
@@ -299,7 +331,7 @@ void PermissionBubbleManager::Deny() {
   for (requests_iter = requests_.begin();
        requests_iter != requests_.end();
        requests_iter++) {
-    (*requests_iter)->PermissionDenied();
+    PermissionDeniedIncludingDuplicates(*requests_iter);
   }
   FinalizeBubble();
 }
@@ -309,7 +341,7 @@ void PermissionBubbleManager::Closing() {
   for (requests_iter = requests_.begin();
        requests_iter != requests_.end();
        requests_iter++) {
-    (*requests_iter)->Cancelled();
+    CancelledIncludingDuplicates(*requests_iter);
   }
   FinalizeBubble();
 }
@@ -340,12 +372,7 @@ void PermissionBubbleManager::TriggerShowBubble() {
   }
 
   if (requests_.empty()) {
-    // Queues containing a user-gesture-generated request have priority.
-    if (HasUserGestureRequest(queued_requests_))
-      requests_.swap(queued_requests_);
-    else if (HasUserGestureRequest(queued_frame_requests_))
-      requests_.swap(queued_frame_requests_);
-    else if (queued_requests_.size())
+    if (queued_requests_.size())
       requests_.swap(queued_requests_);
     else
       requests_.swap(queued_frame_requests_);
@@ -373,7 +400,7 @@ void PermissionBubbleManager::FinalizeBubble() {
   for (requests_iter = requests_.begin();
        requests_iter != requests_.end();
        requests_iter++) {
-    (*requests_iter)->RequestFinished();
+    RequestFinishedIncludingDuplicates(*requests_iter);
   }
   requests_.clear();
   accept_states_.clear();
@@ -388,46 +415,75 @@ void PermissionBubbleManager::CancelPendingQueues() {
   for (requests_iter = queued_requests_.begin();
        requests_iter != queued_requests_.end();
        requests_iter++) {
-    (*requests_iter)->RequestFinished();
+    RequestFinishedIncludingDuplicates(*requests_iter);
   }
   for (requests_iter = queued_frame_requests_.begin();
        requests_iter != queued_frame_requests_.end();
        requests_iter++) {
-    (*requests_iter)->RequestFinished();
+    RequestFinishedIncludingDuplicates(*requests_iter);
   }
   queued_requests_.clear();
   queued_frame_requests_.clear();
 }
 
-bool PermissionBubbleManager::ExistingRequest(
-    PermissionBubbleRequest* request,
-    const std::vector<PermissionBubbleRequest*>& queue,
-    bool* same_object) {
-  CHECK(same_object);
-  *same_object = false;
-  std::vector<PermissionBubbleRequest*>::const_iterator iter;
-  for (iter = queue.begin(); iter != queue.end(); iter++) {
-    if (*iter == request) {
-      *same_object = true;
-      return true;
-    }
-    if ((*iter)->GetMessageTextFragment() ==
-            request->GetMessageTextFragment() &&
-        (*iter)->GetRequestingHostname() == request->GetRequestingHostname()) {
-      return true;
-    }
-  }
-  return false;
+PermissionBubbleRequest* PermissionBubbleManager::GetExistingRequest(
+    PermissionBubbleRequest* request) {
+  for (PermissionBubbleRequest* existing_request : requests_)
+    if (IsMessageTextEqual(existing_request, request))
+      return existing_request;
+  for (PermissionBubbleRequest* existing_request : queued_requests_)
+    if (IsMessageTextEqual(existing_request, request))
+      return existing_request;
+  for (PermissionBubbleRequest* existing_request : queued_frame_requests_)
+    if (IsMessageTextEqual(existing_request, request))
+      return existing_request;
+  return nullptr;
 }
 
-bool PermissionBubbleManager::HasUserGestureRequest(
-    const std::vector<PermissionBubbleRequest*>& queue) {
-  std::vector<PermissionBubbleRequest*>::const_iterator iter;
-  for (iter = queue.begin(); iter != queue.end(); iter++) {
-    if ((*iter)->HasUserGesture())
-      return true;
-  }
-  return false;
+void PermissionBubbleManager::PermissionGrantedIncludingDuplicates(
+    PermissionBubbleRequest* request) {
+  DCHECK_EQ(request, GetExistingRequest(request))
+      << "Only requests in [queued_[frame_]]requests_ can have duplicates";
+  request->PermissionGranted();
+  auto range = duplicate_requests_.equal_range(request);
+  for (auto it = range.first; it != range.second; ++it)
+    it->second->PermissionGranted();
+}
+void PermissionBubbleManager::PermissionDeniedIncludingDuplicates(
+    PermissionBubbleRequest* request) {
+  DCHECK_EQ(request, GetExistingRequest(request))
+      << "Only requests in [queued_[frame_]]requests_ can have duplicates";
+  request->PermissionDenied();
+  auto range = duplicate_requests_.equal_range(request);
+  for (auto it = range.first; it != range.second; ++it)
+    it->second->PermissionDenied();
+}
+void PermissionBubbleManager::CancelledIncludingDuplicates(
+    PermissionBubbleRequest* request) {
+  DCHECK_EQ(request, GetExistingRequest(request))
+      << "Only requests in [queued_[frame_]]requests_ can have duplicates";
+  request->Cancelled();
+  auto range = duplicate_requests_.equal_range(request);
+  for (auto it = range.first; it != range.second; ++it)
+    it->second->Cancelled();
+}
+void PermissionBubbleManager::RequestFinishedIncludingDuplicates(
+    PermissionBubbleRequest* request) {
+  // We can't call GetExistingRequest here, because other entries in requests_,
+  // queued_requests_ or queued_frame_requests_ might already have been deleted.
+  DCHECK_EQ(1, std::count(requests_.begin(), requests_.end(), request) +
+               std::count(queued_requests_.begin(), queued_requests_.end(),
+                          request) +
+               std::count(queued_frame_requests_.begin(),
+                          queued_frame_requests_.end(), request))
+      << "Only requests in [queued_[frame_]]requests_ can have duplicates";
+  request->RequestFinished();
+  // Beyond this point, |request| has probably been deleted.
+  auto range = duplicate_requests_.equal_range(request);
+  for (auto it = range.first; it != range.second; ++it)
+    it->second->RequestFinished();
+  // Additionally, we can now remove the duplicates.
+  duplicate_requests_.erase(request);
 }
 
 void PermissionBubbleManager::AddObserver(Observer* observer) {

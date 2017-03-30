@@ -9,10 +9,6 @@
   width: 100%;
 }
 
-#join-route-button {
-  @apply(--layout-flex);
-}
-
 #route-action-buttons {
   @apply(--layout-horizontal);
   @apply(--layout-end-justified);
@@ -31,9 +27,15 @@
 }
 
 #route-information {
+  -webkit-padding-end: var(--dialog-padding-end);
   -webkit-padding-start: 44px;
   background-color: white;
   font-size: 1.2em;
+  line-height: 1.5em;
   margin-top: 16px;
   overflow: hidden;
+}
+
+#start-casting-to-route-button {
+  @apply(--layout-flex);
 }

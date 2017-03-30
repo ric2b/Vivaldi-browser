@@ -14,10 +14,15 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 
+namespace content {
+class RenderProcessHost;
+}  // namespace content
+
 namespace memory {
 
 struct TabStats {
   TabStats();
+  TabStats(const TabStats& other);
   ~TabStats();
   bool is_app;            // Browser window is an app.
   bool is_internal_page;  // Internal page, such as NTP or Settings.
@@ -28,6 +33,7 @@ struct TabStats {
   bool has_form_entry;  // User has entered text in a form.
   int discard_count;
   base::TimeTicks last_active;
+  content::RenderProcessHost* render_process_host;
   base::ProcessHandle renderer_handle;
   int child_process_host_id;
   base::string16 title;

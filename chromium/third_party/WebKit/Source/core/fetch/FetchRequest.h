@@ -79,7 +79,7 @@ public:
     DeferOption defer() const { return m_defer; }
     void setDefer(DeferOption defer) { m_defer = defer; }
 
-    ResourceWidth resourceWidth() const { return m_resourceWidth; }
+    ResourceWidth getResourceWidth() const { return m_resourceWidth; }
     void setResourceWidth(ResourceWidth);
 
     ClientHintsPreferences& clientHintsPreferences() { return m_clientHintPreferences; }
@@ -87,12 +87,12 @@ public:
     bool forPreload() const { return m_forPreload; }
     void setForPreload(bool forPreload) { m_forPreload = forPreload; }
 
-    bool avoidBlockingOnLoad() { return m_avoidBlockingOnLoad; }
-    void setAvoidBlockingOnLoad(bool doNotBlock) { m_avoidBlockingOnLoad = doNotBlock; }
+    bool isLinkPreload() { return m_linkPreload; }
+    void setLinkPreload(bool isLinkPreload) { m_linkPreload = isLinkPreload; }
 
     void setContentSecurityCheck(ContentSecurityPolicyDisposition contentSecurityPolicyOption) { m_options.contentSecurityPolicyOption = contentSecurityPolicyOption; }
     void setCrossOriginAccessControl(SecurityOrigin*, CrossOriginAttributeValue);
-    OriginRestriction originRestriction() const { return m_originRestriction; }
+    OriginRestriction getOriginRestriction() const { return m_originRestriction; }
     void setOriginRestriction(OriginRestriction restriction) { m_originRestriction = restriction; }
     const IntegrityMetadataSet& integrityMetadata() const { return m_integrityMetadata; }
     void setIntegrityMetadata(const IntegrityMetadataSet& metadata) { m_integrityMetadata = metadata; }
@@ -103,7 +103,7 @@ private:
     ResourceLoaderOptions m_options;
     ResourceLoadPriority m_priority;
     bool m_forPreload;
-    bool m_avoidBlockingOnLoad;
+    bool m_linkPreload;
     DeferOption m_defer;
     OriginRestriction m_originRestriction;
     ResourceWidth m_resourceWidth;

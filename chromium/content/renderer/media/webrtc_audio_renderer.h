@@ -25,10 +25,6 @@
 #include "media/base/output_device.h"
 #include "third_party/WebKit/public/platform/WebMediaStream.h"
 
-namespace media {
-class AudioOutputDevice;
-}  // namespace media
-
 namespace webrtc {
 class AudioSourceInterface;
 }  // namespace webrtc
@@ -172,7 +168,7 @@ class CONTENT_EXPORT WebRtcAudioRenderer
   // media::AudioRendererSink::RenderCallback implementation.
   // These two methods are called on the AudioOutputDevice worker thread.
   int Render(media::AudioBus* audio_bus,
-             uint32_t audio_delay_milliseconds,
+             uint32_t frames_delayed,
              uint32_t frames_skipped) override;
   void OnRenderError() override;
 
@@ -203,8 +199,8 @@ class CONTENT_EXPORT WebRtcAudioRenderer
   void OnPlayStateChanged(const blink::WebMediaStream& media_stream,
                           PlayingState* state);
 
-  // Updates |sink_params_|, |audio_fifo_| and |fifo_delay_milliseconds_| based
-  // on |sink_|, and initializes |sink_|.
+  // Updates |sink_params_| and |audio_fifo_| based on |sink_|, and initializes
+  // |sink_|.
   void PrepareSink();
 
   // The RenderFrame in which the audio is rendered into |sink_|.
@@ -214,7 +210,7 @@ class CONTENT_EXPORT WebRtcAudioRenderer
   const scoped_refptr<base::SingleThreadTaskRunner> signaling_thread_;
 
   // The sink (destination) for rendered audio.
-  scoped_refptr<media::AudioOutputDevice> sink_;
+  scoped_refptr<media::AudioRendererSink> sink_;
 
   // The media stream that holds the audio tracks that this renderer renders.
   const blink::WebMediaStream media_stream_;
@@ -240,9 +236,6 @@ class CONTENT_EXPORT WebRtcAudioRenderer
   // Contains the accumulated delay estimate which is provided to the WebRTC
   // AEC.
   int audio_delay_milliseconds_;
-
-  // Delay due to the FIFO in milliseconds.
-  int fifo_delay_milliseconds_;
 
   base::TimeDelta current_time_;
 

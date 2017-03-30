@@ -4,13 +4,16 @@
 
 #include "core/workers/WorkerThread.h"
 
+#include "bindings/core/v8/ScriptCallStack.h"
 #include "bindings/core/v8/V8GCController.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/workers/WorkerReportingProxy.h"
 #include "core/workers/WorkerThreadStartupData.h"
 #include "platform/NotImplemented.h"
+#include "platform/Task.h"
+#include "platform/ThreadSafeFunctional.h"
+#include "platform/WaitableEvent.h"
 #include "public/platform/WebScheduler.h"
-#include "public/platform/WebWaitableEvent.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -84,7 +87,7 @@ public:
         return EventTargetNames::DedicatedWorkerGlobalScope;
     }
 
-    void logExceptionToConsole(const String&, int, const String&, int, int, PassRefPtrWillBeRawPtr<ScriptCallStack>) override
+    void logExceptionToConsole(const String&, int, const String&, int, int, PassRefPtr<ScriptCallStack>) override
     {
     }
 
@@ -99,7 +102,7 @@ public:
         WorkerReportingProxy& mockWorkerReportingProxy)
         : WorkerThread(WorkerLoaderProxy::create(mockWorkerLoaderProxyProvider), mockWorkerReportingProxy)
         , m_thread(WebThreadSupportingGC::create("Test thread"))
-        , m_scriptLoadedEvent(adoptPtr(Platform::current()->createWaitableEvent()))
+        , m_scriptLoadedEvent(adoptPtr(new WaitableEvent()))
     {
     }
 
@@ -133,52 +136,13 @@ public:
 
 private:
     OwnPtr<WebThreadSupportingGC> m_thread;
-    OwnPtr<WebWaitableEvent> m_scriptLoadedEvent;
+    OwnPtr<WaitableEvent> m_scriptLoadedEvent;
 };
 
 void notifyScriptLoadedEventToWorkerThreadForTest(WorkerThread* thread)
 {
     static_cast<WorkerThreadForTest*>(thread)->scriptLoaded();
 }
-
-class WakeupTask : public WebTaskRunner::Task {
-public:
-    WakeupTask() { }
-
-    ~WakeupTask() override { }
-
-    void run() override { }
-};
-
-class PostDelayedWakeupTask : public WebTaskRunner::Task {
-public:
-    PostDelayedWakeupTask(WebScheduler* scheduler, long long delay) : m_scheduler(scheduler), m_delay(delay) { }
-
-    ~PostDelayedWakeupTask() override { }
-
-    void run() override
-    {
-        m_scheduler->timerTaskRunner()->postDelayedTask(BLINK_FROM_HERE, new WakeupTask(), m_delay);
-    }
-
-    WebScheduler* m_scheduler; // Not owned.
-    long long m_delay;
-};
-
-class SignalTask : public WebTaskRunner::Task {
-public:
-    SignalTask(WebWaitableEvent* completionEvent) : m_completionEvent(completionEvent) { }
-
-    ~SignalTask() override { }
-
-    void run() override
-    {
-        m_completionEvent->signal();
-    }
-
-private:
-    WebWaitableEvent* m_completionEvent; // Not owned.
-};
 
 } // namespace
 
@@ -226,8 +190,8 @@ public:
 
     void waitForInit()
     {
-        OwnPtr<WebWaitableEvent> completionEvent = adoptPtr(Platform::current()->createWaitableEvent());
-        m_workerThread->backingThread().postTask(BLINK_FROM_HERE, new SignalTask(completionEvent.get()));
+        OwnPtr<WaitableEvent> completionEvent = adoptPtr(new WaitableEvent());
+        m_workerThread->backingThread().postTask(BLINK_FROM_HERE, threadSafeBind(&WaitableEvent::signal, AllowCrossThreadAccess(completionEvent.get())));
         completionEvent->wait();
     }
 

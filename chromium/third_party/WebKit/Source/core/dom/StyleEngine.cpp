@@ -56,16 +56,7 @@ using namespace HTMLNames;
 StyleEngine::StyleEngine(Document& document)
     : m_document(&document)
     , m_isMaster(!document.importsController() || document.importsController()->master() == &document)
-    , m_pendingStylesheets(0)
     , m_documentStyleSheetCollection(DocumentStyleSheetCollection::create(document))
-    , m_documentScopeDirty(true)
-    , m_usesSiblingRules(false)
-    , m_usesFirstLineRules(false)
-    , m_usesWindowInactiveSelector(false)
-    , m_usesRemUnits(false)
-    , m_maxDirectAdjacentSelectors(0)
-    , m_ignorePendingStylesheets(false)
-    , m_didCalculateResolver(false)
     // We don't need to create CSSFontSelector for imported document or
     // HTMLTemplateElement's document, because those documents have no frame.
     , m_fontSelector(document.frame() ? CSSFontSelector::create(&document) : nullptr)
@@ -165,8 +156,8 @@ void StyleEngine::resetCSSFeatureFlags(const RuleFeatureSet& features)
 void StyleEngine::injectAuthorSheet(PassRefPtrWillBeRawPtr<StyleSheetContents> authorSheet)
 {
     m_injectedAuthorStyleSheets.append(CSSStyleSheet::create(authorSheet, m_document));
-    document().addedStyleSheet(m_injectedAuthorStyleSheets.last().get());
     markDocumentDirty();
+    resolverChanged(FullStyleUpdate);
 }
 
 void StyleEngine::addPendingSheet()
@@ -189,8 +180,6 @@ void StyleEngine::removePendingSheet(Node* styleSheetCandidateNode)
     if (m_pendingStylesheets)
         return;
 
-    // FIXME: We can't call addedStyleSheet or removedStyleSheet here because we don't know
-    // what's new. We should track that to tell the style system what changed.
     document().didRemoveAllPendingStylesheet();
 }
 
@@ -254,6 +243,7 @@ void StyleEngine::modifiedStyleSheetCandidateNode(Node* node)
     TreeScope& treeScope = isStyleElement(*node) ? node->treeScope() : *m_document;
     ASSERT(isStyleElement(*node) || treeScope == m_document);
     markTreeScopeDirty(treeScope);
+    resolverChanged(FullStyleUpdate);
 }
 
 bool StyleEngine::shouldUpdateDocumentStyleSheetCollection(StyleResolverUpdateMode updateMode) const
@@ -434,11 +424,6 @@ void StyleEngine::clearMasterResolver()
         master->styleEngine().clearResolver();
 }
 
-unsigned StyleEngine::resolverAccessCount() const
-{
-    return m_resolver ? m_resolver->accessCount() : 0;
-}
-
 void StyleEngine::didDetach()
 {
     clearResolver();
@@ -453,7 +438,7 @@ void StyleEngine::resolverChanged(StyleResolverUpdateMode mode)
 {
     if (!isMaster()) {
         if (Document* master = this->master())
-            master->styleResolverChanged(mode);
+            master->styleEngine().resolverChanged(mode);
         return;
     }
 
@@ -634,7 +619,7 @@ bool StyleEngine::shouldSkipInvalidationFor(const Element& element) const
         return true;
     if (!element.parentNode())
         return true;
-    return element.parentNode()->styleChangeType() >= SubtreeStyleChange;
+    return element.parentNode()->getStyleChangeType() >= SubtreeStyleChange;
 }
 
 void StyleEngine::classChangedForElement(const SpaceSplitString& changedClasses, Element& element)
@@ -726,6 +711,18 @@ void StyleEngine::pseudoStateChangedForElement(CSSSelector::PseudoType pseudoTyp
     m_styleInvalidator.scheduleInvalidationSetsForElement(invalidationLists, element);
 }
 
+void StyleEngine::setStatsEnabled(bool enabled)
+{
+    if (!enabled) {
+        m_styleResolverStats = nullptr;
+        return;
+    }
+    if (!m_styleResolverStats)
+        m_styleResolverStats = StyleResolverStats::create();
+    else
+        m_styleResolverStats->reset();
+}
+
 DEFINE_TRACE(StyleEngine)
 {
 #if ENABLE(OILPAN)
@@ -744,4 +741,4 @@ DEFINE_TRACE(StyleEngine)
     CSSFontSelectorClient::trace(visitor);
 }
 
-}
+} // namespace blink

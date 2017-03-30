@@ -62,7 +62,7 @@ class VivaldiBrowserWindow : public BrowserWindow {
   //virtual void OnLoadCompleted() override;
 
   // BrowserWindow:
-  void Show() override{}
+  void Show() override;
   void ShowInactive() override{}
   void Hide() override{}
   void SetBounds(const gfx::Rect& bounds) override;
@@ -97,9 +97,6 @@ class VivaldiBrowserWindow : public BrowserWindow {
   void Restore() override{}
   bool ShouldHideUIForFullscreen() const override;
   bool IsFullscreen() const override;
-  bool SupportsFullscreenWithToolbar() const override;
-  void UpdateFullscreenWithToolbar(bool with_toolbar) override {};
-  bool IsFullscreenWithToolbar() const override;
   void ResetToolbarTabState(content::WebContents* contents) override {};
 #if defined(OS_WIN)
   void SetMetroSnapMode(bool enable) override{}
@@ -142,7 +139,7 @@ class VivaldiBrowserWindow : public BrowserWindow {
     translate::TranslateStep step,
     translate::TranslateErrors::Type error_type,
     bool is_user_gesture) override{}
-#if defined(ENABLE_ONE_CLICK_SIGNIN)
+#if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
   void ShowOneClickSigninBubble(
     OneClickSigninBubbleType type,
     const base::string16& email,
@@ -185,17 +182,13 @@ class VivaldiBrowserWindow : public BrowserWindow {
 
   //extensions::AppWindow* GetAppWindow(content::WebContents* web_contents);
   ExclusiveAccessContext* GetExclusiveAccessContext() override;
-  void ToggleFullscreenToolbar() override {}
-  bool ShouldHideFullscreenToolbar() const override;
   void ShowAvatarBubbleFromAvatarButton(
       AvatarBubbleMode mode,
       const signin::ManageAccountsParams& manage_accounts_params,
       signin_metrics::AccessPoint access_point) override {}
-  void CloseModalSigninWindow() override {}
-  void ShowModalSigninWindow(
-      AvatarBubbleMode mode,
-      signin_metrics::AccessPoint access_point) override {}
 
+  gfx::Size GetContentsSize() const override;
+  extensions::AppWindow* GetAppWindow() const;
 
  protected:
   void DestroyBrowser() override;
@@ -203,9 +196,6 @@ class VivaldiBrowserWindow : public BrowserWindow {
  private:
   // The Browser object we are associated with.
   scoped_ptr<Browser> browser_;
-
-  // Is the window active.
-  bool is_active_;
 
   // The window bounds.
   gfx::Rect bounds_;
@@ -217,8 +207,6 @@ class VivaldiBrowserWindow : public BrowserWindow {
 
   // The download shelf view (view at the bottom of the page).
   scoped_ptr<DownloadShelfView> download_shelf_;
-
-  extensions::AppWindow* GetAppWindow() const;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiBrowserWindow);
 };

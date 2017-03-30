@@ -8,7 +8,6 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browser_process.h"
@@ -26,6 +25,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/error_page/common/net_error_info.h"
 #include "components/google/core/browser/google_util.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
@@ -650,15 +650,13 @@ bool DnsProbeBrowserTest::PageContains(const std::string& expected) {
 
 void DnsProbeBrowserTest::ExpectDisplayingLocalErrorPage(
     const std::string& status_text) {
-  EXPECT_FALSE(PageContains("http://correction1/"));
-  EXPECT_FALSE(PageContains("http://correction2/"));
+  EXPECT_FALSE(PageContains("http://mock.http/title2.html"));
   EXPECT_TRUE(PageContains(status_text));
 }
 
 void DnsProbeBrowserTest::ExpectDisplayingCorrections(
     const std::string& status_text) {
-  EXPECT_TRUE(PageContains("http://correction1/"));
-  EXPECT_TRUE(PageContains("http://correction2/"));
+  EXPECT_TRUE(PageContains("http://mock.http/title2.html"));
   EXPECT_TRUE(PageContains(status_text));
 }
 

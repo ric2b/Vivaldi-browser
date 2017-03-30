@@ -80,6 +80,7 @@ struct DoInitializeOptions {
 // SyncBackendHost::Core::DoConfigureSyncer.
 struct DoConfigureSyncerTypes {
   DoConfigureSyncerTypes();
+  DoConfigureSyncerTypes(const DoConfigureSyncerTypes& other);
   ~DoConfigureSyncerTypes();
   syncer::ModelTypeSet to_download;
   syncer::ModelTypeSet to_purge;
@@ -308,7 +309,7 @@ class SyncBackendHostCore
   syncer::CancelationSignal release_request_context_signal_;
   syncer::CancelationSignal stop_syncing_signal_;
 
-  // Matches the value of SyncPref's HasSyncSetupCompleted() flag at init time.
+  // Matches the value of SyncPref's IsFirstSetupComplete() flag at init time.
   // Should not be used for anything except for UMAs and logging.
   const bool has_sync_setup_completed_;
 

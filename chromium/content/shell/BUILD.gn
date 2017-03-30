@@ -5,7 +5,9 @@
 import("//build/config/features.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
+import("//build/config/win/console_app.gni")
 import("//build/config/win/manifest.gni")
+import("//media/media_options.gni")
 import("//tools/grit/repack.gni")
 import("//tools/grit/grit_rule.gni")
 if (is_android) {
@@ -32,6 +34,11 @@ static_library("content_shell_lib") {
     "android/shell_jni_registrar.h",
     "android/shell_manager.cc",
     "android/shell_manager.h",
+    "app/blink_test_platform_support.h",
+    "app/blink_test_platform_support_android.cc",
+    "app/blink_test_platform_support_linux.cc",
+    "app/blink_test_platform_support_mac.mm",
+    "app/blink_test_platform_support_win.cc",
     "app/paths_mac.h",
     "app/paths_mac.mm",
     "app/shell_crash_reporter_client.cc",
@@ -40,8 +47,8 @@ static_library("content_shell_lib") {
     "app/shell_main_delegate.h",
     "app/shell_main_delegate_mac.h",
     "app/shell_main_delegate_mac.mm",
-    "browser/blink_test_controller.cc",
-    "browser/blink_test_controller.h",
+    "browser/layout_test/blink_test_controller.cc",
+    "browser/layout_test/blink_test_controller.h",
     "browser/layout_test/layout_test_android.cc",
     "browser/layout_test/layout_test_android.h",
     "browser/layout_test/layout_test_bluetooth_adapter_provider.cc",
@@ -76,8 +83,10 @@ static_library("content_shell_lib") {
     "browser/layout_test/layout_test_resource_dispatcher_host_delegate.h",
     "browser/layout_test/layout_test_url_request_context_getter.cc",
     "browser/layout_test/layout_test_url_request_context_getter.h",
-    "browser/notify_done_forwarder.cc",
-    "browser/notify_done_forwarder.h",
+    "browser/layout_test/notify_done_forwarder.cc",
+    "browser/layout_test/notify_done_forwarder.h",
+    "browser/layout_test/test_info_extractor.cc",
+    "browser/layout_test/test_info_extractor.h",
     "browser/shell.cc",
     "browser/shell.h",
     "browser/shell_access_token_store.cc",
@@ -175,6 +184,8 @@ static_library("content_shell_lib") {
 
     # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
     "//build/config/compiler:no_size_t_to_int_warning",
+
+    "//third_party/WebKit/public:debug_devtools",
   ]
 
   defines = [ "CONTENT_SHELL_VERSION=\"$content_shell_version\"" ]
@@ -192,7 +203,6 @@ static_library("content_shell_lib") {
     ":resources",
     "//base",
     "//base:base_static",
-    "//base/allocator",
     "//base/third_party/dynamic_annotations",
     "//cc",
     "//components/crash/content/app:app_breakpad_mac_win_to_be_deleted",
@@ -241,6 +251,9 @@ static_library("content_shell_lib") {
       "//content/ppapi_plugin",
       "//ppapi:blink_test_plugin",
     ]
+  }
+  if (mojo_media_host == "browser") {
+    deps += [ "//media/mojo/services:application_factory" ]
   }
 
   if (is_win) {
@@ -313,7 +326,7 @@ static_library("content_shell_lib") {
     ]
   }
 
-  if (is_linux && !is_chromecast) {
+  if (is_linux) {
     deps += [ "//third_party/freetype2" ]
   }
 
@@ -412,17 +425,21 @@ if (!is_android && !is_mac) {
       "app/shell_main.cc",
     ]
 
+    defines = []
+
     deps = [
       ":content_shell_lib",
       ":pak",
-      "//base/allocator",
       "//build/config/sanitizers:deps",
       "//build/win:default_exe_manifest",
     ]
 
     if (is_win) {
       deps += [ "//sandbox" ]
-      if (!is_asan) {
+      if (win_console_app) {
+        defines += [ "WIN_CONSOLE_APP" ]
+      } else {
+        # Set /SUBSYSTEM:WINDOWS unless a console build has been requested.
         configs -= [ "//build/config/win:console" ]
         configs += [ "//build/config/win:windowed" ]
       }

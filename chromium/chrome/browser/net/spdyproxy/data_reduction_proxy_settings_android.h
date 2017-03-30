@@ -12,7 +12,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/prefs/pref_member.h"
+#include "components/prefs/pref_member.h"
 
 using base::android::ScopedJavaLocalRef;
 
@@ -93,6 +93,11 @@ class DataReductionProxySettingsAndroid {
   // done by keeping a count of requests which go through proxy vs those
   // which should have gone through the proxy based on the config.
   jboolean IsDataReductionProxyUnreachable(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+
+  // Return if Lo-Fi previews are enabled via a field trial or the command line.
+  jboolean AreLoFiPreviewsEnabled(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
 

@@ -22,7 +22,7 @@
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/origin_util.h"
 #include "ipc/ipc_message.h"
-#include "net/base/net_util.h"
+#include "net/base/url_util.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_interceptor.h"
 #include "storage/browser/blob/blob_storage_context.h"
@@ -230,6 +230,13 @@ void ServiceWorkerRequestHandler::MaybeCompleteCrossSiteTransferInOldProcess(
     return;
   }
   CompleteCrossSiteTransfer(old_process_id_, old_provider_id_);
+}
+
+bool ServiceWorkerRequestHandler::SanityCheckIsSameContext(
+    ServiceWorkerContextWrapper* wrapper) {
+  if (!wrapper)
+    return !context_;
+  return context_.get() == wrapper->context();
 }
 
 ServiceWorkerRequestHandler::~ServiceWorkerRequestHandler() {

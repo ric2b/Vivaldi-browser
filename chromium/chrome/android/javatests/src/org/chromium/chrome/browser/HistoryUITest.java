@@ -4,29 +4,28 @@
 
 package org.chromium.chrome.browser;
 
-import android.app.Dialog;
-import android.support.v7.app.AlertDialog;
+import android.os.Environment;
+import android.preference.PreferenceScreen;
 import android.test.suitebuilder.annotation.LargeTest;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.util.JsonReader;
-import android.widget.Button;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
+import org.chromium.chrome.browser.preferences.ButtonPreference;
 import org.chromium.chrome.browser.preferences.Preferences;
-import org.chromium.chrome.browser.preferences.privacy.ClearBrowsingDataDialogFragment;
+import org.chromium.chrome.browser.preferences.privacy.ClearBrowsingDataPreferences;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 import org.chromium.chrome.test.util.ActivityUtils;
-import org.chromium.chrome.test.util.TestHttpServerClient;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.JavaScriptUtils;
-import org.chromium.content.browser.test.util.TestTouchUtils;
+import org.chromium.net.test.EmbeddedTestServer;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -40,8 +39,23 @@ public class HistoryUITest extends ChromeActivityTestCaseBase<ChromeActivity> {
 
     private static final String HISTORY_URL = "chrome://history-frame/";
 
+    private EmbeddedTestServer mTestServer;
+
     public HistoryUITest() {
         super(ChromeActivity.class);
+    }
+
+    @Override
+    protected void setUp() throws Exception {
+        super.setUp();
+        mTestServer = EmbeddedTestServer.createAndStartFileServer(
+                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+    }
+
+    @Override
+    protected void tearDown() throws Exception {
+        mTestServer.stopAndDestroyServer();
+        super.tearDown();
     }
 
     @Override
@@ -137,8 +151,8 @@ public class HistoryUITest extends ChromeActivityTestCaseBase<ChromeActivity> {
     @Feature({"History"})
     public void testSearchHistory() throws InterruptedException, TimeoutException {
         // Introduce some entries in the history page.
-        loadUrl(TestHttpServerClient.getUrl("chrome/test/data/android/about.html"));
-        loadUrl(TestHttpServerClient.getUrl("chrome/test/data/android/get_title_test.html"));
+        loadUrl(mTestServer.getURL("/chrome/test/data/android/about.html"));
+        loadUrl(mTestServer.getURL("/chrome/test/data/android/get_title_test.html"));
         loadUrl(HISTORY_URL);
         waitForResultCount(getActivity().getCurrentContentViewCore(), 2);
 
@@ -171,8 +185,8 @@ public class HistoryUITest extends ChromeActivityTestCaseBase<ChromeActivity> {
         // Urls will be visited in reverse order to preserve the array ordering
         // in the history results.
         String[] testUrls = new String[] {
-                TestHttpServerClient.getUrl("chrome/test/data/android/google.html"),
-                TestHttpServerClient.getUrl("chrome/test/data/android/about.html"),
+                mTestServer.getURL("/chrome/test/data/android/google.html"),
+                mTestServer.getURL("/chrome/test/data/android/about.html"),
         };
 
         String[] testTitles = new String[testUrls.length];
@@ -206,8 +220,8 @@ public class HistoryUITest extends ChromeActivityTestCaseBase<ChromeActivity> {
     @Feature({"History"})
     public void testClearBrowsingData() throws InterruptedException, TimeoutException {
         // Introduce some entries in the history page.
-        loadUrl(TestHttpServerClient.getUrl("chrome/test/data/android/google.html"));
-        loadUrl(TestHttpServerClient.getUrl("chrome/test/data/android/about.html"));
+        loadUrl(mTestServer.getURL("/chrome/test/data/android/google.html"));
+        loadUrl(mTestServer.getURL("/chrome/test/data/android/about.html"));
         loadUrl(HISTORY_URL);
         waitForResultCount(getActivity().getCurrentContentViewCore(), 2);
 
@@ -228,23 +242,9 @@ public class HistoryUITest extends ChromeActivityTestCaseBase<ChromeActivity> {
                 });
         assertNotNull("Could not find the preferences activity", prefActivity);
 
-        final ClearBrowsingDataDialogFragment clearBrowsingFragment =
-                ActivityUtils.waitForFragment(
-                        prefActivity, ClearBrowsingDataDialogFragment.FRAGMENT_TAG);
+        final ClearBrowsingDataPreferences clearBrowsingFragment =
+                (ClearBrowsingDataPreferences) prefActivity.getFragmentForTest();
         assertNotNull("Could not find clear browsing data fragment", clearBrowsingFragment);
-
-        Dialog dialog = clearBrowsingFragment.getDialog();
-        final Button clearButton = ((AlertDialog) dialog).getButton(
-                AlertDialog.BUTTON_POSITIVE);
-        assertNotNull("Could not find Clear button.", clearButton);
-
-        TestTouchUtils.performClickOnMainSync(getInstrumentation(), clearButton);
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria("Clear browsing dialog never hidden") {
-            @Override
-            public boolean isSatisfied() {
-                return !clearBrowsingFragment.isVisible();
-            }
-        });
 
         final ChromeActivity mainActivity = ActivityUtils.waitForActivity(
                 getInstrumentation(), getActivity().getClass(), new Runnable() {
@@ -253,7 +253,13 @@ public class HistoryUITest extends ChromeActivityTestCaseBase<ChromeActivity> {
                         ThreadUtils.runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                prefActivity.finish();
+                                PreferenceScreen screen =
+                                        clearBrowsingFragment.getPreferenceScreen();
+                                ButtonPreference clearButton =
+                                        (ButtonPreference) screen.findPreference(
+                                              ClearBrowsingDataPreferences.PREF_CLEAR_BUTTON);
+                                clearButton.getOnPreferenceClickListener().onPreferenceClick(
+                                        clearButton);
                             }
                         });
                     }
@@ -262,7 +268,8 @@ public class HistoryUITest extends ChromeActivityTestCaseBase<ChromeActivity> {
         CriteriaHelper.pollForUIThreadCriteria(new Criteria("Main tab never restored") {
             @Override
             public boolean isSatisfied() {
-                return mainActivity.getActivityTab() != null
+                return !clearBrowsingFragment.isVisible()
+                        && mainActivity.getActivityTab() != null
                         && !mainActivity.getActivityTab().isFrozen();
             }
         });

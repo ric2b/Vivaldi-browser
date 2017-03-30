@@ -11,7 +11,6 @@
 #include "base/json/json_writer.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -28,6 +27,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/fake_auth_status_provider.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/sync_driver/sync_prefs.h"
@@ -313,12 +313,13 @@ TEST_F(PeopleHandlerTest, Basic) {
 #if !defined(OS_CHROMEOS)
 TEST_F(PeopleHandlerFirstSigninTest, DisplayBasicLogin) {
   EXPECT_CALL(*mock_pss_, CanSyncStart()).WillRepeatedly(Return(false));
-  EXPECT_CALL(*mock_pss_, HasSyncSetupCompleted())
-      .WillRepeatedly(Return(false));
+  EXPECT_CALL(*mock_pss_, IsFirstSetupComplete()).WillRepeatedly(Return(false));
   // Ensure that the user is not signed in before calling |HandleStartSignin()|.
   SigninManager* manager = static_cast<SigninManager*>(mock_signin_);
-  manager->SignOut(signin_metrics::SIGNOUT_TEST);
-  handler_->HandleStartSignin(NULL);
+  manager->SignOut(signin_metrics::SIGNOUT_TEST,
+                   signin_metrics::SignoutDelete::IGNORE_METRIC);
+  base::ListValue list_args;
+  handler_->HandleStartSignin(&list_args);
 
   // Sync setup hands off control to the gaia login tab.
   EXPECT_EQ(NULL,
@@ -335,8 +336,7 @@ TEST_F(PeopleHandlerFirstSigninTest, DisplayBasicLogin) {
 
 TEST_F(PeopleHandlerTest, ShowSyncSetupWhenNotSignedIn) {
   EXPECT_CALL(*mock_pss_, CanSyncStart()).WillRepeatedly(Return(false));
-  EXPECT_CALL(*mock_pss_, HasSyncSetupCompleted())
-      .WillRepeatedly(Return(false));
+  EXPECT_CALL(*mock_pss_, IsFirstSetupComplete()).WillRepeatedly(Return(false));
   handler_->HandleShowSetupUI(NULL);
 
   // We expect a call to settings.SyncPrivateApi.showSyncSetupPage.
@@ -368,8 +368,7 @@ TEST_F(PeopleHandlerTest, HandleSetupUIWhenSyncDisabled) {
 // it is displaying the spinner to the user.
 TEST_F(PeopleHandlerTest, DisplayConfigureWithBackendDisabledAndCancel) {
   EXPECT_CALL(*mock_pss_, CanSyncStart()).WillRepeatedly(Return(true));
-  EXPECT_CALL(*mock_pss_, HasSyncSetupCompleted())
-      .WillRepeatedly(Return(false));
+  EXPECT_CALL(*mock_pss_, IsFirstSetupComplete()).WillRepeatedly(Return(false));
   error_ = GoogleServiceAuthError::AuthErrorNone();
   EXPECT_CALL(*mock_pss_, IsBackendInitialized()).WillRepeatedly(Return(false));
 
@@ -392,14 +391,13 @@ TEST_F(PeopleHandlerTest, DisplayConfigureWithBackendDisabledAndCancel) {
 TEST_F(PeopleHandlerTest,
        DisplayConfigureWithBackendDisabledAndSyncStartupCompleted) {
   EXPECT_CALL(*mock_pss_, CanSyncStart()).WillRepeatedly(Return(true));
-  EXPECT_CALL(*mock_pss_, HasSyncSetupCompleted())
-      .WillRepeatedly(Return(false));
+  EXPECT_CALL(*mock_pss_, IsFirstSetupComplete()).WillRepeatedly(Return(false));
   error_ = GoogleServiceAuthError::AuthErrorNone();
   // Sync backend is stopped initially, and will start up.
   EXPECT_CALL(*mock_pss_, IsBackendInitialized()).WillRepeatedly(Return(false));
   SetDefaultExpectationsForConfigPage();
 
-  handler_->OpenSyncSetup(nullptr);
+  handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
   // We expect a call to settings.SyncPrivateApi.showSyncSetupPage.
   EXPECT_EQ(1U, web_ui_.call_data().size());
@@ -441,14 +439,13 @@ TEST_F(PeopleHandlerTest,
 TEST_F(PeopleHandlerTest,
        DisplayConfigureWithBackendDisabledAndCancelAfterSigninSuccess) {
   EXPECT_CALL(*mock_pss_, CanSyncStart()).WillRepeatedly(Return(true));
-  EXPECT_CALL(*mock_pss_, HasSyncSetupCompleted())
-      .WillRepeatedly(Return(false));
+  EXPECT_CALL(*mock_pss_, IsFirstSetupComplete()).WillRepeatedly(Return(false));
   error_ = GoogleServiceAuthError::AuthErrorNone();
   EXPECT_CALL(*mock_pss_, IsBackendInitialized())
       .WillOnce(Return(false))
       .WillRepeatedly(Return(true));
   SetDefaultExpectationsForConfigPage();
-  handler_->OpenSyncSetup(nullptr);
+  handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
   // It's important to tell sync the user cancelled the setup flow before we
   // tell it we're through with the setup progress.
@@ -465,12 +462,11 @@ TEST_F(PeopleHandlerTest,
 TEST_F(PeopleHandlerTest,
        DisplayConfigureWithBackendDisabledAndSigninFailed) {
   EXPECT_CALL(*mock_pss_, CanSyncStart()).WillRepeatedly(Return(true));
-  EXPECT_CALL(*mock_pss_, HasSyncSetupCompleted())
-      .WillRepeatedly(Return(false));
+  EXPECT_CALL(*mock_pss_, IsFirstSetupComplete()).WillRepeatedly(Return(false));
   error_ = GoogleServiceAuthError::AuthErrorNone();
   EXPECT_CALL(*mock_pss_, IsBackendInitialized()).WillRepeatedly(Return(false));
 
-  handler_->OpenSyncSetup(nullptr);
+  handler_->OpenSyncSetup(false /* creating_supervised_user */);
   const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
   EXPECT_EQ("settings.SyncPrivateApi.showSyncSetupPage", data.function_name());
   std::string page;
@@ -499,10 +495,9 @@ TEST_F(PeopleHandlerNonCrosTest, HandleGaiaAuthFailure) {
   EXPECT_CALL(*mock_pss_, CanSyncStart()).WillRepeatedly(Return(false));
   EXPECT_CALL(*mock_pss_, HasUnrecoverableError())
       .WillRepeatedly(Return(false));
-  EXPECT_CALL(*mock_pss_, HasSyncSetupCompleted())
-      .WillRepeatedly(Return(false));
+  EXPECT_CALL(*mock_pss_, IsFirstSetupComplete()).WillRepeatedly(Return(false));
   // Open the web UI.
-  handler_->OpenSyncSetup(nullptr);
+  handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
   ASSERT_FALSE(handler_->is_configuring_sync());
 }
@@ -510,20 +505,18 @@ TEST_F(PeopleHandlerNonCrosTest, HandleGaiaAuthFailure) {
 // TODO(kochi): We need equivalent tests for ChromeOS.
 TEST_F(PeopleHandlerNonCrosTest, UnrecoverableErrorInitializingSync) {
   EXPECT_CALL(*mock_pss_, CanSyncStart()).WillRepeatedly(Return(false));
-  EXPECT_CALL(*mock_pss_, HasSyncSetupCompleted())
-      .WillRepeatedly(Return(false));
+  EXPECT_CALL(*mock_pss_, IsFirstSetupComplete()).WillRepeatedly(Return(false));
   // Open the web UI.
-  handler_->OpenSyncSetup(nullptr);
+  handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
   ASSERT_FALSE(handler_->is_configuring_sync());
 }
 
 TEST_F(PeopleHandlerNonCrosTest, GaiaErrorInitializingSync) {
   EXPECT_CALL(*mock_pss_, CanSyncStart()).WillRepeatedly(Return(false));
-  EXPECT_CALL(*mock_pss_, HasSyncSetupCompleted())
-      .WillRepeatedly(Return(false));
+  EXPECT_CALL(*mock_pss_, IsFirstSetupComplete()).WillRepeatedly(Return(false));
   // Open the web UI.
-  handler_->OpenSyncSetup(nullptr);
+  handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
   ASSERT_FALSE(handler_->is_configuring_sync());
 }
@@ -752,7 +745,7 @@ TEST_F(PeopleHandlerTest, ShowSyncSetup) {
   SetupInitializedProfileSyncService();
   // This should display the sync setup dialog (not login).
   SetDefaultExpectationsForConfigPage();
-  handler_->OpenSyncSetup(nullptr);
+  handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
   ExpectConfig();
 }
@@ -787,7 +780,7 @@ TEST_F(PeopleHandlerTest, ShowSigninOnAuthError) {
 
   // On ChromeOS, this should display the spinner while we try to startup the
   // sync backend, and on desktop this displays the login dialog.
-  handler_->OpenSyncSetup(nullptr);
+  handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
   // Sync setup is closed when re-auth is in progress.
   EXPECT_EQ(NULL,
@@ -806,7 +799,7 @@ TEST_F(PeopleHandlerTest, ShowSetupSyncEverything) {
   SetupInitializedProfileSyncService();
   SetDefaultExpectationsForConfigPage();
   // This should display the sync setup dialog (not login).
-  handler_->OpenSyncSetup(nullptr);
+  handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
   ExpectConfig();
   const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
@@ -840,7 +833,7 @@ TEST_F(PeopleHandlerTest, ShowSetupManuallySyncAll) {
   sync_prefs.SetKeepEverythingSynced(false);
   SetDefaultExpectationsForConfigPage();
   // This should display the sync setup dialog (not login).
-  handler_->OpenSyncSetup(nullptr);
+  handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
   ExpectConfig();
   const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
@@ -867,7 +860,7 @@ TEST_F(PeopleHandlerTest, ShowSetupSyncForAllTypesIndividually) {
         WillRepeatedly(Return(types));
 
     // This should display the sync setup dialog (not login).
-    handler_->OpenSyncSetup(nullptr);
+    handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
     ExpectConfig();
     // Close the config overlay.
@@ -892,7 +885,7 @@ TEST_F(PeopleHandlerTest, ShowSetupGaiaPassphraseRequired) {
   SetDefaultExpectationsForConfigPage();
 
   // This should display the sync setup dialog (not login).
-  handler_->OpenSyncSetup(nullptr);
+  handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
   ExpectConfig();
   const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
@@ -914,7 +907,7 @@ TEST_F(PeopleHandlerTest, ShowSetupCustomPassphraseRequired) {
   SetDefaultExpectationsForConfigPage();
 
   // This should display the sync setup dialog (not login).
-  handler_->OpenSyncSetup(nullptr);
+  handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
   ExpectConfig();
   const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
@@ -936,7 +929,7 @@ TEST_F(PeopleHandlerTest, ShowSetupEncryptAll) {
       .WillRepeatedly(Return(true));
 
   // This should display the sync setup dialog (not login).
-  handler_->OpenSyncSetup(nullptr);
+  handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
   ExpectConfig();
   const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
@@ -956,7 +949,7 @@ TEST_F(PeopleHandlerTest, ShowSetupEncryptAllDisallowed) {
       .WillRepeatedly(Return(false));
 
   // This should display the sync setup dialog (not login).
-  handler_->OpenSyncSetup(nullptr);
+  handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
   ExpectConfig();
   const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];

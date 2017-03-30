@@ -35,12 +35,12 @@
 #include "core/dom/ExceptionCode.h"
 #include "modules/indexeddb/IDBDatabase.h"
 #include "modules/indexeddb/IDBDatabaseCallbacks.h"
-#include "modules/indexeddb/IDBHistograms.h"
 #include "modules/indexeddb/IDBKey.h"
 #include "modules/indexeddb/IDBTracing.h"
 #include "modules/indexeddb/IndexedDBClient.h"
 #include "modules/indexeddb/WebIDBCallbacksImpl.h"
 #include "modules/indexeddb/WebIDBDatabaseCallbacksImpl.h"
+#include "platform/Histogram.h"
 #include "platform/weborigin/DatabaseIdentifier.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
@@ -103,8 +103,8 @@ IDBOpenDBRequest* IDBFactory::open(ScriptState* scriptState, const String& name,
 
 IDBOpenDBRequest* IDBFactory::openInternal(ScriptState* scriptState, const String& name, int64_t version, ExceptionState& exceptionState)
 {
-    Platform::current()->histogramEnumeration("WebCore.IndexedDB.FrontEndAPICalls", IDBOpenCall, IDBMethodsMax);
-    ASSERT(version >= 1 || version == IDBDatabaseMetadata::NoIntVersion);
+    IDBDatabase::recordApiCallsHistogram(IDBOpenCall);
+    ASSERT(version >= 1 || version == IDBDatabaseMetadata::NoVersion);
     if (!isContextValid(scriptState->executionContext()))
         return nullptr;
     if (!scriptState->executionContext()->securityOrigin()->canAccessDatabase()) {
@@ -128,13 +128,13 @@ IDBOpenDBRequest* IDBFactory::openInternal(ScriptState* scriptState, const Strin
 IDBOpenDBRequest* IDBFactory::open(ScriptState* scriptState, const String& name, ExceptionState& exceptionState)
 {
     IDB_TRACE("IDBFactory::open");
-    return openInternal(scriptState, name, IDBDatabaseMetadata::NoIntVersion, exceptionState);
+    return openInternal(scriptState, name, IDBDatabaseMetadata::NoVersion, exceptionState);
 }
 
 IDBOpenDBRequest* IDBFactory::deleteDatabase(ScriptState* scriptState, const String& name, ExceptionState& exceptionState)
 {
     IDB_TRACE("IDBFactory::deleteDatabase");
-    Platform::current()->histogramEnumeration("WebCore.IndexedDB.FrontEndAPICalls", IDBDeleteDatabaseCall, IDBMethodsMax);
+    IDBDatabase::recordApiCallsHistogram(IDBDeleteDatabaseCall);
     if (!isContextValid(scriptState->executionContext()))
         return nullptr;
     if (!scriptState->executionContext()->securityOrigin()->canAccessDatabase()) {
@@ -142,7 +142,7 @@ IDBOpenDBRequest* IDBFactory::deleteDatabase(ScriptState* scriptState, const Str
         return nullptr;
     }
 
-    IDBOpenDBRequest* request = IDBOpenDBRequest::create(scriptState, nullptr, 0, IDBDatabaseMetadata::DefaultIntVersion);
+    IDBOpenDBRequest* request = IDBOpenDBRequest::create(scriptState, nullptr, 0, IDBDatabaseMetadata::DefaultVersion);
 
     if (!m_permissionClient->allowIndexedDB(scriptState->executionContext(), name)) {
         request->onError(DOMException::create(UnknownError, permissionDeniedErrorMessage));

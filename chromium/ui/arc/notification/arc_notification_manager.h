@@ -10,6 +10,7 @@
 
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_service.h"
 #include "components/arc/common/notifications.mojom.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -18,7 +19,8 @@ namespace arc {
 
 class ArcNotificationItem;
 
-class ArcNotificationManager : public ArcBridgeService::Observer,
+class ArcNotificationManager : public ArcService,
+                               public ArcBridgeService::Observer,
                                public NotificationsHost {
  public:
   ArcNotificationManager(ArcBridgeService* bridge_service,
@@ -27,6 +29,7 @@ class ArcNotificationManager : public ArcBridgeService::Observer,
 
   // ArcBridgeService::Observer implementation:
   void OnNotificationsInstanceReady() override;
+  void OnNotificationsInstanceClosed() override;
 
   // NotificationsHost implementation:
   void OnNotificationPosted(ArcNotificationDataPtr data) override;
@@ -35,14 +38,17 @@ class ArcNotificationManager : public ArcBridgeService::Observer,
   // Methods called from ArcNotificationItem:
   void SendNotificationRemovedFromChrome(const std::string& key);
   void SendNotificationClickedOnChrome(const std::string& key);
+  void SendNotificationButtonClickedOnChrome(
+      const std::string& key, int button_index);
 
  private:
-  ArcBridgeService* const arc_bridge_;
   const AccountId main_profile_id_;
 
   using ItemMap =
       base::ScopedPtrHashMap<std::string, scoped_ptr<ArcNotificationItem>>;
   ItemMap items_;
+
+  bool ready_ = false;
 
   mojo::Binding<arc::NotificationsHost> binding_;
 

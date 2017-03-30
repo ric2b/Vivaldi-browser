@@ -23,8 +23,8 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string16.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_worker_pool.h"
@@ -58,6 +58,7 @@
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "google_apis/gaia/identity_provider.h"
 #include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -71,6 +72,7 @@
 
 namespace autofill {
 
+using base::StartsWith;
 using base::TimeTicks;
 
 namespace {
@@ -96,6 +98,41 @@ bool SectionIsAutofilled(const FormStructure& form_structure,
   }
 
   return false;
+}
+
+// Returns the credit card field |value| trimmed from whitespace and with stop
+// characters removed.
+base::string16 SanitizeCreditCardFieldValue(const base::string16& value) {
+  base::string16 sanitized;
+  base::TrimWhitespace(value, base::TRIM_ALL, &sanitized);
+  // Some sites have ____-____-____-____ in their credit card number fields, for
+  // example.
+  base::ReplaceChars(sanitized, base::ASCIIToUTF16("-_"),
+                     base::ASCIIToUTF16(""), &sanitized);
+  return sanitized;
+}
+
+// If |name| consists of three whitespace-separated parts and the second of the
+// three parts is a single character or a single character followed by a period,
+// returns the result of joining the first and third parts with a space.
+// Otherwise, returns |name|.
+//
+// Note that a better way to do this would be to use SplitName from
+// src/components/autofill/core/browser/contact_info.cc. However, for now we
+// want the logic of which variations of names are considered to be the same to
+// exactly match the logic applied on the Payments server.
+base::string16 RemoveMiddleInitial(const base::string16& name) {
+  std::vector<base::string16> parts =
+      base::SplitString(name, base::kWhitespaceUTF16, base::KEEP_WHITESPACE,
+                        base::SPLIT_WANT_NONEMPTY);
+  if (parts.size() == 3 && (parts[1].length() == 1 ||
+                            (parts[1].length() == 2 &&
+                             base::EndsWith(parts[1], base::ASCIIToUTF16("."),
+                                            base::CompareCase::SENSITIVE)))) {
+    parts.erase(parts.begin() + 1);
+    return base::JoinString(parts, base::ASCIIToUTF16(" "));
+  }
+  return name;
 }
 
 }  // namespace
@@ -266,8 +303,6 @@ bool AutofillManager::OnFormSubmitted(const FormData& form) {
   if (submitted_form->IsAutofillable())
     ImportFormData(*submitted_form);
 
-  recently_unmasked_cards_.clear();
-
   return true;
 }
 
@@ -389,7 +424,9 @@ void AutofillManager::OnQueryFormFieldAutofill(int query_id,
 
   std::vector<Suggestion> suggestions;
 
-  external_delegate_->OnQuery(query_id, form, field, bounding_box);
+  gfx::RectF transformed_box =
+      driver_->TransformBoundingBoxToViewportCoordinates(bounding_box);
+  external_delegate_->OnQuery(query_id, form, field, transformed_box);
 
   // Need to refresh models before using the form_event_loggers.
   bool is_autofill_possible = RefreshDataModels();
@@ -763,7 +800,7 @@ void AutofillManager::OnSetDataList(const std::vector<base::string16>& values,
 }
 
 void AutofillManager::OnLoadedServerPredictions(
-    std::string response_xml,
+    std::string response,
     const std::vector<std::string>& form_signatures) {
   // We obtain the current valid FormStructures represented by
   // |form_signatures|. We invert both lists because most recent forms are at
@@ -785,7 +822,7 @@ void AutofillManager::OnLoadedServerPredictions(
     return;
 
   // Parse and store the server predictions.
-  FormStructure::ParseQueryResponse(std::move(response_xml), queried_forms,
+  FormStructure::ParseQueryResponse(std::move(response), queried_forms,
                                     client_->GetRapporService());
 
   // Forward form structures to the password generation manager to detect
@@ -821,7 +858,6 @@ void AutofillManager::OnDidGetRealPan(AutofillClient::PaymentsRpcResult result,
   if (!real_pan.empty()) {
     DCHECK_EQ(AutofillClient::SUCCESS, result);
     credit_card_form_event_logger_->OnDidFillSuggestion(unmask_request_.card);
-    recently_unmasked_cards_.push_back(unmask_request_.card);
     unmask_request_.card.set_record_type(CreditCard::FULL_SERVER_CARD);
     unmask_request_.card.SetNumber(base::UTF8ToUTF16(real_pan));
     if (!unmask_request_.user_response.exp_month.empty()) {
@@ -929,7 +965,10 @@ bool AutofillManager::IsCreditCardUploadEnabled() {
 bool AutofillManager::ShouldUploadForm(const FormStructure& form) {
   return IsAutofillEnabled() && !driver_->IsOffTheRecord() &&
          form.ShouldBeParsed() &&
-         form.active_field_count() >= kRequiredFieldsForUpload;
+         (form.active_field_count() >= kRequiredFieldsForUpload ||
+          (form.all_fields_are_passwords() &&
+           form.active_field_count() >=
+               kRequiredFieldsForFormsWithOnlyPasswordFields));
 }
 
 void AutofillManager::ImportFormData(const FormStructure& submitted_form) {
@@ -965,83 +1004,157 @@ void AutofillManager::ImportFormData(const FormStructure& submitted_form) {
       }
     }
 
-    DumpAutofillData(imported_credit_card);
+    DumpAutofillData(!!imported_credit_card);
   }
 #endif  // ENABLE_FORM_DEBUG_DUMP
 
-  // If credit card information was submitted, we need to confirm whether to
-  // save it.
-  if (imported_credit_card) {
-    // Don't offer to save any cards that were recently unmasked.
-    for (const CreditCard& unmasked_card : recently_unmasked_cards_) {
-      if (unmasked_card.TypeAndLastFourDigits() ==
-          imported_credit_card->TypeAndLastFourDigits())
-        return;
-    }
+  // No card available to offer save or upload.
+  if (!imported_credit_card)
+    return;
 
+  if (!IsCreditCardUploadEnabled()) {
+    // This block will only be reached if we have observed a new card. In this
+    // case, ImportFormData will return false if the card matches one already
+    // stored.
+    client_->ConfirmSaveCreditCardLocally(
+        *imported_credit_card,
+        base::Bind(
+            base::IgnoreResult(&PersonalDataManager::SaveImportedCreditCard),
+            base::Unretained(personal_data_), *imported_credit_card));
+  } else {
+    // Whereas, because we pass IsCreditCardUploadEnabled() to ImportFormData,
+    // this block can be reached on observing either a new card or one already
+    // stored locally. We will offer to upload either kind.
     upload_request_ = payments::PaymentsClient::UploadRequestDetails();
-    if (!IsCreditCardUploadEnabled()) {
-      client_->ConfirmSaveCreditCardLocally(
-          *imported_credit_card,
-          base::Bind(
-              base::IgnoreResult(&PersonalDataManager::SaveImportedCreditCard),
-              base::Unretained(personal_data_), *imported_credit_card));
-    } else {
-      // Check for a CVC in order to determine whether we can prompt the user to
-      // upload their card.
-      for (const auto& field : submitted_form) {
-        if (field->Type().GetStorableType() == CREDIT_CARD_VERIFICATION_CODE) {
-          upload_request_.cvc = field->value;
-          break;
-        }
-      }
+    upload_request_.card = *imported_credit_card;
 
-      // Upload also requires recently used or modified profiles with matching
-      // names.
-      upload_request_.profiles =
-          GetProfilesForCreditCardUpload(*imported_credit_card);
-
-      // If the necessary conditions don't exist, do nothing. We could fall back
-      // to a local save here but we believe that sometimes offering upload and
-      // sometimes offering local save is a confusing user experience.
-      if (!upload_request_.cvc.empty() && !upload_request_.profiles.empty()) {
-        upload_request_.card = *imported_credit_card;
-        payments_client_->GetUploadDetails(app_locale_);
-      } else if (upload_request_.cvc.empty()) {
-        AutofillMetrics::LogCardUploadDecisionMetric(
-            AutofillMetrics::UPLOAD_NOT_OFFERED_NO_CVC);
-      } else {
-        AutofillMetrics::LogCardUploadDecisionMetric(
-            AutofillMetrics::UPLOAD_NOT_OFFERED_NO_ADDRESS);
+    // Check for a CVC to determine whether we can prompt the user to upload
+    // their card. If no CVC is present, do nothing. We could fall back to a
+    // local save but we believe that sometimes offering upload and sometimes
+    // offering local save is a confusing user experience.
+    for (const AutofillField* field : submitted_form) {
+      if (field->Type().GetStorableType() == CREDIT_CARD_VERIFICATION_CODE) {
+        upload_request_.cvc = field->value;
+        break;
       }
     }
+    if (upload_request_.cvc.empty()) {
+      AutofillMetrics::LogCardUploadDecisionMetric(
+          AutofillMetrics::UPLOAD_NOT_OFFERED_NO_CVC);
+      return;
+    }
+
+    // Upload also requires recently used or modified addresses that meet the
+    // client-side validation rules.
+    if (!GetProfilesForCreditCardUpload(*imported_credit_card,
+                                        &upload_request_.profiles)) {
+      return;
+    }
+
+    // All required data is available, start the upload process.
+    payments_client_->GetUploadDetails(app_locale_);
   }
 }
 
-std::vector<AutofillProfile> AutofillManager::GetProfilesForCreditCardUpload(
-    const CreditCard& card) {
-  std::vector<AutofillProfile> profiles;
+bool AutofillManager::GetProfilesForCreditCardUpload(
+    const CreditCard& card,
+    std::vector<AutofillProfile>* profiles) const {
+  std::vector<AutofillProfile> candidate_profiles;
   const base::Time now = base::Time::Now();
   const base::TimeDelta fifteen_minutes = base::TimeDelta::FromMinutes(15);
 
+  // First, collect all of the addresses used recently.
   for (AutofillProfile* profile : personal_data_->GetProfiles()) {
-    if ((now - profile->use_date()) > fifteen_minutes &&
-        (now - profile->modification_date()) > fifteen_minutes) {
-      continue;
+    if ((now - profile->use_date()) < fifteen_minutes ||
+        (now - profile->modification_date()) < fifteen_minutes) {
+      candidate_profiles.push_back(*profile);
     }
-
-    if (profile->GetInfo(AutofillType(NAME_FULL), app_locale_) !=
-        card.GetInfo(AutofillType(CREDIT_CARD_NAME), app_locale_)) {
-      continue;
-    }
-
-    if (profile->GetRawInfo(ADDRESS_HOME_ZIP).empty())
-      continue;
-
-    profiles.push_back(*profile);
+  }
+  if (candidate_profiles.empty()) {
+    AutofillMetrics::LogCardUploadDecisionMetric(
+        AutofillMetrics::UPLOAD_NOT_OFFERED_NO_ADDRESS);
+    return false;
   }
 
-  return profiles;
+  // If any of the names on the card or the addresses don't match (where
+  // matching is case insensitive and ignores middle initials if present), the
+  // candidate set is invalid. This matches the rules for name matching applied
+  // server-side by Google Payments and ensures that we don't send upload
+  // requests that are guaranteed to fail.
+  base::string16 verified_name;
+  base::string16 card_name =
+      card.GetInfo(AutofillType(CREDIT_CARD_NAME), app_locale_);
+  if (!card_name.empty()) {
+    verified_name = RemoveMiddleInitial(card_name);
+  }
+  for (const AutofillProfile& profile : candidate_profiles) {
+    base::string16 address_name =
+        profile.GetInfo(AutofillType(NAME_FULL), app_locale_);
+    if (!address_name.empty()) {
+      if (verified_name.empty()) {
+        verified_name = RemoveMiddleInitial(address_name);
+      } else {
+        // TODO(crbug.com/590307): We only use ASCII case insensitivity here
+        // because the feature is launching US-only and middle initials only
+        // make sense for Western-style names anyway. As we launch in more
+        // countries, we'll need to make the name comparison more sophisticated.
+        if (!base::EqualsCaseInsensitiveASCII(
+                verified_name, RemoveMiddleInitial(address_name))) {
+          AutofillMetrics::LogCardUploadDecisionMetric(
+              AutofillMetrics::UPLOAD_NOT_OFFERED_CONFLICTING_NAMES);
+          return false;
+        }
+      }
+    }
+  }
+  // If neither the card nor any of the addresses have a name associated with
+  // them, the candidate set is invalid.
+  if (verified_name.empty()) {
+    AutofillMetrics::LogCardUploadDecisionMetric(
+        AutofillMetrics::UPLOAD_NOT_OFFERED_NO_NAME);
+    return false;
+  }
+
+  // If any of the candidate addresses have a non-empty zip that doesn't match
+  // any other non-empty zip, then the candidate set is invalid.
+  base::string16 verified_zip;
+  for (const AutofillProfile& profile : candidate_profiles) {
+    // TODO(jdonnelly): Use GetInfo instead of GetRawInfo once zip codes are
+    // canonicalized. See http://crbug.com/587465.
+    base::string16 zip = profile.GetRawInfo(ADDRESS_HOME_ZIP);
+    if (!zip.empty()) {
+      if (verified_zip.empty()) {
+        verified_zip = zip;
+      } else {
+        // To compare two zips, we check to see if either is a prefix of the
+        // other. This allows us to consider a 5-digit zip and a zip+4 to be a
+        // match if the first 5 digits are the same without hardcoding any
+        // specifics of how postal codes are represented. (They can be numeric
+        // or alphanumeric and vary from 3 to 10 digits long by country. See
+        // https://en.wikipedia.org/wiki/Postal_code#Presentation.) The Payments
+        // backend will apply a more sophisticated address-matching procedure.
+        // This check is simply meant to avoid offering upload in cases that are
+        // likely to fail.
+        if (!(StartsWith(verified_zip, zip, base::CompareCase::SENSITIVE) ||
+              StartsWith(zip, verified_zip, base::CompareCase::SENSITIVE))) {
+          AutofillMetrics::LogCardUploadDecisionMetric(
+              AutofillMetrics::UPLOAD_NOT_OFFERED_CONFLICTING_ZIPS);
+          return false;
+        }
+      }
+    }
+  }
+
+  // If none of the candidate addresses have a zip, the candidate set is
+  // invalid.
+  if (verified_zip.empty()) {
+    AutofillMetrics::LogCardUploadDecisionMetric(
+        AutofillMetrics::UPLOAD_NOT_OFFERED_NO_ZIP_CODE);
+    return false;
+  }
+
+  profiles->assign(candidate_profiles.begin(), candidate_profiles.end());
+  return true;
 }
 
 // Note that |submitted_form| is passed as a pointer rather than as a reference
@@ -1526,8 +1639,11 @@ std::vector<Suggestion> AutofillManager::GetProfileSuggestions(
 std::vector<Suggestion> AutofillManager::GetCreditCardSuggestions(
     const FormFieldData& field,
     const AutofillType& type) const {
+  // The field value is sanitized before attempting to match it to the user's
+  // data.
   std::vector<Suggestion> suggestions =
-      personal_data_->GetCreditCardSuggestions(type, field.value);
+      personal_data_->GetCreditCardSuggestions(
+          type, SanitizeCreditCardFieldValue(field.value));
   for (size_t i = 0; i < suggestions.size(); i++) {
     suggestions[i].frontend_id =
         MakeFrontendID(suggestions[i].backend_id, std::string());

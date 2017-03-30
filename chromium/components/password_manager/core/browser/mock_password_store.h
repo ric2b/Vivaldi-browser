@@ -12,6 +12,7 @@
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/statistics_table.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "url/origin.h"
 
 namespace password_manager {
 
@@ -20,10 +21,8 @@ class MockPasswordStore : public PasswordStore {
   MockPasswordStore();
 
   MOCK_METHOD1(RemoveLogin, void(const autofill::PasswordForm&));
-  MOCK_METHOD3(GetLogins,
-               void(const autofill::PasswordForm&,
-                    PasswordStore::AuthorizationPromptPolicy prompt_policy,
-                    PasswordStoreConsumer*));
+  MOCK_METHOD2(GetLogins,
+               void(const autofill::PasswordForm&, PasswordStoreConsumer*));
   MOCK_METHOD1(AddLogin, void(const autofill::PasswordForm&));
   MOCK_METHOD1(UpdateLogin, void(const autofill::PasswordForm&));
   MOCK_METHOD2(UpdateLoginWithPrimaryKey,
@@ -37,15 +36,19 @@ class MockPasswordStore : public PasswordStore {
                PasswordStoreChangeList(const autofill::PasswordForm&));
   MOCK_METHOD1(RemoveLoginImpl,
                PasswordStoreChangeList(const autofill::PasswordForm&));
+  MOCK_METHOD3(RemoveLoginsByOriginAndTimeImpl,
+               PasswordStoreChangeList(const url::Origin&,
+                                       base::Time,
+                                       base::Time));
   MOCK_METHOD2(RemoveLoginsCreatedBetweenImpl,
                PasswordStoreChangeList(base::Time, base::Time));
   MOCK_METHOD2(RemoveLoginsSyncedBetweenImpl,
                PasswordStoreChangeList(base::Time, base::Time));
   MOCK_METHOD2(RemoveStatisticsCreatedBetweenImpl,
                bool(base::Time, base::Time));
+  MOCK_METHOD0(DisableAutoSignInForAllLoginsImpl, PasswordStoreChangeList());
   ScopedVector<autofill::PasswordForm> FillMatchingLogins(
-      const autofill::PasswordForm& form,
-      PasswordStore::AuthorizationPromptPolicy prompt_policy) override {
+      const autofill::PasswordForm& form) override {
     return ScopedVector<autofill::PasswordForm>();
   }
   MOCK_METHOD1(FillAutofillableLogins,

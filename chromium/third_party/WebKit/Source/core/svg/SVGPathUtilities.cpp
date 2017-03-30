@@ -35,8 +35,7 @@ bool buildPathFromString(const String& d, Path& result)
 
     SVGPathBuilder builder(result);
     SVGPathStringSource source(d);
-    SVGPathParser parser(&source, &builder);
-    return parser.parsePathDataFromSource(NormalizedParsing);
+    return SVGPathParser::parsePath(source, builder);
 }
 
 bool buildPathFromByteStream(const SVGPathByteStream& stream, Path& result)
@@ -46,8 +45,7 @@ bool buildPathFromByteStream(const SVGPathByteStream& stream, Path& result)
 
     SVGPathBuilder builder(result);
     SVGPathByteStreamSource source(stream);
-    SVGPathParser parser(&source, &builder);
-    return parser.parsePathDataFromSource(NormalizedParsing);
+    return SVGPathParser::parsePath(source, builder);
 }
 
 String buildStringFromByteStream(const SVGPathByteStream& stream)
@@ -57,26 +55,24 @@ String buildStringFromByteStream(const SVGPathByteStream& stream)
 
     SVGPathStringBuilder builder;
     SVGPathByteStreamSource source(stream);
-    SVGPathParser parser(&source, &builder);
-    parser.parsePathDataFromSource(UnalteredParsing);
+    SVGPathParser::parsePath(source, builder);
     return builder.result();
 }
 
-bool buildByteStreamFromString(const String& d, SVGPathByteStream& result)
+SVGParsingError buildByteStreamFromString(const String& d, SVGPathByteStream& result)
 {
     result.clear();
     if (d.isEmpty())
-        return true;
+        return SVGParseStatus::NoError;
 
     // The string length is typically a minor overestimate of eventual byte stream size, so it avoids us a lot of reallocs.
     result.reserveInitialCapacity(d.length());
 
     SVGPathByteStreamBuilder builder(result);
     SVGPathStringSource source(d);
-    SVGPathParser parser(&source, &builder);
-    bool ok = parser.parsePathDataFromSource(UnalteredParsing);
+    SVGPathParser::parsePath(source, builder);
     result.shrinkToFit();
-    return ok;
+    return source.parseError();
 }
 
-}
+} // namespace blink

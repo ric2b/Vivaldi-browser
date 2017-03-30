@@ -4,10 +4,10 @@
 #define EXTENSIONS_API_SETTINGS_API_H_
 
 #include "base/memory/ref_counted.h"
-#include "base/prefs/pref_change_registrar.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/web_ui.h"
 
 #include "extensions/schema/settings.h"

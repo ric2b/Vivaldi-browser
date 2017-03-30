@@ -13,11 +13,11 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
-        '../base/base.gyp:base_prefs',
         '../sync/sync.gyp:sync',
         '../url/url.gyp:url_lib',
         'bookmarks_browser',
         'history_core_browser',
+        'prefs/prefs.gyp:prefs',
         'sync_driver',
       ],
       'sources': [
@@ -60,6 +60,8 @@
         'sync_sessions/synced_window_delegates_getter.h',
         'sync_sessions/sync_sessions_client.cc',
         'sync_sessions/sync_sessions_client.h',
+        'sync_sessions/sync_sessions_metrics.cc',
+        'sync_sessions/sync_sessions_metrics.h',
         'sync_sessions/tab_node_pool.cc',
         'sync_sessions/tab_node_pool.h',
       ],

@@ -22,11 +22,15 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #include "app/vivaldi_resources.h"
+#include "importer/imported_speeddial_entry.h"
 #include "importer/viv_importer_utils.h"
 #include "importer/viv_importer.h"
 #include "base/strings/utf_string_conversions.h"
 
-bool ReadOperaIniFile(const base::FilePath &profile_dir,
+static const char OPERA_PREFS_NAME[] = "operaprefs.ini";
+static const char OPERA_SPEEDDIAL_NAME[] = "speeddial.ini";
+
+bool ReadOperaIniFile(const base::FilePath &file,
                       DictionaryValueINIParser& target);
 
 namespace viv_importer {
@@ -39,7 +43,7 @@ void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles) {
 #if defined(OS_WIN)
   opera.app_path = GetOperaInstallPathFromRegistry();
 #endif
-  opera.services_supported =
+  opera.services_supported = importer::SPEED_DIAL |
       importer::FAVORITES | importer::NOTES | importer::PASSWORDS /*|
           importer::HISTORY |
           importer::COOKIES |
@@ -47,7 +51,9 @@ void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles) {
 
   // Check if this profile need the master password
   DictionaryValueINIParser inifile_parser;
-  if (ReadOperaIniFile(opera.source_path, inifile_parser)) {
+  base::FilePath ini_file(opera.source_path);
+  ini_file = ini_file.AppendASCII(OPERA_PREFS_NAME);
+  if (ReadOperaIniFile(ini_file, inifile_parser)) {
     const base::DictionaryValue& inifile = inifile_parser.root();
     int val;
     inifile.GetInteger("Security Prefs.Use Paranoid Mailpassword", &val);
@@ -62,11 +68,10 @@ void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles) {
 bool ReadOperaIniFile(const base::FilePath &profile_dir,
                       DictionaryValueINIParser &target) {
   // profile_dir is likely not a directory but the prefs file, so check before
-  // appending
-  // and breaking import.
+  // appending and breaking import.
   base::FilePath file;
   if (base::DirectoryExists(profile_dir)) {
-    file = profile_dir.AppendASCII("operaprefs.ini");
+    file = profile_dir.AppendASCII(OPERA_PREFS_NAME);
   } else if (base::PathExists(profile_dir)) {
     file = profile_dir;
   }
@@ -87,8 +92,6 @@ OperaImporter::OperaImporter(const importer::ImportConfig &import_config)
 
 OperaImporter::~OperaImporter() {
 }
-
-static const char OPERA_PREFS_NAME[]= "operaprefs.ini";
 
 void OperaImporter::StartImport(const importer::SourceProfile &source_profile,
                                 uint16_t items, ImporterBridge *bridge) {
@@ -152,5 +155,47 @@ void OperaImporter::StartImport(const importer::SourceProfile &source_profile,
     ImportWand();
     bridge_->NotifyItemEnded(importer::PASSWORDS);
   }
+  if ((items & importer::SPEED_DIAL) && !cancelled()) {
+    bridge_->NotifyItemStarted(importer::SPEED_DIAL);
+    ImportSpeedDial();
+    bridge_->NotifyItemEnded(importer::SPEED_DIAL);
+  }
   bridge_->NotifyEnded();
+}
+
+void OperaImporter::ImportSpeedDial() {
+  std::vector<ImportedSpeedDialEntry> entries;
+  DictionaryValueINIParser inifile_parser;
+  base::FilePath ini_file(profile_dir_);
+  ini_file = ini_file.AppendASCII(OPERA_SPEEDDIAL_NAME);
+
+  if (ReadOperaIniFile(ini_file, inifile_parser)) {
+    for (base::DictionaryValue::Iterator itr(inifile_parser.root());
+         !itr.IsAtEnd(); itr.Advance()) {
+      const std::string& key = itr.key();
+
+      if (key.find("Speed Dial ") != std::string::npos) {
+        const base::DictionaryValue* dict = nullptr;
+        scoped_ptr<ImportedSpeedDialEntry> entry(new ImportedSpeedDialEntry);
+        if (itr.value().GetAsDictionary(&dict)) {
+          for (base::DictionaryValue::Iterator section(*dict);
+               !section.IsAtEnd(); section.Advance()) {
+            const std::string& section_key = section.key();
+            const base::Value& section_value = section.value();
+            if (section_key == "Title") {
+              section_value.GetAsString(&entry->title);
+            } else if (section_key == "Url") {
+              std::string url;
+              section_value.GetAsString(&url);
+              entry->url = GURL(url);
+            }
+          }
+          entries.push_back(*entry.release());
+        }
+      }
+    }
+  }
+  if (!entries.empty() && !cancelled()) {
+    bridge_->AddSpeedDial(entries);
+  }
 }

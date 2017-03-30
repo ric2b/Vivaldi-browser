@@ -20,13 +20,15 @@ void DesktopMediaPickerCocoa::Show(content::WebContents* web_contents,
                                    const base::string16& app_name,
                                    const base::string16& target_name,
                                    scoped_ptr<DesktopMediaList> media_list,
+                                   bool request_audio,
                                    const DoneCallback& done_callback) {
   controller_.reset([[DesktopMediaPickerController alloc]
       initWithMediaList:std::move(media_list)
                  parent:parent
                callback:done_callback
                 appName:app_name
-             targetName:target_name]);
+             targetName:target_name
+           requestAudio:request_audio]);
   [controller_ showWindow:nil];
 }
 

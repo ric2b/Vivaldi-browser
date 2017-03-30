@@ -20,6 +20,7 @@
 #include "ios/web/public/web_state/credential.h"
 #include "ios/web/public/web_state/url_verification_constants.h"
 #include "ios/web/public/web_state/web_state.h"
+#include "url/origin.h"
 
 namespace {
 
@@ -42,7 +43,7 @@ web::Credential WebCredentialFromCredentialInfo(
   credential.name = credential_info.name;
   credential.avatar_url = credential_info.icon;
   credential.password = credential_info.password;
-  credential.federation_url = credential_info.federation;
+  credential.federation_origin = credential_info.federation;
   return credential;
 }
 
@@ -68,7 +69,7 @@ password_manager::CredentialInfo CredentialInfoFromWebCredential(
   credential_info.name = credential.name;
   credential_info.icon = credential.avatar_url;
   credential_info.password = credential.password;
-  credential_info.federation = credential.federation_url;
+  credential_info.federation = credential.federation_origin;
   return credential_info;
 }
 
@@ -87,7 +88,8 @@ CredentialManager::CredentialManager(
       driver_(driver),
       weak_factory_(this) {
   zero_click_sign_in_enabled_.Init(
-      password_manager::prefs::kPasswordManagerAutoSignin, client_->GetPrefs());
+      password_manager::prefs::kCredentialsEnableAutosignin,
+      client_->GetPrefs());
 }
 
 CredentialManager::~CredentialManager() = default;
@@ -159,7 +161,7 @@ void CredentialManager::CredentialsRequested(
   std::vector<std::string> realms;
   pending_request_.reset(
       new password_manager::CredentialManagerPendingRequestTask(
-          this, request_id, zero_click_only, page_url, federation_urls,
+          this, request_id, zero_click_only, page_url, true, federation_urls,
           realms));
   store->GetAutofillableLogins(pending_request_.get());
 }

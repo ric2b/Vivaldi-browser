@@ -106,6 +106,12 @@ const char kAuthExtensionPath[]             = "auth-ext-path";
 // Whitelist for Negotiate Auth servers
 const char kAuthServerWhitelist[]           = "auth-server-whitelist";
 
+// This flag makes Chrome auto-open DevTools window for each tab. It is
+// intended to be used by developers and automation to not require user
+// interaction for opening DevTools.
+const char kAutoOpenDevToolsForTabs[] =
+    "auto-open-devtools-for-tabs";
+
 // This flag makes Chrome auto-select the provided choice when an extension asks
 // permission to start desktop capture. Should only be used for tests. For
 // instance, --auto-select-desktop-capture-source="Entire screen" will
@@ -271,8 +277,8 @@ const char kDisableExtensionsHttpThrottling[] =
 // Disable field trial tests configured in fieldtrial_testing_config.json.
 const char kDisableFieldTrialTestingConfig[] = "disable-field-trial-config";
 
-// Disables the Material Design version of chrome://downloads.
-const char kDisableMaterialDesignDownloads[] = "disable-md-downloads";
+// Disable HTTP/2 and SPDY/3.1 protocols.
+const char kDisableHttp2[]                   = "disable-http2";
 
 // Disable the behavior that the second click on a launcher item (the click when
 // the item is already active) minimizes the item.
@@ -417,9 +423,6 @@ const char kEnableExtensionActivityLogTesting[] =
 // crbug.com/142458 .
 const char kEnableFastUnload[] = "enable-fast-unload";
 
-// Enables the Material Design version of chrome://downloads.
-const char kEnableMaterialDesignDownloads[] = "enable-md-downloads";
-
 // Enables the Material Design version of chrome://extensions.
 const char kEnableMaterialDesignExtensions[] = "enable-md-extensions";
 
@@ -512,12 +515,6 @@ const char kEnableSessionCrashedBubble[] = "enable-session-crashed-bubble";
 const char kEnableSettingsWindow[]           = "enable-settings-window";
 const char kDisableSettingsWindow[]          = "disable-settings-window";
 
-// A new user experience for transitioning into fullscreen and mouse pointer
-// lock states.
-const char kEnableSimplifiedFullscreenUI[]  = "enable-simplified-fullscreen-ui";
-const char kDisableSimplifiedFullscreenUI[] =
-    "disable-simplified-fullscreen-ui";
-
 // Enable the Site Engagement App Banner which triggers app install banners
 // using the site engagement service rather than a navigation-based heuristic.
 // Implicitly enables the site engagement service.
@@ -588,11 +585,11 @@ const char kFastStart[]            = "fast-start";
 const char kForceAppMode[]                  = "force-app-mode";
 
 // This option can be used to force parameters of field trials when testing
-// changes locally. The argument is a list of key/value pairs prefixed by
-// Trial/Group pair. The following shows setting parameters to 2 experiments
-// where in the first, it forces "id" to be "foo" for the "Enabled" group of
-// the "EnhancedBookmarks" trial:
-// "EnhancedBookmarks.Enabled:id/foo,Experiment2.Group1:key1/value1"
+// changes locally. The argument is a param list of (key, value) pairs prefixed
+// by an associated (trial, group) pair. You specify the param list for multiple
+// (trial, group) pairs with a comma separator.
+// Example:
+//   "Trial1.Group1:k1/v1/k2/v2,Trial2.Group2:k3/v3/k4/v4"
 // Trial names, groups names, parameter names, and value should all be URL
 // escaped for all non-alphanumeric characters.
 const char kForceFieldTrialParams[] = "force-fieldtrial-params";
@@ -995,14 +992,6 @@ const char kSpeculativeResourcePrefetchingEnabled[] = "enabled";
 const char kEnableAndroidSpellChecker[] = "enable-android-spellchecker";
 #endif
 
-// Disables the multilingual spellchecker.
-const char kDisableMultilingualSpellChecker[] =
-    "disable-multilingual-spellchecker";
-
-// Enables the multilingual spellchecker.
-const char kEnableMultilingualSpellChecker[] =
-    "enable-multilingual-spellchecker";
-
 // Enables participation in the field trial for user feedback to spelling
 // service.
 const char kEnableSpellingFeedbackFieldTrial[] =
@@ -1046,10 +1035,6 @@ const char kSystemLogUploadFrequency[] = "system-log-upload-frequency";
 // Passes the name of the current running automated test to Chrome.
 const char kTestName[]                      = "test-name";
 
-// Disables same-origin check on HTTP resources pushed via a SPDY proxy.
-// The value is the host:port of the trusted proxy.
-const char kTrustedSpdyProxy[]              = "trusted-spdy-proxy";
-
 // Experimental. Shows a dialog asking the user to try chrome. This flag is to
 // be used only by the upgrade process.
 const char kTryChromeAgain[]                = "try-chrome-again";
@@ -1065,10 +1050,6 @@ const char kUnlimitedStorage[]              = "unlimited-storage";
 // --user-data-dir=/test/only/profile/dir
 const char kUnsafelyTreatInsecureOriginAsSecure[] =
     "unsafely-treat-insecure-origin-as-secure";
-
-// Uses Spdy for the transport protocol instead of HTTP. This is a temporary
-// testing flag.
-const char kUseSpdy[]                       = "use-spdy";
 
 // A string used to override the default user agent with a custom one.
 const char kUserAgent[]                     = "user-agent";
@@ -1231,14 +1212,6 @@ const char kRelauncherProcessDMGDevice[]    = "dmg-device";
 #endif  // defined(OS_MACOSX)
 
 #if defined(OS_WIN)
-// A process type (switches::kProcessType) that indicates chrome.exe is being
-// launched as crashpad_handler. This is only used on Windows. We bundle the
-// handler into chrome.exe on Windows because there is high probability of a
-// "new" .exe being blocked or interfered with by application firewalls, AV
-// software, etc. On other platforms, crashpad_handler is a standalone
-// executable.
-const char kCrashpadHandler[]               = "crashpad-handler";
-
 // Fallback to XPS. By default connector uses CDD.
 const char kEnableCloudPrintXps[]           = "enable-cloud-print-xps";
 
@@ -1343,7 +1316,19 @@ const char kForceShowUpdateMenuBadge[] = "force-show-update-menu-badge";
 
 // Sets the market URL for Chrome for use in testing.
 const char kMarketUrlForTesting[] = "market-url-for-testing";
-#endif // defined(OS_ANDROID)
+
+// Specifies a particular tab management experiment to enable.
+const char kTabManagementExperimentTypeDisabled[] =
+    "tab-management-experiment-type-disabled";
+const char kTabManagementExperimentTypeAnise[] =
+    "tab-management-experiment-type-anise";
+const char kTabManagementExperimentTypeBasil[] =
+    "tab-management-experiment-type-basil";
+const char kTabManagementExperimentTypeChive[] =
+    "tab-management-experiment-type-chive";
+const char kTabManagementExperimentTypeDill[] =
+    "tab-management-experiment-type-dill";
+#endif  // defined(OS_ANDROID)
 
 #if defined(OS_WIN) || defined(OS_LINUX)
 extern const char kEnableInputImeAPI[] = "enable-input-ime-api";

@@ -33,7 +33,8 @@ enum ImportItem {
   AUTOFILL_FORM_DATA = 1 << 6,
   NOTES              = 1 << 7,
   MASTER_PASSWORD    = 1 << 8, // Requires a master password
-  ALL                = (1 << 8) - 1  // All the bits should be 1, hence the -1.
+  SPEED_DIAL         = 1 << 9, // Speed Dials
+  ALL                = (1 << 9) - 1  // All the bits should be 1, hence the -1.
 };
 
 // Contains information needed for importing bookmarks/search engine urls, etc.
@@ -45,6 +46,7 @@ struct ChromeProfileInfo {
 // Information about a profile needed by an importer to do import work.
 struct SourceProfile {
   SourceProfile();
+  SourceProfile(const SourceProfile& other);
   ~SourceProfile();
 
   base::string16 importer_name;

@@ -44,6 +44,8 @@ component("bluetooth") {
     "bluetooth_channel_mac.mm",
     "bluetooth_classic_device_mac.h",
     "bluetooth_classic_device_mac.mm",
+    "bluetooth_classic_win.cc",
+    "bluetooth_classic_win.h",
     "bluetooth_device.cc",
     "bluetooth_device.h",
     "bluetooth_device_android.cc",
@@ -87,10 +89,14 @@ component("bluetooth") {
     "bluetooth_low_energy_win.h",
     "bluetooth_remote_gatt_characteristic_android.cc",
     "bluetooth_remote_gatt_characteristic_android.h",
+    "bluetooth_remote_gatt_characteristic_win.cc",
+    "bluetooth_remote_gatt_characteristic_win.h",
     "bluetooth_remote_gatt_descriptor_android.cc",
     "bluetooth_remote_gatt_descriptor_android.h",
     "bluetooth_remote_gatt_service_android.cc",
     "bluetooth_remote_gatt_service_android.h",
+    "bluetooth_remote_gatt_service_win.cc",
+    "bluetooth_remote_gatt_service_win.h",
     "bluetooth_rfcomm_channel_mac.h",
     "bluetooth_rfcomm_channel_mac.mm",
     "bluetooth_service_record_win.cc",
@@ -211,8 +217,6 @@ component("bluetooth") {
         "dbus/bluez_dbus_client.h",
         "dbus/bluez_dbus_manager.cc",
         "dbus/bluez_dbus_manager.h",
-        "dbus/dbus_thread_manager_linux.cc",
-        "dbus/dbus_thread_manager_linux.h",
         "dbus/fake_bluetooth_adapter_client.cc",
         "dbus/fake_bluetooth_adapter_client.h",
         "dbus/fake_bluetooth_agent_manager_client.cc",
@@ -252,10 +256,23 @@ component("bluetooth") {
         "dbus/fake_bluetooth_profile_service_provider.cc",
         "dbus/fake_bluetooth_profile_service_provider.h",
       ]
-
+      if (is_linux) {
+        sources += [
+          "dbus/dbus_bluez_manager_wrapper_linux.cc",
+          "dbus/dbus_bluez_manager_wrapper_linux.h",
+          "dbus/dbus_thread_manager_linux.cc",
+          "dbus/dbus_thread_manager_linux.h",
+        ]
+      }
       deps += [ "//dbus" ]
     } else {  # !use_dbus
       sources += [ "bluetooth_adapter_stub.cc" ]
+      if (is_linux) {
+        sources += [
+          "dbus/dbus_bluez_manager_wrapper_linux.h",
+          "dbus/dbus_bluez_manager_wrapper_stub_linux.cc",
+        ]
+      }
     }
   }
 }

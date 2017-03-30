@@ -67,6 +67,10 @@ class ConfiguratorImpl {
   // XML element.
   std::string ExtraRequestParams() const;
 
+  // Provides a hint for the server to control the order in which multiple
+  // download urls are returned.
+  std::string GetDownloadPreference() const;
+
   // The source of contexts for all the url requests.
   net::URLRequestContextGetter* RequestContext() const;
 
@@ -77,10 +81,8 @@ class ConfiguratorImpl {
   // non on-demand components.
   bool UseBackgroundDownloader() const;
 
-  // Setting this to false means that we'll only use secure transport (eg https)
-  // for update/ping urls. This is already false by default everywhere but older
-  // versions of Windows XP.
-  void set_enable_alt_source_url(bool enable_alt_source_url);
+  // True if signing of update checks is enabled.
+  bool UseCupSigning() const;
 
  private:
   net::URLRequestContextGetter* url_request_getter_;
@@ -90,7 +92,6 @@ class ConfiguratorImpl {
   bool pings_enabled_;
   bool deltas_enabled_;
   bool background_downloads_enabled_;
-  bool fallback_to_alt_source_url_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(ConfiguratorImpl);
 };

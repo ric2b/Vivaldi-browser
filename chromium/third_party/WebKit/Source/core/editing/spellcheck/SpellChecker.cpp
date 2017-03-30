@@ -209,7 +209,7 @@ void SpellChecker::advanceToNextMisspelling(bool startBeforeSelection)
     // and then forward by a word does the trick.
     if (startedWithSelection) {
         VisiblePosition oneBeforeStart = previousPositionOf(createVisiblePosition(spellingSearchStart));
-        if (oneBeforeStart.isNotNull() && rootEditableElementOf(oneBeforeStart) == editableRootForPosition(spellingSearchStart))
+        if (oneBeforeStart.isNotNull() && rootEditableElementOf(oneBeforeStart) == rootEditableElementOf(spellingSearchStart))
             spellingSearchStart = endOfWord(oneBeforeStart).toParentAnchoredPosition();
         // else we were already at the start of the editable node
     }
@@ -497,13 +497,13 @@ static EphemeralRange expandRangeToSentenceBoundary(const EphemeralRange& range)
     return expandEndToSentenceBoundary(EphemeralRange(sentenceStart.isNull() ? range.startPosition() : sentenceStart, range.endPosition()));
 }
 
-void SpellChecker::chunkAndMarkAllMisspellingsAndBadGrammar(Node* node)
+void SpellChecker::chunkAndMarkAllMisspellingsAndBadGrammar(Node* node, const EphemeralRange& insertedRange)
 {
     TRACE_EVENT0("blink", "SpellChecker::chunkAndMarkAllMisspellingsAndBadGrammar");
     if (!node)
         return;
-    RefPtrWillBeRawPtr<Range> rangeToCheck = Range::create(*frame().document(), firstPositionInNode(node), lastPositionInNode(node));
-    TextCheckingParagraph textToCheck(rangeToCheck, rangeToCheck);
+    EphemeralRange paragraphRange(firstPositionInNode(node), lastPositionInNode(node));
+    TextCheckingParagraph textToCheck(insertedRange, paragraphRange);
     chunkAndMarkAllMisspellingsAndBadGrammar(resolveTextCheckingTypeMask(TextCheckingTypeSpelling | TextCheckingTypeGrammar), textToCheck);
 }
 
@@ -920,6 +920,11 @@ DEFINE_TRACE(SpellChecker)
 {
     visitor->trace(m_frame);
     visitor->trace(m_spellCheckRequester);
+}
+
+void SpellChecker::prepareForLeakDetection()
+{
+    m_spellCheckRequester->prepareForLeakDetection();
 }
 
 } // namespace blink

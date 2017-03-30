@@ -32,9 +32,11 @@ WebInspector.ClassesPaneWidget.prototype = {
      */
     _onKeyDown: function(event)
     {
+        var text = event.target.value;
         if (isEscKey(event)) {
             event.target.value = "";
-            event.consume(true);
+            if (!text.isWhitespace())
+                event.consume(true);
             return;
         }
 
@@ -44,7 +46,6 @@ WebInspector.ClassesPaneWidget.prototype = {
         if (!node)
             return;
 
-        var text = event.target.value;
         event.target.value = "";
         var classNames = text.split(/[.,\s]/);
         for (var className of classNames) {
@@ -187,6 +188,7 @@ WebInspector.ClassesPaneWidget.ButtonProvider = function()
 {
     this._button = new WebInspector.ToolbarToggle(WebInspector.UIString("Element Classes"), "");
     this._button.setText(".cls");
+    this._button.element.classList.add("monospace");
     this._button.addEventListener("click", this._clicked, this);
     this._view = new WebInspector.ClassesPaneWidget(this.item());
     WebInspector.context.addFlavorChangeListener(WebInspector.DOMNode, this._nodeChanged, this);

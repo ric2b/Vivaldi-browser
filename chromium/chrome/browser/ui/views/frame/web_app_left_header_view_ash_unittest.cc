@@ -8,11 +8,11 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/values.h"
-#include "chrome/browser/ui/toolbar/test_toolbar_model.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view_ash.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/test_with_browser_view.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/toolbar/test_toolbar_model.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_constants.h"
@@ -26,9 +26,7 @@
 class WebAppLeftHeaderViewTest : public TestWithBrowserView {
  public:
   WebAppLeftHeaderViewTest()
-      : TestWithBrowserView(Browser::TYPE_TABBED,
-                            chrome::HOST_DESKTOP_TYPE_ASH,
-                            true),
+      : TestWithBrowserView(Browser::TYPE_TABBED, true),
         frame_view_(nullptr),
         test_toolbar_model_(nullptr) {}
   ~WebAppLeftHeaderViewTest() override {}
@@ -58,16 +56,12 @@ class WebAppLeftHeaderViewTest : public TestWithBrowserView {
   Browser* CreateBrowser(Profile* profile,
                          Browser::Type browser_type,
                          bool hosted_app,
-                         chrome::HostDesktopType host_desktop_type,
                          BrowserWindow* browser_window) override {
     RegisterExtension(profile);
 
-    Browser::CreateParams params(profile, host_desktop_type);
-    params = Browser::CreateParams::CreateForApp("_crx_abc",
-                                                 false /* trusted_source */,
-                                                 gfx::Rect(),
-                                                 profile,
-                                                 host_desktop_type);
+    Browser::CreateParams params(profile);
+    params = Browser::CreateParams::CreateForApp(
+        "_crx_abc", false /* trusted_source */, gfx::Rect(), profile);
     params.window = browser_window;
     return new Browser(params);
   }

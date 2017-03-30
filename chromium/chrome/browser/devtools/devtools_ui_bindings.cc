@@ -11,7 +11,6 @@
 #include "base/json/json_writer.h"
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -27,7 +26,6 @@
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_iterator.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -38,6 +36,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/syncable_prefs/pref_service_syncable.h"
 #include "components/ui/zoom/page_zoom.h"
 #include "content/public/browser/devtools_external_agent_proxy.h"
@@ -81,7 +80,6 @@ static const char kTitleFormat[] = "Developer Tools - %s";
 
 static const char kDevToolsActionTakenHistogram[] = "DevTools.ActionTaken";
 static const char kDevToolsPanelShownHistogram[] = "DevTools.PanelShown";
-static const char kDevtoolsDrawerShownHistogram[] = "DevTools.DrawerShown";
 
 static const char kRemotePageActionInspect[] = "inspect";
 static const char kRemotePageActionReload[] = "reload";
@@ -106,11 +104,11 @@ base::DictionaryValue* CreateFileSystemValue(
 }
 
 Browser* FindBrowser(content::WebContents* web_contents) {
-  for (chrome::BrowserIterator it; !it.done(); it.Next()) {
-    int tab_index = it->tab_strip_model()->GetIndexOfWebContents(
+  for (auto* browser : *BrowserList::GetInstance()) {
+    int tab_index = browser->tab_strip_model()->GetIndexOfWebContents(
         web_contents);
     if (tab_index != TabStripModel::kNoTab)
-      return *it;
+      return browser;
   }
   return NULL;
 }
@@ -931,8 +929,6 @@ void DevToolsUIBindings::RecordEnumeratedHistogram(const std::string& name,
     UMA_HISTOGRAM_ENUMERATION(name, sample, boundary_value);
   else if (name == kDevToolsPanelShownHistogram)
     UMA_HISTOGRAM_ENUMERATION(name, sample, boundary_value);
-  else if (name == kDevtoolsDrawerShownHistogram)
-    UMA_HISTOGRAM_ENUMERATION(name, sample, boundary_value);
   else
     frontend_host_->BadMessageRecieved();
 }
@@ -979,7 +975,7 @@ void DevToolsUIBindings::OnURLFetchComplete(const net::URLFetcher* source) {
   response.SetInteger("statusCode", rh ? rh->response_code() : 200);
   response.Set("headers", headers);
 
-  void* iterator = NULL;
+  size_t iterator = 0;
   std::string name;
   std::string value;
   while (rh && rh->EnumerateHeaderLines(&iterator, &name, &value))

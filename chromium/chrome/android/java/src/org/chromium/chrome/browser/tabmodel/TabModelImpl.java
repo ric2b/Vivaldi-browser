@@ -84,6 +84,12 @@ public class TabModelImpl extends TabModelJniBridge {
     }
 
     @Override
+    public void removeTab(Tab tab) {
+        for (TabModelObserver obs : mObservers) obs.tabRemoved(tab);
+        mTabs.remove(tab);
+    }
+
+    @Override
     public void destroy() {
         for (Tab tab : mTabs) {
             if (tab.isInitialized()) tab.destroy();
@@ -276,6 +282,9 @@ public class TabModelImpl extends TabModelJniBridge {
         int insertIndex = prevIndex + 1;
         if (mIndex >= insertIndex) mIndex++;
         mTabs.add(insertIndex, tab);
+
+        WebContents webContents = tab.getWebContents();
+        if (webContents != null) webContents.setAudioMuted(false);
 
         boolean activeModel = mModelDelegate.getCurrentModel() == this;
 
@@ -519,10 +528,13 @@ public class TabModelImpl extends TabModelJniBridge {
         // TODO(dtrainor): Update the list of undoable tabs instead of committing it.
         if (!canUndo) commitAllTabClosures();
 
-        // Cancel any media currently playing.
+        // Cancel or mute any media currently playing.
         if (canUndo) {
             WebContents webContents = tab.getWebContents();
-            if (webContents != null) webContents.releaseMediaPlayers();
+            if (webContents != null) {
+                webContents.suspendAllMediaPlayers();
+                webContents.setAudioMuted(true);
+            }
         }
 
         mTabs.remove(tab);

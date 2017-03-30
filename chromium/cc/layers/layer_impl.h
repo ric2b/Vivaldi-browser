@@ -31,7 +31,6 @@
 #include "cc/layers/layer_position_constraint.h"
 #include "cc/layers/performance_properties.h"
 #include "cc/layers/render_surface_impl.h"
-#include "cc/layers/scroll_blocks_on.h"
 #include "cc/output/filter_operations.h"
 #include "cc/quads/shared_quad_state.h"
 #include "cc/resources/resource_provider.h"
@@ -120,14 +119,18 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
 
   // AnimationDelegate implementation.
   void NotifyAnimationStarted(base::TimeTicks monotonic_time,
-                              Animation::TargetProperty target_property,
+                              TargetProperty::Type target_property,
                               int group) override{};
   void NotifyAnimationFinished(base::TimeTicks monotonic_time,
-                               Animation::TargetProperty target_property,
+                               TargetProperty::Type target_property,
                                int group) override;
   void NotifyAnimationAborted(base::TimeTicks monotonic_time,
-                              Animation::TargetProperty target_property,
+                              TargetProperty::Type target_property,
                               int group) override{};
+  void NotifyAnimationTakeover(base::TimeTicks monotonic_time,
+                               TargetProperty::Type target_property,
+                               double animation_start_time,
+                               scoped_ptr<AnimationCurve> curve) override {}
 
   // Tree structure.
   LayerImpl* parent() { return parent_; }
@@ -169,6 +172,9 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
 
   void SetEffectTreeIndex(int index);
   int effect_tree_index() const { return effect_tree_index_; }
+
+  void SetScrollTreeIndex(int index);
+  int scroll_tree_index() const { return scroll_tree_index_; }
 
   void set_offset_to_transform_parent(const gfx::Vector2dF& offset) {
     offset_to_transform_parent_ = offset;
@@ -244,8 +250,8 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
   const LayerImpl* replica_layer() const { return replica_layer_.get(); }
   scoped_ptr<LayerImpl> TakeReplicaLayer();
 
-  bool has_mask() const { return mask_layer_; }
-  bool has_replica() const { return replica_layer_; }
+  bool has_mask() const { return !!mask_layer_; }
+  bool has_replica() const { return !!replica_layer_; }
   bool replica_has_mask() const {
     return replica_layer_ && (mask_layer_ || replica_layer_->mask_layer_);
   }
@@ -275,11 +281,6 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
 
   virtual void GetContentsResourceId(ResourceId* resource_id,
                                      gfx::Size* resource_size) const;
-
-  virtual bool HasDelegatedContent() const;
-  virtual bool HasContributingDelegatedRenderPasses() const;
-  virtual RenderPassId FirstContributingRenderPassId() const;
-  virtual RenderPassId NextContributingRenderPassId(RenderPassId id) const;
 
   virtual void NotifyTileStateChanged(const Tile* tile) {}
 
@@ -321,6 +322,7 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
 
   void SetOpacity(float opacity);
   float opacity() const { return opacity_; }
+  float EffectiveOpacity() const;
   bool OpacityIsAnimating() const;
   bool HasPotentiallyRunningOpacityAnimation() const;
   bool OpacityIsAnimatingOnImplOnly() const;
@@ -381,6 +383,20 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
   }
   bool use_parent_backface_visibility() const {
     return use_parent_backface_visibility_;
+  }
+
+  void SetUseLocalTransformForBackfaceVisibility(bool use_local) {
+    use_local_transform_for_backface_visibility_ = use_local;
+  }
+  bool use_local_transform_for_backface_visibility() const {
+    return use_local_transform_for_backface_visibility_;
+  }
+
+  void SetShouldCheckBackfaceVisibility(bool should_check_backface_visibility) {
+    should_check_backface_visibility_ = should_check_backface_visibility;
+  }
+  bool should_check_backface_visibility() const {
+    return should_check_backface_visibility_;
   }
 
   bool ShowDebugBorders() const;
@@ -492,23 +508,13 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
 
   void ApplySentScrollDeltasFromAbortedCommit();
 
-  void SetShouldScrollOnMainThread(bool should_scroll_on_main_thread) {
-    should_scroll_on_main_thread_ = should_scroll_on_main_thread;
+  void set_main_thread_scrolling_reasons(
+      uint32_t main_thread_scrolling_reasons);
+  uint32_t main_thread_scrolling_reasons() const {
+    return main_thread_scrolling_reasons_;
   }
   bool should_scroll_on_main_thread() const {
-    return should_scroll_on_main_thread_;
-  }
-
-  void SetHaveWheelEventHandlers(bool have_wheel_event_handlers) {
-    have_wheel_event_handlers_ = have_wheel_event_handlers;
-  }
-  bool have_wheel_event_handlers() const { return have_wheel_event_handlers_; }
-
-  void SetHaveScrollEventHandlers(bool have_scroll_event_handlers) {
-    have_scroll_event_handlers_ = have_scroll_event_handlers;
-  }
-  bool have_scroll_event_handlers() const {
-    return have_scroll_event_handlers_;
+    return !!main_thread_scrolling_reasons_;
   }
 
   void SetNonFastScrollableRegion(const Region& region) {
@@ -524,16 +530,6 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
   const Region& touch_event_handler_region() const {
     return touch_event_handler_region_;
   }
-
-  void SetScrollBlocksOn(ScrollBlocksOn scroll_blocks_on) {
-    scroll_blocks_on_ = scroll_blocks_on;
-  }
-  ScrollBlocksOn scroll_blocks_on() const { return scroll_blocks_on_; }
-
-  InputHandler::ScrollStatus TryScroll(
-      const gfx::PointF& screen_space_point,
-      InputHandler::ScrollInputType type,
-      ScrollBlocksOn effective_block_mode) const;
 
   void SetDoubleSided(bool double_sided);
   bool double_sided() const { return double_sided_; }
@@ -554,8 +550,7 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
 
   // This includes all animations, even those that are finished but haven't yet
   // been deleted.
-  bool HasAnyAnimationTargetingProperty(
-      Animation::TargetProperty property) const;
+  bool HasAnyAnimationTargetingProperty(TargetProperty::Type property) const;
 
   bool HasFilterAnimationThatInflatesBounds() const;
   bool HasTransformAnimationThatInflatesBounds() const;
@@ -575,9 +570,7 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
 
   virtual base::DictionaryValue* LayerTreeAsJson() const;
 
-  void SetStackingOrderChanged(bool stacking_order_changed);
-
-  bool LayerPropertyChanged() const { return layer_property_changed_; }
+  bool LayerPropertyChanged() const;
 
   void ResetAllChangeTrackingForSubtree();
 
@@ -602,10 +595,6 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
   // Recreate resources that are required after they were released by a
   // ReleaseResources call.
   virtual void RecreateResources();
-
-  int clip_height() {
-    return scroll_clip_layer() ? scroll_clip_layer()->bounds().height() : 0;
-  }
 
   virtual skia::RefPtr<SkPicture> GetPicture();
 
@@ -665,14 +654,14 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
 
   bool layer_or_descendant_is_drawn() { return layer_or_descendant_is_drawn_; }
 
-  void set_layer_or_descendant_has_input_handler(
-      bool layer_or_descendant_has_input_handler) {
-    layer_or_descendant_has_input_handler_ =
-        layer_or_descendant_has_input_handler;
+  void set_layer_or_descendant_has_touch_handler(
+      bool layer_or_descendant_has_touch_handler) {
+    layer_or_descendant_has_touch_handler_ =
+        layer_or_descendant_has_touch_handler;
   }
 
-  bool layer_or_descendant_has_input_handler() {
-    return layer_or_descendant_has_input_handler_;
+  bool layer_or_descendant_has_touch_handler() {
+    return layer_or_descendant_has_touch_handler_;
   }
 
   void set_sorted_for_recursion(bool sorted_for_recursion) {
@@ -684,13 +673,7 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
 
   void UpdatePropertyTreeForScrollingAndAnimationIfNeeded();
 
-  void set_is_hidden_from_property_trees(bool is_hidden) {
-    if (is_hidden == is_hidden_from_property_trees_)
-      return;
-    is_hidden_from_property_trees_ = is_hidden;
-    SetNeedsPushProperties();
-  }
-  bool LayerIsHidden() const;
+  bool IsHidden() const;
 
   float GetIdealContentsScale() const;
 
@@ -701,6 +684,8 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
   void set_was_ever_ready_since_last_transform_animation(bool was_ready) {
     was_ever_ready_since_last_transform_animation_ = was_ready;
   }
+
+  void NoteLayerPropertyChanged();
 
  protected:
   LayerImpl(LayerTreeImpl* layer_impl,
@@ -722,7 +707,6 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
                              SkColor color,
                              float width) const;
 
-  void NoteLayerPropertyChanged();
   void NoteLayerPropertyChangedForSubtree();
 
   // Note carefully this does not affect the current layer.
@@ -773,17 +757,10 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
   int scroll_clip_layer_id_;
 
   gfx::Vector2dF offset_to_transform_parent_;
-
-  bool should_scroll_on_main_thread_ : 1;
-  bool have_wheel_event_handlers_ : 1;
-  bool have_scroll_event_handlers_ : 1;
-
-  static_assert(SCROLL_BLOCKS_ON_MAX < (1 << 3), "ScrollBlocksOn too big");
-  ScrollBlocksOn scroll_blocks_on_ : 3;
+  uint32_t main_thread_scrolling_reasons_;
 
   bool user_scrollable_horizontal_ : 1;
   bool user_scrollable_vertical_ : 1;
-  bool stacking_order_changed_ : 1;
   // Whether the "back" of this layer should draw.
   bool double_sided_ : 1;
   bool should_flatten_transform_ : 1;
@@ -796,6 +773,8 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
   bool contents_opaque_ : 1;
   bool is_root_for_isolated_group_ : 1;
   bool use_parent_backface_visibility_ : 1;
+  bool use_local_transform_for_backface_visibility_ : 1;
+  bool should_check_backface_visibility_ : 1;
   bool draws_content_ : 1;
   bool hide_layer_and_subtree_ : 1;
 
@@ -834,6 +813,7 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
   int transform_tree_index_;
   int effect_tree_index_;
   int clip_tree_index_;
+  int scroll_tree_index_;
 
   // The global depth value of the center of the layer. This value is used
   // to sort layers from back to front.
@@ -892,10 +872,9 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
   bool frame_timing_requests_dirty_;
   bool visited_;
   bool layer_or_descendant_is_drawn_;
-  // If true, the layer or one of its descendants has a wheel or touch handler.
-  bool layer_or_descendant_has_input_handler_;
+  // If true, the layer or one of its descendants has a touch handler.
+  bool layer_or_descendant_has_touch_handler_;
   bool sorted_for_recursion_;
-  bool is_hidden_from_property_trees_;
 
   DISALLOW_COPY_AND_ASSIGN(LayerImpl);
 };

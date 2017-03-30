@@ -30,10 +30,20 @@
 #include "gpu/GLES2/gl2extchromium.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+// Need to disable IPC Audio for these tests, or the tests will hang
+#include "media/filters/ipc_audio_decoder.h"
+#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
+
 // IPC messages for testing ----------------------------------------------------
 
+// TODO(mdempsky): Fix properly by moving into a separate
+// browsertest_message_generator.cc file.
+#undef IPC_IPC_MESSAGE_MACROS_H_
+#undef IPC_MESSAGE_EXTRA
 #define IPC_MESSAGE_IMPL
 #include "ipc/ipc_message_macros.h"
+#include "ipc/ipc_message_templates_impl.h"
 
 #undef IPC_MESSAGE_START
 #define IPC_MESSAGE_START TestMsgStart
@@ -200,6 +210,10 @@ class RenderThreadImplBrowserTest : public testing::Test {
   scoped_ptr<RenderThreadImplBrowserIPCTestHelper> test_helper_;
   scoped_ptr<MockRenderProcess> mock_process_;
   scoped_refptr<QuitOnTestMsgFilter> test_msg_filter_;
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  // Need to disable IPC Audio for these tests, or the test will hang
+  media::IPCAudioDecoder::ScopedDisableForTesting ipc_audio_decoder_disabler_;
+#endif
   RenderThreadImplForTest* thread_;  // Owned by mock_process_.
   std::string channel_id_;
 };

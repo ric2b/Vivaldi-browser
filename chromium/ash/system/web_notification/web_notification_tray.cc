@@ -22,6 +22,7 @@
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/rtl.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/thread_task_runner_handle.h"
 #include "grit/ash_strings.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -181,7 +182,8 @@ WebNotificationTray::WebNotificationTray(StatusAreaWidget* status_area_widget)
   message_center_tray_.reset(new message_center::MessageCenterTray(
       this,
       message_center::MessageCenter::Get()));
-  popup_alignment_delegate_.reset(new AshPopupAlignmentDelegate());
+  popup_alignment_delegate_.reset(new AshPopupAlignmentDelegate(
+      status_area_widget->shelf_widget()->shelf_layout_manager()));
   popup_collection_.reset(new message_center::MessagePopupCollection(
       ash::Shell::GetContainer(
           status_area_widget->GetNativeView()->GetRootWindow(),
@@ -189,9 +191,10 @@ WebNotificationTray::WebNotificationTray(StatusAreaWidget* status_area_widget)
       message_center(),
       message_center_tray_.get(),
       popup_alignment_delegate_.get()));
-  const gfx::Display& display = Shell::GetScreen()->GetDisplayNearestWindow(
-      status_area_widget->GetNativeView());
-  popup_alignment_delegate_->StartObserving(Shell::GetScreen(), display);
+  const gfx::Display& display =
+      gfx::Screen::GetScreen()->GetDisplayNearestWindow(
+          status_area_widget->GetNativeView());
+  popup_alignment_delegate_->StartObserving(gfx::Screen::GetScreen(), display);
   OnMessageCenterTrayChanged();
 }
 
@@ -444,7 +447,7 @@ void WebNotificationTray::OnMessageCenterTrayChanged() {
   // consecutively, and calling Update in the middle of those events will show
   // intermediate unread counts for a moment.
   should_update_tray_content_ = true;
-  base::MessageLoop::current()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(&WebNotificationTray::UpdateTrayContent, AsWeakPtr()));
 }

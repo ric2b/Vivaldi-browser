@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "ash/display/display_layout.h"
 #include "base/macros.h"
 #include "ui/display/types/display_constants.h"
 
@@ -88,6 +89,22 @@ class ScopedSetInternalDisplayId {
 
 // Sets the display mode that matches the |resolution| for |display_id|.
 bool SetDisplayResolution(int64_t display_id, const gfx::Size& resolution);
+
+// Swap the primary display with the secondary.
+void SwapPrimaryDisplay();
+
+// Creates the dislpay layout from position and offset for the current
+// display list. If you simply want to create a new layout that is
+// independent of current displays, use DisplayLayoutBuilder or simply
+// create a new DisplayLayout and set display id fields (primary, ids
+// in placement) manually.
+scoped_ptr<DisplayLayout> CreateDisplayLayout(
+    DisplayPlacement::Position position,
+    int offset);
+
+// Creates the DisplayIdList from ints.
+DisplayIdList CreateDisplayIdList2(int64_t id1, int64_t id2);
+DisplayIdList CreateDisplayIdListN(size_t count, ...);
 
 }  // namespace test
 }  // namespace ash

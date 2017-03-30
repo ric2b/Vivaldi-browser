@@ -25,6 +25,8 @@ public final class DownloadInfo {
     private final boolean mIsSuccessful;
     private final int mPercentCompleted;
     private final long mTimeRemainingInMillis;
+    private final boolean mIsResumable;
+    private final boolean mIsPaused;
 
     private DownloadInfo(Builder builder) {
         mUrl = builder.mUrl;
@@ -44,6 +46,8 @@ public final class DownloadInfo {
         mContentDisposition = builder.mContentDisposition;
         mPercentCompleted = builder.mPercentCompleted;
         mTimeRemainingInMillis = builder.mTimeRemainingInMillis;
+        mIsResumable = builder.mIsResumable;
+        mIsPaused = builder.mIsPaused;
     }
 
     public String getUrl() {
@@ -117,6 +121,17 @@ public final class DownloadInfo {
         return mTimeRemainingInMillis;
     }
 
+    public boolean isResumable() {
+        return mIsResumable;
+    }
+
+    public boolean isPaused() {
+        return mIsPaused;
+    }
+
+    /**
+     * Helper class for building the DownloadInfo object.
+     */
     public static class Builder {
         private String mUrl;
         private String mUserAgent;
@@ -135,6 +150,8 @@ public final class DownloadInfo {
         private String mContentDisposition;
         private int mPercentCompleted = -1;
         private long mTimeRemainingInMillis;
+        private boolean mIsResumable = true;
+        private boolean mIsPaused = false;
 
         public Builder setUrl(String url) {
             mUrl = url;
@@ -222,6 +239,16 @@ public final class DownloadInfo {
             return this;
         }
 
+        public Builder setIsResumable(boolean isResumable) {
+            mIsResumable = isResumable;
+            return this;
+        }
+
+        public Builder setIsPaused(boolean isPaused) {
+            mIsPaused = isPaused;
+            return this;
+        }
+
         public DownloadInfo build() {
             return new DownloadInfo(this);
         }
@@ -233,8 +260,7 @@ public final class DownloadInfo {
          */
         public static Builder fromDownloadInfo(final DownloadInfo downloadInfo) {
             Builder builder = new Builder();
-            builder
-                    .setUrl(downloadInfo.getUrl())
+            builder.setUrl(downloadInfo.getUrl())
                     .setUserAgent(downloadInfo.getUserAgent())
                     .setMimeType(downloadInfo.getMimeType())
                     .setCookie(downloadInfo.getCookie())
@@ -250,7 +276,9 @@ public final class DownloadInfo {
                     .setIsGETRequest(downloadInfo.isGETRequest())
                     .setIsSuccessful(downloadInfo.isSuccessful())
                     .setPercentCompleted(downloadInfo.getPercentCompleted())
-                    .setTimeRemainingInMillis(downloadInfo.getTimeRemainingInMillis());
+                    .setTimeRemainingInMillis(downloadInfo.getTimeRemainingInMillis())
+                    .setIsResumable(downloadInfo.isResumable())
+                    .setIsPaused(downloadInfo.isPaused());
             return builder;
         }
 

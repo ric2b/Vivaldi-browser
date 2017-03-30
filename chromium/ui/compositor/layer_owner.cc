@@ -48,6 +48,7 @@ scoped_ptr<Layer> LayerOwner::RecreateLayer() {
   new_layer->SetFillsBoundsOpaquely(old_layer->fills_bounds_opaquely());
   new_layer->SetFillsBoundsCompletely(old_layer->FillsBoundsCompletely());
   new_layer->SetSubpixelPositionOffset(old_layer->subpixel_position_offset());
+  new_layer->SetTransform(old_layer->GetTargetTransform());
   if (old_layer->type() == LAYER_SOLID_COLOR)
     new_layer->SetColor(old_layer->GetTargetColor());
   SkRegion* alpha_shape = old_layer->alpha_shape();

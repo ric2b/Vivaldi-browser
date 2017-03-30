@@ -18,9 +18,9 @@
 #include "build/build_config.h"
 #include "components/ssl_errors/error_info.h"
 #include "components/url_formatter/url_formatter.h"
-#include "net/base/net_util.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "net/base/url_util.h"
 #include "net/cert/x509_cert_types.h"
 #include "net/cert/x509_certificate.h"
 #include "url/gurl.h"
@@ -64,32 +64,6 @@ void RecordSSLInterstitialCause(bool overridable, SSLInterstitialCause event) {
     UMA_HISTOGRAM_ENUMERATION("interstitial.ssl.cause.nonoverridable", event,
                               UNUSED_INTERSTITIAL_CAUSE_ENTRY);
   }
-}
-
-size_t GetLevensteinDistance(const std::string& str1, const std::string& str2) {
-  if (str1 == str2)
-    return 0;
-  if (str1.size() == 0)
-    return str2.size();
-  if (str2.size() == 0)
-    return str1.size();
-  std::vector<size_t> kFirstRow(str2.size() + 1, 0);
-  std::vector<size_t> kSecondRow(str2.size() + 1, 0);
-
-  for (size_t i = 0; i < kFirstRow.size(); ++i)
-    kFirstRow[i] = i;
-  for (size_t i = 0; i < str1.size(); ++i) {
-    kSecondRow[0] = i + 1;
-    for (size_t j = 0; j < str2.size(); ++j) {
-      int cost = str1[i] == str2[j] ? 0 : 1;
-      kSecondRow[j + 1] =
-          std::min(std::min(kSecondRow[j] + 1, kFirstRow[j + 1] + 1),
-                   kFirstRow[j] + cost);
-    }
-    for (size_t j = 0; j < kFirstRow.size(); j++)
-      kFirstRow[j] = kSecondRow[j];
-  }
-  return kSecondRow[str2.size()];
 }
 
 std::vector<HostnameTokens> GetTokenizedDNSNames(
@@ -212,11 +186,7 @@ bool IsUserClockInThePast(const base::Time& time_now) {
   if (!g_testing_build_time.Get().is_null()) {
     build_time = g_testing_build_time.Get();
   } else {
-#if defined(DONT_EMBED_BUILD_METADATA) && !defined(OFFICIAL_BUILD)
-    return false;
-#else
     build_time = base::GetBuildTime();
-#endif
   }
 
   if (time_now < build_time - base::TimeDelta::FromDays(2))
@@ -229,11 +199,7 @@ bool IsUserClockInTheFuture(const base::Time& time_now) {
   if (!g_testing_build_time.Get().is_null()) {
     build_time = g_testing_build_time.Get();
   } else {
-#if defined(DONT_EMBED_BUILD_METADATA) && !defined(OFFICIAL_BUILD)
-    return false;
-#else
     build_time = base::GetBuildTime();
-#endif
   }
 
   if (time_now > build_time + base::TimeDelta::FromDays(365))
@@ -317,6 +283,36 @@ bool AnyNamesUnderName(const std::vector<HostnameTokens>& potential_children,
   return false;
 }
 
+// Returns the Levenshtein distance between |str1| and |str2|.
+// Which is the minimum number of single-character edits (i.e. insertions,
+// deletions or substitutions) required to change one word into the other.
+// https://en.wikipedia.org/wiki/Levenshtein_distance
+size_t GetLevenshteinDistance(const std::string& str1,
+                              const std::string& str2) {
+  if (str1 == str2)
+    return 0;
+  if (str1.size() == 0)
+    return str2.size();
+  if (str2.size() == 0)
+    return str1.size();
+
+  std::vector<size_t> row(str2.size() + 1);
+  for (size_t i = 0; i < row.size(); ++i)
+    row[i] = i;
+
+  for (size_t i = 0; i < str1.size(); ++i) {
+    row[0] = i + 1;
+    size_t previous = i;
+    for (size_t j = 0; j < str2.size(); ++j) {
+      size_t old_row = row[j + 1];
+      int cost = str1[i] == str2[j] ? 0 : 1;
+      row[j + 1] = std::min(std::min(row[j], row[j + 1]) + 1, previous + cost);
+      previous = old_row;
+    }
+  }
+  return row[str2.size()];
+}
+
 bool IsSubDomainOutsideWildcard(const GURL& request_url,
                                 const net::X509Certificate& cert) {
   std::string host_name = request_url.host();
@@ -382,11 +378,11 @@ bool IsCertLikelyFromMultiTenantHosting(const GURL& request_url,
   // considered as a shared certificate. Include the host name in the URL also
   // while comparing.
   dns_names.push_back(host_name);
-  static const size_t kMinimumEditDsitance = 5;
+  static const size_t kMinimumEditDistance = 5;
   for (size_t i = 0; i < dns_names_size; ++i) {
     for (size_t j = i + 1; j < dns_names_size; ++j) {
-      size_t edit_distance = GetLevensteinDistance(dns_names[i], dns_names[j]);
-      if (edit_distance < kMinimumEditDsitance)
+      size_t edit_distance = GetLevenshteinDistance(dns_names[i], dns_names[j]);
+      if (edit_distance < kMinimumEditDistance)
         return false;
     }
   }

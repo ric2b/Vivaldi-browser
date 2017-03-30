@@ -20,7 +20,7 @@
 #include "ui/ozone/platform/drm/gpu/gbm_device.h"
 #include "ui/ozone/platform/drm/gpu/gbm_surface_factory.h"
 #include "ui/ozone/platform/drm/gpu/gbm_surfaceless.h"
-#include "ui/ozone/public/ozone_platform.h"  // nogncheck
+#include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/surface_factory_ozone.h"
 
 namespace ui {
@@ -46,7 +46,6 @@ scoped_refptr<GbmBuffer> GbmBuffer::CreateBuffer(
                gbm->device_path().value(), "size", size.ToString());
   bool use_scanout = (usage == gfx::BufferUsage::SCANOUT);
   unsigned flags = 0;
-  // GBM_BO_USE_SCANOUT is the hint of x-tiling.
   if (use_scanout)
     flags = GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING;
   gbm_bo* bo = gbm_bo_create(gbm->device(), size.width(), size.height(),

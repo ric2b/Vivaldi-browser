@@ -7,7 +7,7 @@
 
 #include "base/memory/ref_counted.h"
 #include "platform/EventTracer.h"
-#include "wtf/PassRefPtr.h"
+#include "wtf/PassOwnPtr.h"
 #include "wtf/text/WTFString.h"
 
 namespace base {
@@ -18,11 +18,14 @@ class TracedValue;
 
 namespace blink {
 
-class PLATFORM_EXPORT TracedValue : public TraceEvent::ConvertableToTraceFormat {
+// TracedValue copies all passed names and values and doesn't retain references.
+class PLATFORM_EXPORT TracedValue final {
     WTF_MAKE_NONCOPYABLE(TracedValue);
 
 public:
-    static PassRefPtr<TracedValue> create();
+    ~TracedValue();
+
+    static PassOwnPtr<TracedValue> create();
 
     void endDictionary();
     void endArray();
@@ -41,13 +44,16 @@ public:
     void beginArray();
     void beginDictionary();
 
-    String asTraceFormat() const override;
+    String toString() const;
 
 private:
     TracedValue();
-    ~TracedValue() override;
 
+    // This will be moved (and become null) when TracedValue is passed to
+    // EventTracer::addTraceEvent().
     scoped_refptr<base::trace_event::TracedValue> m_tracedValue;
+
+    friend class EventTracer;
 };
 
 } // namespace blink

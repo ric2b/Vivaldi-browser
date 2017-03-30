@@ -11,8 +11,6 @@
 #include "base/i18n/time_formatting.h"
 #include "base/macros.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -31,6 +29,8 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/crx_file/id_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/storage_monitor/media_storage_util.h"
 #include "components/storage_monitor/storage_monitor.h"
 #include "content/public/browser/browser_thread.h"
@@ -378,6 +378,9 @@ MediaGalleryPrefInfo::MediaGalleryPrefInfo()
       default_gallery_type(kNotDefault),
       prefs_version(0) {
 }
+
+MediaGalleryPrefInfo::MediaGalleryPrefInfo(const MediaGalleryPrefInfo& other) =
+    default;
 
 MediaGalleryPrefInfo::~MediaGalleryPrefInfo() {}
 
@@ -835,6 +838,9 @@ base::FilePath MediaGalleriesPreferences::LookUpGalleryPathForExtension(
       known_galleries_.find(gallery_id);
   if (it == known_galleries_.end())
     return base::FilePath();
+
+  // This seems wrong: it just returns the absolute path to the device, which
+  // is not necessarily the gallery path.
   return MediaStorageUtil::FindDevicePathById(it->second.device_id);
 }
 

@@ -31,6 +31,8 @@ enum class UMAWebBluetoothFunction {
   CHARACTERISTIC_WRITE_VALUE = 5,
   CHARACTERISTIC_START_NOTIFICATIONS = 6,
   CHARACTERISTIC_STOP_NOTIFICATIONS = 7,
+  REMOTE_GATT_SERVER_DISCONNECT = 8,
+  SERVICE_GET_CHARACTERISTICS = 9,
   // NOTE: Add new actions immediately above this line. Make sure to update
   // the enum list in tools/metrics/histograms/histograms.xml accordingly.
   COUNT
@@ -62,6 +64,11 @@ enum class UMARequestDeviceOutcome {
   CHOSEN_DEVICE_VANISHED = 8,
   BLUETOOTH_CHOOSER_CANCELLED = 9,
   BLUETOOTH_CHOOSER_DENIED_PERMISSION = 10,
+  BLACKLISTED_SERVICE_IN_FILTER = 11,
+  BLUETOOTH_OVERVIEW_HELP_LINK_PRESSED = 12,
+  ADAPTER_OFF_HELP_LINK_PRESSED = 13,
+  NEED_LOCATION_HELP_LINK_PRESSED = 14,
+  BLUETOOTH_CHOOSER_GLOBALLY_DISABLED = 15,
   // NOTE: Add new requestDevice() outcomes immediately above this line. Make
   // sure to update the enum list in
   // tools/metrics/histograms/histograms.xml accordingly.
@@ -145,6 +152,8 @@ enum class UMAGetCharacteristicOutcome {
   NO_DEVICE = 1,
   NO_SERVICE = 2,
   NOT_FOUND = 3,
+  BLACKLISTED = 4,
+  NO_CHARACTERISTICS = 5,
   // Note: Add new outcomes immediately above this line.
   // Make sure to update the enum list in
   // tools/metrisc/histogram/histograms.xml accordingly.
@@ -159,6 +168,17 @@ void RecordGetCharacteristicOutcome(UMAGetCharacteristicOutcome outcome);
 void RecordGetCharacteristicOutcome(CacheQueryOutcome outcome);
 // Records the UUID of the characteristic used when calling getCharacteristic.
 void RecordGetCharacteristicCharacteristic(const std::string& characteristic);
+
+// getCharacteristics() Metrics
+// There should be a call to this function for every call to
+// Send(BluetoothMsg_GetCharacteristicsSuccess) and
+// Send(BluetoothMsg_GetCharacteristicsError).
+void RecordGetCharacteristicsOutcome(UMAGetCharacteristicOutcome outcome);
+// Records the outcome of the cache query for getCharacteristics. Should only be
+// called if QueryCacheForService fails.
+void RecordGetCharacteristicsOutcome(CacheQueryOutcome outcome);
+// Records the UUID of the characteristic used when calling getCharacteristic.
+void RecordGetCharacteristicsCharacteristic(const std::string& characteristic);
 
 // GATT Operations Metrics
 
@@ -178,6 +198,7 @@ enum UMAGATTOperationOutcome {
   NOT_AUTHORIZED = 10,
   NOT_PAIRED = 11,
   NOT_SUPPORTED = 12,
+  BLACKLISTED = 13,
   // Note: Add new GATT Outcomes immediately above this line.
   // Make sure to update the enum list in
   // tools/metrics/histograms/histograms.xml accordingly.

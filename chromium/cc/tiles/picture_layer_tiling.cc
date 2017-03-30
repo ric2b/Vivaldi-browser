@@ -11,7 +11,6 @@
 #include <limits>
 #include <set>
 
-#include "base/containers/hash_tables.h"
 #include "base/containers/small_map.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
@@ -75,7 +74,8 @@ PictureLayerTiling::PictureLayerTiling(
       has_skewport_rect_tiles_(false),
       has_soon_border_rect_tiles_(false),
       has_eventually_rect_tiles_(false),
-      all_tiles_done_(true) {
+      all_tiles_done_(true),
+      invalidated_since_last_compute_priority_rects_(false) {
   DCHECK(!raster_source->IsSolidColor());
   gfx::Size content_bounds =
       gfx::ScaleToCeiledSize(raster_source_->GetSize(), contents_scale);
@@ -117,7 +117,7 @@ Tile* PictureLayerTiling::CreateTile(const Tile::CreateInfo& info) {
   all_tiles_done_ = false;
   ScopedTilePtr tile = client_->CreateTile(info);
   Tile* raw_ptr = tile.get();
-  tiles_.add(key, std::move(tile));
+  tiles_[key] = std::move(tile);
   return raw_ptr;
 }
 
@@ -186,8 +186,9 @@ void PictureLayerTiling::TakeTilesAndPropertiesFrom(
     all_tiles_done_ = pending_twin->all_tiles_done_;
   } else {
     while (!pending_twin->tiles_.empty()) {
-      TileMapKey key = pending_twin->tiles_.begin()->first;
-      tiles_.set(key, pending_twin->tiles_.take_and_erase(key));
+      auto pending_iter = pending_twin->tiles_.begin();
+      tiles_[pending_iter->first] = std::move(pending_iter->second);
+      pending_twin->tiles_.erase(pending_iter);
     }
     all_tiles_done_ &= pending_twin->all_tiles_done_;
   }
@@ -287,6 +288,7 @@ void PictureLayerTiling::SetRasterSourceAndResize(
 
 void PictureLayerTiling::Invalidate(const Region& layer_invalidation) {
   DCHECK(tree_ != ACTIVE_TREE || !client_->GetPendingOrActiveTwinTiling(this));
+  invalidated_since_last_compute_priority_rects_ = true;
   RemoveTilesInRegion(layer_invalidation, true /* recreate tiles */);
 }
 
@@ -296,11 +298,12 @@ void PictureLayerTiling::RemoveTilesInRegion(const Region& layer_invalidation,
   // twin, so it's slated for removal in the future.
   if (live_tiles_rect_.IsEmpty())
     return;
-  // Pick 16 for the size of the SmallMap before it promotes to a hash_map.
+  // Pick 16 for the size of the SmallMap before it promotes to a unordered_map.
   // 4x4 tiles should cover most small invalidations, and walking a vector of
   // 16 is fast enough. If an invalidation is huge we will fall back to a
-  // hash_map instead of a vector in the SmallMap.
-  base::SmallMap<base::hash_map<TileMapKey, gfx::Rect>, 16> remove_tiles;
+  // unordered_map instead of a vector in the SmallMap.
+  base::SmallMap<std::unordered_map<TileMapKey, gfx::Rect, TileMapKeyHash>, 16>
+      remove_tiles;
   gfx::Rect expanded_live_tiles_rect =
       tiling_data_.ExpandRectToTileBounds(live_tiles_rect_);
   for (Region::Iterator iter(layer_invalidation); iter.has_rect();
@@ -547,7 +550,9 @@ ScopedTilePtr PictureLayerTiling::TakeTileAt(int i, int j) {
   TileMap::iterator found = tiles_.find(TileMapKey(i, j));
   if (found == tiles_.end())
     return nullptr;
-  return tiles_.take_and_erase(found);
+  ScopedTilePtr result = std::move(found->second);
+  tiles_.erase(found);
+  return result;
 }
 
 bool PictureLayerTiling::RemoveTileAt(int i, int j) {
@@ -635,11 +640,13 @@ bool PictureLayerTiling::ComputeTilePriorityRects(
     set_all_tiles_done(false);
   }
 
+  bool invalidated = invalidated_since_last_compute_priority_rects_;
+  invalidated_since_last_compute_priority_rects_ = false;
   if (!NeedsUpdateForFrameAtTimeAndViewport(current_frame_time_in_seconds,
                                             viewport_in_layer_space)) {
     // This should never be zero for the purposes of has_ever_been_updated().
     DCHECK_NE(current_frame_time_in_seconds, 0.0);
-    return false;
+    return invalidated;
   }
 
   const float content_to_screen_scale = ideal_contents_scale / contents_scale_;
@@ -934,7 +941,7 @@ std::map<const Tile*, PrioritizedTile>
 PictureLayerTiling::UpdateAndGetAllPrioritizedTilesForTesting() const {
   std::map<const Tile*, PrioritizedTile> result;
   for (const auto& key_tile_pair : tiles_) {
-    Tile* tile = key_tile_pair.second;
+    Tile* tile = key_tile_pair.second.get();
     UpdateRequiredStatesOnTile(tile);
     PrioritizedTile prioritized_tile =
         MakePrioritizedTile(tile, ComputePriorityRectTypeForTile(tile));
@@ -1005,7 +1012,7 @@ PictureLayerTiling::ComputePriorityRectTypeForTile(const Tile* tile) const {
 void PictureLayerTiling::GetAllPrioritizedTilesForTracing(
     std::vector<PrioritizedTile>* prioritized_tiles) const {
   for (const auto& tile_pair : tiles_) {
-    Tile* tile = tile_pair.second;
+    Tile* tile = tile_pair.second.get();
     prioritized_tiles->push_back(
         MakePrioritizedTile(tile, ComputePriorityRectTypeForTile(tile)));
   }
@@ -1026,7 +1033,7 @@ void PictureLayerTiling::AsValueInto(
 size_t PictureLayerTiling::GPUMemoryUsageInBytes() const {
   size_t amount = 0;
   for (TileMap::const_iterator it = tiles_.begin(); it != tiles_.end(); ++it) {
-    const Tile* tile = it->second;
+    const Tile* tile = it->second.get();
     amount += tile->GPUMemoryUsageInBytes();
   }
   return amount;

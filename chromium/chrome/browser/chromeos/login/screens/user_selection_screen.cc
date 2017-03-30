@@ -8,13 +8,12 @@
 
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/prefs/pref_service.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
 #include "chrome/browser/chromeos/login/reauth_stats.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/ui/views/user_board_view.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/multi_profile_user_controller.h"
@@ -23,6 +22,7 @@
 #include "chrome/browser/signin/easy_unlock_service.h"
 #include "chrome/browser/ui/webui/chromeos/login/l10n_util.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
+#include "components/prefs/pref_service.h"
 #include "components/proximity_auth/screenlock_bridge.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/known_user.h"
@@ -346,7 +346,7 @@ void UserSelectionScreen::SendUserList() {
   // TODO(nkostylev): Move to a separate method in UserManager.
   // http://crbug.com/230852
   bool single_user = users_.size() == 1;
-  bool is_signin_to_add = LoginDisplayHostImpl::default_host() &&
+  bool is_signin_to_add = LoginDisplayHost::default_host() &&
                           user_manager::UserManager::Get()->IsUserLoggedIn();
   std::string owner_email;
   chromeos::CrosSettings::Get()->GetString(chromeos::kDeviceOwner,

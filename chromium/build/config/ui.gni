@@ -20,7 +20,7 @@ import("//build/config/headless_build.gni")
 declare_args() {
   # Indicates if Ash is enabled. Ash is the Aura Shell which provides a
   # desktop-like environment for Aura. Requires use_aura = true
-  use_ash = (is_win || is_linux) && !is_chromecast && !is_headless
+  use_ash = is_chromeos && !is_chromecast && !is_headless
 
   # Indicates if Ozone is enabled. Ozone is a low-level library layer for Linux
   # that does not require X11. Enabling this feature disables use of glib, x11,
@@ -29,7 +29,7 @@ declare_args() {
 
   # Indicates if Aura is enabled. Aura is a low-level windowing library, sort
   # of a replacement for GDI or GTK.
-  use_aura = is_win || is_linux || is_chromecast
+  use_aura = is_win || is_linux
 
   # True means the UI is built using the "views" framework.
   toolkit_views =
@@ -49,7 +49,7 @@ declare_args() {
 
   # Indicates if material design elements in the top chrome of the browser are
   # enabled.
-  enable_topchrome_md = is_chromeos || is_win || is_linux
+  enable_topchrome_md = is_chromeos || is_win || is_linux || is_mac
 
   # Indicates if Wayland display server support is enabled.
   enable_wayland_server = is_chromeos
@@ -73,11 +73,6 @@ if (use_ozone) {
   use_glib = false
 }
 
-# Turn off Wayland if glib is enabled.
-if (use_glib) {
-  enable_wayland_server = false
-}
-
 if (is_linux && !use_ozone) {
   use_cairo = true
   use_pango = true
@@ -90,5 +85,3 @@ if (is_linux && !use_ozone) {
 use_atk = is_desktop_linux && use_x11
 
 use_clipboard_aurax11 = is_linux && use_aura && use_x11
-
-enable_hidpi = is_mac || is_win || is_linux

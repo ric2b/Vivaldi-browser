@@ -403,7 +403,6 @@ bool AddPolicyForSandboxedProcess(sandbox::TargetPolicy* policy) {
   if (result != sandbox::SBOX_ALL_OK)
     return false;
 
-
   sandbox::TokenLevel initial_token = sandbox::USER_UNPROTECTED;
   if (base::win::GetVersion() > base::win::VERSION_XP) {
     // On 2003/Vista the initial token has to be restricted if the main
@@ -665,7 +664,8 @@ bool InitTargetServices(sandbox::TargetServices* target_services) {
 
 base::Process StartSandboxedProcess(
     SandboxedProcessLauncherDelegate* delegate,
-    base::CommandLine* cmd_line) {
+    base::CommandLine* cmd_line,
+    const base::HandlesToInheritVector& handles_to_inherit) {
   DCHECK(delegate);
   const base::CommandLine& browser_command_line =
       *base::CommandLine::ForCurrentProcess();
@@ -684,8 +684,15 @@ base::Process StartSandboxedProcess(
   if ((!delegate->ShouldSandbox()) ||
       browser_command_line.HasSwitch(switches::kNoSandbox) ||
       cmd_line->HasSwitch(switches::kNoSandbox)) {
-    base::Process process =
-        base::LaunchProcess(*cmd_line, base::LaunchOptions());
+    base::LaunchOptions options;
+
+    base::HandlesToInheritVector handles = handles_to_inherit;
+    if (!handles_to_inherit.empty()) {
+      options.inherit_handles = true;
+      options.handles_to_inherit = &handles;
+    }
+    base::Process process = base::LaunchProcess(*cmd_line, options);
+
     // TODO(rvargas) crbug.com/417532: Don't share a raw handle.
     g_broker_services->AddTargetPeer(process.Handle());
     return process.Pass();
@@ -693,11 +700,25 @@ base::Process StartSandboxedProcess(
 
   sandbox::TargetPolicy* policy = g_broker_services->CreatePolicy();
 
-  sandbox::MitigationFlags mitigations = sandbox::MITIGATION_HEAP_TERMINATE |
-                                         sandbox::MITIGATION_BOTTOM_UP_ASLR |
-                                         sandbox::MITIGATION_DEP |
-                                         sandbox::MITIGATION_DEP_NO_ATL_THUNK |
-                                         sandbox::MITIGATION_SEHOP;
+  // Add any handles to be inherited to the policy.
+  for (HANDLE handle : handles_to_inherit)
+    policy->AddHandleToShare(handle);
+
+  // Pre-startup mitigations.
+  sandbox::MitigationFlags mitigations =
+      sandbox::MITIGATION_HEAP_TERMINATE |
+      sandbox::MITIGATION_BOTTOM_UP_ASLR |
+      sandbox::MITIGATION_DEP |
+      sandbox::MITIGATION_DEP_NO_ATL_THUNK |
+      sandbox::MITIGATION_SEHOP |
+      sandbox::MITIGATION_NONSYSTEM_FONT_DISABLE |
+      sandbox::MITIGATION_IMAGE_LOAD_NO_REMOTE |
+      sandbox::MITIGATION_IMAGE_LOAD_NO_LOW_LABEL;
+#if !defined(NACL_WIN64)
+  // Don't block font loading with GDI.
+  if (!gfx::win::ShouldUseDirectWrite())
+    mitigations ^= sandbox::MITIGATION_NONSYSTEM_FONT_DISABLE;
+#endif
 
   if (policy->SetProcessMitigations(mitigations) != sandbox::SBOX_ALL_OK)
     return base::Process();
@@ -710,6 +731,7 @@ base::Process StartSandboxedProcess(
   }
 #endif
 
+  // Post-startup mitigations.
   mitigations = sandbox::MITIGATION_STRICT_HANDLE_CHECKS |
                 sandbox::MITIGATION_DLL_SEARCH_ORDER;
 
@@ -724,6 +746,9 @@ base::Process StartSandboxedProcess(
   }
 
 #if !defined(NACL_WIN64)
+  // NOTE: This is placed at function scope so that it stays alive through
+  // process launch.
+  base::SharedMemory direct_write_font_cache_section;
   if (type_str == switches::kRendererProcess ||
       type_str == switches::kPpapiPluginProcess) {
     if (gfx::win::ShouldUseDirectWrite()) {
@@ -742,13 +767,12 @@ base::Process StartSandboxedProcess(
         std::string name(content::kFontCacheSharedSectionName);
         name.append(base::UintToString(base::GetCurrentProcId()));
 
-        base::SharedMemory direct_write_font_cache_section;
         if (direct_write_font_cache_section.Open(name, true)) {
-          void* shared_handle = policy->AddHandleToShare(
-              direct_write_font_cache_section.handle().GetHandle());
+          HANDLE handle = direct_write_font_cache_section.handle().GetHandle();
+          policy->AddHandleToShare(handle);
           cmd_line->AppendSwitchASCII(
               switches::kFontCacheSharedHandle,
-              base::UintToString(base::win::HandleToUint32(shared_handle)));
+              base::UintToString(base::win::HandleToUint32(handle)));
         }
       }
     }

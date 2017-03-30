@@ -6,6 +6,8 @@
 # "command_buffer_common" just forwarding) and goes into a static library in
 # non-component build. This needs to match the GYP build which was likely an
 # attempt to make larger components to help with loading.
+import("//mojo/public/tools/bindings/mojom.gni")
+
 group("common") {
   if (is_component_build) {
     public_deps = [
@@ -30,6 +32,7 @@ source_set("common_sources") {
     "cmd_buffer_common.cc",
     "cmd_buffer_common.h",
     "command_buffer.h",
+    "command_buffer_id.h",
     "constants.h",
     "debug_marker_manager.cc",
     "debug_marker_manager.h",
@@ -40,10 +43,12 @@ source_set("common_sources") {
     "gles2_cmd_ids_autogen.h",
     "id_allocator.cc",
     "id_allocator.h",
+    "id_type.h",
     "mailbox.cc",
     "mailbox.h",
     "mailbox_holder.cc",
     "mailbox_holder.h",
+    "sync_token.cc",
     "sync_token.h",
     "thread_local.h",
     "time.h",
@@ -73,4 +78,18 @@ component("gles2_utils") {
   ]
 
   all_dependent_configs = [ "//third_party/khronos:khronos_headers" ]
+}
+
+mojom("interfaces") {
+  sources = [
+    "capabilities.mojom",
+    "command_buffer.mojom",
+    "mailbox.mojom",
+    "mailbox_holder.mojom",
+    "sync_token.mojom",
+    "value_state.mojom",
+  ]
+
+  typemaps = [ "mojo.typemap" ]
+  typemap_deps = [ "//gpu/ipc" ]
 }

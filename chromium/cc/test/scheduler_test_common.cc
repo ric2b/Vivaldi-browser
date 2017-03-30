@@ -37,9 +37,9 @@ std::string TestDelayBasedTimeSource::TypeString() const {
 TestDelayBasedTimeSource::~TestDelayBasedTimeSource() {
 }
 
-void FakeBeginFrameSource::DidFinishFrame(size_t remaining_frames) {
-  remaining_frames_ = remaining_frames;
-}
+FakeBeginFrameSource::FakeBeginFrameSource() {}
+
+FakeBeginFrameSource::~FakeBeginFrameSource() {}
 
 void FakeBeginFrameSource::AsValueInto(
     base::trace_event::TracedValue* dict) const {
@@ -67,16 +67,20 @@ TestSyntheticBeginFrameSource::TestSyntheticBeginFrameSource(
 TestSyntheticBeginFrameSource::~TestSyntheticBeginFrameSource() {
 }
 
-scoped_ptr<FakeCompositorTimingHistory> FakeCompositorTimingHistory::Create() {
+scoped_ptr<FakeCompositorTimingHistory> FakeCompositorTimingHistory::Create(
+    bool using_synchronous_renderer_compositor) {
   scoped_ptr<RenderingStatsInstrumentation> rendering_stats_instrumentation =
       RenderingStatsInstrumentation::Create();
   return make_scoped_ptr(new FakeCompositorTimingHistory(
+      using_synchronous_renderer_compositor,
       std::move(rendering_stats_instrumentation)));
 }
 
 FakeCompositorTimingHistory::FakeCompositorTimingHistory(
+    bool using_synchronous_renderer_compositor,
     scoped_ptr<RenderingStatsInstrumentation> rendering_stats_instrumentation)
-    : CompositorTimingHistory(CompositorTimingHistory::NULL_UMA,
+    : CompositorTimingHistory(using_synchronous_renderer_compositor,
+                              CompositorTimingHistory::NULL_UMA,
                               rendering_stats_instrumentation.get()),
       rendering_stats_instrumentation_owned_(
           std::move(rendering_stats_instrumentation)) {}

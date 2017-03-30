@@ -64,7 +64,6 @@
 
   # Exclude all unused files in skia utils.gypi file
   'sources!': [
-  '../third_party/skia/src/utils/SkBitmapHasher.cpp',
   '../third_party/skia/src/utils/SkBoundaryPatch.cpp',
   '../third_party/skia/src/utils/SkFrontBufferedStream.cpp',
   '../third_party/skia/src/utils/SkCamera.cpp',
@@ -76,7 +75,6 @@
   '../third_party/skia/src/utils/SkNinePatch.cpp',
   '../third_party/skia/src/utils/SkOSFile.cpp',
   '../third_party/skia/src/utils/SkParsePath.cpp',
-  '../third_party/skia/src/utils/SkSHA1.cpp',
 
 #windows
   '../third_party/skia/src/utils/win/SkAutoCoInitialize.cpp',
@@ -90,6 +88,7 @@
   'include_dirs': [
     '../third_party/skia/include/c',
     '../third_party/skia/include/core',
+    '../third_party/skia/include/client/android',
     '../third_party/skia/include/effects',
     '../third_party/skia/include/images',
     '../third_party/skia/include/lazy',

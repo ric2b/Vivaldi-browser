@@ -108,7 +108,6 @@
 <translation id="457845228957001925">Chromium 데이터 관련 중요 정보</translation>
 <translation id="459535195905078186">Chromium 앱</translation>
 <translation id="4677944499843243528">다른 컴퓨터(<ph name="HOST_NAME" />)의 다른 Chromium 프로세스(<ph name="PROCESS_ID" />)에서 프로필을 사용 중인 것 같습니다. 프로필이 손상되지 않도록 Chromium에서 잠금 설정했습니다. 다른 프로세스에서 프로필을 사용 중이지 않은 것이 확실한 경우 프로필을 잠금 해제하고 Chromium을 다시 시작하세요.</translation>
-<translation id="473775607612524610">업데이트</translation>
 <translation id="4743926867934016338">동의 및 검색</translation>
 <translation id="4888717733111232871">Chromium이 mDNS 트래픽을 허용하는 인바운드 규칙입니다.</translation>
 <translation id="4943838377383847465">Chromium이 백그라운드 모드로 실행 중입니다.</translation>
@@ -122,6 +121,7 @@
 <translation id="549669000822060376">Chromium에서 최신 시스템 업데이트를 설치하는 동안 잠시 기다려 주세요.</translation>
 <translation id="5563479599352954471">터치 한 번으로 검색</translation>
 <translation id="5620765574781326016">페이지를 나가지 않고 웹사이트에서 주제에 대해 자세히 알아보기</translation>
+<translation id="5634636535844844681">Chromium은 Windows 7 이상에서 사용할 수 있습니다.</translation>
 <translation id="5680901439334282664">Chromium에 로그인</translation>
 <translation id="5772805321386874569">(Chromium을 <ph name="BEGIN_BUTTON" />다시 시작<ph name="END_BUTTON" />해야 함)</translation>
 <translation id="5796460469508169315">Chromium 준비가 거의 완료되었습니다.</translation>
@@ -130,7 +130,6 @@
 <translation id="5859963531214966875">Chromium 향후 버전에서는 더 이상 이 Linux 시스템을 지원하지 않습니다.</translation>
 <translation id="5862307444128926510">Chromium에 오신 것을 환영합니다.</translation>
 <translation id="5877064549588274448">채널이 변경되었습니다. 변경사항을 적용하려면 기기를 다시 시작하세요.</translation>
-<translation id="5909170354645388250">Chromium에서 사용되지 않았습니다. 자리표시자는 리소스 맵을 동기화 상태로 유지합니다. 하나의 인수($1)가 발생할 수 있습니다.</translation>
 <translation id="5942225298871134766">Chromium은 <ph name="SAVED_PASSWORD_LINK" />을(를) 사용하여 비밀번호를 저장한 후 다음에 필요할 때 제공합니다.</translation>
 <translation id="5942520288919337908"><ph name="EXTENSION_NAME" />이(가) Chromium에 추가되었습니다.</translation>
 <translation id="59625444380784159">연락처 세부정보를 사용하면 Chromium에서 양식을 더욱 신속하게 작성할 수 있습니다.</translation>
@@ -142,7 +141,6 @@
 <translation id="6334986366598267305">이제 Google 계정으로 공유 컴퓨터에서 Chromium을 손쉽게 사용할 수 있습니다.</translation>
 <translation id="6373523479360886564">Chromium을 제거하시겠습니까?</translation>
 <translation id="6403826409255603130">Chromium은 빠른 속도로 웹페이지와 애플리케이션을 실행하는 웹 브라우저입니다. 빠르고 안정적이며 사용하기에 편리합니다. Chromium에 내장된 멀웨어 및 악성 코드 방지 기능을 사용하여 더욱 안전하게 웹을 검색하세요.</translation>
-<translation id="6424492062988593837">한층 개선된 Chromium의 최신 버전이 출시되었습니다.</translation>
 <translation id="6475912303565314141">또한 Chromium을 시작할 때 표시되는 페이지를 설정합니다.</translation>
 <translation id="6485906693002546646">Chromium 콘텐츠를 동기화하기 위해 <ph name="PROFILE_EMAIL" />을(를) 사용 중입니다. 동기화 환경설정을 업데이트하거나 Google 계정 없이 Chromium을 사용하려면 <ph name="SETTINGS_LINK" />(으)로 이동하세요.</translation>
 <translation id="6510925080656968729">Chromium 설치 제거</translation>
@@ -211,7 +209,6 @@ Chromium에서 설정을 복구할 수 없습니다.</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> The Chromium Authors. All rights reserved.</translation>
 <translation id="8621669128220841554">알 수 없는 오류로 인해 설치에 실패했습니다. Chromium을 다시 다운로드하세요.</translation>
 <translation id="8628626585870903697">Chromium은 인쇄 미리보기에 필요한 PDF 뷰어가 포함되어 있지 않습니다.</translation>
-<translation id="8684913864886094367">Chromium이 제대로 종료되지 않았습니다.</translation>
 <translation id="8697124171261953979">또한 Chromium을 시작하거나 검색주소창에서 검색할 때 표시되는 페이지를 설정합니다.</translation>
 <translation id="8704119203788522458">나만의 Chromium</translation>
 <translation id="872034308864968620">백그라운드에서 Chromium을 실행</translation>
@@ -228,7 +225,6 @@ Chromium에서 설정을 복구할 수 없습니다.</translation>
 
 로그인하면 북마크, 방문 기록 및 기타 설정과 같은 Chromium 정보가 <ph name="ACCOUNT_EMAIL_NEW" />에 병합됩니다.</translation>
 <translation id="9013087743919948559">Chromium에 추가</translation>
-<translation id="9013262824292842194">Chromium은 Windows Vista 또는 Windows XP 서비스 팩 2 이상이 설치된 컴퓨터에서 사용하실 수 있습니다.</translation>
 <translation id="9019929317751753759">Google에서는 Chromium의 보안을 강화하기 위해 <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />에 표시되지 않고 사용자가 모르게 추가되었을 수 있는 다음 확장 프로그램의 사용을 중지했습니다.</translation>
 <translation id="9022552996538154597">Chromium에 로그인</translation>
 <translation id="9036189287518468038">Chromium 앱 실행기</translation>

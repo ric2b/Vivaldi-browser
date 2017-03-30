@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/metrics/histogram.h"
+
 #include "components/dom_distiller/content/common/distiller_messages.h"
 #include "components/dom_distiller/content/renderer/distillability_agent.h"
 #include "components/dom_distiller/core/distillable_page_detector.h"
@@ -20,6 +22,10 @@ namespace dom_distiller {
 using namespace blink;
 
 namespace {
+
+const char* const kBlacklist[] = {
+  "www.reddit.com"
+};
 
 // Returns whether it is necessary to send updates back to the browser.
 // The number of updates can be from 0 to 2. See the tests in
@@ -48,18 +54,25 @@ bool IsLast(bool is_loaded) {
   return true;
 }
 
+bool IsBlacklisted(const GURL& url) {
+  for (size_t i = 0; i < arraysize(kBlacklist); ++i) {
+    if (base::LowerCaseEqualsASCII(url.host(), kBlacklist[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool IsDistillablePageAdaboost(WebDocument& doc,
-                               const DistillablePageDetector* detector) {
+                               const DistillablePageDetector* detector,
+                               const DistillablePageDetector* long_page,
+                               bool is_last) {
   WebDistillabilityFeatures features = doc.distillabilityFeatures();
   GURL parsed_url(doc.url());
   if (!parsed_url.is_valid()) {
     return false;
   }
-  // The adaboost model is only applied to non-mobile pages.
-  if (features.isMobileFriendly) {
-    return false;
-  }
-  return detector->Classify(CalculateDerivedFeatures(
+  std::vector<double> derived = CalculateDerivedFeatures(
     features.openGraph,
     parsed_url,
     features.elementCount,
@@ -68,18 +81,40 @@ bool IsDistillablePageAdaboost(WebDocument& doc,
     features.mozScore,
     features.mozScoreAllSqrt,
     features.mozScoreAllLinear
-  ));
+  );
+  bool distillable = detector->Classify(derived);
+  bool long_article = long_page->Classify(derived);
+  bool blacklisted = IsBlacklisted(parsed_url);
+
+  int bucket = static_cast<unsigned>(features.isMobileFriendly) |
+      (static_cast<unsigned>(distillable) << 1);
+  if (is_last) {
+    UMA_HISTOGRAM_ENUMERATION("DomDistiller.PageDistillableAfterLoading",
+        bucket, 4);
+  } else {
+    UMA_HISTOGRAM_ENUMERATION("DomDistiller.PageDistillableAfterParsing",
+        bucket, 4);
+  }
+
+  if (blacklisted) {
+    return false;
+  }
+  if (features.isMobileFriendly) {
+    return false;
+  }
+  return distillable && long_article;
 }
 
-bool IsDistillablePage(WebDocument& doc) {
+bool IsDistillablePage(WebDocument& doc, bool is_last) {
   switch (GetDistillerHeuristicsType()) {
     case DistillerHeuristicsType::ALWAYS_TRUE:
       return true;
     case DistillerHeuristicsType::OG_ARTICLE:
       return doc.distillabilityFeatures().openGraph;
     case DistillerHeuristicsType::ADABOOST_MODEL:
-      return IsDistillablePageAdaboost(
-          doc, DistillablePageDetector::GetNewModel());
+      return IsDistillablePageAdaboost(doc,
+          DistillablePageDetector::GetNewModel(),
+          DistillablePageDetector::GetLongPageModel(), is_last);
     case DistillerHeuristicsType::NONE:
     default:
       return false;
@@ -110,8 +145,9 @@ void DistillabilityAgent::DidMeaningfulLayout(
   bool is_loaded = layout_type == WebMeaningfulLayout::FinishedLoading;
   if (!NeedToUpdate(is_loaded)) return;
 
+  bool is_last = IsLast(is_loaded);
   Send(new FrameHostMsg_Distillability(routing_id(),
-      IsDistillablePage(doc), IsLast(is_loaded)));
+      IsDistillablePage(doc, is_last), is_last));
 }
 
 

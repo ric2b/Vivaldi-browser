@@ -11,6 +11,21 @@
 @WIN-ALLOW:size=(250, 50)
 @WIN-ALLOW:size=(150, 50)
 @WIN-ALLOW:IA2_STATE_EDITABLE
+
+@BLINK-ALLOW:location*
+@BLINK-ALLOW:scroll*
+@BLINK-ALLOW:size=(300, 150)
+@BLINK-ALLOW:size=(300, 100)
+@BLINK-ALLOW:size=(250, 50)
+@BLINK-ALLOW:size=(150, 50)
+
+These can be removed when bug 532249 is fixed because
+then the test framework will just wait until all frames
+have finished loading. Until then we need these because
+the test doesn't wait for same-process iframes to finish
+loading.
+@WAIT-FOR:Ordinary Button
+@WAIT-FOR:Scrolled Button
 -->
 <!DOCTYPE html>
 <html>
@@ -45,34 +60,15 @@ div {
   </button>
 </div>
 
-<div><iframe id="frame1" style="width: 300px; height: 100px;" scrolling="no"></iframe></div>
+<div>
+  <iframe id="frame1" style="width: 300px; height: 100px;"
+          scrolling="no" src="frame/button.html"></iframe>
+</div>
 
-<div><iframe id="frame2" style="width: 150px; height: 50px;" scrolling="no"></iframe></div>
+<div>
+  <iframe id="frame2" style="width: 150px; height: 50px;"
+          scrolling="no" src="frame/button_scrolled.html"></iframe>
+</div>
 
-<script>
-var frameCode =
-    '<body style="margin: 0; padding: 0;">\n' +
-    '<div style="width: 300px; height: 100px;">\n' +
-    '  <button style="margin: 25px; border: 0; width: 250px; height: 50px">\n' +
-    '    Button\n' +
-    '  </button>\n' +
-    '</div>\n' +
-    '</body>\n';
-
-function writeFrameCode(frame) {
-  var doc = frame.contentWindow.document;
-  doc.open();
-  doc.write(frameCode);
-  doc.close();
-}
-
-var frame1 = document.getElementById('frame1');
-writeFrameCode(frame1);
-
-var frame2 = document.getElementById('frame2');
-writeFrameCode(frame2);
-frame2.contentWindow.scrollTo(150, 50);
-</script>
-  
 </body>
 </html>

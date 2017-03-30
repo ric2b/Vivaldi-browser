@@ -41,13 +41,14 @@ class ShellContentRendererClient : public content::ContentRendererClient {
                        const GURL& url,
                        const GURL& first_party_for_cookies,
                        GURL* new_url) override;
-  const void* CreatePPAPIInterface(const std::string& interface_name) override;
   bool IsExternalPepperPlugin(const std::string& module_name) override;
   bool ShouldGatherSiteIsolationStats() const override;
   content::BrowserPluginDelegate* CreateBrowserPluginDelegate(
       content::RenderFrame* render_frame,
       const std::string& mime_type,
       const GURL& original_url) override;
+  void RunScriptsAtDocumentStart(content::RenderFrame* render_frame) override;
+  void RunScriptsAtDocumentEnd(content::RenderFrame* render_frame) override;
 
  protected:
   // app_shell embedders may need custom extensions client interfaces.

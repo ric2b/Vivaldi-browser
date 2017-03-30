@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/ui/views/frame/browser_non_client_frame_view_ash.h"
-
 #include "build/build_config.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 
@@ -20,13 +18,18 @@
 #include "chrome/browser/ui/views/frame/glass_browser_frame_view.h"
 #endif
 
+#if defined(USE_ASH)
+#include "chrome/browser/ui/views/frame/browser_non_client_frame_view_ash.h"
+#endif
+
 namespace chrome {
 
 BrowserNonClientFrameView* CreateBrowserNonClientFrameView(
     BrowserFrame* frame,
     BrowserView* browser_view) {
 #if defined(MOJO_SHELL_CLIENT)
-  if (content::MojoShellConnection::Get()) {
+  if (content::MojoShellConnection::Get() &&
+      content::MojoShellConnection::Get()->UsingExternalShell()) {
     BrowserNonClientFrameViewMus* frame_view =
         new BrowserNonClientFrameViewMus(frame, browser_view);
     frame_view->Init();

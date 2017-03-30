@@ -19,7 +19,7 @@ function WebUIAccessibilityAuditBrowserTest() {}
 WebUIAccessibilityAuditBrowserTest.prototype = {
   __proto__: testing.Test.prototype,
 
-  browsePrintPreload: '../../../app/resources/terms/terms_en.html',
+  browsePrintPreload: '../../../../components/resources/terms/terms_en.html',
 
   runAccessibilityChecks: true,
   accessibilityIssuesAreErrors: true,

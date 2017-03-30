@@ -10,7 +10,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/download_item.h"
 #include "net/base/mime_util.h"
-#include "net/base/net_util.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
@@ -62,7 +61,7 @@ void DragDownloadItem(const content::DownloadItem* download,
   if (!root_window || !aura::client::GetDragDropClient(root_window))
     return;
 
-  gfx::Point location = gfx::Screen::GetScreenFor(view)->GetCursorScreenPoint();
+  gfx::Point location = gfx::Screen::GetScreen()->GetCursorScreenPoint();
   // TODO(varunjain): Properly determine and send DRAG_EVENT_SOURCE below.
   aura::client::GetDragDropClient(root_window)->StartDragAndDrop(
       data,

@@ -19,18 +19,17 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/prefs/pref_member.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
 #include "chrome/common/features.h"
+#include "components/prefs/pref_member.h"
 #include "components/ssl_config/ssl_config_service_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/browser_thread_delegate.h"
 #include "net/base/network_change_notifier.h"
 #include "net/http/http_network_session.h"
-#include "net/socket/next_proto.h"
 
 class PrefProxyConfigTracker;
 class PrefService;
@@ -204,14 +203,12 @@ class IOThread : public content::BrowserThreadDelegate {
     uint16_t testing_fixed_https_port;
     Optional<bool> enable_tcp_fast_open_for_ssl;
 
-    Optional<size_t> initial_max_spdy_concurrent_streams;
-    Optional<bool> enable_spdy_compression;
-    Optional<bool> enable_spdy_ping_based_connection_checking;
     Optional<net::NextProto> spdy_default_protocol;
-    net::NextProtoVector next_protos;
-    Optional<std::string> trusted_spdy_proxy;
+    Optional<bool> enable_spdy31;
+    Optional<bool> enable_http2;
     std::set<net::HostPortPair> forced_spdy_exclusions;
-    Optional<bool> use_alternative_services;
+    Optional<bool> parse_alternative_services;
+    Optional<bool> enable_alternative_service_with_different_host;
     Optional<double> alternative_service_probability_threshold;
 
     Optional<bool> enable_npn;
@@ -219,6 +216,7 @@ class IOThread : public content::BrowserThreadDelegate {
     Optional<bool> enable_brotli;
 
     Optional<bool> enable_quic;
+    Optional<bool> disable_quic_on_timeout_with_open_streams;
     Optional<bool> enable_quic_for_proxies;
     Optional<bool> enable_quic_port_selection;
     Optional<bool> quic_always_require_handshake_confirmation;
@@ -242,11 +240,13 @@ class IOThread : public content::BrowserThreadDelegate {
     Optional<bool> quic_disable_preconnect_if_0rtt;
     std::unordered_set<std::string> quic_host_whitelist;
     Optional<bool> quic_migrate_sessions_on_network_change;
+    Optional<bool> quic_migrate_sessions_early;
     bool enable_user_alternate_protocol_ports;
     // NetErrorTabHelper uses |dns_probe_service| to send DNS probes when a
     // main frame load fails with a DNS error in order to provide more useful
     // information to the renderer so it can show a more specific error page.
     scoped_ptr<chrome_browser_net::DnsProbeService> dns_probe_service;
+    bool enable_token_binding;
   };
 
   // |net_log| must either outlive the IOThread or be NULL.
@@ -322,6 +322,12 @@ class IOThread : public content::BrowserThreadDelegate {
                                    const VariationParameters& quic_trial_params,
                                    Globals* globals);
 
+  // Configures Alternative Services in |globals| based on the field trial
+  // group.
+  static void ConfigureAltSvcGlobals(const base::CommandLine& command_line,
+                                     base::StringPiece altsvc_trial_group,
+                                     IOThread::Globals* globals);
+
   // Configures NPN in |globals| based on the field trial group.
   static void ConfigureNPNGlobals(base::StringPiece npn_trial_group,
                                   Globals* globals);
@@ -370,6 +376,11 @@ class IOThread : public content::BrowserThreadDelegate {
       const VariationParameters& quic_trial_params,
       bool quic_allowed_by_policy,
       Globals* globals);
+
+  // Returns true if QUIC should be disabled when a connection times out with
+  // open streams.
+  static bool ShouldDisableQuicWhenConnectionTimesOutWithOpenStreams(
+      const VariationParameters& quic_trial_params);
 
   // Returns true if QUIC should be enabled, either as a result
   // of a field trial or a command line flag.
@@ -423,8 +434,8 @@ class IOThread : public content::BrowserThreadDelegate {
   // Returns true if QUIC should prefer AES-GCN even without hardware support.
   static bool ShouldQuicPreferAes(const VariationParameters& quic_trial_params);
 
-  // Returns true if QUIC should enable alternative services.
-  static bool ShouldQuicEnableAlternativeServices(
+  // Returns true if QUIC should enable alternative services for different host.
+  static bool ShouldQuicEnableAlternativeServicesForDifferentHost(
       const base::CommandLine& command_line,
       const VariationParameters& quic_trial_params);
 
@@ -472,6 +483,10 @@ class IOThread : public content::BrowserThreadDelegate {
   // Returns true if QUIC should migrate sessions when primary network
   // changes.
   static bool ShouldQuicMigrateSessionsOnNetworkChange(
+      const VariationParameters& quic_trial_params);
+
+  // Returns true if QUIC should migrate sessions early.
+  static bool ShouldQuicMigrateSessionsEarly(
       const VariationParameters& quic_trial_params);
 
   // Returns the maximum length for QUIC packets, based on any flags in

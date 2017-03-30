@@ -42,8 +42,10 @@
     'dependencies': [
       '../config.gyp:config',
       '../wtf/wtf.gyp:wtf',
+      '<(DEPTH)/base/base.gyp:base',
       # FIXME: Can we remove the dependency on Skia?
       '<(DEPTH)/skia/skia.gyp:skia',
+      '<(DEPTH)/url/url.gyp:url_lib',
     ],
     'all_dependent_settings': {
       'include_dirs': [
@@ -61,9 +63,11 @@
       '<(SHARED_INTERMEDIATE_DIR)/blink',
     ],
     'sources': [
+      'exported/FilePathConversion.cpp',
+      'exported/URLConversion.cpp',
       'exported/WebCString.cpp',
-      'exported/WebString.cpp',
       'exported/WebCommon.cpp',
+      'exported/WebString.cpp',
     ],
   },
   {
@@ -127,7 +131,10 @@
       'platform_generated.gyp:make_platform_generated',
       '<(DEPTH)/base/base.gyp:base',
       '<(DEPTH)/cc/cc.gyp:cc',
+      '<(DEPTH)/device/battery/battery.gyp:device_battery_mojo_bindings',
       '<(DEPTH)/gpu/gpu.gyp:gles2_c_lib',
+      '<(DEPTH)/mojo/mojo_base.gyp:mojo_environment_chromium',
+      '<(DEPTH)/mojo/mojo_edk.gyp:mojo_system_impl',
       '<(DEPTH)/skia/skia.gyp:skia',
       '<(DEPTH)/third_party/iccjpeg/iccjpeg.gyp:iccjpeg',
       '<(DEPTH)/third_party/icu/icu.gyp:icui18n',
@@ -143,6 +150,7 @@
       '<(libjpeg_gyp_path):libjpeg',
     ],
     'export_dependent_settings': [
+      'platform_generated.gyp:make_platform_generated',
       '<(DEPTH)/base/base.gyp:base',
       '<(DEPTH)/cc/cc.gyp:cc',
       '<(DEPTH)/gpu/gpu.gyp:gles2_c_lib',
@@ -174,11 +182,21 @@
       '<@(platform_heap_files)',
 
       # Additional .cpp files from platform_generated.gyp:make_platform_generated actions.
+      '<(blink_platform_output_dir)/CharacterData.cpp',
       '<(blink_platform_output_dir)/ColorData.cpp',
       '<(blink_platform_output_dir)/FontFamilyNames.cpp',
       '<(blink_platform_output_dir)/HTTPNames.cpp',
       '<(blink_platform_output_dir)/RuntimeEnabledFeatures.cpp',
       '<(blink_platform_output_dir)/RuntimeEnabledFeatures.h',
+
+      # Additional .cpp files from the protocol_sources list.
+      '<(blink_platform_output_dir)/inspector_protocol/Frontend.cpp',
+      '<(blink_platform_output_dir)/inspector_protocol/Dispatcher.cpp',
+      '<(blink_platform_output_dir)/inspector_protocol/TypeBuilder.cpp',
+
+      # Additional .cpp files from the v8_inspector.
+      '<(blink_platform_output_dir)/v8_inspector/DebuggerScript.h',
+      '<(blink_platform_output_dir)/v8_inspector/InjectedScriptSource.h',
     ],
     'sources/': [
       # Exclude all platform specific things, reinclude them below on a per-platform basis

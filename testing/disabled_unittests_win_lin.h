@@ -5,3 +5,7 @@
 // On the form
 //    DISABLE(foo,bar)
 //    DISABLE(foo,baz)
+
+  // Appears flaky on Win and Lin
+  DISABLE(MediaRouterMojoImplTest,
+       RegisterMediaSinksObserverWithAvailabilityChange)

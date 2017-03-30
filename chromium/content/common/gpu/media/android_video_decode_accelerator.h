@@ -23,6 +23,7 @@
 #include "media/base/android/sdk_media_codec_bridge.h"
 #include "media/base/media_keys.h"
 #include "media/video/video_decode_accelerator.h"
+#include "ui/gl/android/scoped_java_surface.h"
 
 namespace gfx {
 class SurfaceTexture;
@@ -47,20 +48,23 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
    public:
     virtual ~BackingStrategy() {}
 
-    // Called after the state provider is given, but before any other
-    // calls to the BackingStrategy.
-    virtual void Initialize(AVDAStateProvider* provider) = 0;
+    // Must be called before anything else. If surface_view_id is not equal to
+    // |kNoSurfaceID| it refers to a SurfaceView that the strategy must render
+    // to.
+    // Returns the Java surface to configure MediaCodec with.
+    virtual gfx::ScopedJavaSurface Initialize(int surface_view_id) = 0;
 
     // Called before the AVDA does any Destroy() work.  This will be
     // the last call that the BackingStrategy receives.
     virtual void Cleanup(bool have_context,
                          const OutputBufferMap& buffer_map) = 0;
 
+    // This returns the SurfaceTexture created by Initialize, or nullptr if
+    // the strategy was initialized with a SurfaceView.
+    virtual scoped_refptr<gfx::SurfaceTexture> GetSurfaceTexture() const = 0;
+
     // Return the GL texture target that the PictureBuffer textures use.
     virtual uint32_t GetTextureTarget() const = 0;
-
-    // Create and return a surface texture for the MediaCodec to use.
-    virtual scoped_refptr<gfx::SurfaceTexture> CreateSurfaceTexture() = 0;
 
     // Make the provided PictureBuffer draw the image that is represented by
     // the decoded output buffer at codec_buffer_index.
@@ -91,6 +95,9 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
     // Notify the strategy that a frame is available.  This callback can happen
     // on any thread at any time.
     virtual void OnFrameAvailable() = 0;
+
+    // Whether the pictures produced by this backing strategy are overlayable.
+    virtual bool ArePicturesOverlayable() = 0;
   };
 
   AndroidVideoDecodeAccelerator(
@@ -125,12 +132,15 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
   void OnFrameAvailable();
 
  private:
+  friend class AVDATimerManager;
+
+  // TODO(timav): evaluate the need for more states in the AVDA state machine.
   enum State {
     NO_ERROR,
     ERROR,
+    WAITING_FOR_KEY,
+    WAITING_FOR_EOS,
   };
-
-  static const base::TimeDelta kDecodePollDelay;
 
   // Configures |media_codec_| with the given codec parameters from the client.
   bool ConfigureMediaCodec();
@@ -142,7 +152,7 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
   // Does pending IO tasks if any. Once this is called, it polls |media_codec_|
   // until it finishes pending tasks. For the polling, |kDecodePollDelay| is
   // used.
-  void DoIOTask();
+  void DoIOTask(bool start_timer);
 
   // Feeds input data to |media_codec_|. This checks
   // |pending_bitstream_buffers_| and queues a buffer to |media_codec_|.
@@ -156,6 +166,10 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
 
   // Requests picture buffers from the client.
   void RequestPictureBuffers();
+
+  // Decode the content in the |bitstream_buffer|. Note that a
+  // |bitstream_buffer| of id as -1 indicates a flush command.
+  void DecodeBuffer(const media::BitstreamBuffer& bitstream_buffer);
 
   // This callback is called after CDM obtained a MediaCrypto object.
   void OnMediaCryptoReady(media::MediaDrmBridge::JavaObjectPtr media_crypto,
@@ -181,7 +195,12 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
   void NotifyResetDone();
 
   // Notifies about decoding errors.
-  void NotifyError(media::VideoDecodeAccelerator::Error error);
+  // Note: you probably don't want to call this directly.  Use PostError or
+  // RETURN_ON_FAILURE, since we can defer error reporting to keep the pipeline
+  // from breaking.  NotifyError will do so immediately, PostError may wait.
+  // |token| has to match |error_sequence_token_|, or else it's assumed to be
+  // from a post that's prior to a previous reset, and ignored.
+  void NotifyError(media::VideoDecodeAccelerator::Error error, int token);
 
   // Start or stop our work-polling timer based on whether we did any work, and
   // how long it has been since we've done work.  Calling this with true will
@@ -239,8 +258,9 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
   // The low-level decoder which Android SDK provides.
   scoped_ptr<media::VideoCodecBridge> media_codec_;
 
-  // A container of texture. Used to set a texture to |media_codec_|.
-  scoped_refptr<gfx::SurfaceTexture> surface_texture_;
+  // The surface that MediaCodec is configured to output to. It's created by the
+  // backing strategy.
+  gfx::ScopedJavaSurface surface_;
 
   // Set to true after requesting picture buffers to the client.
   bool picturebuffers_requested_;
@@ -268,9 +288,6 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
   // Owner of the GL context. Used to restore the context state.
   base::WeakPtr<gpu::gles2::GLES2Decoder> gl_decoder_;
 
-  // Repeating timer responsible for draining pending IO to the codec.
-  base::RepeatingTimer io_timer_;
-
   // Backing strategy that we'll use to connect PictureBuffers to frames.
   scoped_ptr<BackingStrategy> strategy_;
 
@@ -293,6 +310,17 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
   // The MediaCrypto object is used in the MediaCodec.configure() in case of
   // an encrypted stream.
   media::MediaDrmBridge::JavaObjectPtr media_crypto_;
+
+  // Index of the dequeued and filled buffer that we keep trying to enqueue.
+  // Such buffer appears in MEDIA_CODEC_NO_KEY processing.
+  int pending_input_buf_index_;
+
+  // Monotonically increasing value that is used to prevent old, delayed errors
+  // from being sent after a reset.
+  int error_sequence_token_;
+
+  // PostError will defer sending an error if and only if this is true.
+  bool defer_errors_;
 
   // WeakPtrFactory for posting tasks back to |this|.
   base::WeakPtrFactory<AndroidVideoDecodeAccelerator> weak_this_factory_;

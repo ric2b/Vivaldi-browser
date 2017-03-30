@@ -522,6 +522,9 @@ void GL_APIENTRY GLES2GetShaderSource(GLuint shader,
 const GLubyte* GL_APIENTRY GLES2GetString(GLenum name) {
   return gles2::GetGLContext()->GetString(name);
 }
+const GLubyte* GL_APIENTRY GLES2GetStringi(GLenum name, GLuint index) {
+  return gles2::GetGLContext()->GetStringi(name, index);
+}
 void GL_APIENTRY GLES2GetSynciv(GLsync sync,
                                 GLenum pname,
                                 GLsizei bufsize,
@@ -1457,12 +1460,6 @@ void GL_APIENTRY GLES2DiscardFramebufferEXT(GLenum target,
 void GL_APIENTRY GLES2LoseContextCHROMIUM(GLenum current, GLenum other) {
   gles2::GetGLContext()->LoseContextCHROMIUM(current, other);
 }
-GLuint GL_APIENTRY GLES2InsertSyncPointCHROMIUM() {
-  return gles2::GetGLContext()->InsertSyncPointCHROMIUM();
-}
-void GL_APIENTRY GLES2WaitSyncPointCHROMIUM(GLuint sync_point) {
-  gles2::GetGLContext()->WaitSyncPointCHROMIUM(sync_point);
-}
 GLuint64 GL_APIENTRY GLES2InsertFenceSyncCHROMIUM() {
   return gles2::GetGLContext()->InsertFenceSyncCHROMIUM();
 }
@@ -1714,6 +1711,13 @@ void GL_APIENTRY GLES2BindFragDataLocationEXT(GLuint program,
 }
 GLint GL_APIENTRY GLES2GetFragDataIndexEXT(GLuint program, const char* name) {
   return gles2::GetGLContext()->GetFragDataIndexEXT(program, name);
+}
+void GL_APIENTRY
+GLES2UniformMatrix4fvStreamTextureMatrixCHROMIUM(GLint location,
+                                                 GLboolean transpose,
+                                                 const GLfloat* default_value) {
+  gles2::GetGLContext()->UniformMatrix4fvStreamTextureMatrixCHROMIUM(
+      location, transpose, default_value);
 }
 
 namespace gles2 {
@@ -2104,6 +2108,9 @@ extern const NameToFunc g_gles2_function_table[] = {
     },
     {
         "glGetString", reinterpret_cast<GLES2FunctionPointer>(glGetString),
+    },
+    {
+        "glGetStringi", reinterpret_cast<GLES2FunctionPointer>(glGetStringi),
     },
     {
         "glGetSynciv", reinterpret_cast<GLES2FunctionPointer>(glGetSynciv),
@@ -2832,14 +2839,6 @@ extern const NameToFunc g_gles2_function_table[] = {
         reinterpret_cast<GLES2FunctionPointer>(glLoseContextCHROMIUM),
     },
     {
-        "glInsertSyncPointCHROMIUM",
-        reinterpret_cast<GLES2FunctionPointer>(glInsertSyncPointCHROMIUM),
-    },
-    {
-        "glWaitSyncPointCHROMIUM",
-        reinterpret_cast<GLES2FunctionPointer>(glWaitSyncPointCHROMIUM),
-    },
-    {
         "glInsertFenceSyncCHROMIUM",
         reinterpret_cast<GLES2FunctionPointer>(glInsertFenceSyncCHROMIUM),
     },
@@ -3019,6 +3018,11 @@ extern const NameToFunc g_gles2_function_table[] = {
     {
         "glGetFragDataIndexEXT",
         reinterpret_cast<GLES2FunctionPointer>(glGetFragDataIndexEXT),
+    },
+    {
+        "glUniformMatrix4fvStreamTextureMatrixCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glUniformMatrix4fvStreamTextureMatrixCHROMIUM),
     },
     {
         NULL, NULL,

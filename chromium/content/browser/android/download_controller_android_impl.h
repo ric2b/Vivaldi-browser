@@ -30,7 +30,6 @@
 #include "base/memory/scoped_vector.h"
 #include "base/memory/singleton.h"
 #include "content/public/browser/android/download_controller_android.h"
-#include "content/public/browser/download_item.h"
 #include "net/cookies/cookie_monster.h"
 #include "url/gurl.h"
 
@@ -44,8 +43,7 @@ class DeferredDownloadObserver;
 class RenderViewHost;
 class WebContents;
 
-class DownloadControllerAndroidImpl : public DownloadControllerAndroid,
-                                      public DownloadItem::Observer {
+class DownloadControllerAndroidImpl : public DownloadControllerAndroid {
  public:
   static DownloadControllerAndroidImpl* GetInstance();
 
@@ -61,6 +59,7 @@ class DownloadControllerAndroidImpl : public DownloadControllerAndroid,
   void AcquireFileAccessPermission(
       WebContents* web_contents,
       const AcquireFileAccessPermissionCallback& callback) override;
+  void SetDefaultDownloadFileName(const std::string& file_name) override;
 
  private:
   // Used to store all the information about an Android download.
@@ -143,6 +142,8 @@ class DownloadControllerAndroidImpl : public DownloadControllerAndroid,
   JavaObject* GetJavaObject();
 
   JavaObject* java_object_;
+
+  std::string default_file_name_;
 
   ScopedVector<DeferredDownloadObserver> deferred_downloads_;
 

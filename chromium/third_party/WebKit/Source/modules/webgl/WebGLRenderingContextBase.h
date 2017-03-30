@@ -109,21 +109,6 @@ class WebGLVertexArrayObjectBase;
 class WebGLRenderingContextLostCallback;
 class WebGLRenderingContextErrorMessageCallback;
 
-struct FormatType {
-    GLenum internalformat;
-    GLenum format;
-    GLenum type;
-};
-
-struct FormatTypeCompare {
-    bool operator() (const FormatType& lhs, const FormatType& rhs) const
-    {
-        return (lhs.internalformat < rhs.internalformat
-            || ((lhs.internalformat == rhs.internalformat) && (lhs.format < rhs.format))
-            || ((lhs.internalformat == rhs.internalformat) && (lhs.format == rhs.format) && (lhs.type < rhs.type)));
-    }
-};
-
 // ScopedDrawingBufferBinder is used for ReadPixels/CopyTexImage2D/CopySubImage2D to read from
 // a multisampled DrawingBuffer. In this situation, we need to blit to a single sampled buffer
 // for reading, during which the bindings could be changed and need to be recovered.
@@ -474,8 +459,8 @@ protected:
     void destroyContext();
     void markContextChanged(ContentChangeType);
 
-    // Query if the context is NPOT strict.
-    bool isNPOTStrict() { return !isWebGL2OrHigher(); }
+    void notifyCanvasContextChanged();
+
     // Query if depth_stencil buffer is supported.
     bool isDepthStencilSupported() { return m_isDepthStencilSupported; }
 
@@ -500,10 +485,6 @@ protected:
     PassRefPtr<Image> drawImageIntoBuffer(PassRefPtr<Image>, int width, int height, const char* functionName);
 
     PassRefPtr<Image> videoFrameToImage(HTMLVideoElement*);
-
-    WebGLRenderbuffer* ensureEmulatedStencilBuffer(GLenum target, WebGLRenderbuffer*);
-
-    virtual const WebGLSamplerState* getTextureUnitSamplerState(GLenum target, GLuint unit) const;
 
     // Structure for rendering to a DrawingBuffer, instead of directly
     // to the back-buffer of m_context.
@@ -564,9 +545,6 @@ protected:
     PersistentHeapVectorWillBeHeapVector<TextureUnitState> m_textureUnits;
     unsigned long m_activeTextureUnit;
 
-    PersistentWillBeMember<WebGLTexture> m_blackTexture2D;
-    PersistentWillBeMember<WebGLTexture> m_blackTextureCubeMap;
-
     Vector<GLenum> m_compressedTextureFormats;
 
     // Fixed-size cache of reusable image buffers for video texImage2D calls.
@@ -585,6 +563,7 @@ protected:
     GLint m_maxTextureSize;
     GLint m_maxCubeMapTextureSize;
     GLint m_max3DTextureSize;
+    GLint m_maxArrayTextureLayers;
     GLint m_maxRenderbufferSize;
     GLint m_maxViewportDims[2];
     GLint m_maxTextureLevel;
@@ -778,7 +757,6 @@ protected:
     std::set<GLenum> m_supportedInternalFormatsCopyTexImage;
     std::set<GLenum> m_supportedFormats;
     std::set<GLenum> m_supportedTypes;
-    std::set<FormatType, FormatTypeCompare> m_supportedFormatTypeCombinations;
 
     // Helpers for getParameter and others
     ScriptValue getBooleanParameter(ScriptState*, GLenum);
@@ -831,9 +809,6 @@ protected:
         GLint internalformat, GLenum type, GLint xoffset, GLint yoffset, GLint zoffset, HTMLCanvasElement*);
     bool canUseTexImageCanvasByGPU(GLint internalformat, GLenum type);
 
-    void handleTextureCompleteness(const char*, bool);
-    void createFallbackBlackTextures1x1();
-
     virtual WebGLImageConversion::PixelStoreParams getPackPixelStoreParams();
     virtual WebGLImageConversion::PixelStoreParams getUnpackPixelStoreParams();
 
@@ -841,9 +816,6 @@ protected:
     // and the color buffer format of the current bound framebuffer combination
     // is valid.
     bool isTexInternalFormatColorBufferCombinationValid(GLenum texInternalFormat, GLenum colorBufferFormat);
-
-    // Helper function to get the bound framebuffer's color buffer format.
-    virtual GLenum boundFramebufferColorFormat();
 
     // Helper function to verify limits on the length of uniform and attribute locations.
     virtual unsigned getMaxWebGLLocationLength() const { return 256; }
@@ -857,35 +829,33 @@ protected:
     // ASCII subset as defined in GLSL ES 1.0 spec section 3.1.
     bool validateString(const char* functionName, const String&);
 
-    // Helper function to check target and texture bound to the target.
+    // Helper function to check texture binding target and texture bound to the target.
     // Generate GL errors and return 0 if target is invalid or texture bound is
     // null.  Otherwise, return the texture bound to the target.
-    virtual WebGLTexture* validateTextureBinding(const char* functionName, GLenum target, bool useSixEnumsForCubeMap);
+    WebGLTexture* validateTextureBinding(const char* functionName, GLenum target);
+
+    // Helper function to check texture 2D target and texture bound to the target.
+    // Generate GL errors and return 0 if target is invalid or texture bound is
+    // null.  Otherwise, return the texture bound to the target.
+    WebGLTexture* validateTexture2DBinding(const char* functionName, GLenum target);
 
     // Helper function to check input internalformat/format/type for functions {copy}Tex{Sub}Image.
     // Generates GL error and returns false if parameters are invalid.
     bool validateTexFuncFormatAndType(const char* functionName, TexImageFunctionType, GLenum internalformat, GLenum format, GLenum type, GLint level);
 
-    // Helper function to check readbuffer validity for readPixels and copyTex{Sub}Image.
-    // If yes, obtains the readbuffer's format, type, the bound read framebuffer, returns true.
+    // Helper function to check readbuffer validity for copyTex{Sub}Image.
+    // If yes, obtains the bound read framebuffer, returns true.
     // If not, generates a GL error, returns false.
-    // Note: it's OK to pass format == nullptr and type == nullptr.
-    bool validateReadBufferAndGetInfo(const char* functionName, WebGLFramebuffer*& readFramebufferBinding, GLenum* format, GLenum* type);
+    bool validateReadBufferAndGetInfo(const char* functionName, WebGLFramebuffer*& readFramebufferBinding);
 
-    // Helper function to check format/type enums for readPixels.
+    // Helper function to check format/type and ArrayBuffer view type for readPixels.
     // Generates INVALID_ENUM and returns false if parameters are invalid.
-    virtual bool validateReadPixelsFormatAndType(GLenum format, GLenum type);
-
-    // Helper function to get expected ArrayBuffer view type for readPixels.
-    virtual DOMArrayBufferView::ViewType readPixelsExpectedArrayBufferViewType(GLenum type);
-
-    // Helper function to check format/type combination for readPixels.
-    // Generates INVALID_OPERATION and returns false if the combination is unsupported.
-    bool validateReadPixelsFormatTypeCombination(GLenum format, GLenum type, GLenum readBufferInternalFormat, GLenum readBufferType);
+    // Generates INVALID_OPERATION if ArrayBuffer view type is incompatible with type.
+    virtual bool validateReadPixelsFormatAndType(GLenum format, GLenum type, DOMArrayBufferView*);
 
     // Helper function to check parameters of readPixels. Returns true if all parameters
     // are valid. Otherwise, generates appropriate error and returns false.
-    bool validateReadPixelsFuncParameters(GLsizei width, GLsizei height, GLenum format, GLenum type, long long bufferSize);
+    bool validateReadPixelsFuncParameters(GLsizei width, GLsizei height, GLenum format, GLenum type, DOMArrayBufferView*, long long bufferSize);
 
     virtual GLint getMaxTextureLevelForTarget(GLenum target);
 
@@ -904,6 +874,7 @@ protected:
         SourceHTMLCanvasElement,
         SourceHTMLVideoElement,
         SourceImageBitmap,
+        SourceUnpackBuffer,
     };
 
     // Helper function for tex{Sub}Image{2|3}D to check if the input format/type/level/target/width/height/depth/border/xoffset/yoffset/zoffset are valid.
@@ -929,9 +900,6 @@ protected:
     // Generates GL error and returns false if parameters are invalid.
     bool validateTexFuncData(const char* functionName, GLint level, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, DOMArrayBufferView* pixels, NullDisposition);
 
-    // Helper function to validate that a copyTexSubImage call is valid.
-    bool validateCopyTexSubImage(const char* functionName, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLint x, GLint y, GLsizei width, GLsizei height);
-
     // Helper function to validate a given texture format is settable as in
     // you can supply data to texImage2D, or call texImage2D, copyTexImage2D and
     // copyTexSubImage2D.
@@ -941,20 +909,8 @@ protected:
     // Helper function to validate format for CopyTexImage.
     bool validateCopyTexFormat(const char* functionName, GLenum format);
 
-    // Helper function to validate compressed texture data is correct size
-    // for the given format and dimensions.
-    bool validateCompressedTexFuncData(const char* functionName, GLsizei width, GLsizei height, GLsizei depth, GLenum format, DOMArrayBufferView* pixels);
-
     // Helper function for validating compressed texture formats.
     bool validateCompressedTexFormat(const char* functionName, GLenum format);
-
-    // Helper function to validate compressed texture dimensions are valid for
-    // the given format.
-    bool validateCompressedTexDimensions(const char* functionName, TexImageFunctionType, GLenum target, GLint level, GLsizei width, GLsizei height, GLsizei depth, GLenum format);
-
-    // Helper function to validate compressed texture dimensions are valid for
-    // the given format.
-    bool validateCompressedTexSubDimensions(const char* functionName, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, WebGLTexture*);
 
     // Helper function to validate if front/back stencilMask and stencilFunc settings are the same.
     bool validateStencilSettings(const char* functionName);
@@ -977,6 +933,8 @@ protected:
 
     // Get the framebuffer bound to given target
     virtual WebGLFramebuffer* getFramebufferBinding(GLenum target);
+
+    virtual WebGLFramebuffer* getReadFramebufferBinding();
 
     // Helper function to validate input parameters for framebuffer functions.
     // Generate GL error if parameters are illegal.
@@ -1121,6 +1079,14 @@ protected:
     // If the vector is empty, return the maximum allowed active context number.
     static WebGLRenderingContextBase* oldestContext();
     static WebGLRenderingContextBase* oldestEvictedContext();
+
+#if ENABLE(OILPAN)
+    CrossThreadWeakPersistentThisPointer<WebGLRenderingContextBase> createWeakThisPointer() { return CrossThreadWeakPersistentThisPointer<WebGLRenderingContextBase>(this); }
+#else
+    WeakPtr<WebGLRenderingContextBase> createWeakThisPointer() { return m_weakPtrFactory.createWeakPtr(); }
+
+    WeakPtrFactory<WebGLRenderingContextBase> m_weakPtrFactory;
+#endif
 };
 
 DEFINE_TYPE_CASTS(WebGLRenderingContextBase, CanvasRenderingContext, context, context->is3d(), context.is3d());

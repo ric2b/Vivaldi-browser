@@ -15,21 +15,23 @@
 #include "net/base/net_errors.h"
 #include "net/base/socket_performance_watcher.h"
 #include "net/base/test_completion_callback.h"
+#include "net/base/test_data_directory.h"
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/transport_security_state.h"
 #include "net/quic/congestion_control/send_algorithm_interface.h"
 #include "net/quic/crypto/crypto_protocol.h"
+#include "net/quic/crypto/proof_verifier_chromium.h"
 #include "net/quic/crypto/quic_decrypter.h"
 #include "net/quic/crypto/quic_encrypter.h"
 #include "net/quic/crypto/quic_server_info.h"
 #include "net/quic/quic_chromium_client_session.h"
 #include "net/quic/quic_chromium_client_stream.h"
 #include "net/quic/quic_chromium_connection_helper.h"
+#include "net/quic/quic_chromium_packet_reader.h"
+#include "net/quic/quic_chromium_packet_writer.h"
 #include "net/quic/quic_connection.h"
-#include "net/quic/quic_default_packet_writer.h"
 #include "net/quic/quic_http_utils.h"
-#include "net/quic/quic_packet_reader.h"
 #include "net/quic/quic_write_blocked_list.h"
 #include "net/quic/spdy_utils.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
@@ -45,6 +47,7 @@
 #include "net/spdy/spdy_framer.h"
 #include "net/spdy/spdy_http_utils.h"
 #include "net/spdy/spdy_protocol.h"
+#include "net/test/cert_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -57,7 +60,7 @@ namespace test {
 namespace {
 
 const char kUploadData[] = "Really nifty data!";
-const char kDefaultServerHostName[] = "www.google.com";
+const char kDefaultServerHostName[] = "www.example.org";
 const uint16_t kDefaultServerPort = 80;
 
 class TestQuicConnection : public QuicConnection {
@@ -140,8 +143,7 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<QuicVersion> {
         stream_id_(kClientDataStreamId1),
         maker_(GetParam(), connection_id_, &clock_, kDefaultServerHostName),
         random_generator_(0) {
-    IPAddressNumber ip;
-    CHECK(ParseIPLiteralToNumber("192.0.2.33", &ip));
+    IPAddress ip(192, 0, 2, 33);
     peer_addr_ = IPEndPoint(ip, 443);
     self_addr_ = IPEndPoint(ip, 8435);
     clock_.AdvanceTime(QuicTime::Delta::FromMilliseconds(20));
@@ -214,9 +216,19 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<QuicVersion> {
                                                    &random_generator_));
     connection_ = new TestQuicConnection(
         SupportedVersions(GetParam()), connection_id_, peer_addr_,
-        helper_.get(), new QuicDefaultPacketWriter(socket));
+        helper_.get(), new QuicChromiumPacketWriter(socket));
     connection_->set_visitor(&visitor_);
     connection_->SetSendAlgorithm(send_algorithm_);
+
+    // Load a certificate that is valid for *.example.org
+    scoped_refptr<X509Certificate> test_cert(
+        ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem"));
+    EXPECT_TRUE(test_cert.get());
+
+    verify_details_.cert_verify_result.verified_cert = test_cert;
+    verify_details_.cert_verify_result.is_issued_by_known_root = true;
+    crypto_client_stream_factory_.AddProofVerifyDetails(&verify_details_);
+
     session_.reset(new QuicChromiumClientSession(
         connection_, scoped_ptr<DatagramClientSocket>(socket),
         /*stream_factory=*/nullptr, &crypto_client_stream_factory_, &clock_,
@@ -226,7 +238,7 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<QuicVersion> {
         kQuicYieldAfterPacketsRead,
         QuicTime::Delta::FromMilliseconds(kQuicYieldAfterDurationMilliseconds),
         /*cert_verify_flags=*/0, DefaultQuicConfig(), &crypto_config_,
-        "CONNECTION_UNKNOWN", base::TimeTicks::Now(),
+        "CONNECTION_UNKNOWN", base::TimeTicks::Now(), &push_promise_index_,
         base::ThreadTaskRunnerHandle::Get().get(),
         /*socket_performance_watcher=*/nullptr, nullptr));
     session_->Initialize();
@@ -329,6 +341,7 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<QuicVersion> {
   SpdyHeaderBlock response_headers_;
   std::string request_data_;
   std::string response_data_;
+  QuicClientPushPromiseIndex push_promise_index_;
 
  private:
   const QuicConnectionId connection_id_;
@@ -337,6 +350,7 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<QuicVersion> {
   IPEndPoint self_addr_;
   IPEndPoint peer_addr_;
   MockRandom random_generator_;
+  ProofVerifyDetailsChromium verify_details_;
   MockCryptoClientStreamFactory crypto_client_stream_factory_;
   scoped_ptr<StaticSocketDataProvider> socket_data_;
   std::vector<PacketToWrite> writes_;
@@ -364,7 +378,7 @@ TEST_P(QuicHttpStreamTest, GetRequest) {
   Initialize();
 
   request_.method = "GET";
-  request_.url = GURL("http://www.google.com/");
+  request_.url = GURL("http://www.example.org/");
 
   EXPECT_EQ(OK, stream_->InitializeStream(&request_, DEFAULT_PRIORITY, net_log_,
                                           callback_.callback()));
@@ -413,7 +427,7 @@ TEST_P(QuicHttpStreamTest, GetRequestLargeResponse) {
   Initialize();
 
   request_.method = "GET";
-  request_.url = GURL("http://www.google.com/");
+  request_.url = GURL("http://www.example.org/");
 
   EXPECT_EQ(OK, stream_->InitializeStream(&request_, DEFAULT_PRIORITY, net_log_,
                                           callback_.callback()));
@@ -463,18 +477,43 @@ TEST_P(QuicHttpStreamTest, SessionClosedBeforeSendRequest) {
   Initialize();
 
   request_.method = "GET";
-  request_.url = GURL("http://www.google.com/");
+  request_.url = GURL("http://www.example.org/");
 
   EXPECT_EQ(OK, stream_->InitializeStream(&request_, DEFAULT_PRIORITY, net_log_,
                                           callback_.callback()));
 
-  session_->connection()->CloseConnection(QUIC_NO_ERROR, true);
+  session_->connection()->CloseConnection(QUIC_NO_ERROR,
+                                          ConnectionCloseSource::FROM_PEER);
 
   EXPECT_EQ(ERR_CONNECTION_CLOSED,
             stream_->SendRequest(headers_, &response_, callback_.callback()));
 
   EXPECT_EQ(0, stream_->GetTotalSentBytes());
   EXPECT_EQ(0, stream_->GetTotalReceivedBytes());
+}
+
+// Regression test for http://crbug.com/584441
+TEST_P(QuicHttpStreamTest, GetSSLInfoAfterSessionClosed) {
+  SetRequest("GET", "/", DEFAULT_PRIORITY);
+  Initialize();
+
+  request_.method = "GET";
+  request_.url = GURL("http://www.example.org/");
+
+  EXPECT_EQ(OK, stream_->InitializeStream(&request_, DEFAULT_PRIORITY, net_log_,
+                                          callback_.callback()));
+
+  SSLInfo ssl_info;
+  EXPECT_FALSE(ssl_info.is_valid());
+  stream_->GetSSLInfo(&ssl_info);
+  EXPECT_TRUE(ssl_info.is_valid());
+
+  session_->connection()->CloseConnection(QUIC_NO_ERROR,
+                                          ConnectionCloseSource::FROM_PEER);
+
+  SSLInfo ssl_info2;
+  stream_->GetSSLInfo(&ssl_info2);
+  EXPECT_TRUE(ssl_info2.is_valid());
 }
 
 TEST_P(QuicHttpStreamTest, LogGranularQuicConnectionError) {
@@ -487,7 +526,7 @@ TEST_P(QuicHttpStreamTest, LogGranularQuicConnectionError) {
   Initialize();
 
   request_.method = "GET";
-  request_.url = GURL("http://www.google.com/");
+  request_.url = GURL("http://www.example.org/");
 
   EXPECT_EQ(OK, stream_->InitializeStream(&request_, DEFAULT_PRIORITY, net_log_,
                                           callback_.callback()));
@@ -517,7 +556,7 @@ TEST_P(QuicHttpStreamTest, DoNotLogGranularQuicErrorIfHandshakeNotConfirmed) {
   Initialize();
 
   request_.method = "GET";
-  request_.url = GURL("http://www.google.com/");
+  request_.url = GURL("http://www.example.org/");
 
   EXPECT_EQ(OK, stream_->InitializeStream(&request_, DEFAULT_PRIORITY, net_log_,
                                           callback_.callback()));
@@ -551,7 +590,7 @@ TEST_P(QuicHttpStreamTest, SessionClosedBeforeReadResponseHeaders) {
   Initialize();
 
   request_.method = "GET";
-  request_.url = GURL("http://www.google.com/");
+  request_.url = GURL("http://www.example.org/");
 
   EXPECT_EQ(OK, stream_->InitializeStream(&request_, DEFAULT_PRIORITY, net_log_,
                                           callback_.callback()));
@@ -559,7 +598,8 @@ TEST_P(QuicHttpStreamTest, SessionClosedBeforeReadResponseHeaders) {
   EXPECT_EQ(OK,
             stream_->SendRequest(headers_, &response_, callback_.callback()));
 
-  session_->connection()->CloseConnection(QUIC_NO_ERROR, true);
+  session_->connection()->CloseConnection(QUIC_NO_ERROR,
+                                          ConnectionCloseSource::FROM_PEER);
 
   EXPECT_NE(OK, stream_->ReadResponseHeaders(callback_.callback()));
 
@@ -585,7 +625,7 @@ TEST_P(QuicHttpStreamTest, SendPostRequest) {
       new UploadBytesElementReader(kUploadData, strlen(kUploadData))));
   ElementsUploadDataStream upload_data_stream(std::move(element_readers), 0);
   request_.method = "POST";
-  request_.url = GURL("http://www.google.com/");
+  request_.url = GURL("http://www.example.org/");
   request_.upload_data_stream = &upload_data_stream;
   ASSERT_EQ(OK, request_.upload_data_stream->Init(CompletionCallback()));
 
@@ -647,7 +687,7 @@ TEST_P(QuicHttpStreamTest, SendChunkedPostRequest) {
   upload_data_stream.AppendData(kUploadData, chunk_size, false);
 
   request_.method = "POST";
-  request_.url = GURL("http://www.google.com/");
+  request_.url = GURL("http://www.example.org/");
   request_.upload_data_stream = &upload_data_stream;
   ASSERT_EQ(OK, request_.upload_data_stream->Init(
                     TestCompletionCallback().callback()));
@@ -714,7 +754,7 @@ TEST_P(QuicHttpStreamTest, SendChunkedPostRequestWithFinalEmptyDataPacket) {
   upload_data_stream.AppendData(kUploadData, chunk_size, false);
 
   request_.method = "POST";
-  request_.url = GURL("http://www.google.com/");
+  request_.url = GURL("http://www.example.org/");
   request_.upload_data_stream = &upload_data_stream;
   ASSERT_EQ(OK, request_.upload_data_stream->Init(
                     TestCompletionCallback().callback()));
@@ -776,7 +816,7 @@ TEST_P(QuicHttpStreamTest, SendChunkedPostRequestWithOneEmptyDataPacket) {
   ChunkedUploadDataStream upload_data_stream(0);
 
   request_.method = "POST";
-  request_.url = GURL("http://www.google.com/");
+  request_.url = GURL("http://www.example.org/");
   request_.upload_data_stream = &upload_data_stream;
   ASSERT_EQ(OK, request_.upload_data_stream->Init(
                     TestCompletionCallback().callback()));
@@ -836,7 +876,7 @@ TEST_P(QuicHttpStreamTest, DestroyedEarly) {
   Initialize();
 
   request_.method = "GET";
-  request_.url = GURL("http://www.google.com/");
+  request_.url = GURL("http://www.example.org/");
 
   EXPECT_EQ(OK, stream_->InitializeStream(&request_, DEFAULT_PRIORITY, net_log_,
                                           callback_.callback()));
@@ -874,7 +914,7 @@ TEST_P(QuicHttpStreamTest, Priority) {
   Initialize();
 
   request_.method = "GET";
-  request_.url = GURL("http://www.google.com/");
+  request_.url = GURL("http://www.example.org/");
 
   EXPECT_EQ(OK, stream_->InitializeStream(&request_, MEDIUM, net_log_,
                                           callback_.callback()));
@@ -883,14 +923,14 @@ TEST_P(QuicHttpStreamTest, Priority) {
   QuicChromiumClientStream* reliable_stream =
       QuicHttpStreamPeer::GetQuicChromiumClientStream(stream_.get());
   DCHECK(reliable_stream);
-  DCHECK_EQ(kV3HighestPriority, reliable_stream->Priority());
+  DCHECK_EQ(kV3HighestPriority, reliable_stream->priority());
 
   EXPECT_EQ(OK,
             stream_->SendRequest(headers_, &response_, callback_.callback()));
 
   // Check that priority has now dropped back to MEDIUM.
   DCHECK_EQ(MEDIUM,
-            ConvertQuicPriorityToRequestPriority(reliable_stream->Priority()));
+            ConvertQuicPriorityToRequestPriority(reliable_stream->priority()));
 
   // Ack the request.
   ProcessPacket(ConstructAckPacket(1, 0, 0));
@@ -923,7 +963,7 @@ TEST_P(QuicHttpStreamTest, CheckPriorityWithNoDelegate) {
   Initialize();
 
   request_.method = "GET";
-  request_.url = GURL("http://www.google.com/");
+  request_.url = GURL("http://www.example.org/");
 
   EXPECT_EQ(OK, stream_->InitializeStream(&request_, MEDIUM, net_log_,
                                           callback_.callback()));
@@ -934,12 +974,12 @@ TEST_P(QuicHttpStreamTest, CheckPriorityWithNoDelegate) {
   DCHECK(reliable_stream);
   QuicChromiumClientStream::Delegate* delegate = reliable_stream->GetDelegate();
   DCHECK(delegate);
-  DCHECK_EQ(kV3HighestPriority, reliable_stream->Priority());
+  DCHECK_EQ(kV3HighestPriority, reliable_stream->priority());
 
   // Set Delegate to nullptr and make sure Priority returns highest
   // priority.
   reliable_stream->SetDelegate(nullptr);
-  DCHECK_EQ(kV3HighestPriority, reliable_stream->Priority());
+  DCHECK_EQ(kV3HighestPriority, reliable_stream->priority());
   reliable_stream->SetDelegate(delegate);
 
   EXPECT_EQ(0, stream_->GetTotalSentBytes());
@@ -954,7 +994,7 @@ TEST_P(QuicHttpStreamTest, SessionClosedBeforeSendHeadersComplete) {
   ChunkedUploadDataStream upload_data_stream(0);
 
   request_.method = "POST";
-  request_.url = GURL("http://www.google.com/");
+  request_.url = GURL("http://www.example.org/");
   request_.upload_data_stream = &upload_data_stream;
   ASSERT_EQ(OK, request_.upload_data_stream->Init(
                     TestCompletionCallback().callback()));
@@ -978,7 +1018,7 @@ TEST_P(QuicHttpStreamTest, SessionClosedBeforeSendBodyComplete) {
   upload_data_stream.AppendData(kUploadData, chunk_size, false);
 
   request_.method = "POST";
-  request_.url = GURL("http://www.google.com/");
+  request_.url = GURL("http://www.example.org/");
   request_.upload_data_stream = &upload_data_stream;
   ASSERT_EQ(OK, request_.upload_data_stream->Init(
                     TestCompletionCallback().callback()));

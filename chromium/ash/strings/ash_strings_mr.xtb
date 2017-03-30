@@ -52,6 +52,7 @@
 <translation id="252373100621549798">अज्ञात प्रदर्शन</translation>
 <translation id="2532589005999780174">उच्च तीव्रता मोड</translation>
 <translation id="2562916301614567480">खाजगी नेटवर्क</translation>
+<translation id="2661637000095600270">समर्थित रिझोल्यूशन न आढळल्याने प्रदर्शने मिरर करणे शक्य झाले नाही. आहे. त्याऐवजी विस्तारित केलेला डेस्कटॉप प्रविष्ट केला. एक अभिप्राय अहवाल पाठविण्यासाठी क्लिक करा.</translation>
 <translation id="2692809339924654275"><ph name="BLUETOOTH" />: कनेक्ट करत आहे...</translation>
 <translation id="2700058918926273959"><ph name="SESSION_TIME_REMAINING" /> मध्ये सत्र समाप्त होते. आपल्याला साइन आउट केले जाईल.</translation>
 <translation id="2727977024730340865">एका निम्न-उर्जेच्या चार्जरवर प्लग इन केले. बॅटरी चार्जिंग विश्वसनीय असू शकत नाही.</translation>
@@ -113,7 +114,6 @@
 <translation id="4250680216510889253">नाही</translation>
 <translation id="4279490309300973883">मिररिंग</translation>
 <translation id="4321179778687042513">ctrl</translation>
-<translation id="4379753398862151997">प्रिय मॉनिटर, हे आपल्या दरम्यान कार्य करत नाही. (तो मॉनिटर समर्थित नाही)</translation>
 <translation id="4421231901400348175">दूरस्त सहाय्याद्वारे <ph name="HELPER_NAME" /> सह आपल्या स्क्रीनचे नियंत्रण सामायिक करत आहे.</translation>
 <translation id="4430019312045809116">व्हॉल्यूम</translation>
 <translation id="4527045527269911712">"<ph name="DEVICE_NAME" />" Bluetooth डिव्हाइस जोडण्यासाठी परवानगी घेऊ इच्छिते.</translation>
@@ -182,7 +182,6 @@
 <translation id="6650933572246256093">"<ph name="DEVICE_NAME" />" Bluetooth डिव्हाइस जोडण्यासाठी परवानगी घेऊ इच्छिते. कृपया त्या डिव्हाइसवर ही पासकी प्रविष्ट करा: <ph name="PASSKEY" /></translation>
 <translation id="6713285437468012787">"<ph name="DEVICE_NAME" />" Bluetooth डिव्हाइस जोडले गेले आहे आणि सर्व वापरकर्त्यांसाठी आता उपलब्ध आहे. आपण सेटिंग्ज वापरून ही जोडणी काढू शकता.</translation>
 <translation id="6785414152754474415">बॅटरी <ph name="PERCENTAGE" />% भरली आहे आणि चार्ज होत आहे.</translation>
-<translation id="6803622936009808957">समर्थित रिजोल्यूशन न आढळल्यामुळे प्रदर्शने मिरर करू शकली नाहीत. त्याऐवजी विस्तारित डेस्कटॉप प्रविष्ट केला.</translation>
 <translation id="683971173229319003">Search+L</translation>
 <translation id="68610848741840742">ChromeVox (बोललेला अभिप्राय)</translation>
 <translation id="6911468394164995108">दुसरीकडे सामील व्हा...</translation>
@@ -236,6 +235,7 @@
 <translation id="8878886163241303700">स्क्रीन विस्तृत करत आहे</translation>
 <translation id="8938800817013097409">USB-C डिव्‍हाइस (मागील बाजूचे उजवे पोर्ट)</translation>
 <translation id="8940956008527784070">बॅटरी कमी झाली (<ph name="PERCENTAGE" />%)</translation>
+<translation id="9008540565042607572">प्रिय मॉनिटर, हे आपल्या दरम्यान कार्य करत नाही. (तो मॉनिटर समर्थित नाही. एक अभिप्राय अहवाल पाठविण्यासाठी क्लिक करा.)</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9080206825613744995">मायक्रोफोन वापरात आहे.</translation>
 <translation id="9089416786594320554">इनपुट पद्धती</translation>

@@ -27,10 +27,10 @@ import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplication;
-import org.chromium.chrome.browser.ChromeBrowserProvider.BookmarkNode;
-import org.chromium.chrome.browser.ChromeBrowserProviderClient;
-import org.chromium.chrome.browser.bookmark.BookmarkColumns;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
+import org.chromium.chrome.browser.provider.BookmarkColumns;
+import org.chromium.chrome.browser.provider.ChromeBrowserProvider.BookmarkNode;
+import org.chromium.chrome.browser.provider.ChromeBrowserProviderClient;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.sync.AndroidSyncSettings;
 
@@ -67,7 +67,7 @@ public class BookmarkThumbnailWidgetService extends RemoteViewsService {
         // Android Browser's widget used private API methods to access the shared prefs
         // files and deleted them. This is the best we can do with the public API.
         SharedPreferences preferences = getWidgetState(context, widgetId);
-        if (preferences != null) preferences.edit().clear().commit();
+        if (preferences != null) preferences.edit().clear().apply();
     }
 
     static void changeFolder(Context context, Intent intent) {
@@ -76,7 +76,7 @@ public class BookmarkThumbnailWidgetService extends RemoteViewsService {
                 ChromeBrowserProviderClient.INVALID_BOOKMARK_ID);
         if (widgetId >= 0 && folderId >= 0) {
             SharedPreferences prefs = getWidgetState(context, widgetId);
-            prefs.edit().putLong(STATE_CURRENT_FOLDER, folderId).commit();
+            prefs.edit().putLong(STATE_CURRENT_FOLDER, folderId).apply();
             AppWidgetManager.getInstance(context)
                     .notifyAppWidgetViewDataChanged(widgetId, R.id.bookmarks_list);
         }

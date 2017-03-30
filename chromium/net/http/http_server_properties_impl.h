@@ -14,11 +14,11 @@
 #include <string>
 #include <vector>
 
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/values.h"
 #include "net/base/host_port_pair.h"
+#include "net/base/ip_address.h"
 #include "net/base/linked_hash_map.h"
 #include "net/base/net_export.h"
 #include "net/http/http_server_properties.h"
@@ -27,18 +27,13 @@ namespace base {
 class ListValue;
 }
 
-namespace BASE_HASH_NAMESPACE {
+namespace net {
 
-template <>
-struct hash<net::AlternativeService> {
+struct AlternativeServiceHash {
   size_t operator()(const net::AlternativeService& entry) const {
-    return entry.protocol ^ hash<std::string>()(entry.host) ^ entry.port;
+    return entry.protocol ^ std::hash<std::string>()(entry.host) ^ entry.port;
   }
 };
-
-}  // namespace BASE_HASH_NAMESPACE
-
-namespace net {
 
 // The implementation for setting/retrieving the HTTP server properties.
 class NET_EXPORT HttpServerPropertiesImpl
@@ -58,7 +53,7 @@ class NET_EXPORT HttpServerPropertiesImpl
 
   void InitializeSpdySettingsServers(SpdySettingsMap* spdy_settings_map);
 
-  void InitializeSupportsQuic(IPAddressNumber* last_address);
+  void InitializeSupportsQuic(IPAddress* last_address);
 
   void InitializeServerNetworkStats(
       ServerNetworkStatsMap* server_network_stats_map);
@@ -123,8 +118,8 @@ class NET_EXPORT HttpServerPropertiesImpl
   void ClearSpdySettings(const HostPortPair& host_port_pair) override;
   void ClearAllSpdySettings() override;
   const SpdySettingsMap& spdy_settings_map() const override;
-  bool GetSupportsQuic(IPAddressNumber* last_address) const override;
-  void SetSupportsQuic(bool used_quic, const IPAddressNumber& address) override;
+  bool GetSupportsQuic(IPAddress* last_address) const override;
+  void SetSupportsQuic(bool used_quic, const IPAddress& address) override;
   void SetServerNetworkStats(const HostPortPair& host_port_pair,
                              ServerNetworkStats stats) override;
   const ServerNetworkStats* GetServerNetworkStats(
@@ -151,7 +146,9 @@ class NET_EXPORT HttpServerPropertiesImpl
   // Linked hash map from AlternativeService to expiration time.  This container
   // is a queue with O(1) enqueue and dequeue, and a hash_map with O(1) lookup
   // at the same time.
-  typedef linked_hash_map<AlternativeService, base::TimeTicks>
+  typedef linked_hash_map<AlternativeService,
+                          base::TimeTicks,
+                          AlternativeServiceHash>
       BrokenAlternativeServices;
   // Map to the number of times each alternative service has been marked broken.
   typedef std::map<AlternativeService, int> RecentlyBrokenAlternativeServices;
@@ -176,7 +173,7 @@ class NET_EXPORT HttpServerPropertiesImpl
   // must also be in recently_broken_alternative_services_.
   RecentlyBrokenAlternativeServices recently_broken_alternative_services_;
 
-  IPAddressNumber last_quic_address_;
+  IPAddress last_quic_address_;
   SpdySettingsMap spdy_settings_map_;
   ServerNetworkStatsMap server_network_stats_map_;
   // Contains a map of servers which could share the same alternate protocol.

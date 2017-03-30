@@ -24,8 +24,6 @@
 #if !defined(DISABLE_NACL)
 #include "components/nacl/common/nacl_constants.h"
 #include "components/nacl/renderer/nacl_helper.h"
-#include "components/nacl/renderer/ppb_nacl_private.h"
-#include "components/nacl/renderer/ppb_nacl_private_impl.h"
 #endif
 
 using blink::WebFrame;
@@ -106,15 +104,6 @@ bool ShellContentRendererClient::WillSendRequest(
   return false;
 }
 
-const void* ShellContentRendererClient::CreatePPAPIInterface(
-    const std::string& interface_name) {
-#if !defined(DISABLE_NACL)
-  if (interface_name == PPB_NACL_PRIVATE_INTERFACE)
-    return nacl::GetNaClPrivateInterface();
-#endif
-  return NULL;
-}
-
 bool ShellContentRendererClient::IsExternalPepperPlugin(
     const std::string& module_name) {
 #if !defined(DISABLE_NACL)
@@ -142,6 +131,16 @@ ShellContentRendererClient::CreateBrowserPluginDelegate(
     return new extensions::MimeHandlerViewContainer(
         render_frame, mime_type, original_url);
   }
+}
+
+void ShellContentRendererClient::RunScriptsAtDocumentStart(
+    content::RenderFrame* render_frame) {
+  extension_dispatcher_->RunScriptsAtDocumentStart(render_frame);
+}
+
+void ShellContentRendererClient::RunScriptsAtDocumentEnd(
+    content::RenderFrame* render_frame) {
+  extension_dispatcher_->RunScriptsAtDocumentEnd(render_frame);
 }
 
 ExtensionsClient* ShellContentRendererClient::CreateExtensionsClient() {

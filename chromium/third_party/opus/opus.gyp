@@ -59,6 +59,12 @@
         'OPUS_BUILD',
         'OPUS_EXPORT=',
       ],
+      'variables': {
+        'clang_warning_flags': [
+          # TODO(thakis): Remove once silk/macros.h has been fixed
+          '-Wno-expansion-to-defined',
+        ],
+      },
       'include_dirs': [
         'src/celt',
         'src/include',
@@ -150,11 +156,14 @@
                     'OPUS_ARM_MAY_HAVE_EDSP',
                     'OPUS_ARM_MAY_HAVE_MEDIA',
                     'OPUS_ARM_MAY_HAVE_NEON',
+                    'OPUS_ARM_MAY_HAVE_NEON_INTR',
                     'OPUS_HAVE_RTCD',
                   ],
                   'includes': [
                     'opus_srcs_rtcd.gypi',
                   ],
+                  'cflags!': [ '-mfpu=vfpv3-d16' ],
+                  'cflags': [ '-mfpu=neon' ],
                 }],
               ],
             }],

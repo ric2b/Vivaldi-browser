@@ -342,6 +342,7 @@ void TileManager::SetResources(ResourcePool* resource_pool,
   scheduled_raster_task_limit_ = scheduled_raster_task_limit;
   resource_pool_ = resource_pool;
   tile_task_runner_ = tile_task_runner;
+  image_decode_controller_.SetIsUsingGpuRasterization(use_gpu_rasterization_);
 }
 
 void TileManager::Release(Tile* tile) {
@@ -365,7 +366,6 @@ void TileManager::CleanUpReleasedTiles() {
     DCHECK(tiles_.find(tile->id()) != tiles_.end());
     tiles_.erase(tile->id());
 
-    image_decode_controller_.SubtractLayerUsedCount(tile->layer_id());
     delete tile;
   }
   released_tiles_.swap(tiles_to_retain);
@@ -752,15 +752,11 @@ void TileManager::ScheduleTasks(
     DCHECK(tile->draw_info().requires_resource());
     DCHECK(!tile->draw_info().resource_);
 
-    if (!tile->raster_task_) {
+    if (!tile->raster_task_)
       tile->raster_task_ = CreateRasterTask(prioritized_tile);
-    }
 
     RasterTask* task = tile->raster_task_.get();
     DCHECK(!task->HasCompleted());
-
-    if (!tile->raster_task_.get())
-      tile->raster_task_ = CreateRasterTask(prioritized_tile);
 
     if (tile->required_for_activation()) {
       required_for_activate_count++;
@@ -797,6 +793,7 @@ void TileManager::ScheduleTasks(
   // We must reduce the amount of unused resoruces before calling
   // ScheduleTasks to prevent usage from rising above limits.
   resource_pool_->ReduceResourceUsage();
+  image_decode_controller_.ReduceCacheUsage();
 
   // Schedule running of |raster_queue_|. This replaces any previously
   // scheduled tasks and effectively cancels all tasks not present
@@ -823,6 +820,8 @@ void TileManager::ScheduleTasks(
 scoped_refptr<RasterTask> TileManager::CreateRasterTask(
     const PrioritizedTile& prioritized_tile) {
   Tile* tile = prioritized_tile.tile();
+
+  // Get the resource.
   uint64_t resource_content_id = 0;
   Resource* resource = nullptr;
   if (use_partial_raster_ && tile->invalidated_id()) {
@@ -834,8 +833,6 @@ scoped_refptr<RasterTask> TileManager::CreateRasterTask(
   if (resource) {
     resource_content_id = tile->invalidated_id();
     DCHECK_EQ(DetermineResourceFormat(tile), resource->format());
-    DCHECK_EQ(tile->desired_texture_size().ToString(),
-              resource->size().ToString());
   } else {
     resource = resource_pool_->AcquireResource(tile->desired_texture_size(),
                                                DetermineResourceFormat(tile));
@@ -843,12 +840,22 @@ scoped_refptr<RasterTask> TileManager::CreateRasterTask(
 
   // Create and queue all image decode tasks that this tile depends on.
   ImageDecodeTask::Vector decode_tasks;
-  std::vector<DrawImage> images;
+  std::vector<DrawImage>& images = scheduled_draw_images_[tile->id()];
+  images.clear();
   prioritized_tile.raster_source()->GetDiscardableImagesInRect(
       tile->enclosing_layer_rect(), tile->contents_scale(), &images);
-  for (const auto& image : images) {
-    decode_tasks.push_back(image_decode_controller_.GetTaskForImage(
-        image, tile->layer_id(), prepare_tiles_count_));
+  for (auto it = images.begin(); it != images.end();) {
+    scoped_refptr<ImageDecodeTask> task;
+    bool need_to_unref_when_finished =
+        image_decode_controller_.GetTaskForImageAndRef(
+            *it, prepare_tiles_count_, &task);
+    if (task)
+      decode_tasks.push_back(task);
+
+    if (need_to_unref_when_finished)
+      ++it;
+    else
+      it = images.erase(it);
   }
 
   return make_scoped_refptr(new RasterTaskImpl(
@@ -873,6 +880,13 @@ void TileManager::OnRasterTaskCompleted(
   DCHECK(tile->raster_task_.get());
   orphan_tasks_.push_back(tile->raster_task_);
   tile->raster_task_ = nullptr;
+
+  // Unref all the images.
+  auto images_it = scheduled_draw_images_.find(tile->id());
+  const std::vector<DrawImage>& images = images_it->second;
+  for (const auto& image : images)
+    image_decode_controller_.UnrefImage(image);
+  scheduled_draw_images_.erase(images_it);
 
   if (was_canceled) {
     ++flush_stats_.canceled_count;
@@ -908,7 +922,6 @@ ScopedTilePtr TileManager::CreateTile(const Tile::CreateInfo& info,
   DCHECK(tiles_.find(tile->id()) == tiles_.end());
 
   tiles_[tile->id()] = tile.get();
-  image_decode_controller_.AddLayerUsedCount(tile->layer_id());
   return tile;
 }
 
@@ -964,7 +977,7 @@ void TileManager::CheckAndIssueSignals() {
   if (signals_.ready_to_activate && !signals_.did_notify_ready_to_activate) {
     signals_.ready_to_activate = false;
     if (IsReadyToActivate()) {
-      TRACE_EVENT0("cc",
+      TRACE_EVENT0("disabled-by-default-cc.debug",
                    "TileManager::CheckAndIssueSignals - ready to activate");
       signals_.did_notify_ready_to_activate = true;
       client_->NotifyReadyToActivate();
@@ -975,7 +988,8 @@ void TileManager::CheckAndIssueSignals() {
   if (signals_.ready_to_draw && !signals_.did_notify_ready_to_draw) {
     signals_.ready_to_draw = false;
     if (IsReadyToDraw()) {
-      TRACE_EVENT0("cc", "TileManager::CheckAndIssueSignals - ready to draw");
+      TRACE_EVENT0("disabled-by-default-cc.debug",
+                   "TileManager::CheckAndIssueSignals - ready to draw");
       signals_.did_notify_ready_to_draw = true;
       client_->NotifyReadyToDraw();
     }
@@ -987,7 +1001,8 @@ void TileManager::CheckAndIssueSignals() {
     signals_.all_tile_tasks_completed = false;
     if (!has_scheduled_tile_tasks_) {
       TRACE_EVENT0(
-          "cc", "TileManager::CheckAndIssueSignals - all tile tasks completed");
+          "disabled-by-default-cc.debug",
+          "TileManager::CheckAndIssueSignals - all tile tasks completed");
       signals_.did_notify_all_tile_tasks_completed = true;
       client_->NotifyAllTileTasksCompleted();
     }
@@ -1024,6 +1039,7 @@ void TileManager::CheckIfMoreTilesNeedToBePrepared() {
   FreeResourcesForReleasedTiles();
 
   resource_pool_->ReduceResourceUsage();
+  image_decode_controller_.ReduceCacheUsage();
 
   signals_.all_tile_tasks_completed = true;
   signals_check_notifier_.Schedule();

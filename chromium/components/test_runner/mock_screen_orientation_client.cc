@@ -15,7 +15,8 @@ MockScreenOrientationClient::MockScreenOrientationClient()
     : main_frame_(NULL),
       current_lock_(blink::WebScreenOrientationLockDefault),
       device_orientation_(blink::WebScreenOrientationPortraitPrimary),
-      current_orientation_(blink::WebScreenOrientationPortraitPrimary) {
+      current_orientation_(blink::WebScreenOrientationPortraitPrimary),
+      is_disabled_(false) {
 }
 
 MockScreenOrientationClient::~MockScreenOrientationClient() {
@@ -25,6 +26,7 @@ void MockScreenOrientationClient::ResetData() {
   current_lock_ = blink::WebScreenOrientationLockDefault;
   device_orientation_ = blink::WebScreenOrientationPortraitPrimary;
   current_orientation_ = blink::WebScreenOrientationPortraitPrimary;
+  is_disabled_ = false;
 }
 
 void MockScreenOrientationClient::UpdateDeviceOrientation(
@@ -55,6 +57,10 @@ MockScreenOrientationClient::CurrentOrientationType() const {
 
 unsigned MockScreenOrientationClient::CurrentOrientationAngle() const {
   return OrientationTypeToAngle(current_orientation_);
+}
+
+void MockScreenOrientationClient::SetDisabled(bool disabled) {
+  is_disabled_ = disabled;
 }
 
 unsigned MockScreenOrientationClient::OrientationTypeToAngle(

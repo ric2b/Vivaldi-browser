@@ -79,9 +79,9 @@ String SVGIntegerOptionalInteger::valueAsString() const
 SVGParsingError SVGIntegerOptionalInteger::setValueAsString(const String& value)
 {
     float x, y;
-    SVGParsingError parseStatus = NoError;
+    SVGParsingError parseStatus;
     if (!parseNumberOptionalNumber(value, x, y)) {
-        parseStatus = ParsingAttributeFailedError;
+        parseStatus = SVGParseStatus::ExpectedInteger;
         x = y = 0;
     }
 
@@ -120,4 +120,4 @@ float SVGIntegerOptionalInteger::calculateDistance(PassRefPtrWillBeRawPtr<SVGPro
     return -1;
 }
 
-}
+} // namespace blink

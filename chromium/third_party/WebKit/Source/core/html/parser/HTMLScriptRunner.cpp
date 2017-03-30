@@ -37,52 +37,79 @@
 #include "core/html/parser/HTMLInputStream.h"
 #include "core/html/parser/HTMLScriptRunnerHost.h"
 #include "core/html/parser/NestingLevelIncrementer.h"
+#include "platform/Histogram.h"
 #include "platform/NotImplemented.h"
+#include "platform/TraceEvent.h"
+#include "platform/TracedValue.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebFrameScheduler.h"
+#include <inttypes.h>
 
 namespace blink {
 
-using namespace HTMLNames;
+namespace {
 
-HTMLScriptRunner::HTMLScriptRunner(Document* document, HTMLScriptRunnerHost* host)
-    : m_document(document)
-    , m_host(host)
-    , m_scriptNestingLevel(0)
-    , m_hasScriptsWaitingForResources(false)
-    , m_parserBlockingScriptAlreadyLoaded(false)
+// TODO(bmcquade): move this to a shared location if we find ourselves wanting
+// to trace similar data elsewhere in the codebase.
+PassOwnPtr<TracedValue> getTraceArgsForScriptElement(Element* element, const TextPosition& textPosition)
 {
-    ASSERT(m_host);
-}
-
-HTMLScriptRunner::~HTMLScriptRunner()
-{
-#if ENABLE(OILPAN)
-    // If the document is destructed without having explicitly
-    // detached the parser (and this script runner object), perform
-    // detach steps now. This will happen if the Document, the parser
-    // and this script runner object are swept out in the same GC.
-    detach();
-#else
-    // Verify that detach() has been called.
-    ASSERT(!m_document);
-#endif
-}
-
-void HTMLScriptRunner::detach()
-{
-    if (!m_document)
-        return;
-
-    m_parserBlockingScript.stopWatchingForLoad(this);
-    m_parserBlockingScript.releaseElementAndClear();
-
-    while (!m_scriptsToExecuteAfterParsing.isEmpty()) {
-        PendingScript pendingScript = m_scriptsToExecuteAfterParsing.takeFirst();
-        pendingScript.stopWatchingForLoad(this);
-        pendingScript.releaseElementAndClear();
+    OwnPtr<TracedValue> value = TracedValue::create();
+    ScriptLoader* scriptLoader = toScriptLoaderIfPossible(element);
+    if (scriptLoader && scriptLoader->resource())
+        value->setString("url", scriptLoader->resource()->url().string());
+    if (element->ownerDocument() && element->ownerDocument()->frame())
+        value->setString("frame", String::format("0x%" PRIx64, static_cast<uint64_t>(reinterpret_cast<intptr_t>(element->ownerDocument()->frame()))));
+    if (textPosition.m_line.zeroBasedInt() > 0 || textPosition.m_column.zeroBasedInt() > 0) {
+        value->setInteger("lineNumber", textPosition.m_line.oneBasedInt());
+        value->setInteger("columnNumber", textPosition.m_column.oneBasedInt());
     }
-    m_document = nullptr;
+    return value.release();
+}
+
+bool doExecuteScript(Element* scriptElement, const ScriptSourceCode& sourceCode, const TextPosition& textPosition, double* compilationFinishTime = nullptr)
+{
+    ScriptLoader* scriptLoader = toScriptLoaderIfPossible(scriptElement);
+    ASSERT(scriptLoader);
+    TRACE_EVENT_WITH_FLOW1("blink", "HTMLScriptRunner ExecuteScript", scriptElement, TRACE_EVENT_FLAG_FLOW_IN,
+        "data", getTraceArgsForScriptElement(scriptElement, textPosition));
+    return scriptLoader->executeScript(sourceCode, compilationFinishTime);
+}
+
+void traceParserBlockingScript(const PendingScript* pendingScript, bool waitingForResources)
+{
+    // The HTML parser must yield before executing script in the following
+    // cases:
+    // * the script's execution is blocked on the completed load of the script
+    //   resource
+    //   (https://html.spec.whatwg.org/multipage/scripting.html#pending-parsing-blocking-script)
+    // * the script's execution is blocked on the load of a style sheet or other
+    //   resources that are blocking scripts
+    //   (https://html.spec.whatwg.org/multipage/semantics.html#a-style-sheet-that-is-blocking-scripts)
+    //
+    // Both of these cases can introduce significant latency when loading a
+    // web page, especially for users on slow connections, since the HTML parser
+    // must yield until the blocking resources finish loading.
+    //
+    // We trace these parser yields here using flow events, so we can track
+    // both when these yields occur, as well as how long the parser had
+    // to yield. The connecting flow events are traced once the parser becomes
+    // unblocked when the script actually executes, in doExecuteScript.
+    Element* element = pendingScript->element();
+    if (!element)
+        return;
+    TextPosition scriptStartPosition = pendingScript->startingPosition();
+    if (!pendingScript->isReady()) {
+        if (waitingForResources) {
+            TRACE_EVENT_WITH_FLOW1("blink", "YieldParserForScriptLoadAndBlockingResources", element, TRACE_EVENT_FLAG_FLOW_OUT,
+                "data", getTraceArgsForScriptElement(element, scriptStartPosition));
+        } else {
+            TRACE_EVENT_WITH_FLOW1("blink", "YieldParserForScriptLoad", element, TRACE_EVENT_FLAG_FLOW_OUT,
+                "data", getTraceArgsForScriptElement(element, scriptStartPosition));
+        }
+    } else if (waitingForResources) {
+        TRACE_EVENT_WITH_FLOW1("blink", "YieldParserForScriptBlockingResources", element, TRACE_EVENT_FLAG_FLOW_OUT,
+            "data", getTraceArgsForScriptElement(element, scriptStartPosition));
+    }
 }
 
 static KURL documentURLForScriptExecution(Document* document)
@@ -100,17 +127,52 @@ static KURL documentURLForScriptExecution(Document* document)
     return document->frame()->document()->url();
 }
 
-inline PassRefPtrWillBeRawPtr<Event> createScriptLoadEvent()
+} // namespace
+
+using namespace HTMLNames;
+
+HTMLScriptRunner::HTMLScriptRunner(Document* document, HTMLScriptRunnerHost* host)
+    : m_document(document)
+    , m_host(host)
+    , m_parserBlockingScript(PendingScript::create(nullptr, nullptr))
+    , m_scriptNestingLevel(0)
+    , m_hasScriptsWaitingForResources(false)
+    , m_parserBlockingScriptAlreadyLoaded(false)
 {
-    return Event::create(EventTypeNames::load);
+    ASSERT(m_host);
+#if ENABLE(OILPAN)
+    ThreadState::current()->registerPreFinalizer(this);
+#endif
 }
 
-bool HTMLScriptRunner::isPendingScriptReady(const PendingScript& script)
+HTMLScriptRunner::~HTMLScriptRunner()
+{
+    // Verify that detach() has been called.
+    ASSERT(!m_document);
+}
+
+void HTMLScriptRunner::detach()
+{
+    if (!m_document)
+        return;
+
+    m_parserBlockingScript->stopWatchingForLoad();
+    m_parserBlockingScript->releaseElementAndClear();
+
+    while (!m_scriptsToExecuteAfterParsing.isEmpty()) {
+        OwnPtrWillBeRawPtr<PendingScript> pendingScript = m_scriptsToExecuteAfterParsing.takeFirst();
+        pendingScript->stopWatchingForLoad();
+        pendingScript->releaseElementAndClear();
+    }
+    m_document = nullptr;
+}
+
+bool HTMLScriptRunner::isPendingScriptReady(const PendingScript* script)
 {
     m_hasScriptsWaitingForResources = !m_document->isScriptExecutionReady();
     if (m_hasScriptsWaitingForResources)
         return false;
-    return script.isReady();
+    return script->isReady();
 }
 
 void HTMLScriptRunner::executeParsingBlockingScript()
@@ -118,24 +180,24 @@ void HTMLScriptRunner::executeParsingBlockingScript()
     ASSERT(m_document);
     ASSERT(!isExecutingScript());
     ASSERT(m_document->isScriptExecutionReady());
-    ASSERT(isPendingScriptReady(m_parserBlockingScript));
+    ASSERT(isPendingScriptReady(m_parserBlockingScript.get()));
 
     InsertionPointRecord insertionPointRecord(m_host->inputStream());
-    executePendingScriptAndDispatchEvent(m_parserBlockingScript, PendingScript::ParsingBlocking);
+    executePendingScriptAndDispatchEvent(m_parserBlockingScript.get(), ScriptStreamer::ParsingBlocking);
 }
 
-void HTMLScriptRunner::executePendingScriptAndDispatchEvent(PendingScript& pendingScript, PendingScript::Type pendingScriptType)
+void HTMLScriptRunner::executePendingScriptAndDispatchEvent(PendingScript* pendingScript, ScriptStreamer::Type pendingScriptType)
 {
     bool errorOccurred = false;
-    double loadFinishTime = pendingScript.resource() && pendingScript.resource()->url().protocolIsInHTTPFamily() ? pendingScript.resource()->loadFinishTime() : 0;
-    ScriptSourceCode sourceCode = pendingScript.getSource(documentURLForScriptExecution(m_document), errorOccurred);
+    double loadFinishTime = pendingScript->resource() && pendingScript->resource()->url().protocolIsInHTTPFamily() ? pendingScript->resource()->loadFinishTime() : 0;
+    ScriptSourceCode sourceCode = pendingScript->getSource(documentURLForScriptExecution(m_document), errorOccurred);
 
     // Stop watching loads before executeScript to prevent recursion if the script reloads itself.
-    pendingScript.stopWatchingForLoad(this);
+    pendingScript->stopWatchingForLoad();
 
     if (!isExecutingScript()) {
         Microtask::performCheckpoint(V8PerIsolateData::mainThreadIsolate());
-        if (pendingScriptType == PendingScript::ParsingBlocking) {
+        if (pendingScriptType == ScriptStreamer::ParsingBlocking) {
             m_hasScriptsWaitingForResources = !m_document->isScriptExecutionReady();
             // The parser cannot be unblocked as a microtask requested another resource
             if (m_hasScriptsWaitingForResources)
@@ -143,27 +205,32 @@ void HTMLScriptRunner::executePendingScriptAndDispatchEvent(PendingScript& pendi
         }
     }
 
-    // Clear the pending script before possible rentrancy from executeScript()
-    RefPtrWillBeRawPtr<Element> element = pendingScript.releaseElementAndClear();
+    TextPosition scriptStartPosition = pendingScript->startingPosition();
+    // Clear the pending script before possible re-entrancy from executeScript()
+    RefPtrWillBeRawPtr<Element> element = pendingScript->releaseElementAndClear();
     double compilationFinishTime = 0;
     if (ScriptLoader* scriptLoader = toScriptLoaderIfPossible(element.get())) {
         NestingLevelIncrementer nestingLevelIncrementer(m_scriptNestingLevel);
         IgnoreDestructiveWriteCountIncrementer ignoreDestructiveWriteCountIncrementer(m_document);
-        if (errorOccurred)
+        if (errorOccurred) {
+            TRACE_EVENT_WITH_FLOW1("blink", "HTMLScriptRunner ExecuteScriptFailed", element.get(), TRACE_EVENT_FLAG_FLOW_IN,
+                "data", getTraceArgsForScriptElement(element.get(), scriptStartPosition));
             scriptLoader->dispatchErrorEvent();
-        else {
+        } else {
             ASSERT(isExecutingScript());
-            if (!scriptLoader->executeScript(sourceCode, &compilationFinishTime)) {
+            if (!doExecuteScript(element.get(), sourceCode, scriptStartPosition, &compilationFinishTime)) {
                 scriptLoader->dispatchErrorEvent();
             } else {
-                element->dispatchEvent(createScriptLoadEvent());
+                element->dispatchEvent(Event::create(EventTypeNames::load));
             }
         }
     }
     // The exact value doesn't matter; valid time stamps are much bigger than this value.
     const double epsilon = 1;
-    if (pendingScriptType == PendingScript::ParsingBlocking && !m_parserBlockingScriptAlreadyLoaded && compilationFinishTime > epsilon && loadFinishTime > epsilon) {
-        Platform::current()->histogramCustomCounts("WebCore.Scripts.ParsingBlocking.TimeBetweenLoadedAndCompiled", (compilationFinishTime - loadFinishTime) * 1000, 0, 10000, 50);
+    if (pendingScriptType == ScriptStreamer::ParsingBlocking && !m_parserBlockingScriptAlreadyLoaded && compilationFinishTime > epsilon && loadFinishTime > epsilon) {
+        int duration = (compilationFinishTime - loadFinishTime) * 1000;
+        DEFINE_STATIC_LOCAL(CustomCountHistogram, loadAndCompileHistogram, ("WebCore.Scripts.ParsingBlocking.TimeBetweenLoadedAndCompiled", 0, 10000, 50));
+        loadAndCompileHistogram.count(duration);
     }
 
     ASSERT(!isExecutingScript());
@@ -171,15 +238,15 @@ void HTMLScriptRunner::executePendingScriptAndDispatchEvent(PendingScript& pendi
 
 void HTMLScriptRunner::stopWatchingResourceForLoad(Resource* resource)
 {
-    if (m_parserBlockingScript.resource() == resource) {
-        m_parserBlockingScript.stopWatchingForLoad(this);
-        m_parserBlockingScript.releaseElementAndClear();
+    if (m_parserBlockingScript->resource() == resource) {
+        m_parserBlockingScript->stopWatchingForLoad();
+        m_parserBlockingScript->releaseElementAndClear();
         return;
     }
-    for (PendingScript& script : m_scriptsToExecuteAfterParsing) {
-        if (script.resource() == resource) {
-            script.stopWatchingForLoad(this);
-            script.releaseElementAndClear();
+    for (auto& script : m_scriptsToExecuteAfterParsing) {
+        if (script->resource() == resource) {
+            script->stopWatchingForLoad();
+            script->releaseElementAndClear();
             return;
         }
     }
@@ -206,6 +273,8 @@ void HTMLScriptRunner::notifyFinished(Resource* cachedResource)
 void HTMLScriptRunner::execute(PassRefPtrWillBeRawPtr<Element> scriptElement, const TextPosition& scriptStartPosition)
 {
     ASSERT(scriptElement);
+    TRACE_EVENT1("blink", "HTMLScriptRunner::execute",
+        "data", getTraceArgsForScriptElement(scriptElement.get(), scriptStartPosition));
     // FIXME: If scripting is disabled, always just return.
 
     bool hadPreloadScanner = m_host->hasPreloadScanner();
@@ -225,26 +294,30 @@ void HTMLScriptRunner::execute(PassRefPtrWillBeRawPtr<Element> scriptElement, co
 
 bool HTMLScriptRunner::hasParserBlockingScript() const
 {
-    return !!m_parserBlockingScript.element();
+    return !!m_parserBlockingScript->element();
 }
 
 void HTMLScriptRunner::executeParsingBlockingScripts()
 {
-    while (hasParserBlockingScript() && isPendingScriptReady(m_parserBlockingScript))
+    while (hasParserBlockingScript() && isPendingScriptReady(m_parserBlockingScript.get()))
         executeParsingBlockingScript();
+    if (hasParserBlockingScript())
+        traceParserBlockingScript(m_parserBlockingScript.get(), m_hasScriptsWaitingForResources);
 }
 
 void HTMLScriptRunner::executeScriptsWaitingForLoad(Resource* resource)
 {
+    TRACE_EVENT0("blink", "HTMLScriptRunner::executeScriptsWaitingForLoad");
     ASSERT(!isExecutingScript());
     ASSERT(hasParserBlockingScript());
-    ASSERT_UNUSED(resource, m_parserBlockingScript.resource() == resource);
-    ASSERT(m_parserBlockingScript.isReady());
+    ASSERT_UNUSED(resource, m_parserBlockingScript->resource() == resource);
+    ASSERT(m_parserBlockingScript->isReady());
     executeParsingBlockingScripts();
 }
 
 void HTMLScriptRunner::executeScriptsWaitingForResources()
 {
+    TRACE_EVENT0("blink", "HTMLScriptRunner::executeScriptsWaitingForResources");
     ASSERT(m_document);
     // Callers should check hasScriptsWaitingForResources() before calling
     // to prevent parser or script re-entry during </style> parsing.
@@ -256,16 +329,18 @@ void HTMLScriptRunner::executeScriptsWaitingForResources()
 
 bool HTMLScriptRunner::executeScriptsWaitingForParsing()
 {
+    TRACE_EVENT0("blink", "HTMLScriptRunner::executeScriptsWaitingForParsing");
     while (!m_scriptsToExecuteAfterParsing.isEmpty()) {
         ASSERT(!isExecutingScript());
         ASSERT(!hasParserBlockingScript());
-        ASSERT(m_scriptsToExecuteAfterParsing.first().resource());
-        if (!m_scriptsToExecuteAfterParsing.first().isReady()) {
-            m_scriptsToExecuteAfterParsing.first().watchForLoad(this);
+        ASSERT(m_scriptsToExecuteAfterParsing.first()->resource());
+        if (!m_scriptsToExecuteAfterParsing.first()->isReady()) {
+            m_scriptsToExecuteAfterParsing.first()->watchForLoad(this);
+            traceParserBlockingScript(m_scriptsToExecuteAfterParsing.first().get(), !m_document->isScriptExecutionReady());
             return false;
         }
-        PendingScript first = m_scriptsToExecuteAfterParsing.takeFirst();
-        executePendingScriptAndDispatchEvent(first, PendingScript::Deferred);
+        OwnPtrWillBeRawPtr<PendingScript> first = m_scriptsToExecuteAfterParsing.takeFirst();
+        executePendingScriptAndDispatchEvent(first.get(), ScriptStreamer::Deferred);
         // FIXME: What is this m_document check for?
         if (!m_document)
             return false;
@@ -275,52 +350,52 @@ bool HTMLScriptRunner::executeScriptsWaitingForParsing()
 
 void HTMLScriptRunner::requestParsingBlockingScript(Element* element)
 {
-    if (!requestPendingScript(m_parserBlockingScript, element))
+    if (!requestPendingScript(m_parserBlockingScript.get(), element))
         return;
 
-    ASSERT(m_parserBlockingScript.resource());
+    ASSERT(m_parserBlockingScript->resource());
 
     // We only care about a load callback if resource is not already
     // in the cache. Callers will attempt to run the m_parserBlockingScript
     // if possible before returning control to the parser.
-    if (!m_parserBlockingScript.isReady()) {
+    if (!m_parserBlockingScript->isReady()) {
         if (m_document->frame()) {
             ScriptState* scriptState = ScriptState::forMainWorld(m_document->frame());
             if (scriptState)
-                ScriptStreamer::startStreaming(m_parserBlockingScript, PendingScript::ParsingBlocking, m_document->frame()->settings(), scriptState, m_document->loadingTaskRunner());
+                ScriptStreamer::startStreaming(m_parserBlockingScript.get(), ScriptStreamer::ParsingBlocking, m_document->frame()->settings(), scriptState, m_document->loadingTaskRunner());
         }
 
-        m_parserBlockingScript.watchForLoad(this);
+        m_parserBlockingScript->watchForLoad(this);
     }
 }
 
 void HTMLScriptRunner::requestDeferredScript(Element* element)
 {
-    PendingScript pendingScript;
-    if (!requestPendingScript(pendingScript, element))
+    OwnPtrWillBeRawPtr<PendingScript> pendingScript = PendingScript::create(nullptr, nullptr);
+    if (!requestPendingScript(pendingScript.get(), element))
         return;
 
-    if (m_document->frame() && !pendingScript.isReady()) {
+    if (m_document->frame() && !pendingScript->isReady()) {
         ScriptState* scriptState = ScriptState::forMainWorld(m_document->frame());
         if (scriptState)
-            ScriptStreamer::startStreaming(pendingScript, PendingScript::Deferred, m_document->frame()->settings(), scriptState, m_document->loadingTaskRunner());
+            ScriptStreamer::startStreaming(pendingScript.get(), ScriptStreamer::Deferred, m_document->frame()->settings(), scriptState, m_document->loadingTaskRunner());
     }
 
-    ASSERT(pendingScript.resource());
-    m_scriptsToExecuteAfterParsing.append(pendingScript);
+    ASSERT(pendingScript->resource());
+    m_scriptsToExecuteAfterParsing.append(pendingScript.release());
 }
 
-bool HTMLScriptRunner::requestPendingScript(PendingScript& pendingScript, Element* script) const
+bool HTMLScriptRunner::requestPendingScript(PendingScript* pendingScript, Element* script) const
 {
-    ASSERT(!pendingScript.element());
-    pendingScript.setElement(script);
+    ASSERT(!pendingScript->element());
+    pendingScript->setElement(script);
     // This should correctly return 0 for empty or invalid srcValues.
-    ScriptResource* resource = toScriptLoaderIfPossible(script)->resource().get();
+    ScriptResource* resource = toScriptLoaderIfPossible(script)->resource();
     if (!resource) {
         notImplemented(); // Dispatch error event.
         return false;
     }
-    pendingScript.setScriptResource(resource);
+    pendingScript->setScriptResource(resource);
     return true;
 }
 
@@ -358,11 +433,11 @@ void HTMLScriptRunner::runScript(Element* script, const TextPosition& scriptStar
             requestDeferredScript(script);
         } else if (scriptLoader->readyToBeParserExecuted()) {
             if (m_scriptNestingLevel == 1) {
-                m_parserBlockingScript.setElement(script);
-                m_parserBlockingScript.setStartingPosition(scriptStartPosition);
+                m_parserBlockingScript->setElement(script);
+                m_parserBlockingScript->setStartingPosition(scriptStartPosition);
             } else {
-                ScriptSourceCode sourceCode(script->textContent(), documentURLForScriptExecution(m_document), scriptStartPosition);
-                scriptLoader->executeScript(sourceCode);
+                ScriptSourceCode sourceCode(CompressibleString(script->textContent().impl()), documentURLForScriptExecution(m_document), scriptStartPosition);
+                doExecuteScript(script, sourceCode, scriptStartPosition);
             }
         } else {
             requestParsingBlockingScript(script);

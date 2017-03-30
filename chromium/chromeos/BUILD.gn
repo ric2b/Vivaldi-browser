@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/allocator.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 import("//third_party/protobuf/proto_library.gni")
@@ -29,12 +28,11 @@ component("chromeos") {
     ":power_manager_proto",
     "//base",
     "//base:i18n",
-    "//base:prefs",
     "//base/third_party/dynamic_annotations",
-    "//chromeos/ime:gencode",
     "//components/device_event_log",
     "//components/onc",
     "//components/policy/proto",
+    "//components/prefs",
     "//components/proxy_config",
     "//components/signin/core/account_id",
     "//crypto",
@@ -146,10 +144,10 @@ test("chromeos_unittests") {
     ":cryptohome_proto",
     ":power_manager_proto",
     ":test_support",
-    "//base:prefs_test_support",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//components/onc",
+    "//components/prefs:test_support",
     "//components/proxy_config",
     "//crypto",
     "//crypto:test_support",
@@ -163,9 +161,6 @@ test("chromeos_unittests") {
     "//url",
   ]
   sources = gypi_values.chromeos_test_sources
-  if (use_allocator != "none") {
-    deps += [ "//base/allocator" ]
-  }
   if (use_binder) {
     if (target_cpu == "arm" || target_cpu == "x86") {
       defines += [ "BINDER_IPC_32BIT" ]

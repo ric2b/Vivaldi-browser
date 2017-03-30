@@ -612,7 +612,7 @@ bool AutofillDialogViews::SectionContainer::ShouldForwardEvent(
 
 AutofillDialogViews::SuggestedButton::SuggestedButton(
     views::MenuButtonListener* listener)
-    : views::MenuButton(NULL, base::string16(), listener, false) {
+    : views::MenuButton(base::string16(), listener, false) {
   const int kFocusBorderWidth = 1;
   SetBorder(views::Border::CreateEmptyBorder(kMenuButtonTopInset,
                                              kFocusBorderWidth,
@@ -1188,8 +1188,9 @@ void AutofillDialogViews::OnPerformAction(views::Combobox* combobox) {
   ValidateGroup(*GroupForSection(section), VALIDATE_EDIT);
 }
 
-void AutofillDialogViews::OnMenuButtonClicked(views::View* source,
-                                              const gfx::Point& point) {
+void AutofillDialogViews::OnMenuButtonClicked(views::MenuButton* source,
+                                              const gfx::Point& point,
+                                              const ui::Event* event) {
   DCHECK_EQ(kSuggestedButtonClassName, source->GetClassName());
 
   DetailsGroup* group = NULL;
@@ -1907,6 +1908,9 @@ AutofillDialogViews::DetailsGroup::DetailsGroup(DialogSection section)
       manual_input(NULL),
       suggested_info(NULL),
       suggested_button(NULL) {}
+
+AutofillDialogViews::DetailsGroup::DetailsGroup(const DetailsGroup& other) =
+    default;
 
 AutofillDialogViews::DetailsGroup::~DetailsGroup() {}
 

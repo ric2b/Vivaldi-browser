@@ -43,6 +43,35 @@
 #include "wtf/text/CString.h"
 #include <unicode/locid.h>
 
+// Unfortunately, these chosen font names require a bit of experimentation and
+// researching on the respective platforms as to what works best and is widely
+// available. They may require further manual tuning. Mozilla's choices in the
+// gfxPlatform*::GetCommonFallbackFonts methods collects some of the outcome of
+// this experimentation. On Android, the available fonts in
+// /system/etc/fonts.xml give a clearer picture of which fonts are available and
+// can be widely used successfully. On Linux, updating and improving this list
+// requires finding out widely used distribution fonts, for example on current
+// Ubuntu versions.
+#if OS(WIN)
+const char* kColorEmojiFonts[] = { "Segoe UI Emoji", "Segoe UI Symbol" };
+const char* kTextEmojiFonts[] = { "Segoe UI Symbol", "Code2000", "Lucida Sans Unicode" };
+const char* kSymbolsFonts[] = { "Segoe UI Symbol", "Code2000", "Lucida Sans Unicode" };
+const char* kMathFonts[] = { "Cambria Math", "Segoe UI Symbol", "Code2000" };
+#elif OS(ANDROID)
+// Due to crbug.com/322658 we cannot properly specify Android font family names here,
+// The way Skia's SkFontMgr_android gives them canonical names, we can however
+// reference the Noto Color Emoji font under "56##fallback" on Android 6.0.1
+const char* kColorEmojiFonts[] = { "56##fallback", "Noto Color Emoji", "Android Emoji" };
+const char* kTextEmojiFonts[] = { "Droid Sans Fallback" };
+const char* kSymbolsFonts[] = { "Droid Sans Fallback" };
+const char* kMathFonts[] = { "Droid Sans Fallback" };
+#elif OS(LINUX)
+const char* kColorEmojiFonts[] = { "Noto Color Emoji", "Noto Sans Symbols", "Symbola", "DejaVu Sans" };
+const char* kTextEmojiFonts[] = { "Noto Sans Symbols", "Symbola", "Droid Sans Fallback", "DejaVu Sans" };
+const char* kSymbolsFonts[] = { "FreeSerif", "FreeMono", "Droid Sans Fallback", "DejaVu Sans" };
+const char* kMathFonts[] = { "FreeSerif", "FreeMono", "Droid Sans Fallback", "DejaVu Sans" };
+#endif
+
 #if !OS(WIN) && !OS(ANDROID)
 #include "SkFontConfigInterface.h"
 
@@ -81,56 +110,6 @@ PassRefPtr<SimpleFontData> FontCache::fallbackOnStandardFontStyle(
     return nullptr;
 }
 
-#if !OS(WIN) && !OS(ANDROID)
-PassRefPtr<SimpleFontData> FontCache::fallbackFontForCharacter(const FontDescription& fontDescription, UChar32 c, const SimpleFontData*)
-{
-    // First try the specified font with standard style & weight.
-    if (fontDescription.style() == FontStyleItalic
-        || fontDescription.weight() >= FontWeight600) {
-        RefPtr<SimpleFontData> fontData = fallbackOnStandardFontStyle(
-            fontDescription, c);
-        if (fontData)
-            return fontData;
-    }
-
-    FontCache::PlatformFallbackFont fallbackFont;
-    FontCache::getFontForCharacter(c, fontDescription.locale().ascii().data(), &fallbackFont);
-    if (fallbackFont.name.isEmpty())
-        return nullptr;
-
-    FontFaceCreationParams creationParams;
-    creationParams = FontFaceCreationParams(fallbackFont.filename, fallbackFont.fontconfigInterfaceId, fallbackFont.ttcIndex);
-
-    // Changes weight and/or italic of given FontDescription depends on
-    // the result of fontconfig so that keeping the correct font mapping
-    // of the given character. See http://crbug.com/32109 for details.
-    bool shouldSetSyntheticBold = false;
-    bool shouldSetSyntheticItalic = false;
-    FontDescription description(fontDescription);
-    if (fallbackFont.isBold && description.weight() < FontWeightBold)
-        description.setWeight(FontWeightBold);
-    if (!fallbackFont.isBold && description.weight() >= FontWeightBold) {
-        shouldSetSyntheticBold = true;
-        description.setWeight(FontWeightNormal);
-    }
-    if (fallbackFont.isItalic && description.style() == FontStyleNormal)
-        description.setStyle(FontStyleItalic);
-    if (!fallbackFont.isItalic && (description.style() == FontStyleItalic || description.style() == FontStyleOblique)) {
-        shouldSetSyntheticItalic = true;
-        description.setStyle(FontStyleNormal);
-    }
-
-    FontPlatformData* substitutePlatformData = getFontPlatformData(description, creationParams);
-    if (!substitutePlatformData)
-        return nullptr;
-    FontPlatformData platformData = FontPlatformData(*substitutePlatformData);
-    platformData.setSyntheticBold(shouldSetSyntheticBold);
-    platformData.setSyntheticItalic(shouldSetSyntheticItalic);
-    return fontDataFromFontPlatformData(&platformData, DoNotRetain);
-}
-
-#endif // !OS(WIN) && !OS(ANDROID)
-
 PassRefPtr<SimpleFontData> FontCache::getLastResortFallbackFont(const FontDescription& description, ShouldRetain shouldRetain)
 {
     const FontFaceCreationParams fallbackCreationParams(getFallbackFontFamily(description));
@@ -159,6 +138,32 @@ PassRefPtr<SimpleFontData> FontCache::getLastResortFallbackFont(const FontDescri
 
     ASSERT(fontPlatformData);
     return fontDataFromFontPlatformData(fontPlatformData, shouldRetain);
+}
+
+const Vector<AtomicString> FontCache::platformFontListForFallbackPriority(FontFallbackPriority fallbackPriority) const
+{
+    Vector<AtomicString> returnVector;
+    switch (fallbackPriority) {
+    case FontFallbackPriority::EmojiEmoji:
+        for (size_t i = 0; i < WTF_ARRAY_LENGTH(kColorEmojiFonts); ++i)
+            returnVector.append(kColorEmojiFonts[i]);
+        break;
+    case FontFallbackPriority::EmojiText:
+        for (size_t i = 0; i < WTF_ARRAY_LENGTH(kTextEmojiFonts); ++i)
+            returnVector.append(kTextEmojiFonts[i]);
+        break;
+    case FontFallbackPriority::Math:
+        for (size_t i = 0; i < WTF_ARRAY_LENGTH(kMathFonts); ++i)
+            returnVector.append(kMathFonts[i]);
+        break;
+    case FontFallbackPriority::Symbols:
+        for (size_t i = 0; i < WTF_ARRAY_LENGTH(kSymbolsFonts); ++i)
+            returnVector.append(kSymbolsFonts[i]);
+        break;
+    default:
+        ASSERT_NOT_REACHED();
+    }
+    return returnVector;
 }
 
 #if OS(WIN)

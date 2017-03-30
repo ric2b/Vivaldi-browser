@@ -310,7 +310,7 @@ class TouchEventQueue::TouchMoveSlopSuppressor {
     if (suppressing_touchmoves_) {
       if (event.touchesLength > 1) {
         suppressing_touchmoves_ = false;
-      } else if (event.causesScrollingIfUncanceled) {
+      } else if (event.movedBeyondSlopRegion) {
         suppressing_touchmoves_ = false;
       } else {
         // No sane slop region should be larger than 60 DIPs.
@@ -467,6 +467,7 @@ void TouchEventQueue::QueueEvent(const TouchEventWithLatencyInfo& event) {
     // yields identical results, but this avoids unnecessary allocations.
     PreFilterResult filter_result = FilterBeforeForwarding(event.event);
     if (filter_result != FORWARD_TO_RENDERER) {
+      client_->OnFilteringTouchEvent(event.event);
       client_->OnTouchEventAck(event,
                                filter_result == ACK_WITH_NO_CONSUMER_EXISTS
                                    ? INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS
@@ -537,8 +538,10 @@ void TouchEventQueue::TryForwardNextEventToRenderer() {
   // If there are queued touch events, then try to forward them to the renderer
   // immediately, or ACK the events back to the client if appropriate.
   while (!touch_queue_.empty()) {
-    PreFilterResult filter_result =
-        FilterBeforeForwarding(touch_queue_.front()->coalesced_event().event);
+    const WebTouchEvent& event = touch_queue_.front()->coalesced_event().event;
+    PreFilterResult filter_result = FilterBeforeForwarding(event);
+    if (filter_result != FORWARD_TO_RENDERER)
+      client_->OnFilteringTouchEvent(event);
     switch (filter_result) {
       case ACK_WITH_NO_CONSUMER_EXISTS:
         PopTouchEventToClient(INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
@@ -695,7 +698,7 @@ bool TouchEventQueue::IsAckTimeoutEnabled() const {
 }
 
 bool TouchEventQueue::HasPendingAsyncTouchMoveForTesting() const {
-  return pending_async_touchmove_;
+  return !!pending_async_touchmove_;
 }
 
 bool TouchEventQueue::IsTimeoutRunningForTesting() const {

@@ -7,7 +7,6 @@
 #include <string>
 
 #include "base/bind.h"
-#include "base/prefs/pref_service.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/google/google_url_tracker_factory.h"
@@ -19,13 +18,11 @@
 #include "chrome/browser/web_data_service_factory.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "components/search_engines/default_search_manager.h"
+#include "components/search_engines/desktop_search_utils.h"
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/search_engines/template_url_service.h"
-
-#if defined(OS_WIN)
-#include "components/search_engines/desktop_search_win.h"
-#endif  // defined(OS_WIN)
 
 #if defined(ENABLE_RLZ)
 #include "components/rlz/rlz_tracker.h"
@@ -84,9 +81,7 @@ void TemplateURLServiceFactory::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   DefaultSearchManager::RegisterProfilePrefs(registry);
   TemplateURLService::RegisterProfilePrefs(registry);
-#if defined(OS_WIN)
-  RegisterWindowsDesktopSearchRedirectionPref(registry);
-#endif
+  RegisterDesktopSearchRedirectionPref(registry);
 }
 
 content::BrowserContext* TemplateURLServiceFactory::GetBrowserContextToUse(

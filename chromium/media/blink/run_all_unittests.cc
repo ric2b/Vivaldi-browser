@@ -70,21 +70,16 @@ class TestBlinkPlatformSupport : NON_EXPORTED_BASE(public blink::Platform) {
  public:
   ~TestBlinkPlatformSupport() override;
 
-  const unsigned char* getTraceCategoryEnabledFlag(
-      const char* categoryName) override;
   blink::WebThread* currentThread() override { return &m_currentThread; }
+  void registerMemoryDumpProvider(blink::WebMemoryDumpProvider*,
+                                  const char* name) override {}
+  void unregisterMemoryDumpProvider(blink::WebMemoryDumpProvider*) override {}
 
  private:
   CurrentThreadMock m_currentThread;
 };
 
 TestBlinkPlatformSupport::~TestBlinkPlatformSupport() {}
-
-const unsigned char* TestBlinkPlatformSupport::getTraceCategoryEnabledFlag(
-    const char* categoryName) {
-  static const unsigned char tracingIsDisabled = 0;
-  return &tracingIsDisabled;
-}
 
 class BlinkMediaTestSuite : public base::TestSuite {
  public:

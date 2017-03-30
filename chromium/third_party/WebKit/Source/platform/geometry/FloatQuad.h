@@ -36,6 +36,8 @@
 #include "wtf/Allocator.h"
 #include <iosfwd>
 
+struct SkPoint;
+
 namespace blink {
 
 // A FloatQuad is a collection of 4 points, often representing the result of
@@ -63,6 +65,9 @@ public:
         , m_p4(inRect.x(), inRect.maxY())
     {
     }
+
+    // Converts from an array of four SkPoints, as from SkMatrix::mapRectToQuad.
+    explicit FloatQuad(const SkPoint(&)[4]);
 
     FloatPoint p1() const { return m_p1; }
     FloatPoint p2() const { return m_p2; }
@@ -146,6 +151,11 @@ public:
     // Tests whether points are in clock-wise, or counter clock-wise order.
     // Note that output is undefined when all points are colinear.
     bool isCounterclockwise() const;
+
+#ifndef NDEBUG
+    // Prints debugging information for this object.
+    void show() const;
+#endif
 
 private:
     FloatPoint m_p1;

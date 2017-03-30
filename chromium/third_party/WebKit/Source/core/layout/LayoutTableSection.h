@@ -169,6 +169,7 @@ public:
         bool hasCells() const { return cells.size() > 0; }
     };
 
+    // The index is effective column index.
     typedef Vector<CellStruct> Row;
 
     struct RowStruct {
@@ -182,7 +183,7 @@ public:
 
         Row row;
         LayoutTableRow* rowLayoutObject;
-        LayoutUnit baseline;
+        int baseline;
         Length logicalHeight;
     };
 
@@ -226,20 +227,20 @@ public:
     const LayoutTableCell* firstRowCellAdjoiningTableStart() const;
     const LayoutTableCell* firstRowCellAdjoiningTableEnd() const;
 
-    CellStruct& cellAt(unsigned row,  unsigned col) { return m_grid[row].row[col]; }
-    const CellStruct& cellAt(unsigned row, unsigned col) const { return m_grid[row].row[col]; }
-    LayoutTableCell* primaryCellAt(unsigned row, unsigned col)
+    CellStruct& cellAt(unsigned row,  unsigned effectiveColumn) { return m_grid[row].row[effectiveColumn]; }
+    const CellStruct& cellAt(unsigned row, unsigned effectiveColumn) const { return m_grid[row].row[effectiveColumn]; }
+    LayoutTableCell* primaryCellAt(unsigned row, unsigned effectiveColumn)
     {
-        CellStruct& c = m_grid[row].row[col];
+        CellStruct& c = m_grid[row].row[effectiveColumn];
         return c.primaryCell();
     }
-    const LayoutTableCell* primaryCellAt(unsigned row, unsigned col) const { return const_cast<LayoutTableSection*>(this)->primaryCellAt(row, col); }
+    const LayoutTableCell* primaryCellAt(unsigned row, unsigned effectiveColumn) const { return const_cast<LayoutTableSection*>(this)->primaryCellAt(row, effectiveColumn); }
 
     LayoutTableRow* rowLayoutObjectAt(unsigned row) { return m_grid[row].rowLayoutObject; }
     const LayoutTableRow* rowLayoutObjectAt(unsigned row) const { return m_grid[row].rowLayoutObject; }
 
-    void appendColumn(unsigned pos);
-    void splitColumn(unsigned pos, unsigned first);
+    void appendEffectiveColumn(unsigned pos);
+    void splitEffectiveColumn(unsigned pos, unsigned first);
 
     enum BlockBorderSide { BorderBefore, BorderAfter };
     int calcBlockDirectionOuterBorder(BlockBorderSide) const;
@@ -253,7 +254,7 @@ public:
     int outerBorderEnd() const { return m_outerBorderEnd; }
 
     unsigned numRows() const { return m_grid.size(); }
-    unsigned numColumns() const;
+    unsigned numEffectiveColumns() const;
 
     // recalcCells() is used when we are not sure about the section's structure
     // and want to do an expensive (but safe) reconstruction of m_grid from
@@ -274,14 +275,15 @@ public:
     bool needsCellRecalc() const { return m_needsCellRecalc; }
     void setNeedsCellRecalc();
 
-    LayoutUnit rowBaseline(unsigned row) { return m_grid[row].baseline; }
+    int rowBaseline(unsigned row) { return m_grid[row].baseline; }
 
     void rowLogicalHeightChanged(LayoutTableRow*);
 
     void removeCachedCollapsedBorders(const LayoutTableCell*);
     // Returns true if any collapsed borders of the cell changed.
     bool setCachedCollapsedBorder(const LayoutTableCell*, CollapsedBorderSide, const CollapsedBorderValue&);
-    const CollapsedBorderValue& cachedCollapsedBorder(const LayoutTableCell*, CollapsedBorderSide) const;
+    // Returns null if the border is not cached (there is no such collapsed border or the border is invisible).
+    const CollapsedBorderValue* cachedCollapsedBorder(const LayoutTableCell*, CollapsedBorderSide) const;
 
     // distributeExtraLogicalHeightToRows methods return the *consumed* extra logical height.
     // FIXME: We may want to introduce a structure holding the in-flux layout information.
@@ -299,11 +301,17 @@ public:
     LayoutRect logicalRectForWritingModeAndDirection(const LayoutRect&) const;
 
     CellSpan dirtiedRows(const LayoutRect& paintInvalidationRect) const;
-    CellSpan dirtiedColumns(const LayoutRect& paintInvalidationRect) const;
+    CellSpan dirtiedEffectiveColumns(const LayoutRect& paintInvalidationRect) const;
     const HashSet<LayoutTableCell*>& overflowingCells() const { return m_overflowingCells; }
     bool hasMultipleCellLevels() const { return m_hasMultipleCellLevels; }
 
     const char* name() const override { return "LayoutTableSection"; }
+
+    // Whether a section has opaque background depends on many factors, e.g. border spacing,
+    // border collapsing, missing cells, etc.
+    // For simplicity, just conservatively assume all table sections are not opaque.
+    bool foregroundIsKnownToBeOpaqueInRect(const LayoutRect&, unsigned) const override { return false; }
+    bool backgroundIsKnownToBeOpaqueInRect(const LayoutRect&) const override { return false; }
 
 protected:
     void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) override;
@@ -330,7 +338,7 @@ private:
     void updateRowsHeightHavingOnlySpanningCells(LayoutTableCell*, struct SpanningRowsHeight&, unsigned&, Vector<int>&);
 
     void populateSpanningRowsHeightFromCell(LayoutTableCell*, struct SpanningRowsHeight&);
-    void distributeExtraRowSpanHeightToPercentRows(LayoutTableCell*, int, int&, Vector<int>&);
+    void distributeExtraRowSpanHeightToPercentRows(LayoutTableCell*, float, int&, Vector<int>&);
     void distributeWholeExtraRowSpanHeightToPercentRows(LayoutTableCell*, float, int&, Vector<int>&);
     void distributeExtraRowSpanHeightToAutoRows(LayoutTableCell*, int, int&, Vector<int>&);
     void distributeExtraRowSpanHeightToRemainingRows(LayoutTableCell*, int, int&, Vector<int>&);
@@ -340,19 +348,19 @@ private:
     void distributeExtraLogicalHeightToAutoRows(int& extraLogicalHeight, unsigned autoRowsCount);
     void distributeRemainingExtraLogicalHeight(int& extraLogicalHeight);
 
-    void updateBaselineForCell(LayoutTableCell*, unsigned row, LayoutUnit& baselineDescent);
+    void updateBaselineForCell(LayoutTableCell*, unsigned row, int& baselineDescent);
 
     bool hasOverflowingCell() const { return m_overflowingCells.size() || m_forceSlowPaintPathWithOverflowingCell; }
 
     void computeOverflowFromCells(unsigned totalRows, unsigned nEffCols);
 
     CellSpan fullTableRowSpan() const { return CellSpan(0, m_grid.size()); }
-    CellSpan fullTableColumnSpan() const { return CellSpan(0, table()->columns().size()); }
+    CellSpan fullTableEffectiveColumnSpan() const { return CellSpan(0, table()->numEffectiveColumns()); }
 
     // These two functions take a rectangle as input that has been flipped by logicalRectForWritingModeAndDirection.
     // The returned span of rows or columns is end-exclusive, and empty if start==end.
     CellSpan spannedRows(const LayoutRect& flippedRect) const;
-    CellSpan spannedColumns(const LayoutRect& flippedRect) const;
+    CellSpan spannedEffectiveColumns(const LayoutRect& flippedRect) const;
 
     void setLogicalPositionForCell(LayoutTableCell*, unsigned effectiveColumn) const;
 
@@ -406,6 +414,7 @@ private:
 
     // This map holds the collapsed border values for cells with collapsed borders.
     // It is held at LayoutTableSection level to spare memory consumption by table cells.
+    // Invisible borders are never stored in this map.
     using CellsCollapsedBordersMap = HashMap<std::pair<const LayoutTableCell*, int>, CollapsedBorderValue>;
     CellsCollapsedBordersMap m_cellsCollapsedBorders;
 };

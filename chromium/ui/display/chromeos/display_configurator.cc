@@ -42,7 +42,7 @@ const int kConfigureDelayMs = 500;
 const int kResumeDelayMs = 500;
 
 // The EDID specification marks the top bit of the manufacturer id as reserved.
-const int16_t kReservedManufacturerID = 1 << 15;
+const int16_t kReservedManufacturerID = static_cast<int16_t>(1 << 15);
 
 struct DisplayState {
   DisplaySnapshot* display = nullptr;  // Not owned.
@@ -1138,6 +1138,10 @@ bool DisplayConfigurator::RemoveVirtualDisplay(int64_t display_id) {
   last_virtual_display_id_ = max_display_id & 0xff;
 
   return true;
+}
+
+bool DisplayConfigurator::IsDisplayOn() const {
+  return current_power_state_ != chromeos::DISPLAY_POWER_ALL_OFF;
 }
 
 }  // namespace ui

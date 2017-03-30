@@ -67,6 +67,7 @@ locales\*.pak: %(VersionDir)s\Locales
 resources\vivaldi\_locales\ar\messages.json: %(VersionDir)s\resources\vivaldi\_locales\ar
 resources\vivaldi\_locales\be\messages.json: %(VersionDir)s\resources\vivaldi\_locales\be
 resources\vivaldi\_locales\bg\messages.json: %(VersionDir)s\resources\vivaldi\_locales\bg
+resources\vivaldi\_locales\ca\messages.json: %(VersionDir)s\resources\vivaldi\_locales\ca
 resources\vivaldi\_locales\cs\messages.json: %(VersionDir)s\resources\vivaldi\_locales\cs
 resources\vivaldi\_locales\da\messages.json: %(VersionDir)s\resources\vivaldi\_locales\da
 resources\vivaldi\_locales\de\messages.json: %(VersionDir)s\resources\vivaldi\_locales\de

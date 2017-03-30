@@ -98,11 +98,6 @@
       # Additional .cpp files from the make_core_generated rules.
       '<(blink_core_output_dir)/XPathGrammar.cpp',
 
-      # Additional .cpp files from the inspector_protocol_sources list.
-      '<(blink_core_output_dir)/InspectorFrontend.cpp',
-      '<(blink_core_output_dir)/InspectorBackendDispatcher.cpp',
-      '<(blink_core_output_dir)/InspectorTypeBuilder.cpp',
-
       # Additional .cpp files from the inspector_instrumentation_sources list.
       '<(blink_core_output_dir)/InspectorConsoleInstrumentationInl.h',
       '<(blink_core_output_dir)/InspectorInstrumentationInl.h',
@@ -123,9 +118,9 @@
       # Generated from make_css_property_metadata.py
       '<(blink_core_output_dir)/CSSPropertyMetadata.cpp',
 
-      # Generated from make_experimental_features.py
-      '<(blink_core_output_dir)/experiments/ExperimentalFeatures.cpp',
-      '<(blink_core_output_dir)/experiments/ExperimentalFeatures.h',
+      # Generated from make_origin_trials.py
+      '<(blink_core_output_dir)/origin_trials/OriginTrials.cpp',
+      '<(blink_core_output_dir)/origin_trials/OriginTrials.h',
     ],
   },
 }

@@ -15,6 +15,7 @@ namespace vivaldi {
 
 void setKeyIdentifierFromXEvent(const ui::KeyEvent& event,
                                 char* keyIdentifier,
+                                size_t keyIdentifier_len,
                                 unsigned short windowsKeyCode) {
 #if defined(USE_X11)
   uint16_t keyId = windowsKeyCode;
@@ -31,7 +32,7 @@ void setKeyIdentifierFromXEvent(const ui::KeyEvent& event,
     xev.xkey.state = 0;
 
     keyId = ui::GetCharacterFromXEvent(&xev);
-    base::snprintf(keyIdentifier, sizeof(keyIdentifier), "U+%04X",
+    base::snprintf(keyIdentifier, keyIdentifier_len, "U+%04X",
                    toupper(keyId));
   }
 #endif

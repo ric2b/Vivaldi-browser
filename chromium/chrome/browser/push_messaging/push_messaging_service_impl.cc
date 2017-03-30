@@ -14,7 +14,6 @@
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_service.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -27,12 +26,14 @@
 #include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/gcm_driver/gcm_driver.h"
 #include "components/gcm_driver/gcm_profile_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "components/rappor/rappor_utils.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/permission_type.h"
@@ -45,7 +46,7 @@
 #include "content/public/common/push_messaging_status.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#if defined(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND)
 #include "chrome/browser/background/background_mode_manager.h"
 #endif
 
@@ -68,11 +69,11 @@ void RecordDeliveryStatus(content::PushDeliveryStatus status) {
 blink::WebPushPermissionStatus ToPushPermission(
     content::PermissionStatus permission_status) {
   switch (permission_status) {
-    case content::PERMISSION_STATUS_GRANTED:
+    case content::PermissionStatus::GRANTED:
       return blink::WebPushPermissionStatusGranted;
-    case content::PERMISSION_STATUS_DENIED:
+    case content::PermissionStatus::DENIED:
       return blink::WebPushPermissionStatusDenied;
-    case content::PERMISSION_STATUS_ASK:
+    case content::PermissionStatus::ASK:
       return blink::WebPushPermissionStatusPrompt;
     default:
       NOTREACHED();
@@ -85,7 +86,7 @@ void UnregisterCallbackToClosure(const base::Closure& closure,
   closure.Run();
 }
 
-#if defined(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND)
 bool UseBackgroundMode() {
   // Note: if push is ever enabled in incognito, the background mode integration
   // should not be enabled for it.
@@ -98,7 +99,7 @@ bool UseBackgroundMode() {
     return true;
   return group_name == "Enabled";
 }
-#endif  // defined(ENABLE_BACKGROUND)
+#endif  // BUILDFLAG(ENABLE_BACKGROUND)
 
 }  // namespace
 
@@ -143,13 +144,13 @@ void PushMessagingServiceImpl::IncreasePushSubscriptionCount(int add,
   if (is_pending) {
     pending_push_subscription_count_ += add;
   } else {
-#if defined(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND)
     if (UseBackgroundMode() && g_browser_process->background_mode_manager() &&
         !push_subscription_count_) {
       g_browser_process->background_mode_manager()->RegisterTrigger(
           profile_, this, false /* should_notify_user */);
     }
-#endif  // defined(ENABLE_BACKGROUND)
+#endif  // BUILDFLAG(ENABLE_BACKGROUND)
     push_subscription_count_ += add;
   }
 }
@@ -167,12 +168,12 @@ void PushMessagingServiceImpl::DecreasePushSubscriptionCount(int subtract,
   if (push_subscription_count_ + pending_push_subscription_count_ == 0) {
     GetGCMDriver()->RemoveAppHandler(kPushMessagingAppIdentifierPrefix);
 
-#if defined(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND)
     if (UseBackgroundMode() && g_browser_process->background_mode_manager()) {
       g_browser_process->background_mode_manager()->UnregisterTrigger(profile_,
                                                                       this);
     }
-#endif  // defined(ENABLE_BACKGROUND)
+#endif  // BUILDFLAG(ENABLE_BACKGROUND)
   }
 }
 
@@ -217,14 +218,16 @@ void PushMessagingServiceImpl::OnMessage(const std::string& app_id,
       g_browser_process->rappor_service(),
       "PushMessaging.MessageReceived.Origin", app_identifier.origin());
 
-  std::string data;
-  if (AreMessagePayloadsEnabled() && message.decrypted)
-    data = message.raw_data;
+  // The payload of a push message can be valid with content, valid with empty
+  // content, or null. Only set the payload data if it is non-null.
+  content::PushEventPayload payload;
+  if (message.decrypted)
+    payload.setData(message.raw_data);
 
   // Dispatch the message to the appropriate Service Worker.
   content::BrowserContext::DeliverPushMessage(
       profile_, app_identifier.origin(),
-      app_identifier.service_worker_registration_id(), data,
+      app_identifier.service_worker_registration_id(), payload,
       base::Bind(&PushMessagingServiceImpl::DeliverMessageCallback,
                  weak_factory_.GetWeakPtr(), app_identifier.app_id(),
                  app_identifier.origin(),
@@ -235,7 +238,7 @@ void PushMessagingServiceImpl::OnMessage(const std::string& app_id,
   if (!message_dispatched_callback_for_testing_.is_null()) {
     message_dispatched_callback_for_testing_.Run(
         app_id, app_identifier.origin(),
-        app_identifier.service_worker_registration_id(), data);
+        app_identifier.service_worker_registration_id(), payload);
   }
 }
 
@@ -314,8 +317,8 @@ void PushMessagingServiceImpl::SetMessageCallbackForTesting(
 // Other gcm::GCMAppHandler methods --------------------------------------------
 
 void PushMessagingServiceImpl::OnMessagesDeleted(const std::string& app_id) {
-  // TODO(mvanouwerkerk): Fire push error event on the Service Worker
-  // corresponding to app_id.
+  // TODO(mvanouwerkerk): Consider firing an event on the Service Worker
+  // corresponding to |app_id| to inform the app about deleted messages.
 }
 
 void PushMessagingServiceImpl::OnSendError(
@@ -376,7 +379,7 @@ void PushMessagingServiceImpl::SubscribeFromDocument(
   // Push does not allow permission requests from iframes.
   profile_->GetPermissionManager()->RequestPermission(
       content::PermissionType::PUSH_MESSAGING, web_contents->GetMainFrame(),
-      requesting_origin, true /* user_gesture */,
+      requesting_origin,
       base::Bind(&PushMessagingServiceImpl::DidRequestPermission,
                  weak_factory_.GetWeakPtr(), app_identifier, sender_id,
                  callback));
@@ -399,10 +402,10 @@ void PushMessagingServiceImpl::SubscribeFromWorker(
     return;
   }
 
-  GURL embedding_origin = requesting_origin;
   blink::WebPushPermissionStatus permission_status =
-      PushMessagingServiceImpl::GetPermissionStatus(
-          requesting_origin, embedding_origin, user_visible);
+      PushMessagingServiceImpl::GetPermissionStatus(requesting_origin,
+                                                    user_visible);
+
   if (permission_status != blink::WebPushPermissionStatusGranted) {
     SubscribeEndWithError(register_callback,
                           content::PUSH_REGISTRATION_STATUS_PERMISSION_DENIED);
@@ -418,15 +421,16 @@ void PushMessagingServiceImpl::SubscribeFromWorker(
 }
 
 blink::WebPushPermissionStatus PushMessagingServiceImpl::GetPermissionStatus(
-    const GURL& requesting_origin,
-    const GURL& embedding_origin,
+    const GURL& origin,
     bool user_visible) {
   if (!user_visible)
     return blink::WebPushPermissionStatusDenied;
 
+  // Because the Push API is tied to Service Workers, many usages of the API
+  // won't have an embedding origin at all. Only consider the requesting
+  // |origin| when checking whether permission to use the API has been granted.
   return ToPushPermission(profile_->GetPermissionManager()->GetPermissionStatus(
-      content::PermissionType::PUSH_MESSAGING, requesting_origin,
-      embedding_origin));
+      content::PermissionType::PUSH_MESSAGING, origin, origin));
 }
 
 bool PushMessagingServiceImpl::SupportNonVisibleMessages() {
@@ -462,14 +466,6 @@ void PushMessagingServiceImpl::DidSubscribe(
 
   switch (result) {
     case gcm::GCMClient::SUCCESS:
-      // Do not get a certificate if message payloads have not been enabled.
-      if (!AreMessagePayloadsEnabled()) {
-        DidSubscribeWithEncryptionInfo(
-            app_identifier, callback, subscription_id,
-            std::string() /* p256dh */, std::string() /* auth_secret */);
-        return;
-      }
-
       // Make sure that this subscription has associated encryption keys prior
       // to returning it to the developer - they'll need this information in
       // order to send payloads to the user.
@@ -502,7 +498,7 @@ void PushMessagingServiceImpl::DidSubscribeWithEncryptionInfo(
     const std::string& subscription_id,
     const std::string& p256dh,
     const std::string& auth_secret) {
-  if (!p256dh.size() && AreMessagePayloadsEnabled()) {
+  if (!p256dh.size()) {
     SubscribeEndWithError(
         callback, content::PUSH_REGISTRATION_STATUS_PUBLIC_KEY_UNAVAILABLE);
     return;
@@ -523,7 +519,7 @@ void PushMessagingServiceImpl::DidRequestPermission(
     const std::string& sender_id,
     const content::PushMessagingService::RegisterCallback& register_callback,
     content::PermissionStatus permission_status) {
-  if (permission_status != content::PERMISSION_STATUS_GRANTED) {
+  if (permission_status != content::PermissionStatus::GRANTED) {
     SubscribeEndWithError(register_callback,
                           content::PUSH_REGISTRATION_STATUS_PERMISSION_DENIED);
     return;
@@ -543,13 +539,6 @@ void PushMessagingServiceImpl::GetEncryptionInfo(
     const GURL& origin,
     int64_t service_worker_registration_id,
     const PushMessagingService::EncryptionInfoCallback& callback) {
-  // An empty public key will be returned if payloads are not enabled.
-  if (!AreMessagePayloadsEnabled()) {
-    callback.Run(true /* success */, std::vector<uint8_t>() /* p256dh */,
-                 std::vector<uint8_t>() /* auth */);
-    return;
-  }
-
   PushMessagingAppIdentifier app_identifier =
       PushMessagingAppIdentifier::FindByServiceWorker(
           profile_, origin, service_worker_registration_id);
@@ -750,11 +739,11 @@ gfx::ImageSkia* PushMessagingServiceImpl::GetIcon() {
 }
 
 void PushMessagingServiceImpl::OnMenuClick() {
-#if defined(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND)
   chrome::ShowContentSettings(
       BackgroundModeManager::GetBrowserWindowForProfile(profile_),
       CONTENT_SETTINGS_TYPE_NOTIFICATIONS);
-#endif  // defined(ENABLE_BACKGROUND)
+#endif  // BUILDFLAG(ENABLE_BACKGROUND)
 }
 
 // Helper methods --------------------------------------------------------------
@@ -762,13 +751,8 @@ void PushMessagingServiceImpl::OnMenuClick() {
 // Assumes user_visible always since this is just meant to check
 // if the permission was previously granted and not revoked.
 bool PushMessagingServiceImpl::IsPermissionSet(const GURL& origin) {
-  return GetPermissionStatus(origin, origin, true /* user_visible */) ==
+  return GetPermissionStatus(origin, true /* user_visible */) ==
          blink::WebPushPermissionStatusGranted;
-}
-
-bool PushMessagingServiceImpl::AreMessagePayloadsEnabled() const {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableExperimentalWebPlatformFeatures);
 }
 
 gcm::GCMDriver* PushMessagingServiceImpl::GetGCMDriver() const {

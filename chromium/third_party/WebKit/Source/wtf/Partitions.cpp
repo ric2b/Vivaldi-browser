@@ -43,11 +43,13 @@ bool Partitions::s_initialized = false;
 
 PartitionAllocatorGeneric Partitions::m_fastMallocAllocator;
 PartitionAllocatorGeneric Partitions::m_bufferAllocator;
+#if !ENABLE(OILPAN)
 SizeSpecificPartitionAllocator<3328> Partitions::m_nodeAllocator;
+#endif
 SizeSpecificPartitionAllocator<1024> Partitions::m_layoutAllocator;
-HistogramEnumerationFunction Partitions::m_histogramEnumeration = nullptr;
+Partitions::ReportPartitionAllocSizeFunction Partitions::m_reportSizeFunction = nullptr;
 
-void Partitions::initialize(HistogramEnumerationFunction histogramEnumeration)
+void Partitions::initialize(ReportPartitionAllocSizeFunction reportSizeFunction)
 {
     SpinLock::Guard guard(s_initializationLock);
 
@@ -55,9 +57,11 @@ void Partitions::initialize(HistogramEnumerationFunction histogramEnumeration)
         partitionAllocGlobalInit(&Partitions::handleOutOfMemory);
         m_fastMallocAllocator.init();
         m_bufferAllocator.init();
+#if !ENABLE(OILPAN)
         m_nodeAllocator.init();
+#endif
         m_layoutAllocator.init();
-        m_histogramEnumeration = histogramEnumeration;
+        m_reportSizeFunction = reportSizeFunction;
         s_initialized = true;
     }
 }
@@ -71,7 +75,9 @@ void Partitions::shutdown()
     // the valgrind and heapcheck bots, which run without partitions.
     if (s_initialized) {
         (void) m_layoutAllocator.shutdown();
+#if !ENABLE(OILPAN)
         (void) m_nodeAllocator.shutdown();
+#endif
         (void) m_bufferAllocator.shutdown();
         (void) m_fastMallocAllocator.shutdown();
     }
@@ -85,28 +91,25 @@ void Partitions::decommitFreeableMemory()
 
     partitionPurgeMemoryGeneric(bufferPartition(), PartitionPurgeDecommitEmptyPages);
     partitionPurgeMemoryGeneric(fastMallocPartition(), PartitionPurgeDecommitEmptyPages);
+#if !ENABLE(OILPAN)
     partitionPurgeMemory(nodePartition(), PartitionPurgeDecommitEmptyPages);
+#endif
     partitionPurgeMemory(layoutPartition(), PartitionPurgeDecommitEmptyPages);
 }
 
 void Partitions::reportMemoryUsageHistogram()
 {
-    static size_t supportedMaxSizeInMB = 4 * 1024;
     static size_t observedMaxSizeInMB = 0;
 
-    if (!m_histogramEnumeration)
+    if (!m_reportSizeFunction)
         return;
     // We only report the memory in the main thread.
     if (!isMainThread())
         return;
     // +1 is for rounding up the sizeInMB.
     size_t sizeInMB = Partitions::totalSizeOfCommittedPages() / 1024 / 1024 + 1;
-    if (sizeInMB >= supportedMaxSizeInMB)
-        sizeInMB = supportedMaxSizeInMB - 1;
     if (sizeInMB > observedMaxSizeInMB) {
-        // Send a UseCounter only when we see the highest memory usage
-        // we've ever seen.
-        m_histogramEnumeration("PartitionAlloc.CommittedSize", sizeInMB, supportedMaxSizeInMB);
+        m_reportSizeFunction(sizeInMB);
         observedMaxSizeInMB = sizeInMB;
     }
 }
@@ -120,7 +123,9 @@ void Partitions::dumpMemoryStats(bool isLightDump, PartitionStatsDumper* partiti
     decommitFreeableMemory();
     partitionDumpStatsGeneric(fastMallocPartition(), "fast_malloc", isLightDump, partitionStatsDumper);
     partitionDumpStatsGeneric(bufferPartition(), "buffer", isLightDump, partitionStatsDumper);
+#if !ENABLE(OILPAN)
     partitionDumpStats(nodePartition(), "node", isLightDump, partitionStatsDumper);
+#endif
     partitionDumpStats(layoutPartition(), "layout", isLightDump, partitionStatsDumper);
 }
 
@@ -190,6 +195,8 @@ static NEVER_INLINE void partitionsOutOfMemoryUsingLessThan16M()
 void Partitions::handleOutOfMemory()
 {
     volatile size_t totalUsage = totalSizeOfCommittedPages();
+    uint32_t allocPageErrorCode = getAllocPageErrorCode();
+    base::debug::Alias(&allocPageErrorCode);
 
     if (totalUsage >= 2UL * 1024 * 1024 * 1024)
         partitionsOutOfMemoryUsing2G();

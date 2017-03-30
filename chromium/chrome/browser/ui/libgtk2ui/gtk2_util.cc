@@ -61,6 +61,8 @@ void GtkInitFromCommandLine(const base::CommandLine& command_line) {
 std::string GetDesktopName(base::Environment* env) {
 #if defined(GOOGLE_CHROME_BUILD)
   return "google-chrome.desktop";
+#elif defined(VIVALDI_BUILD)
+  return "vivaldi-stable.desktop";
 #else  // CHROMIUM_BUILD
   // Allow $CHROME_DESKTOP to override the built-in value, so that development
   // versions can set themselves as the default without interfering with

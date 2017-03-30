@@ -33,6 +33,7 @@ namespace content {
 class ChildFrameCompositingHelper;
 class RenderFrameImpl;
 class RenderViewImpl;
+class RenderWidget;
 struct FrameReplicationState;
 
 // When a page's frames are rendered by multiple processes, each renderer has a
@@ -103,6 +104,10 @@ class CONTENT_EXPORT RenderFrameProxy
   bool Send(IPC::Message* msg) override;
 
   // Out-of-process child frames receive a signal from RenderWidgetCompositor
+  // when a compositor frame will begin.
+  void WillBeginCompositorFrame();
+
+  // Out-of-process child frames receive a signal from RenderWidgetCompositor
   // when a compositor frame has committed.
   void DidCommitCompositorFrame();
 
@@ -119,6 +124,9 @@ class CONTENT_EXPORT RenderFrameProxy
   int routing_id() { return routing_id_; }
   RenderViewImpl* render_view() { return render_view_; }
   blink::WebRemoteFrame* web_frame() { return web_frame_; }
+
+  // Returns the widget used for the local frame root.
+  RenderWidget* render_widget() { return render_widget_; }
 
   // blink::WebRemoteFrameClient implementation:
   void frameDetached(DetachType type) override;
@@ -144,7 +152,9 @@ class CONTENT_EXPORT RenderFrameProxy
  private:
   RenderFrameProxy(int routing_id, int frame_routing_id);
 
-  void Init(blink::WebRemoteFrame* frame, RenderViewImpl* render_view);
+  void Init(blink::WebRemoteFrame* frame,
+            RenderViewImpl* render_view,
+            RenderWidget* render_widget);
 
   // IPC::Listener
   bool OnMessageReceived(const IPC::Message& msg) override;
@@ -161,7 +171,7 @@ class CONTENT_EXPORT RenderFrameProxy
   void OnDidStopLoading();
   void OnDidUpdateSandboxFlags(blink::WebSandboxFlags flags);
   void OnDispatchLoad();
-  void OnDidUpdateName(const std::string& name);
+  void OnDidUpdateName(const std::string& name, const std::string& unique_name);
   void OnEnforceStrictMixedContentChecking(bool should_enforce);
   void OnDidUpdateOrigin(const url::Origin& origin);
   void OnSetPageFocus(bool is_focused);
@@ -179,6 +189,7 @@ class CONTENT_EXPORT RenderFrameProxy
   scoped_refptr<ChildFrameCompositingHelper> compositing_helper_;
 
   RenderViewImpl* render_view_;
+  RenderWidget* render_widget_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderFrameProxy);
 };

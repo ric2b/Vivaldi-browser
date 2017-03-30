@@ -23,10 +23,10 @@ int ShellPermissionManager::RequestPermission(
     PermissionType permission,
     RenderFrameHost* render_frame_host,
     const GURL& requesting_origin,
-    bool user_gesture,
     const base::Callback<void(PermissionStatus)>& callback) {
   callback.Run(permission == PermissionType::GEOLOCATION
-                   ? PERMISSION_STATUS_GRANTED : PERMISSION_STATUS_DENIED);
+                   ? PermissionStatus::GRANTED
+                   : PermissionStatus::DENIED);
   return kNoPendingOperation;
 }
 
@@ -34,13 +34,13 @@ int ShellPermissionManager::RequestPermissions(
     const std::vector<PermissionType>& permissions,
     content::RenderFrameHost* render_frame_host,
     const GURL& requesting_origin,
-    bool user_gesture,
     const base::Callback<void(
         const std::vector<PermissionStatus>&)>& callback) {
   std::vector<PermissionStatus> result(permissions.size());
   for (const auto& permission : permissions) {
     result.push_back(permission == PermissionType::GEOLOCATION
-        ? PERMISSION_STATUS_GRANTED : PERMISSION_STATUS_DENIED);
+                         ? PermissionStatus::GRANTED
+                         : PermissionStatus::DENIED);
   }
   callback.Run(result);
   return kNoPendingOperation;
@@ -64,9 +64,9 @@ PermissionStatus ShellPermissionManager::GetPermissionStatus(
        permission == PermissionType::VIDEO_CAPTURE) &&
       command_line->HasSwitch(switches::kUseFakeDeviceForMediaStream) &&
       command_line->HasSwitch(switches::kUseFakeUIForMediaStream)) {
-    return PERMISSION_STATUS_GRANTED;
+    return PermissionStatus::GRANTED;
   }
-  return PERMISSION_STATUS_DENIED;
+  return PermissionStatus::DENIED;
 }
 
 void ShellPermissionManager::RegisterPermissionUsage(

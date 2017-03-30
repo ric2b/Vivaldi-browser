@@ -46,6 +46,35 @@ enum EventHandledRatioType {
 
 }  // namespace
 
+const char* ServiceWorkerMetrics::EventTypeToString(EventType event_type) {
+  switch (event_type) {
+    case EventType::ACTIVATE:
+      return "Activate";
+    case EventType::INSTALL:
+      return "Install";
+    case EventType::FETCH:
+      return "Fetch";
+    case EventType::SYNC:
+      return "Sync";
+    case EventType::NOTIFICATION_CLICK:
+      return "Notification Click";
+    case EventType::NOTIFICATION_CLOSE:
+      return "Notification Close";
+    case EventType::PUSH:
+      return "Push";
+    case EventType::GEOFENCING:
+      return "Geofencing";
+    case EventType::SERVICE_PORT_CONNECT:
+      return "Service Port Connect";
+    case EventType::MESSAGE:
+      return "Message";
+    case EventType::NUM_TYPES:
+      break;
+  }
+  NOTREACHED() << "Got unexpected event type: " << static_cast<int>(event_type);
+  return "Unknown";
+}
+
 bool ServiceWorkerMetrics::ShouldExcludeSiteFromHistogram(Site site) {
   return site == ServiceWorkerMetrics::Site::NEW_TAB_PAGE;
 }
@@ -183,13 +212,23 @@ void ServiceWorkerMetrics::RecordEventTimeout(EventType event) {
 }
 
 void ServiceWorkerMetrics::RecordEventDuration(EventType event,
-                                               const base::TimeDelta& time) {
+                                               const base::TimeDelta& time,
+                                               bool was_handled) {
   switch (event) {
     case EventType::ACTIVATE:
       UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.ActivateEvent.Time", time);
       break;
     case EventType::INSTALL:
       UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.InstallEvent.Time", time);
+      break;
+    case EventType::FETCH:
+      if (was_handled) {
+        UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.FetchEvent.HasResponse.Time",
+                                   time);
+      } else {
+        UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.FetchEvent.Fallback.Time",
+                                   time);
+      }
       break;
     case EventType::SYNC:
       UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.BackgroundSyncEvent.Time",
@@ -199,12 +238,18 @@ void ServiceWorkerMetrics::RecordEventDuration(EventType event,
       UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.NotificationClickEvent.Time",
                                  time);
       break;
+    case EventType::NOTIFICATION_CLOSE:
+      UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.NotificationCloseEvent.Time",
+                                 time);
+      break;
     case EventType::PUSH:
       UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.PushEvent.Time", time);
       break;
+    case EventType::MESSAGE:
+      // TODO(nhiroki): Record event duration for Message event after
+      // ExtendableMessageEvent is enabled by default (crbug.com/543198).
+      break;
 
-    // Event duration for fetch is recorded separately.
-    case EventType::FETCH:
     // For now event duration for these events is not recorded.
     case EventType::GEOFENCING:
     case EventType::SERVICE_PORT_CONNECT:
@@ -225,23 +270,6 @@ void ServiceWorkerMetrics::RecordFetchEventStatus(
   } else {
     UMA_HISTOGRAM_ENUMERATION("ServiceWorker.FetchEvent.Subresource.Status",
                               status, SERVICE_WORKER_ERROR_MAX_VALUE);
-  }
-}
-
-void ServiceWorkerMetrics::RecordFetchEventTime(
-    ServiceWorkerFetchEventResult result,
-    const base::TimeDelta& time) {
-  switch (result) {
-    case ServiceWorkerFetchEventResult::
-        SERVICE_WORKER_FETCH_EVENT_RESULT_FALLBACK:
-      UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.FetchEvent.Fallback.Time",
-                                 time);
-      break;
-    case ServiceWorkerFetchEventResult::
-        SERVICE_WORKER_FETCH_EVENT_RESULT_RESPONSE:
-      UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.FetchEvent.HasResponse.Time",
-                                 time);
-      break;
   }
 }
 

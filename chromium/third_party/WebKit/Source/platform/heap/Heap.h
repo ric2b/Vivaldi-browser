@@ -38,11 +38,51 @@
 #include "platform/heap/ThreadState.h"
 #include "platform/heap/Visitor.h"
 #include "wtf/AddressSanitizer.h"
+#include "wtf/Allocator.h"
 #include "wtf/Assertions.h"
 #include "wtf/Atomics.h"
 #include "wtf/Forward.h"
 
 namespace blink {
+
+class PLATFORM_EXPORT HeapAllocHooks {
+public:
+    // TODO(hajimehoshi): Pass a type name of the allocated object.
+    typedef void AllocationHook(Address, size_t, const char*);
+    typedef void FreeHook(Address);
+
+    static void setAllocationHook(AllocationHook* hook) { m_allocationHook = hook; }
+    static void setFreeHook(FreeHook* hook) { m_freeHook = hook; }
+
+    static void allocationHookIfEnabled(Address address, size_t size, const char* typeName)
+    {
+        AllocationHook* allocationHook = m_allocationHook;
+        if (UNLIKELY(!!allocationHook))
+            allocationHook(address, size, typeName);
+    }
+
+    static void freeHookIfEnabled(Address address)
+    {
+        FreeHook* freeHook = m_freeHook;
+        if (UNLIKELY(!!freeHook))
+            freeHook(address);
+    }
+
+    static void reallocHookIfEnabled(Address oldAddress, Address newAddress, size_t size, const char* typeName)
+    {
+        // Report a reallocation as a free followed by an allocation.
+        AllocationHook* allocationHook = m_allocationHook;
+        FreeHook* freeHook = m_freeHook;
+        if (UNLIKELY(allocationHook && freeHook)) {
+            freeHook(oldAddress);
+            allocationHook(newAddress, size, typeName);
+        }
+    }
+
+private:
+    static AllocationHook* m_allocationHook;
+    static FreeHook* m_freeHook;
+};
 
 class CrossThreadPersistentRegion;
 template<typename T> class Member;
@@ -53,6 +93,7 @@ template<typename T, bool = NeedsAdjustAndMark<T>::value> class ObjectAliveTrait
 
 template<typename T>
 class ObjectAliveTrait<T, false> {
+    STATIC_ONLY(ObjectAliveTrait);
 public:
     static bool isHeapObjectAlive(T* object)
     {
@@ -63,7 +104,9 @@ public:
 
 template<typename T>
 class ObjectAliveTrait<T, true> {
+    STATIC_ONLY(ObjectAliveTrait);
 public:
+    NO_LAZY_SWEEP_SANITIZE_ADDRESS
     static bool isHeapObjectAlive(T* object)
     {
         static_assert(sizeof(T), "T must be fully defined");
@@ -72,6 +115,7 @@ public:
 };
 
 class PLATFORM_EXPORT Heap {
+    STATIC_ONLY(Heap);
 public:
     static void init();
     static void shutdown();
@@ -262,6 +306,7 @@ public:
     static double estimatedMarkingTime();
     static void reportMemoryUsageHistogram();
     static void reportMemoryUsageForTracing();
+    static bool isLowEndDevice() { return s_isLowEndDevice; }
 
 #if ENABLE(ASSERT)
     static uint16_t gcGeneration() { return s_gcGeneration; }
@@ -273,6 +318,8 @@ private:
 
     static int heapIndexForObjectSize(size_t);
     static bool isNormalHeapIndex(int);
+
+    static void decommitCallbackStacks();
 
     static CallbackStack* s_markingStack;
     static CallbackStack* s_postMarkingCallbackStack;
@@ -293,6 +340,7 @@ private:
     static size_t s_collectedWrapperCount;
     static size_t s_partitionAllocSizeAtLastGC;
     static double s_estimatedMarkingTimePerByte;
+    static bool s_isLowEndDevice;
 #if ENABLE(ASSERT)
     static uint16_t s_gcGeneration;
 #endif
@@ -302,6 +350,7 @@ private:
 
 template<typename T>
 struct IsEagerlyFinalizedType {
+    STATIC_ONLY(IsEagerlyFinalizedType);
 private:
     typedef char YesType;
     struct NoType {
@@ -406,6 +455,7 @@ public:                                           \
 #define IS_EAGERLY_FINALIZED() (pageFromObject(this)->heap()->heapIndex() == BlinkGC::EagerSweepHeapIndex)
 #if ENABLE(ASSERT) && ENABLE(OILPAN)
 class VerifyEagerFinalization {
+    DISALLOW_NEW();
 public:
     ~VerifyEagerFinalization()
     {
@@ -447,7 +497,10 @@ template<typename T>
 Address Heap::allocate(size_t size, bool eagerlySweep)
 {
     ThreadState* state = ThreadStateFor<ThreadingTrait<T>::Affinity>::state();
-    return Heap::allocateOnHeapIndex(state, size, eagerlySweep ? BlinkGC::EagerSweepHeapIndex : Heap::heapIndexForObjectSize(size), GCInfoTrait<T>::index());
+    Address address = Heap::allocateOnHeapIndex(state, size, eagerlySweep ? BlinkGC::EagerSweepHeapIndex : Heap::heapIndexForObjectSize(size), GCInfoTrait<T>::index());
+    const char* typeName = WTF_HEAP_PROFILER_TYPE_NAME(T);
+    HeapAllocHooks::allocationHookIfEnabled(address, size, typeName);
+    return address;
 }
 
 template<typename T>
@@ -480,6 +533,8 @@ Address Heap::reallocate(void* previous, size_t size)
     if (copySize > size)
         copySize = size;
     memcpy(address, previous, copySize);
+    const char* typeName = WTF_HEAP_PROFILER_TYPE_NAME(T);
+    HeapAllocHooks::reallocHookIfEnabled(static_cast<Address>(previous), address, size, typeName);
     return address;
 }
 

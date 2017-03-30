@@ -287,7 +287,8 @@ SSLSocketDataProvider::SSLSocketDataProvider(IoMode mode, int result)
       client_cert_sent(false),
       cert_request_info(NULL),
       channel_id_sent(false),
-      connection_status(0) {
+      connection_status(0),
+      token_binding_negotiated(false) {
   SSLConnectionStatusSetVersion(SSL_CONNECTION_VERSION_TLS1_2,
                                 &connection_status);
   // Set to TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
@@ -826,6 +827,17 @@ ChannelIDService* MockClientSocket::GetChannelIDService() const {
   return NULL;
 }
 
+Error MockClientSocket::GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
+                                                    std::vector<uint8_t>* out) {
+  NOTREACHED();
+  return ERR_NOT_IMPLEMENTED;
+}
+
+crypto::ECPrivateKey* MockClientSocket::GetChannelIDKey() const {
+  NOTREACHED();
+  return NULL;
+}
+
 SSLFailureState MockClientSocket::GetSSLFailureState() const {
   return IsConnected() ? SSL_FAILURE_NONE : SSL_FAILURE_UNKNOWN;
 }
@@ -1199,6 +1211,8 @@ bool MockSSLClientSocket::GetSSLInfo(SSLInfo* ssl_info) {
   ssl_info->client_cert_sent = data_->client_cert_sent;
   ssl_info->channel_id_sent = data_->channel_id_sent;
   ssl_info->connection_status = data_->connection_status;
+  ssl_info->token_binding_negotiated = data_->token_binding_negotiated;
+  ssl_info->token_binding_key_param = data_->token_binding_key_param;
   return true;
 }
 
@@ -1222,6 +1236,13 @@ SSLClientSocket::NextProtoStatus MockSSLClientSocket::GetNextProto(
 
 ChannelIDService* MockSSLClientSocket::GetChannelIDService() const {
   return data_->channel_id_service;
+}
+
+Error MockSSLClientSocket::GetSignedEKMForTokenBinding(
+    crypto::ECPrivateKey* key,
+    std::vector<uint8_t>* out) {
+  out->push_back('A');
+  return OK;
 }
 
 void MockSSLClientSocket::OnReadComplete(const MockRead& data) {
@@ -1595,9 +1616,13 @@ MockTransportClientSocketPool::MockTransportClientSocketPool(
 MockTransportClientSocketPool::~MockTransportClientSocketPool() {}
 
 int MockTransportClientSocketPool::RequestSocket(
-    const std::string& group_name, const void* socket_params,
-    RequestPriority priority, ClientSocketHandle* handle,
-    const CompletionCallback& callback, const BoundNetLog& net_log) {
+    const std::string& group_name,
+    const void* socket_params,
+    RequestPriority priority,
+    RespectLimits respect_limits,
+    ClientSocketHandle* handle,
+    const CompletionCallback& callback,
+    const BoundNetLog& net_log) {
   last_request_priority_ = priority;
   scoped_ptr<StreamSocket> socket =
       client_socket_factory_->CreateTransportClientSocket(
@@ -1640,12 +1665,16 @@ MockSOCKSClientSocketPool::MockSOCKSClientSocketPool(
 
 MockSOCKSClientSocketPool::~MockSOCKSClientSocketPool() {}
 
-int MockSOCKSClientSocketPool::RequestSocket(
-    const std::string& group_name, const void* socket_params,
-    RequestPriority priority, ClientSocketHandle* handle,
-    const CompletionCallback& callback, const BoundNetLog& net_log) {
-  return transport_pool_->RequestSocket(
-      group_name, socket_params, priority, handle, callback, net_log);
+int MockSOCKSClientSocketPool::RequestSocket(const std::string& group_name,
+                                             const void* socket_params,
+                                             RequestPriority priority,
+                                             RespectLimits respect_limits,
+                                             ClientSocketHandle* handle,
+                                             const CompletionCallback& callback,
+                                             const BoundNetLog& net_log) {
+  return transport_pool_->RequestSocket(group_name, socket_params, priority,
+                                        respect_limits, handle, callback,
+                                        net_log);
 }
 
 void MockSOCKSClientSocketPool::CancelRequest(

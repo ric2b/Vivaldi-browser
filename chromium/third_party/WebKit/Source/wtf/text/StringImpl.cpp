@@ -900,7 +900,8 @@ inline PassRefPtr<StringImpl> StringImpl::stripMatchedCharacters(UCharPredicate 
     return create(characters16() + start, end + 1 - start);
 }
 
-class UCharPredicate {
+class UCharPredicate final {
+    STACK_ALLOCATED();
 public:
     inline UCharPredicate(CharacterMatchFunctionPtr function): m_function(function) { }
 
@@ -913,7 +914,8 @@ private:
     const CharacterMatchFunctionPtr m_function;
 };
 
-class SpaceOrNewlinePredicate {
+class SpaceOrNewlinePredicate final {
+    STACK_ALLOCATED();
 public:
     inline bool operator()(UChar ch) const
     {
@@ -2272,6 +2274,34 @@ bool equalIgnoringNullity(StringImpl* a, StringImpl* b)
     if (!b && a && !a->length())
         return true;
     return equal(a, b);
+}
+
+bool equalIgnoringASCIICase(const StringImpl* a, const StringImpl* b)
+{
+    if (!a || !b)
+        return !a == !b;
+    unsigned length = b->length();
+    if (a->length() != length)
+        return false;
+    if (a->is8Bit()) {
+        if (b->is8Bit())
+            return equalIgnoringASCIICase(a->characters8(), b->characters8(), length);
+        return equalIgnoringASCIICase(a->characters8(), b->characters16(), length);
+    }
+    if (b->is8Bit())
+        return equalIgnoringASCIICase(a->characters16(), b->characters8(), length);
+    return equalIgnoringASCIICase(a->characters16(), b->characters16(), length);
+}
+
+bool equalIgnoringASCIICase(const StringImpl* a, const LChar* b)
+{
+    if (!a || !b)
+        return !a == !b;
+    size_t length = strlen(reinterpret_cast<const char*>(b));
+    RELEASE_ASSERT(length <= numeric_limits<unsigned>::max());
+    if (length != a->length())
+        return false;
+    return equalSubstringIgnoringASCIICase(a, 0, b, length);
 }
 
 size_t StringImpl::sizeInBytes() const

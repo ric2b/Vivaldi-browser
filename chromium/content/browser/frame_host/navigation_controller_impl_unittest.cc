@@ -46,7 +46,6 @@
 #include "content/test/test_render_frame_host.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
-#include "net/base/net_util.h"
 #include "skia/ext/platform_canvas.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/web/WebFrameOwnerProperties.h"
@@ -1048,10 +1047,7 @@ TEST_F(NavigationControllerTest, LoadURL_IgnorePreemptsPending) {
   EXPECT_EQ(-1, controller.GetPendingEntryIndex());
   EXPECT_FALSE(controller.GetPendingEntry());
   EXPECT_EQ(-1, controller.GetLastCommittedEntryIndex());
-  if (IsBrowserSideNavigationEnabled())
-    EXPECT_EQ(4, delegate->navigation_state_change_count());
-  else
-    EXPECT_EQ(2, delegate->navigation_state_change_count());
+  EXPECT_EQ(2, delegate->navigation_state_change_count());
 
   contents()->SetDelegate(NULL);
 }
@@ -2051,7 +2047,7 @@ TEST_F(NavigationControllerTest, NewSubframe) {
   // Prereq: add a subframe with an initial auto-subframe navigation.
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(), blink::WebTreeScopeType::Document,
-      std::string(), blink::WebSandboxFlags::None,
+      std::string(), "uniqueName0", blink::WebSandboxFlags::None,
       blink::WebFrameOwnerProperties());
   RenderFrameHostImpl* subframe =
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host();
@@ -2132,7 +2128,7 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
   // Add a subframe and navigate it.
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(), blink::WebTreeScopeType::Document,
-      std::string(), blink::WebSandboxFlags::None,
+      std::string(), "uniqueName0", blink::WebSandboxFlags::None,
       blink::WebFrameOwnerProperties());
   RenderFrameHostImpl* subframe =
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host();
@@ -2178,7 +2174,7 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
   // Add a second subframe and navigate.
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(), blink::WebTreeScopeType::Document,
-      std::string(), blink::WebSandboxFlags::None,
+      std::string(), "uniqueName1", blink::WebSandboxFlags::None,
       blink::WebFrameOwnerProperties());
   RenderFrameHostImpl* subframe2 =
       contents()->GetFrameTree()->root()->child_at(1)->current_frame_host();
@@ -2224,7 +2220,7 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
   // Add a nested subframe and navigate.
   subframe->OnCreateChildFrame(process()->GetNextRoutingID(),
                                blink::WebTreeScopeType::Document, std::string(),
-                               blink::WebSandboxFlags::None,
+                               "uniqueName2", blink::WebSandboxFlags::None,
                                blink::WebFrameOwnerProperties());
   RenderFrameHostImpl* subframe3 = contents()
                                        ->GetFrameTree()
@@ -2289,7 +2285,7 @@ TEST_F(NavigationControllerTest, BackSubframe) {
   // Prereq: add a subframe with an initial auto-subframe navigation.
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(), blink::WebTreeScopeType::Document,
-      std::string(), blink::WebSandboxFlags::None,
+      std::string(), "uniqueName0", blink::WebSandboxFlags::None,
       blink::WebFrameOwnerProperties());
   RenderFrameHostImpl* subframe =
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host();
@@ -3470,14 +3466,19 @@ TEST_F(NavigationControllerTest, ShowBrowserURLAfterFailUntilModified) {
 
   // Suppose it aborts before committing, if it's a 204 or download or due to a
   // stop or a new navigation from the user.  The URL should remain visible.
-  FrameHostMsg_DidFailProvisionalLoadWithError_Params params;
-  params.error_code = net::ERR_ABORTED;
-  params.error_description = base::string16();
-  params.url = url;
-  params.showing_repost_interstitial = false;
-  main_test_rfh()->OnMessageReceived(
-      FrameHostMsg_DidFailProvisionalLoadWithError(0, params));
-  contents()->SetIsLoading(false, true, NULL);
+  if (IsBrowserSideNavigationEnabled()) {
+    static_cast<NavigatorImpl*>(main_test_rfh()->frame_tree_node()->navigator())
+        ->CancelNavigation(main_test_rfh()->frame_tree_node());
+  } else {
+    FrameHostMsg_DidFailProvisionalLoadWithError_Params params;
+    params.error_code = net::ERR_ABORTED;
+    params.error_description = base::string16();
+    params.url = url;
+    params.showing_repost_interstitial = false;
+    main_test_rfh()->OnMessageReceived(
+        FrameHostMsg_DidFailProvisionalLoadWithError(0, params));
+    main_test_rfh()->OnMessageReceived(FrameHostMsg_DidStopLoading(0));
+  }
   EXPECT_EQ(url, controller.GetVisibleEntry()->GetURL());
 
   // If something else later modifies the contents of the about:blank page, then
@@ -3723,7 +3724,7 @@ TEST_F(NavigationControllerTest, SameSubframe) {
   // Add and navigate a subframe that would normally count as in-page.
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(), blink::WebTreeScopeType::Document,
-      std::string(), blink::WebSandboxFlags::None,
+      std::string(), "uniqueName0", blink::WebSandboxFlags::None,
       blink::WebFrameOwnerProperties());
   RenderFrameHostImpl* subframe =
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host();
@@ -3890,7 +3891,7 @@ TEST_F(NavigationControllerTest, SubframeWhilePending) {
   // automatically loaded. Auto subframes don't increment the page ID.
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(), blink::WebTreeScopeType::Document,
-      std::string(), blink::WebSandboxFlags::None,
+      std::string(), "uniqueName0", blink::WebSandboxFlags::None,
       blink::WebFrameOwnerProperties());
   RenderFrameHostImpl* subframe =
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host();

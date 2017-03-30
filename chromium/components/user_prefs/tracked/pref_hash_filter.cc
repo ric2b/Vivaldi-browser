@@ -11,12 +11,12 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/pref_store.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/pref_store.h"
 #include "components/user_prefs/tracked/dictionary_hash_store_contents.h"
 #include "components/user_prefs/tracked/pref_hash_store.h"
 #include "components/user_prefs/tracked/pref_hash_store_transaction.h"
@@ -36,6 +36,8 @@ void CleanupDeprecatedTrackedPreferences(
       "safebrowsing.incident_report_sent",
       // TODO(mad): Remove in M48+.
       "software_reporter.prompt_reason",
+      // TODO(zea): Remove in M52+,
+      "sync.remaining_rollback_tries"
   };
 
   for (size_t i = 0; i < arraysize(kDeprecatedTrackedPreferences); ++i) {

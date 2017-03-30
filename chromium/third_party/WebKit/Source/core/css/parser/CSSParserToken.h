@@ -128,14 +128,15 @@ public:
         ret.initRaw(m_valueDataCharRaw, m_valueLength, m_valueIs8Bit);
         return ret;
     }
-    bool valueEqualsIgnoringCase(const char* str) const { return value().equalIgnoringCase(str); }
+    template<unsigned matchLength>
+    bool valueEqualsIgnoringASCIICase(const char (&match)[matchLength]) const { return value().equalIgnoringASCIICase<matchLength>(match); }
 
     UChar delimiter() const;
     NumericSign numericSign() const;
     NumericValueType numericValueType() const;
     double numericValue() const;
-    HashTokenType hashTokenType() const { ASSERT(m_type == HashToken); return m_hashTokenType; }
-    BlockType blockType() const { return static_cast<BlockType>(m_blockType); }
+    HashTokenType getHashTokenType() const { ASSERT(m_type == HashToken); return m_hashTokenType; }
+    BlockType getBlockType() const { return static_cast<BlockType>(m_blockType); }
     CSSPrimitiveValue::UnitType unitType() const { return static_cast<CSSPrimitiveValue::UnitType>(m_unit); }
     UChar32 unicodeRangeStart() const { ASSERT(m_type == UnicodeRangeToken); return m_unicodeRange.start; }
     UChar32 unicodeRangeEnd() const { ASSERT(m_type == UnicodeRangeToken); return m_unicodeRange.end; }

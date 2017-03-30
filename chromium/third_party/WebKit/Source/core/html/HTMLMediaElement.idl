@@ -27,7 +27,7 @@
 
 enum CanPlayTypeResult { "" /* empty string */, "maybe", "probably" };
 [
-    ActiveDOMObject,
+    DependentLifetime,
     RuntimeEnabled=Media,
 ] interface HTMLMediaElement : HTMLElement {
 
@@ -55,7 +55,7 @@ enum CanPlayTypeResult { "" /* empty string */, "maybe", "probably" };
     const unsigned short HAVE_CURRENT_DATA = 2;
     const unsigned short HAVE_FUTURE_DATA = 3;
     const unsigned short HAVE_ENOUGH_DATA = 4;
-    readonly attribute unsigned short readyState;
+    [ImplementedAs=getReadyState] readonly attribute unsigned short readyState;
     readonly attribute boolean seeking;
 
     // playback state
@@ -71,7 +71,7 @@ enum CanPlayTypeResult { "" /* empty string */, "maybe", "probably" };
     readonly attribute boolean ended;
     [Reflect] attribute boolean autoplay;
     [Reflect] attribute boolean loop;
-    void play();
+    [CallWith=ScriptState, ImplementedAs=playForBindings] Promise<void> play();
     void pause();
 
     // controls
@@ -87,7 +87,6 @@ enum CanPlayTypeResult { "" /* empty string */, "maybe", "probably" };
     [RaisesException] TextTrack addTextTrack(TextTrackKind kind, optional DOMString label = "", optional DOMString language = "");
 
     // Non-standard APIs
-    [RuntimeEnabled=PrefixedEncryptedMedia, DeprecateAs=CanPlayTypeKeySystem] DOMString canPlayType(DOMString type, [TreatUndefinedAs=NullString] DOMString? keySystem);
     // The number of bytes consumed by the media decoder.
     [MeasureAs=PrefixedAudioDecodedByteCount] readonly attribute unsigned long webkitAudioDecodedByteCount;
     [MeasureAs=PrefixedVideoDecodedByteCount] readonly attribute unsigned long webkitVideoDecodedByteCount;

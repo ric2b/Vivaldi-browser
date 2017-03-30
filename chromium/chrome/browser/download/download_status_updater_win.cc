@@ -12,7 +12,7 @@
 #include "base/win/windows_version.h"
 #include "browser/vivaldi_download_status.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_iterator.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "ui/views/win/hwnd_util.h"
 
@@ -40,8 +40,7 @@ void UpdateTaskbarProgressBar(int download_count,
   }
 
   // Iterate through all the browser windows, and draw the progress bar.
-  for (chrome::BrowserIterator it; !it.done(); it.Next()) {
-    Browser* browser = *it;
+  for (auto* browser : *BrowserList::GetInstance()) {
     BrowserWindow* window = browser->window();
     if (!window)
       continue;

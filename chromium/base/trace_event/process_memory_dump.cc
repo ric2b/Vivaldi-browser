@@ -16,6 +16,10 @@
 #include <sys/mman.h>
 #endif
 
+#if defined(OS_WIN)
+#include <Psapi.h>
+#endif
+
 namespace base {
 namespace trace_event {
 
@@ -28,6 +32,12 @@ std::string GetSharedGlobalAllocatorDumpName(
   return "global/" + guid.ToString();
 }
 
+#if defined(COUNT_RESIDENT_BYTES_SUPPORTED)
+size_t GetSystemPageCount(size_t mapped_size, size_t page_size) {
+  return (mapped_size + page_size - 1) / page_size;
+}
+#endif
+
 }  // namespace
 
 #if defined(COUNT_RESIDENT_BYTES_SUPPORTED)
@@ -38,51 +48,73 @@ size_t ProcessMemoryDump::CountResidentBytes(void* start_address,
   const uintptr_t start_pointer = reinterpret_cast<uintptr_t>(start_address);
   DCHECK_EQ(0u, start_pointer % page_size);
 
-  // This function allocates a char vector of size number of pages in the given
-  // mapped_size. To avoid allocating a large array, the memory is split into
-  // chunks. Maximum size of vector allocated, will be
-  // kPageChunkSize / page_size.
-  const size_t kMaxChunkSize = 32 * 1024 * 1024;
   size_t offset = 0;
   size_t total_resident_size = 0;
-  int result = 0;
+  bool failure = false;
+
+  // An array as large as number of pages in memory segment needs to be passed
+  // to the query function. To avoid allocating a large array, the given block
+  // of memory is split into chunks of size |kMaxChunkSize|.
+  const size_t kMaxChunkSize = 8 * 1024 * 1024;
+  size_t max_vec_size =
+      GetSystemPageCount(std::min(mapped_size, kMaxChunkSize), page_size);
+#if defined(OS_MACOSX) || defined(OS_IOS)
+  scoped_ptr<char[]> vec(new char[max_vec_size]);
+#elif defined(OS_WIN)
+  scoped_ptr<PSAPI_WORKING_SET_EX_INFORMATION[]> vec(
+      new PSAPI_WORKING_SET_EX_INFORMATION[max_vec_size]);
+#elif defined(OS_POSIX)
+  scoped_ptr<unsigned char[]> vec(new unsigned char[max_vec_size]);
+#endif
+
   while (offset < mapped_size) {
-    void* chunk_start = reinterpret_cast<void*>(start_pointer + offset);
+    uintptr_t chunk_start = (start_pointer + offset);
     const size_t chunk_size = std::min(mapped_size - offset, kMaxChunkSize);
-    const size_t page_count = (chunk_size + page_size - 1) / page_size;
+    const size_t page_count = GetSystemPageCount(chunk_size, page_size);
     size_t resident_page_count = 0;
 
 #if defined(OS_MACOSX) || defined(OS_IOS)
-    std::vector<char> vec(page_count + 1);
     // mincore in MAC does not fail with EAGAIN.
-    result = mincore(chunk_start, chunk_size, vec.data());
-    if (result)
-      break;
-
+    failure =
+        !!mincore(reinterpret_cast<void*>(chunk_start), chunk_size, vec.get());
     for (size_t i = 0; i < page_count; i++)
       resident_page_count += vec[i] & MINCORE_INCORE ? 1 : 0;
-#else   // defined(OS_MACOSX) || defined(OS_IOS)
-    std::vector<unsigned char> vec(page_count + 1);
-    int error_counter = 0;
-    // HANDLE_EINTR tries for 100 times. So following the same pattern.
-    do {
-      result = mincore(chunk_start, chunk_size, vec.data());
-    } while (result == -1 && errno == EAGAIN && error_counter++ < 100);
-    if (result)
-      break;
+#elif defined(OS_WIN)
+    for (size_t i = 0; i < page_count; i++) {
+      vec[i].VirtualAddress =
+          reinterpret_cast<void*>(chunk_start + i * page_size);
+    }
+    DWORD vec_size = static_cast<DWORD>(
+        page_count * sizeof(PSAPI_WORKING_SET_EX_INFORMATION));
+    failure = !QueryWorkingSetEx(GetCurrentProcess(), vec.get(), vec_size);
 
     for (size_t i = 0; i < page_count; i++)
-      resident_page_count += vec[i];
-#endif  // defined(OS_MACOSX) || defined(OS_IOS)
+      resident_page_count += vec[i].VirtualAttributes.Valid;
+#elif defined(OS_POSIX)
+    int error_counter = 0;
+    int result = 0;
+    // HANDLE_EINTR tries for 100 times. So following the same pattern.
+    do {
+      result =
+          mincore(reinterpret_cast<void*>(chunk_start), chunk_size, vec.get());
+    } while (result == -1 && errno == EAGAIN && error_counter++ < 100);
+    failure = !!result;
+
+    for (size_t i = 0; i < page_count; i++)
+      resident_page_count += vec[i] & 1;
+#endif
+
+    if (failure)
+      break;
 
     total_resident_size += resident_page_count * page_size;
     offset += kMaxChunkSize;
   }
 
-  DCHECK_EQ(0, result);
-  if (result) {
+  DCHECK(!failure);
+  if (failure) {
     total_resident_size = 0;
-    LOG(ERROR) << "mincore() call failed. The resident size is invalid";
+    LOG(ERROR) << "CountResidentBytes failed. The resident size is invalid";
   }
   return total_resident_size;
 }
@@ -92,37 +124,35 @@ ProcessMemoryDump::ProcessMemoryDump(
     const scoped_refptr<MemoryDumpSessionState>& session_state)
     : has_process_totals_(false),
       has_process_mmaps_(false),
-      session_state_(session_state) {
-}
+      session_state_(session_state) {}
 
-ProcessMemoryDump::~ProcessMemoryDump() {
-}
+ProcessMemoryDump::~ProcessMemoryDump() {}
 
 MemoryAllocatorDump* ProcessMemoryDump::CreateAllocatorDump(
     const std::string& absolute_name) {
-  MemoryAllocatorDump* mad = new MemoryAllocatorDump(absolute_name, this);
-  AddAllocatorDumpInternal(mad);  // Takes ownership of |mad|.
-  return mad;
+  return AddAllocatorDumpInternal(
+      make_scoped_ptr(new MemoryAllocatorDump(absolute_name, this)));
 }
 
 MemoryAllocatorDump* ProcessMemoryDump::CreateAllocatorDump(
     const std::string& absolute_name,
     const MemoryAllocatorDumpGuid& guid) {
-  MemoryAllocatorDump* mad = new MemoryAllocatorDump(absolute_name, this, guid);
-  AddAllocatorDumpInternal(mad);  // Takes ownership of |mad|.
-  return mad;
+  return AddAllocatorDumpInternal(
+      make_scoped_ptr(new MemoryAllocatorDump(absolute_name, this, guid)));
 }
 
-void ProcessMemoryDump::AddAllocatorDumpInternal(MemoryAllocatorDump* mad) {
-  DCHECK_EQ(0ul, allocator_dumps_.count(mad->absolute_name()));
-  allocator_dumps_storage_.push_back(mad);
-  allocator_dumps_[mad->absolute_name()] = mad;
+MemoryAllocatorDump* ProcessMemoryDump::AddAllocatorDumpInternal(
+    scoped_ptr<MemoryAllocatorDump> mad) {
+  auto insertion_result = allocator_dumps_.insert(
+      std::make_pair(mad->absolute_name(), std::move(mad)));
+  DCHECK(insertion_result.second) << "Duplicate name: " << mad->absolute_name();
+  return insertion_result.first->second.get();
 }
 
 MemoryAllocatorDump* ProcessMemoryDump::GetAllocatorDump(
     const std::string& absolute_name) const {
   auto it = allocator_dumps_.find(absolute_name);
-  return it == allocator_dumps_.end() ? nullptr : it->second;
+  return it == allocator_dumps_.end() ? nullptr : it->second.get();
 }
 
 MemoryAllocatorDump* ProcessMemoryDump::GetOrCreateAllocatorDump(
@@ -135,10 +165,24 @@ MemoryAllocatorDump* ProcessMemoryDump::CreateSharedGlobalAllocatorDump(
     const MemoryAllocatorDumpGuid& guid) {
   // A shared allocator dump can be shared within a process and the guid could
   // have been created already.
-  MemoryAllocatorDump* allocator_dump = GetSharedGlobalAllocatorDump(guid);
-  return allocator_dump ? allocator_dump
-                        : CreateAllocatorDump(
-                              GetSharedGlobalAllocatorDumpName(guid), guid);
+  MemoryAllocatorDump* mad = GetSharedGlobalAllocatorDump(guid);
+  if (mad) {
+    // The weak flag is cleared because this method should create a non-weak
+    // dump.
+    mad->clear_flags(MemoryAllocatorDump::Flags::WEAK);
+    return mad;
+  }
+  return CreateAllocatorDump(GetSharedGlobalAllocatorDumpName(guid), guid);
+}
+
+MemoryAllocatorDump* ProcessMemoryDump::CreateWeakSharedGlobalAllocatorDump(
+    const MemoryAllocatorDumpGuid& guid) {
+  MemoryAllocatorDump* mad = GetSharedGlobalAllocatorDump(guid);
+  if (mad)
+    return mad;
+  mad = CreateAllocatorDump(GetSharedGlobalAllocatorDumpName(guid), guid);
+  mad->set_flags(MemoryAllocatorDump::Flags::WEAK);
+  return mad;
 }
 
 MemoryAllocatorDump* ProcessMemoryDump::GetSharedGlobalAllocatorDump(
@@ -163,7 +207,6 @@ void ProcessMemoryDump::Clear() {
     has_process_mmaps_ = false;
   }
 
-  allocator_dumps_storage_.clear();
   allocator_dumps_.clear();
   allocator_dumps_edges_.clear();
   heap_dumps_.clear();
@@ -173,14 +216,9 @@ void ProcessMemoryDump::TakeAllDumpsFrom(ProcessMemoryDump* other) {
   DCHECK(!other->has_process_totals() && !other->has_process_mmaps());
 
   // Moves the ownership of all MemoryAllocatorDump(s) contained in |other|
-  // into this ProcessMemoryDump.
-  for (MemoryAllocatorDump* mad : other->allocator_dumps_storage_) {
-    // Check that we don't merge duplicates.
-    DCHECK_EQ(0ul, allocator_dumps_.count(mad->absolute_name()));
-    allocator_dumps_storage_.push_back(mad);
-    allocator_dumps_[mad->absolute_name()] = mad;
-  }
-  other->allocator_dumps_storage_.weak_clear();
+  // into this ProcessMemoryDump, checking for duplicates.
+  for (auto& it : other->allocator_dumps_)
+    AddAllocatorDumpInternal(std::move(it.second));
   other->allocator_dumps_.clear();
 
   // Move all the edges.
@@ -206,10 +244,10 @@ void ProcessMemoryDump::AsValueInto(TracedValue* value) const {
     value->EndDictionary();
   }
 
-  if (allocator_dumps_storage_.size() > 0) {
+  if (allocator_dumps_.size() > 0) {
     value->BeginDictionary("allocators");
-    for (const MemoryAllocatorDump* allocator_dump : allocator_dumps_storage_)
-      allocator_dump->AsValueInto(value);
+    for (const auto& allocator_dump_it : allocator_dumps_)
+      allocator_dump_it.second->AsValueInto(value);
     value->EndDictionary();
   }
 

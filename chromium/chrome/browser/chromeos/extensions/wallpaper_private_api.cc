@@ -19,9 +19,9 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/worker_pool.h"
@@ -35,6 +35,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/prefs/pref_service.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/wallpaper/wallpaper_layout.h"
@@ -634,9 +635,8 @@ void WallpaperPrivateSetCustomWallpaperFunction::OnWallpaperDecoded(
   unsafe_wallpaper_decoder_ = NULL;
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  // This API is only available to the component wallpaper picker. We do not
-  // need to show the app's name if it is the component wallpaper picker. So set
-  // the pref to empty string.
+  // TODO(xdai): This preference is unused now. For compatiblity concern, we
+  // need to keep it until it's safe to clean it up.
   profile->GetPrefs()->SetString(prefs::kCurrentWallpaperAppName,
                                  std::string());
 

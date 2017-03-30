@@ -18,6 +18,11 @@ namespace blink {
 
 PushMessageData* PushMessageData::create(const String& messageString)
 {
+    // The standard supports both an empty but valid message and a null message.
+    // In case the message is explicitly null, return a null pointer which will
+    // be set in the PushEvent.
+    if (messageString.isNull())
+        return nullptr;
     return PushMessageData::create(ArrayBufferOrArrayBufferViewOrUSVString::fromUSVString(messageString));
 }
 
@@ -37,11 +42,7 @@ PushMessageData* PushMessageData::create(const ArrayBufferOrArrayBufferViewOrUSV
     }
 
     ASSERT(messageData.isNull());
-    return new PushMessageData();
-}
-
-PushMessageData::PushMessageData()
-{
+    return nullptr;
 }
 
 PushMessageData::PushMessageData(const char* data, unsigned bytesSize)

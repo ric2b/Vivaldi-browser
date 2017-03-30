@@ -4,7 +4,6 @@
 
 #include "modules/mediacapturefromelement/TimedCanvasDrawListener.h"
 
-#include "platform/Task.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebTaskRunner.h"
 #include "public/platform/WebTraceLocation.h"
@@ -15,7 +14,6 @@ TimedCanvasDrawListener::TimedCanvasDrawListener(const PassOwnPtr<WebCanvasCaptu
     : CanvasDrawListener(handler)
 {
     m_frameInterval = 1000 / frameRate;
-    requestNewFrame();
 }
 
 TimedCanvasDrawListener::~TimedCanvasDrawListener() {}
@@ -23,24 +21,21 @@ TimedCanvasDrawListener::~TimedCanvasDrawListener() {}
 // static
 TimedCanvasDrawListener* TimedCanvasDrawListener::create(const PassOwnPtr<WebCanvasCaptureHandler>& handler, double frameRate)
 {
-    return new TimedCanvasDrawListener(handler, frameRate);
-}
-
-bool TimedCanvasDrawListener::needsNewFrame() const
-{
-    return m_requestFrame && CanvasDrawListener::needsNewFrame();
+    TimedCanvasDrawListener* listener = new TimedCanvasDrawListener(handler, frameRate);
+    listener->postRequestFrameCaptureTask();
+    return listener;
 }
 
 void TimedCanvasDrawListener::sendNewFrame(const WTF::PassRefPtr<SkImage>& image)
 {
-    m_requestFrame = false;
+    m_frameCaptureRequested = false;
     CanvasDrawListener::sendNewFrame(image);
 }
 
-void TimedCanvasDrawListener::requestNewFrame()
+void TimedCanvasDrawListener::postRequestFrameCaptureTask()
 {
-    m_requestFrame = true;
-    Platform::current()->currentThread()->taskRunner()->postDelayedTask(BLINK_FROM_HERE, new Task(bind(&TimedCanvasDrawListener::requestNewFrame, this)), m_frameInterval);
+    m_frameCaptureRequested = true;
+    Platform::current()->currentThread()->taskRunner()->postDelayedTask(BLINK_FROM_HERE, bind(&TimedCanvasDrawListener::postRequestFrameCaptureTask, this), m_frameInterval);
 }
 
 } // namespace blink

@@ -15,7 +15,6 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
@@ -26,6 +25,7 @@
 #include "chrome/common/channel_info.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/sync_driver/about_sync_util.h"
 #include "components/sync_driver/pref_names.h"
@@ -187,18 +187,18 @@ void ProfileSyncServiceAndroid::SetSetupInProgress(
   sync_service_->SetSetupInProgress(in_progress);
 }
 
-jboolean ProfileSyncServiceAndroid::HasSyncSetupCompleted(
+jboolean ProfileSyncServiceAndroid::IsFirstSetupComplete(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return sync_service_->HasSyncSetupCompleted();
+  return sync_service_->IsFirstSetupComplete();
 }
 
-void ProfileSyncServiceAndroid::SetSyncSetupCompleted(
+void ProfileSyncServiceAndroid::SetFirstSetupComplete(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  sync_service_->SetSyncSetupCompleted();
+  sync_service_->SetFirstSetupComplete();
 }
 
 ScopedJavaLocalRef<jintArray> ProfileSyncServiceAndroid::GetActiveDataTypes(

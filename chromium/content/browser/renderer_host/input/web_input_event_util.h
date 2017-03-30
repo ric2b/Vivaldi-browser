@@ -15,7 +15,6 @@ namespace ui {
 enum class DomCode;
 struct GestureEventData;
 struct GestureEventDetails;
-class MotionEvent;
 }
 
 namespace content {
@@ -24,10 +23,6 @@ int WebEventModifiersToEventFlags(int modifiers);
 
 blink::WebInputEvent::Modifiers DomCodeToWebInputEventModifiers(
     ui::DomCode code);
-
-CONTENT_EXPORT scoped_ptr<blink::WebInputEvent> ConvertWebInputEventToViewport(
-    const blink::WebInputEvent& event,
-    float scale);
 
 }  // namespace content
 

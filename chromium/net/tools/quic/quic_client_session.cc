@@ -13,13 +13,14 @@
 using std::string;
 
 namespace net {
-namespace tools {
 
-QuicClientSession::QuicClientSession(const QuicConfig& config,
-                                     QuicConnection* connection,
-                                     const QuicServerId& server_id,
-                                     QuicCryptoClientConfig* crypto_config)
-    : QuicClientSessionBase(connection, config),
+QuicClientSession::QuicClientSession(
+    const QuicConfig& config,
+    QuicConnection* connection,
+    const QuicServerId& server_id,
+    QuicCryptoClientConfig* crypto_config,
+    QuicClientPushPromiseIndex* push_promise_index)
+    : QuicClientSessionBase(connection, push_promise_index, config),
       server_id_(server_id),
       crypto_config_(crypto_config),
       respect_goaway_(true) {}
@@ -37,20 +38,27 @@ void QuicClientSession::OnProofValid(
 void QuicClientSession::OnProofVerifyDetailsAvailable(
     const ProofVerifyDetails& /*verify_details*/) {}
 
-QuicSpdyClientStream* QuicClientSession::CreateOutgoingDynamicStream(
-    SpdyPriority priority) {
+bool QuicClientSession::ShouldCreateOutgoingDynamicStream() {
   if (!crypto_stream_->encryption_established()) {
     DVLOG(1) << "Encryption not active so no outgoing stream created.";
-    return nullptr;
+    return false;
   }
-  if (GetNumOpenOutgoingStreams() >= get_max_open_streams()) {
+  if (GetNumOpenOutgoingStreams() >= max_open_outgoing_streams()) {
     DVLOG(1) << "Failed to create a new outgoing stream. "
              << "Already " << GetNumOpenOutgoingStreams() << " open.";
-    return nullptr;
+    return false;
   }
   if (goaway_received() && respect_goaway_) {
     DVLOG(1) << "Failed to create a new outgoing stream. "
              << "Already received goaway.";
+    return false;
+  }
+  return true;
+}
+
+QuicSpdyClientStream* QuicClientSession::CreateOutgoingDynamicStream(
+    SpdyPriority priority) {
+  if (!ShouldCreateOutgoingDynamicStream()) {
     return nullptr;
   }
   QuicSpdyClientStream* stream = CreateClientStream();
@@ -76,18 +84,43 @@ int QuicClientSession::GetNumSentClientHellos() const {
   return crypto_stream_->num_sent_client_hellos();
 }
 
+bool QuicClientSession::ShouldCreateIncomingDynamicStream(QuicStreamId id) {
+  if (!connection()->connected()) {
+    LOG(DFATAL) << "ShouldCreateIncomingDynamicStream called when disconnected";
+    return false;
+  }
+  if (goaway_received() && respect_goaway_) {
+    DVLOG(1) << "Failed to create a new outgoing stream. "
+             << "Already received goaway.";
+    return false;
+  }
+  if (id % 2 != 0) {
+    LOG(WARNING) << "Received invalid push stream id " << id;
+    connection()->SendConnectionCloseWithDetails(
+        QUIC_INVALID_STREAM_ID, "Server created odd numbered stream");
+    return false;
+  }
+  return true;
+}
+
 QuicSpdyStream* QuicClientSession::CreateIncomingDynamicStream(
     QuicStreamId id) {
-  DLOG(ERROR) << "Server push not supported";
-  return nullptr;
+  if (!ShouldCreateIncomingDynamicStream(id)) {
+    return nullptr;
+  }
+  QuicSpdyStream* stream = new QuicSpdyClientStream(id, this);
+  stream->CloseWriteSide();
+  return stream;
 }
 
 QuicCryptoClientStreamBase* QuicClientSession::CreateQuicCryptoStream() {
   return new QuicCryptoClientStream(
       server_id_, this, new ProofVerifyContextChromium(0, BoundNetLog()),
-      crypto_config_);
+      crypto_config_, this);
 }
 
-}  // namespace tools
+bool QuicClientSession::IsAuthorized(const string& authority) {
+  return true;
+}
 
 }  // namespace net

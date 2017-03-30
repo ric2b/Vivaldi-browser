@@ -80,7 +80,7 @@ public class ContextualSearchManager extends ContextualSearchObservable
     // We blacklist this URL because malformed URLs may bring up this page.
     private static final String BLACKLISTED_URL = "about:blank";
 
-    private final ContextualSearchSelectionController mSelectionController;
+    private ContextualSearchSelectionController mSelectionController;
     private final ChromeActivity mActivity;
     private ViewGroup mParentView;
     private final ViewTreeObserver.OnGlobalFocusChangeListener mOnFocusChangeListener;
@@ -289,6 +289,14 @@ public class ContextualSearchManager extends ContextualSearchObservable
     }
 
     /**
+     * @param controller The {@link ContextualSearchSelectionController}, for testing purposes.
+     */
+    @VisibleForTesting
+    void setSelectionController(ContextualSearchSelectionController controller) {
+        mSelectionController = controller;
+    }
+
+    /**
      * @return The current search request, or {@code null} if there is none, for testing.
      */
     @VisibleForTesting
@@ -414,6 +422,14 @@ public class ContextualSearchManager extends ContextualSearchObservable
     }
 
     /**
+     * @return The ContextualSearchPolicy currently being used.
+     */
+    @VisibleForTesting
+    public ContextualSearchPolicy getContextualSearchPolicy() {
+        return mPolicy;
+    }
+
+    /**
      * Shows the Contextual Search UX.
      * Calls back into onGetContextualSearchQueryResponse.
      * @param stateChangeReason The reason explaining the change of state.
@@ -462,7 +478,7 @@ public class ContextualSearchManager extends ContextualSearchObservable
             mTranslateController.cacheNativeTranslateData();
         } else {
             boolean shouldPrefetch = mPolicy.shouldPrefetchSearchResult(isTap);
-            mSearchRequest = new ContextualSearchRequest(mSelectionController.getSelectedText(),
+            mSearchRequest = createContextualSearchRequest(mSelectionController.getSelectedText(),
                     null, shouldPrefetch);
             mTranslateController.forceAutoDetectTranslateUnlessDisabled(mSearchRequest);
             mDidStartLoadingResolvedSearchRequest = false;
@@ -539,6 +555,18 @@ public class ContextualSearchManager extends ContextualSearchObservable
         } catch (MalformedURLException e) {
             return null;
         }
+    }
+
+    /**
+     * A method that can override the creation of a standard search request. This should only be
+     * used for testing.
+     * @param term The search term to create the request with.
+     * @param altTerm An alternate search term.
+     * @param isLowPriorityEnabled Whether the request can be made at low priority.
+     */
+    protected ContextualSearchRequest createContextualSearchRequest(String term, String altTerm,
+            boolean isLowPriorityEnabled) {
+        return new ContextualSearchRequest(term, altTerm, isLowPriorityEnabled);
     }
 
     /**
@@ -698,7 +726,8 @@ public class ContextualSearchManager extends ContextualSearchObservable
             // TODO(donnd): Instead of preloading, we should prefetch (ie the URL should not
             // appear in the user's history until the user views it).  See crbug.com/406446.
             boolean shouldPreload = !doPreventPreload && mPolicy.shouldPrefetchSearchResult(true);
-            mSearchRequest = new ContextualSearchRequest(searchTerm, alternateTerm, shouldPreload);
+            mSearchRequest = createContextualSearchRequest(searchTerm, alternateTerm,
+                    shouldPreload);
             // Trigger translation, if enabled.
             mTranslateController.forceTranslateIfNeeded(mSearchRequest, contextLanguage);
             mDidStartLoadingResolvedSearchRequest = false;
@@ -852,8 +881,8 @@ public class ContextualSearchManager extends ContextualSearchObservable
                 if (mSearchRequest == null
                         && mPolicy.shouldCreateVerbatimRequest(mSelectionController,
                                 mNetworkCommunicator.getBasePageUrl())) {
-                    mSearchRequest = new ContextualSearchRequest(
-                            mSelectionController.getSelectedText());
+                    mSearchRequest = createContextualSearchRequest(
+                            mSelectionController.getSelectedText(), null, false);
                     mDidStartLoadingResolvedSearchRequest = false;
                 }
                 if (mSearchRequest != null && (!mDidStartLoadingResolvedSearchRequest
@@ -1106,8 +1135,7 @@ public class ContextualSearchManager extends ContextualSearchObservable
 
     @Override
     public void onSelectionChanged(String selection) {
-        // Workaround to disable Contextual Search in HTML fullscreen mode. crbug.com/511977
-        if (!mActivity.getFullscreenManager().getPersistentFullscreenMode()) {
+        if (!mActivity.getFullscreenManager().isOverlayVideoMode()) {
             mSelectionController.handleSelectionChanged(selection);
             mSearchPanel.updateTopControlsState(TopControlsState.BOTH, true);
         }
@@ -1115,7 +1143,7 @@ public class ContextualSearchManager extends ContextualSearchObservable
 
     @Override
     public void onSelectionEvent(int eventType, float posXPix, float posYPix) {
-        if (!mActivity.getFullscreenManager().getPersistentFullscreenMode()) {
+        if (!mActivity.getFullscreenManager().isOverlayVideoMode()) {
             mSelectionController.handleSelectionEvent(eventType, posXPix, posYPix);
         }
     }
@@ -1123,7 +1151,7 @@ public class ContextualSearchManager extends ContextualSearchObservable
     @Override
     public void showUnhandledTapUIIfNeeded(final int x, final int y) {
         mDidBasePageLoadJustStart = false;
-        if (!mActivity.getFullscreenManager().getPersistentFullscreenMode()) {
+        if (!mActivity.getFullscreenManager().isOverlayVideoMode()) {
             mSelectionController.handleShowUnhandledTapUIIfNeeded(x, y);
         }
     }
@@ -1230,7 +1258,7 @@ public class ContextualSearchManager extends ContextualSearchObservable
     private native void nativeStartSearchTermResolutionRequest(long nativeContextualSearchManager,
             String selection, boolean useResolvedSearchTerm, ContentViewCore baseContentViewCore,
             boolean maySendBasePageUrl);
-    private native void nativeGatherSurroundingText(long nativeContextualSearchManager,
+    protected native void nativeGatherSurroundingText(long nativeContextualSearchManager,
             String selection, boolean useResolvedSearchTerm, ContentViewCore baseContentViewCore,
             boolean maySendBasePageUrl);
     private native void nativeEnableContextualSearchJsApiForOverlay(

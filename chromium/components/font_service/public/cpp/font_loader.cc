@@ -9,33 +9,13 @@
 #include "base/bind.h"
 #include "base/trace_event/trace_event.h"
 #include "components/font_service/public/cpp/font_service_thread.h"
-#include "mojo/shell/public/cpp/application_impl.h"
-#include "mojo/shell/public/cpp/connect.h"
-#include "mojo/shell/public/interfaces/shell.mojom.h"
+#include "mojo/shell/public/cpp/connector.h"
 
 namespace font_service {
-namespace {
-void OnGotContentHandlerID(uint32_t content_handler_id) {}
-}  // namespace
 
-FontLoader::FontLoader(mojo::Shell* shell) {
-  mojo::ServiceProviderPtr font_service_provider;
-  mojo::URLRequestPtr request(mojo::URLRequest::New());
-  request->url = mojo::String::From("mojo:font_service");
+FontLoader::FontLoader(mojo::Connector* connector) {
   FontServicePtr font_service;
-  shell->ConnectToApplication(std::move(request),
-                              GetProxy(&font_service_provider), nullptr,
-                              mojo::CreatePermissiveCapabilityFilter(),
-                              base::Bind(&OnGotContentHandlerID));
-  mojo::ConnectToService(font_service_provider.get(), &font_service);
-
-  thread_ = new internal::FontServiceThread(std::move(font_service));
-}
-
-FontLoader::FontLoader(mojo::ApplicationImpl* application_impl) {
-  FontServicePtr font_service;
-  application_impl->ConnectToService("mojo:font_service", &font_service);
-
+  connector->ConnectToInterface("mojo:font_service", &font_service);
   thread_ = new internal::FontServiceThread(std::move(font_service));
 }
 

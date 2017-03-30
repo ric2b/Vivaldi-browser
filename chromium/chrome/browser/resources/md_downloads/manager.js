@@ -79,6 +79,9 @@ cr.define('downloads', function() {
         case 'clear-all-command':
           e.canExecute = this.$.toolbar.canClearAll();
           break;
+        case 'find-command':
+          e.canExecute = true;
+          break;
       }
     },
 
@@ -91,6 +94,8 @@ cr.define('downloads', function() {
         downloads.ActionService.getInstance().clearAll();
       else if (e.command.id == 'undo-command')
         downloads.ActionService.getInstance().undo();
+      else if (e.command.id == 'find-command')
+        this.$.toolbar.onFindCommand();
     },
 
     /** @private */
@@ -144,7 +149,8 @@ cr.define('downloads', function() {
     updateItem_: function(index, data) {
       this.set('items_.' + index, data);
       this.updateHideDates_(index, index);
-      this.$['downloads-list'].updateSizeForItem(index);
+      var list = /** @type {!IronListElement} */(this.$['downloads-list']);
+      list.updateSizeForItem(index);
     },
   });
 

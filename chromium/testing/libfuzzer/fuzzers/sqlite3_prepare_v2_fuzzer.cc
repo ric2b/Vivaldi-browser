@@ -1,8 +1,9 @@
-// Copyright (c) 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include "third_party/sqlite/sqlite3.h"
 
@@ -11,7 +12,7 @@ static int Progress(void *not_used_ptr) {
 }
 
 // Entry point for LibFuzzer.
-extern "C" int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   if (size < 2)
     return 0;
 
@@ -32,7 +33,8 @@ extern "C" int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
   selector <<= 1;
 
   sqlite3_stmt* statement = NULL;
-  int result = sqlite3_prepare_v2(db, (const char*)(data + 1), size - 1,
+  int result = sqlite3_prepare_v2(db, (const char*)(data + 1),
+                                  static_cast<int>(size) - 1,
                                   &statement, NULL);
   if (result == SQLITE_OK) {
     // Use selector value to randomize number of iterations.

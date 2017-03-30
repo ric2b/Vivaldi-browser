@@ -16,7 +16,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -55,6 +54,7 @@
 #include "chrome/installer/util/master_preferences_constants.h"
 #include "chrome/installer/util/util_constants.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_tracker.h"
@@ -235,10 +235,15 @@ void SetImportItem(PrefService* user_prefs,
 // |target_profile| for the items specified in the |items_to_import| bitfield.
 // This may be done in a separate process depending on the platform, but it will
 // always block until done.
-void ImportFromSourceProfile(ExternalProcessImporterHost* importer_host,
-                             const importer::SourceProfile& source_profile,
+void ImportFromSourceProfile(const importer::SourceProfile& source_profile,
                              Profile* target_profile,
                              uint16_t items_to_import) {
+  // Deletes itself.
+  ExternalProcessImporterHost* importer_host =
+      new ExternalProcessImporterHost;
+  // Don't show the warning dialog if import fails.
+  importer_host->set_headless();
+
   ImportEndedObserver observer;
   importer_host->set_observer(&observer);
   importer_host->StartImportSettings(source_profile,
@@ -257,7 +262,6 @@ void ImportFromSourceProfile(ExternalProcessImporterHost* importer_host,
 // Imports bookmarks from an html file whose path is provided by
 // |import_bookmarks_path|.
 void ImportFromFile(Profile* profile,
-                    ExternalProcessImporterHost* file_importer_host,
                     const std::string& import_bookmarks_path) {
   importer::SourceProfile source_profile;
   source_profile.importer_type = importer::TYPE_BOOKMARKS_FILE;
@@ -270,14 +274,12 @@ void ImportFromFile(Profile* profile,
 #endif
   source_profile.source_path = base::FilePath(import_bookmarks_path_str);
 
-  ImportFromSourceProfile(file_importer_host, source_profile, profile,
-                          importer::FAVORITES);
+  ImportFromSourceProfile(source_profile, profile, importer::FAVORITES);
   g_auto_import_state |= first_run::AUTO_IMPORT_BOOKMARKS_FILE_IMPORTED;
 }
 
 // Imports settings from the first profile in |importer_list|.
 void ImportSettings(Profile* profile,
-                    ExternalProcessImporterHost* importer_host,
                     scoped_ptr<ImporterList> importer_list,
                     int items_to_import) {
   const importer::SourceProfile& source_profile =
@@ -290,8 +292,7 @@ void ImportSettings(Profile* profile,
   // support. If there is no overlap, skip.
   items_to_import &= source_profile.services_supported;
   if (items_to_import) {
-    ImportFromSourceProfile(importer_host, source_profile, profile,
-                            items_to_import);
+    ImportFromSourceProfile(source_profile, profile, items_to_import);
   }
 
   g_auto_import_state |= first_run::AUTO_IMPORT_PROFILE_IMPORTED;
@@ -398,13 +399,13 @@ void FirstRunBubbleLauncher::Observe(
   if (contents && contents->GetURL().SchemeIs(content::kChromeUIScheme)) {
 #if defined(OS_WIN)
     // Suppress the first run bubble if 'make chrome metro' flow is showing.
-    if (contents->GetURL().host() == chrome::kChromeUIMetroFlowHost)
+    if (contents->GetURL().host_piece() == chrome::kChromeUIMetroFlowHost)
       return;
 #endif
 
     // Suppress the first run bubble if the NTP sync promo bubble is showing
     // or if sign in is in progress.
-    if (contents->GetURL().host() == chrome::kChromeUINewTabHost) {
+    if (contents->GetURL().host_piece() == chrome::kChromeUINewTabHost) {
       Profile* profile =
           Profile::FromBrowserContext(contents->GetBrowserContext());
       SigninManagerBase* manager =
@@ -462,17 +463,17 @@ installer::MasterPreferences* LoadMasterPrefs() {
 void ProcessDefaultBrowserPolicy(bool make_chrome_default_for_user) {
   // Only proceed if chrome can be made default unattended. The interactive case
   // (Windows 8+) is handled by the first run default browser prompt.
-  if (ShellIntegration::CanSetAsDefaultBrowser() ==
-          ShellIntegration::SET_DEFAULT_UNATTENDED) {
+  if (shell_integration::CanSetAsDefaultBrowser() ==
+      shell_integration::SET_DEFAULT_UNATTENDED) {
     // The policy has precedence over the user's choice.
     if (g_browser_process->local_state()->IsManagedPreference(
             prefs::kDefaultBrowserSettingEnabled)) {
       if (g_browser_process->local_state()->GetBoolean(
           prefs::kDefaultBrowserSettingEnabled)) {
-        ShellIntegration::SetAsDefaultBrowser();
+        shell_integration::SetAsDefaultBrowser();
       }
     } else if (make_chrome_default_for_user) {
-        ShellIntegration::SetAsDefaultBrowser();
+      shell_integration::SetAsDefaultBrowser();
     }
   }
 }
@@ -791,26 +792,14 @@ void AutoImport(
                   importer::FAVORITES,
                   &items);
 
-    // Deletes itself.
-    ExternalProcessImporterHost* importer_host =
-        new ExternalProcessImporterHost;
-
-    // Don't show the warning dialog if import fails.
-    importer_host->set_headless();
-
     importer::LogImporterUseToMetrics(
         "AutoImport", importer_list->GetSourceProfileAt(0).importer_type);
 
-    ImportSettings(profile, importer_host, std::move(importer_list), items);
+    ImportSettings(profile, std::move(importer_list), items);
   }
 
   if (!import_bookmarks_path.empty()) {
-    // Deletes itself.
-    ExternalProcessImporterHost* file_importer_host =
-        new ExternalProcessImporterHost;
-    file_importer_host->set_headless();
-
-    ImportFromFile(profile, file_importer_host, import_bookmarks_path);
+    ImportFromFile(profile, import_bookmarks_path);
   }
 
   content::RecordAction(UserMetricsAction("FirstRunDef_Accept"));

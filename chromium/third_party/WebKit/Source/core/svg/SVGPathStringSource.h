@@ -22,27 +22,35 @@
 #define SVGPathStringSource_h
 
 #include "core/CoreExport.h"
-#include "core/svg/SVGPathSource.h"
+#include "core/svg/SVGParsingError.h"
+#include "core/svg/SVGPathData.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
 
-class CORE_EXPORT SVGPathStringSource final : public SVGPathSource {
+class CORE_EXPORT SVGPathStringSource {
+    WTF_MAKE_NONCOPYABLE(SVGPathStringSource);
+    STACK_ALLOCATED();
 public:
     explicit SVGPathStringSource(const String&);
 
-private:
-    bool hasMoreData() const override;
-    SVGPathSegType peekSegmentType() override;
-    PathSegmentData parseSegment() override;
+    bool hasMoreData() const
+    {
+        if (m_is8BitSource)
+            return m_current.m_character8 < m_end.m_character8;
+        return m_current.m_character16 < m_end.m_character16;
+    }
+    PathSegmentData parseSegment();
 
+    SVGParsingError parseError() const { return m_error; }
+
+private:
     void eatWhitespace();
     float parseNumberWithError();
     bool parseArcFlagWithError();
+    void setErrorMark(SVGParseStatus);
 
-    String m_string;
     bool m_is8BitSource;
-    bool m_seenError;
 
     union {
         const LChar* m_character8;
@@ -54,6 +62,8 @@ private:
     } m_end;
 
     SVGPathSegType m_previousCommand;
+    SVGParsingError m_error;
+    String m_string;
 };
 
 } // namespace blink

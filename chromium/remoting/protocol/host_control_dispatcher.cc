@@ -6,68 +6,65 @@
 
 #include "base/callback_helpers.h"
 #include "net/socket/stream_socket.h"
+#include "remoting/base/compound_buffer.h"
 #include "remoting/base/constants.h"
 #include "remoting/proto/control.pb.h"
 #include "remoting/proto/internal.pb.h"
 #include "remoting/protocol/clipboard_stub.h"
 #include "remoting/protocol/host_stub.h"
+#include "remoting/protocol/message_pipe.h"
 #include "remoting/protocol/message_serialization.h"
 
 namespace remoting {
 namespace protocol {
 
 HostControlDispatcher::HostControlDispatcher()
-    : ChannelDispatcherBase(kControlChannelName),
-      clipboard_stub_(nullptr),
-      host_stub_(nullptr),
-      parser_(base::Bind(&HostControlDispatcher::OnMessageReceived,
-                         base::Unretained(this)),
-              reader()) {
-}
-
-HostControlDispatcher::~HostControlDispatcher() {
-}
+    : ChannelDispatcherBase(kControlChannelName) {}
+HostControlDispatcher::~HostControlDispatcher() {}
 
 void HostControlDispatcher::SetCapabilities(
     const Capabilities& capabilities) {
   ControlMessage message;
   message.mutable_capabilities()->CopyFrom(capabilities);
-  writer()->Write(SerializeAndFrameMessage(message), base::Closure());
+  message_pipe()->Send(&message, base::Closure());
 }
 
 void HostControlDispatcher::SetPairingResponse(
     const PairingResponse& pairing_response) {
   ControlMessage message;
   message.mutable_pairing_response()->CopyFrom(pairing_response);
-  writer()->Write(SerializeAndFrameMessage(message), base::Closure());
+  message_pipe()->Send(&message, base::Closure());
 }
 
 void HostControlDispatcher::DeliverHostMessage(
     const ExtensionMessage& message) {
   ControlMessage control_message;
   control_message.mutable_extension_message()->CopyFrom(message);
-  writer()->Write(SerializeAndFrameMessage(control_message), base::Closure());
+  message_pipe()->Send(&control_message, base::Closure());
 }
 
 void HostControlDispatcher::InjectClipboardEvent(const ClipboardEvent& event) {
   ControlMessage message;
   message.mutable_clipboard_event()->CopyFrom(event);
-  writer()->Write(SerializeAndFrameMessage(message), base::Closure());
+  message_pipe()->Send(&message, base::Closure());
 }
 
 void HostControlDispatcher::SetCursorShape(
     const CursorShapeInfo& cursor_shape) {
   ControlMessage message;
   message.mutable_cursor_shape()->CopyFrom(cursor_shape);
-  writer()->Write(SerializeAndFrameMessage(message), base::Closure());
+  message_pipe()->Send(&message, base::Closure());
 }
 
-void HostControlDispatcher::OnMessageReceived(
-    scoped_ptr<ControlMessage> message, const base::Closure& done_task) {
+void HostControlDispatcher::OnIncomingMessage(
+    scoped_ptr<CompoundBuffer> buffer) {
   DCHECK(clipboard_stub_);
   DCHECK(host_stub_);
 
-  base::ScopedClosureRunner done_runner(done_task);
+  scoped_ptr<ControlMessage> message =
+      ParseMessage<ControlMessage>(buffer.get());
+  if (!message)
+    return;
 
   if (message->has_clipboard_event()) {
     clipboard_stub_->InjectClipboardEvent(message->clipboard_event());

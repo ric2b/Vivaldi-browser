@@ -107,6 +107,9 @@ class GCMDriverDesktop::IOWorker : public GCMClient::Delegate {
                    const std::string& authorized_entity,
                    const std::string& scope);
 
+  void RecordDecryptionFailure(const std::string& app_id,
+                               GCMEncryptionProvider::DecryptionResult result);
+
   // For testing purpose. Can be called from UI thread. Use with care.
   GCMClient* gcm_client_for_testing() const { return gcm_client_.get(); }
 
@@ -198,7 +201,7 @@ void GCMDriverDesktop::IOWorker::OnUnregisterFinished(
   if (gcm_registration_info) {
     ui_thread_->PostTask(
         FROM_HERE,
-        base::Bind(&GCMDriverDesktop::UnregisterFinished,
+        base::Bind(&GCMDriverDesktop::RemoveEncryptionInfoAfterUnregister,
                    service_,
                    gcm_registration_info->app_id,
                    result));
@@ -496,6 +499,13 @@ void GCMDriverDesktop::IOWorker::RemoveHeartbeatInterval(
   gcm_client_->RemoveHeartbeatInterval(scope);
 }
 
+void GCMDriverDesktop::IOWorker::RecordDecryptionFailure(
+    const std::string& app_id,
+    GCMEncryptionProvider::DecryptionResult result) {
+  DCHECK(io_thread_->RunsTasksOnCurrentThread());
+  gcm_client_->RecordDecryptionFailure(app_id, result);
+}
+
 GCMDriverDesktop::GCMDriverDesktop(
     scoped_ptr<GCMClientFactory> gcm_client_factory,
     const GCMClient::ChromeBuildInfo& chrome_build_info,
@@ -720,6 +730,17 @@ void GCMDriverDesktop::DoSend(const std::string& app_id,
                  app_id,
                  receiver_id,
                  message));
+}
+
+void GCMDriverDesktop::RecordDecryptionFailure(
+    const std::string& app_id,
+    GCMEncryptionProvider::DecryptionResult result) {
+  DCHECK(ui_thread_->RunsTasksOnCurrentThread());
+  io_thread_->PostTask(
+      FROM_HERE,
+      base::Bind(&GCMDriverDesktop::IOWorker::RecordDecryptionFailure,
+                 base::Unretained(io_worker_.get()),
+                 app_id, result));
 }
 
 GCMClient* GCMDriverDesktop::GetGCMClientForTesting() const {

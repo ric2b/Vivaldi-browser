@@ -361,6 +361,8 @@ struct SSLSocketDataProvider {
   bool channel_id_sent;
   ChannelIDService* channel_id_service;
   int connection_status;
+  bool token_binding_negotiated;
+  TokenBindingParam token_binding_key_param;
 };
 
 // Uses the sequence_number field in the mock reads and writes to
@@ -577,6 +579,9 @@ class MockClientSocket : public SSLClientSocket {
   int GetTLSUniqueChannelBinding(std::string* out) override;
   NextProtoStatus GetNextProto(std::string* proto) const override;
   ChannelIDService* GetChannelIDService() const override;
+  Error GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
+                                    std::vector<uint8_t>* out) override;
+  crypto::ECPrivateKey* GetChannelIDKey() const override;
   SSLFailureState GetSSLFailureState() const override;
 
  protected:
@@ -691,6 +696,8 @@ class MockSSLClientSocket : public MockClientSocket, public AsyncSocket {
 
   // SSLClientSocket implementation.
   void GetSSLCertRequestInfo(SSLCertRequestInfo* cert_request_info) override;
+  Error GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
+                                    std::vector<uint8_t>* out) override;
   NextProtoStatus GetNextProto(std::string* proto) const override;
 
   // This MockSocket does not implement the manual async IO feature.
@@ -824,17 +831,15 @@ class ClientSocketPoolTest {
       PoolType* socket_pool,
       const std::string& group_name,
       RequestPriority priority,
+      ClientSocketPool::RespectLimits respect_limits,
       const scoped_refptr<typename PoolType::SocketParams>& socket_params) {
     DCHECK(socket_pool);
     TestSocketRequest* request(
         new TestSocketRequest(&request_order_, &completion_count_));
     requests_.push_back(make_scoped_ptr(request));
-    int rv = request->handle()->Init(group_name,
-                                     socket_params,
-                                     priority,
-                                     request->callback(),
-                                     socket_pool,
-                                     BoundNetLog());
+    int rv = request->handle()->Init(group_name, socket_params, priority,
+                                     respect_limits, request->callback(),
+                                     socket_pool, BoundNetLog());
     if (rv != ERR_IO_PENDING)
       request_order_.push_back(request);
     return rv;
@@ -918,6 +923,7 @@ class MockTransportClientSocketPool : public TransportClientSocketPool {
   int RequestSocket(const std::string& group_name,
                     const void* socket_params,
                     RequestPriority priority,
+                    RespectLimits respect_limits,
                     ClientSocketHandle* handle,
                     const CompletionCallback& callback,
                     const BoundNetLog& net_log) override;
@@ -950,6 +956,7 @@ class MockSOCKSClientSocketPool : public SOCKSClientSocketPool {
   int RequestSocket(const std::string& group_name,
                     const void* socket_params,
                     RequestPriority priority,
+                    RespectLimits respect_limits,
                     ClientSocketHandle* handle,
                     const CompletionCallback& callback,
                     const BoundNetLog& net_log) override;

@@ -141,6 +141,13 @@
 <translation id="1522425503138261032">Permitir que os sites registem a localização física dos utilizadores</translation>
 <translation id="152657506688053119">Lista de URLs alternativos para o fornecedor de pesquisas predefinido</translation>
 <translation id="1530812829012954197">Processar sempre os seguintes padrões de URL no navegador anfitrião</translation>
+<translation id="1553684822621013552">Quando esta política está definida como verdadeira, o ARC está ativado para o utilizador
+      (sujeito a verificações adicionais das definições da política. O ARC continua
+      indisponível se o modo temporário ou o início de sessão integrado estiverem ativados
+      na sessão de utilizador atual).
+
+      Se esta definição estiver desativada ou por configurar, os utilizadores empresariais
+      não podem utilizar o ARC.</translation>
 <translation id="1561424797596341174">Substituições da política para compilações de Depuração do anfitrião de acesso remoto</translation>
 <translation id="1583248206450240930">Utilizar o <ph name="PRODUCT_FRAME_NAME" /> por predefinição</translation>
 <translation id="1608755754295374538">URLs aos quais será concedido acesso a dispositivos de captura de áudio imediatamente</translation>
@@ -192,6 +199,13 @@
 
           Esta política só será seguida se a política "DefaultSearchProviderEnabled" estiver ativada.</translation>
 <translation id="1859633270756049523">Limitar a duração da sessão</translation>
+<translation id="1859859319036806634">Aviso: a alternativa da versão do TLS será removida do <ph name="PRODUCT_NAME" /> após a versão 52 (em meados de setembro de 2016) e esta política deixa de funcionar nessa altura.
+
+      Anteriormente, quando um handshake de TLS falhava, o <ph name="PRODUCT_NAME" /> tentava estabelecer novamente ligação com uma versão inferior do TLS para contornar os erros dos servidores HTTPS. Esta definição configura a versão na qual este processo alternativo para. Se um servidor executar corretamente a negociação da versão (ou seja, sem interromper a ligação), esta definição não se aplica. Independentemente disso, a ligação resultante deve, mesmo assim, estar em conformidade com a política SSLVersionMin.
+
+      Se esta política não estiver configurada ou estiver definida para "tls1.2", o <ph name="PRODUCT_NAME" /> já não executa este processo alternativo. Tenha em atenção que esta operação não desativa o suporte para versões mais antigas do TLS, mas determina apenas se o <ph name="PRODUCT_NAME" /> deve contornar servidores com erros que não consigam negociar versões corretamente.
+
+      Caso contrário, se for necessário manter a compatibilidade com um servidor com erros, é possível definir esta política para "tls1.1". Esta é uma medida temporária e o servidor deve ser reparado rapidamente.</translation>
 <translation id="1861037019115362154">Especifica uma lista de plug-ins desativados no <ph name="PRODUCT_NAME" /> e impede que os utilizadores alterem esta definição.
 
       Os caracteres universais "*" e "?" podem ser utilizados para estabelecer correspondência com sequências de caracteres arbitrários. "*" corresponde a um número arbitrário de caracteres, ao passo que "?" indica um carácter único opcional, ou seja, corresponde aos caracteres zero ou um. O carácter de escape é "\", pelo que, para fazer corresponder os caracteres reais "*", "?" ou "\", pode colocar um "\" à frente deles.
@@ -230,6 +244,7 @@
       Se esta política for definida como verdadeira, o <ph name="PRODUCT_OS_NAME" /> tentará transferir payloads de atualização automática através de HTTP. Se esta política for definida como falsa ou não for definida, será utilizado HTTPS para transferir payloads de atualização automática.</translation>
 <translation id="2006530844219044261">Gestão de energia</translation>
 <translation id="201557587962247231">Frequência de carregamentos de relatórios de estado do dispositivo</translation>
+<translation id="2024476116966025075">Configurar o nome do domínio obrigatório para clientes de acesso remoto</translation>
 <translation id="2030905906517501646">Palavra-chave do fornecedor de pesquisas predefinido</translation>
 <translation id="206623763829450685">Especifica quais os esquemas de autenticação HTTP que o <ph name="PRODUCT_NAME" /> suporta.
 
@@ -446,21 +461,13 @@
       Se esta política não ficar definida, a funcionalidade proxy de compressão de dados estará disponível para o utilizador decidir se pretende utilizá-la ou não.</translation>
 <translation id="2587719089023392205">Definir o <ph name="PRODUCT_NAME" /> como o Navegador predefinido</translation>
 <translation id="2592091433672667839">Período de inatividade antes de a proteção de ecrã ser apresentada no ecrã de início de sessão no modo de retalho</translation>
+<translation id="260705825237536216">Configurar aplicações ARC</translation>
 <translation id="2623014935069176671">Aguardar atividade inicial do utilizador</translation>
 <translation id="262740370354162807">Permitir o envio de documentos para o <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="2633084400146331575">Ativar comentários falados</translation>
 <translation id="2646290749315461919">Permite definir se os Web sites têm permissão para monitorizar a localização física dos utilizadores. A monitorização da localização física dos utilizadores pode ser permitida por predefinição, negada por predefinição ou o utilizador pode ser questionado sempre que um Web site solicitar a localização física. Se esta política não for definida, será utilizada a definição "AskGeolocation" e o utilizador poderá alterá-la.</translation>
 <translation id="2650049181907741121">Ação a realizar quando o utilizador fecha a tampa</translation>
 <translation id="2660846099862559570">Nunca utilizar proxy</translation>
-<translation id="2665596266623707739">Aviso: a alternativa da versão TLS 1.0 será removida do <ph name="PRODUCT_NAME" /> após a versão 47 (por volta de janeiro de 2016) e a opção "tls1" deixará de funcionar nessa altura.
-
-      Quando um handshake de TLS falhar, o <ph name="PRODUCT_NAME" /> irá tentar estabelecer ligação com uma versão inferior do TLS para contornar os erros dos servidores HTTPS. Esta definição configura a versão na qual este processo alternativo pára. Se um servidor executar corretamente a negociação da versão (ou seja, sem interromper a ligação), esta definição não se aplica. Independentemente disso, a ligação resultante deve, mesmo assim, estar em conformidade com a política SSLVersionMin.
-
-      Se esta política não estiver configurada, o <ph name="PRODUCT_NAME" /> utiliza uma versão mínima predefinida, que é TLS 1.0 no <ph name="PRODUCT_NAME" /> 44 e TLS 1.1 em versões posteriores. Tenha em atenção que esta operação não desativa o suporte para TLS 1.0, mas determina apenas se o <ph name="PRODUCT_NAME" /> deve contornar servidores com erros que não consigam negociar versões corretamente.
-
-      Caso contrário, é possível defini-la para um dos seguintes valores: "tls1", "tls1.1" ou "tls1.2". Se for necessário manter a compatibilidade com um servidor com erros, é possível definir para "tls1". Esta é uma medida temporária e o servidor deve ser reparado rapidamente.
-
-      Uma definição de "tls1.2" desativa todas as alternativas, porém, pode ter um impacto significativo na compatibilidade.</translation>
 <translation id="267596348720209223">Especifica as codificações de caracteres suportadas pelo fornecedor de pesquisas. As codificações são nomes de páginas de códigos, como UTF-8, GB2312 e ISO-8859-1, e são selecionadas por esta ordem. Esta política é opcional. Se não for definida, a codificação predefinida será UTF-8. Esta política aplica-se apenas se a política "DefaultSearchProviderEnabled" estiver ativada.</translation>
 <translation id="2682225790874070339">Desativa o Google Drive na aplicação Ficheiros do <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="268577405881275241">Ativar a funcionalidade proxy de compressão de dados</translation>
@@ -476,11 +483,6 @@
 
       Se a definição estiver desativada, as páginas Web não podem utilizar o JavaScript e o utilizador não pode alterá-la.
       Se a definição estiver ativada ou por definir, as páginas Web podem utilizar o JavaScript, mas o utilizador pode alterá-la.</translation>
-<translation id="2747783890942882652">Configura o nome de domínio do anfitrião necessário que será imposto em anfitriões de acesso remoto e evita que os utilizadores o alterem.
-
-          Se esta definição estiver ativada, os anfitriões apenas podem ser partilhados com contas registadas no nome de domínio especificado.
-
-          Se esta definição estiver desativada ou não estiver definida, os anfitriões podem ser partilhados utilizando qualquer conta.</translation>
 <translation id="2757054304033424106">Tipos de extensões/aplicações com permissão para serem instaladas</translation>
 <translation id="2759224876420453487">Controlar o comportamento dos utilizadores numa sessão multiperfil</translation>
 <translation id="2761483219396643566">Atraso do aviso de inatividade quando o dispositivo está a utilizar a energia da bateria</translation>
@@ -545,6 +547,7 @@
       Especifica se a extensão de certificados de vinculação ao domínio TLS deveria ser ativada.
 
       Esta definição é utilizada para ativar os certificados de vinculação ao domínio TLS para testes. Esta definição experimental será removida no futuro.</translation>
+<translation id="2957506574938329824">Não permitir que os sites solicitem acesso a dispositivos Bluetooth através da API Web Bluetooth</translation>
 <translation id="2957513448235202597">Tipo de conta para a autenticação <ph name="HTTP_NEGOTIATE" /></translation>
 <translation id="2959898425599642200">Regras para ignorar o proxy</translation>
 <translation id="2960691910306063964">Ativar ou desativar a autenticação sem PIN para anfitriões de acesso remoto</translation>
@@ -557,6 +560,8 @@
           Quando esta política não está definida, utiliza-se um período de tempo predefinido.
 
           O valor da política deve ser especificado em milissegundos. Os valores devem ser inferiores ou iguais ao atraso para desligar o ecrã (se estiver definido) e ao atraso de inatividade.</translation>
+<translation id="2987155890997901449">Ativar ARC</translation>
+<translation id="2987227569419001736">Controlar a utilização da API Web Bluetooth</translation>
 <translation id="2998881342848488968">Esta política permite ao <ph name="PRODUCT_OS_NAME" /> ignorar qualquer proxy para autenticação do portal cativo.
 
       Esta política apenas é efetiva se um proxy estiver configurado (por exemplo através da política, pelo utilizador em chrome://settings ou por extensões).
@@ -839,6 +844,7 @@ Se esta definição estiver desativada, os utilizadores não podem ativar o prox
 
           Esta política só será seguida se a política "DefaultSearchProviderEnabled" estiver ativada.</translation>
 <translation id="4320376026953250541">Microsoft Windows XP SP2 ou posterior</translation>
+<translation id="4322842393287974810">Permitir que a aplicação de quiosque de início automático com atraso zero controle a versão do <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="4325690621216251241">Adicionar um botão para terminar sessão ao tabuleiro do sistema</translation>
 <translation id="4347908978527632940">Se estiver definida como verdadeira e o utilizador for um utilizador supervisionado, outras aplicações Android podem consultar as restrições Web do utilizador através de um fornecedor de conteúdos.
 
@@ -1085,6 +1091,11 @@ Se esta definição estiver desativada, os utilizadores não podem ativar o prox
 <translation id="5307432759655324440">Disponibilidade do modo de navegação anónima</translation>
 <translation id="5318185076587284965">Ativar a utilização de servidores de retransmissão através do anfitrião de acesso remoto</translation>
 <translation id="5330684698007383292">Permitir que o <ph name="PRODUCT_FRAME_NAME" /> processe os seguintes tipos de conteúdo</translation>
+<translation id="5345267406698765263">Especifica a política da aplicação ARC como uma string JSON que pode ser
+      transmitida tal como está ao tempo de execução ARC. De momento, esta definição é utilizada
+      exclusivamente para especificar a instalação forçada das aplicações.
+
+      Se esta política não for definida, não são instaladas automaticamente quaisquer aplicações.</translation>
 <translation id="5365946944967967336">Mostrar o botão Página Inicial na barra de ferramentas</translation>
 <translation id="5366977351895725771">Se definido como "false", é desativada a criação de utilizadores supervisionados por parte deste utilizador. Todos os utilizadores supervisionados continuarão disponíveis.
 
@@ -1148,6 +1159,13 @@ Se esta definição estiver desativada, os utilizadores não podem ativar o prox
       Se a política ficar por definir, os utilizadores poderão escolher se a prateleira deverá ser ocultada automaticamente.</translation>
 <translation id="557658534286111200">Ativa ou desativa a edição de marcadores</translation>
 <translation id="5586942249556966598">Não fazer nada</translation>
+<translation id="5613179474872285001">Configura o nome do domínio do cliente obrigatório que é imposto aos clientes de acesso remoto e impede os utilizadores de o alterar.
+
+          Se esta definição estiver ativada, apenas os clientes do domínio especificado podem estabelecer ligação ao anfitrião.
+
+          Se esta definição estiver desativada ou por definir, aplica-se a política predefinida para o tipo de ligação. Para assistência remota, permite que os clientes de qualquer domínio estabeleçam ligação ao anfitrião; para acesso remoto a qualquer momento, apenas o proprietário do anfitrião pode estabelecer ligação.
+
+          Consulte também RemoteAccessHostDomain.</translation>
 <translation id="5630352020869108293">Restaurar a última sessão</translation>
 <translation id="5645779841392247734">Permitir cookies nestes sites</translation>
 <translation id="5677038592630896441">Requer que o nome do utilizador local e do proprietário do anfitrião de acesso remoto coincidam.
@@ -1417,6 +1435,9 @@ Se esta definição estiver desativada, os utilizadores não podem ativar o prox
 
           Se esta política não for definida, o teclado no ecrã é desativado quando o ecrã de início de sessão é apresentado pela primeira vez. Os utilizadores podem ativar ou desativar o teclado no ecrã a qualquer momento e o seu estado no ecrã de início de sessão persiste entre utilizadores.</translation>
 <translation id="6598235178374410284">Imagem do avatar do utilizador</translation>
+<translation id="6628646143828354685">Permite definir se os Websites estão autorizados a obter acesso a dispositivos Bluetooth próximos. É possível bloquear completamente o acesso ou o utilizador pode ser consultado sempre que um Website pretenda obter acesso a dispositivos Bluetooth próximos.
+
+          Se esta política não for definida, é utilizada a definição "3" e o utilizador pode alterá-la.</translation>
 <translation id="6636268606788232221">Configure definições de gestão de energia quando o utilizador fica inativo.
 
           Esta política controla várias definições para a estratégia de gestão de energia quando o utilizador fica inativo.
@@ -1492,6 +1513,7 @@ Se esta definição estiver desativada, os utilizadores não podem ativar o prox
           Se definir esta política, os utilizadores não a podem alterar nem substituir.
 
           Se esta política não for definida, as opções de Acessibilidade não aparecerão no menu do tabuleiro do sistema, mas o utilizador pode fazer com que as opções de Acessibilidade apareçam através da página Definições.</translation>
+<translation id="6766216162565713893">Permitir que os sites solicitem ao utilizador a concessão de acesso a dispositivos Bluetooth próximos</translation>
 <translation id="6770454900105963262">Comunicar informações acerca de sessões ativas do quiosque</translation>
 <translation id="6774533686631353488">Permitir anfitriões de Mensagens nativas de nível de utilizador (instalados sem autorizações de administração).</translation>
 <translation id="6786747875388722282">Extensões</translation>
@@ -1533,6 +1555,13 @@ Se esta definição estiver desativada, os utilizadores não podem ativar o prox
 <translation id="6943577887654905793">Nome de preferência do Mac/Linux</translation>
 <translation id="69525503251220566">Parâmetro que fornece a funcionalidade de pesquisa por imagem ao fornecedor de pesquisas predefinido</translation>
 <translation id="6956272732789158625">Não permitir que os sites utilizem a geração de chaves</translation>
+<translation id="695891079107014261">Configura o nome do domínio do anfitrião obrigatório que é imposto aos anfitriões de acesso remoto e impede os utilizadores de o alterar.
+
+          Se esta definição estiver ativada, apenas é possível partilhar os anfitriões através de contas registadas no nome do domínio especificado.
+
+          Se esta definição estiver desativada ou por definir, é possível partilhar os anfitriões através de qualquer conta.
+
+          Consulte também RemoteAccessHostClientDomain.</translation>
 <translation id="6997592395211691850">Se são necessárias verificações de OCSP/CRL online para âncoras fidedignas locais</translation>
 <translation id="7003334574344702284">Se esta política estiver ativada, força a importação de palavras-passe guardadas a partir do anterior navegador predefinido e também afeta a caixa de diálogo de importação. Se estiver desativada, as palavras-passe não são importadas. Se não estiver definida, o utilizador poderá ser questionado se pretende importá-las ou a importação poderá ocorrer automaticamente.</translation>
 <translation id="7003746348783715221">Preferências do <ph name="PRODUCT_NAME" /></translation>
@@ -1660,6 +1689,13 @@ Se esta definição estiver desativada, os utilizadores não podem ativar o prox
 <translation id="7340034977315324840">Comunicar períodos de atividade do aparelho</translation>
 <translation id="7381326101471547614">Desativa a utilização do protocolo SPDY em <ph name="PRODUCT_NAME" />. Se esta política estiver ativada, o protocolo SPDY não estará disponível em <ph name="PRODUCT_NAME" />. A desativação desta política permitirá a utilização do protocolo SPDY. Se esta política não for definida, o protocolo SPDY estará disponível.</translation>
 <translation id="7384999953864505698">Permite o protocolo QUIC</translation>
+<translation id="7406651467768226499">Permitir ou não que a aplicação de quiosque de início automático com atraso zero controle a versão do <ph name="PRODUCT_OS_NAME" />.
+
+      Esta política controla se a aplicação de quiosque de início automático com atraso zero tem autorização para controlar a versão do <ph name="PRODUCT_OS_NAME" /> ao declarar uma chave required_platform_version no respetivo manifesto e utilizá-la como o prefixo da versão alvo da atualização automática.
+
+      Se a política estiver definida como verdadeira, o valor da chave do manifesto required_platform_version da aplicação de quiosque de início automático com atraso zero é utilizado como o prefixo da versão alvo da atualização automática.
+
+      Se a política não estiver configurada ou estiver definida como falsa, a chave do manifesto required_platform_version é ignorada e a atualização automática decorre como habitualmente.</translation>
 <translation id="7417972229667085380">Percentagem que determina a escala do atraso de inatividade no modo de apresentação (descontinuado)</translation>
 <translation id="7421483919690710988">Definir o tamanho da cache do disco multimédia em bytes</translation>
 <translation id="7424751532654212117">Lista de exceções à lista de plug-ins desativados</translation>
@@ -1760,6 +1796,7 @@ Se esta definição estiver desativada, os utilizadores não podem ativar o prox
       Se esta política não for definida, o <ph name="PRODUCT_NAME" /> utilizará o valor predefinido de 5000 milissegundos.</translation>
 <translation id="7841880500990419427">Versão TLS mínima como alternativa</translation>
 <translation id="7842869978353666042">Configurar as opções do Google Drive</translation>
+<translation id="7843525027689416831">Especifica os sinalizadores que devem ser aplicados ao <ph name="PRODUCT_NAME" /> quando este inicia. Os sinalizadores especificados são aplicados apenas no ecrã de início de sessão. Os sinalizadores definidos através desta política não se propagam para as sessões de utilizador.</translation>
 <translation id="7848840259379156480">Permite-lhe configurar o processador de HTML predefinido quando é instalado o <ph name="PRODUCT_FRAME_NAME" />. A predefinição é permitir que o navegador anfitrião efetue o pro, mas, se pretender, pode substituir esta predefinição e fazer com que o <ph name="PRODUCT_FRAME_NAME" /> processe as páginas HTML por predefinição.</translation>
 <translation id="7882585827992171421">Esta política está ativa apenas no modo de retalho.
 
@@ -2053,7 +2090,6 @@ Se esta definição estiver desativada, os utilizadores não podem ativar o prox
           O valor da política deve ser especificado em milissegundos. Os valores devem ser inferiores ao atraso de inatividade.</translation>
 <translation id="891435090623616439">codificado como uma string JSON; para mais detalhes, consulte <ph name="COMPLEX_POLICIES_URL" /></translation>
 <translation id="8947415621777543415">Comunicar localização do dispositivo</translation>
-<translation id="89493502583189945">Especifica os sinalizadores que devem ser aplicados ao <ph name="PRODUCT_NAME" /> quando este inicia. Os sinalizadores especificados são aplicados antes de o <ph name="PRODUCT_NAME" /> iniciar, mesmo para o ecrã de início de sessão.</translation>
 <translation id="8951350807133946005">Definir o diretório de cache do disco</translation>
 <translation id="8955719471735800169">Voltar ao início</translation>
 <translation id="8960850473856121830">Os padrões nesta lista vão ser comparados com a origem

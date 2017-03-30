@@ -50,7 +50,7 @@ public:
     void setContentFrame(Frame&);
     void clearContentFrame();
 
-    virtual void disconnectContentFrame();
+    void disconnectContentFrame();
 
     // Most subclasses use LayoutPart (either LayoutEmbeddedObject or LayoutIFrame)
     // except for HTMLObjectElement and HTMLEmbedElement which may return any
@@ -79,7 +79,7 @@ public:
     // FrameOwner overrides:
     bool isLocal() const override { return true; }
     void dispatchLoad() override;
-    SandboxFlags sandboxFlags() const override { return m_sandboxFlags; }
+    SandboxFlags getSandboxFlags() const override { return m_sandboxFlags; }
     void renderFallbackContent() override { }
     ScrollbarMode scrollingMode() const override { return ScrollbarAuto; }
     int marginWidth() const override { return -1; }

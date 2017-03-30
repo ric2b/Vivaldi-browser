@@ -38,7 +38,7 @@ SimplifyMarkupCommand::SimplifyMarkupCommand(Document& document, Node* firstNode
 {
 }
 
-void SimplifyMarkupCommand::doApply()
+void SimplifyMarkupCommand::doApply(EditingState* editingState)
 {
     ContainerNode* rootNode = m_firstNode->parentNode();
     WillBeHeapVector<RefPtrWillBeMember<ContainerNode>> nodesToRemove;
@@ -88,15 +88,19 @@ void SimplifyMarkupCommand::doApply()
     // we perform all the DOM mutations at once.
     for (size_t i = 0; i < nodesToRemove.size(); ++i) {
         // FIXME: We can do better by directly moving children from nodesToRemove[i].
-        int numPrunedAncestors = pruneSubsequentAncestorsToRemove(nodesToRemove, i);
+        int numPrunedAncestors = pruneSubsequentAncestorsToRemove(nodesToRemove, i, editingState);
+        if (editingState->isAborted())
+            return;
         if (numPrunedAncestors < 0)
             continue;
-        removeNodePreservingChildren(nodesToRemove[i], AssumeContentIsAlwaysEditable);
+        removeNodePreservingChildren(nodesToRemove[i], editingState, AssumeContentIsAlwaysEditable);
+        if (editingState->isAborted())
+            return;
         i += numPrunedAncestors;
     }
 }
 
-int SimplifyMarkupCommand::pruneSubsequentAncestorsToRemove(WillBeHeapVector<RefPtrWillBeMember<ContainerNode>>& nodesToRemove, size_t startNodeIndex)
+int SimplifyMarkupCommand::pruneSubsequentAncestorsToRemove(WillBeHeapVector<RefPtrWillBeMember<ContainerNode>>& nodesToRemove, size_t startNodeIndex, EditingState* editingState)
 {
     size_t pastLastNodeToRemove = startNodeIndex + 1;
     for (; pastLastNodeToRemove < nodesToRemove.size(); ++pastLastNodeToRemove) {
@@ -113,9 +117,15 @@ int SimplifyMarkupCommand::pruneSubsequentAncestorsToRemove(WillBeHeapVector<Ref
     if (pastLastNodeToRemove == startNodeIndex + 1)
         return 0;
 
-    removeNode(nodesToRemove[startNodeIndex], AssumeContentIsAlwaysEditable);
-    insertNodeBefore(nodesToRemove[startNodeIndex], highestAncestorToRemove, AssumeContentIsAlwaysEditable);
-    removeNode(highestAncestorToRemove, AssumeContentIsAlwaysEditable);
+    removeNode(nodesToRemove[startNodeIndex], editingState, AssumeContentIsAlwaysEditable);
+    if (editingState->isAborted())
+        return -1;
+    insertNodeBefore(nodesToRemove[startNodeIndex], highestAncestorToRemove, editingState, AssumeContentIsAlwaysEditable);
+    if (editingState->isAborted())
+        return -1;
+    removeNode(highestAncestorToRemove, editingState, AssumeContentIsAlwaysEditable);
+    if (editingState->isAborted())
+        return -1;
 
     return pastLastNodeToRemove - startNodeIndex - 1;
 }

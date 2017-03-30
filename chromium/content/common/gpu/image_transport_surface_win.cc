@@ -26,7 +26,8 @@ namespace content {
 scoped_refptr<gfx::GLSurface> ImageTransportSurface::CreateNativeSurface(
     GpuChannelManager* manager,
     GpuCommandBufferStub* stub,
-    const gfx::GLSurfaceHandle& handle) {
+    const gfx::GLSurfaceHandle& handle,
+    gfx::GLSurface::Format format) {
   DCHECK(handle.handle);
   DCHECK_EQ(handle.transport_type, gfx::NATIVE_DIRECT);
 
@@ -44,6 +45,8 @@ scoped_refptr<gfx::GLSurface> ImageTransportSurface::CreateNativeSurface(
       return nullptr;
   } else {
     surface = gfx::GLSurface::CreateViewGLSurface(handle.handle);
+    if (!surface)
+      return nullptr;
   }
 
   return scoped_refptr<gfx::GLSurface>(new PassThroughImageTransportSurface(

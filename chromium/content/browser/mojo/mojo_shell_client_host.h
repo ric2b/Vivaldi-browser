@@ -9,7 +9,6 @@
 
 #include "base/process/process_handle.h"
 #include "mojo/shell/public/interfaces/shell.mojom.h"
-#include "third_party/mojo/src/mojo/edk/embedder/scoped_platform_handle.h"
 
 namespace content {
 
@@ -17,9 +16,10 @@ class RenderProcessHost;
 
 // Creates a communication channel between the external Mojo shell and the
 // child. The server handle of this channel is shared with the external shell
-// via Mojo IPC. |child_process_id| is used to uniquify the child in the
-// external shell's instance map.
+// via Mojo IPC. |child_process_id| and |instance_id| are used to uniquify the
+// child in the external shell's instance map.
 void RegisterChildWithExternalShell(int child_process_id,
+                                    int instance_id,
                                     RenderProcessHost* render_process_host);
 
 // Returns the URL associated with an instance corresponding to the renderer
@@ -37,11 +37,7 @@ void SendExternalMojoShellHandleToChild(base::ProcessHandle process_handle,
 // and interfaces the renderer can see. The implementation lives in
 // renderer_capability_filter.cc so that it can be subject to specific security
 // review.
-mojo::CapabilityFilterPtr CreateCapabilityFilterForRenderer();
-
-// Used for the broker in the new EDK.
-mojo::embedder::ScopedPlatformHandle RegisterProcessWithBroker(
-    base::ProcessId pid);
+mojo::shell::mojom::CapabilityFilterPtr CreateCapabilityFilterForRenderer();
 
 }  // namespace content
 

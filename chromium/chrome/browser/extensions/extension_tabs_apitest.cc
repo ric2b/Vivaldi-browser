@@ -4,7 +4,6 @@
 
 #include "chrome/browser/extensions/extension_apitest.h"
 
-#include "base/prefs/pref_service.h"
 #include "build/build_config.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
@@ -13,6 +12,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "components/prefs/pref_service.h"
 #include "net/dns/mock_host_resolver.h"
 
 #if defined(OS_WIN)
@@ -87,7 +87,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, TabSize) {
 }
 
 // Flaky on linux: http://crbug.com/396364
-#if defined(OS_LINUX)
+// Flaky on Mac: https://crbug.com/588827
+#if defined(OS_LINUX) || defined(OS_MACOSX)
 #define MAYBE_TabUpdate DISABLED_TabUpdate
 #else
 #define MAYBE_TabUpdate TabUpdate
@@ -231,6 +232,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, TabsNoPermissions) {
   host_resolver()->AddRule("a.com", "127.0.0.1");
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("tabs/no_permissions")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest, HostPermission) {
+  host_resolver()->AddRule("a.com", "127.0.0.1");
+  ASSERT_TRUE(StartEmbeddedTestServer());
+
+  ASSERT_TRUE(RunExtensionTest("tabs/host_permission")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionApiTest, UpdateWindowResize) {

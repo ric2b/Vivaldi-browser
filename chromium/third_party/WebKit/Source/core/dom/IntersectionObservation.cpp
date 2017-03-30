@@ -8,6 +8,7 @@
 #include "core/dom/IntersectionObserver.h"
 #include "core/frame/FrameView.h"
 #include "core/layout/LayoutBox.h"
+#include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutText.h"
 #include "core/layout/LayoutView.h"
 #include "core/paint/PaintLayer.h"
@@ -17,7 +18,6 @@ namespace blink {
 IntersectionObservation::IntersectionObservation(IntersectionObserver& observer, Element& target, bool shouldReportRootBounds)
     : m_observer(observer)
     , m_target(target.ensureIntersectionObserverData().createWeakPtr(&target))
-    , m_active(true)
     , m_shouldReportRootBounds(shouldReportRootBounds)
     , m_lastThresholdIndex(0)
 {
@@ -36,6 +36,10 @@ void IntersectionObservation::initializeGeometry(IntersectionGeometry& geometry)
         geometry.targetRect = toLayoutBoxModelObject(targetLayoutObject)->visualOverflowRect();
     else
         geometry.targetRect = toLayoutText(targetLayoutObject)->visualOverflowRect();
+    if (!geometry.targetRect.size().width())
+        geometry.targetRect.setWidth(LayoutUnit(1));
+    if (!geometry.targetRect.size().height())
+        geometry.targetRect.setHeight(LayoutUnit(1));
     geometry.intersectionRect = geometry.targetRect;
 }
 
@@ -59,7 +63,7 @@ void IntersectionObservation::clipToRoot(LayoutRect& rect)
 
 void IntersectionObservation::clipToFrameView(IntersectionGeometry& geometry)
 {
-    Node* rootNode = m_observer->root();
+    Node* rootNode = m_observer->rootNode();
     LayoutObject* rootLayoutObject = m_observer->rootLayoutObject();
     if (rootLayoutObject->isLayoutView()) {
         geometry.rootRect = LayoutRect(toLayoutView(rootLayoutObject)->frameView()->visibleContentRect());
@@ -84,14 +88,43 @@ static void mapRectToDocumentCoordinates(LayoutObject& layoutObject, LayoutRect&
     rect = LayoutRect(layoutObject.localToAbsoluteQuad(FloatQuad(FloatRect(rect)), UseTransforms | ApplyContainerFlip | TraverseDocumentBoundaries).boundingBox());
 }
 
+static bool isContainingBlockChainDescendant(LayoutObject* descendant, LayoutObject* ancestor)
+{
+    LocalFrame* ancestorFrame = ancestor->document().frame();
+    LocalFrame* descendantFrame = descendant->document().frame();
+
+    if (ancestor->isLayoutView())
+        return descendantFrame && descendantFrame->tree().top() == ancestorFrame;
+
+    if (ancestorFrame != descendantFrame)
+        return false;
+
+    while (descendant && descendant != ancestor)
+        descendant = descendant->containingBlock();
+    return descendant;
+}
+
 bool IntersectionObservation::computeGeometry(IntersectionGeometry& geometry)
 {
-    ASSERT(m_target);
+    // Pre-oilpan, there will be a delay between the time when the target Element gets deleted
+    // (because its ref count dropped to zero) and when this IntersectionObservation gets
+    // deleted (during the next gc run, because the target Element is the only thing keeping
+    // the IntersectionObservation alive).  During that interval, we need to check that m_target
+    // hasn't been cleared.
+    Element* targetElement = target();
+    if (!targetElement || !targetElement->inDocument())
+        return false;
+    LayoutObject* targetLayoutObject = targetElement->layoutObject();
+    ASSERT(m_observer);
     LayoutObject* rootLayoutObject = m_observer->rootLayoutObject();
-    LayoutObject* targetLayoutObject = target()->layoutObject();
-    if (!rootLayoutObject->isBoxModelObject())
+    // TODO(szager): Support SVG
+    if (!targetLayoutObject)
         return false;
     if (!targetLayoutObject->isBoxModelObject() && !targetLayoutObject->isText())
+        return false;
+    if (!rootLayoutObject || !rootLayoutObject->isBoxModelObject())
+        return false;
+    if (!isContainingBlockChainDescendant(targetLayoutObject, rootLayoutObject))
         return false;
 
     // Initialize targetRect and intersectionRect to bounds of target, in target's coordinate space.
@@ -116,27 +149,12 @@ bool IntersectionObservation::computeGeometry(IntersectionGeometry& geometry)
 
     if (geometry.intersectionRect.size().isZero())
         geometry.intersectionRect = LayoutRect();
-    if (!m_shouldReportRootBounds)
-        geometry.rootRect = LayoutRect();
 
     return true;
 }
 
-void IntersectionObservation::computeIntersectionObservations(double timestamp)
+void IntersectionObservation::computeIntersectionObservations(DOMHighResTimeStamp timestamp)
 {
-    // Pre-oilpan, there will be a delay between the time when the target Element gets deleted
-    // (because its ref count dropped to zero) and when this IntersectionObservation gets
-    // deleted (during the next gc run, because the target Element is the only thing keeping
-    // the IntersectionObservation alive).  During that interval, we need to check that m_target
-    // hasn't been cleared.
-    Element* targetElement = target();
-    if (!targetElement || !isActive())
-        return;
-    LayoutObject* targetLayoutObject = targetElement->layoutObject();
-    // TODO(szager): Support SVG
-    if (!targetLayoutObject || (!targetLayoutObject->isBox() && !targetLayoutObject->isInline()))
-        return;
-
     IntersectionGeometry geometry;
     if (!computeGeometry(geometry))
         return;
@@ -147,13 +165,15 @@ void IntersectionObservation::computeIntersectionObservations(double timestamp)
         return;
     float newVisibleRatio = intersectionArea / targetArea;
     unsigned newThresholdIndex = observer().firstThresholdGreaterThan(newVisibleRatio);
+    IntRect snappedRootBounds = pixelSnappedIntRect(geometry.rootRect);
+    IntRect* rootBoundsPointer = m_shouldReportRootBounds ? &snappedRootBounds : nullptr;
     if (m_lastThresholdIndex != newThresholdIndex) {
         IntersectionObserverEntry* newEntry = new IntersectionObserverEntry(
-            timestamp / 1000.0,
+            timestamp,
             pixelSnappedIntRect(geometry.targetRect),
-            pixelSnappedIntRect(geometry.rootRect),
+            rootBoundsPointer,
             pixelSnappedIntRect(geometry.intersectionRect),
-            targetElement);
+            target());
         observer().enqueueIntersectionObserverEntry(*newEntry);
     }
     setLastThresholdIndex(newThresholdIndex);
@@ -161,9 +181,15 @@ void IntersectionObservation::computeIntersectionObservations(double timestamp)
 
 void IntersectionObservation::disconnect()
 {
+    IntersectionObserver* observer = m_observer;
+    clearRootAndRemoveFromTarget();
+    observer->removeObservation(*this);
+}
+
+void IntersectionObservation::clearRootAndRemoveFromTarget()
+{
     if (m_target)
-        target()->ensureIntersectionObserverData().removeObservation(this->observer());
-    m_observer->removeObservation(*this);
+        target()->ensureIntersectionObserverData().removeObservation(observer());
     m_observer.clear();
 }
 

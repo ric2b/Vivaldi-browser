@@ -15,7 +15,6 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/scoped_vector.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -33,6 +32,7 @@
 #include "chrome/common/spellcheck_common.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/prefs/pref_service.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "content/public/browser/user_metrics.h"
@@ -80,8 +80,6 @@ void LanguageOptionsHandlerCommon::GetLocalizedValues(
       IDS_OPTIONS_SETTINGS_USE_THIS_FOR_SPELL_CHECKING },
     { "cannotBeUsedForSpellChecking",
       IDS_OPTIONS_SETTINGS_CANNOT_BE_USED_FOR_SPELL_CHECKING },
-    { "isUsedForSpellChecking",
-      IDS_OPTIONS_SETTINGS_IS_USED_FOR_SPELL_CHECKING },
     { "enableSpellCheck", IDS_OPTIONS_ENABLE_SPELLCHECK },
     { "downloadingDictionary", IDS_OPTIONS_DICTIONARY_DOWNLOADING },
     { "downloadFailed", IDS_OPTIONS_DICTIONARY_DOWNLOAD_FAILED },
@@ -126,10 +124,6 @@ void LanguageOptionsHandlerCommon::GetLocalizedValues(
   localized_strings->Set("spellCheckLanguageCodeSet",
                          GetSpellCheckLanguageCodeSet());
   localized_strings->Set("uiLanguageCodeSet", GetUILanguageCodeSet());
-
-  localized_strings->SetBoolean(
-      "enableMultilingualSpellChecker",
-      chrome::spellcheck_common::IsMultilingualSpellcheckEnabled());
 
   Profile* profile = Profile::FromWebUI(web_ui());
   PrefService* prefs = profile->GetPrefs();

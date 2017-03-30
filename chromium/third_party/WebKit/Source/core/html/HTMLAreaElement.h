@@ -59,12 +59,12 @@ private:
     void updateFocusAppearance(SelectionBehaviorOnFocus) override;
     void setFocus(bool) override;
 
-    enum Shape { Default, Poly, Rect, Circle, Unknown };
+    enum Shape { Default, Poly, Rect, Circle };
     Path getRegion(const LayoutSize&) const;
     void invalidateCachedRegion();
 
     OwnPtr<Path> m_region;
-    Vector<Length> m_coords;
+    Vector<double> m_coords;
     LayoutSize m_lastSize;
     Shape m_shape;
 };

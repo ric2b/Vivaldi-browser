@@ -33,18 +33,92 @@ SKIP = {
   'non_filter_builders', 'non_filter_tests_builders',
 
   # These are not supported on Swarming yet.
-  # http://crbug.com/472205
-  'Chromium Mac 10.10',
+
+  # Android Cloud is still experimental and involves spinning up an Android
+  # instance on GCE.  Swarming doesn't work in that environment yet.
+  'Android Cloud Tests',
+
+  # Recipes don't promise execution on jelly bean.  This could work if the
+  # OS dimensions go into the recipe, they're set in the json file, and
+  # jelly bean devices are in the pool.  For now, just blacklist.
+  'Jelly Bean Tester',
+  'KitKat Tablet Tester',
+  'Lollipop Consumer Tester',
+  'Lollipop Low-end Tester',
+  'Lollipop Phone Tester',
+  'Lollipop Tablet Tester',
+  'Marshmallow 64 bit Tester',
+  'Marshmallow Tablet Tester',
+
+  # Android bots need custom dimension_sets entries for swarming, and capacity
+  # is not there yet -- so don't let manage.py add swarming automatically there.
+  'Android User Builder Tests',
+  'Android GN',
+  'Android Tests',
+  'Android Tests (dbg)',
+
   # http://crbug.com/441429
   'Linux Trusty (32)', 'Linux Trusty (dbg)(32)',
 
-  # http://crbug.com/480053
-  'Linux GN',
-  'Linux GN (dbg)',
+  # swarming may not work on Mac10.10 and 10.11, need to
+  # re-investigate and confirm
+  'WebKit Mac10.10',
+  'WebKit Mac10.11',
+  'WebKit Mac10.11 (dbg)',
+  'WebKit Mac10.11 (retina)',
+  'Chromium Mac10.10 Tests',
+  'Chromium Mac10.11 Tests',
+  'Mac GN',
+  'Mac GN (dbg)',
 
-  # Unmaintained builders on chromium.fyi
-  'ClangToTMac',
-  'ClangToTMacASan',
+  # The memory.fyi waterfall is in the process of being converted to recipes,
+  # and swarming doesn't work yet.
+  'Chromium Mac (valgrind)(1)',
+  'Chromium Mac (valgrind)(2)',
+  'Chromium OS (valgrind)(1)',
+  'Chromium OS (valgrind)(2)',
+  'Chromium OS (valgrind)(3)',
+  'Chromium OS (valgrind)(4)',
+  'Chromium OS (valgrind)(5)',
+  'Chromium OS (valgrind)(6)',
+  'Linux Tests (valgrind)(1)',
+  'Linux Tests (valgrind)(2)',
+  'Linux Tests (valgrind)(3)',
+  'Linux Tests (valgrind)(4)',
+  'Linux Tests (valgrind)(5)',
+  'Windows Browser (DrMemory full) (1)',
+  'Windows Browser (DrMemory full) (2)',
+  'Windows Browser (DrMemory full) (3)',
+  'Windows Browser (DrMemory full) (4)',
+  'Windows Browser (DrMemory full) (5)',
+  'Windows Browser (DrMemory full) (6)',
+  'Windows Browser (DrMemory full) (7)',
+  'Windows Browser (DrMemory full) (8)',
+  'Windows Browser (DrMemory full) (9)',
+  'Windows Browser (DrMemory full) (10)',
+  'Windows Browser (DrMemory full) (11)',
+  'Windows Browser (DrMemory full) (12)',
+  'Windows Content Browser (DrMemory)',
+  'Windows Content Browser (DrMemory full) (1)',
+  'Windows Content Browser (DrMemory full) (2)',
+  'Windows Content Browser (DrMemory full) (3)',
+  'Windows Content Browser (DrMemory full) (4)',
+  'Windows Content Browser (DrMemory full) (5)',
+  'Windows Content Browser (DrMemory full) (6)',
+  'Windows Unit (DrMemory full) (1)',
+  'Windows Unit (DrMemory full) (2)',
+  'Windows Unit (DrMemory full) (3)',
+  'Windows Unit (DrMemory full) (4)',
+  'Windows Unit (DrMemory full) (5)',
+  'Windows Unit (DrMemory full) (6)',
+  'Windows Unit (DrMemory full) (7)',
+  'Windows Unit (DrMemory full) (8)',
+  'Windows Unit (DrMemory full) (9)',
+  'Windows Unit (DrMemory full) (10)',
+  'Windows Unit (DrMemory full) (11)',
+  'Windows Unit (DrMemory full) (12)',
+  'Windows Unit (DrMemory x64)',
+  'Windows Unit (DrMemory)',
 
   # This builder is fine, but win8_chromium_ng uses GN and this configuration,
   # which breaks everything.
@@ -60,6 +134,8 @@ SKIP = {
 SKIP_GN_ISOLATE_MAP_TARGETS = {
   # TODO(GYP): These targets have not been ported to GN yet.
   'android_webview_unittests',
+  'angle_deqp_gles2_tests',
+  'angle_deqp_gles3_tests',
   'cast_media_unittests',
   'cast_shell_browser_test',
   'chromevox_tests',
@@ -67,6 +143,7 @@ SKIP_GN_ISOLATE_MAP_TARGETS = {
 
   # These targets are run on the bots but not listed in the
   # buildbot JSON files.
+  # TODO(kbr): remove these before closing http://crbug.com/542370 .
   'angle_end2end_tests',
   'content_gl_tests',
   'gl_tests',

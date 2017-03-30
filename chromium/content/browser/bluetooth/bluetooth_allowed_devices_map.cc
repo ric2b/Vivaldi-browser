@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
+#include "content/browser/bluetooth/bluetooth_blacklist.h"
 #include "content/common/bluetooth/bluetooth_scan_filter.h"
 #include "crypto/random.h"
 #include "device/bluetooth/bluetooth_uuid.h"
@@ -55,18 +56,28 @@ const std::string& BluetoothAllowedDevicesMap::AddDevice(
   // https://w3c.github.io/webappsec-secure-contexts/
   CHECK(!origin.unique());
 
-  if (ContainsKey(origin_to_device_address_to_id_map_[origin],
-                  device_address)) {
+  auto device_address_to_id_map = origin_to_device_address_to_id_map_[origin];
+  auto id_iter = device_address_to_id_map.find(device_address);
+  if (id_iter != device_address_to_id_map.end()) {
     VLOG(1) << "Device already in map of allowed devices.";
+    const auto& device_id = id_iter->second;
+
+    AddUnionOfServicesTo(
+        filters, optional_services,
+        &origin_to_device_id_to_services_map_[origin][device_id]);
+
     return origin_to_device_address_to_id_map_[origin][device_address];
   }
-  const std::string device_id = GenerateDeviceId(origin);
+  const std::string device_id = GenerateDeviceId();
   VLOG(1) << "Id generated for device: " << device_id;
 
   origin_to_device_address_to_id_map_[origin][device_address] = device_id;
   origin_to_device_id_to_address_map_[origin][device_id] = device_address;
-  origin_to_device_id_to_services_map_[origin][device_id] =
-      UnionOfServices(filters, optional_services);
+  AddUnionOfServicesTo(
+      filters, optional_services,
+      &origin_to_device_id_to_services_map_[origin][device_id]);
+
+  CHECK(device_id_set_.insert(device_id).second);
 
   return origin_to_device_address_to_id_map_[origin][device_address];
 }
@@ -88,6 +99,9 @@ void BluetoothAllowedDevicesMap::RemoveDevice(
     CHECK(origin_to_device_id_to_address_map_.erase(origin));
     CHECK(origin_to_device_id_to_services_map_.erase(origin));
   }
+
+  // 3. Remove from set of ids.
+  CHECK(device_id_set_.erase(device_id));
 }
 
 const std::string& BluetoothAllowedDevicesMap::GetDeviceId(
@@ -123,33 +137,48 @@ const std::string& BluetoothAllowedDevicesMap::GetDeviceAddress(
                                                    : id_iter->second;
 }
 
-std::string BluetoothAllowedDevicesMap::GenerateDeviceId(
-    const url::Origin& origin) {
-  std::string device_id = GetBase64Id();
-  auto id_map_iter = origin_to_device_id_to_address_map_.find(origin);
-  if (id_map_iter == origin_to_device_id_to_address_map_.end()) {
-    return device_id;
+bool BluetoothAllowedDevicesMap::IsOriginAllowedToAccessService(
+    const url::Origin& origin,
+    const std::string& device_id,
+    const std::string& service_uuid) const {
+  if (BluetoothBlacklist::Get().IsExcluded(BluetoothUUID(service_uuid)))
+    return false;
+
+  auto id_map_iter = origin_to_device_id_to_services_map_.find(origin);
+  if (id_map_iter == origin_to_device_id_to_services_map_.end()) {
+    return false;
   }
-  while (ContainsKey(id_map_iter->second, device_id)) {
+
+  const auto& device_id_to_services_map = id_map_iter->second;
+
+  auto id_iter = device_id_to_services_map.find(device_id);
+
+  return id_iter == device_id_to_services_map.end()
+             ? false
+             : ContainsKey(id_iter->second, service_uuid);
+}
+
+std::string BluetoothAllowedDevicesMap::GenerateDeviceId() {
+  std::string device_id = GetBase64Id();
+  while (ContainsKey(device_id_set_, device_id)) {
     LOG(WARNING) << "Generated repeated id.";
     device_id = GetBase64Id();
   }
   return device_id;
 }
 
-std::set<std::string> BluetoothAllowedDevicesMap::UnionOfServices(
+void BluetoothAllowedDevicesMap::AddUnionOfServicesTo(
     const std::vector<BluetoothScanFilter>& filters,
-    const std::vector<BluetoothUUID>& optional_services) {
-  std::set<std::string> unionOfServices;
+    const std::vector<device::BluetoothUUID>& optional_services,
+    std::set<std::string>* unionOfServices) {
   for (const auto& filter : filters) {
     for (const BluetoothUUID& uuid : filter.services) {
-      unionOfServices.insert(uuid.canonical_value());
+      unionOfServices->insert(uuid.canonical_value());
     }
   }
   for (const BluetoothUUID& uuid : optional_services) {
-    unionOfServices.insert(uuid.canonical_value());
+    unionOfServices->insert(uuid.canonical_value());
   }
-  return unionOfServices;
 }
 
 }  // namespace content

@@ -74,8 +74,10 @@ ProxyImpl::ProxyImpl(ChannelImpl* channel_impl,
       layer_tree_host->settings().ToSchedulerSettings());
 
   scoped_ptr<CompositorTimingHistory> compositor_timing_history(
-      new CompositorTimingHistory(CompositorTimingHistory::RENDERER_UMA,
-                                  rendering_stats_instrumentation_));
+      new CompositorTimingHistory(
+          scheduler_settings.using_synchronous_renderer_compositor,
+          CompositorTimingHistory::RENDERER_UMA,
+          rendering_stats_instrumentation_));
 
   scheduler_ = Scheduler::Create(this, scheduler_settings, layer_tree_host_id_,
                                  task_runner_provider_->ImplThreadTaskRunner(),
@@ -410,14 +412,6 @@ void ProxyImpl::RenewTreePriority() {
           : ScrollHandlerState::SCROLL_DOES_NOT_AFFECT_SCROLL_HANDLER;
   scheduler_->SetTreePrioritiesAndScrollState(tree_priority,
                                               scroll_handler_state);
-
-  // Notify the the client of this compositor via the output surface.
-  // TODO(epenner): Route this to compositor-thread instead of output-surface
-  // after GTFO refactor of compositor-thread (http://crbug/170828).
-  if (layer_tree_host_impl_->output_surface()) {
-    layer_tree_host_impl_->output_surface()->UpdateSmoothnessTakesPriority(
-        tree_priority == SMOOTHNESS_TAKES_PRIORITY);
-  }
 }
 
 void ProxyImpl::PostDelayedAnimationTaskOnImplThread(const base::Closure& task,

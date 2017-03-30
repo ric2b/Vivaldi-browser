@@ -35,7 +35,6 @@ struct CookieStoreIOSTestTraits {
     return store;
   }
 
-  static const bool is_cookie_monster = false;
   static const bool supports_http_only = false;
   static const bool supports_non_dotted_domains = false;
   static const bool preserves_trailing_dots = false;
@@ -87,6 +86,27 @@ class RoundTripTestCookieStore : public net::CookieStore {
     store_->SetCookieWithOptionsAsync(url, cookie_line, options, callback);
   }
 
+  void SetCookieWithDetailsAsync(const GURL& url,
+                                 const std::string& name,
+                                 const std::string& value,
+                                 const std::string& domain,
+                                 const std::string& path,
+                                 base::Time creation_time,
+                                 base::Time expiration_time,
+                                 base::Time last_access_time,
+                                 bool secure,
+                                 bool http_only,
+                                 bool same_site,
+                                 bool enforce_strict_secure,
+                                 CookiePriority priority,
+                                 const SetCookiesCallback& callback) override {
+    RoundTrip();
+    store_->SetCookieWithDetailsAsync(
+        url, name, value, domain, path, creation_time, expiration_time,
+        last_access_time, secure, http_only, same_site, enforce_strict_secure,
+        priority, callback);
+  }
+
   void GetCookiesWithOptionsAsync(const GURL& url,
                                   const net::CookieOptions& options,
                                   const GetCookiesCallback& callback) override {
@@ -94,11 +114,17 @@ class RoundTripTestCookieStore : public net::CookieStore {
     store_->GetCookiesWithOptionsAsync(url, options, callback);
   }
 
-  void GetAllCookiesForURLAsync(
+  void GetCookieListWithOptionsAsync(
       const GURL& url,
+      const net::CookieOptions& options,
       const GetCookieListCallback& callback) override {
     RoundTrip();
-    store_->GetAllCookiesForURLAsync(url, callback);
+    store_->GetCookieListWithOptionsAsync(url, options, callback);
+  }
+
+  void GetAllCookiesAsync(const GetCookieListCallback& callback) override {
+    RoundTrip();
+    store_->GetAllCookiesAsync(callback);
   }
 
   void DeleteCookieAsync(const GURL& url,
@@ -108,7 +134,12 @@ class RoundTripTestCookieStore : public net::CookieStore {
     store_->DeleteCookieAsync(url, cookie_name, callback);
   }
 
-  net::CookieMonster* GetCookieMonster() override { return nullptr; }
+  void DeleteCanonicalCookieAsync(
+      const CanonicalCookie& cookie,
+      const DeleteCallback& callback) override {
+    RoundTrip();
+    store_->DeleteCanonicalCookieAsync(cookie, callback);
+  }
 
   void DeleteAllCreatedBetweenAsync(const base::Time& delete_begin,
                                     const base::Time& delete_end,
@@ -130,6 +161,11 @@ class RoundTripTestCookieStore : public net::CookieStore {
   void DeleteSessionCookiesAsync(const DeleteCallback& callback) override {
     RoundTrip();
     store_->DeleteSessionCookiesAsync(callback);
+  }
+
+  void FlushStore(const base::Closure& callback) override {
+    RoundTrip();
+    store_->FlushStore(callback);
   }
 
   scoped_ptr<CookieStore::CookieChangedSubscription> AddCallbackForCookie(
@@ -208,8 +244,11 @@ class TestPersistentCookieStore
     std::vector<net::CanonicalCookie*> cookies;
     net::CookieOptions options;
     options.set_include_httponly();
-    cookies.push_back(net::CanonicalCookie::Create(kTestCookieURL, "a=b",
-                                                   base::Time::Now(), options));
+
+    scoped_ptr<net::CanonicalCookie> cookie(net::CanonicalCookie::Create(
+        kTestCookieURL, "a=b", base::Time::Now(), options));
+    cookies.push_back(cookie.release());
+
     // Some canonical cookies cannot be converted into System cookies, for
     // example if value is not valid utf8. Such cookies are ignored.
     net::CanonicalCookie* bad_canonical_cookie = new net::CanonicalCookie(
@@ -220,7 +259,7 @@ class TestPersistentCookieStore
         base::Time(),  // last_access
         false,         // secure
         false,         // httponly
-        false,         // first_party_only
+        false,         // same_site
         net::COOKIE_PRIORITY_DEFAULT);
     cookies.push_back(bad_canonical_cookie);
     loaded_callback_.Run(cookies);
@@ -504,7 +543,7 @@ TEST(CookieStoreIOS, GetAllCookiesForURLAsync) {
       [NSHTTPCookieStorage sharedHTTPCookieStorage];
   EXPECT_EQ(0u, [[system_store cookies] count]);
   // Flushing should not have any effect.
-  cookie_store->Flush(base::Closure());
+  cookie_store->FlushStore(base::Closure());
   // Check we can get the cookie even though cookies are disabled.
   GetAllCookiesCallback callback;
   cookie_store->GetAllCookiesForURLAsync(
@@ -714,7 +753,7 @@ TEST_F(CookieStoreIOSWithBackend, ManualFlush) {
   EXPECT_FALSE(backend_->flushed());
 
   // The store should be flushed even if it is not dirty.
-  store_->Flush(base::Closure());
+  store_->FlushStore(base::Closure());
   EXPECT_TRUE(backend_->flushed());
 
   store_->UnSynchronize();

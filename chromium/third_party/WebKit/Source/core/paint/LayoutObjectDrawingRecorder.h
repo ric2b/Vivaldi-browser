@@ -57,6 +57,8 @@ public:
     LayoutObjectDrawingRecorder(GraphicsContext& context, const LayoutObject& layoutObject, PaintPhase phase, const IntRect& clip, const LayoutPoint& paintOffset)
         : LayoutObjectDrawingRecorder(context, layoutObject, DisplayItem::paintPhaseToDrawingType(phase), FloatRect(clip), paintOffset) { }
 
+    void setKnownToBeOpaque() { ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled()); m_drawingRecorder->setKnownToBeOpaque(); }
+
 #if ENABLE(ASSERT)
     void setUnderInvalidationCheckingMode(DrawingDisplayItem::UnderInvalidationCheckingMode mode) { m_drawingRecorder->setUnderInvalidationCheckingMode(mode); }
 #endif
@@ -72,7 +74,7 @@ private:
         else
             ASSERT(!paintController.paintOffsetWasInvalidated(layoutObject) || !paintController.clientCacheIsValid(layoutObject));
 
-        layoutObject.mutableForPainting().setPreviousPaintOffset(paintOffset);
+        layoutObject.getMutableForPainting().setPreviousPaintOffset(paintOffset);
     }
 
     Optional<DisplayItemCacheSkipper> m_cacheSkipper;

@@ -11,7 +11,6 @@
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "chrome/browser/ui/views/tab_icon_view_model.h"
-#include "ui/views/controls/button/button.h"
 
 class TabIconView;
 class WebAppLeftHeaderView;
@@ -30,11 +29,8 @@ class ToggleImageButton;
 
 class BrowserNonClientFrameViewAsh : public BrowserNonClientFrameView,
                                      public ash::ShellObserver,
-                                     public TabIconViewModel,
-                                     public views::ButtonListener {
+                                     public TabIconViewModel {
  public:
-  static const char kViewClassName[];
-
   BrowserNonClientFrameViewAsh(BrowserFrame* frame, BrowserView* browser_view);
   ~BrowserNonClientFrameViewAsh() override;
 
@@ -75,12 +71,9 @@ class BrowserNonClientFrameViewAsh : public BrowserNonClientFrameView,
   bool ShouldTabIconViewAnimate() const override;
   gfx::ImageSkia GetFaviconForTabIconView() override;
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
  protected:
   // BrowserNonClientFrameView:
-  void UpdateNewAvatarButtonImpl() override;
+  void UpdateAvatar() override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(BrowserNonClientFrameViewAshTest, WindowHeader);
@@ -121,23 +114,12 @@ class BrowserNonClientFrameViewAsh : public BrowserNonClientFrameView,
 
   // Layout the avatar button.
   void LayoutAvatar();
-#if defined(FRAME_AVATAR_BUTTON)
-  void LayoutNewStyleAvatar();
-#endif
 
   // Returns true if there is anything to paint. Some fullscreen windows do not
   // need their frames painted.
   bool ShouldPaint() const;
 
-  // Paints the header background when the frame is in immersive fullscreen and
-  // tab light bar is visible.
-  void PaintImmersiveLightbarStyleHeader(gfx::Canvas* canvas);
-
   void PaintToolbarBackground(gfx::Canvas* canvas);
-
-  // Draws the line under the header for windows without a toolbar and not using
-  // the packaged app header style.
-  void PaintContentEdge(gfx::Canvas* canvas);
 
   // View which contains the window controls.
   ash::FrameCaptionButtonContainerView* caption_button_container_;

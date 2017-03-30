@@ -4,30 +4,53 @@
 
 import("//build/config/ui.gni")
 import("//mojo/public/mojo_application.gni")
+import("//mojo/public/mojo_application_manifest.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//tools/grit/repack.gni")
 
-mojo_native_application("shell") {
-  output_name = "mash_shell"
-
+source_set("lib") {
   sources = [
-    "main.cc",
     "shell_application_delegate.cc",
     "shell_application_delegate.h",
   ]
 
   deps = [
     "//base",
+    "//mash/shell/public/interfaces",
+    "//mojo/common",
     "//mojo/public/cpp/bindings",
     "//mojo/shell/public/cpp",
     "//mojo/shell/public/cpp:sources",
   ]
 
   data_deps = [
+    "//ash/mus",
     "//mash/browser_driver",
     "//mash/quick_launch",
-    "//mash/shelf",
-    "//mash/wallpaper",
     "//mash/wm",
   ]
+}
+
+mojo_native_application("shell") {
+  output_name = "mash_shell"
+
+  sources = [
+    "main.cc",
+  ]
+
+  deps = [
+    ":lib",
+    ":manifest",
+    "//base",
+    "//mash/shell/public/interfaces",
+    "//mojo/common",
+    "//mojo/public/cpp/bindings",
+    "//mojo/shell/public/cpp",
+    "//mojo/shell/public/cpp:sources",
+  ]
+}
+
+mojo_application_manifest("manifest") {
+  application_name = "mash_shell"
+  source = "manifest.json"
 }

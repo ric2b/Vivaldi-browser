@@ -144,6 +144,8 @@
         <include name="IDR_FIRST_RUN_DIALOG_ICON_96" file="chromeos/first_run/app/icon/96.png" type="BINDATA" />
         <include name="IDR_FIRST_RUN_DIALOG_ICON_128" file="chromeos/first_run/app/icon/128.png" type="BINDATA" />
         <include name="IDR_FIRST_RUN_DIALOG_ICON_256" file="chromeos/first_run/app/icon/256.png" type="BINDATA" />
+        <include name="IDR_ARC_SUPPORT_BACKGROUND_JS" file="chromeos/arc_support/background.js" flattenhtml="true" type="BINDATA" />
+        <include name="IDR_ARC_SUPPORT_MAIN" file="chromeos/arc_support/main.html" allowexternalscript="true" type="BINDATA" />
       </if>
       <if expr="enable_settings_app">
         <include name="IDR_SETTINGS_APP_JS" file="settings_app/settings_app.js" type="BINDATA" />
@@ -205,9 +207,7 @@
       <include name="IDR_CRYPTOTOKEN_GNUBBIES_JS" file="cryptotoken/gnubbies.js" type="BINDATA" />
       <include name="IDR_CRYPTOTOKEN_GNUBBY_JS" file="cryptotoken/gnubby.js" type="BINDATA" />
       <include name="IDR_CRYPTOTOKEN_GNUBBY_U2F_JS" file="cryptotoken/gnubby-u2f.js" type="BINDATA" />
-      <include name="IDR_CRYPTOTOKEN_GNUBBYCODETYPES_JS" file="cryptotoken/gnubbycodetypes.js" type="BINDATA" />
       <include name="IDR_CRYPTOTOKEN_GNUBBYFACTORY_JS" file="cryptotoken/gnubbyfactory.js" type="BINDATA" />
-      <include name="IDR_CRYPTOTOKEN_GNUBBYMSGTYPES_JS" file="cryptotoken/gnubbymsgtypes.js" type="BINDATA" />
       <include name="IDR_CRYPTOTOKEN_USBGNUBBYFACTORY_JS" file="cryptotoken/usbgnubbyfactory.js" type="BINDATA" />
       <include name="IDR_CRYPTOTOKEN_DEVICESTATUSCODES_JS" file="cryptotoken/devicestatuscodes.js" type="BINDATA" />
       <include name="IDR_CRYPTOTOKEN_ENROLLER_JS" file="cryptotoken/enroller.js" type="BINDATA" />

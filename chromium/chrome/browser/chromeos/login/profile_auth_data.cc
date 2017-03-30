@@ -17,7 +17,6 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/cookies/canonical_cookie.h"
-#include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_store.h"
 #include "net/http/http_auth_cache.h"
 #include "net/http/http_network_session.h"
@@ -36,6 +35,27 @@ namespace {
 
 const char kSAMLStartCookie[] = "google-accounts-saml-start";
 const char kSAMLEndCookie[] = "google-accounts-saml-end";
+
+// Import |cookies| into |cookie_store|.
+void ImportCookies(const net::CookieList& cookies,
+                   net::CookieStore* cookie_store) {
+  for (const auto& cookie : cookies) {
+    // To re-create the original cookie, a domain should only be passed in to
+    // SetCookieWithDetailsAsync if cookie.Domain() has a leading period, to
+    // re-create the original cookie.
+    std::string domain;
+    if (!cookie.Domain().empty() && cookie.Domain()[0] == '.')
+      domain = cookie.Domain();
+
+    cookie_store->SetCookieWithDetailsAsync(
+        cookie.Source(), cookie.Name(), cookie.Value(), domain, cookie.Path(),
+        cookie.CreationDate(), cookie.ExpiryDate(), cookie.LastAccessDate(),
+        cookie.IsSecure(), cookie.IsHttpOnly(), cookie.IsSameSite(),
+        // enforce_strict_secure should have been applied on the original
+        // cookie, prior to import.
+        false, cookie.Priority(), net::CookieStore::SetCookiesCallback());
+  }
+}
 
 class ProfileAuthDataTransferer {
  public:
@@ -162,10 +182,8 @@ void ProfileAuthDataTransferer::BeginTransferOnIOThread() {
     // Retrieve the contents of |to_context_|'s cookie jar.
     net::CookieStore* to_store =
         to_context_->GetURLRequestContext()->cookie_store();
-    net::CookieMonster* to_monster = to_store->GetCookieMonster();
-    to_monster->GetAllCookiesAsync(
-        base::Bind(
-            &ProfileAuthDataTransferer::OnTargetCookieJarContentsRetrieved,
+    to_store->GetAllCookiesAsync(base::Bind(
+        &ProfileAuthDataTransferer::OnTargetCookieJarContentsRetrieved,
         base::Unretained(this)));
   } else {
     Finish();
@@ -212,9 +230,7 @@ void ProfileAuthDataTransferer::RetrieveCookiesToTransfer() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   net::CookieStore* from_store =
       from_context_->GetURLRequestContext()->cookie_store();
-  net::CookieMonster* from_monster = from_store->GetCookieMonster();
-  from_monster->SetKeepExpiredCookies();
-  from_monster->GetAllCookiesAsync(
+  from_store->GetAllCookiesAsync(
       base::Bind(&ProfileAuthDataTransferer::OnCookiesToTransferRetrieved,
                  base::Unretained(this)));
 }
@@ -284,9 +300,8 @@ void ProfileAuthDataTransferer::MaybeTransferCookiesAndChannelIDs() {
 
   net::CookieStore* to_store =
       to_context_->GetURLRequestContext()->cookie_store();
-  net::CookieMonster* to_monster = to_store->GetCookieMonster();
   if (first_login_) {
-    to_monster->ImportCookies(cookies_to_transfer_);
+    ImportCookies(cookies_to_transfer_, to_store);
     net::ChannelIDService* to_cert_service =
         to_context_->GetURLRequestContext()->channel_id_service();
     to_cert_service->GetChannelIDStore()->InitializeFrom(
@@ -298,7 +313,7 @@ void ProfileAuthDataTransferer::MaybeTransferCookiesAndChannelIDs() {
       if (!IsGAIACookie(*it))
         non_gaia_cookies.push_back(*it);
     }
-    to_monster->ImportCookies(non_gaia_cookies);
+    ImportCookies(non_gaia_cookies, to_store);
   }
 
   Finish();

@@ -51,6 +51,14 @@ class MediaSourceDelegate : public media::DemuxerHost {
       UpdateNetworkStateCB;
   typedef base::Callback<void(const base::TimeDelta&)> DurationChangeCB;
 
+  // Callback to notify that a CDM is ready. CdmAttachedCB is called when the
+  // CDM has been completely attached to the media pipeline.
+  typedef base::Callback<void(media::CdmContext*, const media::CdmAttachedCB&)>
+      CdmReadyCB;
+
+  // Callback to set a CdmReadyCB, which will be called when a CDM is ready.
+  typedef base::Callback<void(const CdmReadyCB&)> SetCdmReadyCB;
+
   MediaSourceDelegate(
       RendererDemuxerAndroid* demuxer_client,
       int demuxer_client_id,
@@ -64,7 +72,7 @@ class MediaSourceDelegate : public media::DemuxerHost {
       const MediaSourceOpenedCB& media_source_opened_cb,
       const media::Demuxer::EncryptedMediaInitDataCB&
           encrypted_media_init_data_cb,
-      const media::SetCdmReadyCB& set_cdm_ready_cb,
+      const SetCdmReadyCB& set_cdm_ready_cb,
       const UpdateNetworkStateCB& update_network_state_cb,
       const DurationChangeCB& duration_change_cb,
       const base::Closure& waiting_for_decryption_key_cb);
@@ -124,6 +132,12 @@ class MediaSourceDelegate : public media::DemuxerHost {
   // Callback for ChunkDemuxer initialization.
   void OnDemuxerInitDone(media::PipelineStatus status);
 
+  bool HasEncryptedStream();
+
+  // Callback to set CDM and fires |cdm_attached_cb| with the result.
+  void SetCdm(media::CdmContext* cdm_context,
+              const media::CdmAttachedCB& cdm_attached_cb);
+
   // Initializes DecryptingDemuxerStreams if audio/video stream is encrypted.
   void InitAudioDecryptingDemuxerStream();
   void InitVideoDecryptingDemuxerStream();
@@ -144,7 +158,7 @@ class MediaSourceDelegate : public media::DemuxerHost {
   void OnDemuxerOpened();
   void OnEncryptedMediaInitData(media::EmeInitDataType init_data_type,
                                 const std::vector<uint8_t>& init_data);
-  void NotifyDemuxerReady();
+  void NotifyDemuxerReady(bool is_cdm_attached);
 
   // Stops and clears objects on the media thread.
   void StopDemuxer(const base::Closure& stop_cb);
@@ -190,7 +204,9 @@ class MediaSourceDelegate : public media::DemuxerHost {
   scoped_ptr<media::ChunkDemuxer> chunk_demuxer_;
   bool is_demuxer_ready_;
 
-  media::SetCdmReadyCB set_cdm_ready_cb_;
+  SetCdmReadyCB set_cdm_ready_cb_;
+  media::CdmContext* cdm_context_;
+  media::CdmAttachedCB pending_cdm_attached_cb_;
 
   scoped_ptr<media::DecryptingDemuxerStream> audio_decrypting_demuxer_stream_;
   scoped_ptr<media::DecryptingDemuxerStream> video_decrypting_demuxer_stream_;

@@ -23,6 +23,7 @@
 #include "content/browser/webui/web_ui_controller_factory_registry.h"
 #include "content/common/frame_messages.h"
 #include "content/common/input/synthetic_web_input_event_builders.h"
+#include "content/common/media/media_player_delegate_messages.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/global_request_id.h"
@@ -545,6 +546,7 @@ TEST_F(WebContentsImplTest, CrossSiteBoundaries) {
   EXPECT_EQ(url, contents()->GetLastCommittedURL());
   EXPECT_EQ(url2, contents()->GetVisibleURL());
   TestRenderFrameHost* pending_rfh = contents()->GetPendingMainFrame();
+  EXPECT_TRUE(pending_rfh->GetLastCommittedURL().is_empty());
   int pending_rvh_delete_count = 0;
   pending_rfh->GetRenderViewHost()->set_delete_counter(
       &pending_rvh_delete_count);
@@ -3200,9 +3202,7 @@ TEST_F(WebContentsImplTest, NoEarlyStop) {
 }
 
 TEST_F(WebContentsImplTest, MediaPowerSaveBlocking) {
-  // PlayerIDs are actually pointers cast to int64_t, so verify that both
-  // negative
-  // and positive player ids don't blow up.
+  // Verify that both negative and positive player ids don't blow up.
   const int kPlayerAudioVideoId = 15;
   const int kPlayerAudioOnlyId = -15;
   const int kPlayerVideoOnlyId = 30;
@@ -3236,8 +3236,8 @@ TEST_F(WebContentsImplTest, MediaPowerSaveBlocking) {
   // Start a player with both audio and video.  A video power save blocker
   // should be created.  If audio stream monitoring is available, an audio power
   // save blocker should be created too.
-  rfh->OnMessageReceived(FrameHostMsg_MediaPlayingNotification(
-      0, kPlayerAudioVideoId, true, true, false));
+  rfh->OnMessageReceived(MediaPlayerDelegateHostMsg_OnMediaPlaying(
+      0, kPlayerAudioVideoId, true, true, false, base::TimeDelta()));
   EXPECT_TRUE(has_video_power_save_blocker());
   EXPECT_EQ(has_audio_power_save_blocker(),
             !AudioStreamMonitor::monitoring_available());
@@ -3249,8 +3249,8 @@ TEST_F(WebContentsImplTest, MediaPowerSaveBlocking) {
   // Start another player that only has video.  There should be no change in
   // the power save blockers.  The notification should take into account the
   // visibility state of the WebContents.
-  rfh->OnMessageReceived(FrameHostMsg_MediaPlayingNotification(
-      0, kPlayerVideoOnlyId, true, false, false));
+  rfh->OnMessageReceived(MediaPlayerDelegateHostMsg_OnMediaPlaying(
+      0, kPlayerVideoOnlyId, true, false, false, base::TimeDelta()));
   EXPECT_FALSE(has_video_power_save_blocker());
   EXPECT_EQ(has_audio_power_save_blocker(),
             !AudioStreamMonitor::monitoring_available());
@@ -3261,16 +3261,16 @@ TEST_F(WebContentsImplTest, MediaPowerSaveBlocking) {
 
   // Start another player that only has audio.  There should be no change in
   // the power save blockers.
-  rfh->OnMessageReceived(FrameHostMsg_MediaPlayingNotification(
-      0, kPlayerAudioOnlyId, false, true, false));
+  rfh->OnMessageReceived(MediaPlayerDelegateHostMsg_OnMediaPlaying(
+      0, kPlayerAudioOnlyId, false, true, false, base::TimeDelta()));
   EXPECT_TRUE(has_video_power_save_blocker());
   EXPECT_EQ(has_audio_power_save_blocker(),
             !AudioStreamMonitor::monitoring_available());
 
   // Start a remote player. There should be no change in the power save
   // blockers.
-  rfh->OnMessageReceived(FrameHostMsg_MediaPlayingNotification(
-      0, kPlayerRemoteId, true, true, true));
+  rfh->OnMessageReceived(MediaPlayerDelegateHostMsg_OnMediaPlaying(
+      0, kPlayerRemoteId, true, true, true, base::TimeDelta()));
   EXPECT_TRUE(has_video_power_save_blocker());
   EXPECT_EQ(has_audio_power_save_blocker(),
             !AudioStreamMonitor::monitoring_available());
@@ -3278,34 +3278,34 @@ TEST_F(WebContentsImplTest, MediaPowerSaveBlocking) {
   // Destroy the original audio video player.  Both power save blockers should
   // remain.
   rfh->OnMessageReceived(
-      FrameHostMsg_MediaPausedNotification(0, kPlayerAudioVideoId));
+      MediaPlayerDelegateHostMsg_OnMediaPaused(0, kPlayerAudioVideoId, false));
   EXPECT_TRUE(has_video_power_save_blocker());
   EXPECT_EQ(has_audio_power_save_blocker(),
             !AudioStreamMonitor::monitoring_available());
 
   // Destroy the audio only player.  The video power save blocker should remain.
   rfh->OnMessageReceived(
-      FrameHostMsg_MediaPausedNotification(0, kPlayerAudioOnlyId));
+      MediaPlayerDelegateHostMsg_OnMediaPaused(0, kPlayerAudioOnlyId, false));
   EXPECT_TRUE(has_video_power_save_blocker());
   EXPECT_FALSE(has_audio_power_save_blocker());
 
   // Destroy the video only player.  No power save blockers should remain.
   rfh->OnMessageReceived(
-      FrameHostMsg_MediaPausedNotification(0, kPlayerVideoOnlyId));
+      MediaPlayerDelegateHostMsg_OnMediaPaused(0, kPlayerVideoOnlyId, false));
   EXPECT_FALSE(has_video_power_save_blocker());
   EXPECT_FALSE(has_audio_power_save_blocker());
 
   // Destroy the remote player. No power save blockers should remain.
   rfh->OnMessageReceived(
-      FrameHostMsg_MediaPausedNotification(0, kPlayerRemoteId));
+      MediaPlayerDelegateHostMsg_OnMediaPaused(0, kPlayerRemoteId, false));
   EXPECT_FALSE(has_video_power_save_blocker());
   EXPECT_FALSE(has_audio_power_save_blocker());
 
   // Start a player with both audio and video.  A video power save blocker
   // should be created.  If audio stream monitoring is available, an audio power
   // save blocker should be created too.
-  rfh->OnMessageReceived(FrameHostMsg_MediaPlayingNotification(
-      0, kPlayerAudioVideoId, true, true, false));
+  rfh->OnMessageReceived(MediaPlayerDelegateHostMsg_OnMediaPlaying(
+      0, kPlayerAudioVideoId, true, true, false, base::TimeDelta()));
   EXPECT_TRUE(has_video_power_save_blocker());
   EXPECT_EQ(has_audio_power_save_blocker(),
             !AudioStreamMonitor::monitoring_available());
@@ -3321,6 +3321,7 @@ TEST_F(WebContentsImplTest, MediaPowerSaveBlocking) {
 TEST_F(WebContentsImplTest, ThemeColorChangeDependingOnFirstVisiblePaint) {
   TestWebContentsObserver observer(contents());
   TestRenderFrameHost* rfh = contents()->GetMainFrame();
+  rfh->InitializeRenderFrameIfNeeded();
 
   SkColor transparent = SK_ColorTRANSPARENT;
 

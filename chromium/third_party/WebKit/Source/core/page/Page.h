@@ -23,6 +23,7 @@
 
 #include "core/CoreExport.h"
 #include "core/dom/ViewportDescription.h"
+#include "core/frame/Deprecation.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/OriginsUsingFeatures.h"
 #include "core/frame/SettingsDelegate.h"
@@ -34,6 +35,7 @@
 #include "core/page/PageVisibilityState.h"
 #include "platform/MemoryPurgeController.h"
 #include "platform/Supplementable.h"
+#include "platform/Timer.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/geometry/Region.h"
 #include "platform/heap/Handle.h"
@@ -162,6 +164,7 @@ public:
     Settings& settings() const { return *m_settings; }
 
     UseCounter& useCounter() { return m_useCounter; }
+    Deprecation& deprecation() { return m_deprecation; }
     OriginsUsingFeatures& originsUsingFeatures() { return m_originsUsingFeatures; }
 
     void setTabKeyCyclesThroughElements(bool b) { m_tabKeyCyclesThroughElements = b; }
@@ -186,8 +189,9 @@ public:
     static void allVisitedStateChanged(bool invalidateVisitedLinkHashes);
     static void visitedStateChanged(LinkHash visitedHash);
 
-    PageVisibilityState visibilityState() const;
     void setVisibilityState(PageVisibilityState, bool);
+    PageVisibilityState visibilityState() const;
+    bool isPageVisible() const;
 
     bool isCursorVisible() const;
     void setIsCursorVisible(bool isVisible) { m_isCursorVisible = isVisible; }
@@ -229,10 +233,10 @@ private:
 
     void initGroup();
 
-    void setNeedsLayoutInAllFrames();
-
     // SettingsDelegate overrides.
     void settingsChanged(SettingsDelegate::ChangeType) override;
+
+    void compressStrings(Timer<Page>*);
 
     RefPtrWillBeMember<PageAnimator> m_animator;
     const OwnPtrWillBeMember<AutoscrollController> m_autoscrollController;
@@ -266,6 +270,7 @@ private:
     OwnPtrWillBeMember<ValidationMessageClient> m_validationMessageClient;
 
     UseCounter m_useCounter;
+    Deprecation m_deprecation;
     OriginsUsingFeatures m_originsUsingFeatures;
 
     bool m_openedByDOM;
@@ -290,6 +295,8 @@ private:
     OwnPtrWillBeMember<FrameHost> m_frameHost;
 
     OwnPtrWillBeMember<MemoryPurgeController> m_memoryPurgeController;
+
+    Timer<Page> m_timerForCompressStrings;
 };
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT WillBeHeapSupplement<Page>;

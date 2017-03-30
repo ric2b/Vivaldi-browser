@@ -4,12 +4,12 @@
 
 #include "chrome/browser/extensions/api/settings_private/prefs_util.h"
 
-#include "base/prefs/pref_service.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
 #include "components/url_formatter/url_fixer.h"
 #include "extensions/browser/extension_pref_value_map.h"
@@ -68,10 +68,15 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["browser.show_home_button"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+
+  // Downloads settings.
   (*s_whitelist)["download.default_directory"] =
       settings_private::PrefType::PREF_TYPE_STRING;
   (*s_whitelist)["download.prompt_for_download"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["gdata.disabled"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+
   (*s_whitelist)["enable_do_not_track"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["homepage"] = settings_private::PrefType::PREF_TYPE_URL;
@@ -215,10 +220,23 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["settings.internet.wake_on_wifi_darkconnect"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["settings.enable_screen_lock"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+
+  // Input settings.
+  (*s_whitelist)["settings.touchpad.enable_tap_to_click"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["settings.touchpad.natural_scroll"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
 #else
   (*s_whitelist)["intl.accept_languages"] =
       settings_private::PrefType::PREF_TYPE_STRING;
 #endif
+
+#if defined(GOOGLE_CHROME_BUILD)
+  (*s_whitelist)["media_router.cloudservices.enabled"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+#endif  // defined(GOOGLE_CHROME_BUILD)
 
   return *s_whitelist;
 }

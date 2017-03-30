@@ -62,12 +62,10 @@ bool CreateMapAndDupSharedBuffer(size_t size,
   return true;
 }
 
-void PostTask(
-    const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-    const base::Closure& callback) {
+void PostTask(const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
+              const base::Closure& callback) {
   task_runner->PostTask(FROM_HERE, callback);
 }
-
 }
 
 const unsigned int GL_READ_WRITE_CHROMIUM = 0x78F2;
@@ -91,6 +89,11 @@ CommandBufferLocal::CommandBufferLocal(CommandBufferLocalClient* client,
 
 void CommandBufferLocal::Destroy() {
   DCHECK(CalledOnValidThread());
+  // After this |Destroy()| call, this object will not be used by client anymore
+  // and it will be deleted on the GPU thread. So we have to detach it from the
+  // client thread first.
+  DetachFromThread();
+
   weak_factory_.InvalidateWeakPtrs();
   // CommandBufferLocal is initialized on the GPU thread with
   // InitializeOnGpuThread(), so we need delete memebers on the GPU thread
@@ -194,7 +197,8 @@ scoped_refptr<gpu::Buffer> CommandBufferLocal::CreateTransferBuffer(
   gpu_state_->command_buffer_task_runner()->PostTask(
       driver_.get(),
       base::Bind(&CommandBufferLocal::RegisterTransferBufferOnGpuThread,
-                 base::Unretained(this), *id, base::Passed(&duped), size));
+                 base::Unretained(this), *id, base::Passed(&duped),
+                 static_cast<uint32_t>(size)));
   scoped_ptr<gpu::BufferBacking> backing(
       new mus::MojoBufferBacking(std::move(handle), memory, size));
   scoped_refptr<gpu::Buffer> buffer(new gpu::Buffer(std::move(backing)));
@@ -295,42 +299,13 @@ int32_t CommandBufferLocal::CreateGpuMemoryBufferImage(size_t width,
   return CreateImage(buffer->AsClientBuffer(), width, height, internal_format);
 }
 
-uint32_t CommandBufferLocal::InsertSyncPoint() {
-  DCHECK(CalledOnValidThread());
-  uint32_t sync_point = gpu_state_->sync_point_manager()->GenerateSyncPoint();
-  sync_points_.push_back(sync_point);
-  RetireSyncPoint(sync_point);
-  return sync_point;
-}
-
-uint32_t CommandBufferLocal::InsertFutureSyncPoint() {
-  DCHECK(CalledOnValidThread());
-  uint32_t sync_point = gpu_state_->sync_point_manager()->GenerateSyncPoint();
-  sync_points_.push_back(sync_point);
-  return sync_point;
-}
-
-void CommandBufferLocal::RetireSyncPoint(uint32_t sync_point) {
-  DCHECK(CalledOnValidThread());
-  DCHECK(!sync_points_.empty() && sync_points_.front() == sync_point);
-  sync_points_.pop_front();
-  gpu_state_->command_buffer_task_runner()->PostTask(
-      driver_.get(), base::Bind(&CommandBufferLocal::RetireSyncPointOnGpuThread,
-                                base::Unretained(this), sync_point));
-}
-
-void CommandBufferLocal::SignalSyncPoint(uint32_t sync_point,
-                                         const base::Closure& callback) {
-  DCHECK(CalledOnValidThread());
-  gpu_state_->sync_point_manager()->AddSyncPointCallback(sync_point,
-      base::Bind(&PostTask, client_thread_task_runner_, callback));
-}
-
-void CommandBufferLocal::SignalQuery(uint32_t query,
+void CommandBufferLocal::SignalQuery(uint32_t query_id,
                                      const base::Closure& callback) {
   DCHECK(CalledOnValidThread());
-  // TODO(piman)
-  NOTIMPLEMENTED();
+
+  gpu_state_->command_buffer_task_runner()->PostTask(
+      driver_.get(), base::Bind(&CommandBufferLocal::SignalQueryOnGpuThread,
+                                base::Unretained(this), query_id, callback));
 }
 
 void CommandBufferLocal::SetLock(base::Lock* lock) {
@@ -353,7 +328,7 @@ gpu::CommandBufferNamespace CommandBufferLocal::GetNamespaceID() const {
   return gpu::CommandBufferNamespace::MOJO_LOCAL;
 }
 
-uint64_t CommandBufferLocal::GetCommandBufferID() const {
+gpu::CommandBufferId CommandBufferLocal::GetCommandBufferID() const {
   DCHECK(CalledOnValidThread());
   return driver_->GetCommandBufferID();
 }
@@ -428,10 +403,7 @@ void CommandBufferLocal::UpdateVSyncParameters(int64_t timebase,
   }
 }
 
-CommandBufferLocal::~CommandBufferLocal() {
-  for (uint32_t sync_point : sync_points_)
-    gpu_state_->sync_point_manager()->RetireSyncPoint(sync_point);
-}
+CommandBufferLocal::~CommandBufferLocal() {}
 
 void CommandBufferLocal::TryUpdateState() {
   if (last_state_.error == gpu::error::kNoError)
@@ -454,9 +426,10 @@ void CommandBufferLocal::MakeProgressAndUpdateState() {
 
 void CommandBufferLocal::InitializeOnGpuThread(base::WaitableEvent* event,
                                                bool* result) {
-  driver_.reset(new CommandBufferDriver(gpu::CommandBufferNamespace::MOJO_LOCAL,
-                                        ++g_next_command_buffer_id, widget_,
-                                        gpu_state_));
+  driver_.reset(new CommandBufferDriver(
+      gpu::CommandBufferNamespace::MOJO_LOCAL,
+      gpu::CommandBufferId::FromUnsafeValue(++g_next_command_buffer_id),
+      widget_, gpu_state_));
   const size_t kSharedStateSize = sizeof(gpu::CommandBufferSharedState);
   void* memory = nullptr;
   mojo::ScopedSharedBufferHandle duped;
@@ -512,12 +485,6 @@ bool CommandBufferLocal::DestroyTransferBufferOnGpuThread(int32_t id) {
   return true;
 }
 
-bool CommandBufferLocal::RetireSyncPointOnGpuThread(uint32_t sync_point) {
-  DCHECK(driver_->IsScheduled());
-  gpu_state_->sync_point_manager()->RetireSyncPoint(sync_point);
-  return true;
-}
-
 bool CommandBufferLocal::CreateImageOnGpuThread(
     int32_t id,
     mojo::ScopedHandle memory_handle,
@@ -548,6 +515,14 @@ bool CommandBufferLocal::MakeProgressOnGpuThread(
 
 bool CommandBufferLocal::DeleteOnGpuThread() {
   delete this;
+  return true;
+}
+
+bool CommandBufferLocal::SignalQueryOnGpuThread(uint32_t query_id,
+                                                const base::Closure& callback) {
+  // |callback| should run on the client thread.
+  driver_->SignalQuery(
+      query_id, base::Bind(&PostTask, client_thread_task_runner_, callback));
   return true;
 }
 

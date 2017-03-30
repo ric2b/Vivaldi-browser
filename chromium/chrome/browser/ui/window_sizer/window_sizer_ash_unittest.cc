@@ -429,28 +429,25 @@ TEST_F(WindowSizerAshTest, MAYBE_PlaceNewWindows) {
   scoped_ptr<TestingProfile> profile(new TestingProfile());
   // Creating a popup handler here to make sure it does not interfere with the
   // existing windows.
-  Browser::CreateParams native_params(profile.get(),
-                                      chrome::HOST_DESKTOP_TYPE_ASH);
+  Browser::CreateParams native_params(profile.get());
   scoped_ptr<Browser> browser(
       chrome::CreateBrowserWithTestWindowForParams(&native_params));
 
   // Creating a popup handler here to make sure it does not interfere with the
   // existing windows.
-  Browser::CreateParams params2(profile.get(), chrome::HOST_DESKTOP_TYPE_ASH);
+  Browser::CreateParams params2(profile.get());
   scoped_ptr<Browser> browser2(CreateTestBrowser(
       CreateTestWindowInShellWithId(0), gfx::Rect(16, 32, 640, 320), &params2));
   BrowserWindow* browser_window = browser2->window();
 
   // Creating a popup to make sure it does not interfere with the positioning.
-  Browser::CreateParams params_popup(Browser::TYPE_POPUP, profile.get(),
-                                     chrome::HOST_DESKTOP_TYPE_ASH);
+  Browser::CreateParams params_popup(Browser::TYPE_POPUP, profile.get());
   scoped_ptr<Browser> browser_popup(
       CreateTestBrowser(CreateTestWindowInShellWithId(1),
                         gfx::Rect(16, 32, 128, 256), &params_popup));
 
   // Creating a panel to make sure it does not interfere with the positioning.
-  Browser::CreateParams params_panel(Browser::TYPE_POPUP, profile.get(),
-                                     chrome::HOST_DESKTOP_TYPE_ASH);
+  Browser::CreateParams params_panel(Browser::TYPE_POPUP, profile.get());
   scoped_ptr<Browser> browser_panel(
       CreateTestBrowser(CreateTestWindowInShellWithId(2),
                         gfx::Rect(32, 48, 256, 512), &params_panel));
@@ -506,8 +503,7 @@ TEST_F(WindowSizerAshTest, MAYBE_PlaceNewWindows) {
 TEST_F(WindowSizerAshTest, MAYBE_PlaceNewBrowserWindowOnEmptyDesktop) {
   // Create a browser to pass into the GetWindowBoundsAndShowState function.
   scoped_ptr<TestingProfile> profile(new TestingProfile());
-  Browser::CreateParams native_params(profile.get(),
-                                      chrome::HOST_DESKTOP_TYPE_ASH);
+  Browser::CreateParams native_params(profile.get());
   scoped_ptr<Browser> browser(
       chrome::CreateBrowserWithTestWindowForParams(&native_params));
 
@@ -584,8 +580,8 @@ TEST_F(WindowSizerAshTest, MAYBE_PlaceNewBrowserWindowOnEmptyDesktop) {
 // Test the placement of newly created windows on multiple dislays.
 TEST_F(WindowSizerAshTest, MAYBE_PlaceNewWindowsOnMultipleDisplays) {
   UpdateDisplay("1600x1200,1600x1200");
-  gfx::Rect primary_bounds = ash::Shell::GetInstance()->GetScreen()->
-      GetPrimaryDisplay().bounds();
+  gfx::Rect primary_bounds =
+      gfx::Screen::GetScreen()->GetPrimaryDisplay().bounds();
   gfx::Rect secondary_bounds = ash::ScreenUtil::GetSecondaryDisplay().bounds();
 
   ash::Shell::GetInstance()->set_target_root_window(
@@ -594,7 +590,7 @@ TEST_F(WindowSizerAshTest, MAYBE_PlaceNewWindowsOnMultipleDisplays) {
   scoped_ptr<TestingProfile> profile(new TestingProfile());
 
   // Create browser windows that are used as reference.
-  Browser::CreateParams params(profile.get(), chrome::HOST_DESKTOP_TYPE_ASH);
+  Browser::CreateParams params(profile.get());
   scoped_ptr<Browser> browser(CreateTestBrowser(
       CreateTestWindowInShellWithId(0), gfx::Rect(10, 10, 200, 200), &params));
   BrowserWindow* browser_window = browser->window();
@@ -602,8 +598,7 @@ TEST_F(WindowSizerAshTest, MAYBE_PlaceNewWindowsOnMultipleDisplays) {
   browser_window->Show();
   EXPECT_EQ(native_window->GetRootWindow(), ash::Shell::GetTargetRootWindow());
 
-  Browser::CreateParams another_params(profile.get(),
-                                       chrome::HOST_DESKTOP_TYPE_ASH);
+  Browser::CreateParams another_params(profile.get());
   scoped_ptr<Browser> another_browser(
       CreateTestBrowser(CreateTestWindowInShellWithId(1),
                         gfx::Rect(400, 10, 300, 300), &another_params));
@@ -613,8 +608,7 @@ TEST_F(WindowSizerAshTest, MAYBE_PlaceNewWindowsOnMultipleDisplays) {
   another_browser_window->Show();
 
   // Creating a new window to verify the new placement.
-  Browser::CreateParams new_params(profile.get(),
-                                   chrome::HOST_DESKTOP_TYPE_ASH);
+  Browser::CreateParams new_params(profile.get());
   scoped_ptr<Browser> new_browser(CreateTestBrowser(
       CreateTestWindowInShellWithId(0), gfx::Rect(), &new_params));
 
@@ -637,8 +631,9 @@ TEST_F(WindowSizerAshTest, MAYBE_PlaceNewWindowsOnMultipleDisplays) {
   // Move the window to the right side of the secondary display and create a new
   // window. It should be opened then on the secondary display.
   {
-    gfx::Display second_display = ash::Shell::GetScreen()->
-        GetDisplayNearestPoint(gfx::Point(1600 + 100,10));
+    gfx::Display second_display =
+        gfx::Screen::GetScreen()->GetDisplayNearestPoint(
+            gfx::Point(1600 + 100, 10));
     browser_window->GetNativeWindow()->SetBoundsInScreen(
         gfx::Rect(secondary_bounds.CenterPoint().x() - 100, 10, 200, 200),
         second_display);
@@ -688,14 +683,12 @@ TEST_F(WindowSizerAshTest, MAYBE_TestShowState) {
   scoped_ptr<TestingProfile> profile(new TestingProfile());
 
   // Creating a browser & window to play with.
-  Browser::CreateParams params(Browser::TYPE_TABBED, profile.get(),
-                               chrome::HOST_DESKTOP_TYPE_ASH);
+  Browser::CreateParams params(Browser::TYPE_TABBED, profile.get());
   scoped_ptr<Browser> browser(CreateTestBrowser(
       CreateTestWindowInShellWithId(0), gfx::Rect(16, 32, 640, 320), &params));
 
   // Create also a popup browser since that behaves different.
-  Browser::CreateParams params_popup(Browser::TYPE_POPUP, profile.get(),
-                                     chrome::HOST_DESKTOP_TYPE_ASH);
+  Browser::CreateParams params_popup(Browser::TYPE_POPUP, profile.get());
   scoped_ptr<Browser> browser_popup(
       CreateTestBrowser(CreateTestWindowInShellWithId(1),
                         gfx::Rect(16, 32, 640, 320), &params_popup));
@@ -727,8 +720,7 @@ TEST_F(WindowSizerAshTest, MAYBE_TestShowState) {
   // Now create a top level window and check again for both. Only the tabbed
   // window should follow the top level window's state.
   // Creating a browser & window to play with.
-  Browser::CreateParams params2(Browser::TYPE_TABBED, profile.get(),
-                                chrome::HOST_DESKTOP_TYPE_ASH);
+  Browser::CreateParams params2(Browser::TYPE_TABBED, profile.get());
   scoped_ptr<Browser> browser2(CreateTestBrowser(
       CreateTestWindowInShellWithId(3), gfx::Rect(16, 32, 640, 320), &params2));
 
@@ -764,15 +756,13 @@ TEST_F(WindowSizerAshTest, TestShowStateDefaults) {
   // Creating a browser & window to play with.
   scoped_ptr<TestingProfile> profile(new TestingProfile());
 
-  Browser::CreateParams params(Browser::TYPE_TABBED, profile.get(),
-                               chrome::HOST_DESKTOP_TYPE_ASH);
+  Browser::CreateParams params(Browser::TYPE_TABBED, profile.get());
   scoped_ptr<Browser> browser(CreateTestBrowser(
       CreateTestWindowInShellWithId(0), gfx::Rect(16, 32, 640, 320), &params));
 
   // Create also a popup browser since that behaves slightly different for
   // defaults.
-  Browser::CreateParams params_popup(Browser::TYPE_POPUP, profile.get(),
-                                     chrome::HOST_DESKTOP_TYPE_ASH);
+  Browser::CreateParams params_popup(Browser::TYPE_POPUP, profile.get());
   scoped_ptr<Browser> browser_popup(
       CreateTestBrowser(CreateTestWindowInShellWithId(1),
                         gfx::Rect(16, 32, 128, 256), &params_popup));
@@ -823,13 +813,12 @@ TEST_F(WindowSizerAshTest, TestShowStateDefaults) {
 TEST_F(WindowSizerAshTest, DefaultStateBecomesMaximized) {
   // Create a browser to pass into the GetWindowBounds function.
   scoped_ptr<TestingProfile> profile(new TestingProfile());
-  Browser::CreateParams native_params(profile.get(),
-                                      chrome::HOST_DESKTOP_TYPE_ASH);
+  Browser::CreateParams native_params(profile.get());
   scoped_ptr<Browser> browser(
       chrome::CreateBrowserWithTestWindowForParams(&native_params));
 
-  gfx::Rect display_bounds = ash::Shell::GetInstance()->GetScreen()->
-      GetPrimaryDisplay().bounds();
+  gfx::Rect display_bounds =
+      gfx::Screen::GetScreen()->GetPrimaryDisplay().bounds();
   gfx::Rect specified_bounds = display_bounds;
 
   // Make a window bigger than the display work area.
@@ -893,8 +882,8 @@ TEST_F(WindowSizerAshTest, DefaultBoundsInTargetDisplay) {
 
 TEST_F(WindowSizerAshTest, TrustedPopupBehavior) {
   scoped_ptr<TestingProfile> profile(new TestingProfile());
-  Browser::CreateParams trusted_popup_create_params(
-      Browser::TYPE_POPUP, profile.get(), chrome::HOST_DESKTOP_TYPE_ASH);
+  Browser::CreateParams trusted_popup_create_params(Browser::TYPE_POPUP,
+                                                    profile.get());
   trusted_popup_create_params.trusted_source = true;
 
   scoped_ptr<Browser> trusted_popup(CreateTestBrowser(

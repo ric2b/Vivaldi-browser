@@ -128,6 +128,19 @@
       'includes': [ 'vivaldi_other_grit_action.gypi' ]
     },
     {
+      'target_name': 'component_locale_resources',
+      'variables': {
+        'grit_out_dir': '<(SHARED_INTERMEDIATE_DIR)/components/strings',
+        'main_resource_dir':  '<(DEPTH)/components',
+        'merge_main_file': 'components_locale_settings.grd',
+        'vivaldi_resource_path':
+            '<(VIVALDI)/app/resources/components_locale_settings/vivaldi_components_locale_settings.grd',
+        'translation_dir': 'strings',
+        'target_file': 'components_locale_settings.grd',
+      },
+      'includes': [ 'vivaldi_other_grit_action.gypi' ]
+    },
+    {
       'target_name': 'component_scaled_resources',
       'variables': {
         'grit_out_dir': '<(SHARED_INTERMEDIATE_DIR)/components',

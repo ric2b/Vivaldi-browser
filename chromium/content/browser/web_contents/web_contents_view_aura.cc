@@ -93,8 +93,10 @@ bool IsScrollEndEffectEnabled() {
 
 RenderWidgetHostViewAura* ToRenderWidgetHostViewAura(
     RenderWidgetHostView* view) {
-  if (!view || RenderViewHostFactory::has_factory())
+  if (!view || (RenderViewHostFactory::has_factory() &&
+      !RenderViewHostFactory::is_real_render_view_host())) {
     return NULL;  // Can't cast to RenderWidgetHostViewAura in unit tests.
+  }
 
   RenderViewHost* rvh = RenderViewHost::From(view->GetRenderWidgetHost());
   WebContentsImpl* web_contents = static_cast<WebContentsImpl*>(
@@ -238,7 +240,7 @@ const ui::Clipboard::FormatType& GetFileSystemFileFormatType() {
 void WriteFileSystemFilesToPickle(
     const std::vector<DropData::FileSystemFileInfo>& file_system_files,
     base::Pickle* pickle) {
-  pickle->WriteSizeT(file_system_files.size());
+  pickle->WriteUInt32(file_system_files.size());
   for (size_t i = 0; i < file_system_files.size(); ++i) {
     pickle->WriteString(file_system_files[i].url.spec());
     pickle->WriteInt64(file_system_files[i].size);
@@ -251,12 +253,12 @@ bool ReadFileSystemFilesFromPickle(
     std::vector<DropData::FileSystemFileInfo>* file_system_files) {
   base::PickleIterator iter(pickle);
 
-  size_t num_files = 0;
-  if (!iter.ReadSizeT(&num_files))
+  uint32_t num_files = 0;
+  if (!iter.ReadUInt32(&num_files))
     return false;
   file_system_files->resize(num_files);
 
-  for (size_t i = 0; i < num_files; ++i) {
+  for (uint32_t i = 0; i < num_files; ++i) {
     std::string url_string;
     int64_t size = 0;
     if (!iter.ReadString(&url_string) || !iter.ReadInt64(&size))
@@ -664,6 +666,11 @@ WebContentsViewAura::WebContentsViewAura(WebContentsImpl* web_contents,
       is_or_was_visible_(false) {
 }
 
+void WebContentsViewAura::SetDelegateForTesting(
+    WebContentsViewDelegate* delegate) {
+  delegate_.reset(delegate);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // WebContentsViewAura, private:
 
@@ -690,8 +697,7 @@ void WebContentsViewAura::SizeChangedCommon(const gfx::Size& size) {
 
 void WebContentsViewAura::EndDrag(blink::WebDragOperationsMask ops) {
   aura::Window* root_window = GetNativeView()->GetRootWindow();
-  gfx::Point screen_loc =
-      gfx::Screen::GetScreenFor(GetNativeView())->GetCursorScreenPoint();
+  gfx::Point screen_loc = gfx::Screen::GetScreen()->GetCursorScreenPoint();
   gfx::Point client_loc = screen_loc;
   RenderViewHost* rvh = web_contents_->GetRenderViewHost();
   aura::Window* window = rvh->GetWidget()->GetView()->GetNativeView();
@@ -953,11 +959,12 @@ void WebContentsViewAura::ShowContextMenu(RenderFrameHost* render_frame_host,
       selection_controller_client->HandleContextMenu(params)) {
     return;
   }
+
   if (delegate_) {
     RenderWidgetHostViewAura* view = ToRenderWidgetHostViewAura(
         web_contents_->GetRenderWidgetHostView());
-    if (view)
-      view->OnShowContextMenu();
+    if (view && !view->OnShowContextMenu(params))
+      return;
 
     delegate_->ShowContextMenu(render_frame_host, params);
     // WARNING: we may have been deleted during the call to ShowContextMenu().
@@ -1199,8 +1206,7 @@ void WebContentsViewAura::OnMouseEvent(ui::MouseEvent* event) {
       web_contents_->GetDelegate()->ActivateContents(web_contents_);
 
   web_contents_->GetDelegate()->ContentsMouseEvent(
-      web_contents_,
-      gfx::Screen::GetScreenFor(GetNativeView())->GetCursorScreenPoint(),
+      web_contents_, gfx::Screen::GetScreen()->GetCursorScreenPoint(),
       type == ui::ET_MOUSE_MOVED, type == ui::ET_MOUSE_EXITED);
 }
 
@@ -1225,8 +1231,7 @@ void WebContentsViewAura::OnDragEntered(const ui::DropTargetEvent& event) {
   if (drag_dest_delegate_)
     drag_dest_delegate_->DragInitialize(web_contents_);
 
-  gfx::Point screen_pt =
-      gfx::Screen::GetScreenFor(GetNativeView())->GetCursorScreenPoint();
+  gfx::Point screen_pt = gfx::Screen::GetScreen()->GetCursorScreenPoint();
   web_contents_->GetRenderViewHost()->DragTargetDragEnter(
       *current_drop_data_.get(), event.location(), screen_pt, op,
       ConvertAuraEventFlagsToWebInputEventModifiers(event.flags()));
@@ -1246,8 +1251,7 @@ int WebContentsViewAura::OnDragUpdated(const ui::DropTargetEvent& event) {
     return ui::DragDropTypes::DRAG_NONE;
 
   blink::WebDragOperationsMask op = ConvertToWeb(event.source_operations());
-  gfx::Point screen_pt =
-      gfx::Screen::GetScreenFor(GetNativeView())->GetCursorScreenPoint();
+  gfx::Point screen_pt = gfx::Screen::GetScreen()->GetCursorScreenPoint();
   web_contents_->GetRenderViewHost()->DragTargetDragOver(
       event.location(), screen_pt, op,
       ConvertAuraEventFlagsToWebInputEventModifiers(event.flags()));
@@ -1282,8 +1286,7 @@ int WebContentsViewAura::OnPerformDrop(const ui::DropTargetEvent& event) {
     return ui::DragDropTypes::DRAG_NONE;
 
   web_contents_->GetRenderViewHost()->DragTargetDrop(
-      event.location(),
-      gfx::Screen::GetScreenFor(GetNativeView())->GetCursorScreenPoint(),
+      event.location(), gfx::Screen::GetScreen()->GetCursorScreenPoint(),
       ConvertAuraEventFlagsToWebInputEventModifiers(event.flags()));
   if (drag_dest_delegate_)
     drag_dest_delegate_->OnDrop();

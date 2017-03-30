@@ -6,26 +6,22 @@
 #define CHROME_BROWSER_UI_VIEWS_PROFILES_NEW_AVATAR_BUTTON_H_
 
 #include "base/macros.h"
-#include "chrome/browser/profiles/profile_info_cache_observer.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
+#include "chrome/browser/ui/views/profiles/avatar_button_style.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "ui/views/controls/button/label_button.h"
 
-class Browser;
+class AvatarButtonDelegate;
+class Profile;
 
 // Avatar button that displays the active profile's name in the caption area.
 class NewAvatarButton : public views::LabelButton,
-                        public ProfileInfoCacheObserver,
+                        public ProfileAttributesStorage::Observer,
                         public SigninErrorController::Observer {
  public:
-  // Different button styles that can be applied.
-  enum AvatarButtonStyle {
-    THEMED_BUTTON,   // Used in a themed browser window.
-    NATIVE_BUTTON,    // Used in a native aero or metro window.
-  };
-
-  NewAvatarButton(views::ButtonListener* listener,
+  NewAvatarButton(AvatarButtonDelegate* delegate,
                   AvatarButtonStyle button_style,
-                  Browser* browser);
+                  Profile* profile);
   ~NewAvatarButton() override;
 
   // Views::LabelButton
@@ -38,7 +34,7 @@ class NewAvatarButton : public views::LabelButton,
  private:
   friend class ProfileChooserViewExtensionsTest;
 
-  // ProfileInfoCacheObserver:
+  // ProfileAttributesStorage::Observer:
   void OnProfileAdded(const base::FilePath& profile_path) override;
   void OnProfileWasRemoved(const base::FilePath& profile_path,
                            const base::string16& profile_name) override;
@@ -54,7 +50,8 @@ class NewAvatarButton : public views::LabelButton,
   // have to update the icon/text of the button.
   void Update();
 
-  Browser* browser_;
+  AvatarButtonDelegate* delegate_;
+  Profile* profile_;
 
   // Whether the signed in profile has an authentication error. Used to display
   // an error icon next to the button text.

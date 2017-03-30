@@ -51,7 +51,7 @@ class ScreenOrientationBrowserTest : public ContentBrowserTest  {
     ASSERT_NE(blink::WebScreenOrientationUndefined, type);
     screen_info.orientationType = type;
 
-    ViewMsg_Resize_Params params;
+    ResizeParams params;
     params.screen_info = screen_info;
     params.new_size = gfx::Size(0, 0);
     params.physical_backing_size = gfx::Size(300, 300);
@@ -227,18 +227,22 @@ class ScreenOrientationLockDisabledBrowserTest : public ContentBrowserTest  {
 
 // Check that when --disable-screen-orientation-lock is passed to the command
 // line, screen.orientation.lock() correctly reports to not be supported.
-// Flaky: https://crbug.com/498236
-IN_PROC_BROWSER_TEST_F(ScreenOrientationLockDisabledBrowserTest,
-                       DISABLED_NotSupported) {
+IN_PROC_BROWSER_TEST_F(ScreenOrientationLockDisabledBrowserTest, NotSupported) {
   GURL test_url = GetTestUrl("screen_orientation",
                              "screen_orientation_lock_disabled.html");
 
-  TestNavigationObserver navigation_observer(shell()->web_contents(), 2);
+  TestNavigationObserver navigation_observer(shell()->web_contents(), 1);
   shell()->LoadURL(test_url);
   navigation_observer.Wait();
 
-  EXPECT_EQ("NotSupportedError",
-            shell()->web_contents()->GetLastCommittedURL().ref());
+  {
+    ASSERT_TRUE(ExecuteScript(shell()->web_contents(), "run();"));
+
+    TestNavigationObserver navigation_observer(shell()->web_contents(), 1);
+    navigation_observer.Wait();
+    EXPECT_EQ("NotSupportedError",
+              shell()->web_contents()->GetLastCommittedURL().ref());
+  }
 }
 #endif // defined(OS_ANDROID)
 

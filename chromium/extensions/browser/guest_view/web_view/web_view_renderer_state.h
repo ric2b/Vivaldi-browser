@@ -39,6 +39,7 @@ class WebViewRendererState {
     std::string type;
 
     WebViewInfo();
+    WebViewInfo(const WebViewInfo& other);
     ~WebViewInfo();
   };
 

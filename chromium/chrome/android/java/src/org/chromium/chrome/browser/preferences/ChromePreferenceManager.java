@@ -9,10 +9,14 @@ import android.content.SharedPreferences;
 import android.preference.PreferenceManager;
 
 import org.chromium.base.annotations.SuppressFBWarnings;
+import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.crash.MinidumpUploadService.ProcessType;
 import org.chromium.chrome.browser.signin.SigninPromoUma;
+import org.chromium.chrome.browser.util.FeatureUtilities;
 
 import java.util.Locale;
+
+
 /**
  * ChromePreferenceManager stores and retrieves various values in Android shared preferences.
  */
@@ -22,6 +26,8 @@ public class ChromePreferenceManager {
      * mode.
      */
     public static final String MIGRATION_ON_UPGRADE_ATTEMPTED = "migration_on_upgrade_attempted";
+
+    private static final String TAG = "preferences";
 
     private static final String PROMOS_SKIPPED_ON_FIRST_START = "promos_skipped_on_first_start";
     private static final String SIGNIN_PROMO_LAST_SHOWN = "signin_promo_last_timestamp_key";
@@ -38,6 +44,7 @@ public class ChromePreferenceManager {
     private static final String CONTEXTUAL_SEARCH_LAST_ANIMATION_TIME =
             "contextual_search_last_animation_time";
     private static final String ENABLE_CUSTOM_TABS = "enable_custom_tabs";
+    private static final String HERB_FLAVOR_KEY = "herb_flavor";
 
     private static final String SUCCESS_UPLOAD_SUFFIX = "_crash_success_upload";
     private static final String FAILURE_UPLOAD_SUFFIX = "_crash_failure_upload";
@@ -318,6 +325,21 @@ public class ChromePreferenceManager {
     }
 
     /**
+     * @return Which UI prototype the user is testing. This is cached from native via
+     *         {@link FeatureUtilities#cacheHerbFlavor}.
+     */
+    public String getCachedHerbFlavor() {
+        return mSharedPreferences.getString(HERB_FLAVOR_KEY, ChromeSwitches.HERB_FLAVOR_DISABLED);
+    }
+
+    /**
+     * Caches which UI prototype the user is testing.
+     */
+    public void setCachedHerbFlavor(String flavor) {
+        writeString(HERB_FLAVOR_KEY, flavor);
+    }
+
+    /**
      * Writes the given int value to the named shared preference.
      *
      * @param key The name of the preference to modify.
@@ -326,6 +348,18 @@ public class ChromePreferenceManager {
     private void writeInt(String key, int value) {
         SharedPreferences.Editor ed = mSharedPreferences.edit();
         ed.putInt(key, value);
+        ed.apply();
+    }
+
+    /**
+     * Writes the given String to the named shared preference.
+     *
+     * @param key The name of the preference to modify.
+     * @param value The new value for the preference.
+     */
+    private void writeString(String key, String value) {
+        SharedPreferences.Editor ed = mSharedPreferences.edit();
+        ed.putString(key, value);
         ed.apply();
     }
 }

@@ -204,6 +204,9 @@
   "RemoteAccessClientFirewallTraversal": {
   },
 
+  "RemoteAccessHostClientDomain": {
+  },
+
   "RemoteAccessHostFirewallTraversal": {
   },
 
@@ -1209,6 +1212,14 @@
           { "policy": { "VideoCaptureAllowedUrls": ["[*.]google.com"] } }
         ]
       }
+    ]
+  },
+
+  "DefaultWebBluetoothGuardSetting": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DefaultWebBluetoothGuardSetting": 2 },
+    "pref_mappings": [
+      { "pref": "profile.managed_default_content_settings.web_bluetooth_guard" }
     ]
   },
 
@@ -2422,6 +2433,18 @@
     ]
   },
 
+  "ArcEnabled": {
+    "os": ["chromeos"],
+    "can_be_recommended": false,
+    "test_policy": { "ArcEnabled": false }
+  },
+
+  "ArcApplicationPolicy": {
+    "os": ["chromeos"],
+    "can_be_recommended": false,
+    "test_policy": { "ArcApplicationPolicy": "" }
+  },
+
   "----- Chrome OS device policies ---------------------------------------": {},
 
   "DevicePolicyRefreshRate": {
@@ -2639,6 +2662,9 @@
   },
 
   "DeviceLoginScreenDomainAutoComplete": {
+  },
+
+  "AllowKioskAppControlChromeVersion": {
   },
 
   "----- Chrome Frame policies -------------------------------------------": {},

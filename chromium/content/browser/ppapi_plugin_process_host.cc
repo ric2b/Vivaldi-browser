@@ -35,6 +35,10 @@
 #include "ppapi/proxy/ppapi_messages.h"
 #include "ui/base/ui_base_switches.h"
 
+#if defined(OS_POSIX)
+#include "content/public/browser/zygote_handle_linux.h"
+#endif  // defined(OS_POSIX)
+
 #if defined(OS_WIN)
 #include "content/browser/renderer_host/dwrite_font_proxy_message_filter_win.h"
 #include "content/common/sandbox_win.h"
@@ -47,6 +51,10 @@
 #include "base/vivaldi_switches.h"
 
 namespace content {
+
+#if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
+ZygoteHandle g_ppapi_zygote;
+#endif  // defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
 
 // NOTE: changes to this class need to be reviewed by the security team.
 class PpapiPluginSandboxedProcessLauncherDelegate
@@ -108,13 +116,18 @@ class PpapiPluginSandboxedProcessLauncherDelegate
   }
 
 #elif defined(OS_POSIX)
-  bool ShouldUseZygote() override {
+#if !defined(OS_MACOSX) && !defined(OS_ANDROID)
+  ZygoteHandle* GetZygote() override {
     const base::CommandLine& browser_command_line =
         *base::CommandLine::ForCurrentProcess();
     base::CommandLine::StringType plugin_launcher = browser_command_line
         .GetSwitchValueNative(switches::kPpapiPluginLauncher);
-    return !is_broker_ && plugin_launcher.empty();
+    if (is_broker_ || !plugin_launcher.empty())
+      return nullptr;
+    return GetGenericZygote();
   }
+#endif  // !defined(OS_MACOSX) && !defined(OS_ANDROID)
+
   base::ScopedFD TakeIpcFd() override { return std::move(ipc_fd_); }
 #endif  // OS_WIN
 
@@ -202,6 +215,14 @@ PpapiPluginProcessHost* PpapiPluginProcessHost::CreateBrokerHost(
   NOTREACHED();  // Init is not expected to fail.
   return NULL;
 }
+
+#if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
+// static
+void PpapiPluginProcessHost::EarlyZygoteLaunch() {
+  DCHECK(!g_ppapi_zygote);
+  g_ppapi_zygote = CreateZygote();
+}
+#endif  // defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
 
 // static
 void PpapiPluginProcessHost::DidCreateOutOfProcessInstance(

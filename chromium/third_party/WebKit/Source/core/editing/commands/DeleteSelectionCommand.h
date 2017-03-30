@@ -50,26 +50,26 @@ private:
     DeleteSelectionCommand(Document&, bool smartDelete, bool mergeBlocksAfterDelete, bool expandForSpecialElements, bool santizeMarkup);
     DeleteSelectionCommand(const VisibleSelection&, bool smartDelete, bool mergeBlocksAfterDelete, bool expandForSpecialElements, bool sanitizeMarkup);
 
-    void doApply() override;
+    void doApply(EditingState*) override;
     EditAction editingAction() const override;
 
     bool preservesTypingStyle() const override;
 
     void initializeStartEnd(Position&, Position&);
     void setStartingSelectionOnSmartDelete(const Position&, const Position&);
-    void initializePositionData();
+    void initializePositionData(EditingState*);
     void saveTypingStyleState();
-    bool handleSpecialCaseBRDelete();
-    void handleGeneralDelete();
+    bool handleSpecialCaseBRDelete(EditingState*);
+    void handleGeneralDelete(EditingState*);
     void fixupWhitespace();
-    void mergeParagraphs();
-    void removePreviouslySelectedEmptyTableRows();
+    void mergeParagraphs(EditingState*);
+    void removePreviouslySelectedEmptyTableRows(EditingState*);
     void calculateTypingStyleAfterDelete();
     void clearTransientState();
-    void makeStylingElementsDirectChildrenOfEditableRootToPreventStyleLoss();
-    void removeNode(PassRefPtrWillBeRawPtr<Node>, ShouldAssumeContentIsAlwaysEditable = DoNotAssumeContentIsAlwaysEditable) override;
+    void makeStylingElementsDirectChildrenOfEditableRootToPreventStyleLoss(EditingState*);
+    void removeNode(PassRefPtrWillBeRawPtr<Node>, EditingState*, ShouldAssumeContentIsAlwaysEditable = DoNotAssumeContentIsAlwaysEditable) override;
     void deleteTextFromNode(PassRefPtrWillBeRawPtr<Text>, unsigned, unsigned) override;
-    void removeRedundantBlocks();
+    void removeRedundantBlocks(EditingState*);
 
     bool m_hasSelectionToDelete;
     bool m_smartDelete;

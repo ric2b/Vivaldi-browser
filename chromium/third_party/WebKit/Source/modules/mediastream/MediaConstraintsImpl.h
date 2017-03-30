@@ -44,13 +44,11 @@ class MediaTrackConstraintSet;
 namespace MediaConstraintsImpl {
 
 WebMediaConstraints create();
-WebMediaConstraints create(const Dictionary&, MediaErrorState&);
-WebMediaConstraints create(const MediaTrackConstraintSet&, MediaErrorState&);
+WebMediaConstraints create(ExecutionContext*, const Dictionary&, MediaErrorState&);
+WebMediaConstraints create(ExecutionContext*, const MediaTrackConstraintSet&, MediaErrorState&);
 
 }
 
 } // namespace blink
 
 #endif // MediaConstraintsImpl_h
-
-

@@ -13,7 +13,6 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_service.h"
 #include "base/rand_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -24,6 +23,7 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/pending_extension_manager.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/prefs/pref_service.h"
 #include "components/update_client/update_query_params.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
@@ -116,10 +116,16 @@ ExtensionUpdater::FetchedCRXFile::FetchedCRXFile()
     : file_ownership_passed(true) {
 }
 
+ExtensionUpdater::FetchedCRXFile::FetchedCRXFile(const FetchedCRXFile& other) =
+    default;
+
 ExtensionUpdater::FetchedCRXFile::~FetchedCRXFile() {}
 
 ExtensionUpdater::InProgressCheck::InProgressCheck()
     : install_immediately(false) {}
+
+ExtensionUpdater::InProgressCheck::InProgressCheck(
+    const InProgressCheck& other) = default;
 
 ExtensionUpdater::InProgressCheck::~InProgressCheck() {}
 
@@ -269,7 +275,7 @@ void ExtensionUpdater::ScheduleNextCheck(const TimeDelta& target_delay) {
 
 void ExtensionUpdater::TimerFired() {
   DCHECK(alive_);
-  CheckNow(default_params_);
+  CheckNow(CheckParams());
 
   // If the user has overridden the update frequency, don't bother reporting
   // this.
@@ -321,7 +327,7 @@ void ExtensionUpdater::StopTimerForTesting() {
 
 void ExtensionUpdater::DoCheckSoon() {
   DCHECK(will_check_soon_);
-  CheckNow(default_params_);
+  CheckNow(CheckParams());
   will_check_soon_ = false;
 }
 

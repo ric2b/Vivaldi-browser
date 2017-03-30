@@ -103,7 +103,7 @@ HTMLInputElement::HTMLInputElement(Document& document, HTMLFormElement* form, bo
     : HTMLTextFormControlElement(inputTag, document, form)
     , m_size(defaultSize)
     , m_maxLength(maximumLength)
-    , m_minLength(0)
+    , m_minLength(-1)
     , m_maxResults(-1)
     , m_isChecked(false)
     , m_reflectsCheckedAttribute(true)
@@ -175,8 +175,10 @@ HTMLInputElement::~HTMLInputElement()
     // We should unregister it to avoid accessing a deleted object.
     if (type() == InputTypeNames::radio)
         document().formController().radioButtonGroupScope().removeButton(this);
+
+    // TODO(dtapuska): Make this passive touch listener see crbug.com/584438
     if (m_hasTouchEventHandler && document().frameHost())
-        document().frameHost()->eventHandlerRegistry().didRemoveEventHandler(*this, EventHandlerRegistry::TouchEvent);
+        document().frameHost()->eventHandlerRegistry().didRemoveEventHandler(*this, EventHandlerRegistry::TouchEventBlocking);
 #endif
 }
 
@@ -271,7 +273,14 @@ String HTMLInputElement::validationMessage() const
     if (customError())
         return customValidationMessage();
 
-    return m_inputType->validationMessage();
+    return m_inputType->validationMessage().first;
+}
+
+String HTMLInputElement::validationSubMessage() const
+{
+    if (!willValidate() || customError())
+        return String();
+    return m_inputType->validationMessage().second;
 }
 
 double HTMLInputElement::minimum() const
@@ -419,10 +428,11 @@ void HTMLInputElement::updateTouchEventHandlerRegistry()
     // If the Document is being or has been stopped, don't register any handlers.
     if (document().frameHost() && document().lifecycle().state() < DocumentLifecycle::Stopping) {
         EventHandlerRegistry& registry = document().frameHost()->eventHandlerRegistry();
+        // TODO(dtapuska): Make this passive touch listener see crbug.com/584438
         if (hasTouchEventHandler)
-            registry.didAddEventHandler(*this, EventHandlerRegistry::TouchEvent);
+            registry.didAddEventHandler(*this, EventHandlerRegistry::TouchEventBlocking);
         else
-            registry.didRemoveEventHandler(*this, EventHandlerRegistry::TouchEvent);
+            registry.didRemoveEventHandler(*this, EventHandlerRegistry::TouchEventBlocking);
         m_hasTouchEventHandler = hasTouchEventHandler;
     }
 }
@@ -1355,6 +1365,8 @@ const AtomicString& HTMLInputElement::alt() const
 
 int HTMLInputElement::maxLength() const
 {
+    if (!hasAttribute(maxlengthAttr))
+        return -1;
     return m_maxLength;
 }
 
@@ -1669,9 +1681,9 @@ void HTMLInputElement::updatePlaceholderText()
 void HTMLInputElement::parseMaxLengthAttribute(const AtomicString& value)
 {
     int maxLength;
-    if (!parseHTMLInteger(value, maxLength))
-        maxLength = maximumLength;
-    if (maxLength < 0 || maxLength > maximumLength)
+    if (!parseHTMLInteger(value, maxLength) || maxLength < 0)
+        maxLength = -1;
+    if (maxLength > maximumLength)
         maxLength = maximumLength;
     int oldMaxLength = m_maxLength;
     m_maxLength = maxLength;
@@ -1683,10 +1695,8 @@ void HTMLInputElement::parseMaxLengthAttribute(const AtomicString& value)
 void HTMLInputElement::parseMinLengthAttribute(const AtomicString& value)
 {
     int minLength;
-    if (!parseHTMLInteger(value, minLength))
-        minLength = 0;
-    if (minLength < 0)
-        minLength = 0;
+    if (!parseHTMLInteger(value, minLength) || minLength < 0)
+        minLength = -1;
     m_minLength = minLength;
     setNeedsValidityCheck();
 }
@@ -1927,4 +1937,4 @@ bool HTMLInputElement::hasFallbackContent() const
 {
     return m_inputTypeView->hasFallbackContent();
 }
-} // namespace
+} // namespace blink

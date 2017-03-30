@@ -61,8 +61,9 @@ class UsbDeviceImpl : public UsbDevice {
     serial_number_ = value;
   }
   void set_device_path(const std::string& value) { device_path_ = value; }
-  void set_webusb_allowed_origins(scoped_ptr<WebUsbDescriptorSet> descriptors) {
-    webusb_allowed_origins_ = std::move(descriptors);
+  void set_webusb_allowed_origins(
+      scoped_ptr<WebUsbAllowedOrigins> allowed_origins) {
+    webusb_allowed_origins_ = std::move(allowed_origins);
   }
   void set_webusb_landing_page(const GURL& url) { webusb_landing_page_ = url; }
 
@@ -96,6 +97,9 @@ class UsbDeviceImpl : public UsbDevice {
 #if defined(OS_CHROMEOS)
   void OnOpenRequestComplete(const OpenCallback& callback,
                              dbus::FileDescriptor fd);
+  void OnOpenRequestError(const OpenCallback& callback,
+                          const std::string& error_name,
+                          const std::string& error_message);
   void OpenOnBlockingThreadWithFd(dbus::FileDescriptor fd,
                                   const OpenCallback& callback);
 #endif

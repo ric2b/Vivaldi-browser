@@ -13,10 +13,13 @@
 
 namespace ui {
 
-DrmThreadMessageProxy::DrmThreadMessageProxy(DrmThread* drm_thread)
-    : drm_thread_(drm_thread), weak_ptr_factory_(this) {}
+DrmThreadMessageProxy::DrmThreadMessageProxy() : weak_ptr_factory_(this) {}
 
 DrmThreadMessageProxy::~DrmThreadMessageProxy() {}
+
+void DrmThreadMessageProxy::SetDrmThread(DrmThread* thread) {
+  drm_thread_ = thread;
+}
 
 void DrmThreadMessageProxy::OnFilterAdded(IPC::Sender* sender) {
   sender_ = sender;
@@ -51,10 +54,10 @@ bool DrmThreadMessageProxy::OnMessageReceived(const IPC::Message& message) {
                         OnRemoveGraphicsDevice)
     IPC_MESSAGE_HANDLER(OzoneGpuMsg_GetHDCPState, OnGetHDCPState)
     IPC_MESSAGE_HANDLER(OzoneGpuMsg_SetHDCPState, OnSetHDCPState)
-    IPC_MESSAGE_HANDLER(OzoneGpuMsg_SetGammaRamp, OnSetGammaRamp);
+    IPC_MESSAGE_HANDLER(OzoneGpuMsg_SetGammaRamp, OnSetGammaRamp)
     IPC_MESSAGE_HANDLER(OzoneGpuMsg_CheckOverlayCapabilities,
                         OnCheckOverlayCapabilities)
-    IPC_MESSAGE_UNHANDLED(handled = false);
+    IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
   return handled;

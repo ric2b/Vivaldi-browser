@@ -31,7 +31,6 @@
 #include "core/inspector/WorkerThreadDebugger.h"
 
 #include "bindings/core/v8/V8ScriptRunner.h"
-#include "core/inspector/DebuggerScript.h"
 #include "core/inspector/WorkerDebuggerAgent.h"
 #include "core/workers/WorkerThread.h"
 #include <v8.h>
@@ -41,8 +40,7 @@ namespace blink {
 static const int workerContextGroupId = 1;
 
 WorkerThreadDebugger::WorkerThreadDebugger(WorkerThread* workerThread)
-    : m_isolate(v8::Isolate::GetCurrent())
-    , m_debugger(V8Debugger::create(v8::Isolate::GetCurrent(), this))
+    : ThreadDebugger(v8::Isolate::GetCurrent())
     , m_workerThread(workerThread)
     , m_paused(false)
 {
@@ -62,11 +60,6 @@ int WorkerThreadDebugger::contextGroupId()
     return workerContextGroupId;
 }
 
-v8::Local<v8::Object> WorkerThreadDebugger::compileDebuggerScript()
-{
-    return blink::compileDebuggerScript(m_isolate);
-}
-
 void WorkerThreadDebugger::runMessageLoopOnPause(int contextGroupId)
 {
     ASSERT(contextGroupId == workerContextGroupId);
@@ -83,6 +76,11 @@ void WorkerThreadDebugger::runMessageLoopOnPause(int contextGroupId)
 void WorkerThreadDebugger::quitMessageLoopOnPause()
 {
     m_paused = false;
+}
+
+bool WorkerThreadDebugger::callingContextCanAccessContext(v8::Local<v8::Context> calling, v8::Local<v8::Context> target)
+{
+    return true;
 }
 
 } // namespace blink

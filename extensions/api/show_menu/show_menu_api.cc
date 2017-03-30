@@ -30,6 +30,8 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/manifest_constants.h"
+#include "ui/base/accelerators/accelerator.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/vivaldi_context_menu.h"
 #include "ui/vivaldi_main_menu.h"
 
@@ -421,20 +423,20 @@ void VivaldiMenuController::PopulateModel(const show_menu::MenuItem* item,
       initial_selected_id_ = id;
     }
     bool load_image = false;
-    if (item->items) {
-      ui::SimpleMenuModel* child_menu_model = new ui::SimpleMenuModel(this);
-      models_.push_back(child_menu_model);
-      for (std::vector<linked_ptr<show_menu::MenuItem>>::const_iterator it =
-              item->items->begin();
-          it != item->items->end(); ++it) {
-        const show_menu::MenuItem& child = **it;
-        PopulateModel(&child, child_menu_model);
-      }
-      menu_model->AddSubMenu(id, label, child_menu_model);
-      load_image = true;
-    } else {
-      bool visible = item->visible ? *item->visible : true;
-      if (visible) {
+    bool visible = item->visible ? *item->visible : true;
+    if (visible) {
+      if (item->items) {
+        ui::SimpleMenuModel* child_menu_model = new ui::SimpleMenuModel(this);
+        models_.push_back(child_menu_model);
+        for (std::vector<linked_ptr<show_menu::MenuItem>>::const_iterator it =
+                item->items->begin();
+            it != item->items->end(); ++it) {
+          const show_menu::MenuItem& child = **it;
+          PopulateModel(&child, child_menu_model);
+        }
+        menu_model->AddSubMenu(id, label, child_menu_model);
+        load_image = true;
+      } else {
         if (item->type.get() && item->type->compare("checkbox") == 0) {
           menu_model->AddCheckItem(id, label);
         } else {

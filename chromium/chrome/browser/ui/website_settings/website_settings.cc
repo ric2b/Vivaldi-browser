@@ -60,6 +60,9 @@
 #include "content/public/browser/user_metrics.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
+#include "grit/components_chromium_strings.h"
+#include "grit/components_google_chrome_strings.h"
+#include "grit/components_strings.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/ssl_cipher_suite_names.h"
@@ -309,7 +312,8 @@ void WebsiteSettings::OnSiteChosenObjectDeleted(
     const base::DictionaryValue& object) {
   // TODO(reillyg): Create metrics for revocations. crbug.com/556845
   ChooserContextBase* context = ui_info.get_context(profile_);
-  context->RevokeObjectPermission(site_url_, site_url_, object);
+  const GURL origin = site_url_.GetOrigin();
+  context->RevokeObjectPermission(origin, origin, object);
 
   show_info_bar_ = true;
 
@@ -694,18 +698,20 @@ void WebsiteSettings::PresentSitePermissions() {
                                                       NULL);
     }
 
-    if ((permission_info.setting != CONTENT_SETTING_DEFAULT &&
-         permission_info.setting != permission_info.default_setting) ||
-        (permission_info.type == CONTENT_SETTINGS_TYPE_KEYGEN &&
-         tab_specific_content_settings()->IsContentBlocked(
-             permission_info.type))) {
-      permission_info_list.push_back(permission_info);
+    if (permission_info.type == CONTENT_SETTINGS_TYPE_KEYGEN &&
+        (permission_info.setting == CONTENT_SETTING_DEFAULT ||
+         permission_info.setting == permission_info.default_setting) &&
+        !tab_specific_content_settings()->IsContentBlocked(
+            permission_info.type)) {
+      continue;
     }
+    permission_info_list.push_back(permission_info);
   }
 
   for (const ChooserUIInfo& ui_info : kChooserUIInfo) {
     ChooserContextBase* context = ui_info.get_context(profile_);
-    auto chosen_objects = context->GetGrantedObjects(site_url_, site_url_);
+    const GURL origin = site_url_.GetOrigin();
+    auto chosen_objects = context->GetGrantedObjects(origin, origin);
     for (scoped_ptr<base::DictionaryValue>& object : chosen_objects) {
       chosen_object_info_list.push_back(
           new WebsiteSettingsUI::ChosenObjectInfo(ui_info, std::move(object)));

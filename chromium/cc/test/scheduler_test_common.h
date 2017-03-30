@@ -91,31 +91,28 @@ class TestDelayBasedTimeSource : public DelayBasedTimeSource {
 
 class FakeBeginFrameSource : public BeginFrameSourceBase {
  public:
-  FakeBeginFrameSource() : remaining_frames_(false) {}
-  ~FakeBeginFrameSource() override {}
+  FakeBeginFrameSource();
+  ~FakeBeginFrameSource() override;
 
-  BeginFrameObserver* GetObserver() { return observer_; }
-
-  BeginFrameArgs TestLastUsedBeginFrameArgs() {
-    if (observer_) {
-      return observer_->LastUsedBeginFrameArgs();
-    }
-    return BeginFrameArgs();
-  }
-
+  // TODO(sunnyps): Use using BeginFrameSourceBase::CallOnBeginFrame instead.
   void TestOnBeginFrame(const BeginFrameArgs& args) {
     return CallOnBeginFrame(args);
   }
 
+  BeginFrameArgs TestLastUsedBeginFrameArgs() {
+    if (!observers_.empty())
+      return (*observers_.begin())->LastUsedBeginFrameArgs();
+    return BeginFrameArgs();
+  }
+
+  bool has_observers() const { return !observers_.empty(); }
+
   // BeginFrameSource
-  void DidFinishFrame(size_t remaining_frames) override;
   void AsValueInto(base::trace_event::TracedValue* dict) const override;
 
   using BeginFrameSourceBase::SetBeginFrameSourcePaused;
 
  private:
-  bool remaining_frames_;
-
   DISALLOW_COPY_AND_ASSIGN(FakeBeginFrameSource);
 };
 
@@ -167,7 +164,8 @@ class TestSyntheticBeginFrameSource : public SyntheticBeginFrameSource {
 
 class FakeCompositorTimingHistory : public CompositorTimingHistory {
  public:
-  static scoped_ptr<FakeCompositorTimingHistory> Create();
+  static scoped_ptr<FakeCompositorTimingHistory> Create(
+      bool using_synchronous_renderer_compositor);
   ~FakeCompositorTimingHistory() override;
 
   void SetAllEstimatesTo(base::TimeDelta duration);
@@ -193,7 +191,8 @@ class FakeCompositorTimingHistory : public CompositorTimingHistory {
   base::TimeDelta DrawDurationEstimate() const override;
 
  protected:
-  FakeCompositorTimingHistory(scoped_ptr<RenderingStatsInstrumentation>
+  FakeCompositorTimingHistory(bool using_synchronous_renderer_compositor,
+                              scoped_ptr<RenderingStatsInstrumentation>
                                   rendering_stats_instrumentation_owned);
 
   scoped_ptr<RenderingStatsInstrumentation>
@@ -240,6 +239,8 @@ class TestScheduler : public Scheduler {
   bool MainThreadMissedLastDeadline() const {
     return state_machine_.main_thread_missed_last_deadline();
   }
+
+  bool begin_frames_expected() const { return observing_frame_source_; }
 
   ~TestScheduler() override;
 

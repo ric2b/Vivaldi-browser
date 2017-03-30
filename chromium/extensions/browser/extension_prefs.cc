@@ -12,13 +12,13 @@
 
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "components/crx_file/id_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "extensions/browser/app_sorting.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_pref_store.h"
@@ -137,11 +137,6 @@ const char kPrefAPIs[] = "api";
 const char kPrefManifestPermissions[] = "manifest_permissions";
 const char kPrefExplicitHosts[] = "explicit_host";
 const char kPrefScriptableHosts[] = "scriptable_host";
-
-// The preference names for the old granted permissions scheme.
-const char kPrefOldGrantedFullAccess[] = "granted_permissions.full";
-const char kPrefOldGrantedHosts[] = "granted_permissions.host";
-const char kPrefOldGrantedAPIs[] = "granted_permissions.api";
 
 // A preference that indicates when an extension was installed.
 const char kPrefInstallTime[] = "install_time";
@@ -943,57 +938,6 @@ void ExtensionPrefs::SetActiveBit(const std::string& extension_id,
                       new base::FundamentalValue(active));
 }
 
-void ExtensionPrefs::MigratePermissions(const ExtensionIdList& extension_ids) {
-  PermissionsInfo* info = PermissionsInfo::GetInstance();
-  for (ExtensionIdList::const_iterator ext_id =
-       extension_ids.begin(); ext_id != extension_ids.end(); ++ext_id) {
-    // An extension's granted permissions need to be migrated if the
-    // full_access bit is present. This bit was always present in the previous
-    // scheme and is never present now.
-    bool full_access = false;
-    const base::DictionaryValue* ext = GetExtensionPref(*ext_id);
-    if (!ext || !ext->GetBoolean(kPrefOldGrantedFullAccess, &full_access))
-      continue;
-
-    // Remove the full access bit (empty list will get trimmed).
-    UpdateExtensionPref(
-        *ext_id, kPrefOldGrantedFullAccess, new base::ListValue());
-
-    // Add the plugin permission if the full access bit was set.
-    if (full_access) {
-      const base::ListValue* apis = NULL;
-      base::ListValue* new_apis = NULL;
-
-      std::string granted_apis = JoinPrefs(kPrefGrantedPermissions, kPrefAPIs);
-      if (ext->GetList(kPrefOldGrantedAPIs, &apis))
-        new_apis = apis->DeepCopy();
-      else
-        new_apis = new base::ListValue();
-
-      std::string plugin_name = info->GetByID(APIPermission::kPlugin)->name();
-      new_apis->Append(new base::StringValue(plugin_name));
-      UpdateExtensionPref(*ext_id, granted_apis, new_apis);
-    }
-
-    // The granted permissions originally only held the effective hosts,
-    // which are a combination of host and user script host permissions.
-    // We now maintain these lists separately. For migration purposes, it
-    // does not matter how we treat the old effective hosts as long as the
-    // new effective hosts will be the same, so we move them to explicit
-    // host permissions.
-    const base::ListValue* hosts = NULL;
-    std::string explicit_hosts =
-        JoinPrefs(kPrefGrantedPermissions, kPrefExplicitHosts);
-    if (ext->GetList(kPrefOldGrantedHosts, &hosts)) {
-      UpdateExtensionPref(
-          *ext_id, explicit_hosts, hosts->DeepCopy());
-
-      // We can get rid of the old one by setting it to an empty list.
-      UpdateExtensionPref(*ext_id, kPrefOldGrantedHosts, new base::ListValue());
-    }
-  }
-}
-
 scoped_ptr<const PermissionSet> ExtensionPrefs::GetGrantedPermissions(
     const std::string& extension_id) const {
   CHECK(crx_file::id_util::IdIsValid(extension_id));
@@ -1662,25 +1606,6 @@ void ExtensionPrefs::RemoveObserver(ExtensionPrefsObserver* observer) {
   observer_list_.RemoveObserver(observer);
 }
 
-void ExtensionPrefs::FixMissingPrefs(const ExtensionIdList& extension_ids) {
-  // Fix old entries that did not get an installation time entry when they
-  // were installed or don't have a preferences field.
-  for (ExtensionIdList::const_iterator ext_id = extension_ids.begin();
-       ext_id != extension_ids.end(); ++ext_id) {
-    if (GetInstallTime(*ext_id) == base::Time()) {
-      VLOG(1) << "Could not parse installation time of extension "
-              << *ext_id << ". It was probably installed before setting "
-              << kPrefInstallTime << " was introduced. Updating "
-              << kPrefInstallTime << " to the current time.";
-      const base::Time install_time = time_provider_->GetCurrentTime();
-      UpdateExtensionPref(*ext_id,
-                          kPrefInstallTime,
-                          new base::StringValue(base::Int64ToString(
-                              install_time.ToInternalValue())));
-    }
-  }
-}
-
 void ExtensionPrefs::InitPrefStore() {
   TRACE_EVENT0("browser,startup", "ExtensionPrefs::InitPrefStore")
   SCOPED_UMA_HISTOGRAM_TIMER("Extensions.InitPrefStoreTime");
@@ -1705,9 +1630,6 @@ void ExtensionPrefs::InitPrefStore() {
     // This creates an empty dictionary if none is stored.
     update.Get();
   }
-
-  FixMissingPrefs(extension_ids);
-  MigratePermissions(extension_ids);
 
   InitExtensionControlledPrefs(extension_pref_value_map_);
 

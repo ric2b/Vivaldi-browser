@@ -45,6 +45,7 @@
 #include "app/vivaldi_apptools.h"
 
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/task_management/web_contents_tags.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -100,16 +101,19 @@ ExtensionHost::ExtensionHost(const Extension* extension,
     }
 
     if (guest_view_manager) {
-      WebContents::CreateParams r =
-          WebContents::CreateParams(browser_context_, site_instance);
-      r.initially_hidden = true;
+      WebContents::CreateParams guest_create_params =
+          WebContents::CreateParams(browser_context_);
+      guest_create_params.initially_hidden = true;
 
-      guest_owner_contents_.reset(WebContents::Create(r));
-      content::WebContents *t =
+      guest_owner_contents_.reset(WebContents::Create(guest_create_params));
+      content::WebContents* guest_content =
           guest_view_manager->CreateGuestWithWebContentsParams(
-              WebViewGuest::Type, guest_owner_contents_.get(), create_params);
-      // TODO: Should remove the webview tag so it does not show in taskmanager
-      create_params.guest_delegate = WebViewGuest::FromWebContents(t);
+              WebViewGuest::Type, guest_owner_contents_.get(),
+              guest_create_params);
+      task_management::WebContentsTags::ClearTag(guest_content);
+
+      create_params.guest_delegate =
+          WebViewGuest::FromWebContents(guest_content);
     }
   }
 
@@ -514,11 +518,9 @@ void ExtensionHost::AddNewContents(WebContents* source,
 }
 
 content::WebContents *ExtensionHost::GetAssociatedWebContents() const {
-  chrome::HostDesktopType active_desktop = chrome::GetActiveDesktop();
   bool match_original_profiles = true;
   Profile *profile = Profile::FromBrowserContext(browser_context_);
-  Browser *browser = chrome::FindTabbedBrowser(profile, match_original_profiles,
-                                               active_desktop);
+  Browser *browser = chrome::FindTabbedBrowser(profile, match_original_profiles);
   if (browser) {
     TabStripModel *tab_strip = browser->tab_strip_model();
     return tab_strip->GetActiveWebContents();

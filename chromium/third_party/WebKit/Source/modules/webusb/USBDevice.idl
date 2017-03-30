@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// http://reillyeon.github.io/webusb/#idl-def-usbtransferstatus
+// http://wicg.github.io/webusb/#idl-def-usbtransferstatus
 
 enum USBTransferStatus {
     "ok",
@@ -10,7 +10,7 @@ enum USBTransferStatus {
     "babble"
 };
 
-// http://reillyeon.github.io/webusb/#device-usage
+// http://wicg.github.io/webusb/#device-usage
 
 [
     GarbageCollected,
@@ -45,5 +45,7 @@ enum USBTransferStatus {
     [CallWith=ScriptState] Promise<void> clearHalt(octet endpointNumber);
     [CallWith=ScriptState] Promise<USBInTransferResult> transferIn(octet endpointNumber, unsigned long length);
     [CallWith=ScriptState] Promise<USBOutTransferResult> transferOut(octet endpointNumber, BufferSource data);
+    [CallWith=ScriptState] Promise<USBIsochronousInTransferResult>  isochronousTransferIn(octet endpointNumber, sequence<unsigned long> packetLengths);
+    [CallWith=ScriptState] Promise<UsbIsochronousOutTransferResult> isochronousTransferOut(octet endpointNumber, BufferSource data, sequence<unsigned long> packetLengths);
     [CallWith=ScriptState] Promise<void> reset();
 };

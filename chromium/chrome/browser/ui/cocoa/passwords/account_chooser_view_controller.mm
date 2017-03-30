@@ -4,83 +4,45 @@
 
 #import "chrome/browser/ui/cocoa/passwords/account_chooser_view_controller.h"
 
-#include <cmath>
-
+#include "base/mac/foundation_util.h"
+#include "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
-#include "chrome/browser/profiles/profile.h"
-#import "chrome/browser/ui/cocoa/bubble_combobox.h"
+#include "base/strings/utf_string_conversions.h"
 #import "chrome/browser/ui/cocoa/passwords/account_avatar_fetcher_manager.h"
+#import "chrome/browser/ui/cocoa/passwords/credential_item_button.h"
 #import "chrome/browser/ui/cocoa/passwords/passwords_bubble_utils.h"
-#include "chrome/browser/ui/passwords/account_chooser_more_combobox_model.h"
-#include "chrome/browser/ui/passwords/manage_passwords_bubble_model.h"
+#include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
+#include "chrome/browser/ui/passwords/password_dialog_controller.h"
+#include "chrome/browser/ui/passwords/password_dialog_prompts.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
+#include "grit/theme_resources.h"
+#include "skia/ext/skia_utils_mac.h"
+#include "ui/base/cocoa/controls/hyperlink_text_view.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/resource/resource_bundle.h"
+#include "ui/strings/grit/ui_strings.h"
 
-@implementation CredentialItemCell {
-  base::scoped_nsobject<CredentialItemView> view_;
+@interface AccountChooserViewController () {
+  NSButton* cancelButton_;  // Weak.
+  NSTextView* titleView_;   //  Weak.
+  base::scoped_nsobject<NSArray> credentialButtons_;
+  base::scoped_nsobject<AccountAvatarFetcherManager> avatarManager_;
 }
-- (id)initWithView:(CredentialItemView*)view {
-  if ((self = [super init]))
-    view_.reset([view retain]);
-  return self;
-}
-- (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(NSView*)controlView {
-  [controlView addSubview:view_];
-  [view_ setFrame:cellFrame];
-}
-- (id)copyWithZone:(NSZone*)zone {
-  return [[CredentialItemCell alloc] initWithView:view_];
-}
-- (CredentialItemView*)view {
-  return view_.get();
-}
-@end
-
-@interface ManagePasswordsBubbleAccountChooserViewController()
-- (id)initWithModel:(ManagePasswordsBubbleModel*)model
-      avatarManager:(AccountAvatarFetcherManager*)avatarManager
-           delegate:(id<ManagePasswordsBubbleContentViewDelegate>)delegate;
 - (void)onCancelClicked:(id)sender;
-- (void)onLearnMoreClicked:(id)sender;
-- (void)onSettingsClicked:(id)sender;
-+ (NSArray*)credentialItemsForModel:(ManagePasswordsBubbleModel*)model
-                           delegate:(id<CredentialItemDelegate>)delegate;
-@property(nonatomic, readonly) NSButton* cancelButton;
-@property(nonatomic, readonly) BubbleCombobox* moreButton;
-@property(nonatomic, readonly) NSTableView* credentialsView;
+- (void)onCredentialClicked:(id)sender;
+- (void)loadCredentialItems;
 @end
 
-@implementation ManagePasswordsBubbleAccountChooserViewController
+@implementation AccountChooserViewController
+@synthesize bridge = bridge_;
 
-@synthesize cancelButton = cancelButton_;
-@synthesize moreButton = moreButton_;
-@synthesize credentialsView = credentialsView_;
-
-- (id)initWithModel:(ManagePasswordsBubbleModel*)model
-      avatarManager:(AccountAvatarFetcherManager*)avatarManager
-           delegate:(id<ManagePasswordsBubbleContentViewDelegate>)delegate {
-  DCHECK(model);
-  if (([super initWithDelegate:delegate])) {
-    model_ = model;
-    avatarManager_.reset([avatarManager retain]);
-  }
-  return self;
-}
-
-- (id)initWithModel:(ManagePasswordsBubbleModel*)model
-           delegate:(id<ManagePasswordsBubbleContentViewDelegate>)delegate {
+- (instancetype)initWithBridge:(PasswordPromptBridgeInterface*)bridge {
   base::scoped_nsobject<AccountAvatarFetcherManager> avatarManager(
       [[AccountAvatarFetcherManager alloc]
-          initWithRequestContext:model->GetProfile()->GetRequestContext()]);
-  return
-      [self initWithModel:model avatarManager:avatarManager delegate:delegate];
-}
-
-- (void)dealloc {
-  [credentialsView_ setDelegate:nil];
-  [credentialsView_ setDataSource:nil];
-  [super dealloc];
+           initWithRequestContext:bridge->GetRequestContext()]);
+  return [self initWithBridge:bridge avatarManager:avatarManager];
 }
 
 - (void)loadView {
@@ -96,173 +58,148 @@
   // | |  |  credential view            |
   // | ----                             |
   // |                                  |
-  // |            [ More v] [ Cancel ]  |
+  // |                      [ Cancel ]  |
   // ------------------------------------
 
   // Create the views.
   // Title.
-  NSTextField* title =
-      [self addTitleLabel:base::SysUTF16ToNSString(model_->title())
-                   toView:view];
-  [title setAlignment:base::i18n::IsRTL() ? NSRightTextAlignment
-                                          : NSLeftTextAlignment];
+  std::pair<base::string16, gfx::Range> title_text =
+      bridge_->GetDialogController()->GetAccoutChooserTitle();
+  titleView_ =
+      TitleDialogLabelWithLink(title_text.first, title_text.second, self);
+  // Force the text to wrap to fit in the bubble size.
+  [titleView_ setVerticallyResizable:YES];
+  const CGFloat width = kDesiredBubbleWidth - 2*kFramePadding;
+  [titleView_ setFrameSize:NSMakeSize(width, MAXFLOAT)];
+  [titleView_ sizeToFit];
+  [[titleView_ textContainer] setLineFragmentPadding:0];
+  [view addSubview:titleView_];
 
   // Credentials list.
-  credentialItems_.reset(
-      [[[self class] credentialItemsForModel:model_ delegate:self] retain]);
-  base::scoped_nsobject<NSTableView> credentialsView(
-      [[NSTableView alloc] initWithFrame:NSZeroRect]);
-  [credentialsView
-      setSelectionHighlightStyle:NSTableViewSelectionHighlightStyleNone];
-  NSTableColumn* column =
-      [[[NSTableColumn alloc] initWithIdentifier:@""] autorelease];
-  [credentialsView addTableColumn:column];
-  [credentialsView setDelegate:self];
-  [credentialsView setDataSource:self];
-  [credentialsView setFocusRingType:NSFocusRingTypeNone];
-  credentialsView_ = credentialsView;
-  [view addSubview:credentialsView_];
+  [self loadCredentialItems];
 
   // "Cancel" button.
-  cancelButton_ =
-      [self addButton:l10n_util::GetNSString(
-                          IDS_CREDENTIAL_MANAGEMENT_ACCOUNT_CHOOSER_NO_THANKS)
-               toView:view
-               target:self
-               action:@selector(onCancelClicked:)];
-
-  // "More" button.
-  AccountChooserMoreComboboxModel comboboxModel;
-  moreButton_ = [[BubbleCombobox alloc] initWithFrame:NSZeroRect
-                                            pullsDown:YES
-                                                model:&comboboxModel];
-  [moreButton_ sizeToFit];
-  NSMenuItem* learnMoreItem = [moreButton_
-      itemAtIndex:AccountChooserMoreComboboxModel::INDEX_LEARN_MORE];
-  [learnMoreItem setTarget:self];
-  [learnMoreItem setAction:@selector(onLearnMoreClicked:)];
-  NSMenuItem* settingsItem =
-      [moreButton_ itemAtIndex:AccountChooserMoreComboboxModel::INDEX_SETTINGS];
-  [settingsItem setTarget:self];
-  [settingsItem setAction:@selector(onSettingsClicked:)];
-  [view addSubview:moreButton_];
+  cancelButton_ = DialogButton(l10n_util::GetNSString(IDS_APP_CANCEL));
+  [cancelButton_ setTarget:self];
+  [cancelButton_ setAction:@selector(onCancelClicked:)];
+  [view addSubview:cancelButton_];
 
   // Lay out the views.
-  const CGFloat width =
-      std::max(NSWidth([title frame]), NSWidth([credentialsView_ frame]));
-  [cancelButton_
-      setFrameOrigin:NSMakePoint(base::i18n::IsRTL()
-                                     ? kFramePadding
-                                     : kFramePadding + width -
-                                           NSWidth([cancelButton_ frame]),
-                                 kFramePadding)];
-  [moreButton_
-      setFrameOrigin:NSMakePoint(base::i18n::IsRTL()
-                                     ? NSMaxX([cancelButton_ frame]) +
-                                           kRelatedControlHorizontalPadding
-                                     : NSMinX([cancelButton_ frame]) -
-                                           kRelatedControlHorizontalPadding -
-                                           NSWidth([moreButton_ frame]),
-                                 std::ceil(kFramePadding +
-                                           (NSHeight([cancelButton_ frame]) -
-                                            NSHeight([moreButton_ frame])) /
-                                               2.0f))];
+  [cancelButton_ setFrameOrigin:NSMakePoint(
+      kFramePadding + width - NSWidth([cancelButton_ frame]),
+      kFramePadding)];
 
-  // The credentials TableView expands to fill available space.
-  [column setMaxWidth:width];
-  [credentialsView
-      setFrameSize:NSMakeSize(width, NSHeight([credentialsView_ frame]))];
-  [credentialsView_
-      setFrameOrigin:NSMakePoint(kFramePadding,
-                                 NSMaxY([cancelButton_ frame]) +
-                                     kUnrelatedControlVerticalPadding)];
+  CGFloat curY =
+      NSMaxY([cancelButton_ frame]) + 3 * kRelatedControlVerticalSpacing;
+  for (CredentialItemButton* button in credentialButtons_.get()) {
+    [view addSubview:button];
+    [button setFrameOrigin:NSMakePoint(0, curY)];
+    curY = NSMaxY([button frame]);
+  }
+  curY += 2 * kRelatedControlVerticalSpacing;
 
-  [title setFrameOrigin:NSMakePoint(
-                            base::i18n::IsRTL()
-                                ? kFramePadding + width - NSWidth([title frame])
-                                : kFramePadding,
-                            NSMaxY([credentialsView_ frame]) +
-                                kUnrelatedControlVerticalPadding)];
+  [titleView_ setFrameOrigin:NSMakePoint(kFramePadding, curY)];
 
-  // Compute the frame to hold all the views.
-  const CGFloat frameWidth = width + 2 * kFramePadding;
-  const CGFloat frameHeight = NSMaxY([title frame]) + kFramePadding;
-  [view setFrame:NSMakeRect(0, 0, frameWidth, frameHeight)];
-
+  const CGFloat frameHeight = NSMaxY([titleView_ frame]) + kFramePadding;
+  [view setFrame:NSMakeRect(0, 0, kDesiredBubbleWidth, frameHeight)];
   [self setView:view];
 }
 
+- (BOOL)textView:(NSTextView*)textView
+    clickedOnLink:(id)link
+          atIndex:(NSUInteger)charIndex {
+  if (bridge_ && bridge_->GetDialogController())
+    bridge_->GetDialogController()->OnSmartLockLinkClicked();
+  return YES;
+}
+
 - (void)onCancelClicked:(id)sender {
-  model_->OnCancelClicked();
-  [delegate_ viewShouldDismiss];
+  if (bridge_)
+    bridge_->PerformClose();
 }
 
-- (void)onLearnMoreClicked:(id)sender {
-  // TODO(dconnelly): Open some help center article that's not written yet.
-  [delegate_ viewShouldDismiss];
+- (void)onCredentialClicked:(id)sender {
+  CredentialItemButton* button =
+      base::mac::ObjCCastStrict<CredentialItemButton>(sender);
+  if (bridge_ && bridge_->GetDialogController()) {
+    bridge_->GetDialogController()->OnChooseCredentials(*button.passwordForm,
+                                                        button.credentialType);
+  }
 }
 
-- (void)onSettingsClicked:(id)sender {
-  model_->OnManageLinkClicked();
-  [delegate_ viewShouldDismiss];
-}
-
-- (void)fetchAvatar:(const GURL&)avatarURL forView:(CredentialItemView*)view {
-  [avatarManager_ fetchAvatar:avatarURL forView:view];
-}
-
-+ (NSArray*)credentialItemsForModel:(ManagePasswordsBubbleModel*)model
-                           delegate:(id<CredentialItemDelegate>)delegate {
+- (void)loadCredentialItems {
   base::scoped_nsobject<NSMutableArray> items([[NSMutableArray alloc] init]);
-  for (auto form : model->local_credentials()) {
-    base::scoped_nsobject<CredentialItemView> item([[CredentialItemView alloc]
-        initWithPasswordForm:*form
-              credentialType:password_manager::CredentialType::
-                                 CREDENTIAL_TYPE_PASSWORD
-                       style:password_manager_mac::CredentialItemStyle::
-                                 ACCOUNT_CHOOSER
-                    delegate:delegate]);
-    [item setAutoresizingMask:NSViewWidthSizable];
+  PasswordDialogController* controller = self.bridge->GetDialogController();
+  NSRect rect = NSMakeRect(0, 0, kDesiredBubbleWidth,
+                           kAvatarImageSize + 2 * kVerticalAvatarMargin);
+  for (const auto& form : controller->GetLocalForms()) {
+    base::scoped_nsobject<CredentialItemButton> item(
+        [[CredentialItemButton alloc]
+              initWithFrame:rect
+            backgroundColor:[NSColor textBackgroundColor]
+                 hoverColor:skia::SkColorToSRGBNSColor(kButtonHoverColor)]);
+    [item setPasswordForm:form.get()];
+    [item setCredentialType:password_manager::CredentialType::
+                                CREDENTIAL_TYPE_PASSWORD];
+    std::pair<base::string16, base::string16> labels =
+        GetCredentialLabelsForAccountChooser(*form);
+    if (labels.second.empty()) {
+      [item setTitle:base::SysUTF16ToNSString(labels.first)];
+    } else {
+      NSString* text = base::SysUTF16ToNSString(
+          labels.first + base::ASCIIToUTF16("\n") + labels.second);
+      NSFont* font = ResourceBundle::GetSharedInstance()
+                         .GetFontList(ResourceBundle::SmallFont)
+                         .GetPrimaryFont()
+                         .GetNativeFont();
+      NSDictionary* attrsDictionary =
+          [NSDictionary dictionaryWithObject:font forKey:NSFontAttributeName];
+      base::scoped_nsobject<NSMutableAttributedString> attributed_string(
+          [[NSMutableAttributedString alloc] initWithString:text
+                                                 attributes:attrsDictionary]);
+      [attributed_string beginEditing];
+      [attributed_string
+          addAttribute:NSForegroundColorAttributeName
+                 value:skia::SkColorToSRGBNSColor(kAutoSigninTextColor)
+                 range:NSMakeRange(labels.first.size() + 1,
+                                   labels.second.size())];
+      [attributed_string endEditing];
+      [item setAttributedTitle:attributed_string];
+    }
+    [item setImage:[CredentialItemButton defaultAvatar]];
+    if (form->icon_url.is_valid())
+      [avatarManager_ fetchAvatar:form->icon_url forView:item];
+    [item setTarget:self];
+    [item setAction:@selector(onCredentialClicked:)];
     [items addObject:item];
   }
-  for (auto form : model->federated_credentials()) {
-    base::scoped_nsobject<CredentialItemView> item([[CredentialItemView alloc]
-        initWithPasswordForm:*form
-              credentialType:password_manager::CredentialType::
-                                 CREDENTIAL_TYPE_FEDERATED
-                       style:password_manager_mac::CredentialItemStyle::
-                                 ACCOUNT_CHOOSER
-                    delegate:delegate]);
-    [item setAutoresizingMask:NSViewWidthSizable];
-    [items addObject:item];
+  credentialButtons_.reset(items.release());
+}
+
+@end
+
+@implementation AccountChooserViewController(Testing)
+
+- (instancetype)initWithBridge:(PasswordPromptBridgeInterface*)bridge
+                 avatarManager:(AccountAvatarFetcherManager*)avatarManager {
+  DCHECK(bridge);
+  if (self = [super initWithNibName:nil bundle:nil]) {
+    bridge_ = bridge;
+    avatarManager_.reset([avatarManager retain]);
   }
-  return items.autorelease();
+  return self;
 }
 
-#pragma mark NSTableViewDataSource
-
-- (NSInteger)numberOfRowsInTableView:(NSTableView*)tableView {
-  return [credentialItems_ count];
+- (NSButton*)cancelButton {
+  return cancelButton_;
 }
 
-#pragma mark NSTableViewDelegate
-
-- (CGFloat)tableView:(NSTableView*)tableView heightOfRow:(NSInteger)row {
-  return NSHeight([[credentialItems_.get() objectAtIndex:row] frame]);
+- (NSArray*)credentialButtons {
+  return credentialButtons_;
 }
 
-- (NSCell*)tableView:(NSTableView*)tableView
-    dataCellForTableColumn:(NSTableColumn*)tableColumn
-                       row:(NSInteger)row {
-  return [[[CredentialItemCell alloc]
-      initWithView:[credentialItems_.get() objectAtIndex:row]] autorelease];
-}
-
-- (void)tableViewSelectionDidChange:(NSNotification *)notification {
-  CredentialItemView* item =
-      [credentialItems_.get() objectAtIndex:[credentialsView_ selectedRow]];
-  model_->OnChooseCredentials(item.passwordForm, item.credentialType);
-  [delegate_ viewShouldDismiss];
+- (NSTextView*)titleView {
+  return titleView_;
 }
 
 @end

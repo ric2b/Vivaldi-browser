@@ -14,13 +14,14 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/lifetime/keep_alive_types.h"
+#include "chrome/browser/lifetime/scoped_keep_alive.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/panels/panel.h"
 #include "chrome/browser/ui/panels/panel_bounds_animation.h"
 #include "chrome/browser/ui/panels/panel_manager.h"
 #include "chrome/browser/ui/panels/stacked_panel_collection.h"
-#include "chrome/browser/ui/views/auto_keep_alive.h"
 #include "chrome/browser/ui/views/panels/panel_frame_view.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -300,8 +301,11 @@ PanelView::PanelView(Panel* panel, const gfx::Rect& bounds, bool always_on_top)
   window_->set_focus_on_creation(false);
   window_->AddObserver(this);
 
+#if !defined(USE_ASH)
   // Prevent the browser process from shutting down while this window is open.
-  keep_alive_.reset(new AutoKeepAlive(GetNativePanelWindow()));
+  // Chrome OS already has a mechanism to always stay alive and skips this.
+  keep_alive_.reset(new ScopedKeepAlive(KeepAliveOrigin::PANEL_VIEW));
+#endif  // !defined(USE_ASH)
 
   web_view_ = new views::WebView(NULL);
   AddChildView(web_view_);
@@ -319,7 +323,7 @@ PanelView::PanelView(Panel* panel, const gfx::Rect& bounds, bool always_on_top)
 
 #if defined(OS_WIN)
   ui::win::SetAppIdForWindow(
-      ShellIntegration::GetAppModelIdForProfile(
+      shell_integration::GetAppModelIdForProfile(
           base::UTF8ToWide(panel->app_name()), panel->profile()->GetPath()),
       views::HWNDForWidget(window_));
   ui::win::PreventWindowFromPinning(views::HWNDForWidget(window_));
@@ -1011,8 +1015,8 @@ void PanelView::OnWidgetActivationChanged(views::Widget* widget, bool active) {
 #if defined(OS_WIN)
   if (focused_ && panel_->IsMinimized() &&
       panel_->collection()->type() == PanelCollection::DOCKED &&
-      gfx::Screen::GetScreenFor(widget->GetNativeWindow())->
-          GetWindowUnderCursor() != widget->GetNativeWindow()) {
+      gfx::Screen::GetScreen()->GetWindowUnderCursor() !=
+          widget->GetNativeWindow()) {
     panel_->Restore();
   }
 #endif

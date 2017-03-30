@@ -3,7 +3,6 @@
 <translationbundle lang="sv">
 <translation id="1001534784610492198">Arkivet för installationsfilen är skadat eller ogiltigt. Ladda ned Google Chrome igen.</translation>
 <translation id="1013290471399003443">Chrome har verifierat att webbplatsens certifikat har utfärdats av <ph name="ISSUER" />. Giltiga certifikattransparensuppgifter har skickats från servern.</translation>
-<translation id="1016765312371154165">Chrome avslutades inte korrekt.</translation>
 <translation id="103396972844768118">Viktig information om uppgifter i Chrome</translation>
 <translation id="1035334672863811645">Logga in i Chrome</translation>
 <translation id="1061441684050139317">Chrome behöver tillgång till mikrofonen för att kunna dela den på den här webbplatsen.</translation>
@@ -55,7 +54,6 @@ Om du loggar in ändå synkroniseras din information i Chrome, till exempel bokm
 <translation id="2397416548179033562">Visa Chrome-menyn</translation>
 <translation id="2429317896000329049">Google Chrome kunde inte synkronisera data eftersom synkronisering inte är tillgängligt för din domän.</translation>
 <translation id="2485422356828889247">Avinstallera</translation>
-<translation id="2576431527583832481">Chrome har blivit ännu bättre! En ny version finns tillgänglig.</translation>
 <translation id="2580411288591421699">Det går inte att installera samma version av Google Chrome som redan körs. Stäng Google Chrome och försök igen.</translation>
 <translation id="2582790009689336987">Den här datorn slutar snart att få uppdateringar för Google Chrome eftersom dess Linux-system inte längre stöds.</translation>
 <translation id="2588322182880276190">Logotypen för Chrome</translation>
@@ -115,7 +113,6 @@ Om du loggar in ändå synkroniseras din information i Chrome, till exempel bokm
 <translation id="4633000520311261472">Vi har gjort Chrome säkrare genom att inaktivera vissa tillägg som inte finns i <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> och som kan ha lagts till utan att du vet om det.</translation>
 <translation id="4700157086864140907">Google Chrome kan ge smartare stavningskontroll genom att skicka det som du skriver i webbläsaren till Googles servrar så att du kan använda samma stavningsteknik som används i Googles webbsökning.</translation>
 <translation id="4728575227883772061">Installationen misslyckades på grund av ett ospecificerat fel. Stäng Google Chrome, om det är igång, och försök sedan igen.</translation>
-<translation id="473775607612524610">Uppdatera</translation>
 <translation id="4743926867934016338">Acceptera och sök</translation>
 <translation id="4751441238232965030">Den här datorn får snart inte längre uppdateringar för 32-bitarsversionen av Google Chrome. Uppgradera till Google Chrome med 64 bitar.</translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
@@ -216,7 +213,6 @@ Google Chrome kan inte återställa dina inställningar.</translation>
 <translation id="7808348361785373670">Ta bort från Chrome …</translation>
 <translation id="7825851276765848807">Installationen misslyckades på grund av ett okänt fel. Ladda ned Google Chrome igen.</translation>
 <translation id="7890208801193284374">Om du delar en dator med vänner och familj kan de konfigurera Chrome precis som de vill och surfa separat.</translation>
-<translation id="8000275528373650868">För Google Chrome krävs Windows Vista eller Windows XP med SP2 eller senare.</translation>
 <translation id="8005540215158006229">Chrome är nästan klar.</translation>
 <translation id="8008534537613507642">Installera om Chrome</translation>
 <translation id="8030318113982266900">Uppdaterar din enhet till kanalen <ph name="CHANNEL_NAME" /> ...</translation>
@@ -245,6 +241,7 @@ Google Chrome kan inte återställa dina inställningar.</translation>
 <translation id="8851136666856101339">huvud</translation>
 <translation id="8862326446509486874">Du har inte behörighet att göra en installation på systemnivå. Försök köra installationsprogrammet igen som administratör.</translation>
 <translation id="9026991721384951619">Det gick inte att synkronisera data med Chrome OS eftersom inloggningsuppgifterna för kontot är inaktuella.</translation>
+<translation id="9067395829937117663">För Google Chrome krävs Windows 7 eller senare.</translation>
 <translation id="9102715433345326100">Filen är skadlig och har blockerats av Chrome.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Varning!<ph name="END_BOLD" /> Google Chrome kan inte förhindra tillägg från att registrera din webbhistorik. Om du vill inaktivera det här tillägget i inkognitoläge avmarkerar du detta tillval.</translation>
 <translation id="911206726377975832">Vill du även ta bort din webbinformation?</translation>

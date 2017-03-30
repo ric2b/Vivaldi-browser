@@ -79,7 +79,7 @@ bool WindowManagerAccessPolicy::CanChangeWindowVisibility(
 bool WindowManagerAccessPolicy::CanSetWindowSurface(
     const ServerWindow* window,
     mus::mojom::SurfaceType surface_type) const {
-  if (surface_type == mojom::SURFACE_TYPE_UNDERLAY)
+  if (surface_type == mojom::SurfaceType::UNDERLAY)
     return window->id().connection_id == connection_id_;
 
   if (delegate_->IsWindowRootOfAnotherConnectionForAccessPolicy(window))
@@ -99,6 +99,11 @@ bool WindowManagerAccessPolicy::CanSetWindowProperties(
 }
 
 bool WindowManagerAccessPolicy::CanSetWindowTextInputState(
+    const ServerWindow* window) const {
+  return window->id().connection_id == connection_id_;
+}
+
+bool WindowManagerAccessPolicy::CanSetCapture(
     const ServerWindow* window) const {
   return window->id().connection_id == connection_id_;
 }
@@ -131,7 +136,7 @@ bool WindowManagerAccessPolicy::ShouldNotifyOnHierarchyChange(
   return IsWindowKnown(window) || (*new_parent && IsWindowKnown(*new_parent));
 }
 
-bool WindowManagerAccessPolicy::CanSetWindowManagerInternal() const {
+bool WindowManagerAccessPolicy::CanSetWindowManager() const {
   return true;
 }
 

@@ -201,9 +201,6 @@ class MockMultibufferDataSource : public MultibufferDataSource {
   // Whether the resource is downloading or deferred.
   bool downloading_;
 
-  // Whether the resource load has starting loading but yet to been cancelled.
-  bool loading_;
-
   DISALLOW_COPY_AND_ASSIGN(MockMultibufferDataSource);
 };
 
@@ -322,6 +319,12 @@ class MultibufferDataSourceTest : public testing::Test {
     if (!url_loader())
       return;
     data_provider()->didFinishLoading(url_loader(), 0, -1);
+    message_loop_.RunUntilIdle();
+  }
+
+  void FailLoading() {
+    data_provider()->didFail(url_loader(),
+                             response_generator_->GenerateError());
     message_loop_.RunUntilIdle();
   }
 
@@ -796,23 +799,19 @@ TEST_F(MultibufferDataSourceTest, Http_TooManyRetries) {
   // Make sure there's a pending read -- we'll expect it to error.
   ReadAt(kDataSize);
 
-  // It'll try three times.
-  FinishLoading();
-  Restart();
-  Respond(response_generator_->Generate206(kDataSize));
+  for (int i = 0; i < ResourceMultiBufferDataProvider::kMaxRetries; i++) {
+    FailLoading();
+    data_provider()->Start();
+    Respond(response_generator_->Generate206(kDataSize));
+  }
 
-  FinishLoading();
-  Restart();
-  Respond(response_generator_->Generate206(kDataSize));
-
-  FinishLoading();
-  Restart();
-  Respond(response_generator_->Generate206(kDataSize));
-
-  // It'll error after this.
-  EXPECT_CALL(*this, ReadCallback(media::DataSource::kReadError));
-  FinishLoading();
-
+  // Stop() will also cause the readback to be called with kReadError, but
+  // we want to make sure it was called during FailLoading().
+  bool failed_ = false;
+  EXPECT_CALL(*this, ReadCallback(media::DataSource::kReadError))
+      .WillOnce(Assign(&failed_, true));
+  FailLoading();
+  EXPECT_TRUE(failed_);
   EXPECT_FALSE(loading());
   Stop();
 }
@@ -823,23 +822,19 @@ TEST_F(MultibufferDataSourceTest, File_TooManyRetries) {
   // Make sure there's a pending read -- we'll expect it to error.
   ReadAt(kDataSize);
 
-  // It'll try three times.
-  FinishLoading();
-  Restart();
-  Respond(response_generator_->GenerateFileResponse(0));
+  for (int i = 0; i < ResourceMultiBufferDataProvider::kMaxRetries; i++) {
+    FailLoading();
+    data_provider()->Start();
+    Respond(response_generator_->Generate206(kDataSize));
+  }
 
-  FinishLoading();
-  Restart();
-  Respond(response_generator_->GenerateFileResponse(0));
-
-  FinishLoading();
-  Restart();
-  Respond(response_generator_->GenerateFileResponse(0));
-
-  // It'll error after this.
-  EXPECT_CALL(*this, ReadCallback(media::DataSource::kReadError));
-  FinishLoading();
-
+  // Stop() will also cause the readback to be called with kReadError, but
+  // we want to make sure it was called during FailLoading().
+  bool failed_ = false;
+  EXPECT_CALL(*this, ReadCallback(media::DataSource::kReadError))
+      .WillOnce(Assign(&failed_, true));
+  FailLoading();
+  EXPECT_TRUE(failed_);
   EXPECT_FALSE(loading());
   Stop();
 }
@@ -1208,7 +1203,7 @@ TEST_F(MultibufferDataSourceTest,
 
   ReadAt(kDataSize);
 
-  data_source_->OnBufferingHaveEnough();
+  data_source_->OnBufferingHaveEnough(false);
   ASSERT_TRUE(active_loader());
 
   EXPECT_CALL(*this, ReadCallback(kDataSize));
@@ -1216,6 +1211,81 @@ TEST_F(MultibufferDataSourceTest,
   ReceiveData(kDataSize);
 
   EXPECT_FALSE(active_loader_allownull());
+}
+
+TEST_F(MultibufferDataSourceTest,
+       ExternalResource_Response206_CancelAfterPlay) {
+  set_preload(BufferedDataSource::METADATA);
+  InitializeWith206Response();
+
+  EXPECT_EQ(MultibufferDataSource::METADATA, preload());
+  EXPECT_FALSE(is_local_source());
+
+  EXPECT_TRUE(data_source_->range_supported());
+  CheckReadThenDefer();
+
+  ReadAt(kDataSize);
+
+  // Marking the media as playing should prevent deferral. It also tells the
+  // data source to start buffering beyond the initial load.
+  data_source_->MediaIsPlaying();
+  data_source_->OnBufferingHaveEnough(false);
+  CheckCapacityDefer();
+  ASSERT_TRUE(active_loader());
+
+  // Read a bit from the beginning and ensure deferral hasn't happened yet.
+  EXPECT_CALL(*this, ReadCallback(kDataSize));
+  EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize * 2));
+  ReceiveData(kDataSize);
+  ASSERT_TRUE(active_loader());
+  data_source_->OnBufferingHaveEnough(true);
+  ASSERT_TRUE(active_loader());
+  ASSERT_FALSE(active_loader()->deferred());
+
+  // Deliver data until capacity is reached and verify deferral.
+  int bytes_received = 0;
+  EXPECT_CALL(host_, AddBufferedByteRange(_, _)).Times(testing::AtLeast(1));
+  while (active_loader_allownull() && !active_loader()->deferred()) {
+    ReceiveData(kDataSize);
+    bytes_received += kDataSize;
+  }
+  EXPECT_GT(bytes_received, 0);
+  EXPECT_LT(bytes_received + kDataSize, kFileSize);
+  EXPECT_FALSE(active_loader_allownull());
+}
+
+TEST_F(MultibufferDataSourceTest, SeekPastEOF) {
+  GURL gurl(kHttpUrl);
+  data_source_.reset(new MockMultibufferDataSource(
+      gurl, message_loop_.task_runner(), url_index_,
+      view_->mainFrame()->toWebLocalFrame(), &host_));
+  data_source_->SetPreload(preload_);
+
+  response_generator_.reset(new TestResponseGenerator(gurl, kDataSize + 1));
+  EXPECT_CALL(*this, OnInitialize(true));
+  data_source_->Initialize(base::Bind(&MultibufferDataSourceTest::OnInitialize,
+                                      base::Unretained(this)));
+  message_loop_.RunUntilIdle();
+
+  // Not really loading until after OnInitialize is called.
+  EXPECT_EQ(data_source_->downloading(), false);
+
+  EXPECT_CALL(host_, SetTotalBytes(response_generator_->content_length()));
+  Respond(response_generator_->Generate206(0));
+  EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize));
+  ReceiveData(kDataSize);
+
+  // Read a bit from the beginning.
+  EXPECT_CALL(*this, ReadCallback(kDataSize));
+  ReadAt(0);
+
+  ReceiveData(1);
+  EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize * 3));
+  FinishLoading();
+  EXPECT_CALL(*this, ReadCallback(0));
+
+  ReadAt(kDataSize + 5, kDataSize * 2);
+  Stop();
 }
 
 }  // namespace media

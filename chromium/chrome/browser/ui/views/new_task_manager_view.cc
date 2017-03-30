@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include "base/prefs/pref_service.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -19,6 +18,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/prefs/pref_service.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/table_model_observer.h"
 #include "ui/views/controls/label.h"
@@ -48,7 +48,7 @@ namespace {
 NewTaskManagerView* g_task_manager_view = nullptr;
 
 // Opens the "about:memory" for the "stats for nerds" link.
-void OpenAboutMemory(chrome::HostDesktopType desktop_type) {
+void OpenAboutMemory() {
   Profile* profile = ProfileManager::GetLastUsedProfileAllowedByPolicy();
   if (profile->IsGuestSession() &&
       !g_browser_process->local_state()->GetBoolean(
@@ -63,7 +63,6 @@ void OpenAboutMemory(chrome::HostDesktopType desktop_type) {
                                 GURL(chrome::kChromeUIMemoryURL),
                                 ui::PAGE_TRANSITION_LINK);
   params.disposition = NEW_FOREGROUND_TAB;
-  params.host_desktop_type = desktop_type;
   chrome::Navigate(&params);
 }
 
@@ -82,12 +81,7 @@ void NewTaskManagerView::Show(Browser* browser) {
     return;
   }
 
-  // In ash we can come here through the ChromeShellDelegate. If there is no
-  // browser window at that time of the call, browser could be passed as NULL.
-  const chrome::HostDesktopType desktop_type =
-      browser ? browser->host_desktop_type() : chrome::HOST_DESKTOP_TYPE_ASH;
-
-  g_task_manager_view = new NewTaskManagerView(desktop_type);
+  g_task_manager_view = new NewTaskManagerView();
 
   gfx::NativeWindow window = browser ? browser->window()->GetNativeWindow()
                                      : nullptr;
@@ -103,7 +97,6 @@ void NewTaskManagerView::Show(Browser* browser) {
                                      window,
                                      nullptr);
   g_task_manager_view->InitAlwaysOnTopState();
-  g_task_manager_view->table_model_->StartUpdating();
 
 #if defined(OS_WIN)
   // Set the app id for the task manager to the app id of its parent browser. If
@@ -111,7 +104,7 @@ void NewTaskManagerView::Show(Browser* browser) {
   // process.
   if (browser) {
     ui::win::SetAppIdForWindow(
-        ShellIntegration::GetChromiumModelIdForProfile(
+        shell_integration::GetChromiumModelIdForProfile(
             browser->profile()->GetPath()),
         views::HWNDForWidget(g_task_manager_view->GetWidget()));
   }
@@ -272,7 +265,6 @@ void NewTaskManagerView::WindowClosing() {
     g_task_manager_view = nullptr;
   }
   table_model_->StoreColumnsSettings();
-  table_model_->StopUpdating();
 }
 
 bool NewTaskManagerView::UseNewStyleForThisDialog() const {
@@ -310,7 +302,7 @@ void NewTaskManagerView::OnKeyDown(ui::KeyboardCode keycode) {
 
 void NewTaskManagerView::LinkClicked(views::Link* source, int event_flags) {
   DCHECK_EQ(about_memory_link_, source);
-  OpenAboutMemory(desktop_type_);
+  OpenAboutMemory();
 }
 
 void NewTaskManagerView::ShowContextMenuForView(
@@ -354,12 +346,11 @@ void NewTaskManagerView::ExecuteCommand(int id, int event_flags) {
   table_model_->ToggleColumnVisibility(id);
 }
 
-NewTaskManagerView::NewTaskManagerView(chrome::HostDesktopType desktop_type)
+NewTaskManagerView::NewTaskManagerView()
     : kill_button_(nullptr),
       about_memory_link_(nullptr),
       tab_table_(nullptr),
       tab_table_parent_(nullptr),
-      desktop_type_(desktop_type),
       is_always_on_top_(false) {
   Init();
 }

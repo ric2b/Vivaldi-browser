@@ -5,7 +5,6 @@
 #include "chrome/browser/ui/browser_navigator_browsertest.h"
 
 #include "base/command_line.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -28,6 +27,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/omnibox/browser/omnibox_view.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/web_contents.h"
@@ -114,17 +114,14 @@ bool BrowserNavigatorTest::OpenPOSTURLInNewForegroundTabAndGetTitle(
 
 Browser* BrowserNavigatorTest::CreateEmptyBrowserForType(Browser::Type type,
                                                          Profile* profile) {
-  Browser* browser = new Browser(
-      Browser::CreateParams(type, profile, chrome::GetActiveDesktop()));
+  Browser* browser = new Browser(Browser::CreateParams(type, profile));
   chrome::AddTabAt(browser, GURL(), -1, true);
   return browser;
 }
 
 Browser* BrowserNavigatorTest::CreateEmptyBrowserForApp(Profile* profile) {
-  Browser* browser = new Browser(
-      Browser::CreateParams::CreateForApp(
-          "Test", false /* trusted_source */, gfx::Rect(), profile,
-          chrome::GetActiveDesktop()));
+  Browser* browser = new Browser(Browser::CreateParams::CreateForApp(
+      "Test", false /* trusted_source */, gfx::Rect(), profile));
   chrome::AddTabAt(browser, GURL(), -1, true);
   return browser;
 }
@@ -205,10 +202,6 @@ void BrowserNavigatorTest::SetUpCommandLine(base::CommandLine* command_line) {
   // Disable settings-in-a-window so that we can use the settings page and
   // sub-pages to test browser navigation.
   command_line->AppendSwitch(::switches::kDisableSettingsWindow);
-
-  // Disable new downloads UI as it is very very slow. https://crbug.com/526577
-  // TODO(dbeam): remove this once the downloads UI is not slow.
-  command_line->AppendSwitch(switches::kDisableMaterialDesignDownloads);
 }
 
 void BrowserNavigatorTest::Observe(
@@ -1284,9 +1277,11 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
 
 // TODO(linux_aura) http://crbug.com/163931
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_AURA)
-#define MAYBE_NavigateFromDefaultToBookmarksInSameTab DISABLED_NavigateFromDefaultToBookmarksInSameTab
+#define MAYBE_NavigateFromDefaultToBookmarksInSameTab \
+    DISABLED_NavigateFromDefaultToBookmarksInSameTab
 #else
-#define MAYBE_NavigateFromDefaultToBookmarksInSameTab NavigateFromDefaultToBookmarksInSameTab
+#define MAYBE_NavigateFromDefaultToBookmarksInSameTab \
+    NavigateFromDefaultToBookmarksInSameTab
 #endif
 IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
                        MAYBE_NavigateFromDefaultToBookmarksInSameTab) {

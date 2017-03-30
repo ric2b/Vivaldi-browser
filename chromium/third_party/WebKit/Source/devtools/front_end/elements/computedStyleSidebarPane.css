@@ -10,17 +10,51 @@
 
 .computed-style-property {
     display: flex;
-    flex-wrap: wrap;
+    overflow: hidden;
+    flex: auto;
 }
 
 .computed-style-property .property-name {
-    width: 16em;
+    min-width: 5em;
     text-overflow: ellipsis;
     overflow: hidden;
+    flex-shrink: 1;
+    flex-basis: 16em;
+    flex-grow: 1;
 }
 
 .computed-style-property .property-value {
-    min-width: 5em;
+    margin-left: 2em;
+    position: relative;
+    display: flex;
+    flex-shrink: 0;
+    flex-basis: 5em;
+    flex-grow: 10;
+}
+
+.computed-style-property .property-value-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tree-outline li:hover .goto-source-icon {
+    display: block;
+}
+
+.goto-source-icon {
+    -webkit-mask-image: url(Images/toolbarButtonGlyphs.png);
+    -webkit-mask-position: 0 -120px;
+    background-color: #5a5a5a;
+    width: 28px;
+    height: 24px;
+    display: none;
+    position: absolute;
+    top: -6px;
+    left: -27px;
+}
+
+.goto-source-icon:hover {
+    background-color: #333;
 }
 
 .computed-style-property-inherited {
@@ -53,6 +87,7 @@
 .property-trace-value {
     position: relative;
     display: inline-block;
+    margin-left: 2em;
 }
 
 .property-trace-inactive .property-trace-value::before {
@@ -81,4 +116,12 @@
 
 .tree-outline li::before {
     margin-left: 4px;
+}
+
+.delimeter {
+    color: transparent;
+}
+
+.delimeter::selection {
+    color: transparent;
 }

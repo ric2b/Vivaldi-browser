@@ -4,7 +4,6 @@
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/net/prediction_options.h"
 #include "chrome/browser/profiles/profile.h"
@@ -13,6 +12,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
@@ -92,29 +92,19 @@ class PrefetchBrowserTestPredictionDisabled : public PrefetchBrowserTestBase {
 IN_PROC_BROWSER_TEST_F(PrefetchBrowserTestPredictionDisabled,
                        ExperimentDisabled) {
   EXPECT_TRUE(RunPrefetchExperiment(false, browser()));
-  // Should not prefetch even if preference is ALWAYS.
-  SetPreference(NetworkPredictionOptions::NETWORK_PREDICTION_ALWAYS);
+  // Should not prefetch even if preference is WIFI_ONLY.
+  SetPreference(NetworkPredictionOptions::NETWORK_PREDICTION_WIFI_ONLY);
   EXPECT_TRUE(RunPrefetchExperiment(false, browser()));
 }
 
-// Prefetch should be allowed depending on preference and network type.
+// When initiated from the renderer, prefetch should be allowed regardless of
+// the network type.
 IN_PROC_BROWSER_TEST_F(PrefetchBrowserTestPrediction, PreferenceWorks) {
   // Set real NetworkChangeNotifier singleton aside.
   scoped_ptr<NetworkChangeNotifier::DisableForTest> disable_for_test(
       new NetworkChangeNotifier::DisableForTest);
 
-  // Preference defaults to WIFI_ONLY: prefetch when not on cellular.
-  {
-    scoped_ptr<NetworkChangeNotifier> mock(new MockNetworkChangeNotifierWIFI);
-    EXPECT_TRUE(RunPrefetchExperiment(true, browser()));
-  }
-  {
-    scoped_ptr<NetworkChangeNotifier> mock(new MockNetworkChangeNotifier4G);
-    EXPECT_TRUE(RunPrefetchExperiment(false, browser()));
-  }
-
-  // Set preference to ALWAYS: always prefetch.
-  SetPreference(NetworkPredictionOptions::NETWORK_PREDICTION_ALWAYS);
+  // Preference defaults to ALWAYS.
   {
     scoped_ptr<NetworkChangeNotifier> mock(new MockNetworkChangeNotifierWIFI);
     EXPECT_TRUE(RunPrefetchExperiment(true, browser()));
@@ -124,15 +114,15 @@ IN_PROC_BROWSER_TEST_F(PrefetchBrowserTestPrediction, PreferenceWorks) {
     EXPECT_TRUE(RunPrefetchExperiment(true, browser()));
   }
 
-  // Set preference to NEVER: never prefetch.
+  // Set preference to NEVER: prefetch should be unaffected.
   SetPreference(NetworkPredictionOptions::NETWORK_PREDICTION_NEVER);
   {
     scoped_ptr<NetworkChangeNotifier> mock(new MockNetworkChangeNotifierWIFI);
-    EXPECT_TRUE(RunPrefetchExperiment(false, browser()));
+    EXPECT_TRUE(RunPrefetchExperiment(true, browser()));
   }
   {
     scoped_ptr<NetworkChangeNotifier> mock(new MockNetworkChangeNotifier4G);
-    EXPECT_TRUE(RunPrefetchExperiment(false, browser()));
+    EXPECT_TRUE(RunPrefetchExperiment(true, browser()));
   }
 }
 
@@ -140,8 +130,8 @@ IN_PROC_BROWSER_TEST_F(PrefetchBrowserTestPrediction, PreferenceWorks) {
 // uninitialized preference member. Verify that it no longer does.
 IN_PROC_BROWSER_TEST_F(PrefetchBrowserTestPrediction, IncognitoTest) {
   Profile* incognito_profile = browser()->profile()->GetOffTheRecordProfile();
-  Browser* incognito_browser = new Browser(
-      Browser::CreateParams(incognito_profile, browser()->host_desktop_type()));
+  Browser* incognito_browser =
+      new Browser(Browser::CreateParams(incognito_profile));
 
   // Navigate just to have a tab in this window, otherwise there is no
   // WebContents for the incognito browser.

@@ -10,10 +10,12 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/message_loop/message_loop.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "content/child/child_thread_impl.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/common/fileapi/webblob_messages.h"
+#include "third_party/WebKit/public/platform/FilePathConversion.h"
 #include "third_party/WebKit/public/platform/WebBlobData.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebThreadSafeData.h"
@@ -154,7 +156,8 @@ void WebBlobRegistryImpl::addDataToStream(const WebURL& url,
       size_t chunk_size = std::min(remaining_bytes, shared_memory_size);
       memcpy(shared_memory->memory(), current_ptr, chunk_size);
       sender_->Send(new StreamHostMsg_SyncAppendSharedMemory(
-          url, shared_memory->handle(), chunk_size));
+          url, shared_memory->handle(),
+          base::checked_cast<uint32_t>(chunk_size)));
       remaining_bytes -= chunk_size;
       current_ptr += chunk_size;
     }
@@ -208,7 +211,7 @@ void WebBlobRegistryImpl::BuilderImpl::appendFile(
     uint64_t length,
     double expected_modification_time) {
   consolidation_.AddFileItem(
-      base::FilePath::FromUTF16Unsafe(base::string16(path)), offset, length,
+      blink::WebStringToFilePath(path), offset, length,
       expected_modification_time);
 }
 
@@ -300,7 +303,7 @@ void WebBlobRegistryImpl::BuilderImpl::SendOversizedDataForBlob(
     consolidation_.ReadMemory(consolidated_item_index, offset, chunk_size,
                               shared_memory->memory());
     sender_->Send(new BlobHostMsg_SyncAppendSharedMemory(
-        uuid_, shared_memory->handle(), chunk_size));
+        uuid_, shared_memory->handle(), static_cast<uint32_t>(chunk_size)));
     data_size -= chunk_size;
     offset += chunk_size;
   }

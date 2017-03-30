@@ -21,8 +21,6 @@
 #include "base/metrics/sparse_histogram.h"
 #include "base/metrics/user_metrics.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_member.h"
-#include "base/prefs/pref_service.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -44,6 +42,8 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/data_usage/core/data_use_aggregator.h"
 #include "components/domain_reliability/monitor.h"
+#include "components/prefs/pref_member.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -495,9 +495,7 @@ int ChromeNetworkDelegate::OnHeadersReceived(
 void ChromeNetworkDelegate::OnBeforeRedirect(net::URLRequest* request,
                                              const GURL& new_location) {
 // Recording data use of request on redirects.
-#if !defined(OS_IOS)
   data_use_measurement_.ReportDataUseUMA(request);
-#endif
   if (domain_reliability_monitor_)
     domain_reliability_monitor_->OnBeforeRedirect(request);
   extensions_delegate_->OnBeforeRedirect(request, new_location);
@@ -527,11 +525,9 @@ void ChromeNetworkDelegate::OnNetworkBytesSent(net::URLRequest* request,
 
 void ChromeNetworkDelegate::OnCompleted(net::URLRequest* request,
                                         bool started) {
-#if !defined(OS_IOS)
   // TODO(amohammadkhan): Verify that there is no double recording in data use
   // of redirected requests.
   data_use_measurement_.ReportDataUseUMA(request);
-#endif
   RecordNetworkErrorHistograms(request);
   if (started) {
     // Only call in for requests that were started, to obey the precondition

@@ -15,9 +15,6 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/stl_util.h"
 #include "base/sys_info.h"
 #include "chrome/browser/browser_process.h"
@@ -41,6 +38,9 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/ownership/owner_key_util.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
@@ -72,7 +72,7 @@ void ScheduleDelayedCryptohomeRemoval(const std::string& user_id,
 void CancelDelayedCryptohomeRemoval(const std::string& user_id) {
   PrefService* local_state = g_browser_process->local_state();
   DictionaryPrefUpdate dict_update(local_state, kKioskUsersToRemove);
-  dict_update->RemoveWithoutPathExpansion(user_id, NULL);
+  dict_update->RemoveWithoutPathExpansion(user_id, nullptr);
   local_state->CommitPendingWrite();
 }
 
@@ -147,7 +147,7 @@ KioskAppManager* KioskAppManager::Get() {
 
 // static
 void KioskAppManager::Shutdown() {
-  if (instance == NULL)
+  if (instance == nullptr)
     return;
 
   instance.Pointer()->CleanUp();
@@ -167,17 +167,16 @@ void KioskAppManager::RemoveObsoleteCryptohomes() {
       base::Bind(&PerformDelayedCryptohomeRemovals));
 }
 
-KioskAppManager::App::App(
-    const KioskAppData& data,
-    bool is_extension_pending,
-    bool auto_launched_with_zero_delay)
+KioskAppManager::App::App(const KioskAppData& data,
+                          bool is_extension_pending,
+                          bool auto_launched_with_zero_delay)
     : app_id(data.app_id()),
       user_id(data.user_id()),
       name(data.name()),
       icon(data.icon()),
+      required_platform_version(data.required_platform_version()),
       is_loading(data.IsLoading() || is_extension_pending),
-      was_auto_launched_with_zero_delay(auto_launched_with_zero_delay) {
-}
+      was_auto_launched_with_zero_delay(auto_launched_with_zero_delay) {}
 
 KioskAppManager::App::App() : is_loading(false),
                               was_auto_launched_with_zero_delay(false) {}
@@ -345,6 +344,15 @@ bool KioskAppManager::IsAutoLaunchEnabled() const {
   return GetAutoLoginState() == AUTOLOGIN_APPROVED;
 }
 
+std::string KioskAppManager::GetAutoLaunchAppRequiredPlatformVersion() const {
+  // Bail out if there is no auto launched app with zero delay.
+  if (!IsAutoLaunchEnabled() || !GetAutoLaunchDelay().is_zero())
+    return std::string();
+
+  const KioskAppData* data = GetAppData(GetAutoLaunchApp());
+  return data == nullptr ? std::string() : data->required_platform_version();
+}
+
 void KioskAppManager::AddApp(const std::string& app_id,
                              OwnerSettingsServiceChromeOS* service) {
   std::vector<policy::DeviceLocalAccount> device_local_accounts =
@@ -500,7 +508,7 @@ KioskAppManager::CreateSecondaryAppExternalLoader() {
 }
 
 void KioskAppManager::InstallFromCache(const std::string& id) {
-  const base::DictionaryValue* extension = NULL;
+  const base::DictionaryValue* extension = nullptr;
   if (external_cache_->cached_extensions()->GetDictionary(id, &extension)) {
     scoped_ptr<base::DictionaryValue> prefs(new base::DictionaryValue);
     base::DictionaryValue* extension_copy = extension->DeepCopy();
@@ -603,7 +611,7 @@ const KioskAppData* KioskAppManager::GetAppData(
       return data;
   }
 
-  return NULL;
+  return nullptr;
 }
 
 KioskAppData* KioskAppManager::GetAppDataMutable(const std::string& app_id) {
@@ -782,6 +790,15 @@ void KioskAppManager::GetCrxUnpackDir(base::FilePath* unpack_dir) {
   base::FilePath temp_dir;
   base::GetTempDir(&temp_dir);
   *unpack_dir = temp_dir.AppendASCII(kCrxUnpackDir);
+}
+
+base::TimeDelta KioskAppManager::GetAutoLaunchDelay() const {
+  int delay;
+  if (!CrosSettings::Get()->GetInteger(
+          kAccountsPrefDeviceLocalAccountAutoLoginDelay, &delay)) {
+    return base::TimeDelta();  // Default delay is 0ms.
+  }
+  return base::TimeDelta::FromMilliseconds(delay);
 }
 
 }  // namespace chromeos

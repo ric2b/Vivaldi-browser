@@ -4,46 +4,19 @@
 
 #include "modules/accessibility/InspectorTypeBuilderHelper.h"
 
-#include "core/InspectorTypeBuilder.h"
 #include "core/dom/DOMNodeIds.h"
 #include "modules/accessibility/AXObject.h"
 #include "modules/accessibility/AXObjectCacheImpl.h"
+#include "platform/inspector_protocol/TypeBuilder.h"
 
 namespace blink {
 
-using TypeBuilder::Accessibility::AXValueNativeSourceType;
-using TypeBuilder::Accessibility::AXRelatedNode;
-using TypeBuilder::Accessibility::AXValueSourceType;
+using namespace HTMLNames;
+using namespace protocol::Accessibility;
 
-PassRefPtr<AXProperty> createProperty(String name, PassRefPtr<AXValue> value)
+PassOwnPtr<AXProperty> createProperty(const String& name, PassOwnPtr<AXValue> value)
 {
-    RefPtr<AXProperty> property = AXProperty::create().setName(name).setValue(value);
-    return property;
-}
-
-PassRefPtr<AXProperty> createProperty(AXGlobalStates::Enum name, PassRefPtr<AXValue> value)
-{
-    return createProperty(TypeBuilder::getEnumConstantValue(name), value);
-}
-
-PassRefPtr<AXProperty> createProperty(AXLiveRegionAttributes::Enum name, PassRefPtr<AXValue> value)
-{
-    return createProperty(TypeBuilder::getEnumConstantValue(name), value);
-}
-
-PassRefPtr<AXProperty> createProperty(AXRelationshipAttributes::Enum name, PassRefPtr<AXValue> value)
-{
-    return createProperty(TypeBuilder::getEnumConstantValue(name), value);
-}
-
-PassRefPtr<AXProperty> createProperty(AXWidgetAttributes::Enum name, PassRefPtr<AXValue> value)
-{
-    return createProperty(TypeBuilder::getEnumConstantValue(name), value);
-}
-
-PassRefPtr<AXProperty> createProperty(AXWidgetStates::Enum name, PassRefPtr<AXValue> value)
-{
-    return createProperty(TypeBuilder::getEnumConstantValue(name), value);
+    return AXProperty::create().setName(name).setValue(value).build();
 }
 
 String ignoredReasonName(AXIgnoredReason reason)
@@ -88,158 +61,143 @@ String ignoredReasonName(AXIgnoredReason reason)
     return "";
 }
 
-PassRefPtr<AXProperty> createProperty(IgnoredReason reason)
+PassOwnPtr<AXProperty> createProperty(IgnoredReason reason)
 {
     if (reason.relatedObject)
-        return createProperty(ignoredReasonName(reason.reason), createRelatedNodeListValue(reason.relatedObject, nullptr, AXValueType::Idref));
+        return createProperty(ignoredReasonName(reason.reason), createRelatedNodeListValue(reason.relatedObject, nullptr, AXValueTypeEnum::Idref));
     return createProperty(ignoredReasonName(reason.reason), createBooleanValue(true));
 }
 
-PassRefPtr<AXValue> createValue(String value, AXValueType::Enum type)
+PassOwnPtr<AXValue> createValue(const String& value, const String& type)
 {
-    RefPtr<AXValue> axValue = AXValue::create().setType(type);
-    axValue->setValue(JSONString::create(value));
-    return axValue;
+    return AXValue::create().setType(type).setValue(protocol::toValue(value)).build();
 }
 
-PassRefPtr<AXValue> createValue(int value, AXValueType::Enum type)
+PassOwnPtr<AXValue> createValue(int value, const String& type)
 {
-    RefPtr<AXValue> axValue = AXValue::create().setType(type);
-    axValue->setValue(JSONBasicValue::create(value));
-    return axValue;
+    return AXValue::create().setType(type).setValue(protocol::toValue(value)).build();
 }
 
-PassRefPtr<AXValue> createValue(float value, AXValueType::Enum type)
+PassOwnPtr<AXValue> createValue(float value, const String& type)
 {
-    RefPtr<AXValue> axValue = AXValue::create().setType(type);
-    axValue->setValue(JSONBasicValue::create(value));
-    return axValue;
+    return AXValue::create().setType(type).setValue(protocol::toValue(value)).build();
 }
 
-PassRefPtr<AXValue> createBooleanValue(bool value, AXValueType::Enum type)
+PassOwnPtr<AXValue> createBooleanValue(bool value, const String& type)
 {
-    RefPtr<AXValue> axValue = AXValue::create().setType(type);
-    axValue->setValue(JSONBasicValue::create(value));
-    return axValue;
+    return AXValue::create().setType(type).setValue(protocol::toValue(value)).build();
 }
 
-PassRefPtr<AXRelatedNode> relatedNodeForAXObject(const AXObject* axObject, String* name = nullptr)
+PassOwnPtr<AXRelatedNode> relatedNodeForAXObject(const AXObject* axObject, String* name = nullptr)
 {
     Node* node = axObject->node();
     if (!node)
-        return PassRefPtr<AXRelatedNode>();
+        return PassOwnPtr<AXRelatedNode>();
     int backendNodeId = DOMNodeIds::idForNode(node);
     if (!backendNodeId)
-        return PassRefPtr<AXRelatedNode>();
-    RefPtr<AXRelatedNode> relatedNode = AXRelatedNode::create().setBackendNodeId(backendNodeId);
+        return PassOwnPtr<AXRelatedNode>();
+    OwnPtr<AXRelatedNode> relatedNode = AXRelatedNode::create().setBackendNodeId(backendNodeId).build();
     if (!node->isElementNode())
-        return relatedNode;
+        return relatedNode.release();
 
     Element* element = toElement(node);
-    const AtomicString& idref = element->getIdAttribute();
+    String idref = element->getIdAttribute();
     if (!idref.isEmpty())
         relatedNode->setIdref(idref);
 
     if (name)
         relatedNode->setText(*name);
-    return relatedNode;
+    return relatedNode.release();
 }
 
-PassRefPtr<AXValue> createRelatedNodeListValue(const AXObject* axObject, String* name, AXValueType::Enum valueType)
+PassOwnPtr<AXValue> createRelatedNodeListValue(const AXObject* axObject, String* name, const String& valueType)
 {
-    RefPtr<AXValue> axValue = AXValue::create().setType(valueType);
-    RefPtr<AXRelatedNode> relatedNode = relatedNodeForAXObject(axObject, name);
-    RefPtr<TypeBuilder::Array<AXRelatedNode>> relatedNodes = TypeBuilder::Array<AXRelatedNode>::create();
-    relatedNodes->addItem(relatedNode);
-    axValue->setRelatedNodes(relatedNodes);
-    return axValue;
+    OwnPtr<protocol::Array<AXRelatedNode>> relatedNodes = protocol::Array<AXRelatedNode>::create();
+    relatedNodes->addItem(relatedNodeForAXObject(axObject, name));
+    return AXValue::create().setType(valueType).setRelatedNodes(relatedNodes.release()).build();
 }
 
-PassRefPtr<AXValue> createRelatedNodeListValue(AXRelatedObjectVector& relatedObjects, AXValueType::Enum valueType)
+PassOwnPtr<AXValue> createRelatedNodeListValue(AXRelatedObjectVector& relatedObjects, const String& valueType)
 {
-    RefPtr<TypeBuilder::Array<AXRelatedNode>> frontendRelatedNodes = TypeBuilder::Array<AXRelatedNode>::create();
+    OwnPtr<protocol::Array<AXRelatedNode>> frontendRelatedNodes = protocol::Array<AXRelatedNode>::create();
     for (unsigned i = 0; i < relatedObjects.size(); i++) {
-        RefPtr<AXRelatedNode> frontendRelatedNode = relatedNodeForAXObject(relatedObjects[i]->object, &(relatedObjects[i]->text));
+        OwnPtr<AXRelatedNode> frontendRelatedNode = relatedNodeForAXObject(relatedObjects[i]->object, &(relatedObjects[i]->text));
         if (frontendRelatedNode)
-            frontendRelatedNodes->addItem(frontendRelatedNode);
+            frontendRelatedNodes->addItem(frontendRelatedNode.release());
     }
-    RefPtr<AXValue> axValue = AXValue::create().setType(valueType);
-    axValue->setRelatedNodes(frontendRelatedNodes);
-    return axValue;
+    return AXValue::create().setType(valueType).setRelatedNodes(frontendRelatedNodes.release()).build();
 }
 
-PassRefPtr<AXValue> createRelatedNodeListValue(AXObject::AXObjectVector& axObjects, AXValueType::Enum valueType)
+PassOwnPtr<AXValue> createRelatedNodeListValue(AXObject::AXObjectVector& axObjects, const String& valueType)
 {
-    RefPtr<TypeBuilder::Array<AXRelatedNode>> relatedNodes = TypeBuilder::Array<AXRelatedNode>::create();
+    OwnPtr<protocol::Array<AXRelatedNode>> relatedNodes = protocol::Array<AXRelatedNode>::create();
     for (unsigned i = 0; i < axObjects.size(); i++) {
-        RefPtr<AXRelatedNode> relatedNode = relatedNodeForAXObject(axObjects[i].get());
+        OwnPtr<AXRelatedNode> relatedNode = relatedNodeForAXObject(axObjects[i].get());
         if (relatedNode)
-            relatedNodes->addItem(relatedNode);
+            relatedNodes->addItem(relatedNode.release());
     }
-    RefPtr<AXValue> axValue = AXValue::create().setType(valueType);
-    axValue->setRelatedNodes(relatedNodes);
-    return axValue;
+    return AXValue::create().setType(valueType).setRelatedNodes(relatedNodes.release()).build();
 }
 
-AXValueSourceType::Enum valueSourceType(AXNameFrom nameFrom)
+String valueSourceType(AXNameFrom nameFrom)
 {
     switch (nameFrom) {
     case AXNameFromAttribute:
     case AXNameFromTitle:
     case AXNameFromValue:
-        return AXValueSourceType::Attribute;
+        return AXValueSourceTypeEnum::Attribute;
     case AXNameFromContents:
-        return AXValueSourceType::Contents;
+        return AXValueSourceTypeEnum::Contents;
     case AXNameFromPlaceholder:
-        return AXValueSourceType::Placeholder;
+        return AXValueSourceTypeEnum::Placeholder;
     case AXNameFromCaption:
     case AXNameFromRelatedElement:
-        return AXValueSourceType::RelatedElement;
+        return AXValueSourceTypeEnum::RelatedElement;
     default:
-        return AXValueSourceType::Implicit; // TODO(aboxhall): what to do here?
+        return AXValueSourceTypeEnum::Implicit; // TODO(aboxhall): what to do here?
     }
 }
 
-AXValueNativeSourceType::Enum nativeSourceType(AXTextFromNativeHTML nativeSource)
+String nativeSourceType(AXTextFromNativeHTML nativeSource)
 {
     switch (nativeSource) {
     case AXTextFromNativeHTMLFigcaption:
-        return AXValueNativeSourceType::Figcaption;
+        return AXValueNativeSourceTypeEnum::Figcaption;
     case AXTextFromNativeHTMLLabel:
-        return AXValueNativeSourceType::Label;
+        return AXValueNativeSourceTypeEnum::Label;
     case AXTextFromNativeHTMLLabelFor:
-        return AXValueNativeSourceType::Labelfor;
+        return AXValueNativeSourceTypeEnum::Labelfor;
     case AXTextFromNativeHTMLLabelWrapped:
-        return AXValueNativeSourceType::Labelwrapped;
+        return AXValueNativeSourceTypeEnum::Labelwrapped;
     case AXTextFromNativeHTMLTableCaption:
-        return AXValueNativeSourceType::Tablecaption;
+        return AXValueNativeSourceTypeEnum::Tablecaption;
     case AXTextFromNativeHTMLLegend:
-        return AXValueNativeSourceType::Legend;
+        return AXValueNativeSourceTypeEnum::Legend;
     case AXTextFromNativeHTMLTitleElement:
-        return AXValueNativeSourceType::Title;
+        return AXValueNativeSourceTypeEnum::Title;
     default:
-        return AXValueNativeSourceType::Other;
+        return AXValueNativeSourceTypeEnum::Other;
     }
 }
 
-
-PassRefPtr<AXValueSource> createValueSource(NameSource& nameSource)
+PassOwnPtr<AXValueSource> createValueSource(NameSource& nameSource)
 {
-    String attribute = nameSource.attribute.toString();
-    AXValueSourceType::Enum type = valueSourceType(nameSource.type);
-    RefPtr<AXValueSource> valueSource = AXValueSource::create().setType(type);
-    RefPtr<AXValue> value;
+    String type = valueSourceType(nameSource.type);
+    OwnPtr<AXValueSource> valueSource = AXValueSource::create().setType(type).build();
     if (!nameSource.relatedObjects.isEmpty()) {
-        AXValueType::Enum valueType = nameSource.attributeValue.isNull() ? AXValueType::NodeList : AXValueType::IdrefList;
-        value = createRelatedNodeListValue(nameSource.relatedObjects, valueType);
-        if (!nameSource.attributeValue.isNull())
-            value->setValue(JSONString::create(nameSource.attributeValue.string()));
-        valueSource->setValue(value);
-    } else if (!nameSource.text.isNull()) {
-        valueSource->setValue(createValue(nameSource.text));
+        if (nameSource.attribute == aria_labelledbyAttr || nameSource.attribute == aria_labeledbyAttr) {
+            OwnPtr<AXValue> attributeValue = createRelatedNodeListValue(nameSource.relatedObjects, AXValueTypeEnum::IdrefList);
+            if (!nameSource.attributeValue.isNull())
+                attributeValue->setValue(protocol::StringValue::create(nameSource.attributeValue.string()).get());
+            valueSource->setAttributeValue(attributeValue.release());
+        } else if (nameSource.attribute == QualifiedName::null()) {
+            valueSource->setNativeSourceValue(createRelatedNodeListValue(nameSource.relatedObjects, AXValueTypeEnum::NodeList));
+        }
     } else if (!nameSource.attributeValue.isNull()) {
-        valueSource->setValue(createValue(nameSource.attributeValue));
+        valueSource->setAttributeValue(createValue(nameSource.attributeValue));
     }
+    if (!nameSource.text.isNull())
+        valueSource->setValue(createValue(nameSource.text, AXValueTypeEnum::ComputedString));
     if (nameSource.attribute != QualifiedName::null())
         valueSource->setAttribute(nameSource.attribute.localName().string());
     if (nameSource.superseded)
@@ -248,7 +206,7 @@ PassRefPtr<AXValueSource> createValueSource(NameSource& nameSource)
         valueSource->setInvalid(true);
     if (nameSource.nativeSource != AXTextFromNativeHTMLUninitialized)
         valueSource->setNativeSource(nativeSourceType(nameSource.nativeSource));
-    return valueSource;
+    return valueSource.release();
 }
 
 } // namespace blink

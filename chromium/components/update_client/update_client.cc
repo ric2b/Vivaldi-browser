@@ -13,7 +13,6 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
-#include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -48,11 +47,15 @@ CrxUpdateItem::CrxUpdateItem()
       diff_extra_code1(0) {
 }
 
+CrxUpdateItem::CrxUpdateItem(const CrxUpdateItem& other) = default;
+
 CrxUpdateItem::~CrxUpdateItem() {
 }
 
 CrxComponent::CrxComponent() : allow_background_download(true) {
 }
+
+CrxComponent::CrxComponent(const CrxComponent& other) = default;
 
 CrxComponent::~CrxComponent() {
 }

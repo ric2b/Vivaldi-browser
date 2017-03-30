@@ -19,16 +19,17 @@
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model_delegate.h"
-#include "chrome/browser/ui/toolbar/toolbar_model_impl.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/toolbar/reload_button.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/security_state/security_state_model.h"
+#include "components/toolbar/toolbar_model_impl.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_constants.h"
 #include "grit/components_strings.h"
 #include "ipc/ipc_message.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -166,7 +167,8 @@ void SimpleWebViewDialog::Init() {
   if (web_view_->GetWebContents())
     ChromeSecurityStateModelClient::CreateForWebContents(
         web_view_->GetWebContents());
-  toolbar_model_.reset(new ToolbarModelImpl(this));
+  toolbar_model_.reset(
+      new ToolbarModelImpl(this, content::kMaxURLDisplayChars));
 
   set_background(views::Background::CreateSolidBackground(kDialogColor));
 

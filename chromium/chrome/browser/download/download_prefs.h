@@ -9,8 +9,8 @@
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/prefs/pref_member.h"
 #include "build/build_config.h"
+#include "components/prefs/pref_member.h"
 
 class PrefService;
 class Profile;
@@ -79,8 +79,7 @@ class DownloadPrefs {
   // Disables auto-open based on file extension.
   void DisableAutoOpenBasedOnExtension(const base::FilePath& file_name);
 
-#if defined(OS_WIN) || defined(OS_LINUX) || \
-    (defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MACOSX)
   // Store the user preference to disk. If |should_open| is true, also disable
   // the built-in PDF plugin. If |should_open| is false, enable the PDF plugin.
   void SetShouldOpenPdfInSystemReader(bool should_open);
@@ -111,8 +110,7 @@ class DownloadPrefs {
                    AutoOpenCompareFunctor> AutoOpenSet;
   AutoOpenSet auto_open_;
 
-#if defined(OS_WIN) || defined(OS_LINUX) || \
-    (defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MACOSX)
   bool should_open_pdf_in_system_reader_;
 #endif
 

@@ -5,7 +5,6 @@
 #include "chrome/browser/browsing_data/browsing_data_counter_utils.h"
 
 #include "base/command_line.h"
-#include "base/prefs/pref_service.h"
 #include "chrome/browser/browsing_data/autofill_counter.h"
 #include "chrome/browser/browsing_data/cache_counter.h"
 #include "chrome/browser/browsing_data/history_counter.h"
@@ -13,6 +12,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/prefs/pref_service.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/text/bytes_formatting.h"
 
@@ -27,13 +27,8 @@ bool AreCountersEnabled() {
     return false;
   }
 
-  // Enabled by default on desktop. Disabled on Android until the feature
-  // is finished.
-#if defined(OS_ANDROID)
-  return false;
-#else
+  // Enabled by default.
   return true;
-#endif
 }
 
 // A helper function to display the size of cache in units of MB or higher.
@@ -166,6 +161,37 @@ base::string16 GetCounterTextFromResult(
   }
 
   return text;
+}
+
+bool GetDeletionPreferenceFromDataType(
+    BrowsingDataType data_type, std::string* out_pref) {
+  switch (data_type) {
+    case HISTORY:
+      *out_pref = prefs::kDeleteBrowsingHistory;
+      return true;
+    case CACHE:
+      *out_pref = prefs::kDeleteCache;
+      return true;
+    case COOKIES:
+      *out_pref = prefs::kDeleteCookies;
+      return true;
+    case PASSWORDS:
+      *out_pref = prefs::kDeletePasswords;
+      return true;
+    case FORM_DATA:
+      *out_pref = prefs::kDeleteFormData;
+      return true;
+    case BOOKMARKS:
+      // Bookmarks are deleted on the Android side. No corresponding deletion
+      // preference.
+      return false;
+    case NUM_TYPES:
+      // This is not an actual type.
+      NOTREACHED();
+      return false;
+  }
+  NOTREACHED();
+  return false;
 }
 
 BrowsingDataCounter* CreateCounterForPreference(std::string pref_name) {

@@ -20,14 +20,15 @@
 #include "bindings/core/v8/V8TestInterfaceWillBeGarbageCollected.h"
 #include "bindings/core/v8/V8Uint8Array.h"
 #include "core/dom/FlexibleArrayBufferView.h"
-#include "core/frame/UseCounter.h"
+#include "core/frame/Deprecation.h"
 
 namespace blink {
 
 void V8TestDictionary::toImpl(v8::Isolate* isolate, v8::Local<v8::Value> v8Value, TestDictionary& impl, ExceptionState& exceptionState)
 {
-    if (isUndefinedOrNull(v8Value))
+    if (isUndefinedOrNull(v8Value)) {
         return;
+    }
     if (!v8Value->IsObject()) {
         exceptionState.throwTypeError("cannot convert to dictionary.");
         return;
@@ -94,7 +95,7 @@ void V8TestDictionary::toImpl(v8::Isolate* isolate, v8::Local<v8::Value> v8Value
         if (deprecatedCreateMemberValue.IsEmpty() || deprecatedCreateMemberValue->IsUndefined()) {
             // Do nothing.
         } else {
-            UseCounter::countDeprecationIfNotPrivateScript(isolate, currentExecutionContext(isolate), UseCounter::CreateMember);
+            Deprecation::countDeprecationIfNotPrivateScript(isolate, currentExecutionContext(isolate), UseCounter::CreateMember);
             bool deprecatedCreateMember = toBoolean(isolate, deprecatedCreateMemberValue, exceptionState);
             if (exceptionState.hadException())
                 return;

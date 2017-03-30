@@ -100,7 +100,10 @@ public:
     virtual void readingChecked() const;
 
     // Validation functions
-    virtual String validationMessage() const;
+
+    // Returns a validation message as .first, and title attribute value as
+    // .second if patternMismatch.
+    virtual std::pair<String, String> validationMessage() const;
     virtual bool supportsValidation() const;
     virtual bool typeMismatchFor(const String&) const;
     // Type check for the current input value. We do nothing for some types
@@ -228,6 +231,7 @@ protected:
     Decimal findStepBase(const Decimal&) const;
 
     StepRange createStepRange(AnyStepHandling, const Decimal& stepBaseDefault, const Decimal& minimumDefault, const Decimal& maximumDefault, const StepRange::StepDescription&) const;
+    void addWarningToConsole(const char* messageFormat, const String& value) const;
 
 private:
     // Helper for stepUp()/stepDown(). Adds step value * count to the current value.

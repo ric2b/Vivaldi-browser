@@ -24,10 +24,6 @@
 #include "third_party/ashmem/ashmem.h"
 #endif
 
-#if defined(OS_WIN)
-#include "base/win/windows_version.h"
-#endif
-
 namespace base {
 namespace {
 
@@ -206,7 +202,7 @@ DiscardableSharedMemory::LockResult DiscardableSharedMemory::Lock(
 
   size_t start = offset / base::GetPageSize();
   size_t end = start + length / base::GetPageSize();
-  DCHECK_LT(start, end);
+  DCHECK_LE(start, end);
   DCHECK_LE(end, AlignToPageSize(mapped_size_) / base::GetPageSize());
 
   // Add pages to |locked_page_count_|.
@@ -227,14 +223,6 @@ DiscardableSharedMemory::LockResult DiscardableSharedMemory::Lock(
   if (SharedMemory::IsHandleValid(handle)) {
     if (ashmem_pin_region(
             handle.fd, AlignToPageSize(sizeof(SharedState)) + offset, length)) {
-      return PURGED;
-    }
-  }
-#elif defined(OS_WIN)
-  if (base::win::GetVersion() >= base::win::VERSION_WIN8) {
-    if (!VirtualAlloc(reinterpret_cast<char*>(shared_memory_.memory()) +
-                          AlignToPageSize(sizeof(SharedState)) + offset,
-                      length, MEM_RESET_UNDO, PAGE_READWRITE)) {
       return PURGED;
     }
   }
@@ -265,23 +253,11 @@ void DiscardableSharedMemory::Unlock(size_t offset, size_t length) {
       DPLOG(ERROR) << "ashmem_unpin_region() failed";
     }
   }
-#elif defined(OS_WIN)
-  if (base::win::GetVersion() >= base::win::VERSION_WIN8) {
-    // Note: MEM_RESET is not technically gated on Win8.  However, this Unlock
-    // function needs to match the Lock behaviour (MEM_RESET_UNDO) to properly
-    // implement memory pinning.  It needs to bias towards preserving the
-    // contents of memory between an Unlock and next Lock.
-    if (!VirtualAlloc(reinterpret_cast<char*>(shared_memory_.memory()) +
-                          AlignToPageSize(sizeof(SharedState)) + offset,
-                      length, MEM_RESET, PAGE_READWRITE)) {
-      DPLOG(ERROR) << "VirtualAlloc() MEM_RESET failed in Unlock()";
-    }
-  }
 #endif
 
   size_t start = offset / base::GetPageSize();
   size_t end = start + length / base::GetPageSize();
-  DCHECK_LT(start, end);
+  DCHECK_LE(start, end);
   DCHECK_LE(end, AlignToPageSize(mapped_size_) / base::GetPageSize());
 
   // Remove pages from |locked_page_count_|.

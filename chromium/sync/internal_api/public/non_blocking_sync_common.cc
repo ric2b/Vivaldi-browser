@@ -6,11 +6,9 @@
 
 namespace syncer_v2 {
 
-DataTypeState::DataTypeState() {}
-
-DataTypeState::~DataTypeState() {}
-
 CommitRequestData::CommitRequestData() {}
+
+CommitRequestData::CommitRequestData(const CommitRequestData& other) = default;
 
 CommitRequestData::~CommitRequestData() {}
 
@@ -19,6 +17,9 @@ CommitResponseData::CommitResponseData() {}
 CommitResponseData::~CommitResponseData() {}
 
 UpdateResponseData::UpdateResponseData() {}
+
+UpdateResponseData::UpdateResponseData(const UpdateResponseData& other) =
+    default;
 
 UpdateResponseData::~UpdateResponseData() {}
 

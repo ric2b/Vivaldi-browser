@@ -9,10 +9,11 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
-#include "chrome/browser/ui/toolbar/toolbar_model_impl.h"
+#include "components/toolbar/toolbar_model_impl.h"
 #include "content/public/browser/cert_store.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_constants.h"
 #include "content/public/common/ssl_status.h"
 #include "jni/ToolbarModel_jni.h"
 #include "net/cert/x509_certificate.h"
@@ -20,9 +21,8 @@
 using base::android::ScopedJavaLocalRef;
 
 ToolbarModelAndroid::ToolbarModelAndroid(JNIEnv* env, jobject jdelegate)
-    : toolbar_model_(new ToolbarModelImpl(this)),
-      weak_java_delegate_(env, jdelegate) {
-}
+    : toolbar_model_(new ToolbarModelImpl(this, content::kMaxURLDisplayChars)),
+      weak_java_delegate_(env, jdelegate) {}
 
 ToolbarModelAndroid::~ToolbarModelAndroid() {
 }

@@ -105,6 +105,7 @@ Para obtener información sobre la privacidad, consulta la Política de Privacid
 <translation id="337167041784729019">Mostrar estadísticas</translation>
 <translation id="3385242214819933234">Propietario del host no válido.</translation>
 <translation id="3403830762023901068">La configuración de la política no permite compartir este ordenador como un host de Chromoting. Ponte en contacto con el administrador del sistema para obtener asistencia.</translation>
+<translation id="3423542133075182604">Proceso remoto de la llave de seguridad</translation>
 <translation id="3581045510967524389">No se ha podido establecer conexión con la red. Comprueba que el dispositivo esté conectado a Internet.</translation>
 <translation id="3596628256176442606">Este servicio permite las conexiones entrantes de los clientes de Chromoting.</translation>
 <translation id="3606997049964069799">No has iniciado sesión en Chromium. Inicia sesión y vuelve a intentarlo.</translation>
@@ -175,7 +176,7 @@ remoto de Chrome</translation>
 <translation id="518094545883702183">Esta información solo se utiliza para diagnosticar el problema del que has informado, solo está disponible para la persona que examine tu informe y se conserva durante un período de hasta 30 días.</translation>
 <translation id="5222676887888702881">Cerrar sesión</translation>
 <translation id="5254120496627797685">Si abandonas esta página, finalizará tu sesión en Escritorio remoto de Chrome.</translation>
-<translation id="5308380583665731573">Conexiones</translation>
+<translation id="5308380583665731573">Conectar</translation>
 <translation id="5363265567587775042">Pregunta al usuario el ordenador al que se quiere acceder para hacer clic en <ph name="SHARE" /> y proporcionar el código de acceso.</translation>
 <translation id="5379087427956679853">Escritorio remoto de Chrome permite compartir de forma segura tu ordenador a través de Internet. Ambos usuarios deben estar ejecutando la aplicación Escritorio remoto de Chrome, que está disponible en la página <ph name="URL" />.</translation>
 <translation id="5394895745784982830">Para Mac (OS X 10.6 y versiones superiores)</translation>

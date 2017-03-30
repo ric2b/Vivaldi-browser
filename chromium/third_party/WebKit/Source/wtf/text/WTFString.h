@@ -70,6 +70,8 @@ WTF_EXPORT uint64_t charactersToUInt64(const UChar*, size_t, bool* ok = 0); // i
 // consistent with the above functions instead.
 WTF_EXPORT double charactersToDouble(const LChar*, size_t, bool* ok = 0);
 WTF_EXPORT double charactersToDouble(const UChar*, size_t, bool* ok = 0);
+WTF_EXPORT double charactersToDouble(const LChar*, size_t, size_t& parsedLength);
+WTF_EXPORT double charactersToDouble(const UChar*, size_t, size_t& parsedLength);
 WTF_EXPORT float charactersToFloat(const LChar*, size_t, bool* ok = 0);
 WTF_EXPORT float charactersToFloat(const UChar*, size_t, bool* ok = 0);
 WTF_EXPORT float charactersToFloat(const LChar*, size_t, size_t& parsedLength);
@@ -501,6 +503,8 @@ inline bool equalIgnoringCase(const String& a, const LChar* b) { return equalIgn
 inline bool equalIgnoringCase(const String& a, const char* b) { return equalIgnoringCase(a.impl(), reinterpret_cast<const LChar*>(b)); }
 inline bool equalIgnoringCase(const LChar* a, const String& b) { return equalIgnoringCase(a, b.impl()); }
 inline bool equalIgnoringCase(const char* a, const String& b) { return equalIgnoringCase(reinterpret_cast<const LChar*>(a), b.impl()); }
+
+inline bool equalIgnoringASCIICase(const String& a, const String& b) { return equalIgnoringASCIICase(a.impl(), b.impl()); }
 
 inline bool equalPossiblyIgnoringCase(const String& a, const String& b, bool ignoreCase)
 {

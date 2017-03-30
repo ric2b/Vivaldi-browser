@@ -136,6 +136,7 @@ should be able to be added at any place in this file.
   <description>
     User flag to disable smooth scroll animations on wheel and keyboard input.
   </description>
+  <obsolete>This flag no longer exists.</obsolete>
 </action>
 
 <action name="AboutFlags_disable-views-rect-based-targeting">
@@ -297,6 +298,13 @@ should be able to be added at any place in this file.
 <action name="AboutFlags_save-page-as-mhtml">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="AboutFlags_smooth-scrolling">
+  <owner>skobes@chromium.org</owner>
+  <description>
+    User flag to disable smooth scroll animations on wheel and keyboard input.
+  </description>
 </action>
 
 <action name="AboutFlags_snap-start">
@@ -2513,6 +2521,18 @@ should be able to be added at any place in this file.
   <obsolete>Deprecated as of 11/2015.</obsolete>
 </action>
 
+<action name="CustomTabs.CloseButtonClicked">
+  <owner>dfalcantara@chromium.org</owner>
+  <description>Close button of the CustomTabActivity was clicked.</description>
+</action>
+
+<action name="CustomTabs.SystemBack">
+  <owner>dfalcantara@chromium.org</owner>
+  <description>
+    User hit the 'back' button in the CustomTabActivity.
+  </description>
+</action>
+
 <action name="CustomTabsCustomActionButtonClick">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of the metric.</description>
@@ -2651,6 +2671,40 @@ should be able to be added at any place in this file.
   <description>
     Recorded when a desktop search is opened in Chrome. This is currently
     Windows-specific.
+  </description>
+</action>
+
+<action name="DesktopSearchRedirectionInfoBar_Dismiss">
+  <owner>fdoray@chromium.org</owner>
+  <description>
+    Recorded when the user clicks on the dismiss button in the infobar
+    explaining that a desktop search has been redirected to the default search
+    engine.
+  </description>
+</action>
+
+<action name="DesktopSearchRedirectionInfoBar_Ignore">
+  <owner>fdoray@chromium.org</owner>
+  <description>
+    Recorded when the infobar explaining that a desktop search has been
+    redirected to the default search engine is closed without user interaction.
+  </description>
+</action>
+
+<action name="DesktopSearchRedirectionInfoBar_ManageSearchSettings">
+  <owner>fdoray@chromium.org</owner>
+  <description>
+    Recorded when the user clicks on the 'Manage search settings' button in the
+    infobar explaining that a desktop search has been redirected to the default
+    search engine.
+  </description>
+</action>
+
+<action name="DesktopSearchRedirectionInfoBar_Shown">
+  <owner>fdoray@chromium.org</owner>
+  <description>
+    Recorded when the infobar explaining that a desktop search has been
+    redirected to the default search engine is shown.
   </description>
 </action>
 
@@ -3124,19 +3178,19 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
-<action name="FilterURLTermiate_About">
+<action name="FilterURLTermiate_About" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
   <obsolete>Removed in M44.</obsolete>
 </action>
 
-<action name="FilterURLTermiate_Blocked">
+<action name="FilterURLTermiate_Blocked" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
   <obsolete>Removed in M44.</obsolete>
 </action>
 
-<action name="FilterURLTermiate_Invalid">
+<action name="FilterURLTermiate_Invalid" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
   <obsolete>Removed in M44.</obsolete>
@@ -5079,6 +5133,7 @@ should be able to be added at any place in this file.
 <action name="InstantExtended.MostVisitedClicked">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated as of 2/2016</obsolete>
 </action>
 
 <action name="InstantExtended.ShowNTP">
@@ -7795,6 +7850,21 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="MediaRouter_Ui_Dialog_Blur">
+  <owner>apacible@chromium.org</owner>
+  <description>
+    User clicked outside the Media Router dialog, possibly in an effort to close
+    the dialog.
+  </description>
+</action>
+
+<action name="MediaRouter_Ui_Dialog_ESCToClose">
+  <owner>apacible@chromium.org</owner>
+  <description>
+    User closed the Media Router dialog by pressing the ESC key.
+  </description>
+</action>
+
 <action name="MediaRouter_Ui_Navigate_Help">
   <owner>apacible@chromium.org</owner>
   <description>
@@ -7827,6 +7897,60 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Media_Paused">
+  <owner>liberato@chromium.org</owner>
+  <description>Media playback was paused.</description>
+</action>
+
+<action name="Media_Play_WithGesture">
+  <owner>liberato@chromium.org</owner>
+  <description>A call to play() with a user gesture succeeded.</description>
+</action>
+
+<action name="Media_Playback_Ended">
+  <owner>liberato@chromium.org</owner>
+  <description>Media playback reached the end.</description>
+</action>
+
+<action name="Media_Playback_Mute_Off">
+  <owner>liberato@chromium.org</owner>
+  <description>Mute was turned off.</description>
+</action>
+
+<action name="Media_Playback_Mute_On">
+  <owner>liberato@chromium.org</owner>
+  <description>Mute was turned on.</description>
+</action>
+
+<action name="Media_Playback_Started">
+  <owner>liberato@chromium.org</owner>
+  <description>Media playback started due to any cause.</description>
+</action>
+
+<action name="Media_RequestRemotePlayback">
+  <owner>liberato@chromium.org</owner>
+  <description>
+    User requested to transfer playback to a remote player, via 'cast' button.
+  </description>
+</action>
+
+<action name="Media_RequestRemotePlayback_Control">
+  <owner>liberato@chromium.org</owner>
+  <description>
+    User requested to control playback of a remote player, such as Chromecast.
+  </description>
+</action>
+
+<action name="Media_Seeked">
+  <owner>liberato@chromium.org</owner>
+  <description>Seek to different time completed.</description>
+</action>
+
+<action name="Media_SetVolume">
+  <owner>liberato@chromium.org</owner>
+  <description>Playback volume was changed.</description>
+</action>
+
 <action name="Menu_Take_Screenshot">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -7852,6 +7976,13 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="MobileAddBookmarkViaIntent">
+  <owner>newt@chromium.org</owner>
+  <description>
+    User added a bookmark to Chrome via an intent from a third-party app.
+  </description>
+</action>
+
 <action name="MobileBeamCallbackSuccess">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -7862,23 +7993,23 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
-<action name="MobileBreakpadUploadAttempt">
+<action name="MobileBreakpadUploadAttempt" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
-<action name="MobileBreakpadUploadFail">
+<action name="MobileBreakpadUploadFail" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of the metric.</description>
 </action>
 
-<action name="MobileBreakpadUploadFailure">
+<action name="MobileBreakpadUploadFailure" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
   <obsolete>Deprecated as of 5/2015</obsolete>
 </action>
 
-<action name="MobileBreakpadUploadSuccess">
+<action name="MobileBreakpadUploadSuccess" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
@@ -8313,17 +8444,17 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
-<action name="MobilePageLoaded">
+<action name="MobilePageLoaded" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
-<action name="MobilePageLoadedDesktopUserAgent">
+<action name="MobilePageLoadedDesktopUserAgent" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
-<action name="MobilePageLoadedWithKeyboard">
+<action name="MobilePageLoadedWithKeyboard" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
@@ -9334,6 +9465,20 @@ should be able to be added at any place in this file.
   <description>Settings: Users: Enable allowing all users</description>
 </action>
 
+<action name="Options_AndroidApps_Disable">
+  <owner>khmel@chromium.org</owner>
+  <description>
+    User changed setting to disable Android apps from running on the Chromebook.
+  </description>
+</action>
+
+<action name="Options_AndroidApps_Enable">
+  <owner>khmel@chromium.org</owner>
+  <description>
+    User changed setting to enable Android apps to run on the Chromebook.
+  </description>
+</action>
+
 <action name="Options_AppLanguage">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -9710,6 +9855,11 @@ should be able to be added at any place in this file.
   <description>
     Settings: Device: Display settings: arrange desktops
   </description>
+</action>
+
+<action name="Options_DisplaySetColorProfile">
+  <owner>stevenjb@chromium.org</owner>
+  <description>Settings: Device: Display settings: Color Profile</description>
 </action>
 
 <action name="Options_DisplaySetOrientation">
@@ -11933,7 +12083,7 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
-<action name="ServiceWorker.ControlledPageLoad">
+<action name="ServiceWorker.ControlledPageLoad" not_user_triggered="true">
   <owner>nhiroki@chromium.org</owner>
   <description>
     Counts the number of page loads controlled by a Service Worker.
@@ -12902,8 +13052,15 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="SystemBackForNavigation">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>dfalcantara@chromium.org</owner>
+  <description>
+    The user navigated backward in the tab's history using the system back
+    button.
+  </description>
+  <obsolete>
+    Deprecated as of 02/2016. Now recorded in the histogram
+    &quot;Android.Activity.ChromeTabbedActivity.SystemBackAction&quot;.
+  </obsolete>
 </action>
 
 <action name="TabContextMenu_BookmarkAllTabs">
@@ -13052,6 +13209,24 @@ should be able to be added at any place in this file.
 <action name="Tab_DropURLOnTab">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="TaskManagement.OpenInChromeActionButtonClicked">
+  <owner>dfalcantara@chromium.org</owner>
+  <description>
+    User hit the &quot;Open in Chrome&quot; action button.
+  </description>
+</action>
+
+<action name="TaskManagement.ReturnButtonClicked">
+  <owner>dfalcantara@chromium.org</owner>
+  <description>
+    User hit the &quot;X&quot; button to close the tab. The return button is an
+    explicit &quot;close this tab and return to the previous app&quot; button
+    that may appear to the left of the Omnibox.  This is different from regular
+    tab closing buttons because those doesn't send the user back to the previous
+    app.
+  </description>
 </action>
 
 <action name="TaskManager">

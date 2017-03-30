@@ -22,8 +22,11 @@ from telemetry.internal.util import binary_manager
 
 
 def _DiscoverProfileExtenderClasses():
-  profile_extenders_dir = os.path.abspath(os.path.join(util.GetBaseDir(),
-      '..', 'perf', 'profile_creators'))
+  profile_extenders_dir = (
+      os.path.abspath(
+          os.path.join(
+              util.GetBaseDir(), '..', 'perf',
+              'profile_creators')))
   base_dir = os.path.abspath(os.path.join(profile_extenders_dir, '..'))
 
   profile_extenders_unfiltered = discover.DiscoverClasses(
@@ -60,7 +63,7 @@ def _IsPseudoFile(directory, paths):
     if not IsSocket(full_path) and not os.path.islink(full_path):
       continue
 
-    logging.warning('Ignoring pseudo file: %s' % full_path)
+    logging.warning('Ignoring pseudo file: %s', full_path)
     ignore_list.append(path)
 
   return ignore_list
@@ -75,6 +78,7 @@ class ProfileGenerator(object):
   override it before user login. So for CrOS we just generate the profile
   every time when the benchmark starts to run.
   """
+
   def __init__(self, profile_extender_class, profile_name):
     self._profile_extender_class = profile_extender_class
     self._profile_name = profile_name
@@ -105,14 +109,7 @@ class ProfileGenerator(object):
     if options.browser_options.profile_dir:
       return (options.browser_options.profile_dir, False)
 
-    out_dir = os.path.abspath(os.path.join(
-        tempfile.gettempdir(), self._profile_name, self._profile_name))
-
-    # Never reuse a generated profile, since it might be for a different version
-    # of Chrome.
-    if os.path.exists(out_dir):
-      assert os.path.isdir(out_dir)
-      shutil.rmtree(out_dir)
+    out_dir = tempfile.mkdtemp(prefix=self._profile_name)
 
     self.Create(options, out_dir)
     return (out_dir, True)
@@ -166,10 +163,10 @@ def AddCommandLineArgs(parser):
   legal_profile_creators = '|'.join(profile_extenders)
   group = optparse.OptionGroup(parser, 'Profile generation options')
   group.add_option('--profile-type-to-generate',
-      dest='profile_type_to_generate',
-      default=None,
-      help='Type of profile to generate. '
-           'Supported values: %s' % legal_profile_creators)
+                   dest='profile_type_to_generate',
+                   default=None,
+                   help='Type of profile to generate. '
+                   'Supported values: %s' % legal_profile_creators)
   parser.add_option_group(group)
 
 
@@ -177,19 +174,19 @@ def ProcessCommandLineArgs(parser, args):
   story_runner.ProcessCommandLineArgs(parser, args)
 
   if not args.profile_type_to_generate:
-    parser.error("Must specify --profile-type-to-generate option.")
+    parser.error('Must specify --profile-type-to-generate option.')
 
   profile_extenders = _DiscoverProfileExtenderClasses().keys()
   if args.profile_type_to_generate not in profile_extenders:
     legal_profile_creators = '|'.join(profile_extenders)
-    parser.error("Invalid profile type, legal values are: %s." %
-        legal_profile_creators)
+    parser.error('Invalid profile type, legal values are: %s.' %
+                 legal_profile_creators)
 
   if not args.browser_type:
-    parser.error("Must specify --browser option.")
+    parser.error('Must specify --browser option.')
 
   if not args.output_dir:
-    parser.error("Must specify --output-dir option.")
+    parser.error('Must specify --output-dir option.')
 
   if args.browser_options.dont_override_profile:
     parser.error("Can't use existing profile when generating profile.")
@@ -199,7 +196,7 @@ def Main():
   binary_manager.InitDependencyManager(None)
   options = browser_options.BrowserFinderOptions()
   parser = options.CreateParser(
-      "%%prog <--profile-type-to-generate=...> <--browser=...> <--output-dir>")
+      '%%prog <--profile-type-to-generate=...> <--browser=...> <--output-dir>')
   AddCommandLineArgs(parser)
   _, _ = parser.parse_args()
   ProcessCommandLineArgs(parser, options)
@@ -209,6 +206,6 @@ def Main():
   profile_extender_class = profile_extenders[options.profile_type_to_generate]
 
   generator = ProfileGenerator(profile_extender_class,
-      options.profile_type_to_generate)
+                               options.profile_type_to_generate)
   generator.Create(options, options.output_dir)
   return 0

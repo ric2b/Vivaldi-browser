@@ -10,11 +10,8 @@
 #include "bindings/core/v8/V8DOMConfiguration.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
 #include "core/SVGNames.h"
-#include "core/dom/ContextFeatures.h"
 #include "core/dom/Document.h"
 #include "core/dom/custom/CustomElementProcessingStack.h"
-#include "platform/RuntimeEnabledFeatures.h"
-#include "platform/TraceEvent.h"
 #include "wtf/GetPtr.h"
 #include "wtf/RefPtr.h"
 
@@ -26,7 +23,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8SVGTestInterface::wrapperTypeInfo = { gin::kEmbedderBlink, V8SVGTestInterface::domTemplate, V8SVGTestInterface::refObject, V8SVGTestInterface::derefObject, V8SVGTestInterface::trace, 0, 0, V8SVGTestInterface::preparePrototypeAndInterfaceObject, V8SVGTestInterface::installConditionallyEnabledProperties, "SVGTestInterface", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Dependent, WrapperTypeInfo::RefCountedObject };
+const WrapperTypeInfo V8SVGTestInterface::wrapperTypeInfo = { gin::kEmbedderBlink, V8SVGTestInterface::domTemplate, V8SVGTestInterface::refObject, V8SVGTestInterface::derefObject, V8SVGTestInterface::trace, 0, V8SVGTestInterface::preparePrototypeAndInterfaceObject, V8SVGTestInterface::installConditionallyEnabledProperties, "SVGTestInterface", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Dependent, WrapperTypeInfo::RefCountedObject };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -47,9 +44,7 @@ static void typeAttributeGetter(const v8::FunctionCallbackInfo<v8::Value>& info)
 
 static void typeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMGetter");
     SVGTestInterfaceV8Internal::typeAttributeGetter(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void typeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -66,10 +61,8 @@ static void typeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::Function
 static void typeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     v8::Local<v8::Value> v8Value = info[0];
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMSetter");
     CustomElementProcessingStack::CallbackDeliveryScope deliveryScope;
     SVGTestInterfaceV8Internal::typeAttributeSetter(v8Value, info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 } // namespace SVGTestInterfaceV8Internal
@@ -83,7 +76,7 @@ static void installV8SVGTestInterfaceTemplate(v8::Local<v8::FunctionTemplate> fu
     functionTemplate->ReadOnlyPrototype();
 
     v8::Local<v8::Signature> defaultSignature;
-    defaultSignature = V8DOMConfiguration::installDOMClassTemplate(isolate, functionTemplate, "SVGTestInterface", v8::Local<v8::FunctionTemplate>(), V8SVGTestInterface::internalFieldCount,
+    defaultSignature = V8DOMConfiguration::installDOMClassTemplate(isolate, functionTemplate, V8SVGTestInterface::wrapperTypeInfo.interfaceName, v8::Local<v8::FunctionTemplate>(), V8SVGTestInterface::internalFieldCount,
         0, 0,
         V8SVGTestInterfaceAccessors, WTF_ARRAY_LENGTH(V8SVGTestInterfaceAccessors),
         0, 0);
@@ -91,6 +84,7 @@ static void installV8SVGTestInterfaceTemplate(v8::Local<v8::FunctionTemplate> fu
     ALLOW_UNUSED_LOCAL(instanceTemplate);
     v8::Local<v8::ObjectTemplate> prototypeTemplate = functionTemplate->PrototypeTemplate();
     ALLOW_UNUSED_LOCAL(prototypeTemplate);
+    V8DOMConfiguration::setClassString(isolate, prototypeTemplate, V8SVGTestInterface::wrapperTypeInfo.interfaceName);
 }
 
 v8::Local<v8::FunctionTemplate> V8SVGTestInterface::domTemplate(v8::Isolate* isolate)

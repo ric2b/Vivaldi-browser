@@ -13,8 +13,9 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/common/content_client.h"
+#include "mojo/common/url_type_converters.h"
 
-#if defined(OS_ANDROID) && defined(ENABLE_MOJO_MEDIA)
+#if defined(OS_ANDROID) && defined(ENABLE_MOJO_CDM)
 #include "content/browser/media/android/provision_fetcher_impl.h"
 #endif
 
@@ -24,7 +25,7 @@ namespace {
 
 void RegisterFrameMojoShellServices(ServiceRegistry* registry,
                                     RenderFrameHost* render_frame_host) {
-#if defined(OS_ANDROID) && defined(ENABLE_MOJO_MEDIA)
+#if defined(OS_ANDROID) && defined(ENABLE_MOJO_CDM)
   registry->AddService(
       base::Bind(&ProvisionFetcherImpl::Create, render_frame_host));
 #endif
@@ -39,35 +40,33 @@ FrameMojoShell::FrameMojoShell(RenderFrameHost* frame_host)
 FrameMojoShell::~FrameMojoShell() {
 }
 
-void FrameMojoShell::BindRequest(
-    mojo::InterfaceRequest<mojo::Shell> shell_request) {
-  bindings_.AddBinding(this, std::move(shell_request));
+void FrameMojoShell::BindRequest(mojo::shell::mojom::ConnectorRequest request) {
+  connectors_.AddBinding(this, std::move(request));
 }
 
 // TODO(xhwang): Currently no callers are exposing |exposed_services|. So we
 // drop it and replace it with services we provide in the browser. In the
 // future we may need to support both.
-void FrameMojoShell::ConnectToApplication(
-    mojo::URLRequestPtr application_url,
-    mojo::InterfaceRequest<mojo::ServiceProvider> services,
-    mojo::ServiceProviderPtr /* exposed_services */,
-    mojo::CapabilityFilterPtr filter,
-    const ConnectToApplicationCallback& callback) {
-  mojo::ServiceProviderPtr frame_services;
+void FrameMojoShell::Connect(
+    const mojo::String& application_url,
+    uint32_t user_id,
+    mojo::shell::mojom::InterfaceProviderRequest services,
+    mojo::shell::mojom::InterfaceProviderPtr /* exposed_services */,
+    const mojo::shell::mojom::Connector::ConnectCallback& callback) {
+  // TODO(beng): user_id is dropped on the floor right now. Figure out what to
+  //             do with it.
+  mojo::shell::mojom::InterfaceProviderPtr frame_services;
   service_provider_bindings_.AddBinding(GetServiceRegistry(),
                                         GetProxy(&frame_services));
 
-  mojo::shell::CapabilityFilter capability_filter =
-      mojo::shell::GetPermissiveCapabilityFilter();
-  if (!filter.is_null())
-    capability_filter = filter->filter.To<mojo::shell::CapabilityFilter>();
   MojoShellContext::ConnectToApplication(
-      GURL(application_url->url), frame_host_->GetSiteInstance()->GetSiteURL(),
-      std::move(services), std::move(frame_services), capability_filter,
-      callback);
+      application_url.To<GURL>(),
+      frame_host_->GetSiteInstance()->GetSiteURL(), std::move(services),
+      std::move(frame_services), callback);
 }
 
-void FrameMojoShell::QuitApplication() {
+void FrameMojoShell::Clone(mojo::shell::mojom::ConnectorRequest request) {
+  connectors_.AddBinding(this, std::move(request));
 }
 
 ServiceRegistryImpl* FrameMojoShell::GetServiceRegistry() {

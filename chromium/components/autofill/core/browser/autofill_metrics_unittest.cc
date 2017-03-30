@@ -10,7 +10,6 @@
 
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/prefs/pref_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
@@ -27,6 +26,7 @@
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
+#include "components/prefs/pref_service.h"
 #include "components/rappor/test_rappor_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/fake_signin_manager.h"
@@ -3454,16 +3454,18 @@ class AutofillMetricsParseQueryResponseTest : public testing::Test {
 };
 
 TEST_F(AutofillMetricsParseQueryResponseTest, ServerHasData) {
-  std::string response =
-      "<autofillqueryresponse>"
-      "<field autofilltype=\"7\" />"
-      "<field autofilltype=\"30\" />"
-      "<field autofilltype=\"9\" />"
-      "<field autofilltype=\"0\" />"
-      "</autofillqueryresponse>";
+  AutofillQueryResponseContents response;
+  response.add_field()->set_autofill_type(7);
+  response.add_field()->set_autofill_type(30);
+  response.add_field()->set_autofill_type(9);
+  response.add_field()->set_autofill_type(0);
+
+  std::string response_string;
+  ASSERT_TRUE(response.SerializeToString(&response_string));
 
   base::HistogramTester histogram_tester;
-  FormStructure::ParseQueryResponse(response, forms_.get(), &rappor_service_);
+  FormStructure::ParseQueryResponse(response_string, forms_.get(),
+                                    &rappor_service_);
   EXPECT_THAT(
       histogram_tester.GetAllSamples("Autofill.ServerResponseHasDataForForm"),
       ElementsAre(Bucket(true, 2)));
@@ -3476,16 +3478,18 @@ TEST_F(AutofillMetricsParseQueryResponseTest, ServerHasData) {
 // If the server returns NO_SERVER_DATA for one of the forms, expect RAPPOR
 // logging.
 TEST_F(AutofillMetricsParseQueryResponseTest, OneFormNoServerData) {
-  std::string response =
-      "<autofillqueryresponse>"
-      "<field autofilltype=\"0\" />"
-      "<field autofilltype=\"0\" />"
-      "<field autofilltype=\"9\" />"
-      "<field autofilltype=\"0\" />"
-      "</autofillqueryresponse>";
+  AutofillQueryResponseContents response;
+  response.add_field()->set_autofill_type(0);
+  response.add_field()->set_autofill_type(0);
+  response.add_field()->set_autofill_type(9);
+  response.add_field()->set_autofill_type(0);
+
+  std::string response_string;
+  ASSERT_TRUE(response.SerializeToString(&response_string));
 
   base::HistogramTester histogram_tester;
-  FormStructure::ParseQueryResponse(response, forms_.get(), &rappor_service_);
+  FormStructure::ParseQueryResponse(response_string, forms_.get(),
+                                    &rappor_service_);
   EXPECT_THAT(
       histogram_tester.GetAllSamples("Autofill.ServerResponseHasDataForForm"),
       ElementsAre(Bucket(false, 1), Bucket(true, 1)));
@@ -3502,16 +3506,17 @@ TEST_F(AutofillMetricsParseQueryResponseTest, OneFormNoServerData) {
 // If the server returns NO_SERVER_DATA for both of the forms, expect RAPPOR
 // logging.
 TEST_F(AutofillMetricsParseQueryResponseTest, AllFormsNoServerData) {
-  std::string response =
-      "<autofillqueryresponse>"
-      "<field autofilltype=\"0\" />"
-      "<field autofilltype=\"0\" />"
-      "<field autofilltype=\"0\" />"
-      "<field autofilltype=\"0\" />"
-      "</autofillqueryresponse>";
+  AutofillQueryResponseContents response;
+  for (int i = 0; i < 4; ++i) {
+    response.add_field()->set_autofill_type(0);
+  }
+
+  std::string response_string;
+  ASSERT_TRUE(response.SerializeToString(&response_string));
 
   base::HistogramTester histogram_tester;
-  FormStructure::ParseQueryResponse(response, forms_.get(), &rappor_service_);
+  FormStructure::ParseQueryResponse(response_string, forms_.get(),
+                                    &rappor_service_);
   EXPECT_THAT(
       histogram_tester.GetAllSamples("Autofill.ServerResponseHasDataForForm"),
       ElementsAre(Bucket(false, 2)));
@@ -3530,16 +3535,18 @@ TEST_F(AutofillMetricsParseQueryResponseTest, AllFormsNoServerData) {
 // If the server returns NO_SERVER_DATA for only some of the fields, expect no
 // RAPPOR logging, and expect the UMA metric to say there is data.
 TEST_F(AutofillMetricsParseQueryResponseTest, PartialNoServerData) {
-  std::string response =
-      "<autofillqueryresponse>"
-      "<field autofilltype=\"0\" />"
-      "<field autofilltype=\"10\" />"
-      "<field autofilltype=\"0\" />"
-      "<field autofilltype=\"11\" />"
-      "</autofillqueryresponse>";
+  AutofillQueryResponseContents response;
+  response.add_field()->set_autofill_type(0);
+  response.add_field()->set_autofill_type(10);
+  response.add_field()->set_autofill_type(0);
+  response.add_field()->set_autofill_type(11);
+
+  std::string response_string;
+  ASSERT_TRUE(response.SerializeToString(&response_string));
 
   base::HistogramTester histogram_tester;
-  FormStructure::ParseQueryResponse(response, forms_.get(), &rappor_service_);
+  FormStructure::ParseQueryResponse(response_string, forms_.get(),
+                                    &rappor_service_);
   EXPECT_THAT(
       histogram_tester.GetAllSamples("Autofill.ServerResponseHasDataForForm"),
       ElementsAre(Bucket(true, 2)));

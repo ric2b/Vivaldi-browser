@@ -9,17 +9,20 @@
 #include <utility>
 
 #include "base/base64.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "cc/layers/layer.h"
+#include "content/common/gpu/gpu_host_messages.h"
 #include "content/common/input/synthetic_gesture_params.h"
 #include "content/common/input/synthetic_pinch_gesture_params.h"
 #include "content/common/input/synthetic_smooth_drag_gesture_params.h"
 #include "content/common/input/synthetic_smooth_scroll_gesture_params.h"
 #include "content/common/input/synthetic_tap_gesture_params.h"
 #include "content/public/child/v8_value_converter.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/renderer/chrome_object_extensions_utils.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/renderer/gpu/render_widget_compositor.h"
@@ -53,19 +56,52 @@ namespace content {
 
 namespace {
 
-class PNGSerializer : public SkPixelSerializer {
+class EncodingSerializer : public SkPixelSerializer {
  protected:
   bool onUseEncodedData(const void* data, size_t len) override { return true; }
 
   SkData* onEncode(const SkPixmap& pixmap) override {
-    SkBitmap bm;
-    // The const_cast is fine, since we only read from the bitmap.
-    if (bm.installPixels(pixmap.info(),
-                         const_cast<void*>(pixmap.addr()),
-                         pixmap.rowBytes())) {
-      std::vector<unsigned char> vector;
-      if (gfx::PNGCodec::EncodeBGRASkBitmap(bm, false, &vector)) {
+    std::vector<uint8_t> vector;
+
+    const base::CommandLine& commandLine =
+        *base::CommandLine::ForCurrentProcess();
+    if (commandLine.HasSwitch(switches::kSkipReencodingOnSKPCapture)) {
+        // In this case, we just want to store some useful information
+        // about the image to replace the missing encoded data.
+
+        // First make sure that the data does not accidentally match any
+        // image signatures.
+        vector.push_back(0xFF);
+        vector.push_back(0xFF);
+        vector.push_back(0xFF);
+        vector.push_back(0xFF);
+
+        // Save the width and height.
+        uint32_t width = pixmap.width();
+        uint32_t height = pixmap.height();
+        vector.push_back(width & 0xFF);
+        vector.push_back((width >> 8) & 0xFF);
+        vector.push_back((width >> 16) & 0xFF);
+        vector.push_back((width >> 24) & 0xFF);
+        vector.push_back(height & 0xFF);
+        vector.push_back((height >> 8) & 0xFF);
+        vector.push_back((height >> 16) & 0xFF);
+        vector.push_back((height >> 24) & 0xFF);
+
+        // Save any additional information about the bitmap that may be
+        // interesting.
+        vector.push_back(pixmap.colorType());
+        vector.push_back(pixmap.alphaType());
         return SkData::NewWithCopy(&vector.front(), vector.size());
+    } else {
+      SkBitmap bm;
+      // The const_cast is fine, since we only read from the bitmap.
+      if (bm.installPixels(pixmap.info(),
+                           const_cast<void*>(pixmap.addr()),
+                           pixmap.rowBytes())) {
+        if (gfx::PNGCodec::EncodeBGRASkBitmap(bm, false, &vector)) {
+          return SkData::NewWithCopy(&vector.front(), vector.size());
+        }
       }
     }
     return nullptr;
@@ -105,7 +141,7 @@ class SkPictureSerializer {
     SkFILEWStream file(filepath.c_str());
     DCHECK(file.isValid());
 
-    PNGSerializer serializer;
+    EncodingSerializer serializer;
     picture->serialize(&file, &serializer);
     file.fsync();
   }
@@ -456,9 +492,6 @@ gin::ObjectTemplateBuilder GpuBenchmarking::GetObjectTemplateBuilder(
       .SetMethod("smoothDrag", &GpuBenchmarking::SmoothDrag)
       .SetMethod("swipe", &GpuBenchmarking::Swipe)
       .SetMethod("scrollBounce", &GpuBenchmarking::ScrollBounce)
-      // TODO(dominikg): Remove once JS interface changes have rolled into
-      //                 stable.
-      .SetValue("newPinchInterface", true)
       .SetMethod("pinchBy", &GpuBenchmarking::PinchBy)
       .SetMethod("visualViewportHeight", &GpuBenchmarking::VisualViewportHeight)
       .SetMethod("visualViewportWidth", &GpuBenchmarking::VisualViewportWidth)
@@ -467,6 +500,7 @@ gin::ObjectTemplateBuilder GpuBenchmarking::GetObjectTemplateBuilder(
       .SetMethod("runMicroBenchmark", &GpuBenchmarking::RunMicroBenchmark)
       .SetMethod("sendMessageToMicroBenchmark",
                  &GpuBenchmarking::SendMessageToMicroBenchmark)
+      .SetMethod("hasGpuChannel", &GpuBenchmarking::HasGpuChannel)
       .SetMethod("hasGpuProcess", &GpuBenchmarking::HasGpuProcess);
 }
 
@@ -868,9 +902,18 @@ bool GpuBenchmarking::SendMessageToMicroBenchmark(
                                                            std::move(value));
 }
 
+bool GpuBenchmarking::HasGpuChannel() {
+  GpuChannelHost* gpu_channel = RenderThreadImpl::current()->GetGpuChannel();
+  return !!gpu_channel;
+}
+
 bool GpuBenchmarking::HasGpuProcess() {
-    GpuChannelHost* gpu_channel = RenderThreadImpl::current()->GetGpuChannel();
-    return !!gpu_channel;
+  bool has_gpu_process = false;
+  if (!RenderThreadImpl::current()->Send(
+          new GpuHostMsg_HasGpuProcess(&has_gpu_process)))
+    return false;
+
+  return has_gpu_process;
 }
 
 }  // namespace content

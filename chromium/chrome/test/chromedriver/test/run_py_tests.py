@@ -18,6 +18,7 @@ import tempfile
 import threading
 import time
 import unittest
+import urllib
 import urllib2
 import uuid
 
@@ -64,13 +65,6 @@ _VERSION_SPECIFIC_FILTER = {}
 _VERSION_SPECIFIC_FILTER['HEAD'] = [
     # https://code.google.com/p/chromedriver/issues/detail?id=992
     'ChromeDownloadDirTest.testDownloadDirectoryOverridesExistingPreferences',
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1302
-    'ChromeDriverTest.testShadowDomStaleReference',
-]
-_VERSION_SPECIFIC_FILTER['44'] = [
-    # https://code.google.com/p/chromedriver/issues/detail?id=1202
-    'ChromeDownloadDirTest.testFileDownloadWithGet',
-
 ]
 
 _OS_SPECIFIC_FILTER = {}
@@ -81,8 +75,12 @@ _OS_SPECIFIC_FILTER['win'] = [
 _OS_SPECIFIC_FILTER['linux'] = [
     # Xvfb doesn't support maximization.
     'ChromeDriverTest.testWindowMaximize',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1302
+    'ChromeDriverTest.testShadowDomStaleReference',
 ]
 _OS_SPECIFIC_FILTER['mac'] = [
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1302
+    'ChromeDriverTest.testShadowDomStaleReference',
 ]
 
 _DESKTOP_NEGATIVE_FILTER = [
@@ -137,6 +135,9 @@ _ANDROID_NEGATIVE_FILTER['chrome'] = (
         'ChromeDriverTest.testChromeDriverSendLargeData',
         # Chrome 44+ for Android doesn't dispatch the dblclick event
         'ChromeDriverTest.testMouseDoubleClick',
+        # Page cannot be loaded from file:// URI in Android unless it
+        # is stored in device.
+        'ChromeDriverTest.testCanClickAlertInIframes',
     ]
 )
 _ANDROID_NEGATIVE_FILTER['chrome_stable'] = (
@@ -146,6 +147,8 @@ _ANDROID_NEGATIVE_FILTER['chrome_beta'] = (
 _ANDROID_NEGATIVE_FILTER['chromium'] = (
     _ANDROID_NEGATIVE_FILTER['chrome'] + [
         'ChromeDriverTest.testSwitchToWindow',
+        # https://crbug.com/579782
+        'ChromeDriverTest.testTouchLongPressElement',
     ]
 )
 _ANDROID_NEGATIVE_FILTER['chromedriver_webview_shell'] = (
@@ -218,22 +221,25 @@ class ChromeDriverBaseTest(unittest.TestCase):
     self._drivers += [driver]
     return driver
 
-  def WaitForNewWindow(self, driver, old_handles):
+  def WaitForNewWindow(self, driver, old_handles, check_closed_windows=True):
     """Wait for at least one new window to show up in 20 seconds.
 
     Args:
       old_handles: Handles to all old windows before the new window is added.
+      check_closed_windows: If True, assert that no windows are closed before
+          the new window is added.
 
     Returns:
       Handle to a new window. None if timeout.
     """
     deadline = time.time() + 20
     while time.time() < deadline:
-      new_handles = driver.GetWindowHandles()
-      if len(new_handles) > len(old_handles):
-        for index, old_handle in enumerate(old_handles):
-          self.assertEquals(old_handle, new_handles[index])
-        return new_handles[len(old_handles)]
+      handles = driver.GetWindowHandles()
+      if check_closed_windows:
+        self.assertTrue(set(old_handles).issubset(handles))
+      new_handles = set(handles).difference(set(old_handles))
+      if len(new_handles) > 0:
+        return new_handles.pop()
       time.sleep(0.01)
     return None
 
@@ -1209,6 +1215,20 @@ class ChromeDriverTest(ChromeDriverBaseTest):
     self._driver.Load('http://invalid./')
     self.assertEquals('http://invalid./', self._driver.GetCurrentUrl())
 
+  def testCanClickAlertInIframes(self):
+    # This test requires that the page be loaded from a file:// URI, rather than
+    # the test HTTP server.
+    path = os.path.join(chrome_paths.GetTestData(), 'chromedriver',
+      'page_with_frame.html')
+    url = 'file://' + urllib.pathname2url(path)
+    self._driver.Load(url)
+    frame = self._driver.FindElement('id', 'frm')
+    self._driver.SwitchToFrame(frame)
+    a = self._driver.FindElement('id', 'btn')
+    a.Click()
+    self.WaitForCondition(lambda: self._driver.IsAlertOpen())
+    self._driver.HandleAlert(True)
+
 
 class ChromeDriverAndroidTest(ChromeDriverBaseTest):
   """End to end tests for Android-specific tests."""
@@ -1394,6 +1414,25 @@ class ChromeExtensionsCapabilityTest(ChromeDriverBaseTest):
     body_element = driver.FindElement('tag name', 'body')
     self.assertEqual('It works!', body_element.GetText())
 
+  def testCanInspectBackgroundPage(self):
+    app_path = os.path.join(_TEST_DATA_DIR, 'test_app')
+    extension_path = os.path.join(_TEST_DATA_DIR, 'all_frames')
+    driver = self.CreateDriver(
+        chrome_switches=['load-extension=%s' % app_path],
+        experimental_options={'windowTypes': ['background_page']})
+    old_handles = driver.GetWindowHandles()
+    driver.LaunchApp('gegjcdcfeiojglhifpmibkadodekakpc')
+    new_window_handle = self.WaitForNewWindow(
+        driver, old_handles, check_closed_windows=False)
+    handles = driver.GetWindowHandles()
+    for handle in handles:
+      driver.SwitchToWindow(handle)
+      if driver.GetCurrentUrl() == 'chrome-extension://' \
+          'gegjcdcfeiojglhifpmibkadodekakpc/_generated_background_page.html':
+        self.assertEqual(42, driver.ExecuteScript('return magic;'))
+        return
+    self.fail("couldn't find generated background page for test app")
+
   def testDontExecuteScriptsInContentScriptContext(self):
     # This test extension has a content script which runs in all frames (see
     # https://developer.chrome.com/extensions/content_scripts) which causes each
@@ -1546,7 +1585,7 @@ class MobileEmulationCapabilityTest(ChromeDriverBaseTest):
     self.assertTrue(driver.capabilities['hasTouchScreen'])
 
 
-class ChromeDriverLogTest(unittest.TestCase):
+class ChromeDriverLogTest(ChromeDriverBaseTest):
   """Tests that chromedriver produces the expected log file."""
 
   UNEXPECTED_CHROMEOPTION_CAP = 'unexpected_chromeoption_capability'
@@ -1568,6 +1607,22 @@ class ChromeDriverLogTest(unittest.TestCase):
     with open(tmp_log_path, 'r') as f:
       self.assertTrue(self.LOG_MESSAGE in f.read())
 
+  def testDisablingDriverLogsSuppressesChromeDriverLog(self):
+    _, tmp_log_path = tempfile.mkstemp(prefix='chromedriver_log_')
+    chromedriver_server = server.Server(
+        _CHROMEDRIVER_BINARY, log_path=tmp_log_path)
+    try:
+      driver = self.CreateDriver(
+          chromedriver_server.GetUrl(), logging_prefs={'driver':'OFF'})
+      driver.Load(
+        ChromeDriverTest._http_server.GetUrl() + '/chromedriver/empty.html')
+      driver.AddCookie({'name': 'secret_code', 'value': 'bosco'})
+      driver.Quit()
+    finally:
+      chromedriver_server.Kill()
+    with open(tmp_log_path, 'r') as f:
+      self.assertNotIn('bosco', f.read())
+
 
 class PerformanceLoggerTest(ChromeDriverBaseTest):
   """Tests chromedriver tracing support and Inspector event collection."""
@@ -1576,7 +1631,7 @@ class PerformanceLoggerTest(ChromeDriverBaseTest):
     driver = self.CreateDriver(
         experimental_options={'perfLoggingPrefs': {
             'traceCategories': 'webkit.console,blink.console'
-          }}, performance_log_level='ALL')
+          }}, logging_prefs={'performance':'ALL'})
     driver.Load(
         ChromeDriverTest._http_server.GetUrl() + '/chromedriver/empty.html')
     # Mark the timeline; later we will verify the marks appear in the trace.

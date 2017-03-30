@@ -74,6 +74,10 @@ MediaSourcePlayer::~MediaSourcePlayer() {
   Release();
   DCHECK_EQ(!cdm_, !cdm_registration_id_);
   if (cdm_) {
+    // Cancel previously registered callback (if any).
+    static_cast<MediaDrmBridge*>(cdm_.get())
+        ->SetMediaCryptoReadyCB(MediaDrmBridge::MediaCryptoReadyCB());
+
     static_cast<MediaDrmBridge*>(cdm_.get())
         ->UnregisterPlayer(cdm_registration_id_);
     cdm_registration_id_ = 0;
@@ -207,8 +211,8 @@ void MediaSourcePlayer::Release() {
   on_decoder_resources_released_cb_.Run(player_id());
 }
 
-void MediaSourcePlayer::SetVolume(double volume) {
-  audio_decoder_job_->SetVolume(volume);
+void MediaSourcePlayer::UpdateEffectiveVolumeInternal(double effective_volume) {
+  audio_decoder_job_->SetVolume(effective_volume);
 }
 
 bool MediaSourcePlayer::CanPause() {

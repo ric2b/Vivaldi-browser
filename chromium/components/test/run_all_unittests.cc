@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
@@ -35,7 +36,7 @@
 #endif
 
 #if defined(OS_CHROMEOS)
-#include "third_party/mojo/src/mojo/edk/embedder/embedder.h"
+#include "mojo/edk/embedder/embedder.h"
 #endif
 
 namespace {
@@ -144,7 +145,7 @@ int main(int argc, char** argv) {
   listeners.Append(new ComponentsUnitTestEventListener());
 
 #if defined(OS_CHROMEOS)
-  mojo::embedder::Init();
+  mojo::edk::Init();
 #endif
 
   return base::LaunchUnitTests(

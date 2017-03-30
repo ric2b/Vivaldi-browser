@@ -26,6 +26,7 @@ include_rules = [
   "+components/crash",
   "+components/devtools_discovery",
   "+components/devtools_http_handler",
+  "+components/test_runner/layout_dump_flags.h",  # POD only.
   "+components/url_formatter",
 
   # For enabling media related features.
@@ -33,6 +34,9 @@ include_rules = [
 
   # For media::RemoveProprietaryMediaTypesAndCodecsForTests.
   "+media/base/mime_util.h",
+
+  # For enabling mojo media services.
+  "+media/mojo/services",
 ]
 
 specific_include_rules = {

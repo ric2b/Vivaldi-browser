@@ -17,6 +17,7 @@
 #include "net/quic/crypto/crypto_handshake.h"
 #include "net/quic/crypto/quic_crypto_client_config.h"
 #include "net/quic/quic_bandwidth.h"
+#include "net/quic/quic_client_push_promise_index.h"
 #include "net/quic/quic_config.h"
 #include "net/quic/quic_connection.h"
 #include "net/quic/quic_packet_writer.h"
@@ -28,8 +29,6 @@ namespace net {
 
 class ProofVerifier;
 class QuicServerId;
-
-namespace tools {
 
 class QuicClientBase {
  public:
@@ -222,10 +221,11 @@ class QuicClientBase {
   // to the previous client-level connection.
   bool connected_or_attempting_connect_;
 
+  QuicClientPushPromiseIndex push_promise_index_;
+
   DISALLOW_COPY_AND_ASSIGN(QuicClientBase);
 };
 
-}  // namespace tools
 }  // namespace net
 
 #endif  // NET_TOOLS_QUIC_QUIC_CLIENT_BASE_H_

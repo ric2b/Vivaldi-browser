@@ -132,21 +132,23 @@ std::vector<importer::SourceProfile> DetectSourceProfilesWorker(
 
   std::vector<importer::SourceProfile> profiles;
 
+  ChromiumProfileImporter *chromiumImporter = new ChromiumProfileImporter();
+
   // The first run import will automatically take settings from the first
   // profile detected, which should be the user's current default.
 #if defined(OS_WIN)
-  ChromiumProfileImporter *chromiumImporter = new ChromiumProfileImporter();
-  if (ShellIntegration::IsOperaDefaultBrowser()) {
+  if (shell_integration::IsOperaDefaultBrowser()) {
     viv_importer::DetectOperaProfiles(&profiles);
     DetectFirefoxProfiles(locale, &profiles);
     DetectBuiltinWindowsProfiles(&profiles);
     chromiumImporter->DetectChromiumProfiles(&profiles);
-  } else if (ShellIntegration::IsFirefoxDefaultBrowser()) {
+  } else
+  if (shell_integration::IsFirefoxDefaultBrowser()) {
     DetectFirefoxProfiles(locale, &profiles);
     viv_importer::DetectOperaProfiles(&profiles);
     DetectBuiltinWindowsProfiles(&profiles);
     chromiumImporter->DetectChromiumProfiles(&profiles);
-  }else if (ShellIntegration::IsChromeDefaultBrowser()) {
+  } else if (shell_integration::IsChromeDefaultBrowser()) {
     DetectFirefoxProfiles(locale, &profiles);
     viv_importer::DetectOperaProfiles(&profiles);
     DetectBuiltinWindowsProfiles(&profiles);
@@ -158,13 +160,13 @@ std::vector<importer::SourceProfile> DetectSourceProfilesWorker(
     chromiumImporter->DetectChromiumProfiles(&profiles);
   }
 #elif defined(OS_MACOSX)
-  ChromiumProfileImporter *chromiumImporter = new ChromiumProfileImporter();
-  if (ShellIntegration::IsOperaDefaultBrowser()) {
+  if (shell_integration::IsOperaDefaultBrowser()) {
     viv_importer::DetectOperaProfiles(&profiles);
     DetectFirefoxProfiles(locale, &profiles);
     DetectSafariProfiles(&profiles);
     chromiumImporter->DetectChromiumProfiles(&profiles);
-  }else if (ShellIntegration::IsFirefoxDefaultBrowser()) {
+  } else
+  if (shell_integration::IsFirefoxDefaultBrowser()) {
     DetectFirefoxProfiles(locale, &profiles);
     viv_importer::DetectOperaProfiles(&profiles);
     DetectSafariProfiles(&profiles);
@@ -176,7 +178,6 @@ std::vector<importer::SourceProfile> DetectSourceProfilesWorker(
     chromiumImporter->DetectChromiumProfiles(&profiles);
   }
 #else // linux
-  ChromiumProfileImporter *chromiumImporter = new ChromiumProfileImporter();
   viv_importer::DetectOperaProfiles(&profiles);
   DetectFirefoxProfiles(locale, &profiles);
   chromiumImporter->DetectChromiumProfiles(&profiles);

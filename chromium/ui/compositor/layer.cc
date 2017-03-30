@@ -14,7 +14,6 @@
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/trace_event/trace_event.h"
-#include "cc/layers/delegated_renderer_layer.h"
 #include "cc/layers/layer_settings.h"
 #include "cc/layers/nine_patch_layer.h"
 #include "cc/layers/picture_layer.h"
@@ -22,7 +21,6 @@
 #include "cc/layers/surface_layer.h"
 #include "cc/layers/texture_layer.h"
 #include "cc/output/copy_output_request.h"
-#include "cc/output/delegated_frame_data.h"
 #include "cc/output/filter_operation.h"
 #include "cc/output/filter_operations.h"
 #include "cc/playback/display_item_list_settings.h"
@@ -505,7 +503,6 @@ void Layer::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
 
   if (texture_layer_.get())
     texture_layer_->ClearClient();
-  // TODO(piman): delegated_renderer_layer_ cleanup.
 
   cc_layer_->RemoveAllChildren();
   if (cc_layer_->parent()) {
@@ -521,7 +518,6 @@ void Layer::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
   content_layer_ = NULL;
   solid_color_layer_ = NULL;
   texture_layer_ = NULL;
-  delegated_renderer_layer_ = NULL;
   surface_layer_ = NULL;
 
   for (size_t i = 0; i < children_.size(); ++i) {
@@ -537,6 +533,13 @@ void Layer::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
 
   SetLayerFilters();
   SetLayerBackgroundFilters();
+}
+
+bool Layer::HasPendingThreadedAnimationsForTesting() const {
+  if (UILayerSettings().use_compositor_animation_timelines)
+    return animator_->HasPendingThreadedAnimationsForTesting();
+  else
+    return !pending_threaded_animations_.empty();
 }
 
 void Layer::SwitchCCLayerForTest() {
@@ -587,19 +590,6 @@ void Layer::SetTextureFlipped(bool flipped) {
 bool Layer::TextureFlipped() const {
   DCHECK(texture_layer_.get());
   return texture_layer_->flipped();
-}
-
-void Layer::SetShowDelegatedContent(cc::DelegatedFrameProvider* frame_provider,
-                                    gfx::Size frame_size_in_dip) {
-  DCHECK(type_ == LAYER_TEXTURED || type_ == LAYER_SOLID_COLOR);
-
-  scoped_refptr<cc::DelegatedRendererLayer> new_layer =
-      cc::DelegatedRendererLayer::Create(UILayerSettings(), frame_provider);
-  SwitchToLayer(new_layer);
-  delegated_renderer_layer_ = new_layer;
-
-  frame_size_in_dip_ = frame_size_in_dip;
-  RecomputeDrawsContentAndUVRect();
 }
 
 void Layer::SetShowSurface(
@@ -751,7 +741,7 @@ void Layer::OnDeviceScaleFactorChanged(float device_scale_factor) {
 }
 
 void Layer::OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) {
-  DCHECK(delegated_renderer_layer_.get() || surface_layer_.get());
+  DCHECK(surface_layer_.get());
   if (!delegate_)
     return;
   delegate_->OnDelegatedFrameDamage(damage_rect_in_dip);
@@ -983,15 +973,11 @@ float Layer::GetDeviceScaleFactor() const {
 
 void Layer::AddThreadedAnimation(scoped_ptr<cc::Animation> animation) {
   DCHECK(cc_layer_);
+  DCHECK(!UILayerSettings().use_compositor_animation_timelines);
   // Until this layer has a compositor (and hence cc_layer_ has a
   // LayerTreeHost), addAnimation will fail.
   if (GetCompositor()) {
-    if (UILayerSettings().use_compositor_animation_timelines) {
-      DCHECK(animator_);
-      animator_->AddThreadedAnimation(std::move(animation));
-    } else {
-      cc_layer_->AddAnimation(std::move(animation));
-    }
+    cc_layer_->AddAnimation(std::move(animation));
   } else {
     pending_threaded_animations_.push_back(std::move(animation));
   }
@@ -999,13 +985,9 @@ void Layer::AddThreadedAnimation(scoped_ptr<cc::Animation> animation) {
 
 void Layer::RemoveThreadedAnimation(int animation_id) {
   DCHECK(cc_layer_);
+  DCHECK(!UILayerSettings().use_compositor_animation_timelines);
   if (pending_threaded_animations_.size() == 0) {
-    if (UILayerSettings().use_compositor_animation_timelines) {
-      DCHECK(animator_);
-      animator_->RemoveThreadedAnimation(animation_id);
-    } else {
-      cc_layer_->RemoveAnimation(animation_id);
-    }
+    cc_layer_->RemoveAnimation(animation_id);
     return;
   }
 
@@ -1028,15 +1010,23 @@ cc::Layer* Layer::GetCcLayer() const {
   return cc_layer_;
 }
 
-void Layer::SendPendingThreadedAnimations() {
-  for (auto& animation : pending_threaded_animations_) {
-    if (UILayerSettings().use_compositor_animation_timelines) {
-      DCHECK(animator_);
-      animator_->AddThreadedAnimation(std::move(animation));
-    } else {
-      cc_layer_->AddAnimation(std::move(animation));
-    }
+LayerThreadedAnimationDelegate* Layer::GetThreadedAnimationDelegate() {
+  if (UILayerSettings().use_compositor_animation_timelines) {
+    DCHECK(animator_);
+    return animator_.get();
+  } else {
+    return this;
   }
+}
+
+void Layer::SendPendingThreadedAnimations() {
+  if (UILayerSettings().use_compositor_animation_timelines) {
+    DCHECK(pending_threaded_animations_.empty());
+    return;
+  }
+
+  for (auto& animation : pending_threaded_animations_)
+    cc_layer_->AddAnimation(std::move(animation));
   pending_threaded_animations_.clear();
 
   for (auto* child : children_)
@@ -1075,7 +1065,7 @@ void Layer::RecomputeDrawsContentAndUVRect() {
         static_cast<float>(size.width()) / frame_size_in_dip_.width(),
         static_cast<float>(size.height()) / frame_size_in_dip_.height());
     texture_layer_->SetUV(uv_top_left, uv_bottom_right);
-  } else if (delegated_renderer_layer_.get() || surface_layer_.get()) {
+  } else if (surface_layer_.get()) {
     size.SetToMin(frame_size_in_dip_);
   }
   cc_layer_->SetBounds(size);
@@ -1106,8 +1096,7 @@ void Layer::ResetCompositorForAnimatorsInTree(Compositor* compositor) {
 
   if (animator_) {
     animator_->ResetCompositor(compositor);
-    if (animator_->is_animating())
-      animator_->RemoveFromCollection(collection);
+    animator_->RemoveFromCollection(collection);
   }
 
   for (auto* child : children_)

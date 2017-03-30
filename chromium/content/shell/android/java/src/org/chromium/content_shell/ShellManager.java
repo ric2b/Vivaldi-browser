@@ -15,8 +15,8 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
-import org.chromium.content.browser.ActivityContentVideoViewClient;
-import org.chromium.content.browser.ContentVideoViewClient;
+import org.chromium.content.browser.ActivityContentVideoViewEmbedder;
+import org.chromium.content.browser.ContentVideoViewEmbedder;
 import org.chromium.content.browser.ContentViewClient;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.ContentViewRenderView;
@@ -47,8 +47,8 @@ public class ShellManager extends FrameLayout {
         nativeInit(this);
         mContentViewClient = new ContentViewClient() {
             @Override
-            public ContentVideoViewClient getContentVideoViewClient() {
-                return new ActivityContentVideoViewClient((Activity) context) {
+            public ContentVideoViewEmbedder getContentVideoViewEmbedder() {
+                return new ActivityContentVideoViewEmbedder((Activity) context) {
                     @Override
                     public void enterFullscreenVideo(View view) {
                         super.enterFullscreenVideo(view);
@@ -176,6 +176,16 @@ public class ShellManager extends FrameLayout {
         if (contentViewCore != null) contentViewCore.onHide();
         shellView.setContentViewRenderView(null);
         removeView(shellView);
+    }
+
+    /**
+     * Destroys the Shell manager and associated components.
+     */
+    public void destroy() {
+        // Remove active shell (Currently single shell support only available).
+        removeShell(mActiveShell);
+        mContentViewRenderView.destroy();
+        mContentViewRenderView = null;
     }
 
     private static native void nativeInit(Object shellManagerInstance);

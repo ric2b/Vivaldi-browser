@@ -82,7 +82,6 @@
                     ],
                     'sources': [
                         '<@(bindings_unittest_files)',
-                        '<@(platform_unittest_support_files)',
                         '<@(core_unittest_files)',
                         '<@(modules_unittest_files)',
                         '<@(platform_web_unittest_files)',
@@ -99,13 +98,6 @@
                             },
                         },
                     },
-                    'conditions': [
-                        ['win_use_allocator_shim==1', {
-                            'dependencies': [
-                                '<(DEPTH)/base/allocator/allocator.gyp:allocator',
-                            ],
-                        }],
-                    ],
                 }],
                 ['OS=="win" and win_use_allocator_shim==1', {
                   'dependencies': [
@@ -122,11 +114,6 @@
                 ['OS=="mac"', {
                     'include_dirs': [
                         '../../public/web/mac',
-                    ],
-                }],
-                [ 'os_posix==1 and OS!="mac" and OS!="android" and OS!="ios" and use_allocator!="none"', {
-                    'dependencies': [
-                        '<(DEPTH)/base/allocator/allocator.gyp:allocator',
                     ],
                 }],
             ],

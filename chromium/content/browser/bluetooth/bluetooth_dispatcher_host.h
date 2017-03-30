@@ -103,10 +103,13 @@ class CONTENT_EXPORT BluetoothDispatcherHost final
       int frame_routing_id,
       const std::vector<content::BluetoothScanFilter>& filters,
       const std::vector<device::BluetoothUUID>& optional_services);
-  void OnConnectGATT(int thread_id,
-                     int request_id,
-                     int frame_routing_id,
-                     const std::string& device_id);
+  void OnGATTServerConnect(int thread_id,
+                           int request_id,
+                           int frame_routing_id,
+                           const std::string& device_id);
+  void OnGATTServerDisconnect(int thread_id,
+                              int frame_routing_id,
+                              const std::string& device_id);
   void OnGetPrimaryService(int thread_id,
                            int request_id,
                            int frame_routing_id,
@@ -117,6 +120,11 @@ class CONTENT_EXPORT BluetoothDispatcherHost final
                            int frame_routing_id,
                            const std::string& service_instance_id,
                            const std::string& characteristic_uuid);
+  void OnGetCharacteristics(int thread_id,
+                            int request_id,
+                            int frame_routing_id,
+                            const std::string& service_instance_id,
+                            const std::string& characteristics_uuid);
   void OnReadValue(int thread_id,
                    int request_id,
                    int frame_routing_id,
@@ -142,6 +150,17 @@ class CONTENT_EXPORT BluetoothDispatcherHost final
       int thread_id,
       int frame_routing_id,
       const std::string& characteristic_instance_id);
+
+  // Callbacks for BluetoothDevice::OnRequestDevice.
+  // If necessary, the adapter must be obtained before continuing to Impl.
+  void OnGetAdapter(base::Closure continuation,
+                    scoped_refptr<device::BluetoothAdapter> adapter);
+  void OnRequestDeviceImpl(
+      int thread_id,
+      int request_id,
+      int frame_routing_id,
+      const std::vector<content::BluetoothScanFilter>& filters,
+      const std::vector<device::BluetoothUUID>& optional_services);
 
   // Callbacks for BluetoothAdapter::StartDiscoverySession.
   void OnDiscoverySessionStarted(
@@ -251,12 +270,6 @@ class CONTENT_EXPORT BluetoothDispatcherHost final
       int frame_routing_id,
       const std::string& characteristic_instance_id);
 
-  // Show help pages from the chooser dialog.
-  void ShowBluetoothOverviewLink();
-  void ShowBluetoothPairingLink();
-  void ShowBluetoothAdapterOffLink();
-  void ShowNeedLocationLink();
-
   int render_process_id_;
 
   // Maps a (thread_id,request_id) to information about its requestDevice call,
@@ -298,8 +311,8 @@ class CONTENT_EXPORT BluetoothDispatcherHost final
   base::Timer discovery_session_timer_;
 
   // Retain BluetoothGattConnection objects to keep connections open.
-  // TODO(scheib): Destroy as connections are closed. http://crbug.com/539643
-  ScopedVector<device::BluetoothGattConnection> connections_;
+  std::map<std::string, scoped_ptr<device::BluetoothGattConnection>>
+      device_id_to_connection_map_;
 
   // Map of device_address's to primary-services requests that need responses
   // when that device's service discovery completes.

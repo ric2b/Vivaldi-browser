@@ -107,6 +107,19 @@ class LayerTreeHostSerializationTest : public testing::Test {
     if (layer_tree_host_src_->hud_layer_) {
       EXPECT_EQ(layer_tree_host_src_->hud_layer_->id(),
                 layer_tree_host_dst_->hud_layer_->id());
+      // The HUD layer member is a HeadsUpDisplayLayer instead of Layer, so
+      // inspect the proto to see if it contains the the right layer type.
+      bool found_hud_layer_type = false;
+      for (int i = 0; i < proto.root_layer().children_size(); ++i) {
+        if (proto.root_layer().children(i).id() ==
+            layer_tree_host_src_->hud_layer_->id()) {
+          EXPECT_EQ(proto::LayerNode::HEADS_UP_DISPLAY_LAYER,
+                    proto.root_layer().children(i).type());
+          found_hud_layer_type = true;
+          break;
+        }
+      }
+      EXPECT_TRUE(found_hud_layer_type);
     } else {
       EXPECT_EQ(nullptr, layer_tree_host_dst_->hud_layer_);
     }
@@ -142,6 +155,15 @@ class LayerTreeHostSerializationTest : public testing::Test {
               layer_tree_host_dst_->surface_id_namespace_);
     EXPECT_EQ(layer_tree_host_src_->next_surface_sequence_,
               layer_tree_host_dst_->next_surface_sequence_);
+
+    // All layers must have a property tree index that matches PropertyTrees.
+    if (layer_tree_host_dst_->property_trees_.sequence_number) {
+      int seq_num = layer_tree_host_dst_->property_trees_.sequence_number;
+      LayerTreeHostCommon::CallFunctionForSubtree(
+          layer_tree_host_dst_->root_layer_.get(), [seq_num](Layer* layer) {
+            EXPECT_EQ(seq_num, layer->property_tree_sequence_number());
+          });
+    }
   }
 
   void RunAllMembersChangedTest() {

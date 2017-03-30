@@ -18,7 +18,6 @@
 namespace mus {
 
 class CommandBufferDriver;
-class CommandBufferImplObserver;
 class GpuState;
 
 // This class listens to the CommandBuffer message pipe on a low-latency thread
@@ -31,17 +30,13 @@ class CommandBufferImpl : public mojom::CommandBuffer {
                     scoped_refptr<GpuState> gpu_state);
   void DidLoseContext(uint32_t reason);
 
-  void set_observer(CommandBufferImplObserver* observer) {
-    observer_ = observer;
-  }
-
  private:
   class CommandBufferDriverClientImpl;
   ~CommandBufferImpl() override;
 
   // mojom::CommandBuffer:
   void Initialize(
-      mojom::CommandBufferLostContextObserverPtr loss_observer,
+      mojom::CommandBufferClientPtr client,
       mojo::ScopedSharedBufferHandle shared_state,
       mojo::Array<int32_t> attribs,
       const mojom::CommandBuffer::InitializeCallback& callback) override;
@@ -54,10 +49,6 @@ class CommandBufferImpl : public mojom::CommandBuffer {
                               mojo::ScopedSharedBufferHandle transfer_buffer,
                               uint32_t size) override;
   void DestroyTransferBuffer(int32_t id) override;
-  void InsertSyncPoint(
-      bool retire,
-      const mojom::CommandBuffer::InsertSyncPointCallback& callback) override;
-  void RetireSyncPoint(uint32_t sync_point) override;
   void CreateImage(int32_t id,
                    mojo::ScopedHandle memory_handle,
                    int32_t type,
@@ -65,13 +56,30 @@ class CommandBufferImpl : public mojom::CommandBuffer {
                    int32_t format,
                    int32_t internal_format) override;
   void DestroyImage(int32_t id) override;
+  void CreateStreamTexture(
+      uint32_t client_texture_id,
+      const mojom::CommandBuffer::CreateStreamTextureCallback& callback
+      ) override;
+  void ProduceFrontBuffer(const gpu::Mailbox& mailbox) override;
+  void SignalQuery(uint32_t query, uint32_t signal_id) override;
+  void SignalSyncToken(const gpu::SyncToken& sync_token,
+                       uint32_t signal_id) override;
+  void WaitForGetOffsetInRange(
+      int32_t start, int32_t end,
+      const mojom::CommandBuffer::WaitForGetOffsetInRangeCallback& callback
+      ) override;
+  void WaitForTokenInRange(
+      int32_t start, int32_t end,
+      const mojom::CommandBuffer::WaitForGetOffsetInRangeCallback& callback
+      ) override;
 
   // All helper functions are called in the GPU therad.
   void InitializeOnGpuThread(
-      mojom::CommandBufferLostContextObserverPtr loss_observer,
+      mojom::CommandBufferClientPtr client,
       mojo::ScopedSharedBufferHandle shared_state,
       mojo::Array<int32_t> attribs,
-      const base::Callback<void(mojom::CommandBufferInfoPtr)>& callback);
+      const base::Callback<
+          void(mojom::CommandBufferInitializeResultPtr)>& callback);
   bool SetGetBufferOnGpuThread(int32_t buffer);
   bool FlushOnGpuThread(int32_t put_offset, uint32_t order_num);
   bool MakeProgressOnGpuThread(
@@ -82,7 +90,6 @@ class CommandBufferImpl : public mojom::CommandBuffer {
       mojo::ScopedSharedBufferHandle transfer_buffer,
       uint32_t size);
   bool DestroyTransferBufferOnGpuThread(int32_t id);
-  bool RetireSyncPointOnGpuThread(uint32_t sync_point);
   bool CreateImageOnGpuThread(int32_t id,
                               mojo::ScopedHandle memory_handle,
                               int32_t type,
@@ -99,9 +106,7 @@ class CommandBufferImpl : public mojom::CommandBuffer {
   scoped_refptr<GpuState> gpu_state_;
   scoped_ptr<CommandBufferDriver> driver_;
   scoped_ptr<mojo::Binding<CommandBuffer>> binding_;
-  std::deque<uint32_t> sync_points_;
-  CommandBufferImplObserver* observer_;
-  mojom::CommandBufferLostContextObserverPtr loss_observer_;
+  mojom::CommandBufferClientPtr client_;
 
   DISALLOW_COPY_AND_ASSIGN(CommandBufferImpl);
 };

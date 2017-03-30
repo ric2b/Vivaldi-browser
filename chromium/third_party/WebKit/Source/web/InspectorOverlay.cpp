@@ -47,11 +47,11 @@
 #include "core/loader/FrameLoadRequest.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
-#include "platform/JSONValues.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/CullRect.h"
 #include "platform/graphics/paint/DisplayItemCacheSkipper.h"
+#include "platform/inspector_protocol/Values.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebData.h"
 #include "web/PageOverlay.h"
@@ -73,7 +73,7 @@ Node* hoveredNodeForPoint(LocalFrame* frame, const IntPoint& pointInRootFrame, b
     HitTestResult result(request, frame->view()->rootFrameToContents(pointInRootFrame));
     frame->contentLayoutObject()->hitTest(result);
     Node* node = result.innerPossiblyPseudoNode();
-    while (node && node->nodeType() == Node::TEXT_NODE)
+    while (node && node->getNodeType() == Node::TEXT_NODE)
         node = node->parentNode();
     return node;
 }
@@ -180,7 +180,10 @@ private:
 InspectorOverlay::InspectorOverlay(WebViewImpl* webViewImpl)
     : m_webViewImpl(webViewImpl)
     , m_overlayHost(InspectorOverlayHost::create())
+    , m_drawViewSize(false)
+    , m_resizeTimerActive(false)
     , m_omitTooltip(false)
+    , m_timer(this, &InspectorOverlay::onTimer)
     , m_suspendCount(0)
     , m_inLayout(false)
     , m_needsUpdate(false)
@@ -292,9 +295,9 @@ bool InspectorOverlay::handleInputEvent(const WebInputEvent& inputEvent)
     return handled;
 }
 
-void InspectorOverlay::setPausedInDebuggerMessage(const String* message)
+void InspectorOverlay::setPausedInDebuggerMessage(const String& message)
 {
-    m_pausedInDebuggerMessage = message ? *message : String();
+    m_pausedInDebuggerMessage = message;
     scheduleUpdate();
 }
 
@@ -360,7 +363,7 @@ bool InspectorOverlay::isEmpty()
 {
     if (m_suspendCount)
         return true;
-    bool hasVisibleElements = m_highlightNode || m_eventTargetNode || m_highlightQuad  || !m_pausedInDebuggerMessage.isNull();
+    bool hasVisibleElements = m_highlightNode || m_eventTargetNode || m_highlightQuad  || (m_resizeTimerActive && m_drawViewSize) || !m_pausedInDebuggerMessage.isNull();
     return !hasVisibleElements && m_inspectMode == InspectorDOMAgent::NotSearching;
 }
 
@@ -392,13 +395,14 @@ void InspectorOverlay::rebuildOverlayPage()
     drawNodeHighlight();
     drawQuadHighlight();
     drawPausedInDebuggerMessage();
+    drawViewSize();
     if (m_layoutEditor && !m_highlightNode)
         m_layoutEditor->rebuild();
 }
 
-static PassRefPtr<JSONObject> buildObjectForSize(const IntSize& size)
+static PassRefPtr<protocol::DictionaryValue> buildObjectForSize(const IntSize& size)
 {
-    RefPtr<JSONObject> result = JSONObject::create();
+    RefPtr<protocol::DictionaryValue> result = protocol::DictionaryValue::create();
     result->setNumber("width", size.width());
     result->setNumber("height", size.height());
     return result.release();
@@ -421,7 +425,7 @@ void InspectorOverlay::drawNodeHighlight()
         for (unsigned i = 0; i < elements->length(); ++i) {
             Element* element = elements->item(i);
             InspectorHighlight highlight(element, m_nodeHighlightConfig, false);
-            RefPtr<JSONObject> highlightJSON = highlight.asJSONObject();
+            RefPtr<protocol::DictionaryValue> highlightJSON = highlight.asProtocolValue();
             evaluateInOverlay("drawHighlight", highlightJSON.release());
         }
     }
@@ -431,7 +435,7 @@ void InspectorOverlay::drawNodeHighlight()
     if (m_eventTargetNode)
         highlight.appendEventTargetQuads(m_eventTargetNode.get(), m_nodeHighlightConfig);
 
-    RefPtr<JSONObject> highlightJSON = highlight.asJSONObject();
+    RefPtr<protocol::DictionaryValue> highlightJSON = highlight.asProtocolValue();
     evaluateInOverlay("drawHighlight", highlightJSON.release());
 }
 
@@ -442,13 +446,19 @@ void InspectorOverlay::drawQuadHighlight()
 
     InspectorHighlight highlight;
     highlight.appendQuad(*m_highlightQuad, m_quadHighlightConfig.content, m_quadHighlightConfig.contentOutline);
-    evaluateInOverlay("drawHighlight", highlight.asJSONObject());
+    evaluateInOverlay("drawHighlight", highlight.asProtocolValue());
 }
 
 void InspectorOverlay::drawPausedInDebuggerMessage()
 {
     if (m_inspectMode == InspectorDOMAgent::NotSearching && !m_pausedInDebuggerMessage.isNull())
         evaluateInOverlay("drawPausedInDebuggerMessage", m_pausedInDebuggerMessage);
+}
+
+void InspectorOverlay::drawViewSize()
+{
+    if (m_resizeTimerActive && m_drawViewSize)
+        evaluateInOverlay("drawViewSize", "");
 }
 
 Page* InspectorOverlay::overlayPage()
@@ -522,7 +532,7 @@ LocalFrame* InspectorOverlay::overlayMainFrame()
 
 void InspectorOverlay::reset(const IntSize& viewportSize, const IntPoint& documentScrollOffset)
 {
-    RefPtr<JSONObject> resetData = JSONObject::create();
+    RefPtr<protocol::DictionaryValue> resetData = protocol::DictionaryValue::create();
     resetData->setNumber("deviceScaleFactor", m_webViewImpl->page()->deviceScaleFactor());
     resetData->setNumber("pageScaleFactor", m_webViewImpl->page()->pageScaleFactor());
     resetData->setObject("viewportSize", buildObjectForSize(viewportSize));
@@ -535,17 +545,17 @@ void InspectorOverlay::reset(const IntSize& viewportSize, const IntPoint& docume
 void InspectorOverlay::evaluateInOverlay(const String& method, const String& argument)
 {
     ScriptForbiddenScope::AllowUserAgentScript allowScript;
-    RefPtr<JSONArray> command = JSONArray::create();
-    command->pushString(method);
-    command->pushString(argument);
+    RefPtr<protocol::ListValue> command = protocol::ListValue::create();
+    command->pushValue(protocol::StringValue::create(method));
+    command->pushValue(protocol::StringValue::create(argument));
     toLocalFrame(overlayPage()->mainFrame())->script().executeScriptInMainWorld("dispatch(" + command->toJSONString() + ")", ScriptController::ExecuteScriptWhenScriptsDisabled);
 }
 
-void InspectorOverlay::evaluateInOverlay(const String& method, PassRefPtr<JSONValue> argument)
+void InspectorOverlay::evaluateInOverlay(const String& method, PassRefPtr<protocol::Value> argument)
 {
     ScriptForbiddenScope::AllowUserAgentScript allowScript;
-    RefPtr<JSONArray> command = JSONArray::create();
-    command->pushString(method);
+    RefPtr<protocol::ListValue> command = protocol::ListValue::create();
+    command->pushValue(protocol::StringValue::create(method));
     command->pushValue(argument);
     toLocalFrame(overlayPage()->mainFrame())->script().executeScriptInMainWorld("dispatch(" + command->toJSONString() + ")", ScriptController::ExecuteScriptWhenScriptsDisabled);
 }
@@ -558,6 +568,12 @@ String InspectorOverlay::evaluateInOverlayForTest(const String& script)
     return toCoreStringWithUndefinedOrNullCheck(string);
 }
 
+void InspectorOverlay::onTimer(Timer<InspectorOverlay>*)
+{
+    m_resizeTimerActive = false;
+    scheduleUpdate();
+}
+
 void InspectorOverlay::clear()
 {
     if (m_layoutEditor)
@@ -568,8 +584,10 @@ void InspectorOverlay::clear()
         m_overlayPage.clear();
         m_overlayChromeClient.clear();
     }
+    m_resizeTimerActive = false;
     m_pausedInDebuggerMessage = String();
     m_inspectMode = InspectorDOMAgent::NotSearching;
+    m_timer.stop();
     hideHighlight();
 }
 
@@ -650,9 +668,18 @@ void InspectorOverlay::profilingStopped()
     --m_suspendCount;
 }
 
-void InspectorOverlay::pageLayoutInvalidated()
+void InspectorOverlay::pageLayoutInvalidated(bool resized)
 {
+    if (resized && m_drawViewSize) {
+        m_resizeTimerActive = true;
+        m_timer.startOneShot(1, BLINK_FROM_HERE);
+    }
     scheduleUpdate();
+}
+
+void InspectorOverlay::setShowViewportSizeOnResize(bool show)
+{
+    m_drawViewSize = show;
 }
 
 bool InspectorOverlay::handleMouseMove(const PlatformMouseEvent& event)

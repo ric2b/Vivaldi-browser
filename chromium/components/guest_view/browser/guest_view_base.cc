@@ -92,7 +92,8 @@ class GuestViewBase::OwnerContentsObserver : public WebContentsObserver {
     Destroy();
   }
 
-  void DidToggleFullscreenModeForTab(bool entered_fullscreen) override {
+  void DidToggleFullscreenModeForTab(bool entered_fullscreen,
+                                     bool will_cause_resize) override {
     if (destroyed_)
       return;
 
@@ -281,7 +282,8 @@ void GuestViewBase::DispatchOnResizeEvent(const gfx::Size& old_size,
   args->SetInteger(kOldHeight, old_size.height());
   args->SetInteger(kNewWidth, new_size.width());
   args->SetInteger(kNewHeight, new_size.height());
-  DispatchEventToGuestProxy(new GuestViewEvent(kEventResize, std::move(args)));
+  DispatchEventToGuestProxy(
+      make_scoped_ptr(new GuestViewEvent(kEventResize, std::move(args))));
 }
 
 gfx::Size GuestViewBase::GetDefaultSize() const {
@@ -642,13 +644,6 @@ void GuestViewBase::DidNavigateMainFrame(
     const content::FrameNavigateParams& params) {
   if (attached() && ZoomPropagatesFromEmbedderToGuest())
     SetGuestZoomLevelToMatchEmbedder();
-
-  // TODO(lazyboy): This breaks guest visibility in --site-per-process because
-  // we do not take the widget's visibility into account.  We need to also
-  // stay hidden during "visibility:none" state.
-  if (content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests()) {
-    web_contents()->WasShown();
-  }
 }
 
 void GuestViewBase::ActivateContents(WebContents* web_contents) {
@@ -804,14 +799,15 @@ void GuestViewBase::OnZoomChanged(
   }
 }
 
-void GuestViewBase::DispatchEventToGuestProxy(GuestViewEvent* event) {
+void GuestViewBase::DispatchEventToGuestProxy(
+    scoped_ptr<GuestViewEvent> event) {
   event->Dispatch(this, guest_instance_id_);
 }
 
-void GuestViewBase::DispatchEventToView(GuestViewEvent* event) {
+void GuestViewBase::DispatchEventToView(scoped_ptr<GuestViewEvent> event) {
   if (!attached() &&
       (!CanRunInDetachedState() || !can_owner_receive_events())) {
-    pending_events_.push_back(linked_ptr<GuestViewEvent>(event));
+    pending_events_.push_back(std::move(event));
     return;
   }
 
@@ -822,9 +818,9 @@ void GuestViewBase::SendQueuedEvents() {
   if (!attached())
     return;
   while (!pending_events_.empty()) {
-    linked_ptr<GuestViewEvent> event_ptr = pending_events_.front();
+    scoped_ptr<GuestViewEvent> event_ptr = std::move(pending_events_.front());
     pending_events_.pop_front();
-    event_ptr.release()->Dispatch(this, view_instance_id_);
+    event_ptr->Dispatch(this, view_instance_id_);
   }
 }
 

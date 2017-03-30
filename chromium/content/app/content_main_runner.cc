@@ -28,7 +28,6 @@
 #include "base/process/launch.h"
 #include "base/process/memory.h"
 #include "base/process/process_handle.h"
-#include "base/profiler/alternate_timer.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -64,15 +63,12 @@
 #include "gin/v8_initializer.h"
 #endif
 
-#if defined(USE_TCMALLOC)
-#include "third_party/tcmalloc/chromium/src/gperftools/malloc_extension.h"
-#endif
-
 #if !defined(OS_IOS)
 #include "content/app/mojo/mojo_init.h"
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/utility_process_host_impl.h"
+#include "content/public/gpu/content_gpu_client.h"
 #include "content/public/plugin/content_plugin_client.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/utility/content_utility_client.h"
@@ -115,12 +111,6 @@
 #include "crypto/nss_util.h"
 #endif
 
-#if !defined(OS_MACOSX) && defined(USE_TCMALLOC)
-extern "C" {
-int tc_set_new_mode(int mode);
-}
-#endif
-
 namespace content {
 extern int GpuMain(const content::MainFunctionParams&);
 #if defined(ENABLE_PLUGINS)
@@ -132,6 +122,9 @@ extern int PpapiBrokerMain(const MainFunctionParams&);
 #endif
 extern int RendererMain(const content::MainFunctionParams&);
 extern int UtilityMain(const MainFunctionParams&);
+#if defined(OS_ANDROID)
+extern int DownloadMain(const MainFunctionParams&);
+#endif
 }  // namespace content
 
 namespace content {
@@ -142,6 +135,8 @@ base::LazyInstance<ContentBrowserClient>
 #endif  //  !CHROME_MULTIPLE_DLL_CHILD
 
 #if !defined(OS_IOS) && !defined(CHROME_MULTIPLE_DLL_BROWSER)
+base::LazyInstance<ContentGpuClient>
+    g_empty_content_gpu_client = LAZY_INSTANCE_INITIALIZER;
 base::LazyInstance<ContentPluginClient>
     g_empty_content_plugin_client = LAZY_INSTANCE_INITIALIZER;
 base::LazyInstance<ContentRendererClient>
@@ -150,9 +145,15 @@ base::LazyInstance<ContentUtilityClient>
     g_empty_content_utility_client = LAZY_INSTANCE_INITIALIZER;
 #endif  // !OS_IOS && !CHROME_MULTIPLE_DLL_BROWSER
 
-#if defined(OS_WIN)
-
-#endif  // defined(OS_WIN)
+#if defined(V8_USE_EXTERNAL_STARTUP_DATA) && defined(OS_ANDROID)
+#if defined __LP64__
+#define kV8NativesDataDescriptor kV8NativesDataDescriptor64
+#define kV8SnapshotDataDescriptor kV8SnapshotDataDescriptor64
+#else
+#define kV8NativesDataDescriptor kV8NativesDataDescriptor32
+#define kV8SnapshotDataDescriptor kV8SnapshotDataDescriptor32
+#endif
+#endif
 
 #if defined(OS_POSIX) && !defined(OS_IOS)
 
@@ -227,6 +228,15 @@ class ContentClientInitializer {
 #endif  // !CHROME_MULTIPLE_DLL_CHILD
 
 #if !defined(OS_IOS) && !defined(CHROME_MULTIPLE_DLL_BROWSER)
+    if (process_type == switches::kGpuProcess ||
+        base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kSingleProcess)) {
+      if (delegate)
+        content_client->gpu_ = delegate->CreateContentGpuClient();
+      if (!content_client->gpu_)
+        content_client->gpu_ = &g_empty_content_gpu_client.Get();
+    }
+
     if (process_type == switches::kPluginProcess ||
         process_type == switches::kPpapiPluginProcess) {
       if (delegate)
@@ -358,6 +368,9 @@ int RunNamedProcessTypeMain(
     { switches::kUtilityProcess,     UtilityMain },
     { switches::kRendererProcess,    RendererMain },
     { switches::kGpuProcess,         GpuMain },
+#if defined(OS_ANDROID)
+    { switches::kDownloadProcess,    DownloadMain},
+#endif
 #endif  // !CHROME_MULTIPLE_DLL_BROWSER
   };
 
@@ -417,16 +430,6 @@ class ContentMainRunnerImpl : public ContentMainRunner {
       Shutdown();
   }
 
-#if defined(USE_TCMALLOC)
-  static bool GetNumericPropertyThunk(const char* name, size_t* value) {
-    return MallocExtension::instance()->GetNumericProperty(name, value);
-  }
-
-  static void ReleaseFreeMemoryThunk() {
-    MallocExtension::instance()->ReleaseFreeMemory();
-  }
-#endif
-
   int Initialize(const ContentMainParams& params) override {
     ui_task_ = params.ui_task;
 
@@ -444,32 +447,6 @@ class ContentMainRunnerImpl : public ContentMainRunner {
     // TRACE_EVENT right away.
     TRACE_EVENT0("startup,benchmark", "ContentMainRunnerImpl::Initialize");
 #endif  // OS_ANDROID
-
-    // NOTE(willchan): One might ask why these TCMalloc-related calls are done
-    // here rather than in process_util_linux.cc with the definition of
-    // EnableTerminationOnOutOfMemory().  That's because base shouldn't have a
-    // dependency on TCMalloc.  Really, we ought to have our allocator shim code
-    // implement this EnableTerminationOnOutOfMemory() function.  Whateverz.
-    // This works for now.
-#if !defined(OS_MACOSX) && defined(USE_TCMALLOC)
-    // For tcmalloc, we need to tell it to behave like new.
-    tc_set_new_mode(1);
-
-    // On windows, we've already set these thunks up in _heap_init()
-    base::allocator::SetGetNumericPropertyFunction(GetNumericPropertyThunk);
-    base::allocator::SetReleaseFreeMemoryFunction(ReleaseFreeMemoryThunk);
-
-    // Provide optional hook for monitoring allocation quantities on a
-    // per-thread basis.  Only set the hook if the environment indicates this
-    // needs to be enabled.
-    const char* profiling = getenv(tracked_objects::kAlternateProfilerTime);
-    if (profiling &&
-        (atoi(profiling) == tracked_objects::TIME_SOURCE_TYPE_TCMALLOC)) {
-      tracked_objects::SetAlternateTimeSource(
-          MallocExtension::GetBytesAllocatedOnCurrentThread,
-          tracked_objects::TIME_SOURCE_TYPE_TCMALLOC);
-    }
-#endif  // !OS_MACOSX && USE_TCMALLOC
 
 #if !defined(OS_IOS)
     base::GlobalDescriptors* g_fds = base::GlobalDescriptors::GetInstance();

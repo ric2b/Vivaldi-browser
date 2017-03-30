@@ -13,7 +13,6 @@
 #include "base/command_line.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_nsobject.h"
-#include "base/prefs/pref_service.h"
 #include "base/run_loop.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -42,6 +41,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
@@ -114,9 +114,7 @@ class AppControllerPlatformAppBrowserTest
     : public extensions::PlatformAppBrowserTest {
  protected:
   AppControllerPlatformAppBrowserTest()
-      : active_browser_list_(BrowserList::GetInstance(
-                                chrome::GetActiveDesktop())) {
-  }
+      : active_browser_list_(BrowserList::GetInstance()) {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     PlatformAppBrowserTest::SetUpCommandLine(command_line);
@@ -172,9 +170,7 @@ IN_PROC_BROWSER_TEST_F(AppControllerPlatformAppBrowserTest,
 class AppControllerWebAppBrowserTest : public InProcessBrowserTest {
  protected:
   AppControllerWebAppBrowserTest()
-      : active_browser_list_(BrowserList::GetInstance(
-                                chrome::GetActiveDesktop())) {
-  }
+      : active_browser_list_(BrowserList::GetInstance()) {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitchASCII(switches::kApp, GetAppURL());
@@ -233,9 +229,7 @@ class AppControllerNewProfileManagementBrowserTest
     : public InProcessBrowserTest {
  protected:
   AppControllerNewProfileManagementBrowserTest()
-      : active_browser_list_(BrowserList::GetInstance(
-                                chrome::GetActiveDesktop())) {
-  }
+      : active_browser_list_(BrowserList::GetInstance()) {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     switches::EnableNewProfileManagementForTesting(command_line);
@@ -665,8 +659,7 @@ IN_PROC_BROWSER_TEST_F(AppControllerHandoffBrowserTest, TestHandoffURLs) {
   EXPECT_EQ(g_handoff_url, test_url3);
 
   // Check that there are exactly 2 browsers.
-  BrowserList* active_browser_list =
-      BrowserList::GetInstance(chrome::GetActiveDesktop());
+  BrowserList* active_browser_list = BrowserList::GetInstance();
   EXPECT_EQ(2u, active_browser_list->size());
 
   // Close the second browser window (which only has 1 tab left).

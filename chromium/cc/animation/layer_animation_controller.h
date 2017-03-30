@@ -5,9 +5,9 @@
 #ifndef CC_ANIMATION_LAYER_ANIMATION_CONTROLLER_H_
 #define CC_ANIMATION_LAYER_ANIMATION_CONTROLLER_H_
 
+#include <unordered_set>
 #include <vector>
 
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -46,10 +46,9 @@ class CC_EXPORT LayerAnimationController
   void AddAnimation(scoped_ptr<Animation> animation);
   void PauseAnimation(int animation_id, base::TimeDelta time_offset);
   void RemoveAnimation(int animation_id);
-  void RemoveAnimation(int animation_id,
-                       Animation::TargetProperty target_property);
   void AbortAnimation(int animation_id);
-  void AbortAnimations(Animation::TargetProperty target_property);
+  void AbortAnimations(TargetProperty::Type target_property,
+                       bool needs_completion = false);
 
   // Ensures that the list of active animations on the main thread and the impl
   // thread are kept in sync. This function does not take ownership of the impl
@@ -70,7 +69,7 @@ class CC_EXPORT LayerAnimationController
 
   // Returns the active animation animating the given property that is either
   // running, or is next to run, if such an animation exists.
-  Animation* GetAnimation(Animation::TargetProperty target_property) const;
+  Animation* GetAnimation(TargetProperty::Type target_property) const;
 
   // Returns the active animation for the given unique animation id.
   Animation* GetAnimationById(int animation_id) const;
@@ -85,12 +84,12 @@ class CC_EXPORT LayerAnimationController
   // Returns true if there is an animation that is either currently animating
   // the given property or scheduled to animate this property in the future, and
   // that affects the given observer type.
-  bool IsPotentiallyAnimatingProperty(Animation::TargetProperty target_property,
+  bool IsPotentiallyAnimatingProperty(TargetProperty::Type target_property,
                                       ObserverType observer_type) const;
 
   // Returns true if there is an animation that is currently animating the given
   // property and that affects the given observer type.
-  bool IsCurrentlyAnimatingProperty(Animation::TargetProperty target_property,
+  bool IsCurrentlyAnimatingProperty(TargetProperty::Type target_property,
                                     ObserverType observer_type) const;
 
   void SetAnimationRegistrar(AnimationRegistrar* registrar);
@@ -100,6 +99,7 @@ class CC_EXPORT LayerAnimationController
   void NotifyAnimationFinished(const AnimationEvent& event);
   void NotifyAnimationAborted(const AnimationEvent& event);
   void NotifyAnimationPropertyUpdate(const AnimationEvent& event);
+  void NotifyAnimationTakeover(const AnimationEvent& event);
 
   void AddValueObserver(LayerAnimationValueObserver* observer);
   void RemoveValueObserver(LayerAnimationValueObserver* observer);
@@ -177,7 +177,7 @@ class CC_EXPORT LayerAnimationController
   virtual ~LayerAnimationController();
 
  private:
-  typedef base::hash_set<int> TargetProperties;
+  using TargetProperties = std::unordered_set<int>;
 
   void PushNewAnimationsToImplThread(
       LayerAnimationController* controller_impl) const;

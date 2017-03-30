@@ -2,25 +2,24 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-item/paper-item-body.html">
 <link rel="import" href="chrome://md-settings/certificate_manager_page/certificate_manager_page.html">
 <link rel="import" href="chrome://md-settings/clear_browsing_data_page/clear_browsing_data_page.html">
 <link rel="import" href="chrome://md-settings/controls/settings_checkbox.html">
 <link rel="import" href="chrome://md-settings/settings_page/settings_animated_pages.html">
 <link rel="import" href="chrome://md-settings/settings_page/settings_subheader.html">
+<link rel="import" href="chrome://md-settings/settings_shared_css.html">
+<link rel="import" href="chrome://md-settings/site_settings/all_sites.html">
 <link rel="import" href="chrome://md-settings/site_settings/constants.html">
 <link rel="import" href="chrome://md-settings/site_settings_page/site_settings_page.html">
 
 <dom-module id="settings-privacy-page">
-  <link rel="import" type="css"
-      href="chrome://md-settings/settings_shared.css">
   <link rel="import" type="css" href="privacy_page.css">
   <template>
+    <style include="settings-shared"></style>
     <settings-animated-pages id="pages" current-route="{{currentRoute}}"
         section="privacy">
       <neon-animatable id="main">
-        <div class="settings-box">
+        <div class="settings-box block first">
           <p class="privacy-explanation"
               i18n-values=".innerHTML:improveBrowsingExperience">
           </p>
@@ -70,26 +69,26 @@
           </settings-checkbox>
 </if>
         </div>
-        <div class="settings-box" on-tap="onManageCertificatesTap_">
+        <div class="settings-box two-line" on-tap="onManageCertificatesTap_">
           <div class="start">
             <div i18n-content="manageCertificates"></div>
             <div class="secondary">
-              <!-- TODO(dschuyler) replace this placeholder text -->
+              <!-- TODO(dschuyler): replace this placeholder text -->
               Contrary to popular belief, Lorem Ipsum is not simply random text.
             </div>
           </div>
         </div>
-        <div class="settings-box" on-tap="onSiteSettingsTap_">
+        <div class="settings-box two-line" on-tap="onSiteSettingsTap_">
           <div class="start">
             <div i18n-content="siteSettings"></div>
             <div class="secondary">
-              <!-- TODO(dschuyler) replace this placeholder text -->
+              <!-- TODO(dschuyler): replace this placeholder text -->
               Contrary to popular belief, Lorem Ipsum is not simply random text.
             </div>
           </div>
         </div>
         <div class="settings-box">
-          <paper-button on-tap="onClearBrowsingDataTap_"
+          <paper-button on-tap="onClearBrowsingDataTap_" class="primary-button"
               i18n-content="clearBrowsingData">
           </paper-button>
         </div>
@@ -104,12 +103,21 @@
         <settings-subheader i18n-values="page-title:siteSettings">
         </settings-subheader>
         <settings-site-settings-page current-route="{{currentRoute}}"
-            prefs="{{prefs}}">
+            prefs="{{prefs}}" category-selected="{{categorySelected}}">
         </settings-site-settings-page>
       </neon-animatable>
 
+      <neon-animatable id="all-sites">
+        <settings-subheader
+            i18n-values="page-title:siteSettingsCategoryAllSites">
+        </settings-subheader>
+        <all-sites
+            selected-origin="{{originSelected}}" prefs="{{prefs}}"
+            current-route="{{currentRoute}}">
+        </all-sites>
+      </neon-animatable>
       <neon-animatable id="site-settings-category-camera">
-        <settings-subheader i18n-values="page-title:siteSettings">
+        <settings-subheader i18n-values="page-title:siteSettingsCategoryCamera">
         </settings-subheader>
         <site-settings-category
             selected-origin="{{originSelected}}" prefs="{{prefs}}"
@@ -118,7 +126,8 @@
         </site-settings-category>
       </neon-animatable>
       <neon-animatable id="site-settings-category-cookies">
-        <settings-subheader i18n-values="page-title:siteSettings">
+        <settings-subheader
+            i18n-values="page-title:siteSettingsCategoryCookies">
         </settings-subheader>
         <site-settings-category
             selected-origin="{{originSelected}}" prefs="{{prefs}}"
@@ -127,7 +136,8 @@
         </site-settings-category>
       </neon-animatable>
       <neon-animatable id="site-settings-category-fullscreen">
-        <settings-subheader i18n-values="page-title:siteSettings">
+        <settings-subheader
+            i18n-values="page-title:siteSettingsCategoryFullscreen">
         </settings-subheader>
         <site-settings-category
             selected-origin="{{originSelected}}" prefs="{{prefs}}"
@@ -136,7 +146,7 @@
         </site-settings-category>
       </neon-animatable>
       <neon-animatable id="site-settings-category-images">
-        <settings-subheader i18n-values="page-title:siteSettings">
+        <settings-subheader i18n-values="page-title:siteSettingsCategoryImages">
         </settings-subheader>
         <site-settings-category
             selected-origin="{{originSelected}}" prefs="{{prefs}}"
@@ -145,7 +155,8 @@
         </site-settings-category>
       </neon-animatable>
       <neon-animatable id="site-settings-category-location">
-        <settings-subheader i18n-values="page-title:siteSettings">
+        <settings-subheader
+            i18n-values="page-title:siteSettingsCategoryLocation">
         </settings-subheader>
         <site-settings-category
             selected-origin="{{originSelected}}" prefs="{{prefs}}"
@@ -154,7 +165,8 @@
         </site-settings-category>
       </neon-animatable>
       <neon-animatable id="site-settings-category-javascript">
-        <settings-subheader i18n-values="page-title:siteSettings">
+        <settings-subheader
+            i18n-values="page-title:siteSettingsCategoryJavascript">
         </settings-subheader>
         <site-settings-category
             selected-origin="{{originSelected}}" prefs="{{prefs}}"
@@ -163,7 +175,8 @@
         </site-settings-category>
       </neon-animatable>
       <neon-animatable id="site-settings-category-microphone">
-        <settings-subheader i18n-values="page-title:siteSettings">
+        <settings-subheader
+            i18n-values="page-title:siteSettingsCategoryMicrophone">
         </settings-subheader>
         <site-settings-category
             selected-origin="{{originSelected}}" prefs="{{prefs}}"
@@ -172,7 +185,8 @@
         </site-settings-category>
       </neon-animatable>
       <neon-animatable id="site-settings-category-notifications">
-        <settings-subheader i18n-values="page-title:siteSettings">
+        <settings-subheader
+            i18n-values="page-title:siteSettingsCategoryNotifications">
         </settings-subheader>
         <site-settings-category
             selected-origin="{{originSelected}}" prefs="{{prefs}}"
@@ -181,7 +195,8 @@
         </site-settings-category>
       </neon-animatable>
       <neon-animatable id="site-settings-category-popups">
-        <settings-subheader i18n-values="page-title:siteSettings">
+        <settings-subheader
+            i18n-values="page-title:siteSettingsCategoryPopups">
         </settings-subheader>
         <site-settings-category
             selected-origin="{{originSelected}}" prefs="{{prefs}}"
@@ -191,7 +206,9 @@
       </neon-animatable>
 
       <neon-animatable id="site-details">
-        <site-details prefs="{{prefs}}" origin="{{originSelected}}">
+        <site-details prefs="{{prefs}}" origin="{{originSelected}}"
+            current-route="{{currentRoute}}"
+            category-selected="{{categorySelected}}">
         </site-details>
       </neon-animatable>
       <neon-animatable id="clear-browsing-data">

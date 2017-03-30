@@ -35,6 +35,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/website_settings/permission_bubble_manager.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -43,13 +44,12 @@
 #include "components/gcm_driver/common/gcm_messages.h"
 #include "components/gcm_driver/gcm_client.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/base/window_open_disposition.h"
 
-#if defined(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND)
 #include "chrome/browser/background/background_mode_manager.h"
 #endif
 
@@ -82,14 +82,6 @@ class PushMessagingBrowserTest : public InProcessBrowserTest {
  public:
   PushMessagingBrowserTest() : gcm_service_(nullptr) {}
   ~PushMessagingBrowserTest() override {}
-
-  // InProcessBrowserTest:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(
-        switches::kEnableExperimentalWebPlatformFeatures);
-
-    InProcessBrowserTest::SetUpCommandLine(command_line);
-  }
 
   // InProcessBrowserTest:
   void SetUp() override {
@@ -490,6 +482,33 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, PushEventSuccess) {
   push_service()->OnMessage(app_identifier.app_id(), message);
   ASSERT_TRUE(RunScript("resultQueue.pop()", &script_result));
   EXPECT_EQ("testdata", script_result);
+}
+
+IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, PushEventWithoutPayload) {
+  std::string script_result;
+
+  TryToSubscribeSuccessfully("1-0" /* expected_push_subscription_id */);
+
+  PushMessagingAppIdentifier app_identifier =
+      GetAppIdentifierForServiceWorkerRegistration(0LL);
+  EXPECT_EQ(app_identifier.app_id(), gcm_service()->last_registered_app_id());
+  EXPECT_EQ("1234567890", gcm_service()->last_registered_sender_ids()[0]);
+
+  ASSERT_TRUE(RunScript("isControlled()", &script_result));
+  ASSERT_EQ("false - is not controlled", script_result);
+
+  LoadTestPage();  // Reload to become controlled.
+
+  ASSERT_TRUE(RunScript("isControlled()", &script_result));
+  ASSERT_EQ("true - is controlled", script_result);
+
+  gcm::IncomingMessage message;
+  message.sender_id = "1234567890";
+  message.decrypted = false;
+
+  push_service()->OnMessage(app_identifier.app_id(), message);
+  ASSERT_TRUE(RunScript("resultQueue.pop()", &script_result));
+  EXPECT_EQ("[NULL]", script_result);
 }
 
 IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, PushEventNoServiceWorker) {
@@ -1205,7 +1224,7 @@ IN_PROC_BROWSER_TEST_F(PushMessagingIncognitoBrowserTest,
 }
 
 // None of the following should matter on ChromeOS: crbug.com/527045
-#if defined(ENABLE_BACKGROUND) && !defined(OS_CHROMEOS)
+#if BUILDFLAG(ENABLE_BACKGROUND) && !defined(OS_CHROMEOS)
 // Push background mode is disabled by default.
 IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
                        BackgroundModeDisabledByDefault) {
@@ -1289,4 +1308,4 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBackgroundModeDisabledBrowserTest,
   EXPECT_EQ("unsubscribe result: true", script_result);
   ASSERT_FALSE(background_mode_manager->IsBackgroundModeActive());
 }
-#endif  // defined(ENABLE_BACKGROUND) && !defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(ENABLE_BACKGROUND) && !defined(OS_CHROMEOS)

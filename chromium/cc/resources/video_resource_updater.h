@@ -63,7 +63,13 @@ class CC_EXPORT VideoFrameExternalResources {
   std::vector<unsigned> software_resources;
   ReleaseCallbackImpl software_release_callback;
 
+  // Used by hardware textures which do not return values in the 0-1 range.
+  // After a lookup, subtract offset and multiply by multiplier.
+  float offset;
+  float multiplier;
+
   VideoFrameExternalResources();
+  VideoFrameExternalResources(const VideoFrameExternalResources& other);
   ~VideoFrameExternalResources();
 };
 
@@ -100,6 +106,7 @@ class CC_EXPORT VideoResourceUpdater
                   const gfx::Size& resource_size,
                   ResourceFormat resource_format,
                   gpu::Mailbox mailbox);
+    PlaneResource(const PlaneResource& other);
   };
 
   static bool PlaneResourceMatchesUniqueID(const PlaneResource& plane_resource,
@@ -115,7 +122,8 @@ class CC_EXPORT VideoResourceUpdater
   typedef std::list<PlaneResource> ResourceList;
   ResourceList::iterator AllocateResource(const gfx::Size& plane_size,
                                           ResourceFormat format,
-                                          bool has_mailbox);
+                                          bool has_mailbox,
+                                          bool immutable_hint);
   void DeleteResource(ResourceList::iterator resource_it);
   bool VerifyFrame(const scoped_refptr<media::VideoFrame>& video_frame);
   void CopyPlaneTexture(const scoped_refptr<media::VideoFrame>& video_frame,

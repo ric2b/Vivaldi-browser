@@ -4,6 +4,7 @@
 
 package org.chromium.net;
 
+import android.content.Context;
 import android.os.Build;
 import android.os.ConditionVariable;
 import android.os.Handler;
@@ -78,8 +79,8 @@ class CronetUrlRequestContext extends CronetEngine {
     public CronetUrlRequestContext(CronetEngine.Builder builder) {
         CronetLibraryLoader.ensureInitialized(builder.getContext(), builder);
         nativeSetMinLogLevel(getLoggingLevel());
-        mUrlRequestContextAdapter =
-                nativeCreateRequestContextAdapter(createNativeUrlRequestContextConfig(builder));
+        mUrlRequestContextAdapter = nativeCreateRequestContextAdapter(
+                createNativeUrlRequestContextConfig(builder.getContext(), builder));
         if (mUrlRequestContextAdapter == 0) {
             throw new NullPointerException("Context Adapter creation failed.");
         }
@@ -104,10 +105,12 @@ class CronetUrlRequestContext extends CronetEngine {
         }
     }
 
-    static long createNativeUrlRequestContextConfig(CronetEngine.Builder builder) {
+    static long createNativeUrlRequestContextConfig(
+            final Context context, CronetEngine.Builder builder) {
         final long urlRequestContextConfig = nativeCreateRequestContextConfig(
                 builder.getUserAgent(), builder.storagePath(), builder.quicEnabled(),
-                builder.http2Enabled(), builder.sdchEnabled(), builder.dataReductionProxyKey(),
+                builder.getDefaultQuicUserAgentId(context), builder.http2Enabled(),
+                builder.sdchEnabled(), builder.dataReductionProxyKey(),
                 builder.dataReductionProxyPrimaryProxy(), builder.dataReductionProxyFallbackProxy(),
                 builder.dataReductionProxySecureProxyCheckUrl(), builder.cacheDisabled(),
                 builder.httpCacheMode(), builder.httpCacheMaxSize(), builder.experimentalOptions(),
@@ -134,8 +137,8 @@ class CronetUrlRequestContext extends CronetEngine {
                     metricsCollectionEnabled = !mFinishedListenerList.isEmpty();
                 }
             }
-            return new CronetUrlRequest(this, mUrlRequestContextAdapter, url, priority, callback,
-                    executor, requestAnnotations, metricsCollectionEnabled);
+            return new CronetUrlRequest(this, url, priority, callback, executor, requestAnnotations,
+                    metricsCollectionEnabled);
         }
     }
 
@@ -143,7 +146,11 @@ class CronetUrlRequestContext extends CronetEngine {
     BidirectionalStream createBidirectionalStream(String url, BidirectionalStream.Callback callback,
             Executor executor, String httpMethod, List<Map.Entry<String, String>> requestHeaders,
             @BidirectionalStream.Builder.StreamPriority int priority) {
-        throw new UnsupportedOperationException();
+        synchronized (mLock) {
+            checkHaveAdapter();
+            return new CronetBidirectionalStream(
+                    this, url, priority, callback, executor, httpMethod, requestHeaders);
+        }
     }
 
     @Override
@@ -343,7 +350,7 @@ class CronetUrlRequestContext extends CronetEngine {
      * Mark request as started to prevent shutdown when there are active
      * requests.
      */
-    void onRequestStarted(UrlRequest urlRequest) {
+    void onRequestStarted() {
         mActiveRequestCount.incrementAndGet();
     }
 
@@ -351,7 +358,7 @@ class CronetUrlRequestContext extends CronetEngine {
      * Mark request as finished to allow shutdown when there are no active
      * requests.
      */
-    void onRequestDestroyed(UrlRequest urlRequest) {
+    void onRequestDestroyed() {
         mActiveRequestCount.decrementAndGet();
     }
 
@@ -461,11 +468,11 @@ class CronetUrlRequestContext extends CronetEngine {
 
     // Native methods are implemented in cronet_url_request_context_adapter.cc.
     private static native long nativeCreateRequestContextConfig(String userAgent,
-            String storagePath, boolean quicEnabled, boolean http2Enabled, boolean sdchEnabled,
-            String dataReductionProxyKey, String dataReductionProxyPrimaryProxy,
-            String dataReductionProxyFallbackProxy, String dataReductionProxySecureProxyCheckUrl,
-            boolean disableCache, int httpCacheMode, long httpCacheMaxSize,
-            String experimentalOptions, long mockCertVerifier);
+            String storagePath, boolean quicEnabled, String quicUserAgentId, boolean http2Enabled,
+            boolean sdchEnabled, String dataReductionProxyKey,
+            String dataReductionProxyPrimaryProxy, String dataReductionProxyFallbackProxy,
+            String dataReductionProxySecureProxyCheckUrl, boolean disableCache, int httpCacheMode,
+            long httpCacheMaxSize, String experimentalOptions, long mockCertVerifier);
 
     private static native void nativeAddQuicHint(
             long urlRequestContextConfig, String host, int port, int alternatePort);

@@ -19,12 +19,12 @@
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
 #include "google_apis/gaia/gaia_urls.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFormElement.h"
 #include "third_party/WebKit/public/web/WebInputElement.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -74,11 +74,11 @@ const PasswordFormGenerationData* FindFormGenerationData(
 // than 2 elements.
 std::vector<blink::WebInputElement> FindPasswordElementsForGeneration(
     const std::vector<blink::WebInputElement>& all_password_elements,
-    const FormFieldData& field_data) {
+    const base::string16& field_name) {
   auto iter =
       std::find_if(all_password_elements.begin(), all_password_elements.end(),
-                   [&field_data](const blink::WebInputElement& input) {
-                     return input.nameForAutofill() == field_data.name;
+                   [&field_name](const blink::WebInputElement& input) {
+                     return input.nameForAutofill() == field_name;
                    });
   std::vector<blink::WebInputElement> passwords;
 
@@ -113,6 +113,9 @@ PasswordGenerationAgent::AccountCreationFormData::AccountCreationFormData(
     : form(password_form),
       password_elements(passwords) {}
 
+PasswordGenerationAgent::AccountCreationFormData::AccountCreationFormData(
+    const AccountCreationFormData& other) = default;
+
 PasswordGenerationAgent::AccountCreationFormData::~AccountCreationFormData() {}
 
 PasswordGenerationAgent::PasswordGenerationAgent(
@@ -120,6 +123,7 @@ PasswordGenerationAgent::PasswordGenerationAgent(
     PasswordAutofillAgent* password_agent)
     : content::RenderFrameObserver(render_frame),
       password_is_generated_(false),
+      is_manually_triggered_(false),
       password_edited_(false),
       generation_popup_shown_(false),
       editing_popup_shown_(false),
@@ -253,6 +257,8 @@ bool PasswordGenerationAgent::OnMessageReceived(const IPC::Message& message) {
                         OnPasswordAccepted)
     IPC_MESSAGE_HANDLER(AutofillMsg_FoundFormsEligibleForGeneration,
                         OnFormsEligibleForGenerationFound);
+    IPC_MESSAGE_HANDLER(AutofillMsg_UserTriggeredGeneratePassword,
+                        OnUserTriggeredGeneratePassword);
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -338,7 +344,7 @@ void PasswordGenerationAgent::DetermineGenerationElement() {
     std::vector<blink::WebInputElement> password_elements =
         generation_data ? FindPasswordElementsForGeneration(
                               possible_form_data.password_elements,
-                              generation_data->generation_field)
+                              generation_data->generation_field.name)
                         : possible_form_data.password_elements;
     if (password_elements.empty()) {
       // It might be if JavaScript changes field names.
@@ -437,11 +443,13 @@ bool PasswordGenerationAgent::TextDidChangeInTextField(
 
 void PasswordGenerationAgent::ShowGenerationPopup() {
   Send(new AutofillHostMsg_ShowPasswordGenerationPopup(
-           routing_id(),
-           render_frame()->GetRenderView()->ElementBoundsInWindow(
-               generation_element_),
-           generation_element_.maxLength(),
-           *generation_form_data_->form));
+      routing_id(),
+      render_frame()->GetRenderView()->ElementBoundsInWindow(
+          generation_element_),
+      generation_element_.maxLength(),
+      generation_element_.nameForAutofill(),
+      is_manually_triggered_,
+      *generation_form_data_->form));
   generation_popup_shown_ = true;
 }
 
@@ -456,6 +464,36 @@ void PasswordGenerationAgent::ShowEditingPopup() {
 
 void PasswordGenerationAgent::HidePopup() {
   Send(new AutofillHostMsg_HidePasswordGenerationPopup(routing_id()));
+}
+
+void PasswordGenerationAgent::OnUserTriggeredGeneratePassword() {
+  blink::WebDocument doc = render_frame()->GetWebFrame()->document();
+  if (doc.isNull())
+    return;
+
+  blink::WebElement focused_element = doc.focusedElement();
+  const blink::WebInputElement* element = toWebInputElement(&focused_element);
+  if (!element || !element->isPasswordField())
+    return;
+
+  blink::WebFormElement form = element->form();
+  if (form.isNull())
+    return;
+
+  scoped_ptr<PasswordForm> password_form(
+      CreatePasswordFormFromWebForm(form, nullptr, nullptr));
+  if (!password_form)
+    return;
+
+  generation_element_ = *element;
+  std::vector<blink::WebInputElement> password_elements;
+  GetAccountCreationPasswordFields(form, &password_elements);
+  password_elements = FindPasswordElementsForGeneration(
+      password_elements, element->nameForAutofill());
+  generation_form_data_.reset(new AccountCreationFormData(
+      make_linked_ptr(password_form.release()), password_elements));
+  is_manually_triggered_ = true;
+  ShowGenerationPopup();
 }
 
 }  // namespace autofill

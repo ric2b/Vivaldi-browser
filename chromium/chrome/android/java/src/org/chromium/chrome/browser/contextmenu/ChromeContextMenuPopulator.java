@@ -87,7 +87,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         // Note: these values must match the ContextMenuSaveLinkType enum in histograms.xml.
         // Only add new values at the end, right before NUM_TYPES. We depend on these specific
         // values in UMA histograms.
-        static final int TYPE_UNKNWON = 0;
+        static final int TYPE_UNKNOWN = 0;
         static final int TYPE_TEXT = 1;
         static final int TYPE_IMAGE = 2;
         static final int TYPE_AUDIO = 3;
@@ -123,7 +123,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
          */
         static void recordSaveLinkTypes(String url) {
             String extension = MimeTypeMap.getFileExtensionFromUrl(url);
-            int mimeType = TYPE_UNKNWON;
+            int mimeType = TYPE_UNKNOWN;
             if (extension != null) {
                 String type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
                 if (type != null) {
@@ -283,7 +283,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
             ContextMenuUma.record(params, ContextMenuUma.ACTION_LOAD_IMAGES);
             DataReductionProxyUma.dataReductionProxyLoFiUIAction(
                     DataReductionProxyUma.ACTION_LOAD_IMAGES_CONTEXT_MENU_CLICKED);
-            mDelegate.onReloadDisableLoFi();
+            mDelegate.onReloadLoFiImages();
         } else if (itemId == R.id.contextmenu_load_original_image) {
             ContextMenuUma.record(params, ContextMenuUma.ACTION_LOAD_ORIGINAL_IMAGE);
             DataReductionProxyUma.dataReductionProxyLoFiUIAction(

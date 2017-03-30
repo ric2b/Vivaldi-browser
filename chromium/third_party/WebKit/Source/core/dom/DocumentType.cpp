@@ -40,7 +40,7 @@ String DocumentType::nodeName() const
     return name();
 }
 
-Node::NodeType DocumentType::nodeType() const
+Node::NodeType DocumentType::getNodeType() const
 {
     return DOCUMENT_TYPE_NODE;
 }
@@ -68,4 +68,4 @@ void DocumentType::removedFrom(ContainerNode* insertionPoint)
     Node::removedFrom(insertionPoint);
 }
 
-}
+} // namespace blink

@@ -68,8 +68,6 @@ public:
         return new File(name, modificationTime, blobDataHandle);
     }
 
-    static File* create(const unsigned char* data, size_t bytes, const String& mimeType);
-
     // For deserialization.
     static File* createFromSerialization(const String& path, const String& name, const String& relativePath, UserVisibility userVisibility, bool hasSnaphotData, uint64_t size, double lastModified, PassRefPtr<BlobDataHandle> blobDataHandle)
     {
@@ -134,7 +132,7 @@ public:
     // http://www.w3.org/TR/FileAPI/#dfn-lastModifiedDate
     double lastModifiedDate() const;
 
-    UserVisibility userVisibility() const { return m_userVisibility; }
+    UserVisibility getUserVisibility() const { return m_userVisibility; }
 
     // Returns the relative path of this file in the context of a directory selection.
     const String& webkitRelativePath() const { return m_relativePath; }

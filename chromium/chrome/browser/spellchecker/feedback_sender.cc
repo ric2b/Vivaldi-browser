@@ -50,6 +50,9 @@
 #include "chrome/common/spellcheck_messages.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "content/public/browser/render_process_host.h"
+#include "crypto/random.h"
+#include "crypto/secure_hash.h"
+#include "crypto/sha2.h"
 #include "google_apis/google_api_keys.h"
 #include "net/base/load_flags.h"
 #include "net/url_request/url_fetcher.h"
@@ -77,6 +80,19 @@ uint32_t BuildHash(const base::Time& session_start, size_t suggestion_index) {
                          suggestion_index));
 }
 
+uint64_t BuildAnonymousHash(const FeedbackSender::RandSalt& r,
+                            const base::string16& s) {
+  scoped_ptr<crypto::SecureHash> hash(
+      crypto::SecureHash::Create(crypto::SecureHash::SHA256));
+
+  hash->Update(s.data(), s.size() * sizeof(s[0]));
+  hash->Update(&r, sizeof(r));
+
+  uint64_t result;
+  hash->Finish(&result, sizeof(result));
+  return result;
+}
+
 // Returns a pending feedback data structure for the spellcheck |result| and
 // |text|.
 Misspelling BuildFeedback(const SpellCheckResult& result,
@@ -93,30 +109,44 @@ Misspelling BuildFeedback(const SpellCheckResult& result,
                      result.hash);
 }
 
-// Builds suggestion info from |suggestions|. The caller owns the result.
-base::ListValue* BuildSuggestionInfo(
-    const std::vector<Misspelling>& suggestions,
-    bool is_first_feedback_batch) {
-  base::ListValue* list = new base::ListValue;
-  for (std::vector<Misspelling>::const_iterator suggestion_it =
-           suggestions.begin();
-       suggestion_it != suggestions.end();
-       ++suggestion_it) {
-    base::DictionaryValue* suggestion = SerializeMisspelling(*suggestion_it);
-    suggestion->SetBoolean("isFirstInSession", is_first_feedback_batch);
-    suggestion->SetBoolean("isAutoCorrection", false);
-    list->Append(suggestion);
+// Builds suggestion info from |suggestions|.
+scoped_ptr<base::ListValue> BuildSuggestionInfo(
+    const std::vector<Misspelling>& misspellings,
+    bool is_first_feedback_batch,
+    const FeedbackSender::RandSalt& salt) {
+  scoped_ptr<base::ListValue> list(new base::ListValue);
+  for (const auto& raw_misspelling : misspellings) {
+    scoped_ptr<base::DictionaryValue> misspelling(
+        SerializeMisspelling(raw_misspelling));
+    misspelling->SetBoolean("isFirstInSession", is_first_feedback_batch);
+    misspelling->SetBoolean("isAutoCorrection", false);
+    // hash(R) fields come from red_underline_extensions.proto
+    // fixed64 user_misspelling_id = ...
+    misspelling->SetString(
+        "userMisspellingId",
+        base::Uint64ToString(BuildAnonymousHash(
+            salt, raw_misspelling.context.substr(raw_misspelling.location,
+                                                 raw_misspelling.length))));
+    // repeated fixed64 user_suggestion_id = ...
+    scoped_ptr<base::ListValue> suggestion_list(new base::ListValue());
+    for (const auto& suggestion : raw_misspelling.suggestions) {
+      suggestion_list->AppendString(
+          base::Uint64ToString(BuildAnonymousHash(salt, suggestion)));
+    }
+    misspelling->Set("userSuggestionId", suggestion_list.release());
+    list->Append(misspelling.release());
   }
   return list;
 }
 
 // Builds feedback parameters from |suggestion_info|, |language|, and |country|.
-// Takes ownership of |suggestion_list|. The caller owns the result.
-base::DictionaryValue* BuildParams(base::ListValue* suggestion_info,
-                                   const std::string& language,
-                                   const std::string& country) {
-  base::DictionaryValue* params = new base::DictionaryValue;
-  params->Set("suggestionInfo", suggestion_info);
+// Takes ownership of |suggestion_list|.
+scoped_ptr<base::DictionaryValue> BuildParams(
+    scoped_ptr<base::ListValue> suggestion_info,
+    const std::string& language,
+    const std::string& country) {
+  scoped_ptr<base::DictionaryValue> params(new base::DictionaryValue);
+  params->Set("suggestionInfo", suggestion_info.release());
   params->SetString("key", google_apis::GetAPIKey());
   params->SetString("language", language);
   params->SetString("originCountry", country);
@@ -124,15 +154,15 @@ base::DictionaryValue* BuildParams(base::ListValue* suggestion_info,
   return params;
 }
 
-// Builds feedback data from |params|. Takes ownership of |params|. The caller
-// owns the result.
-base::Value* BuildFeedbackValue(base::DictionaryValue* params,
-                                const std::string& api_version) {
-  base::DictionaryValue* result = new base::DictionaryValue;
-  result->Set("params", params);
+// Builds feedback data from |params|. Takes ownership of |params|.
+scoped_ptr<base::Value> BuildFeedbackValue(
+    scoped_ptr<base::DictionaryValue> params,
+    const std::string& api_version) {
+  scoped_ptr<base::DictionaryValue> result(new base::DictionaryValue);
+  result->Set("params", params.release());
   result->SetString("method", "spelling.feedback");
   result->SetString("apiVersion", api_version);
-  return result;
+  return std::move(result);
 }
 
 // Returns true if the misspelling location is within text bounds.
@@ -206,9 +236,8 @@ void FeedbackSender::AddedToDictionary(uint32_t hash) {
   misspelling->timestamp = base::Time::Now();
   const std::set<uint32_t>& hashes =
       feedback_.FindMisspellings(GetMisspelledString(*misspelling));
-  for (std::set<uint32_t>::const_iterator hash_it = hashes.begin();
-       hash_it != hashes.end(); ++hash_it) {
-    Misspelling* duplicate_misspelling = feedback_.GetMisspelling(*hash_it);
+  for (uint32_t hash : hashes) {
+    Misspelling* duplicate_misspelling = feedback_.GetMisspelling(hash);
     if (!duplicate_misspelling || duplicate_misspelling->action.IsFinal())
       continue;
     duplicate_misspelling->action.set_type(SpellcheckAction::TYPE_ADD_TO_DICT);
@@ -283,25 +312,22 @@ void FeedbackSender::OnSpellcheckResults(
   for (size_t i = 0; i < markers.size(); ++i)
     marker_map[markers[i].offset] = markers[i].hash;
 
-  for (std::vector<SpellCheckResult>::iterator result_it = results->begin();
-       result_it != results->end();
-       ++result_it) {
-    if (!IsInBounds(result_it->location, result_it->length, text.length()))
+  for (auto& result : *results) {
+    if (!IsInBounds(result.location, result.length, text.length()))
       continue;
-    MarkerMap::const_iterator marker_it = marker_map.find(result_it->location);
+    MarkerMap::const_iterator marker_it = marker_map.find(result.location);
     if (marker_it != marker_map.end() &&
         feedback_.HasMisspelling(marker_it->second)) {
       // If the renderer already has a marker for this spellcheck result, then
       // set the hash of the spellcheck result to be the same as the marker.
-      result_it->hash = marker_it->second;
+      result.hash = marker_it->second;
     } else {
       // If the renderer does not yet have a marker for this spellcheck result,
       // then generate a new hash for the spellcheck result.
-      result_it->hash = BuildHash(session_start_, ++misspelling_counter_);
+      result.hash = BuildHash(session_start_, ++misspelling_counter_);
     }
     // Save the feedback data for the spellcheck result.
-    feedback_.AddMisspelling(renderer_process_id,
-                             BuildFeedback(*result_it, text));
+    feedback_.AddMisspelling(renderer_process_id, BuildFeedback(result, text));
   }
 }
 
@@ -347,6 +373,10 @@ void FeedbackSender::StopFeedbackCollection() {
   timer_.Stop();
 }
 
+void FeedbackSender::RandBytes(void* p, size_t len) {
+  crypto::RandBytes(p, len);
+}
+
 void FeedbackSender::OnURLFetchComplete(const net::URLFetcher* source) {
   for (ScopedVector<net::URLFetcher>::iterator sender_it = senders_.begin();
        sender_it != senders_.end();
@@ -375,14 +405,13 @@ void FeedbackSender::RequestDocumentMarkers() {
   std::vector<int> known_renderers = feedback_.GetRendersWithMisspellings();
   std::sort(known_renderers.begin(), known_renderers.end());
   std::vector<int> dead_renderers =
-      base::STLSetDifference<std::vector<int> >(known_renderers,
-                                                alive_renderers);
-  for (std::vector<int>::const_iterator it = dead_renderers.begin();
-       it != dead_renderers.end();
-       ++it) {
+      base::STLSetDifference<std::vector<int>>(known_renderers,
+                                               alive_renderers);
+  for (int renderer_process_id : dead_renderers) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&FeedbackSender::OnReceiveDocumentMarkers,
-                              AsWeakPtr(), *it, std::vector<uint32_t>()));
+        FROM_HERE,
+        base::Bind(&FeedbackSender::OnReceiveDocumentMarkers, AsWeakPtr(),
+                   renderer_process_id, std::vector<uint32_t>()));
   }
 }
 
@@ -400,10 +429,14 @@ void FeedbackSender::FlushFeedback() {
 
 void FeedbackSender::SendFeedback(const std::vector<Misspelling>& feedback_data,
                                   bool is_first_feedback_batch) {
+  if (base::Time::Now() - last_salt_update_ > base::TimeDelta::FromHours(24)) {
+    RandBytes(&salt_, sizeof(salt_));
+    last_salt_update_ = base::Time::Now();
+  }
   scoped_ptr<base::Value> feedback_value(BuildFeedbackValue(
-      BuildParams(BuildSuggestionInfo(feedback_data, is_first_feedback_batch),
-                  language_,
-                  country_),
+      BuildParams(
+          BuildSuggestionInfo(feedback_data, is_first_feedback_batch, salt_),
+          language_, country_),
       api_version_));
   std::string feedback;
   base::JSONWriter::Write(*feedback_value, &feedback);
@@ -420,7 +453,7 @@ void FeedbackSender::SendFeedback(const std::vector<Misspelling>& feedback_data,
   sender->SetUploadData("application/json", feedback);
   senders_.push_back(sender);
 
-  // Request context is NULL in testing.
+  // Request context is nullptr in testing.
   if (request_context_.get()) {
     sender->SetRequestContext(request_context_.get());
     sender->Start();

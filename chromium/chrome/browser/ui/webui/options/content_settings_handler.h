@@ -11,7 +11,6 @@
 
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/prefs/pref_change_registrar.h"
 #include "base/scoped_observer.h"
 #include "base/values.h"
 #include "chrome/browser/pepper_flash_settings_manager.h"
@@ -20,6 +19,7 @@
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -163,9 +163,16 @@ class ContentSettingsHandler : public OptionsPageUIHandler,
   // Clobbers and rebuilds all chooser-based exception tables.
   void UpdateAllChooserExceptionsViewsFromModel();
 
+  // As above, but only OTR tables.
+  void UpdateAllOTRChooserExceptionsViewsFromModel();
+
   // Clobbers and rebuilds the exception table for a particular chooser-based
   // permission.
   void UpdateChooserExceptionsViewFromModel(
+      const ChooserTypeNameEntry& chooser_type);
+
+  // As above, but only OTR tables.
+  void UpdateOTRChooserExceptionsViewFromModel(
       const ChooserTypeNameEntry& chooser_type);
 
   // Modifies the zoom level exceptions list to display correct chrome
@@ -260,6 +267,11 @@ class ContentSettingsHandler : public OptionsPageUIHandler,
       const HostContentSettingsMap* map,
       ContentSettingsType type,
       base::ListValue* exceptions);
+
+  // Fills in |exceptions| with Values for the given |type| from |map|.
+  void GetChooserExceptionsFromProfile(bool incognito,
+                                       const ChooserTypeNameEntry& type,
+                                       base::ListValue* exceptions);
 
   void OnPepperFlashPrefChanged();
 

@@ -39,9 +39,7 @@
 
 namespace blink {
 
-class FloatQuad;
 class HTMLSelectElement;
-class IntSize;
 class LocalFrame;
 class WebExternalPopupMenu;
 class WebMouseEvent;
@@ -67,7 +65,7 @@ public:
 
 private:
     // PopupMenu methods:
-    void show(const FloatQuad& controlPosition, const IntSize&, int index) override;
+    void show() override;
     void hide() override;
     void updateFromElement() override;
     void disconnectClient() override;
@@ -78,7 +76,9 @@ private:
     void didAcceptIndices(const WebVector<int>& indices) override;
     void didCancel() override;
 
+    bool showInternal();
     void dispatchEvent(Timer<ExternalPopupMenu>*);
+    void update();
 
     RawPtrWillBeMember<HTMLSelectElement> m_ownerElement;
     RefPtrWillBeMember<LocalFrame> m_localFrame;
@@ -87,6 +87,8 @@ private:
     Timer<ExternalPopupMenu> m_dispatchEventTimer;
     // The actual implementor of the show menu.
     WebExternalPopupMenu* m_webExternalPopupMenu;
+    uint64_t m_shownDOMTreeVersion = 0;
+    bool m_needsUpdate = false;
 };
 
 } // namespace blink

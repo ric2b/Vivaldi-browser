@@ -10,8 +10,6 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
-#include "cc/layers/delegated_frame_provider.h"
-#include "cc/layers/delegated_frame_resource_collection.h"
 #include "cc/output/copy_output_result.h"
 #include "cc/surfaces/surface_factory_client.h"
 #include "content/browser/compositor/image_transport_factory.h"
@@ -87,7 +85,6 @@ class CONTENT_EXPORT DelegatedFrameHost
       public ui::LayerOwnerDelegate,
       public ImageTransportFactoryObserver,
       public DelegatedFrameEvictorClient,
-      public cc::DelegatedFrameResourceCollectionClient,
       public cc::SurfaceFactoryClient,
       public base::SupportsWeakPtr<DelegatedFrameHost> {
  public:
@@ -115,9 +112,6 @@ class CONTENT_EXPORT DelegatedFrameHost
 
   // DelegatedFrameEvictorClient implementation.
   void EvictDelegatedFrame() override;
-
-  // cc::DelegatedFrameProviderClient implementation.
-  void UnusedResourcesAreAvailable() override;
 
   // cc::SurfaceFactoryClient implementation.
   void ReturnResources(const cc::ReturnedResourceArray& resources) override;
@@ -155,11 +149,12 @@ class CONTENT_EXPORT DelegatedFrameHost
   void BeginFrameSubscription(
       scoped_ptr<RenderWidgetHostViewFrameSubscriber> subscriber);
   void EndFrameSubscription();
-  bool HasFrameSubscriber() const { return frame_subscriber_; }
+  bool HasFrameSubscriber() const { return !!frame_subscriber_; }
   uint32_t GetSurfaceIdNamespace();
   // Returns a null SurfaceId if this DelegatedFrameHost has not yet created
   // a compositor Surface.
-  cc::SurfaceId SurfaceIdAtPoint(const gfx::Point& point,
+  cc::SurfaceId SurfaceIdAtPoint(cc::SurfaceHittestDelegate* delegate,
+                                 const gfx::Point& point,
                                  gfx::Point* transformed_point);
 
   // Given the SurfaceID of a Surface that is contained within this class'
@@ -171,9 +166,6 @@ class CONTENT_EXPORT DelegatedFrameHost
                                        gfx::Point* transformed_point);
 
   // Exposed for tests.
-  cc::DelegatedFrameProvider* FrameProviderForTesting() const {
-    return frame_provider_.get();
-  }
   cc::SurfaceId SurfaceIdForTesting() const { return surface_id_; }
   void OnCompositingDidCommitForTesting(ui::Compositor* compositor) {
     OnCompositingDidCommit(compositor);
@@ -219,21 +211,6 @@ class CONTENT_EXPORT DelegatedFrameHost
 
   // Called after async thumbnailer task completes.  Scales and crops the result
   // of the copy.
-  static void CopyFromCompositingSurfaceHasResult(
-      const gfx::Size& dst_size_in_pixel,
-      const SkColorType color_type,
-      const ReadbackRequestCallback& callback,
-      scoped_ptr<cc::CopyOutputResult> result);
-  static void PrepareTextureCopyOutputResult(
-      const gfx::Size& dst_size_in_pixel,
-      const SkColorType color_type,
-      const ReadbackRequestCallback& callback,
-      scoped_ptr<cc::CopyOutputResult> result);
-  static void PrepareBitmapCopyOutputResult(
-      const gfx::Size& dst_size_in_pixel,
-      const SkColorType color_type,
-      const ReadbackRequestCallback& callback,
-      scoped_ptr<cc::CopyOutputResult> result);
   static void CopyFromCompositingSurfaceHasResultForVideo(
       base::WeakPtr<DelegatedFrameHost> rwhva,
       scoped_refptr<OwnedMailbox> subscriber_texture,
@@ -262,10 +239,6 @@ class CONTENT_EXPORT DelegatedFrameHost
   DelegatedFrameHostClient* const client_;
   ui::Compositor* compositor_;
 
-  // True if this renders into a Surface, false if it renders into a delegated
-  // layer.
-  bool use_surfaces_;
-
   std::vector<base::Closure> on_compositing_did_commit_callbacks_;
 
   // The vsync manager we are observing for changes, if any.
@@ -292,14 +265,6 @@ class CONTENT_EXPORT DelegatedFrameHost
   // skipped.
   bool skipped_frames_;
   std::vector<ui::LatencyInfo> skipped_latency_info_list_;
-
-  // Holds delegated resources that have been given to a DelegatedFrameProvider,
-  // and gives back resources when they are no longer in use for return to the
-  // renderer.
-  scoped_refptr<cc::DelegatedFrameResourceCollection> resource_collection_;
-
-  // Provides delegated frame updates to the cc::DelegatedRendererLayer.
-  scoped_refptr<cc::DelegatedFrameProvider> frame_provider_;
 
   // State for rendering into a Surface.
   scoped_ptr<cc::SurfaceIdAllocator> id_allocator_;

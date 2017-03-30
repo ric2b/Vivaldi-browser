@@ -36,6 +36,9 @@ void AXViewObjWrapper::GetChildren(
     std::vector<AXAuraObjWrapper*>* out_children) {
   // TODO(dtseng): Need to handle |Widget| child of |View|.
   for (int i = 0; i < view_->child_count(); ++i) {
+    if (!view_->child_at(i)->visible())
+      continue;
+
     AXAuraObjWrapper* child =
         AXAuraObjCache::GetInstance()->GetOrCreate(view_->child_at(i));
     out_children->push_back(child);
@@ -50,8 +53,6 @@ void AXViewObjWrapper::Serialize(ui::AXNodeData* out_node_data) {
   out_node_data->role = view_data.role;
 
   out_node_data->state = view_data.state();
-  if (view_->HasFocus())
-    out_node_data->state |= 1 << ui::AX_STATE_FOCUSED;
   if (view_->IsFocusable())
     out_node_data->state |= 1 << ui::AX_STATE_FOCUSABLE;
   if (!view_->visible())

@@ -7,12 +7,12 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
-#include "base/prefs/pref_service.h"
 #include "base/process/launch.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/web_contents.h"
@@ -54,11 +54,6 @@ void LaunchDateAndTimeSettingsOnFile() {
       l10n_util::GetStringUTF8(IDS_OPTIONS_SETTINGS_SECTION_TITLE_DATETIME);
   chrome::ShowSettingsSubPageForProfile(ProfileManager::GetActiveUserProfile(),
                                         sub_page);
-
-#elif defined(OS_IOS)
-  // TODO(blundell): Remove this once iOS has its own version of this class.
-  // iOS does not have a way to launch the date and time settings.
-  NOTREACHED();
 
 #elif defined(OS_LINUX)
   struct ClockCommand {

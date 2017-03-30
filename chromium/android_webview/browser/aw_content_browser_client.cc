@@ -144,11 +144,11 @@ class AwAccessTokenStore : public content::AccessTokenStore {
   AwAccessTokenStore() { }
 
   // content::AccessTokenStore implementation
-  void LoadAccessTokens(const LoadAccessTokensCallbackType& request) override {
-    AccessTokenStore::AccessTokenSet access_token_set;
-    // AccessTokenSet and net::URLRequestContextGetter not used on Android,
+  void LoadAccessTokens(const LoadAccessTokensCallback& request) override {
+    AccessTokenStore::AccessTokenMap access_token_map;
+    // AccessTokenMap and net::URLRequestContextGetter not used on Android,
     // but Run needs to be called to finish the geolocation setup.
-    request.Run(access_token_set, NULL);
+    request.Run(access_token_map, NULL);
   }
   void SaveAccessToken(const GURL& server_url,
                        const base::string16& access_token) override {}
@@ -369,7 +369,6 @@ bool AwContentBrowserClient::AllowWorkerDatabase(
     const GURL& url,
     const base::string16& name,
     const base::string16& display_name,
-    unsigned long estimated_size,
     content::ResourceContext* context,
     const std::vector<std::pair<int, int> >& render_frames) {
   // Android WebView does not yet support web workers.

@@ -28,7 +28,7 @@ const SkColor kWarmWelcomeColor = SkColorSetRGB(0x64, 0x64, 0x64);
   ManagePasswordsBubbleModel* model = [self model];
   if (model)
     model->OnBrandLinkClicked();
-  [delegate_ viewShouldDismiss];
+  [self.delegate viewShouldDismiss];
   return YES;
 }
 
@@ -38,7 +38,7 @@ const SkColor kWarmWelcomeColor = SkColorSetRGB(0x64, 0x64, 0x64);
   base::scoped_nsobject<NSButton> button(
       [[WebUIHoverCloseButton alloc] initWithFrame:frame]);
   [button setAction:@selector(viewShouldDismiss)];
-  [button setTarget:delegate_];
+  [button setTarget:self.delegate];
   return button;
 }
 
@@ -84,36 +84,9 @@ const SkColor kWarmWelcomeColor = SkColorSetRGB(0x64, 0x64, 0x64);
   [view addSubview:closeButton_];
 
   // Title.
-  base::scoped_nsobject<HyperlinkTextView> titleView(
-      [[HyperlinkTextView alloc] initWithFrame:NSZeroRect]);
-  NSColor* textColor = [NSColor blackColor];
-  NSFont* font = ResourceBundle::GetSharedInstance()
-                     .GetFontList(ResourceBundle::SmallFont)
-                     .GetPrimaryFont()
-                     .GetNativeFont();
   ManagePasswordsBubbleModel* model = [self model];
-  [titleView setMessage:base::SysUTF16ToNSString(model->title())
-               withFont:font
-           messageColor:textColor];
-  NSRange titleBrandLinkRange = model->title_brand_link_range().ToNSRange();
-  if (titleBrandLinkRange.length) {
-    NSColor* linkColor =
-        skia::SkColorToCalibratedNSColor(chrome_style::GetLinkColor());
-    [titleView addLinkRange:titleBrandLinkRange
-                    withURL:nil
-                  linkColor:linkColor];
-    [titleView.get() setDelegate:self];
-
-    // Create the link with no underlining.
-    [titleView setLinkTextAttributes:nil];
-    NSTextStorage* text = [titleView textStorage];
-    [text addAttribute:NSUnderlineStyleAttributeName
-                 value:@(NSUnderlineStyleNone)
-                 range:titleBrandLinkRange];
-  } else {
-    // TODO(vasilii): remove if crbug.com/515189 is fixed.
-    [titleView setRefusesFirstResponder:YES];
-  }
+  HyperlinkTextView* titleView = TitleBubbleLabelWithLink(
+      model->title(), model->title_brand_link_range(), self);
 
   // Force the text to wrap to fit in the bubble size.
   int titleRightPadding =
@@ -136,15 +109,17 @@ const SkColor kWarmWelcomeColor = SkColorSetRGB(0x64, 0x64, 0x64);
 
   base::scoped_nsobject<NSTextField> warm_welcome;
   if ([self shouldShowGoogleSmartLockWelcome]) {
-    NSString* label_text =
-        l10n_util::GetNSString(IDS_PASSWORD_MANAGER_SMART_LOCK_WELCOME);
-    warm_welcome.reset([[self addLabel:label_text
-                                toView:view] retain]);
+    base::string16 label_text =
+        l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_SMART_LOCK_WELCOME);
+    warm_welcome.reset([[NSTextField alloc] initWithFrame:NSZeroRect]);
+    InitLabel(warm_welcome.get(), label_text);
+    [[warm_welcome cell] setWraps:YES];
     [warm_welcome setFrameSize:NSMakeSize(kDesiredBubbleWidth - 2*kFramePadding,
                                           MAXFLOAT)];
     [GTMUILocalizerAndLayoutTweaker sizeToFitFixedWidthTextField:warm_welcome];
-    NSColor* color = skia::SkColorToCalibratedNSColor(kWarmWelcomeColor);
+    NSColor* color = skia::SkColorToSRGBNSColor(kWarmWelcomeColor);
     [warm_welcome setTextColor:color];
+    [view addSubview:warm_welcome.get()];
   }
 
   NSArray* buttons = [self createButtonsAndAddThemToView:view];
@@ -199,7 +174,7 @@ const SkColor kWarmWelcomeColor = SkColorSetRGB(0x64, 0x64, 0x64);
 }
 
 - (ManagePasswordsBubbleModel*)model {
-  return [delegate_ model];
+  return [self.delegate model];
 }
 
 @end

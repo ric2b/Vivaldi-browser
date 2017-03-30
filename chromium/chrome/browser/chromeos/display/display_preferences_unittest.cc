@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "ash/display/display_layout_builder.h"
 #include "ash/display/display_layout_store.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/display_util.h"
@@ -22,8 +23,6 @@
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/prefs/scoped_user_pref_update.h"
-#include "base/prefs/testing_pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/display/display_configuration_observer.h"
@@ -31,6 +30,8 @@
 #include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "components/prefs/scoped_user_pref_update.h"
+#include "components/prefs/testing_pref_service.h"
 #include "ui/display/chromeos/display_configurator.h"
 #include "ui/gfx/geometry/vector3d_f.h"
 #include "ui/gfx/screen.h"
@@ -44,6 +45,8 @@ const char kPrimaryIdKey[] = "primary-id";
 const char kMirroredKey[] = "mirrored";
 const char kPositionKey[] = "position";
 const char kOffsetKey[] = "offset";
+const char kPlacementDisplayIdKey[] = "placement.display_id";
+const char kPlacementParentDisplayIdKey[] = "placement.parent_display_id";
 
 // The mean acceleration due to gravity on Earth in m/s^2.
 const float kMeanGravity = -9.80665f;
@@ -52,11 +55,6 @@ bool IsRotationLocked() {
   return ash::Shell::GetInstance()
       ->screen_orientation_controller()
       ->rotation_locked();
-}
-
-std::string ToPairString(const ash::DisplayIdPair& pair) {
-  return base::Int64ToString(pair.first) + "," +
-         base::Int64ToString(pair.second);
 }
 
 class DisplayPreferencesTest : public ash::test::AshTestBase {
@@ -80,7 +78,7 @@ class DisplayPreferencesTest : public ash::test::AshTestBase {
 
   void TearDown() override {
     observer_.reset();
-    TestingBrowserProcess::GetGlobal()->SetLocalState(NULL);
+    TestingBrowserProcess::GetGlobal()->SetLocalState(nullptr);
     ash::test::AshTestBase::TearDown();
   }
 
@@ -102,13 +100,15 @@ class DisplayPreferencesTest : public ash::test::AshTestBase {
 
   // Do not use the implementation of display_preferences.cc directly to avoid
   // notifying the update to the system.
-  void StoreDisplayLayoutPrefForPair(const ash::DisplayIdPair& pair,
-                                     ash::DisplayLayout::Position layout,
+  void StoreDisplayLayoutPrefForList(const ash::DisplayIdList& list,
+                                     ash::DisplayPlacement::Position position,
                                      int offset,
                                      int64_t primary_id) {
-    std::string name = ToPairString(pair);
+    std::string name = ash::DisplayIdListToString(list);
     DictionaryPrefUpdate update(&local_state_, prefs::kSecondaryDisplays);
-    ash::DisplayLayout display_layout(layout, offset);
+    ash::DisplayLayout display_layout;
+    display_layout.placement_list.push_back(
+        new ash::DisplayPlacement(position, offset));
     display_layout.primary_id = primary_id;
 
     DCHECK(!name.empty());
@@ -116,24 +116,24 @@ class DisplayPreferencesTest : public ash::test::AshTestBase {
     base::DictionaryValue* pref_data = update.Get();
     scoped_ptr<base::Value>layout_value(new base::DictionaryValue());
     if (pref_data->HasKey(name)) {
-      base::Value* value = NULL;
-      if (pref_data->Get(name, &value) && value != NULL)
+      base::Value* value = nullptr;
+      if (pref_data->Get(name, &value) && value != nullptr)
         layout_value.reset(value->DeepCopy());
     }
     if (ash::DisplayLayout::ConvertToValue(display_layout, layout_value.get()))
       pref_data->Set(name, layout_value.release());
   }
 
-  void StoreDisplayPropertyForPair(const ash::DisplayIdPair& pair,
+  void StoreDisplayPropertyForList(const ash::DisplayIdList& list,
                                    std::string key,
                                    scoped_ptr<base::Value> value) {
-    std::string name = ToPairString(pair);
+    std::string name = ash::DisplayIdListToString(list);
 
     DictionaryPrefUpdate update(&local_state_, prefs::kSecondaryDisplays);
     base::DictionaryValue* pref_data = update.Get();
 
     if (pref_data->HasKey(name)) {
-      base::Value* layout_value = NULL;
+      base::Value* layout_value = nullptr;
       pref_data->Get(name, &layout_value);
       if (layout_value)
         static_cast<base::DictionaryValue*>(layout_value)
@@ -146,17 +146,17 @@ class DisplayPreferencesTest : public ash::test::AshTestBase {
     }
   }
 
-  void StoreDisplayBoolPropertyForPair(const ash::DisplayIdPair& pair,
+  void StoreDisplayBoolPropertyForList(const ash::DisplayIdList& list,
                                        const std::string& key,
                                        bool value) {
-    StoreDisplayPropertyForPair(
-        pair, key, make_scoped_ptr(new base::FundamentalValue(value)));
+    StoreDisplayPropertyForList(
+        list, key, make_scoped_ptr(new base::FundamentalValue(value)));
   }
 
-  void StoreDisplayLayoutPrefForPair(const ash::DisplayIdPair& pair,
-                                     ash::DisplayLayout::Position layout,
+  void StoreDisplayLayoutPrefForList(const ash::DisplayIdList& list,
+                                     ash::DisplayPlacement::Position layout,
                                      int offset) {
-    StoreDisplayLayoutPrefForPair(pair, layout, offset, pair.first);
+    StoreDisplayLayoutPrefForList(list, layout, offset, list[0]);
   }
 
   void StoreDisplayOverscan(int64_t id, const gfx::Insets& insets) {
@@ -190,9 +190,13 @@ class DisplayPreferencesTest : public ash::test::AshTestBase {
     pref_data->SetInteger("orientation", static_cast<int>(rotation));
   }
 
-  std::string GetRegisteredDisplayLayoutStr(const ash::DisplayIdPair& pair) {
-    return ash::Shell::GetInstance()->display_manager()->layout_store()->
-        GetRegisteredDisplayLayout(pair).ToString();
+  std::string GetRegisteredDisplayPlacementStr(const ash::DisplayIdList& list) {
+    return ash::Shell::GetInstance()
+        ->display_manager()
+        ->layout_store()
+        ->GetRegisteredDisplayLayout(list)
+        .placement_list[0]
+        ->ToString();
   }
 
   PrefService* local_state() { return &local_state_; }
@@ -208,17 +212,18 @@ class DisplayPreferencesTest : public ash::test::AshTestBase {
 
 }  // namespace
 
-TEST_F(DisplayPreferencesTest, PairedLayoutOverrides) {
+TEST_F(DisplayPreferencesTest, ListedLayoutOverrides) {
   UpdateDisplay("100x100,200x200");
   ash::DisplayManager* display_manager =
       ash::Shell::GetInstance()->display_manager();
 
-  ash::DisplayIdPair pair = display_manager->GetCurrentDisplayIdPair();
-  ash::DisplayIdPair dummy_pair = std::make_pair(pair.first, pair.second + 1);
-  ASSERT_NE(pair.first, dummy_pair.second);
+  ash::DisplayIdList list = display_manager->GetCurrentDisplayIdList();
+  ash::DisplayIdList dummy_list =
+      ash::test::CreateDisplayIdList2(list[0], list[1] + 1);
+  ASSERT_NE(list[0], dummy_list[1]);
 
-  StoreDisplayLayoutPrefForPair(pair, ash::DisplayLayout::TOP, 20);
-  StoreDisplayLayoutPrefForPair(dummy_pair, ash::DisplayLayout::LEFT, 30);
+  StoreDisplayLayoutPrefForList(list, ash::DisplayPlacement::TOP, 20);
+  StoreDisplayLayoutPrefForList(dummy_list, ash::DisplayPlacement::LEFT, 30);
   StoreDisplayPowerStateForTest(
       chromeos::DISPLAY_POWER_INTERNAL_OFF_EXTERNAL_ON);
 
@@ -231,13 +236,18 @@ TEST_F(DisplayPreferencesTest, PairedLayoutOverrides) {
 
   shell->display_manager()->UpdateDisplays();
   // Check if the layout settings are notified to the system properly.
-  // The paired layout overrides old layout.
-  // Inverted one of for specified pair (id1, id2).  Not used for the pair
+  // The new layout overrides old layout.
+  // Inverted one of for specified pair (id1, id2).  Not used for the list
   // (id1, dummy_id) since dummy_id is not connected right now.
-  EXPECT_EQ("top, 20",
-            shell->display_manager()->GetCurrentDisplayLayout().ToString());
-  EXPECT_EQ("top, 20", GetRegisteredDisplayLayoutStr(pair));
-  EXPECT_EQ("left, 30", GetRegisteredDisplayLayoutStr(dummy_pair));
+  EXPECT_EQ("id=2200000001, parent=2200000000, top, 20",
+            shell->display_manager()
+                ->GetCurrentDisplayLayout()
+                .placement_list[0]
+                ->ToString());
+  EXPECT_EQ("id=2200000001, parent=2200000000, top, 20",
+            GetRegisteredDisplayPlacementStr(list));
+  EXPECT_EQ("id=2200000002, parent=2200000000, left, 30",
+            GetRegisteredDisplayPlacementStr(dummy_list));
 }
 
 TEST_F(DisplayPreferencesTest, BasicStores) {
@@ -247,7 +257,7 @@ TEST_F(DisplayPreferencesTest, BasicStores) {
       ash::Shell::GetInstance()->display_manager();
 
   UpdateDisplay("200x200*2, 400x300#400x400|300x200*1.25");
-  int64_t id1 = gfx::Screen::GetNativeScreen()->GetPrimaryDisplay().id();
+  int64_t id1 = gfx::Screen::GetScreen()->GetPrimaryDisplay().id();
   ash::test::ScopedSetInternalDisplayId set_internal(id1);
   int64_t id2 = ash::ScreenUtil::GetSecondaryDisplay().id();
   int64_t dummy_id = id2 + 1;
@@ -263,13 +273,23 @@ TEST_F(DisplayPreferencesTest, BasicStores) {
   display_manager->SetColorCalibrationProfile(id2, ui::COLOR_PROFILE_DYNAMIC);
 
   LoggedInAsUser();
-  ash::DisplayLayout layout(ash::DisplayLayout::TOP, 10);
-  SetCurrentDisplayLayout(layout);
-  StoreDisplayLayoutPrefForTest(
-      id1, dummy_id, ash::DisplayLayout(ash::DisplayLayout::LEFT, 20));
+
+  display_manager->SetLayoutForCurrentDisplays(
+      ash::test::CreateDisplayLayout(ash::DisplayPlacement::TOP, 10));
+  const ash::DisplayLayout& layout = display_manager->GetCurrentDisplayLayout();
+  EXPECT_EQ(ash::DisplayPlacement::TOP, layout.placement_list[0]->position);
+  EXPECT_EQ(10, layout.placement_list[0]->offset);
+
+  ash::DisplayLayoutBuilder dummy_layout_builder(id1);
+  dummy_layout_builder.SetSecondaryPlacement(dummy_id,
+                                             ash::DisplayPlacement::LEFT, 20);
+  scoped_ptr<ash::DisplayLayout> dummy_layout(dummy_layout_builder.Build());
+  ash::DisplayIdList list = ash::test::CreateDisplayIdList2(id1, dummy_id);
+  StoreDisplayLayoutPrefForTest(list, *dummy_layout);
+
   // Can't switch to a display that does not exist.
   window_tree_host_manager->SetPrimaryDisplayId(dummy_id);
-  EXPECT_NE(dummy_id, ash::Shell::GetScreen()->GetPrimaryDisplay().id());
+  EXPECT_NE(dummy_id, gfx::Screen::GetScreen()->GetPrimaryDisplay().id());
 
   window_tree_host_manager->SetOverscanInsets(id1, gfx::Insets(10, 11, 12, 13));
   display_manager->SetDisplayRotation(id1, gfx::Display::ROTATE_90,
@@ -279,15 +299,21 @@ TEST_F(DisplayPreferencesTest, BasicStores) {
 
   const base::DictionaryValue* displays =
       local_state()->GetDictionary(prefs::kSecondaryDisplays);
-  const base::DictionaryValue* layout_value = NULL;
+  const base::DictionaryValue* layout_value = nullptr;
   std::string key = base::Int64ToString(id1) + "," + base::Int64ToString(id2);
-  EXPECT_TRUE(displays->GetDictionary(key, &layout_value));
+  std::string dummy_key =
+      base::Int64ToString(id1) + "," + base::Int64ToString(dummy_id);
+  EXPECT_TRUE(displays->GetDictionary(dummy_key, &layout_value));
 
   ash::DisplayLayout stored_layout;
   EXPECT_TRUE(ash::DisplayLayout::ConvertFromValue(*layout_value,
                                                    &stored_layout));
-  EXPECT_EQ(layout.position, stored_layout.position);
-  EXPECT_EQ(layout.offset, stored_layout.offset);
+  ASSERT_EQ(1u, stored_layout.placement_list.size());
+
+  EXPECT_EQ(dummy_layout->placement_list[0]->position,
+            stored_layout.placement_list[0]->position);
+  EXPECT_EQ(dummy_layout->placement_list[0]->offset,
+            stored_layout.placement_list[0]->offset);
 
   bool mirrored = true;
   EXPECT_TRUE(layout_value->GetBoolean(kMirroredKey, &mirrored));
@@ -295,7 +321,7 @@ TEST_F(DisplayPreferencesTest, BasicStores) {
 
   const base::DictionaryValue* properties =
       local_state()->GetDictionary(prefs::kDisplayProperties);
-  const base::DictionaryValue* property = NULL;
+  const base::DictionaryValue* property = nullptr;
   EXPECT_TRUE(properties->GetDictionary(base::Int64ToString(id1), &property));
   int ui_scale = 0;
   int rotation = 0;
@@ -351,6 +377,8 @@ TEST_F(DisplayPreferencesTest, BasicStores) {
 
   window_tree_host_manager->SetPrimaryDisplayId(id2);
 
+  EXPECT_EQ(id2, gfx::Screen::GetScreen()->GetPrimaryDisplay().id());
+
   EXPECT_TRUE(properties->GetDictionary(base::Int64ToString(id1), &property));
   width = 0;
   height = 0;
@@ -370,13 +398,22 @@ TEST_F(DisplayPreferencesTest, BasicStores) {
   EXPECT_EQ(200, height);
   EXPECT_EQ(1250, device_scale_factor);
 
-  // The layout remains the same.
+  // The layout is swapped.
   EXPECT_TRUE(displays->GetDictionary(key, &layout_value));
+
   EXPECT_TRUE(ash::DisplayLayout::ConvertFromValue(*layout_value,
                                                    &stored_layout));
-  EXPECT_EQ(layout.position, stored_layout.position);
-  EXPECT_EQ(layout.offset, stored_layout.offset);
+  ASSERT_EQ(1u, stored_layout.placement_list.size());
+  const ash::DisplayPlacement& stored_placement =
+      *stored_layout.placement_list[0];
+  EXPECT_EQ(ash::DisplayPlacement::BOTTOM, stored_placement.position);
+  EXPECT_EQ(-10, stored_placement.offset);
+  EXPECT_EQ(id1, stored_placement.display_id);
+  EXPECT_EQ(id2, stored_placement.parent_display_id);
   EXPECT_EQ(id2, stored_layout.primary_id);
+
+  if (true)
+    return;
 
   mirrored = true;
   EXPECT_TRUE(layout_value->GetBoolean(kMirroredKey, &mirrored));
@@ -385,8 +422,8 @@ TEST_F(DisplayPreferencesTest, BasicStores) {
   EXPECT_TRUE(layout_value->GetString(kPrimaryIdKey, &primary_id_str));
   EXPECT_EQ(base::Int64ToString(id2), primary_id_str);
 
-  SetCurrentDisplayLayout(
-      ash::DisplayLayout(ash::DisplayLayout::BOTTOM, 20));
+  display_manager->SetLayoutForCurrentDisplays(
+      ash::test::CreateDisplayLayout(ash::DisplayPlacement::BOTTOM, 20));
 
   UpdateDisplay("1+0-200x200*2,1+0-200x200");
   // Mirrored.
@@ -394,9 +431,15 @@ TEST_F(DisplayPreferencesTest, BasicStores) {
   std::string position;
   EXPECT_TRUE(displays->GetDictionary(key, &layout_value));
   EXPECT_TRUE(layout_value->GetString(kPositionKey, &position));
-  EXPECT_EQ("top", position);
+  EXPECT_EQ("bottom", position);
   EXPECT_TRUE(layout_value->GetInteger(kOffsetKey, &offset));
-  EXPECT_EQ(-20, offset);
+  EXPECT_EQ(20, offset);
+  std::string id;
+  EXPECT_TRUE(layout_value->GetString(kPlacementDisplayIdKey, &id));
+  EXPECT_EQ(base::Int64ToString(id1), id);
+  EXPECT_TRUE(layout_value->GetString(kPlacementParentDisplayIdKey, &id));
+  EXPECT_EQ(base::Int64ToString(id2), id);
+
   mirrored = false;
   EXPECT_TRUE(layout_value->GetBoolean(kMirroredKey, &mirrored));
   EXPECT_TRUE(mirrored);
@@ -416,9 +459,9 @@ TEST_F(DisplayPreferencesTest, BasicStores) {
   EXPECT_EQ(200, height);
 
   // Set new display's selected resolution.
-  display_manager->RegisterDisplayProperty(
-      id2 + 1, gfx::Display::ROTATE_0, 1.0f, NULL, gfx::Size(500, 400), 1.0f,
-      ui::COLOR_PROFILE_STANDARD);
+  display_manager->RegisterDisplayProperty(id2 + 1, gfx::Display::ROTATE_0,
+                                           1.0f, nullptr, gfx::Size(500, 400),
+                                           1.0f, ui::COLOR_PROFILE_STANDARD);
 
   UpdateDisplay("200x200*2, 600x500#600x500|500x400");
 
@@ -442,9 +485,9 @@ TEST_F(DisplayPreferencesTest, BasicStores) {
   EXPECT_FALSE(property->GetInteger("height", &height));
 
   // Set yet another new display's selected resolution.
-  display_manager->RegisterDisplayProperty(
-      id2 + 1, gfx::Display::ROTATE_0, 1.0f, NULL, gfx::Size(500, 400), 1.0f,
-      ui::COLOR_PROFILE_STANDARD);
+  display_manager->RegisterDisplayProperty(id2 + 1, gfx::Display::ROTATE_0,
+                                           1.0f, nullptr, gfx::Size(500, 400),
+                                           1.0f, ui::COLOR_PROFILE_STANDARD);
   // Disconnect 2nd display first to generate new id for external display.
   UpdateDisplay("200x200*2");
   UpdateDisplay("200x200*2, 500x400#600x500|500x400%60.0f");
@@ -474,7 +517,7 @@ TEST_F(DisplayPreferencesTest, PreventStore) {
   ResolutionNotificationController::SuppressTimerForTest();
   LoggedInAsUser();
   UpdateDisplay("400x300#500x400|400x300|300x200");
-  int64_t id = ash::Shell::GetScreen()->GetPrimaryDisplay().id();
+  int64_t id = gfx::Screen::GetScreen()->GetPrimaryDisplay().id();
   // Set display's resolution in single display. It creates the notification and
   // display preferences should not stored meanwhile.
   ash::Shell* shell = ash::Shell::GetInstance();
@@ -490,7 +533,7 @@ TEST_F(DisplayPreferencesTest, PreventStore) {
 
   const base::DictionaryValue* properties =
       local_state()->GetDictionary(prefs::kDisplayProperties);
-  const base::DictionaryValue* property = NULL;
+  const base::DictionaryValue* property = nullptr;
   EXPECT_TRUE(properties->GetDictionary(base::Int64ToString(id), &property));
   int width = 0, height = 0;
   EXPECT_FALSE(property->GetInteger("width", &width));
@@ -510,7 +553,7 @@ TEST_F(DisplayPreferencesTest, PreventStore) {
       id, ash::DisplayMode(gfx::Size(300, 200), 60.0f, false, true));
   UpdateDisplay("300x200#500x400|400x300|300x200");
 
-  property = NULL;
+  property = nullptr;
   EXPECT_TRUE(properties->GetDictionary(base::Int64ToString(id), &property));
   EXPECT_TRUE(property->GetInteger("width", &width));
   EXPECT_TRUE(property->GetInteger("height", &height));
@@ -520,44 +563,79 @@ TEST_F(DisplayPreferencesTest, PreventStore) {
 
 TEST_F(DisplayPreferencesTest, StoreForSwappedDisplay) {
   UpdateDisplay("100x100,200x200");
-  int64_t id1 = gfx::Screen::GetNativeScreen()->GetPrimaryDisplay().id();
+  int64_t id1 = gfx::Screen::GetScreen()->GetPrimaryDisplay().id();
   int64_t id2 = ash::ScreenUtil::GetSecondaryDisplay().id();
 
-  ash::WindowTreeHostManager* window_tree_host_manager =
-      ash::Shell::GetInstance()->window_tree_host_manager();
-  window_tree_host_manager->SwapPrimaryDisplay();
+  LoggedInAsUser();
+
+  ash::test::SwapPrimaryDisplay();
   ASSERT_EQ(id1, ash::ScreenUtil::GetSecondaryDisplay().id());
 
-  LoggedInAsUser();
-  ash::DisplayLayout layout(ash::DisplayLayout::TOP, 10);
-  SetCurrentDisplayLayout(layout);
-  layout = layout.Invert();
-
+  std::string key = base::Int64ToString(id1) + "," + base::Int64ToString(id2);
   const base::DictionaryValue* displays =
       local_state()->GetDictionary(prefs::kSecondaryDisplays);
-  const base::DictionaryValue* new_value = NULL;
-  std::string key = base::Int64ToString(id1) + "," + base::Int64ToString(id2);
-  EXPECT_TRUE(displays->GetDictionary(key, &new_value));
+  // Initial saved value is swapped.
+  {
+    const base::DictionaryValue* new_value = nullptr;
+    EXPECT_TRUE(displays->GetDictionary(key, &new_value));
+    ash::DisplayLayout stored_layout;
+    EXPECT_TRUE(
+        ash::DisplayLayout::ConvertFromValue(*new_value, &stored_layout));
+    ASSERT_EQ(1u, stored_layout.placement_list.size());
+    const ash::DisplayPlacement& stored_placement =
+        *stored_layout.placement_list[0];
+    EXPECT_EQ(ash::DisplayPlacement::LEFT, stored_placement.position);
+    EXPECT_EQ(0, stored_placement.offset);
+    EXPECT_EQ(id1, stored_placement.display_id);
+    EXPECT_EQ(id2, stored_placement.parent_display_id);
+    EXPECT_EQ(id2, stored_layout.primary_id);
+  }
 
-  ash::DisplayLayout stored_layout;
-  EXPECT_TRUE(ash::DisplayLayout::ConvertFromValue(*new_value, &stored_layout));
-  EXPECT_EQ(layout.position, stored_layout.position);
-  EXPECT_EQ(layout.offset, stored_layout.offset);
-  EXPECT_EQ(id2, stored_layout.primary_id);
+  // Updating layout with primary swapped should save the correct value.
+  {
+    ash::Shell::GetInstance()->display_manager()->SetLayoutForCurrentDisplays(
+        ash::test::CreateDisplayLayout(ash::DisplayPlacement::TOP, 10));
+    const base::DictionaryValue* new_value = nullptr;
+    EXPECT_TRUE(displays->GetDictionary(key, &new_value));
+    ash::DisplayLayout stored_layout;
+    EXPECT_TRUE(
+        ash::DisplayLayout::ConvertFromValue(*new_value, &stored_layout));
+    ASSERT_EQ(1u, stored_layout.placement_list.size());
+    const ash::DisplayPlacement& stored_placement =
+        *stored_layout.placement_list[0];
+    EXPECT_EQ(ash::DisplayPlacement::TOP, stored_placement.position);
+    EXPECT_EQ(10, stored_placement.offset);
+    EXPECT_EQ(id1, stored_placement.display_id);
+    EXPECT_EQ(id2, stored_placement.parent_display_id);
+    EXPECT_EQ(id2, stored_layout.primary_id);
+  }
 
-  window_tree_host_manager->SwapPrimaryDisplay();
-  EXPECT_TRUE(displays->GetDictionary(key, &new_value));
-  EXPECT_TRUE(ash::DisplayLayout::ConvertFromValue(*new_value, &stored_layout));
-  EXPECT_EQ(layout.position, stored_layout.position);
-  EXPECT_EQ(layout.offset, stored_layout.offset);
-  EXPECT_EQ(id1, stored_layout.primary_id);
+  // Swapping primary will save the swapped value.
+  {
+    ash::test::SwapPrimaryDisplay();
+    const base::DictionaryValue* new_value = nullptr;
+    EXPECT_TRUE(displays->GetDictionary(key, &new_value));
+    ash::DisplayLayout stored_layout;
+
+    EXPECT_TRUE(displays->GetDictionary(key, &new_value));
+    EXPECT_TRUE(
+        ash::DisplayLayout::ConvertFromValue(*new_value, &stored_layout));
+    ASSERT_EQ(1u, stored_layout.placement_list.size());
+    const ash::DisplayPlacement& stored_placement =
+        *stored_layout.placement_list[0];
+    EXPECT_EQ(ash::DisplayPlacement::BOTTOM, stored_placement.position);
+    EXPECT_EQ(-10, stored_placement.offset);
+    EXPECT_EQ(id2, stored_placement.display_id);
+    EXPECT_EQ(id1, stored_placement.parent_display_id);
+    EXPECT_EQ(id1, stored_layout.primary_id);
+  }
 }
 
 TEST_F(DisplayPreferencesTest, RestoreColorProfiles) {
   ash::DisplayManager* display_manager =
       ash::Shell::GetInstance()->display_manager();
 
-  int64_t id1 = gfx::Screen::GetNativeScreen()->GetPrimaryDisplay().id();
+  int64_t id1 = gfx::Screen::GetScreen()->GetPrimaryDisplay().id();
 
   StoreColorProfile(id1, "dynamic");
 
@@ -589,16 +667,16 @@ TEST_F(DisplayPreferencesTest, DontStoreInGuestMode) {
   UpdateDisplay("200x200*2,200x200");
 
   LoggedInAsGuest();
-  int64_t id1 = ash::Shell::GetScreen()->GetPrimaryDisplay().id();
+  int64_t id1 = gfx::Screen::GetScreen()->GetPrimaryDisplay().id();
   ash::test::ScopedSetInternalDisplayId set_internal(id1);
   int64_t id2 = ash::ScreenUtil::GetSecondaryDisplay().id();
-  ash::DisplayLayout layout(ash::DisplayLayout::TOP, 10);
-  SetCurrentDisplayLayout(layout);
   ash::DisplayManager* display_manager =
       ash::Shell::GetInstance()->display_manager();
+  display_manager->SetLayoutForCurrentDisplays(
+      ash::test::CreateDisplayLayout(ash::DisplayPlacement::TOP, 10));
   ash::SetDisplayUIScale(id1, 1.25f);
   window_tree_host_manager->SetPrimaryDisplayId(id2);
-  int64_t new_primary = ash::Shell::GetScreen()->GetPrimaryDisplay().id();
+  int64_t new_primary = gfx::Screen::GetScreen()->GetPrimaryDisplay().id();
   window_tree_host_manager->SetOverscanInsets(new_primary,
                                               gfx::Insets(10, 11, 12, 13));
   display_manager->SetDisplayRotation(new_primary, gfx::Display::ROTATE_90,
@@ -611,11 +689,12 @@ TEST_F(DisplayPreferencesTest, DontStoreInGuestMode) {
       prefs::kDisplayProperties)->HasUserSetting());
 
   // Settings are still notified to the system.
-  gfx::Screen* screen = gfx::Screen::GetNativeScreen();
+  gfx::Screen* screen = gfx::Screen::GetScreen();
   EXPECT_EQ(id2, screen->GetPrimaryDisplay().id());
-  EXPECT_EQ(ash::DisplayLayout::BOTTOM,
-            display_manager->GetCurrentDisplayLayout().position);
-  EXPECT_EQ(-10, display_manager->GetCurrentDisplayLayout().offset);
+  const ash::DisplayPlacement& placement =
+      *display_manager->GetCurrentDisplayLayout().placement_list[0];
+  EXPECT_EQ(ash::DisplayPlacement::BOTTOM, placement.position);
+  EXPECT_EQ(-10, placement.offset);
   const gfx::Display& primary_display = screen->GetPrimaryDisplay();
   EXPECT_EQ("178x176", primary_display.bounds().size().ToString());
   EXPECT_EQ(gfx::Display::ROTATE_90, primary_display.rotation());
@@ -690,7 +769,7 @@ TEST_F(DisplayPreferencesTest, DontSaveAndRestoreAllOff) {
 TEST_F(DisplayPreferencesTest, DontSaveMaximizeModeControllerRotations) {
   ash::Shell* shell = ash::Shell::GetInstance();
   gfx::Display::SetInternalDisplayId(
-      gfx::Screen::GetNativeScreen()->GetPrimaryDisplay().id());
+      gfx::Screen::GetScreen()->GetPrimaryDisplay().id());
   ash::DisplayManager* display_manager = shell->display_manager();
   LoggedInAsUser();
   // Populate the properties.
@@ -722,7 +801,7 @@ TEST_F(DisplayPreferencesTest, DontSaveMaximizeModeControllerRotations) {
 
   const base::DictionaryValue* properties =
       local_state()->GetDictionary(prefs::kDisplayProperties);
-  const base::DictionaryValue* property = NULL;
+  const base::DictionaryValue* property = nullptr;
   EXPECT_TRUE(properties->GetDictionary(
       base::Int64ToString(gfx::Display::InternalDisplayId()), &property));
   int rotation = -1;
@@ -733,7 +812,7 @@ TEST_F(DisplayPreferencesTest, DontSaveMaximizeModeControllerRotations) {
   // rotation.
   StoreDisplayPrefs();
   properties = local_state()->GetDictionary(prefs::kDisplayProperties);
-  property = NULL;
+  property = nullptr;
   EXPECT_TRUE(properties->GetDictionary(
       base::Int64ToString(gfx::Display::InternalDisplayId()), &property));
   rotation = -1;
@@ -744,7 +823,7 @@ TEST_F(DisplayPreferencesTest, DontSaveMaximizeModeControllerRotations) {
 // Tests that the rotation state is saved without a user being logged in.
 TEST_F(DisplayPreferencesTest, StoreRotationStateNoLogin) {
   gfx::Display::SetInternalDisplayId(
-            gfx::Screen::GetNativeScreen()->GetPrimaryDisplay().id());
+      gfx::Screen::GetScreen()->GetPrimaryDisplay().id());
   EXPECT_FALSE(local_state()->HasPrefPath(prefs::kDisplayRotationLock));
 
   bool current_rotation_lock = IsRotationLocked();
@@ -766,7 +845,7 @@ TEST_F(DisplayPreferencesTest, StoreRotationStateNoLogin) {
 // Tests that the rotation state is saved when a guest is logged in.
 TEST_F(DisplayPreferencesTest, StoreRotationStateGuest) {
   gfx::Display::SetInternalDisplayId(
-      gfx::Screen::GetNativeScreen()->GetPrimaryDisplay().id());
+      gfx::Screen::GetScreen()->GetPrimaryDisplay().id());
   EXPECT_FALSE(local_state()->HasPrefPath(prefs::kDisplayRotationLock));
   LoggedInAsGuest();
 
@@ -789,7 +868,7 @@ TEST_F(DisplayPreferencesTest, StoreRotationStateGuest) {
 // Tests that the rotation state is saved when a normal user is logged in.
 TEST_F(DisplayPreferencesTest, StoreRotationStateNormalUser) {
   gfx::Display::SetInternalDisplayId(
-      gfx::Screen::GetNativeScreen()->GetPrimaryDisplay().id());
+      gfx::Screen::GetScreen()->GetPrimaryDisplay().id());
   EXPECT_FALSE(local_state()->HasPrefPath(prefs::kDisplayRotationLock));
   LoggedInAsGuest();
 
@@ -813,7 +892,7 @@ TEST_F(DisplayPreferencesTest, StoreRotationStateNormalUser) {
 // entering maximize mode applies the state.
 TEST_F(DisplayPreferencesTest, LoadRotationNoLogin) {
   gfx::Display::SetInternalDisplayId(
-      gfx::Screen::GetNativeScreen()->GetPrimaryDisplay().id());
+      gfx::Screen::GetScreen()->GetPrimaryDisplay().id());
   ASSERT_FALSE(local_state()->HasPrefPath(prefs::kDisplayRotationLock));
 
   ash::Shell* shell = ash::Shell::GetInstance();
@@ -864,7 +943,7 @@ TEST_F(DisplayPreferencesTest, LoadRotationNoLogin) {
 // Tests that rotation lock being set causes the rotation state to be saved.
 TEST_F(DisplayPreferencesTest, RotationLockTriggersStore) {
   gfx::Display::SetInternalDisplayId(
-    gfx::Screen::GetNativeScreen()->GetPrimaryDisplay().id());
+      gfx::Screen::GetScreen()->GetPrimaryDisplay().id());
   ASSERT_FALSE(local_state()->HasPrefPath(prefs::kDisplayRotationLock));
 
   ash::Shell::GetInstance()->screen_orientation_controller()->SetRotationLocked(
@@ -886,16 +965,15 @@ TEST_F(DisplayPreferencesTest, SaveUnifiedMode) {
   display_manager->SetUnifiedDesktopEnabled(true);
 
   UpdateDisplay("200x200,100x100");
-  ash::DisplayIdPair pair = display_manager->GetCurrentDisplayIdPair();
-  EXPECT_EQ(
-      "400x200",
-      gfx::Screen::GetNativeScreen()->GetPrimaryDisplay().size().ToString());
+  ash::DisplayIdList list = display_manager->GetCurrentDisplayIdList();
+  EXPECT_EQ("400x200",
+            gfx::Screen::GetScreen()->GetPrimaryDisplay().size().ToString());
 
   const base::DictionaryValue* secondary_displays =
       local_state()->GetDictionary(prefs::kSecondaryDisplays);
-  const base::DictionaryValue* new_value = NULL;
-  EXPECT_TRUE(
-      secondary_displays->GetDictionary(ToPairString(pair), &new_value));
+  const base::DictionaryValue* new_value = nullptr;
+  EXPECT_TRUE(secondary_displays->GetDictionary(
+      ash::DisplayIdListToString(list), &new_value));
 
   ash::DisplayLayout stored_layout;
   EXPECT_TRUE(ash::DisplayLayout::ConvertFromValue(*new_value, &stored_layout));
@@ -904,28 +982,27 @@ TEST_F(DisplayPreferencesTest, SaveUnifiedMode) {
 
   const base::DictionaryValue* displays =
       local_state()->GetDictionary(prefs::kDisplayProperties);
-  int64_t unified_id = gfx::Screen::GetNativeScreen()->GetPrimaryDisplay().id();
+  int64_t unified_id = gfx::Screen::GetScreen()->GetPrimaryDisplay().id();
   EXPECT_FALSE(
       displays->GetDictionary(base::Int64ToString(unified_id), &new_value));
 
   ash::test::SetDisplayResolution(unified_id, gfx::Size(200, 100));
-  EXPECT_EQ(
-      "200x100",
-      gfx::Screen::GetNativeScreen()->GetPrimaryDisplay().size().ToString());
+  EXPECT_EQ("200x100",
+            gfx::Screen::GetScreen()->GetPrimaryDisplay().size().ToString());
   EXPECT_FALSE(
       displays->GetDictionary(base::Int64ToString(unified_id), &new_value));
 
   // Mirror mode should remember if the default mode was unified.
   display_manager->SetMirrorMode(true);
-  ASSERT_TRUE(
-      secondary_displays->GetDictionary(ToPairString(pair), &new_value));
+  ASSERT_TRUE(secondary_displays->GetDictionary(
+      ash::DisplayIdListToString(list), &new_value));
   EXPECT_TRUE(ash::DisplayLayout::ConvertFromValue(*new_value, &stored_layout));
   EXPECT_TRUE(stored_layout.default_unified);
   EXPECT_TRUE(stored_layout.mirrored);
 
   display_manager->SetMirrorMode(false);
-  ASSERT_TRUE(
-      secondary_displays->GetDictionary(ToPairString(pair), &new_value));
+  ASSERT_TRUE(secondary_displays->GetDictionary(
+      ash::DisplayIdListToString(list), &new_value));
   EXPECT_TRUE(ash::DisplayLayout::ConvertFromValue(*new_value, &stored_layout));
   EXPECT_TRUE(stored_layout.default_unified);
   EXPECT_FALSE(stored_layout.mirrored);
@@ -933,20 +1010,19 @@ TEST_F(DisplayPreferencesTest, SaveUnifiedMode) {
   // Exit unified mode.
   display_manager->SetDefaultMultiDisplayModeForCurrentDisplays(
       ash::DisplayManager::EXTENDED);
-  display_manager->ReconfigureDisplays();
-  ASSERT_TRUE(
-      secondary_displays->GetDictionary(ToPairString(pair), &new_value));
+  ASSERT_TRUE(secondary_displays->GetDictionary(
+      ash::DisplayIdListToString(list), &new_value));
   EXPECT_TRUE(ash::DisplayLayout::ConvertFromValue(*new_value, &stored_layout));
   EXPECT_FALSE(stored_layout.default_unified);
   EXPECT_FALSE(stored_layout.mirrored);
 }
 
 TEST_F(DisplayPreferencesTest, RestoreUnifiedMode) {
-  int64_t id1 = gfx::Screen::GetNativeScreen()->GetPrimaryDisplay().id();
-  ash::DisplayIdPair pair = std::make_pair(id1, id1 + 1);
-  StoreDisplayBoolPropertyForPair(pair, "default_unified", true);
-  StoreDisplayPropertyForPair(
-      pair, "primary-id",
+  int64_t id1 = gfx::Screen::GetScreen()->GetPrimaryDisplay().id();
+  ash::DisplayIdList list = ash::test::CreateDisplayIdList2(id1, id1 + 1);
+  StoreDisplayBoolPropertyForList(list, "default_unified", true);
+  StoreDisplayPropertyForList(
+      list, "primary-id",
       make_scoped_ptr(new base::StringValue(base::Int64ToString(id1))));
   LoadDisplayPreferences(false);
 
@@ -958,14 +1034,14 @@ TEST_F(DisplayPreferencesTest, RestoreUnifiedMode) {
 
   // Restored to unified.
   display_manager->SetUnifiedDesktopEnabled(true);
-  StoreDisplayBoolPropertyForPair(pair, "default_unified", true);
+  StoreDisplayBoolPropertyForList(list, "default_unified", true);
   LoadDisplayPreferences(false);
   UpdateDisplay("100x100,200x200");
   EXPECT_TRUE(display_manager->IsInUnifiedMode());
 
   // Restored to mirror, then unified.
-  StoreDisplayBoolPropertyForPair(pair, "mirrored", true);
-  StoreDisplayBoolPropertyForPair(pair, "default_unified", true);
+  StoreDisplayBoolPropertyForList(list, "mirrored", true);
+  StoreDisplayBoolPropertyForList(list, "default_unified", true);
   LoadDisplayPreferences(false);
   UpdateDisplay("100x100,200x200");
   EXPECT_TRUE(display_manager->IsInMirrorMode());
@@ -974,8 +1050,8 @@ TEST_F(DisplayPreferencesTest, RestoreUnifiedMode) {
   EXPECT_TRUE(display_manager->IsInUnifiedMode());
 
   // Sanity check. Restore to extended.
-  StoreDisplayBoolPropertyForPair(pair, "default_unified", false);
-  StoreDisplayBoolPropertyForPair(pair, "mirrored", false);
+  StoreDisplayBoolPropertyForList(list, "default_unified", false);
+  StoreDisplayBoolPropertyForList(list, "mirrored", false);
   LoadDisplayPreferences(false);
   UpdateDisplay("100x100,200x200");
   EXPECT_FALSE(display_manager->IsInMirrorMode());

@@ -25,6 +25,7 @@ class CommandLine;
 }
 
 namespace content {
+class BrowserContext;
 class QuotaPermissionContext;
 }
 
@@ -70,10 +71,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       bool* in_memory) override;
   content::WebContentsViewDelegate* GetWebContentsViewDelegate(
       content::WebContents* web_contents) override;
-  content::WebContents* GetGuestWebContentsByTabId(
-      int tab_id,
-      content::BrowserContext* browser_context,
-      bool include_incognito) override;
   void RenderProcessWillLaunch(content::RenderProcessHost* host) override;
   GURL GetEffectiveURL(content::BrowserContext* browser_context,
                        const GURL& url) override;
@@ -130,6 +127,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   std::string GetApplicationLocale() override;
   std::string GetAcceptLangs(content::BrowserContext* context) override;
   const gfx::ImageSkia* GetDefaultFavicon() override;
+  bool IsDataSaverEnabled(content::BrowserContext* context) override;
   bool AllowAppCache(const GURL& manifest_url,
                      const GURL& first_party,
                      content::ResourceContext* context) override;
@@ -156,7 +154,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       const GURL& url,
       const base::string16& name,
       const base::string16& display_name,
-      unsigned long estimated_size,
       content::ResourceContext* context,
       const std::vector<std::pair<int, int>>& render_frames) override;
   void AllowWorkerFileSystem(
@@ -177,6 +174,9 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
 #endif  // defined(ENABLE_WEBRTC)
 
   bool AllowKeygen(const GURL& url, content::ResourceContext* context) override;
+  bool AllowWebBluetooth(content::BrowserContext* browser_context,
+                         const url::Origin& requesting_origin,
+                         const url::Origin& embedding_origin) override;
 
   net::URLRequestContext* OverrideRequestContextForURL(
       const GURL& url,
@@ -293,6 +293,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   void RegisterRenderFrameMojoServices(
       content::ServiceRegistry* registry,
       content::RenderFrameHost* render_frame_host) override;
+  void RegisterInProcessMojoApplications(
+      StaticMojoApplicationMap* apps) override;
   void RegisterOutOfProcessMojoApplications(
       OutOfProcessMojoApplicationMap* apps) override;
   void OpenURL(content::BrowserContext* browser_context,

@@ -28,21 +28,83 @@ MediaRouterElementsBrowserTest.prototype = {
     switchName: 'media-router', switchValue: '1'
   }],
 
-  // List tests for individual elements.
+  // List tests for individual elements. The media_router_container tests are
+  // split between media_router_container_tests.js and
+  // media_router_container_filter_tests.js.
   extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
     'issue_banner_tests.js',
     'media_router_container_tests.js',
+    'media_router_container_filter_tests.js',
     'media_router_header_tests.js',
+    'media_router_search_highlighter.js',
     'route_details_tests.js',
   ]),
+
+  /** @override */
+  setUp: function() {
+    PolymerTest.prototype.setUp.call(this);
+
+    // This element is used as a focus placeholder on dialog open, then
+    // deleted. The user will be unable to tab to it. Remove when there is a
+    // long term fix.
+    this.accessibilityAuditConfig.ignoreSelectors(
+       'focusableElementNotVisibleAndNotAriaHidden', '#focus-placeholder');
+  },
 };
 
-// Runs all tests.
-TEST_F('MediaRouterElementsBrowserTest', 'MediaRouterElementsTest', function() {
-  // Register mocha tests for each element.
+TEST_F('MediaRouterElementsBrowserTest', 'MediaRouterElementsTestIssueBanner',
+    function() {
+  // Register mocha tests for the issue banner.
   issue_banner.registerTests();
+
+  // Run all registered tests.
+  mocha.run();
+});
+
+TEST_F('MediaRouterElementsBrowserTest',
+    'MediaRouterElementsTestMediaRouterContainer',
+    function() {
+  // Register mocha tests for the container.
   media_router_container.registerTests();
+
+  // Run all registered tests.
+  mocha.run();
+});
+
+TEST_F('MediaRouterElementsBrowserTest',
+    'MediaRouterElementsTestMediaRouterContainerFilter',
+    function() {
+  // Register mocha tests for the container filter.
+  media_router_container_filter.registerTests();
+
+  // Run all registered tests.
+  mocha.run();
+});
+
+TEST_F('MediaRouterElementsBrowserTest',
+    'MediaRouterElementsTestMediaRouterHeader',
+    function() {
+  // Register mocha tests for the header.
   media_router_header.registerTests();
+
+  // Run all registered tests.
+  mocha.run();
+});
+
+TEST_F('MediaRouterElementsBrowserTest',
+    'MediaRouterElementsTestMediaRouterSearchHighlighter',
+    function() {
+  // Register mocha tests for the search highlighter.
+  media_router_search_highlighter.registerTests();
+
+  // Run all registered tests.
+  mocha.run();
+});
+
+TEST_F('MediaRouterElementsBrowserTest',
+    'MediaRouterElementsTestMediaRouterRouteDetails',
+    function() {
+  // Register mocha tests for the route details.
   route_details.registerTests();
 
   // Run all registered tests.

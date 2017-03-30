@@ -8,6 +8,7 @@
 
 #include <string>
 
+#include "base/metrics/histogram_macros.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/settings/appearance_handler.h"
 #include "chrome/browser/ui/webui/settings/downloads_handler.h"
@@ -16,9 +17,11 @@
 #include "chrome/browser/ui/webui/settings/md_settings_localized_strings_provider.h"
 #include "chrome/browser/ui/webui/settings/people_handler.h"
 #include "chrome/browser/ui/webui/settings/reset_settings_handler.h"
+#include "chrome/browser/ui/webui/settings/search_engines_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_default_browser_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_startup_pages_handler.h"
+#include "chrome/browser/ui/webui/settings/site_settings_handler.h"
 #include "chrome/common/url_constants.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -40,8 +43,15 @@ SettingsPageUIHandler::SettingsPageUIHandler() {
 SettingsPageUIHandler::~SettingsPageUIHandler() {
 }
 
+void SettingsPageUIHandler::CallJavascriptCallback(
+    const base::Value& callback_id, const base::Value& response) {
+  // cr.webUIResponse is a global JS function exposed from cr.js.
+  web_ui()->CallJavascriptFunction("cr.webUIResponse", callback_id, response);
+}
+
 MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
-    : content::WebUIController(web_ui) {
+    : content::WebUIController(web_ui),
+      WebContentsObserver(web_ui->GetWebContents()) {
   Profile* profile = Profile::FromWebUI(web_ui);
   AddSettingsPageUIHandler(new AppearanceHandler(web_ui));
   AddSettingsPageUIHandler(new ClearBrowsingDataHandler(web_ui));
@@ -50,6 +60,8 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
   AddSettingsPageUIHandler(new FontHandler(web_ui));
   AddSettingsPageUIHandler(new LanguagesHandler(web_ui));
   AddSettingsPageUIHandler(new PeopleHandler(profile));
+  AddSettingsPageUIHandler(new SearchEnginesHandler(profile));
+  AddSettingsPageUIHandler(new SiteSettingsHandler(profile));
   AddSettingsPageUIHandler(new StartupPagesHandler(web_ui));
 
 #if defined(OS_CHROMEOS)
@@ -85,6 +97,25 @@ void MdSettingsUI::AddSettingsPageUIHandler(
   DCHECK(handler.get());
 
   web_ui()->AddMessageHandler(handler.release());
+}
+
+void MdSettingsUI::DidStartProvisionalLoadForFrame(
+    content::RenderFrameHost* render_frame_host,
+    const GURL& validated_url,
+    bool is_error_page,
+    bool is_iframe_srcdoc) {
+  load_start_time_ = base::Time::Now();
+}
+
+void MdSettingsUI::DocumentLoadedInFrame(
+    content::RenderFrameHost* render_frame_host) {
+  UMA_HISTOGRAM_TIMES("Settings.LoadDocumentTime.MD",
+                      base::Time::Now() - load_start_time_);
+}
+
+void MdSettingsUI::DocumentOnLoadCompletedInMainFrame() {
+  UMA_HISTOGRAM_TIMES("Settings.LoadCompletedTime.MD",
+                      base::Time::Now() - load_start_time_);
 }
 
 }  // namespace settings

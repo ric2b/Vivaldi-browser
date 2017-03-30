@@ -17,6 +17,7 @@ from telemetry.web_perf.metrics import memory_timeline
 
 
 class _OortOnlineMeasurement(page_test.PageTest):
+
   def __init__(self):
     super(_OortOnlineMeasurement, self).__init__()
 
@@ -29,6 +30,7 @@ class _OortOnlineMeasurement(page_test.PageTest):
         results.AddValue(scalar.ScalarValue(
             results.current_page, score['name'], 'score', score['score'],
             important=True, improvement_direction=improvement_direction.UP))
+
 
 @benchmark.Disabled('android')
 class OortOnline(perf_benchmark.PerfBenchmark):
@@ -61,8 +63,6 @@ class OortOnlineTBM(perf_benchmark.PerfBenchmark):
         # TODO(perezju): Temporary workaround to disable periodic memory dumps.
         # See: http://crbug.com/513692
         '--enable-memory-benchmarking',
-        # TODO(ssid): Remove this flag after fixing http://crbug.com/461788.
-        '--no-sandbox'
     ])
 
   def CreateStorySet(self, options):
@@ -80,7 +80,7 @@ class OortOnlineTBM(perf_benchmark.PerfBenchmark):
     for category in categories:
       category_filter.AddIncludedCategory(category)
     options = timeline_based_measurement.Options(category_filter)
-    options.SetTimelineBasedMetrics([v8_gc_latency.V8GCLatency(),
+    options.SetLegacyTimelineBasedMetrics([v8_gc_latency.V8GCLatency(),
                                      smoothness.SmoothnessMetric(),
                                      memory_timeline.MemoryTimelineMetric()])
     return options

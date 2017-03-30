@@ -31,7 +31,7 @@ std::string RectToString(const mojo::Rect& rect) {
 }
 
 std::string DirectionToString(mojom::OrderDirection direction) {
-  return direction == mojom::ORDER_DIRECTION_ABOVE ? "above" : "below";
+  return direction == mojom::OrderDirection::ABOVE ? "above" : "below";
 }
 
 std::string ChangeToDescription1(const Change& change) {
@@ -45,6 +45,10 @@ std::string ChangeToDescription1(const Change& change) {
 
     case CHANGE_TYPE_UNEMBED:
       return base::StringPrintf("OnUnembed window=%s",
+                                WindowIdToString(change.window_id).c_str());
+
+    case CHANGE_TYPE_LOST_CAPTURE:
+      return base::StringPrintf("OnLostCapture window=%s",
                                 WindowIdToString(change.window_id).c_str());
 
     case CHANGE_TYPE_NODE_ADD_TRANSIENT_WINDOW:
@@ -149,9 +153,12 @@ std::string SingleChangeToDescription(const std::vector<Change>& changes) {
 }
 
 std::string SingleWindowDescription(const std::vector<TestWindow>& windows) {
-  if (windows.size() != 1u)
-    return "more than one changes and expected only one";
-  return windows[0].ToString();
+  if (windows.empty())
+    return "no windows";
+  std::string result;
+  for (const TestWindow& window : windows)
+    result += window.ToString();
+  return result;
 }
 
 std::string ChangeWindowDescription(const std::vector<Change>& changes) {
@@ -187,7 +194,7 @@ Change::Change()
       window_id2(0),
       window_id3(0),
       event_action(0),
-      direction(mojom::ORDER_DIRECTION_ABOVE),
+      direction(mojom::OrderDirection::ABOVE),
       bool_value(false),
       change_id(0u) {}
 
@@ -255,6 +262,13 @@ void TestChangeTracker::OnTransientWindowRemoved(Id window_id,
   AddChange(change);
 }
 
+void TestChangeTracker::OnLostCapture(Id window_id) {
+  Change change;
+  change.type = CHANGE_TYPE_LOST_CAPTURE;
+  change.window_id = window_id;
+  AddChange(change);
+}
+
 void TestChangeTracker::OnWindowViewportMetricsChanged(
     mojom::ViewportMetricsPtr old_metrics,
     mojom::ViewportMetricsPtr new_metrics) {
@@ -317,7 +331,7 @@ void TestChangeTracker::OnWindowInputEvent(Id window_id,
   Change change;
   change.type = CHANGE_TYPE_INPUT_EVENT;
   change.window_id = window_id;
-  change.event_action = event->action;
+  change.event_action = static_cast<int32_t>(event->action);
   AddChange(change);
 }
 
@@ -348,7 +362,7 @@ void TestChangeTracker::OnWindowPredefinedCursorChanged(
   Change change;
   change.type = CHANGE_TYPE_CURSOR_CHANGED;
   change.window_id = window_id;
-  change.cursor_id = cursor_id;
+  change.cursor_id = static_cast<int32_t>(cursor_id);
   AddChange(change);
 }
 

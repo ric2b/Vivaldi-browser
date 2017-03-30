@@ -151,10 +151,6 @@ class DummyImeControlDelegate : public ImeControlDelegate {
   int handle_switch_ime_count() const {
     return handle_switch_ime_count_;
   }
-  ui::Accelerator RemapAccelerator(
-      const ui::Accelerator& accelerator) override {
-    return ui::Accelerator(accelerator);
-  }
 
  private:
   int handle_next_ime_count_;
@@ -650,8 +646,9 @@ TEST_F(AcceleratorControllerTest, CenterWindowAccelerator) {
 
   // Center the window using accelerator.
   GetController()->PerformActionIfEnabled(WINDOW_POSITION_CENTER);
-  gfx::Rect work_area =
-      Shell::GetScreen()->GetDisplayNearestWindow(window.get()).work_area();
+  gfx::Rect work_area = gfx::Screen::GetScreen()
+                            ->GetDisplayNearestWindow(window.get())
+                            .work_area();
   gfx::Rect bounds = window->GetBoundsInScreen();
   EXPECT_NEAR(bounds.x() - work_area.x(),
               work_area.right() - bounds.right(),
@@ -1522,7 +1519,8 @@ class DeprecatedAcceleratorTester : public AcceleratorControllerTest {
   }
 
   void RemoveAllNotifications() const {
-    message_center()->RemoveAllNotifications(false);
+    message_center()->RemoveAllNotifications(
+        false /* by_user */, message_center::MessageCenter::RemoveType::ALL);
   }
 
   message_center::MessageCenter* message_center() const {

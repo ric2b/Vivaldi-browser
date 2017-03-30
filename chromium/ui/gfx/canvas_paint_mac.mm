@@ -23,7 +23,7 @@ CanvasSkiaPaint::CanvasSkiaPaint(NSRect dirtyRect, bool opaque)
 
 CanvasSkiaPaint::~CanvasSkiaPaint() {
   if (!is_empty()) {
-    platform_canvas()->restoreToCount(1);
+    sk_canvas()->restoreToCount(1);
 
     // Blit the dirty rect to the current context.
     CGImageRef image = CGBitmapContextCreateImage(context_);
@@ -60,7 +60,7 @@ void CanvasSkiaPaint::Init(bool opaque) {
 
   gfx::Size size(NSWidth(rectangle_), NSHeight(rectangle_));
   RecreateBackingCanvas(size, scale, opaque);
-  skia::PlatformCanvas* canvas = platform_canvas();
+  SkCanvas* canvas = sk_canvas();
   canvas->clear(SkColorSetARGB(0, 0, 0, 0));
 
     // Need to translate so that the dirty region appears at the origin of the

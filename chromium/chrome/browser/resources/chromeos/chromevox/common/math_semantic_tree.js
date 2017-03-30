@@ -50,7 +50,7 @@ cvox.SemanticTree.Node = function(id) {
   /** @type {number} */
   this.id = id;
 
-  /** @type {Array<Element>} */
+  /** @type {Array<Node>} */
   this.mathml = [];
 
   /** @type {cvox.SemanticTree.Node} */
@@ -902,6 +902,7 @@ cvox.SemanticTree.prototype.appendExistingOperator_ = function(root, op, node) {
       /** @type {!cvox.SemanticTree.Node} */
       (root.childNodes[root.childNodes.length - 1]),
       op, node);
+  return false;
 };
 
 
@@ -935,7 +936,7 @@ cvox.SemanticTree.prototype.getFencesInRow_ = function(nodes) {
  * into single nodes. It also processes singular fences, building expressions
  * that are only fenced left or right.
  * @param {!Array<cvox.SemanticTree.Node>} fences FIFO queue of fence nodes.
- * @param {!Array<Array<cvox.SemanticTree.Node>>} content FIFO queue content
+ * @param {!Array<!Array<cvox.SemanticTree.Node>>} content FIFO queue content
  *     between fences.
  * @param {!Array<cvox.SemanticTree.Node>} openStack LIFO stack of open fences.
  * @param {!Array<!Array<cvox.SemanticTree.Node>>} contentStack LIFO stack of
@@ -1477,6 +1478,7 @@ cvox.SemanticTree.prototype.getFunctionArgs_ = function(func, rest, heuristic) {
     return rest;
     break;
   }
+  return [];
 };
 
 

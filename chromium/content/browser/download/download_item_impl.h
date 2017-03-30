@@ -73,6 +73,8 @@ class CONTENT_EXPORT DownloadItemImpl
 
   // Constructing for a regular download.
   // |bound_net_log| is constructed externally for our use.
+  // TODO(asanka): Get rid of the DownloadCreateInfo parameter since active
+  // downloads end up at Start() immediately after creation.
   DownloadItemImpl(DownloadItemImplDelegate* delegate,
                    uint32_t id,
                    const DownloadCreateInfo& info,
@@ -167,18 +169,18 @@ class CONTENT_EXPORT DownloadItemImpl
   // INTERRUPTED state.
   virtual ResumeMode GetResumeMode() const;
 
-  // Notify the download item that new origin information is available due to a
-  // resumption request receiving a response.
-  virtual void MergeOriginInfoOnResume(
-      const DownloadCreateInfo& new_create_info);
-
   // State transition operations on regular downloads --------------------------
 
   // Start the download.
   // |download_file| is the associated file on the storage medium.
   // |req_handle| is the new request handle associated with the download.
+  // |new_create_info| is a DownloadCreateInfo containing the new response
+  // parameters. It may be different from the DownloadCreateInfo used to create
+  // the DownloadItem if Start() is being called in response for a download
+  // resumption request.
   virtual void Start(scoped_ptr<DownloadFile> download_file,
-                     scoped_ptr<DownloadRequestHandleInterface> req_handle);
+                     scoped_ptr<DownloadRequestHandleInterface> req_handle,
+                     const DownloadCreateInfo& new_create_info);
 
   // Needed because of intertwining with DownloadManagerImpl -------------------
 
@@ -217,80 +219,155 @@ class CONTENT_EXPORT DownloadItemImpl
   void DestinationCompleted(const std::string& final_hash) override;
 
  private:
-  // Fine grained states of a download. Note that active downloads are created
-  // in IN_PROGRESS_INTERNAL state. However, downloads creates via history can
-  // be created in COMPLETE_INTERNAL, CANCELLED_INTERNAL and
-  // INTERRUPTED_INTERNAL.
-
+  // Fine grained states of a download.
+  //
+  // New downloads can be created in the following states:
+  //
+  //     INITIAL_INTERNAL:        All active new downloads.
+  //
+  //     COMPLETE_INTERNAL:       Downloads restored from persisted state.
+  //     CANCELLED_INTERNAL:      - do -
+  //     INTERRUPTED_INTERNAL:    - do -
+  //
+  //     IN_PROGRESS_INTERNAL:    SavePackage downloads.
+  //
+  // On debug builds, state transitions can be verified via
+  // IsValidStateTransition() and IsValidSavePackageStateTransition(). Allowed
+  // state transitions are described below, both for normal downloads and
+  // SavePackage downloads.
   enum DownloadInternalState {
-    // Includes both before and after file name determination, and paused
-    // downloads.
-    // TODO(rdsmith): Put in state variable for file name determination.
-    // Transitions from:
-    //   <Initial creation>    Active downloads are created in this state.
-    //   RESUMING_INTERNAL
-    // Transitions to:
-    //   COMPLETING_INTERNAL   On final rename completion.
-    //   CANCELLED_INTERNAL    On cancel.
-    //   INTERRUPTED_INTERNAL  On interrupt.
-    //   COMPLETE_INTERNAL     On SavePackage download completion.
+    // Initial state. Regular downloads are created in this state until the
+    // Start() call is received.
+    //
+    // Transitions to (regular):
+    //   TARGET_PENDING_INTERNAL: After a successful Start() call.
+    //   INTERRUPTED_TARGET_PENDING_INTERNAL: After a failed Start() call.
+    //
+    // Transitions to (SavePackage):
+    //   <n/a>                    SavePackage downloads never reach this state.
+    INITIAL_INTERNAL,
+
+    // Embedder is in the process of determining the target of the download.
+    // Since the embedder is sensitive to state transitions during this time,
+    // any DestinationError/DestinationCompleted events are deferred until
+    // TARGET_RESOLVED_INTERNAL.
+    //
+    // Transitions to (regular):
+    //   TARGET_RESOLVED_INTERNAL: Once the embedder invokes the callback.
+    //   INTERRUPTED_TARGET_PENDING_INTERNAL: An error occurred prior to target
+    //                            determination.
+    //   CANCELLED_INTERNAL:      Cancelled.
+    //
+    // Transitions to (SavePackage):
+    //   <n/a>                    SavePackage downloads never reach this state.
+    TARGET_PENDING_INTERNAL,
+
+    // Embedder is in the process of determining the target of the download, and
+    // the download is in an interrupted state. The interrupted state is not
+    // exposed to the emedder until target determination is complete.
+    //
+    // Transitions to (regular):
+    //   INTERRUPTED_INTERNAL:    Once the target is determined, the download
+    //                            is marked as interrupted.
+    //   CANCELLED_INTERNAL:      Cancelled.
+    //
+    // Transitions to (SavePackage):
+    //   <n/a>                    SavePackage downloads never reach this state.
+    INTERRUPTED_TARGET_PENDING_INTERNAL,
+
+    // Embedder has completed target determination. It is now safe to resolve
+    // the download target as well as process deferred DestinationError events.
+    // This state is differs from TARGET_PENDING_INTERNAL due to it being
+    // allowed to transition to INTERRUPTED_INTERNAL, and it's different from
+    // IN_PROGRESS_INTERNAL in that entering this state doesn't require having
+    // a valid target. This state is transient (i.e. DownloadItemImpl will
+    // transition out of it before yielding execution). It's only purpose in
+    // life is to ensure the integrity of state transitions.
+    //
+    // Transitions to (regular):
+    //   IN_PROGRESS_INTERNAL:    Target successfully determined. The incoming
+    //                            data stream can now be written to the target.
+    //   INTERRUPTED_INTERNAL:    Either the target determination or one of the
+    //                            deferred signals indicated that the download
+    //                            should be interrupted.
+    //   CANCELLED_INTERNAL:      User cancelled the download or there was a
+    //                            deferred Cancel() call.
+    //
+    // Transitions to (SavePackage):
+    //   <n/a>                    SavePackage downloads never reach this state.
+    TARGET_RESOLVED_INTERNAL,
+
+    // Download target is known and the data can be transferred from our source
+    // to our sink.
+    //
+    // Transitions to (regular):
+    //   COMPLETING_INTERNAL:     On final rename completion.
+    //   CANCELLED_INTERNAL:      On cancel.
+    //   INTERRUPTED_INTERNAL:    On interrupt.
+    //
+    // Transitions to (SavePackage):
+    //   COMPLETE_INTERNAL:       On completion.
+    //   CANCELLED_INTERNAL:      On cancel.
     IN_PROGRESS_INTERNAL,
 
     // Between commit point (dispatch of download file release) and completed.
     // Embedder may be opening the file in this state.
-    // Transitions from:
-    //   IN_PROGRESS_INTERNAL
-    // Transitions to:
-    //   COMPLETE_INTERNAL     On successful completion.
+    //
+    // Transitions to (regular):
+    //   COMPLETE_INTERNAL:       On successful completion.
+    //
+    // Transitions to (SavePackage):
+    //   <n/a>                    SavePackage downloads never reach this state.
     COMPLETING_INTERNAL,
 
     // After embedder has had a chance to auto-open.  User may now open
     // or auto-open based on extension.
-    // Transitions from:
-    //   COMPLETING_INTERNAL
-    //   IN_PROGRESS_INTERNAL  SavePackage only.
-    //   <Initial creation>    Completed persisted downloads.
-    // Transitions to:
-    //   <none>                Terminal state.
+    //
+    // Transitions to (regular):
+    //   <none>                   Terminal state.
+    //
+    // Transitions to (SavePackage):
+    //   <none>                   Terminal state.
     COMPLETE_INTERNAL,
 
-    // User has cancelled the download.
-    // Transitions from:
-    //   IN_PROGRESS_INTERNAL
-    //   INTERRUPTED_INTERNAL
-    //   RESUMING_INTERNAL
-    //   <Initial creation>    Canceleld persisted downloads.
-    // Transitions to:
-    //   <none>                Terminal state.
-    CANCELLED_INTERNAL,
-
     // An error has interrupted the download.
-    // Transitions from:
-    //   IN_PROGRESS_INTERNAL
-    //   RESUMING_INTERNAL
-    //   <Initial creation>    Interrupted persisted downloads.
-    // Transitions to:
-    //   RESUMING_INTERNAL     On resumption.
+    //
+    // Transitions to (regular):
+    //   RESUMING_INTERNAL:       On resumption.
+    //   CANCELLED_INTERNAL:      On cancel.
+    //
+    // Transitions to (SavePackage):
+    //   <n/a>                    SavePackage downloads never reach this state.
     INTERRUPTED_INTERNAL,
 
     // A request to resume this interrupted download is in progress.
-    // Transitions from:
-    //   INTERRUPTED_INTERNAL
-    // Transitions to:
-    //   IN_PROGRESS_INTERNAL  Once a server response is received from a
-    //                         resumption.
-    //   INTERRUPTED_INTERNAL  If the resumption request fails.
-    //   CANCELLED_INTERNAL    On cancel.
+    //
+    // Transitions to (regular):
+    //   TARGET_PENDING_INTERNAL: Once a server response is received from a
+    //                            resumption.
+    //   INTERRUPTED_TARGET_PENDING_INTERNAL: A server response was received,
+    //                            but it indicated an error, and the download
+    //                            needs to go through target determination.
+    //   TARGET_RESOLVED_INTERNAL: A resumption attempt received an error
+    //                            but it was not necessary to go through target
+    //                            determination.
+    //   CANCELLED_INTERNAL:      On cancel.
+    //
+    // Transitions to (SavePackage):
+    //   <n/a>                    SavePackage downloads never reach this state.
     RESUMING_INTERNAL,
 
-    MAX_DOWNLOAD_INTERNAL_STATE,
-  };
+    // User has cancelled the download.
+    // TODO(asanka): Merge interrupted and cancelled states.
+    //
+    // Transitions to (regular):
+    //   <none>                   Terminal state.
+    //
+    // Transitions to (SavePackage):
+    //   <none>                   Terminal state.
+    CANCELLED_INTERNAL,
 
-  // Used with TransitionTo() to indicate whether or not to call
-  // UpdateObservers() after the state transition.
-  enum ShouldUpdateObservers {
-    UPDATE_OBSERVERS,
-    DONT_UPDATE_OBSERVERS
+    MAX_DOWNLOAD_INTERNAL_STATE,
   };
 
   // Normal progression of a download ------------------------------------------
@@ -305,6 +382,13 @@ class CONTENT_EXPORT DownloadItemImpl
   // this is.
   void Init(bool active, DownloadType download_type);
 
+  // Callback from file thread when we initialize the DownloadFile.
+  void OnDownloadFileInitialized(DownloadInterruptReason result);
+
+  // Called to determine the target path. Will cause OnDownloadTargetDetermined
+  // to be called when the target information is available.
+  void DetermineDownloadTarget();
+
   // Called when the target path has been determined. |target_path| is the
   // suggested target path. |disposition| indicates how the target path should
   // be used (see TargetDisposition). |danger_type| is the danger level of
@@ -315,9 +399,6 @@ class CONTENT_EXPORT DownloadItemImpl
       TargetDisposition disposition,
       DownloadDangerType danger_type,
       const base::FilePath& intermediate_path);
-
-  // Callback from file thread when we initialize the DownloadFile.
-  void OnDownloadFileInitialized(DownloadInterruptReason result);
 
   void OnDownloadRenamedToIntermediateName(
       DownloadInterruptReason reason, const base::FilePath& full_path);
@@ -339,13 +420,9 @@ class CONTENT_EXPORT DownloadItemImpl
   // the download has been opened.
   void DelayedDownloadOpened(bool auto_opened);
 
-  // Called when the entire download operation (including renaming etc)
+  // Called when the entire download operation (including renaming etc.)
   // is completed.
   void Completed();
-
-  // Callback invoked when the URLRequest for a download resumption has started.
-  void OnResumeRequestStarted(DownloadItem* item,
-                              DownloadInterruptReason interrupt_reason);
 
   // Helper routines -----------------------------------------------------------
 
@@ -366,10 +443,9 @@ class CONTENT_EXPORT DownloadItemImpl
   // Call to transition state; all state transitions should go through this.
   // |notify_action| specifies whether or not to call UpdateObservers() after
   // the state transition.
-  void TransitionTo(DownloadInternalState new_state,
-                    ShouldUpdateObservers notify_action);
+  void TransitionTo(DownloadInternalState new_state);
 
-  // Set the |danger_type_| and invoke obserers if necessary.
+  // Set the |danger_type_| and invoke observers if necessary.
   void SetDangerType(DownloadDangerType danger_type);
 
   void SetFullPath(const base::FilePath& new_path);
@@ -377,6 +453,11 @@ class CONTENT_EXPORT DownloadItemImpl
   void AutoResumeIfValid();
 
   void ResumeInterruptedDownload();
+
+  // Update origin information based on the response to a download resumption
+  // request. Should only be called if the resumption request was successful.
+  virtual void UpdateValidatorsOnResumption(
+      const DownloadCreateInfo& new_create_info);
 
   static DownloadState InternalToExternalState(
       DownloadInternalState internal_state);
@@ -386,16 +467,20 @@ class CONTENT_EXPORT DownloadItemImpl
   // Debugging routines --------------------------------------------------------
   static const char* DebugDownloadStateString(DownloadInternalState state);
   static const char* DebugResumeModeString(ResumeMode mode);
+  static bool IsValidSavePackageStateTransition(DownloadInternalState from,
+                                                DownloadInternalState to);
+  static bool IsValidStateTransition(DownloadInternalState from,
+                                     DownloadInternalState to);
 
   // Will be false for save package downloads retrieved from the history.
   // TODO(rdsmith): Replace with a generalized enum for "download source".
-  const bool is_save_package_download_;
+  const bool is_save_package_download_ = false;
 
   // The handle to the request information.  Used for operations outside the
   // download system.
   scoped_ptr<DownloadRequestHandleInterface> request_handle_;
 
-  uint32_t download_id_;
+  uint32_t download_id_ = kInvalidId;
 
   // Display name for the download. If this is empty, then the display name is
   // considered to be |target_path_.BaseName()|.
@@ -413,7 +498,7 @@ class CONTENT_EXPORT DownloadItemImpl
   base::FilePath target_path_;
 
   // Whether the target should be overwritten, uniquified or prompted for.
-  TargetDisposition target_disposition_;
+  TargetDisposition target_disposition_ = TARGET_DISPOSITION_OVERWRITE;
 
   // The chain of redirects that leading up to and including the final URL.
   std::vector<GURL> url_chain_;
@@ -437,10 +522,10 @@ class CONTENT_EXPORT DownloadItemImpl
   base::FilePath forced_file_path_;
 
   // Page transition that triggerred the download.
-  ui::PageTransition transition_type_;
+  ui::PageTransition transition_type_ = ui::PAGE_TRANSITION_LINK;
 
   // Whether the download was triggered with a user gesture.
-  bool has_user_gesture_;
+  bool has_user_gesture_ = false;
 
   // Information from the request.
   // Content-disposition field from the header.
@@ -459,13 +544,13 @@ class CONTENT_EXPORT DownloadItemImpl
   std::string remote_address_;
 
   // Total bytes expected.
-  int64_t total_bytes_;
+  int64_t total_bytes_ = 0;
 
   // Current received bytes.
-  int64_t received_bytes_;
+  int64_t received_bytes_ = 0;
 
   // Current speed. Calculated by the DownloadFile.
-  int64_t bytes_per_sec_;
+  int64_t bytes_per_sec_ = 0;
 
   // Sha256 hash of the content.  This might be empty either because
   // the download isn't done yet or because the hash isn't needed
@@ -483,16 +568,16 @@ class CONTENT_EXPORT DownloadItemImpl
   std::string etag_;
 
   // Last reason.
-  DownloadInterruptReason last_reason_;
+  DownloadInterruptReason last_reason_ = DOWNLOAD_INTERRUPT_REASON_NONE;
 
   // Start time for recording statistics.
   base::TimeTicks start_tick_;
 
   // The current state of this download.
-  DownloadInternalState state_;
+  DownloadInternalState state_ = INITIAL_INTERNAL;
 
   // Current danger type for the download.
-  DownloadDangerType danger_type_;
+  DownloadDangerType danger_type_ = DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS;
 
   // The views of this item in the download shelf and download contents.
   base::ObserverList<Observer> observers_;
@@ -504,44 +589,44 @@ class CONTENT_EXPORT DownloadItemImpl
   base::Time end_time_;
 
   // Our delegate.
-  DownloadItemImplDelegate* delegate_;
+  DownloadItemImplDelegate* delegate_ = nullptr;
 
   // In progress downloads may be paused by the user, we note it here.
-  bool is_paused_;
+  bool is_paused_ = false;
 
   // The number of times this download has been resumed automatically.
-  int auto_resume_count_;
+  int auto_resume_count_ = 0;
 
   // A flag for indicating if the download should be opened at completion.
-  bool open_when_complete_;
+  bool open_when_complete_ = false;
 
   // A flag for indicating if the downloaded file is externally removed.
-  bool file_externally_removed_;
+  bool file_externally_removed_ = false;
 
   // True if the download was auto-opened. We set this rather than using
   // an observer as it's frequently possible for the download to be auto opened
   // before the observer is added.
-  bool auto_opened_;
+  bool auto_opened_ = false;
 
   // True if the item was downloaded temporarily.
-  bool is_temporary_;
+  bool is_temporary_ = false;
 
   // True if we've saved all the data for the download.
-  bool all_data_saved_;
+  bool all_data_saved_ = false;
 
   // Error return from DestinationError.  Stored separately from
   // last_reason_ so that we can avoid handling destination errors until
   // after file name determination has occurred.
-  DownloadInterruptReason destination_error_;
+  DownloadInterruptReason destination_error_ = DOWNLOAD_INTERRUPT_REASON_NONE;
 
   // Did the user open the item either directly or indirectly (such as by
   // setting always open files of this type)? The shelf also sets this field
   // when the user closes the shelf before the item has been opened but should
   // be treated as though the user opened it.
-  bool opened_;
+  bool opened_ = false;
 
   // Did the delegate delay calling Complete on this download?
-  bool delegate_delayed_complete_;
+  bool delegate_delayed_complete_ = false;
 
   // DownloadFile associated with this download.  Note that this
   // pointer may only be used or destroyed on the FILE thread.

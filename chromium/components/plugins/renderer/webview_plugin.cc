@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include "base/auto_reset.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
@@ -55,7 +56,8 @@ WebViewPlugin::WebViewPlugin(content::RenderView* render_view,
       container_(nullptr),
       web_view_(WebView::create(this)),
       finished_loading_(false),
-      focused_(false) {
+      focused_(false),
+      is_painting_(false) {
   // ApplyWebPreferences before making a WebLocalFrame so that the frame sees a
   // consistent view of our preferences.
   content::RenderView::ApplyWebPreferences(preferences, web_view_);
@@ -170,6 +172,9 @@ void WebViewPlugin::paint(WebCanvas* canvas, const WebRect& rect) {
   if (paint_rect.IsEmpty())
     return;
 
+  base::AutoReset<bool> is_painting(
+        &is_painting_, true);
+
   paint_rect.Offset(-rect_.x(), -rect_.y());
 
   canvas->save();
@@ -281,23 +286,14 @@ void WebViewPlugin::didInvalidateRect(const WebRect& rect) {
     container_->invalidateRect(rect);
 }
 
-void WebViewPlugin::didUpdateLayoutSize(const WebSize&) {
-  if (container_)
-    container_->scheduleAnimation();
-}
-
 void WebViewPlugin::didChangeCursor(const WebCursorInfo& cursor) {
   current_cursor_ = cursor;
 }
 
 void WebViewPlugin::scheduleAnimation() {
-  // Resizes must be self-contained: any lifecycle updating must
-  // be triggerd from within the WebView or this WebViewPlugin.
-  // This is because this WebViewPlugin is contained in another
-  // Web View which may be in the middle of updating its lifecycle,
-  // but after layout is done, and it is illegal to dirty earlier
-  // lifecycle stages during later ones.
   if (container_) {
+    // This should never happen; see also crbug.com/545039 for context.
+    CHECK(!is_painting_);
     container_->scheduleAnimation();
   }
 }
@@ -318,10 +314,9 @@ void WebViewPlugin::didClearWindowObject(WebLocalFrame* frame) {
               delegate_->GetV8Handle(isolate));
 }
 
-void WebViewPlugin::didReceiveResponse(WebLocalFrame* frame,
-                                       unsigned identifier,
+void WebViewPlugin::didReceiveResponse(unsigned identifier,
                                        const WebURLResponse& response) {
-  WebFrameClient::didReceiveResponse(frame, identifier, response);
+  WebFrameClient::didReceiveResponse(identifier, response);
 }
 
 void WebViewPlugin::OnDestruct() {

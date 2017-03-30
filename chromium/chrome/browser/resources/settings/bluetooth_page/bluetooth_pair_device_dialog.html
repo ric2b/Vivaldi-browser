@@ -3,12 +3,13 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-input.html">
+<link rel="import" href="chrome://md-settings/settings_shared_css.html">
 
 <dom-module id="settings-bluetooth-pair-device-dialog">
-  <link rel="import" type="css" href="chrome://md-settings/settings_shared.css">
   <link rel="import" type="css" href="bluetooth_page.css">
   <link rel="import" type="css" href="bluetooth_dialog.css">
   <template>
+    <style include="settings-shared"></style>
     <div id="dialogOuterDiv" class="layout vertical flex">
       <div id="dialogHeaderDiv" class="settings-box layout horizontal center">
         <span id="dialogTitle" class="flex"
@@ -58,8 +59,8 @@
             hidden$="[[!showDismiss_(pairingDevice, pairingEvent)]]"
             on-tap="onDismissTap_">
         </paper-button>
-        <paper-button i18n-content="bluetoothCancel" on-tap="onCancelTap_"
-            hidden$="[[showDismiss_(pairingDevice, pairingEvent)]]"
+        <paper-button i18n-content="cancel" on-tap="onCancelTap_"
+            hidden$="[[showDismiss_(pairingDevice, pairingEvent)]]">
         </paper-button>
       </div>
     </div>

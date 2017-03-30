@@ -12,8 +12,8 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
-#include "base/prefs/persistent_pref_store.h"
-#include "base/prefs/pref_value_map.h"
+#include "components/prefs/persistent_pref_store.h"
+#include "components/prefs/pref_value_map.h"
 
 // A light-weight prefstore implementation that keeps preferences
 // in a memory backed store. This is not a persistent prefstore -- we
@@ -47,6 +47,7 @@ class AwPrefStore : public PersistentPrefStore {
   void ReadPrefsAsync(ReadErrorDelegate* error_delegate) override;
   void CommitPendingWrite() override {}
   void SchedulePendingLossyWrites() override {}
+  void ClearMutableValues() override {}
 
  protected:
   ~AwPrefStore() override;

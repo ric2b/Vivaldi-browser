@@ -51,7 +51,7 @@ public class BrowserAccessibilityManager {
     private Rect mAccessibilityFocusRect;
     private boolean mIsHovering;
     private int mLastHoverId = View.NO_ID;
-    private int mCurrentRootId;
+    protected int mCurrentRootId;
     private final int[] mTempLocation = new int[2];
     private final ViewGroup mView;
     private boolean mUserHasTouchExplored;
@@ -76,6 +76,9 @@ public class BrowserAccessibilityManager {
             ContentViewCore contentViewCore) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             return new LollipopBrowserAccessibilityManager(
+                    nativeBrowserAccessibilityManagerAndroid, contentViewCore);
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            return new KitKatBrowserAccessibilityManager(
                     nativeBrowserAccessibilityManagerAndroid, contentViewCore);
         } else {
             return new BrowserAccessibilityManager(
@@ -236,8 +239,6 @@ public class BrowserAccessibilityManager {
                 return true;
             case AccessibilityNodeInfo.ACTION_CLICK:
                 nativeClick(mNativeObj, virtualViewId);
-                sendAccessibilityEvent(virtualViewId,
-                        AccessibilityEvent.TYPE_VIEW_CLICKED);
                 return true;
             case AccessibilityNodeInfo.ACTION_FOCUS:
                 nativeFocus(mNativeObj, virtualViewId);
@@ -327,6 +328,10 @@ public class BrowserAccessibilityManager {
 
         if (event.getAction() == MotionEvent.ACTION_HOVER_EXIT) {
             mIsHovering = false;
+            if (mLastHoverId != View.NO_ID) {
+                sendAccessibilityEvent(mLastHoverId, AccessibilityEvent.TYPE_VIEW_HOVER_EXIT);
+                mLastHoverId = View.NO_ID;
+            }
             if (mPendingScrollToMakeNodeVisible) {
                 nativeScrollToMakeNodeVisible(
                         mNativeObj, mAccessibilityFocusId);
@@ -666,6 +671,11 @@ public class BrowserAccessibilityManager {
     }
 
     @CalledByNative
+    private void handleClicked(int id) {
+        sendAccessibilityEvent(id, AccessibilityEvent.TYPE_VIEW_CLICKED);
+    }
+
+    @CalledByNative
     private void handleTextSelectionChanged(int id) {
         sendAccessibilityEvent(id, AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED);
     }
@@ -713,10 +723,13 @@ public class BrowserAccessibilityManager {
     @CalledByNative
     private void handleHover(int id) {
         if (mLastHoverId == id) return;
+        if (!mIsHovering) return;
 
         // Always send the ENTER and then the EXIT event, to match a standard Android View.
         sendAccessibilityEvent(id, AccessibilityEvent.TYPE_VIEW_HOVER_ENTER);
-        sendAccessibilityEvent(mLastHoverId, AccessibilityEvent.TYPE_VIEW_HOVER_EXIT);
+        if (mLastHoverId != View.NO_ID) {
+            sendAccessibilityEvent(mLastHoverId, AccessibilityEvent.TYPE_VIEW_HOVER_EXIT);
+        }
         mLastHoverId = id;
     }
 
@@ -888,6 +901,12 @@ public class BrowserAccessibilityManager {
                 moveAccessibilityFocusToIdAndRefocusIfNeeded(virtualViewId);
             }
         }
+    }
+
+    @CalledByNative
+    protected void setAccessibilityNodeInfoKitKatAttributes(AccessibilityNodeInfo node,
+            boolean isRoot, String roleDescription) {
+        // Requires KitKat or higher.
     }
 
     @CalledByNative
@@ -1077,4 +1096,6 @@ public class BrowserAccessibilityManager {
             long nativeBrowserAccessibilityManagerAndroid, int id);
     private native boolean nativeScroll(
             long nativeBrowserAccessibilityManagerAndroid, int id, int direction);
+    protected native String nativeGetSupportedHtmlElementTypes(
+            long nativeBrowserAccessibilityManagerAndroid);
 }

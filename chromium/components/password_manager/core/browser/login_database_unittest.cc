@@ -25,6 +25,7 @@
 #include "sql/test/test_helpers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/origin.h"
 
 #if defined(OS_MACOSX)
 #include "components/os_crypt/os_crypt.h"
@@ -63,7 +64,7 @@ void GenerateExamplePasswordForm(PasswordForm* form) {
   form->date_synced = base::Time::Now();
   form->display_name = ASCIIToUTF16("Mr. Smith");
   form->icon_url = GURL("https://accounts.google.com/Icon");
-  form->federation_url = GURL("https://accounts.google.com/federation");
+  form->federation_origin = url::Origin(GURL("https://accounts.google.com/"));
   form->skip_zero_click = true;
 }
 
@@ -86,6 +87,26 @@ template<> int64_t GetFirstColumn(const sql::Statement& s) {
 template<> std::string GetFirstColumn(const sql::Statement& s) {
   return s.ColumnString(0);
 };
+
+bool AddZeroClickableLogin(LoginDatabase* db,
+                           const std::string& unique_string) {
+  // Example password form.
+  PasswordForm form;
+  form.origin = GURL("https://example.com/");
+  form.username_element = ASCIIToUTF16(unique_string);
+  form.username_value = ASCIIToUTF16(unique_string);
+  form.password_element = ASCIIToUTF16(unique_string);
+  form.submit_element = ASCIIToUTF16("signIn");
+  form.signon_realm = form.origin.spec();
+  form.display_name = ASCIIToUTF16(unique_string);
+  form.icon_url = GURL("https://example.com/");
+  form.federation_origin = url::Origin(GURL("https://example.com/"));
+  form.date_created = base::Time::Now();
+
+  form.skip_zero_click = false;
+
+  return db->AddLogin(form) == AddChangeForForm(form);
+}
 
 }  // namespace
 
@@ -352,6 +373,52 @@ TEST_F(LoginDatabaseTest, TestPublicSuffixDomainMatching) {
   result.clear();
 }
 
+TEST_F(LoginDatabaseTest, TestFederatedMatching) {
+  ScopedVector<autofill::PasswordForm> result;
+
+  // Example password form.
+  PasswordForm form;
+  form.origin = GURL("https://foo.com/");
+  form.action = GURL("https://foo.com/login");
+  form.username_value = ASCIIToUTF16("test@gmail.com");
+  form.password_value = ASCIIToUTF16("test");
+  form.signon_realm = "https://foo.com/";
+  form.ssl_valid = true;
+  form.preferred = false;
+  form.scheme = PasswordForm::SCHEME_HTML;
+
+  // We go to the mobile site.
+  PasswordForm form2(form);
+  form2.origin = GURL("https://mobile.foo.com/");
+  form2.action = GURL("https://mobile.foo.com/login");
+  form2.signon_realm = "federation://mobile.foo.com/accounts.google.com";
+  form2.username_value = ASCIIToUTF16("test1@gmail.com");
+  form2.type = autofill::PasswordForm::TYPE_API;
+  form2.federation_origin = url::Origin(GURL("https://accounts.google.com/"));
+
+  // Add it and make sure it is there.
+  EXPECT_EQ(AddChangeForForm(form), db().AddLogin(form));
+  EXPECT_EQ(AddChangeForForm(form2), db().AddLogin(form2));
+  EXPECT_TRUE(db().GetAutofillableLogins(&result));
+  EXPECT_EQ(2U, result.size());
+
+  // Match against desktop.
+  PasswordForm form_request;
+  form_request.origin = GURL("https://foo.com/");
+  form_request.signon_realm = "https://foo.com/";
+  form_request.scheme = PasswordForm::SCHEME_HTML;
+  EXPECT_TRUE(db().GetLogins(form_request, &result));
+  EXPECT_THAT(result, testing::ElementsAre(testing::Pointee(form)));
+
+  // Match against the mobile site.
+  form_request.origin = GURL("https://mobile.foo.com/");
+  form_request.signon_realm = "https://mobile.foo.com/";
+  EXPECT_TRUE(db().GetLogins(form_request, &result));
+  form.is_public_suffix_match = true;
+  EXPECT_THAT(result, testing::UnorderedElementsAre(testing::Pointee(form),
+                                                    testing::Pointee(form2)));
+}
+
 TEST_F(LoginDatabaseTest, TestPublicSuffixDisabledForNonHTMLForms) {
   TestNonHTMLFormPSLMatching(PasswordForm::SCHEME_BASIC);
   TestNonHTMLFormPSLMatching(PasswordForm::SCHEME_DIGEST);
@@ -414,8 +481,58 @@ TEST_F(LoginDatabaseTest, TestPublicSuffixDomainMatchingShouldMatchingApply) {
 
   // Match against the other site. Should not match since feature should not be
   // enabled for this domain.
+  ASSERT_FALSE(ShouldPSLDomainMatchingApply(
+      GetRegistryControlledDomain(GURL(form2.signon_realm))));
+
   EXPECT_TRUE(db().GetLogins(form2, &result));
   EXPECT_EQ(0U, result.size());
+}
+
+TEST_F(LoginDatabaseTest, TestFederatedMatchingWithoutPSLMatching) {
+  ScopedVector<autofill::PasswordForm> result;
+
+  // Example password form.
+  PasswordForm form;
+  form.origin = GURL("https://accounts.google.com/");
+  form.action = GURL("https://accounts.google.com/login");
+  form.username_value = ASCIIToUTF16("test@gmail.com");
+  form.password_value = ASCIIToUTF16("test");
+  form.signon_realm = "https://accounts.google.com/";
+  form.ssl_valid = true;
+  form.preferred = false;
+  form.scheme = PasswordForm::SCHEME_HTML;
+
+  // We go to a different site on the same domain where PSL is disabled.
+  PasswordForm form2(form);
+  form2.origin = GURL("https://some.other.google.com/");
+  form2.action = GURL("https://some.other.google.com/login");
+  form2.signon_realm = "federation://some.other.google.com/accounts.google.com";
+  form2.username_value = ASCIIToUTF16("test1@gmail.com");
+  form2.type = autofill::PasswordForm::TYPE_API;
+  form2.federation_origin = url::Origin(GURL("https://accounts.google.com/"));
+
+  // Add it and make sure it is there.
+  EXPECT_EQ(AddChangeForForm(form), db().AddLogin(form));
+  EXPECT_EQ(AddChangeForForm(form2), db().AddLogin(form2));
+  EXPECT_TRUE(db().GetAutofillableLogins(&result));
+  EXPECT_EQ(2U, result.size());
+
+  // Match against the first one.
+  PasswordForm form_request;
+  form_request.origin = form.origin;
+  form_request.signon_realm = form.signon_realm;
+  form_request.scheme = PasswordForm::SCHEME_HTML;
+  EXPECT_TRUE(db().GetLogins(form_request, &result));
+  EXPECT_THAT(result, testing::ElementsAre(testing::Pointee(form)));
+
+  // Match against the second one.
+  ASSERT_FALSE(ShouldPSLDomainMatchingApply(
+      GetRegistryControlledDomain(GURL(form2.signon_realm))));
+  form_request.origin = form2.origin;
+  form_request.signon_realm = form2.signon_realm;
+  EXPECT_TRUE(db().GetLogins(form_request, &result));
+  form.is_public_suffix_match = true;
+  EXPECT_THAT(result, testing::ElementsAre(testing::Pointee(form2)));
 }
 
 // This test fails if the implementation of GetLogins uses GetCachedStatement
@@ -633,7 +750,7 @@ static bool AddTimestampedLogin(LoginDatabase* db,
   form.signon_realm = url;
   form.display_name = ASCIIToUTF16(unique_string);
   form.icon_url = GURL("https://accounts.google.com/Icon");
-  form.federation_url = GURL("https://accounts.google.com/federation");
+  form.federation_origin = url::Origin(GURL("https://accounts.google.com/"));
   form.skip_zero_click = true;
 
   if (date_is_creation)
@@ -735,6 +852,42 @@ TEST_F(LoginDatabaseTest, RemoveLoginsSyncedBetween) {
   EXPECT_EQ(0U, result.size());
 }
 
+TEST_F(LoginDatabaseTest, GetAutoSignInLogins) {
+  ScopedVector<autofill::PasswordForm> result;
+
+  EXPECT_TRUE(AddZeroClickableLogin(&db(), "foo1"));
+  EXPECT_TRUE(AddZeroClickableLogin(&db(), "foo2"));
+  EXPECT_TRUE(AddZeroClickableLogin(&db(), "foo3"));
+  EXPECT_TRUE(AddZeroClickableLogin(&db(), "foo4"));
+
+  EXPECT_TRUE(db().GetAutoSignInLogins(&result));
+  EXPECT_EQ(4U, result.size());
+  for (const auto& form : result)
+    EXPECT_FALSE(form->skip_zero_click);
+
+  EXPECT_TRUE(db().DisableAutoSignInForAllLogins());
+  EXPECT_TRUE(db().GetAutoSignInLogins(&result));
+  EXPECT_EQ(0U, result.size());
+}
+
+TEST_F(LoginDatabaseTest, DisableAutoSignInForAllLogins) {
+  ScopedVector<autofill::PasswordForm> result;
+
+  EXPECT_TRUE(AddZeroClickableLogin(&db(), "foo1"));
+  EXPECT_TRUE(AddZeroClickableLogin(&db(), "foo2"));
+  EXPECT_TRUE(AddZeroClickableLogin(&db(), "foo3"));
+  EXPECT_TRUE(AddZeroClickableLogin(&db(), "foo4"));
+
+  EXPECT_TRUE(db().GetAutofillableLogins(&result));
+  for (const auto& form : result)
+    EXPECT_FALSE(form->skip_zero_click);
+
+  EXPECT_TRUE(db().DisableAutoSignInForAllLogins());
+  EXPECT_TRUE(db().GetAutofillableLogins(&result));
+  for (const auto& form : result)
+    EXPECT_TRUE(form->skip_zero_click);
+}
+
 TEST_F(LoginDatabaseTest, BlacklistedLogins) {
   ScopedVector<autofill::PasswordForm> result;
 
@@ -757,7 +910,7 @@ TEST_F(LoginDatabaseTest, BlacklistedLogins) {
   form.date_synced = base::Time::Now();
   form.display_name = ASCIIToUTF16("Mr. Smith");
   form.icon_url = GURL("https://accounts.google.com/Icon");
-  form.federation_url = GURL("https://accounts.google.com/federation");
+  form.federation_origin = url::Origin(GURL("https://accounts.google.com/"));
   form.skip_zero_click = true;
   EXPECT_EQ(AddChangeForForm(form), db().AddLogin(form));
 
@@ -981,7 +1134,7 @@ TEST_F(LoginDatabaseTest, UpdateLogin) {
   form.type = PasswordForm::TYPE_GENERATED;
   form.display_name = ASCIIToUTF16("Mr. Smith");
   form.icon_url = GURL("https://accounts.google.com/Icon");
-  form.federation_url = GURL("https://accounts.google.com/federation");
+  form.federation_origin = url::Origin(GURL("https://accounts.google.com/"));
   form.skip_zero_click = true;
   EXPECT_EQ(UpdateChangeForForm(form), db().UpdateLogin(form));
 

@@ -6,17 +6,20 @@
 
 #include <stddef.h>
 
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
+#include "base/feature_list.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/system/statistics_provider.h"
+#include "components/metrics/leak_detector/leak_detector.h"
 #include "components/metrics/metrics_service.h"
 #include "components/metrics/proto/chrome_user_metrics_extension.pb.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "device/bluetooth/bluetooth_adapter.h"
@@ -139,6 +142,14 @@ ChromeOSMetricsProvider::GetEnrollmentStatus() {
   return connector->IsEnterpriseManaged() ? MANAGED : NON_MANAGED;
 }
 
+void ChromeOSMetricsProvider::Init() {
+  perf_provider_.Init();
+
+  if (base::FeatureList::IsEnabled(features::kRuntimeMemoryLeakDetector)) {
+    leak_detector_controller_.reset(new metrics::LeakDetectorController);
+  }
+}
+
 void ChromeOSMetricsProvider::OnDidCreateMetricsLog() {
   registered_user_count_at_log_initialization_ = false;
   if (user_manager::UserManager::IsInitialized()) {
@@ -164,6 +175,13 @@ void ChromeOSMetricsProvider::InitTaskGetHardwareClassOnFileThread() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
   chromeos::system::StatisticsProvider::GetInstance()->GetMachineStatistic(
       "hardware_class", &hardware_class_);
+}
+
+void ChromeOSMetricsProvider::InitTaskGetBluetoothAdapter(
+    const base::Closure& callback) {
+  device::BluetoothAdapterFactory::GetAdapter(
+      base::Bind(&ChromeOSMetricsProvider::SetBluetoothAdapter,
+                 weak_ptr_factory_.GetWeakPtr(), callback));
 }
 
 void ChromeOSMetricsProvider::ProvideSystemProfileMetrics(
@@ -223,12 +241,6 @@ void ChromeOSMetricsProvider::WriteBluetoothProto(
     metrics::SystemProfileProto* system_profile_proto) {
   metrics::SystemProfileProto::Hardware* hardware =
       system_profile_proto->mutable_hardware();
-
-  // BluetoothAdapterFactory::GetAdapter is synchronous on Chrome OS; if that
-  // changes this will fail at the DCHECK().
-  device::BluetoothAdapterFactory::GetAdapter(base::Bind(
-      &ChromeOSMetricsProvider::SetBluetoothAdapter, base::Unretained(this)));
-  DCHECK(adapter_.get());
 
   SystemProfileProto::Hardware::Bluetooth* bluetooth =
       hardware->mutable_bluetooth();
@@ -298,8 +310,10 @@ void ChromeOSMetricsProvider::UpdateMultiProfileUserCount(
 }
 
 void ChromeOSMetricsProvider::SetBluetoothAdapter(
+    base::Closure callback,
     scoped_refptr<device::BluetoothAdapter> adapter) {
   adapter_ = adapter;
+  callback.Run();
 }
 
 void ChromeOSMetricsProvider::RecordEnrollmentStatus() {

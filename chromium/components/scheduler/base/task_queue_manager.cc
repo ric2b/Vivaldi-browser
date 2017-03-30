@@ -8,6 +8,7 @@
 #include <set>
 
 #include "base/bind.h"
+#include "base/metrics/histogram_macros.h"
 #include "components/scheduler/base/real_time_domain.h"
 #include "components/scheduler/base/task_queue_impl.h"
 #include "components/scheduler/base/task_queue_manager_delegate.h"
@@ -16,6 +17,21 @@
 #include "components/scheduler/base/work_queue_sets.h"
 
 namespace scheduler {
+
+namespace {
+const size_t kRecordRecordTaskDelayHistogramsEveryNTasks = 10;
+
+void RecordDelayedTaskLateness(base::TimeDelta lateness) {
+  UMA_HISTOGRAM_TIMES("RendererScheduler.TaskQueueManager.DelayedTaskLateness",
+                      lateness);
+}
+
+void RecordImmediateTaskQueueingDuration(tracked_objects::Duration duration) {
+  UMA_HISTOGRAM_TIMES(
+      "RendererScheduler.TaskQueueManager.ImmediateTaskQueueingDuration",
+      base::TimeDelta::FromMilliseconds(duration.InMilliseconds()));
+}
+}
 
 TaskQueueManager::TaskQueueManager(
     scoped_refptr<TaskQueueManagerDelegate> delegate,
@@ -26,11 +42,13 @@ TaskQueueManager::TaskQueueManager(
       delegate_(delegate),
       task_was_run_on_quiescence_monitored_queue_(false),
       work_batch_size_(1),
+      task_count_(0),
       tracing_category_(tracing_category),
       disabled_by_default_tracing_category_(
           disabled_by_default_tracing_category),
       disabled_by_default_verbose_tracing_category_(
           disabled_by_default_verbose_tracing_category),
+      currently_executing_task_queue_(nullptr),
       observer_(nullptr),
       deletion_sentinel_(new DeletionSentinel()),
       weak_factory_(this) {
@@ -138,11 +156,11 @@ void TaskQueueManager::MaybeScheduleImmediateWork(
 
 void TaskQueueManager::MaybeScheduleDelayedWork(
     const tracked_objects::Location& from_here,
-    LazyNow* lazy_now,
+    base::TimeTicks now,
     base::TimeDelta delay) {
   DCHECK(main_thread_checker_.CalledOnValidThread());
   DCHECK_GE(delay, base::TimeDelta());
-  base::TimeTicks run_time = lazy_now->Now() + delay;
+  base::TimeTicks run_time = now + delay;
   // De-duplicate DoWork posts.
   if (!main_thread_pending_wakeups_.insert(run_time).second)
     return;
@@ -177,6 +195,8 @@ void TaskQueueManager::DoWork(base::TimeTicks run_time, bool from_main_thread) {
       break;
     }
 
+    bool should_trigger_wakeup = work_queue->task_queue()->wakeup_policy() ==
+                                 TaskQueue::WakeupPolicy::CAN_WAKE_OTHER_QUEUES;
     switch (ProcessTaskFromWorkQueue(work_queue, &previous_task)) {
       case ProcessTaskResult::DEFERRED:
         // If a task was deferred, try again with another task. Note that this
@@ -188,8 +208,8 @@ void TaskQueueManager::DoWork(base::TimeTicks run_time, bool from_main_thread) {
       case ProcessTaskResult::TASK_QUEUE_MANAGER_DELETED:
         return;  // The TaskQueueManager got deleted, we must bail out.
     }
-    bool should_trigger_wakeup = work_queue->task_queue()->wakeup_policy() ==
-                                 TaskQueue::WakeupPolicy::CAN_WAKE_OTHER_QUEUES;
+    work_queue = nullptr; // The queue may have been unregistered.
+
     UpdateWorkQueues(should_trigger_wakeup, &previous_task);
 
     // Only run a single task per batch in nested run loops so that we can
@@ -201,12 +221,8 @@ void TaskQueueManager::DoWork(base::TimeTicks run_time, bool from_main_thread) {
   // TODO(alexclarke): Consider refactoring the above loop to terminate only
   // when there's no more work left to be done, rather than posting a
   // continuation task.
-  if (!selector_.EnabledWorkQueuesEmpty() || TryAdvanceTimeDomains()) {
+  if (!selector_.EnabledWorkQueuesEmpty() || TryAdvanceTimeDomains())
     MaybeScheduleImmediateWork(FROM_HERE);
-  } else {
-    // Tell the task runner we have no more work.
-    delegate_->OnNoMoreImmediateWork();
-  }
 }
 
 bool TaskQueueManager::TryAdvanceTimeDomains() {
@@ -252,6 +268,8 @@ TaskQueueManager::ProcessTaskResult TaskQueueManager::ProcessTaskFromWorkQueue(
     return ProcessTaskResult::DEFERRED;
   }
 
+  MaybeRecordTaskDelayHistograms(pending_task, queue);
+
   TRACE_TASK_EXECUTION("TaskQueueManager::ProcessTaskFromWorkQueue",
                        pending_task);
   if (queue->GetShouldNotifyObservers()) {
@@ -261,12 +279,20 @@ TaskQueueManager::ProcessTaskResult TaskQueueManager::ProcessTaskFromWorkQueue(
   }
   TRACE_EVENT1(tracing_category_,
                "TaskQueueManager::RunTask", "queue", queue->GetName());
+  // NOTE when TaskQueues get unregistered a reference ends up getting retained
+  // by |queues_to_delete_| which is cleared at the top of |DoWork|. This means
+  // we are OK to use raw pointers here.
+  internal::TaskQueueImpl* prev_executing_task_queue =
+      currently_executing_task_queue_;
+  currently_executing_task_queue_ = queue;
   task_annotator_.RunTask("TaskQueueManager::PostTask", pending_task);
 
   // Detect if the TaskQueueManager just got deleted.  If this happens we must
   // not access any member variables after this point.
   if (protect->HasOneRef())
     return ProcessTaskResult::TASK_QUEUE_MANAGER_DELETED;
+
+  currently_executing_task_queue_ = prev_executing_task_queue;
 
   if (queue->GetShouldNotifyObservers()) {
     FOR_EACH_OBSERVER(base::MessageLoop::TaskObserver, task_observers_,
@@ -277,6 +303,26 @@ TaskQueueManager::ProcessTaskResult TaskQueueManager::ProcessTaskFromWorkQueue(
   pending_task.task.Reset();
   *out_previous_task = pending_task;
   return ProcessTaskResult::EXECUTED;
+}
+
+void TaskQueueManager::MaybeRecordTaskDelayHistograms(
+    const internal::TaskQueueImpl::Task& pending_task,
+    const internal::TaskQueueImpl* queue) {
+  if ((task_count_++ % kRecordRecordTaskDelayHistogramsEveryNTasks) != 0)
+    return;
+
+  // Record delayed task lateness and immediate task queueing durations, but
+  // only for auto-pumped queues.  Manually pumped and after wakeup queues can
+  // have arbitarially large delayes, which would cloud any analysis.
+  if (queue->GetPumpPolicy() == TaskQueue::PumpPolicy::AUTO) {
+    if (!pending_task.delayed_run_time.is_null()) {
+      RecordDelayedTaskLateness(delegate_->NowTicks() -
+                                pending_task.delayed_run_time);
+    } else if (!pending_task.time_posted.is_null()) {
+      RecordImmediateTaskQueueingDuration(tracked_objects::TrackedTime::Now() -
+                                          pending_task.time_posted);
+    }
+  }
 }
 
 bool TaskQueueManager::RunsTasksOnCurrentThread() const {
@@ -353,6 +399,16 @@ void TaskQueueManager::OnTaskQueueEnabled(internal::TaskQueueImpl* queue) {
   if (!queue->immediate_work_queue()->Empty() ||
       !queue->delayed_work_queue()->Empty()) {
     MaybeScheduleImmediateWork(FROM_HERE);
+  }
+}
+
+void TaskQueueManager::OnTriedToSelectBlockedWorkQueue(
+    internal::WorkQueue* work_queue) {
+  DCHECK(main_thread_checker_.CalledOnValidThread());
+  DCHECK(!work_queue->Empty());
+  if (observer_) {
+    observer_->OnTriedToExecuteBlockedTask(*work_queue->task_queue(),
+                                           *work_queue->GetFrontTask());
   }
 }
 

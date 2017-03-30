@@ -78,6 +78,7 @@
 #include "public/web/WebElement.h"
 #include "public/web/WebFrame.h"
 #include "public/web/WebFrameClient.h"
+#include "public/web/WebFrameContentDumper.h"
 #include "public/web/WebHitTestResult.h"
 #include "public/web/WebInputEvent.h"
 #include "public/web/WebScriptSource.h"
@@ -525,9 +526,9 @@ TEST_F(WebViewTest, SetBaseBackgroundColor)
     EXPECT_EQ(kTransparent, frame->view()->baseBackgroundColor());
     frame->view()->dispose();
 
-    Color kTransparentRed(100, 0, 0, 0);
-    frame->createView(IntSize(1024, 768), kTransparentRed, true);
-    EXPECT_EQ(kTransparentRed, frame->view()->baseBackgroundColor());
+    const Color transparentRed(100, 0, 0, 0);
+    frame->createView(IntSize(1024, 768), transparentRed, true);
+    EXPECT_EQ(transparentRed, frame->view()->baseBackgroundColor());
     frame->view()->dispose();
 }
 
@@ -535,7 +536,7 @@ TEST_F(WebViewTest, SetBaseBackgroundColorBeforeMainFrame)
 {
     const WebColor kBlue = 0xFF0000FF;
     FrameTestHelpers::TestWebViewClient webViewClient;
-    WebView* webView = WebViewImpl::create(&webViewClient);
+    WebViewImpl* webView = WebViewImpl::create(&webViewClient);
     EXPECT_NE(kBlue, webView->backgroundColor());
     // webView does not have a frame yet, but we should still be able to set the background color.
     webView->setBaseBackgroundColor(kBlue);
@@ -553,7 +554,7 @@ TEST_F(WebViewTest, SetBaseBackgroundColorAndBlendWithExistingContent)
     const int kWidth = 100;
     const int kHeight = 100;
 
-    WebView* webView = m_webViewHelper.initialize();
+    WebViewImpl* webView = m_webViewHelper.initialize();
 
     // Set WebView background to green with alpha.
     webView->setBaseBackgroundColor(kAlphaGreen);
@@ -1344,22 +1345,6 @@ TEST_F(WebViewTest, PrintWithXHRInFlight)
     m_webViewHelper.reset();
 }
 
-class DropTask : public WebTaskRunner::Task {
-public:
-    explicit DropTask(WebView* webView) : m_webView(webView)
-    {
-    }
-
-    void run() override
-    {
-        const WebPoint clientPoint(0, 0);
-        const WebPoint screenPoint(0, 0);
-        m_webView->dragTargetDrop(clientPoint, screenPoint, 0);
-    }
-
-private:
-    WebView* const m_webView;
-};
 static void DragAndDropURL(WebViewImpl* webView, const std::string& url)
 {
     WebDragData dragData;
@@ -1374,7 +1359,7 @@ static void DragAndDropURL(WebViewImpl* webView, const std::string& url)
     const WebPoint clientPoint(0, 0);
     const WebPoint screenPoint(0, 0);
     webView->dragTargetDragEnter(dragData, clientPoint, screenPoint, WebDragOperationCopy, 0);
-    Platform::current()->currentThread()->taskRunner()->postTask(BLINK_FROM_HERE, new DropTask(webView));
+    webView->dragTargetDrop(clientPoint, screenPoint, 0);
     FrameTestHelpers::pumpPendingRequestsDoNotUse(webView->mainFrame());
 }
 
@@ -1615,6 +1600,22 @@ TEST_F(WebViewTest, LongPressSelection)
     EXPECT_EQ("", std::string(frame->selectionAsText().utf8().data()));
     EXPECT_TRUE(tapElementById(webView, WebInputEvent::GestureLongPress, target));
     EXPECT_EQ("testword", std::string(frame->selectionAsText().utf8().data()));
+}
+
+TEST_F(WebViewTest, LongPressEmptyTextarea)
+{
+    URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(m_baseURL.c_str()), WebString::fromUTF8("longpress_textarea.html"));
+
+    WebView* webView = m_webViewHelper.initializeAndLoad(m_baseURL + "longpress_textarea.html", true);
+    webView->resize(WebSize(500, 300));
+    webView->updateAllLifecyclePhases();
+    runPendingTasks();
+
+    WebString blanklinestextbox = WebString::fromUTF8("blanklinestextbox");
+    WebLocalFrameImpl* frame = toWebLocalFrameImpl(webView->mainFrame());
+
+    EXPECT_TRUE(tapElementById(webView, WebInputEvent::GestureLongPress, blanklinestextbox));
+    EXPECT_EQ("", std::string(frame->selectionAsText().utf8().data()));
 }
 
 TEST_F(WebViewTest, BlinkCaretOnTypingAfterLongPress)
@@ -2105,8 +2106,8 @@ TEST_F(WebViewTest, DispatchesFocusBlurOnViewToggle)
 
 TEST_F(WebViewTest, SmartClipData)
 {
-    static const char* kExpectedClipText = "\nPrice 10,000,000won";
-    static const char* kExpectedClipHtml =
+    static const char kExpectedClipText[] = "\nPrice 10,000,000won";
+    static const char kExpectedClipHtml[] =
         "<div id=\"div4\" style=\"padding: 10px; margin: 10px; border: 2px "
         "solid skyblue; float: left; width: 190px; height: 30px; "
         "color: rgb(0, 0, 0); font-family: myahem; font-size: 8px; font-style: "
@@ -2138,8 +2139,8 @@ TEST_F(WebViewTest, SmartClipData)
 
 TEST_F(WebViewTest, SmartClipDataWithPinchZoom)
 {
-    static const char* kExpectedClipText = "\nPrice 10,000,000won";
-    static const char* kExpectedClipHtml =
+    static const char kExpectedClipText[] = "\nPrice 10,000,000won";
+    static const char kExpectedClipHtml[] =
         "<div id=\"div4\" style=\"padding: 10px; margin: 10px; border: 2px "
         "solid skyblue; float: left; width: 190px; height: 30px; "
         "color: rgb(0, 0, 0); font-family: myahem; font-size: 8px; font-style: "
@@ -2206,7 +2207,7 @@ TEST_F(WebViewTest, SmartClipDoesNotCrashPositionReversed)
 class CreateChildCounterFrameClient : public FrameTestHelpers::TestWebFrameClient {
 public:
     CreateChildCounterFrameClient() : m_count(0) { }
-    WebFrame* createChildFrame(WebLocalFrame* parent, WebTreeScopeType, const WebString& frameName, WebSandboxFlags, const WebFrameOwnerProperties&) override;
+    WebFrame* createChildFrame(WebLocalFrame* parent, WebTreeScopeType, const WebString& name, const WebString& uniqueName, WebSandboxFlags, const WebFrameOwnerProperties&) override;
 
     int count() const { return m_count; }
 
@@ -2214,10 +2215,10 @@ private:
     int m_count;
 };
 
-WebFrame* CreateChildCounterFrameClient::createChildFrame(WebLocalFrame* parent, WebTreeScopeType scope, const WebString& frameName, WebSandboxFlags sandboxFlags, const WebFrameOwnerProperties& frameOwnerProperties)
+WebFrame* CreateChildCounterFrameClient::createChildFrame(WebLocalFrame* parent, WebTreeScopeType scope, const WebString& name, const WebString& uniqueName, WebSandboxFlags sandboxFlags, const WebFrameOwnerProperties& frameOwnerProperties)
 {
     ++m_count;
-    return TestWebFrameClient::createChildFrame(parent, scope, frameName, sandboxFlags, frameOwnerProperties);
+    return TestWebFrameClient::createChildFrame(parent, scope, name, uniqueName, sandboxFlags, frameOwnerProperties);
 }
 
 TEST_F(WebViewTest, ChangeDisplayMode)
@@ -2225,11 +2226,11 @@ TEST_F(WebViewTest, ChangeDisplayMode)
     URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(m_baseURL.c_str()), WebString::fromUTF8("display_mode.html"));
     WebView* webView = m_webViewHelper.initializeAndLoad(m_baseURL + "display_mode.html", true);
 
-    std::string content = webView->mainFrame()->contentAsText(21).utf8();
+    std::string content = WebFrameContentDumper::dumpFrameTreeAsText(webView->mainFrame()->toWebLocalFrame(), 21).utf8();
     EXPECT_EQ("regular-ui", content);
 
     webView->setDisplayMode(WebDisplayModeMinimalUi);
-    content = webView->mainFrame()->contentAsText(21).utf8();
+    content = WebFrameContentDumper::dumpFrameTreeAsText(webView->mainFrame()->toWebLocalFrame(), 21).utf8();
     EXPECT_EQ("minimal-ui", content);
     m_webViewHelper.reset();
 }
@@ -2308,7 +2309,7 @@ TEST_F(WebViewTest, HasTouchEventHandlers)
     std::string url = m_baseURL + "has_touch_event_handlers.html";
     URLTestHelpers::registerMockedURLLoad(toKURL(url), "has_touch_event_handlers.html");
     WebViewImpl* webViewImpl = m_webViewHelper.initializeAndLoad(url, true, 0, &client);
-    const EventHandlerRegistry::EventHandlerClass touchEvent = EventHandlerRegistry::TouchEvent;
+    const EventHandlerRegistry::EventHandlerClass touchEvent = EventHandlerRegistry::TouchEventBlocking;
 
     // The page is initialized with at least one no-handlers call.
     // In practice we get two such calls because WebViewHelper::initializeAndLoad first
@@ -2700,7 +2701,7 @@ TEST_F(WebViewTest, CompareSelectAllToContentAsText)
     std::string actual = frame->selectionAsText().utf8();
 
     const int kMaxOutputCharacters = 1024;
-    std::string expected = frame->contentAsText(kMaxOutputCharacters).utf8();
+    std::string expected = WebFrameContentDumper::dumpFrameTreeAsText(frame, kMaxOutputCharacters).utf8();
     EXPECT_EQ(expected, actual);
 }
 

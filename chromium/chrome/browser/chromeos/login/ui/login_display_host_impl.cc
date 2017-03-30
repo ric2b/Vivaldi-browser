@@ -16,7 +16,6 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
@@ -74,6 +73,7 @@
 #include "chromeos/settings/cros_settings_provider.h"
 #include "chromeos/settings/timezone_settings.h"
 #include "chromeos/timezone/timezone_resolver.h"
+#include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
@@ -249,9 +249,6 @@ void ResetKeyboardOverscrollOverride() {
 namespace chromeos {
 
 // static
-LoginDisplayHost* LoginDisplayHostImpl::default_host_ = NULL;
-
-// static
 const int LoginDisplayHostImpl::kShowLoginWebUIid = 0x1111;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -284,7 +281,7 @@ LoginDisplayHostImpl::LoginDisplayHostImpl(const gfx::Rect& background_bounds)
   }
 
   ash::Shell::GetInstance()->delegate()->AddVirtualKeyboardStateObserver(this);
-  ash::Shell::GetScreen()->AddObserver(this);
+  gfx::Screen::GetScreen()->AddObserver(this);
 
   // We need to listen to CLOSE_ALL_BROWSERS_REQUEST but not APP_TERMINATING
   // because/ APP_TERMINATING will never be fired as long as this keeps
@@ -306,7 +303,7 @@ LoginDisplayHostImpl::LoginDisplayHostImpl(const gfx::Rect& background_bounds)
                  chrome::NOTIFICATION_LOGIN_USER_CHANGED,
                  content::NotificationService::AllSources());
 
-  DCHECK(default_host_ == NULL);
+  DCHECK(default_host() == nullptr);
   default_host_ = this;
 
   // Make sure chrome won't exit while we are at login/oobe screen.
@@ -389,7 +386,7 @@ LoginDisplayHostImpl::~LoginDisplayHostImpl() {
 
   ash::Shell::GetInstance()->delegate()->
       RemoveVirtualKeyboardStateObserver(this);
-  ash::Shell::GetScreen()->RemoveObserver(this);
+  gfx::Screen::GetScreen()->RemoveObserver(this);
 
   if (login_view_ && login_window_)
     login_window_->RemoveRemovalsObserver(this);
@@ -402,7 +399,7 @@ LoginDisplayHostImpl::~LoginDisplayHostImpl() {
   // Let chrome process exit after login/oobe screen if needed.
   chrome::DecrementKeepAliveCount();
 
-  default_host_ = NULL;
+  default_host_ = nullptr;
   // TODO(tengs): This should be refactored. See crbug.com/314934.
   if (user_manager::UserManager::Get()->IsCurrentUserNew()) {
     // DriveOptInController will delete itself when finished.
@@ -881,8 +878,7 @@ void LoginDisplayHostImpl::OnDisplayRemoved(const gfx::Display& old_display) {
 
 void LoginDisplayHostImpl::OnDisplayMetricsChanged(const gfx::Display& display,
                                                    uint32_t changed_metrics) {
-  gfx::Display primary_display =
-      gfx::Screen::GetNativeScreen()->GetPrimaryDisplay();
+  gfx::Display primary_display = gfx::Screen::GetScreen()->GetPrimaryDisplay();
   if (display.id() != primary_display.id() ||
       !(changed_metrics & DISPLAY_METRIC_BOUNDS)) {
     return;

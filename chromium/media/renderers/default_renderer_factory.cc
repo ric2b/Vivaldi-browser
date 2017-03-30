@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
+#include "media/base/decoder_factory.h"
 #include "media/base/media_log.h"
 #include "media/filters/gpu_video_decoder.h"
 #include "media/filters/opus_audio_decoder.h"
@@ -46,24 +47,20 @@ namespace media {
 
 DefaultRendererFactory::DefaultRendererFactory(
     const scoped_refptr<MediaLog>& media_log,
-    GpuVideoAcceleratorFactories* gpu_factories,
+    DecoderFactory* decoder_factory,
+    const GetGpuFactoriesCB& get_gpu_factories_cb,
     const AudioHardwareConfig& audio_hardware_config)
     : media_log_(media_log),
-      gpu_factories_(gpu_factories),
+      decoder_factory_(decoder_factory),
+      get_gpu_factories_cb_(get_gpu_factories_cb),
       audio_hardware_config_(audio_hardware_config) {}
 
 DefaultRendererFactory::~DefaultRendererFactory() {
 }
 
-scoped_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
+ScopedVector<AudioDecoder> DefaultRendererFactory::CreateAudioDecoders(
     const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
-    const scoped_refptr<base::TaskRunner>& worker_task_runner,
-    AudioRendererSink* audio_renderer_sink,
-    VideoRendererSink* video_renderer_sink,
-    bool use_platform_media_pipeline,
-    bool platform_pipeline_enlarges_buffers_on_underflow) {
-  DCHECK(audio_renderer_sink);
-
+    bool use_platform_media_pipeline) {
   // Create our audio decoders and renderer.
   ScopedVector<AudioDecoder> audio_decoders;
 
@@ -84,32 +81,29 @@ scoped_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
 #endif
 
   audio_decoders.push_back(new OpusAudioDecoder(media_task_runner));
-
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   }
 #endif
 
-  scoped_ptr<AudioRendererImpl> audio_renderer(new AudioRendererImpl(
-      media_task_runner, audio_renderer_sink, std::move(audio_decoders),
-      audio_hardware_config_, media_log_));
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  if (use_platform_media_pipeline &&
-      platform_pipeline_enlarges_buffers_on_underflow) {
-    // Disable the part of underflow handling in AudioRendererImpl that
-    // increases the audio queue size on each underflow.  Some implementations
-    // of PlatformMediaPipeline do something that achieves the same goal.
-    audio_renderer->set_increase_queue_size_on_underflow(false);
-  }
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  if (decoder_factory_)
+    decoder_factory_->CreateAudioDecoders(&audio_decoders);
 
+  return audio_decoders;
+}
+
+ScopedVector<VideoDecoder> DefaultRendererFactory::CreateVideoDecoders(
+    const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+    const RequestSurfaceCB& request_surface_cb,
+    GpuVideoAcceleratorFactories* gpu_factories,
+    bool use_platform_media_pipeline) {
   // Create our video decoders and renderer.
   ScopedVector<VideoDecoder> video_decoders;
 
   // |gpu_factories_| requires that its entry points be called on its
   // |GetTaskRunner()|.  Since |pipeline_| will own decoders created from the
   // factories, require that their message loops are identical.
-  DCHECK(!gpu_factories_ ||
-         (gpu_factories_->GetTaskRunner() == media_task_runner.get()));
+  DCHECK(!gpu_factories ||
+         (gpu_factories->GetTaskRunner() == media_task_runner.get()));
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   if (use_platform_media_pipeline) {
@@ -117,14 +111,19 @@ scoped_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
   } else {
 #endif
 
-  if (gpu_factories_)
-    video_decoders.push_back(new GpuVideoDecoder(gpu_factories_));
+  // TODO(pgraszka): When chrome fixes the dropping frames issue in the
+  // GpuVideoDecoder, we should make it our first choice on the list of video
+  // decoders, for more details see: DNA-36050,
+  // https://code.google.com/p/chromium/issues/detail?id=470466.
+  if (gpu_factories)
+    video_decoders.push_back(
+        new GpuVideoDecoder(gpu_factories, request_surface_cb));
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #if defined(OS_WIN)
     video_decoders.push_back(new WMFVideoDecoder(media_task_runner));
 #elif defined(OS_MACOSX)
-    if (!gpu_factories_)
+    if (!gpu_factories)
       pipeline_stats::ReportNoGpuProcessForDecoder();
 #endif
 #endif
@@ -141,11 +140,38 @@ scoped_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
   }
 #endif
 
+  if (decoder_factory_)
+    decoder_factory_->CreateVideoDecoders(&video_decoders);
+
+  return video_decoders;
+}
+
+scoped_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
+    const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+    const scoped_refptr<base::TaskRunner>& worker_task_runner,
+    AudioRendererSink* audio_renderer_sink,
+    VideoRendererSink* video_renderer_sink,
+    const RequestSurfaceCB& request_surface_cb,
+    bool use_platform_media_pipeline,
+    bool platform_pipeline_enlarges_buffers_on_underflow) {
+  DCHECK(audio_renderer_sink);
+
+  scoped_ptr<AudioRenderer> audio_renderer(
+      new AudioRendererImpl(media_task_runner, audio_renderer_sink,
+                            CreateAudioDecoders(media_task_runner,
+                                use_platform_media_pipeline),
+                            audio_hardware_config_, media_log_));
+
+  GpuVideoAcceleratorFactories* gpu_factories = nullptr;
+  if (!get_gpu_factories_cb_.is_null())
+    gpu_factories = get_gpu_factories_cb_.Run();
+
   scoped_ptr<VideoRenderer> video_renderer(new VideoRendererImpl(
       media_task_runner, worker_task_runner, video_renderer_sink,
-      std::move(video_decoders), true, gpu_factories_, media_log_));
+      CreateVideoDecoders(media_task_runner, request_surface_cb, gpu_factories,
+                          use_platform_media_pipeline),
+      true, gpu_factories, media_log_));
 
-  // Create renderer.
   return scoped_ptr<Renderer>(new RendererImpl(
       media_task_runner, std::move(audio_renderer), std::move(video_renderer)));
 }

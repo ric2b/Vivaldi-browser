@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_EXCLUSIVE_ACCESS_EXCLUSIVE_ACCESS_MANAGER_H_
 #define CHROME_BROWSER_UI_EXCLUSIVE_ACCESS_EXCLUSIVE_ACCESS_MANAGER_H_
 
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_bubble_type.h"
@@ -26,6 +27,10 @@ class WebContents;
 // the exit bubble to reflect the combined state.
 class ExclusiveAccessManager {
  public:
+  // A new user experience for transitioning into fullscreen and mouse pointer
+  // lock states.
+  static const base::Feature kSimplifiedUIFeature;
+
   explicit ExclusiveAccessManager(
       ExclusiveAccessContext* exclusive_access_context);
   ~ExclusiveAccessManager();
@@ -61,10 +66,14 @@ class ExclusiveAccessManager {
   // Called by Browser::PreHandleKeyboardEvent.
   bool HandleUserKeyPress(const content::NativeWebKeyboardEvent& event);
 
+  // Called by Browser::ContentsMouseEvent.
+  void OnUserInput();
+
   // Called by platform ExclusiveAccessExitBubble.
   void OnAcceptExclusiveAccessPermission();
   void OnDenyExclusiveAccessPermission();
   void ExitExclusiveAccess();
+  void RecordBubbleReshownUMA(ExclusiveAccessBubbleType type);
 
  private:
   ExclusiveAccessContext* const exclusive_access_context_;

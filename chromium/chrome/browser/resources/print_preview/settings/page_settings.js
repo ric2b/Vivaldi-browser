@@ -112,7 +112,7 @@ cr.define('print_preview', function() {
       this.tracker.add(
           this.customInput_, 'keydown', this.onCustomInputKeyDown_.bind(this));
       this.tracker.add(
-          this.customInput_, 'keyup', this.onCustomInputKeyUp_.bind(this));
+          this.customInput_, 'input', this.onCustomInputChange_.bind(this));
       this.tracker.add(
           this.pageRangeTicketItem_,
           print_preview.ticket_items.TicketItem.EventType.CHANGE,
@@ -138,17 +138,30 @@ cr.define('print_preview', function() {
           PageSettings.Classes_.CUSTOM_RADIO)[0];
       this.customHintEl_ = this.getElement().getElementsByClassName(
           PageSettings.Classes_.CUSTOM_HINT)[0];
-      this.customHintEl_.textContent = loadTimeData.getStringF(
-          'pageRangeInstruction',
-          loadTimeData.getString('examplePageRangeText'));
     },
 
     /**
-     * @param {boolean} isVisible Whether the custom hint is visible.
+     * @param {!PageRangeStatus} validity (of page range)
      * @private
      */
-    setInvalidStateVisible_: function(isVisible) {
-      if (isVisible) {
+    setInvalidStateVisible_: function(validity) {
+      if (validity !== PageRangeStatus.NO_ERROR) {
+        var message;
+        if (validity === PageRangeStatus.LIMIT_ERROR) {
+          if (this.pageRangeTicketItem_.getDocumentNumPages()) {
+            message = loadTimeData.getStringF(
+                'pageRangeLimitInstructionWithValue',
+                this.pageRangeTicketItem_.getDocumentNumPages());
+          } else {
+            message = loadTimeData.getString(
+                'pageRangeLimitInstruction');
+          }
+        } else {
+          message = loadTimeData.getStringF(
+              'pageRangeSyntaxInstruction',
+              loadTimeData.getString('examplePageRangeText'));
+        }
+        this.customHintEl_.textContent = message;
         this.customInput_.classList.add('invalid');
         fadeInElement(this.customHintEl_);
       } else {
@@ -210,24 +223,6 @@ cr.define('print_preview', function() {
     },
 
     /**
-     * Called when a key is pressed on the custom input.
-     * @param {Event} event Contains the key that was pressed.
-     * @private
-     */
-    onCustomInputKeyUp_: function(event) {
-      if (this.customInputTimeout_) {
-        clearTimeout(this.customInputTimeout_);
-        this.customInputTimeout_ = null;
-      }
-      if (event.keyCode != 13 /*enter*/) {
-        this.customRadio_.checked = true;
-        this.customInputTimeout_ = setTimeout(
-            this.onCustomInputTimeout_.bind(this),
-            PageSettings.CUSTOM_INPUT_DELAY_);
-      }
-    },
-
-    /**
      * Called after a delay following a key press in the custom input.
      * @private
      */
@@ -236,6 +231,20 @@ cr.define('print_preview', function() {
       if (this.customRadio_.checked) {
         this.pageRangeTicketItem_.updateValue(this.customInput_.value);
       }
+    },
+
+    /**
+     * Called for events that change the text - undo, redo, paste and
+     * keystrokes outside of enter, copy, etc. (Re)starts the
+     * re-evaluation timer.
+     * @private
+     */
+    onCustomInputChange_: function() {
+      if (this.customInputTimeout_)
+        clearTimeout(this.customInputTimeout_);
+      this.customInputTimeout_ = setTimeout(
+          this.onCustomInputTimeout_.bind(this),
+          PageSettings.CUSTOM_INPUT_DELAY_);
     },
 
     /**
@@ -251,10 +260,11 @@ cr.define('print_preview', function() {
             this.customInput_.value = pageRangeStr;
           }
           this.customRadio_.checked = true;
-          this.setInvalidStateVisible_(!this.pageRangeTicketItem_.isValid());
+          this.setInvalidStateVisible_(
+              this.pageRangeTicketItem_.checkValidity());
         } else {
           this.allRadio_.checked = true;
-          this.setInvalidStateVisible_(false);
+          this.setInvalidStateVisible_(PageRangeStatus.NO_ERROR);
         }
       }
       this.updateUiStateInternal();

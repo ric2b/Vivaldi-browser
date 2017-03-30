@@ -45,27 +45,27 @@ PassRefPtrWillBeRawPtr<SVGRect> SVGRect::clone() const
 }
 
 template<typename CharType>
-bool SVGRect::parse(const CharType*& ptr, const CharType* end)
+SVGParsingError SVGRect::parse(const CharType*& ptr, const CharType* end)
 {
-    skipOptionalSVGSpaces(ptr, end);
-
-    float x = 0.0f;
-    float y = 0.0f;
-    float width = 0.0f;
-    float height = 0.0f;
-    bool valid = parseNumber(ptr, end, x) && parseNumber(ptr, end, y) && parseNumber(ptr, end, width) && parseNumber(ptr, end, height, DisallowWhitespace);
-
-    if (!valid)
-        return false;
+    const CharType* start = ptr;
+    float x = 0;
+    float y = 0;
+    float width = 0;
+    float height = 0;
+    if (!parseNumber(ptr, end, x)
+        || !parseNumber(ptr, end, y)
+        || !parseNumber(ptr, end, width)
+        || !parseNumber(ptr, end, height, DisallowWhitespace))
+        return SVGParsingError(SVGParseStatus::ExpectedNumber, ptr - start);
 
     if (skipOptionalSVGSpaces(ptr, end)) {
         // Nothing should come after the last, fourth number.
-        return false;
+        return SVGParsingError(SVGParseStatus::TrailingGarbage, ptr - start);
     }
 
     m_value = FloatRect(x, y, width, height);
     m_isValid = true;
-    return true;
+    return SVGParseStatus::NoError;
 }
 
 SVGParsingError SVGRect::setValueAsString(const String& string)
@@ -73,25 +73,22 @@ SVGParsingError SVGRect::setValueAsString(const String& string)
     setInvalid();
 
     if (string.isNull())
-        return NoError;
+        return SVGParseStatus::NoError;
 
     if (string.isEmpty()) {
         m_value = FloatRect(0.0f, 0.0f, 0.0f, 0.0f);
         m_isValid = true;
-        return NoError;
+        return SVGParseStatus::NoError;
     }
 
-    bool valid;
     if (string.is8Bit()) {
         const LChar* ptr = string.characters8();
         const LChar* end = ptr + string.length();
-        valid = parse(ptr, end);
-    } else {
-        const UChar* ptr = string.characters16();
-        const UChar* end = ptr + string.length();
-        valid = parse(ptr, end);
+        return parse(ptr, end);
     }
-    return valid ? NoError : ParsingAttributeFailedError;
+    const UChar* ptr = string.characters16();
+    const UChar* end = ptr + string.length();
+    return parse(ptr, end);
 }
 
 String SVGRect::valueAsString() const
@@ -143,4 +140,4 @@ void SVGRect::setInvalid()
     m_isValid = false;
 }
 
-}
+} // namespace blink

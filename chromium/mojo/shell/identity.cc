@@ -4,7 +4,7 @@
 
 #include "mojo/shell/identity.h"
 
-#include "mojo/shell/query_util.h"
+#include "mojo/shell/public/interfaces/shell.mojom.h"
 
 namespace mojo {
 namespace shell {
@@ -30,19 +30,13 @@ CapabilityFilter CanonicalizeFilter(const CapabilityFilter& filter) {
 Identity::Identity() {}
 
 Identity::Identity(const GURL& url)
-    : url_(GetBaseURLAndQuery(url, nullptr)),
-      qualifier_(url_.spec()) {}
+    : Identity(url, url.spec(), mojom::Connector::kUserRoot) {}
 
-Identity::Identity(const GURL& url, const std::string& qualifier)
-    : url_(GetBaseURLAndQuery(url, nullptr)),
-      qualifier_(qualifier.empty() ? url_.spec() : qualifier) {}
-
-Identity::Identity(const GURL& url,
-                   const std::string& qualifier,
-                   CapabilityFilter filter)
-    : url_(GetBaseURLAndQuery(url, nullptr)),
+Identity::Identity(const GURL& url, const std::string& qualifier,
+                   uint32_t user_id)
+    : url_(url),
       qualifier_(qualifier.empty() ? url_.spec() : qualifier),
-      filter_(CanonicalizeFilter(filter)) {}
+      user_id_(user_id) {}
 
 Identity::~Identity() {}
 
@@ -52,7 +46,28 @@ bool Identity::operator<(const Identity& other) const {
   // TODO(beng): figure out how it should work.
   if (url_ != other.url_)
     return url_ < other.url_;
-  return qualifier_ < other.qualifier_;
+  if (qualifier_ != other.qualifier_)
+    return qualifier_ < other.qualifier_;
+  return user_id_ < other.user_id_;
+}
+
+bool Identity::operator==(const Identity& other) const {
+  // We specifically don't include filter in the equivalence check because we
+  // don't quite know how this should work yet.
+  // TODO(beng): figure out how it should work.
+  return other.url_ == url_ && other.qualifier_ == qualifier_ &&
+         other.user_id_ == user_id_;
+}
+
+void Identity::SetFilter(const CapabilityFilter& filter) {
+  filter_ = CanonicalizeFilter(filter);
+}
+
+Identity CreateShellIdentity() {
+  Identity id =
+      Identity(GURL("mojo://shell/"), "", mojom::Connector::kUserRoot);
+  id.SetFilter(GetPermissiveCapabilityFilter());
+  return id;
 }
 
 }  // namespace shell

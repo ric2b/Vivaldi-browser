@@ -8,9 +8,9 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
 #include "core/page/Page.h"
+#include "core/style/ComputedStyle.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "public/platform/WebLayerTreeView.h"
-#include "web/InspectorEmulationAgent.h"
 #include "web/WebInputEventConversion.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebSettingsImpl.h"
@@ -49,10 +49,11 @@ namespace blink {
 
 DevToolsEmulator::DevToolsEmulator(WebViewImpl* webViewImpl)
     : m_webViewImpl(webViewImpl)
-    , m_emulationAgent(nullptr)
     , m_deviceMetricsEnabled(false)
     , m_emulateMobileEnabled(false)
     , m_isOverlayScrollbarsEnabled(false)
+    , m_isOrientationEventEnabled(false)
+    , m_isMobileLayoutThemeEnabled(false)
     , m_originalDefaultMinimumPageScaleFactor(0)
     , m_originalDefaultMaximumPageScaleFactor(0)
     , m_embedderTextAutosizingEnabled(webViewImpl->page()->settings().textAutosizingEnabled())
@@ -66,6 +67,7 @@ DevToolsEmulator::DevToolsEmulator(WebViewImpl* webViewImpl)
     , m_embedderPrimaryHoverType(webViewImpl->page()->settings().primaryHoverType())
     , m_touchEventEmulationEnabled(false)
     , m_doubleTapToZoomEnabled(false)
+    , m_mainFrameResizesAreOrientationChanges(false)
     , m_originalTouchEnabled(false)
     , m_originalDeviceSupportsMouse(false)
     , m_originalDeviceSupportsTouch(false)
@@ -86,18 +88,6 @@ PassOwnPtrWillBeRawPtr<DevToolsEmulator> DevToolsEmulator::create(WebViewImpl* w
 
 DEFINE_TRACE(DevToolsEmulator)
 {
-    visitor->trace(m_emulationAgent);
-}
-
-void DevToolsEmulator::setEmulationAgent(InspectorEmulationAgent* agent)
-{
-    m_emulationAgent = agent;
-}
-
-void DevToolsEmulator::viewportChanged()
-{
-    if (m_emulationAgent)
-        m_emulationAgent->viewportChanged();
 }
 
 void DevToolsEmulator::setTextAutosizingEnabled(bool enabled)
@@ -155,6 +145,17 @@ void DevToolsEmulator::setDoubleTapToZoomEnabled(bool enabled)
 bool DevToolsEmulator::doubleTapToZoomEnabled() const
 {
     return m_touchEventEmulationEnabled ? true : m_doubleTapToZoomEnabled;
+}
+
+void DevToolsEmulator::setMainFrameResizesAreOrientationChanges(bool enabled)
+{
+    m_mainFrameResizesAreOrientationChanges = enabled;
+}
+
+bool DevToolsEmulator::mainFrameResizesAreOrientationChanges() const
+{
+    bool emulateMobileEnabled = m_deviceMetricsEnabled && m_emulateMobileEnabled;
+    return emulateMobileEnabled ? true : m_mainFrameResizesAreOrientationChanges;
 }
 
 void DevToolsEmulator::setAvailablePointerTypes(int types)
@@ -258,6 +259,11 @@ void DevToolsEmulator::enableMobileEmulation()
     m_emulateMobileEnabled = true;
     m_isOverlayScrollbarsEnabled = RuntimeEnabledFeatures::overlayScrollbarsEnabled();
     RuntimeEnabledFeatures::setOverlayScrollbarsEnabled(true);
+    m_isOrientationEventEnabled = RuntimeEnabledFeatures::orientationEventEnabled();
+    RuntimeEnabledFeatures::setOrientationEventEnabled(true);
+    m_isMobileLayoutThemeEnabled = RuntimeEnabledFeatures::mobileLayoutThemeEnabled();
+    RuntimeEnabledFeatures::setMobileLayoutThemeEnabled(true);
+    ComputedStyle::invalidateInitialStyle();
     m_webViewImpl->page()->settings().setUseMobileViewportStyle(true);
     m_webViewImpl->enableViewport();
     m_webViewImpl->settings()->setViewportMetaEnabled(true);
@@ -287,6 +293,9 @@ void DevToolsEmulator::disableMobileEmulation()
     if (!m_emulateMobileEnabled)
         return;
     RuntimeEnabledFeatures::setOverlayScrollbarsEnabled(m_isOverlayScrollbarsEnabled);
+    RuntimeEnabledFeatures::setOrientationEventEnabled(m_isOrientationEventEnabled);
+    RuntimeEnabledFeatures::setMobileLayoutThemeEnabled(m_isMobileLayoutThemeEnabled);
+    ComputedStyle::invalidateInitialStyle();
     m_webViewImpl->disableViewport();
     m_webViewImpl->settings()->setViewportMetaEnabled(false);
     m_webViewImpl->page()->frameHost().visualViewport().initializeScrollbars();

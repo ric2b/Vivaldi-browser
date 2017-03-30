@@ -4,18 +4,16 @@
 
 package org.chromium.chrome.browser.signin;
 
-import android.accounts.Account;
 import android.app.Activity;
+import android.app.FragmentManager;
 import android.content.Intent;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
-import android.view.View;
 import android.widget.LinearLayout;
 
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.firstrun.AccountFirstRunView;
 import org.chromium.chrome.browser.firstrun.ProfileDataCache;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
@@ -23,19 +21,18 @@ import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.Preferences;
 import org.chromium.chrome.browser.preferences.PreferencesLauncher;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.signin.SigninManager.SignInFlowObserver;
+import org.chromium.chrome.browser.signin.SigninManager.SignInCallback;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.browser.sync.ui.SyncCustomizationFragment;
 import org.chromium.chrome.browser.widget.AlwaysDismissedDialog;
-import org.chromium.sync.signin.AccountManagerHelper;
 import org.chromium.sync.signin.ChromeSigninController;
 
 /**
  * This class implements the dialog UI for the signin promo.
  */
-public class SigninPromoScreen
-        extends AlwaysDismissedDialog implements AccountFirstRunView.Listener {
-    private AccountFirstRunView mAccountFirstRunView;
+public class SigninPromoScreen extends AlwaysDismissedDialog
+        implements AccountSigninView.Listener, AccountSigninView.Delegate {
+    private AccountSigninView mAccountFirstRunView;
     private ProfileDataCache mProfileDataCache;
 
     /**
@@ -48,7 +45,7 @@ public class SigninPromoScreen
         // navigate to and view a URL on startup), the instance is part of the field trial,
         // and the promo has been marked to display.
         ChromePreferenceManager preferenceManager = ChromePreferenceManager.getInstance(activity);
-        if (MultiWindowUtils.getInstance().isMultiWindow(activity)) return false;
+        if (MultiWindowUtils.getInstance().isLegacyMultiWindow(activity)) return false;
         if (!preferenceManager.getShowSigninPromo()) return false;
         preferenceManager.setShowSigninPromo(false);
 
@@ -76,14 +73,15 @@ public class SigninPromoScreen
         setOwnerActivity(activity);
 
         LayoutInflater inflater = LayoutInflater.from(activity);
-        View view = inflater.inflate(R.layout.fre_choose_account, null);
+        mAccountFirstRunView = (AccountSigninView)
+                inflater.inflate(R.layout.account_signin_view, null);
         mProfileDataCache = new ProfileDataCache(activity, Profile.getLastUsedProfile());
-        mAccountFirstRunView = (AccountFirstRunView) view.findViewById(R.id.fre_account_layout);
         mAccountFirstRunView.init(mProfileDataCache);
         mAccountFirstRunView.configureForAddAccountPromo();
         mAccountFirstRunView.setListener(this);
+        mAccountFirstRunView.setDelegate(this);
 
-        setContentView(view, new LinearLayout.LayoutParams(
+        setContentView(mAccountFirstRunView, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT));
     }
 
@@ -100,32 +98,6 @@ public class SigninPromoScreen
         mProfileDataCache.destroy();
         mProfileDataCache = null;
     }
-
-    @Override
-    public void onAccountSelectionConfirmed(String accountName) {
-        final Account account =
-                AccountManagerHelper.get(getContext()).getAccountFromName(accountName);
-        SignInFlowObserver signInCallback = new SignInFlowObserver() {
-            @Override
-            public void onSigninComplete() {
-                mAccountFirstRunView.switchToSignedMode();
-                SigninManager.get(getOwnerActivity()).logInSignedInUser();
-                SigninPromoUma.recordAction(SigninPromoUma.SIGNIN_PROMO_ACCEPTED);
-                RecordUserAction.record("Signin_Signin_Succeed");
-            }
-
-            @Override
-            public void onSigninCancelled() {
-                SigninPromoUma.recordAction(SigninPromoUma.SIGNIN_PROMO_DECLINED);
-                dismiss();
-            }
-        };
-        RecordUserAction.record("Signin_Signin_FromSigninPromo");
-        SigninManager.get(getOwnerActivity().getApplicationContext())
-                .signInToSelectedAccount(getOwnerActivity(), account,
-                        SigninManager.SIGNIN_TYPE_INTERACTIVE, signInCallback);
-    }
-
     @Override
     public void onAccountSelectionCanceled() {
         SigninPromoUma.recordAction(SigninPromoUma.SIGNIN_PROMO_DECLINED);
@@ -138,27 +110,46 @@ public class SigninPromoScreen
     }
 
     @Override
-    public void onSigningInCompleted(String accountName) {
-        dismiss();
-    }
+    public void onAccountSelected(String accountName, boolean settingsClicked) {
+        if (settingsClicked) {
+            if (ProfileSyncService.get() != null) {
+                Intent intent = PreferencesLauncher.createIntentForSettingsPage(getContext(),
+                        SyncCustomizationFragment.class.getName());
+                Bundle args = new Bundle();
+                args.putString(SyncCustomizationFragment.ARGUMENT_ACCOUNT, accountName);
+                intent.putExtra(Preferences.EXTRA_SHOW_FRAGMENT_ARGUMENTS, args);
+                getContext().startActivity(intent);
+            }
 
-    @Override
-    public void onSettingsButtonClicked(String accountName) {
-        if (ProfileSyncService.get() != null) {
-            Intent intent = PreferencesLauncher.createIntentForSettingsPage(getContext(),
-                    SyncCustomizationFragment.class.getName());
-            Bundle args = new Bundle();
-            args.putString(SyncCustomizationFragment.ARGUMENT_ACCOUNT, accountName);
-            intent.putExtra(Preferences.EXTRA_SHOW_FRAGMENT_ARGUMENTS, args);
-            getContext().startActivity(intent);
+            SigninPromoUma.recordAction(SigninPromoUma.SIGNIN_PROMO_ACCEPTED_WITH_ADVANCED);
+            dismiss();
+        } else {
+            Activity activity = getOwnerActivity();
+            RecordUserAction.record("Signin_Signin_FromSigninPromo");
+            SigninManager.get(activity).signIn(accountName, activity, new SignInCallback() {
+                @Override
+                public void onSignInComplete() {
+                    SigninManager.get(getOwnerActivity()).logInSignedInUser();
+                    SigninPromoUma.recordAction(SigninPromoUma.SIGNIN_PROMO_ACCEPTED);
+                    dismiss();
+                }
+
+                @Override
+                public void onSignInAborted() {
+                    SigninPromoUma.recordAction(SigninPromoUma.SIGNIN_PROMO_DECLINED);
+                    dismiss();
+                }
+            });
         }
-
-        SigninPromoUma.recordAction(SigninPromoUma.SIGNIN_PROMO_ACCEPTED_WITH_ADVANCED);
-        dismiss();
     }
 
     @Override
     public void onFailedToSetForcedAccount(String forcedAccountName) {
         assert false : "No forced accounts in SigninPromoScreen";
+    }
+
+    @Override
+    public FragmentManager getFragmentManager() {
+        return getOwnerActivity().getFragmentManager();
     }
 }

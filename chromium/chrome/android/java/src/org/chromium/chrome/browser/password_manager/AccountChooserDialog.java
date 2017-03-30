@@ -46,6 +46,7 @@ public class AccountChooserDialog
     private final String mTitle;
     private final int mTitleLinkStart;
     private final int mTitleLinkEnd;
+    private final String mOrigin;
     private ArrayAdapter<Credential> mAdapter;
 
     /**
@@ -56,7 +57,8 @@ public class AccountChooserDialog
     private AlertDialog mDialog;
 
     private AccountChooserDialog(Context context, long nativeAccountChooserDialog,
-            Credential[] credentials, String title, int titleLinkStart, int titleLinkEnd) {
+            Credential[] credentials, String title, int titleLinkStart, int titleLinkEnd,
+            String origin) {
         mNativeAccountChooserDialog = nativeAccountChooserDialog;
         mContext = context;
         mCredentials = credentials.clone();
@@ -64,6 +66,7 @@ public class AccountChooserDialog
         mTitle = title;
         mTitleLinkStart = titleLinkStart;
         mTitleLinkEnd = titleLinkEnd;
+        mOrigin = origin;
     }
 
     /**
@@ -72,15 +75,17 @@ public class AccountChooserDialog
      *  @param title Title message for the dialog, which can contain Smart Lock branding.
      *  @param titleLinkStart Start of a link in case title contains Smart Lock branding.
      *  @param titleLinkEnd End of a link in case title contains Smart Lock branding.
+     *  @param origin Address of the web page, where dialog was triggered.
      */
     @CalledByNative
     private static AccountChooserDialog createAccountChooser(WindowAndroid windowAndroid,
             long nativeAccountChooserDialog, Credential[] credentials, String title,
-            int titleLinkStart, int titleLinkEnd) {
+            int titleLinkStart, int titleLinkEnd, String origin) {
         Activity activity = windowAndroid.getActivity().get();
         if (activity == null) return null;
-        AccountChooserDialog chooser = new AccountChooserDialog(activity,
-                nativeAccountChooserDialog, credentials, title, titleLinkStart, titleLinkEnd);
+        AccountChooserDialog chooser =
+                new AccountChooserDialog(activity, nativeAccountChooserDialog, credentials, title,
+                        titleLinkStart, titleLinkEnd, origin);
         chooser.show(activity.getFragmentManager(), null);
         return chooser;
     }
@@ -111,14 +116,24 @@ public class AccountChooserDialog
                     avatarView.setImageResource(R.drawable.account_management_no_picture);
                 }
 
-                TextView usernameView = (TextView) convertView.findViewById(R.id.username);
-                usernameView.setText(credential.getUsername());
-
-                TextView smallTextView = (TextView) convertView.findViewById(R.id.display_name);
-                String smallText = credential.getFederation().isEmpty()
-                        ? credential.getDisplayName()
-                        : credential.getFederation();
-                smallTextView.setText(smallText);
+                TextView mainNameView = (TextView) convertView.findViewById(R.id.main_name);
+                TextView secondaryNameView =
+                        (TextView) convertView.findViewById(R.id.secondary_name);
+                if (credential.getFederation().isEmpty()) {
+                    // Not federated credentials case
+                    if (credential.getDisplayName().isEmpty()) {
+                        mainNameView.setText(credential.getUsername());
+                        secondaryNameView.setVisibility(View.GONE);
+                    } else {
+                        mainNameView.setText(credential.getDisplayName());
+                        secondaryNameView.setText(credential.getUsername());
+                        secondaryNameView.setVisibility(View.VISIBLE);
+                    }
+                } else {
+                    mainNameView.setText(credential.getUsername());
+                    secondaryNameView.setText(credential.getFederation());
+                    secondaryNameView.setVisibility(View.VISIBLE);
+                }
 
                 return convertView;
             }
@@ -129,14 +144,16 @@ public class AccountChooserDialog
     public Dialog onCreateDialog(Bundle savedInstanceState) {
         View titleView =
                 LayoutInflater.from(mContext).inflate(R.layout.account_chooser_dialog_title, null);
+        TextView origin = (TextView) titleView.findViewById(R.id.origin);
+        origin.setText(mOrigin);
         TextView titleMessageText = (TextView) titleView.findViewById(R.id.title);
-        // TODO(melandory): add support for showing site origin in the title.
         if (mTitleLinkStart != 0 && mTitleLinkEnd != 0) {
             SpannableString spanableTitle = new SpannableString(mTitle);
             spanableTitle.setSpan(new ClickableSpan() {
                 @Override
                 public void onClick(View view) {
                     nativeOnLinkClicked(mNativeAccountChooserDialog);
+                    mDialog.dismiss();
                 }
             }, mTitleLinkStart, mTitleLinkEnd, Spanned.SPAN_INCLUSIVE_INCLUSIVE);
             titleMessageText.setText(spanableTitle, TextView.BufferType.SPANNABLE);
@@ -145,14 +162,15 @@ public class AccountChooserDialog
             titleMessageText.setText(mTitle);
         }
         mAdapter = generateAccountsArrayAdapter(mContext, mCredentials);
-        final AlertDialog.Builder builder = new AlertDialog.Builder(mContext)
-                .setCustomTitle(titleView)
-                .setNegativeButton(R.string.no_thanks, this)
-                .setAdapter(mAdapter, new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialog, int item) {
-                        mCredential = mCredentials[item];
-                    }
-                });
+        final AlertDialog.Builder builder =
+                new AlertDialog.Builder(mContext, R.style.AlertDialogTheme)
+                        .setCustomTitle(titleView)
+                        .setNegativeButton(R.string.cancel, this)
+                        .setAdapter(mAdapter, new DialogInterface.OnClickListener() {
+                            public void onClick(DialogInterface dialog, int item) {
+                                mCredential = mCredentials[item];
+                            }
+                        });
         mDialog = builder.create();
         return mDialog;
     }

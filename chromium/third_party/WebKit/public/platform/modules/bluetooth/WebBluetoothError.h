@@ -44,9 +44,11 @@ enum class WebBluetoothError {
     NoBluetoothAdapter,
     ChosenDeviceVanished,
     ChooserCancelled,
+    ChooserDisabled,
     ChooserDeniedPermission,
     ServiceNotFound,
     CharacteristicNotFound,
+    NoCharacteristicsFound,
     // NotSupportedError:
     GATTUnknownError,
     GATTUnknownFailure,
@@ -55,10 +57,16 @@ enum class WebBluetoothError {
     GATTUntranslatedErrorCode,
     // SecurityError:
     GATTNotAuthorized,
+    BlacklistedCharacteristicUUID,
+    BlacklistedRead,
+    BlacklistedWrite,
+    NotAllowedToAccessService,
+    RequestDeviceWithBlacklistedUUID,
+    RequestDeviceWithUniqueOrigin,
     RequestDeviceWithoutFrame,
     // SyntaxError:
 
-    ENUM_MAX_VALUE = GATTNotAuthorized,
+    ENUM_MAX_VALUE = RequestDeviceWithoutFrame,
 };
 
 } // namespace blink

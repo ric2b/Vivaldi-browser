@@ -26,6 +26,7 @@
 #include "ash/root_window_settings.h"
 #include "ash/shell.h"
 #include "base/strings/stringprintf.h"
+#include "base/thread_task_runner_handle.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_delegate.h"
@@ -35,6 +36,7 @@
 #include "ui/compositor/reflector.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/screen.h"
 
 #if defined(USE_X11)
 #include "ui/gfx/x/x11_types.h"
@@ -159,7 +161,7 @@ void MirrorWindowController::UpdateWindow(
     const std::vector<DisplayInfo>& display_info_list) {
   static int mirror_host_count = 0;
   DisplayManager* display_manager = Shell::GetInstance()->display_manager();
-  const gfx::Display& primary = Shell::GetScreen()->GetPrimaryDisplay();
+  const gfx::Display& primary = gfx::Screen::GetScreen()->GetPrimaryDisplay();
   const DisplayInfo& source_display_info =
       display_manager->GetDisplayInfo(primary.id());
 
@@ -214,7 +216,7 @@ void MirrorWindowController::UpdateWindow(
             Shell::GetInstance()
                 ->window_tree_host_manager()
                 ->GetAshWindowTreeHostForDisplayId(
-                    Shell::GetScreen()->GetPrimaryDisplay().id());
+                    gfx::Screen::GetScreen()->GetPrimaryDisplay().id());
         unified_ash_host->RegisterMirroringHost(host_info->ash_host.get());
         aura::client::SetScreenPositionClient(host->window(),
                                               screen_position_client_.get());
@@ -330,10 +332,9 @@ gfx::Display MirrorWindowController::GetDisplayForRootWindow(
     if (pair.second->ash_host->AsWindowTreeHost()->window() == root) {
       // Sanity check to catch an error early.
       int64_t id = pair.first;
-      const DisplayManager::DisplayList& list =
-          Shell::GetInstance()
-              ->display_manager()
-              ->software_mirroring_display_list();
+      const DisplayList& list = Shell::GetInstance()
+                                    ->display_manager()
+                                    ->software_mirroring_display_list();
       auto iter = std::find_if(
           list.begin(), list.end(),
           [id](const gfx::Display& display) { return display.id() == id; });
@@ -378,7 +379,7 @@ void MirrorWindowController::CloseAndDeleteHost(MirroringHostInfo* host_info,
   // was deleted as a result of input event (e.g. shortcut), so don't delete
   // now.
   if (delay_host_deletion)
-    base::MessageLoop::current()->DeleteSoon(FROM_HERE, host_info);
+    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, host_info);
   else
     delete host_info;
 }

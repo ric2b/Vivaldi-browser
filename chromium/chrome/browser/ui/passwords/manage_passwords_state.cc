@@ -40,6 +40,15 @@ ScopedPtrMapToVector(const Map& map) {
   return ret;
 }
 
+void AddRawPtrFromOwningVector(
+    const std::vector<scoped_ptr<autofill::PasswordForm>>& owning_vector,
+    std::vector<const autofill::PasswordForm*>* destination) {
+  destination->reserve(destination->size() + owning_vector.size());
+  for (const auto& owning_ptr : owning_vector) {
+    destination->push_back(owning_ptr.get());
+  }
+}
+
 ScopedVector<const autofill::PasswordForm> DeepCopyMapToVector(
     const PasswordFormMap& password_form_map) {
   ScopedVector<const autofill::PasswordForm> ret;
@@ -101,6 +110,8 @@ void ManagePasswordsState::OnPendingPassword(
   ClearData();
   form_manager_ = std::move(form_manager);
   current_forms_weak_ = ScopedPtrMapToVector(form_manager_->best_matches());
+  AddRawPtrFromOwningVector(form_manager_->federated_matches(),
+                            &current_forms_weak_);
   origin_ = form_manager_->pending_credentials().origin;
   SetState(password_manager::ui::PENDING_PASSWORD_STATE);
 }
@@ -110,6 +121,8 @@ void ManagePasswordsState::OnUpdatePassword(
   ClearData();
   form_manager_ = std::move(form_manager);
   current_forms_weak_ = ScopedPtrMapToVector(form_manager_->best_matches());
+  AddRawPtrFromOwningVector(form_manager_->federated_matches(),
+                            &current_forms_weak_);
   origin_ = form_manager_->pending_credentials().origin;
   SetState(password_manager::ui::PENDING_PASSWORD_UPDATE_STATE);
 }
@@ -145,23 +158,39 @@ void ManagePasswordsState::OnAutomaticPasswordSave(
   current_forms[form_manager_->pending_credentials().username_value] =
       &form_manager_->pending_credentials();
   current_forms_weak_ = MapToVector(current_forms);
+  AddRawPtrFromOwningVector(form_manager_->federated_matches(),
+                            &current_forms_weak_);
   origin_ = form_manager_->pending_credentials().origin;
   SetState(password_manager::ui::CONFIRMATION_STATE);
 }
 
 void ManagePasswordsState::OnPasswordAutofilled(
     const PasswordFormMap& password_form_map,
-    const GURL& origin) {
-  // TODO(vabr): Revert back to DCHECK once http://crbug.com/486931 is fixed.
-  CHECK(!password_form_map.empty());
+    const GURL& origin,
+    const std::vector<scoped_ptr<autofill::PasswordForm>>* federated_matches) {
+  DCHECK(!password_form_map.empty());
   ClearData();
-  if (password_form_map.begin()->second->is_public_suffix_match) {
+  bool only_PSL_matches =
+      find_if(password_form_map.begin(), password_form_map.end(),
+              [](const std::pair<const base::string16,
+                                 scoped_ptr<autofill::PasswordForm>>& p) {
+                return !p.second->is_public_suffix_match;
+              }) == password_form_map.end();
+  if (only_PSL_matches) {
     // Don't show the UI for PSL matched passwords. They are not stored for this
     // page and cannot be deleted.
     origin_ = GURL();
     SetState(password_manager::ui::INACTIVE_STATE);
   } else {
     local_credentials_forms_ = DeepCopyMapToVector(password_form_map);
+    if (federated_matches) {
+      local_credentials_forms_.reserve(local_credentials_forms_.size() +
+                                       federated_matches->size());
+      for (const auto& owned_form : *federated_matches) {
+        local_credentials_forms_.push_back(
+            new autofill::PasswordForm(*owned_form));
+      }
+    }
     origin_ = origin;
     SetState(password_manager::ui::MANAGE_STATE);
   }
@@ -224,14 +253,14 @@ void ManagePasswordsState::ChooseCredential(
   // cross-origin.
   //
   // If |credential_type| is local, the credential MIGHT be a PasswordCredential
-  // or it MIGHT be a FederatedCredential. We inspect the |federation_url|
+  // or it MIGHT be a FederatedCredential. We inspect the |federation_origin|
   // field to determine which we should return.
   //
   // TODO(mkwst): Clean this up. It is confusing.
   password_manager::CredentialType type_to_return;
   if (credential_type ==
           password_manager::CredentialType::CREDENTIAL_TYPE_PASSWORD &&
-      form.federation_url.is_empty()) {
+      form.federation_origin.unique()) {
     type_to_return = password_manager::CredentialType::CREDENTIAL_TYPE_PASSWORD;
   } else if (credential_type ==
              password_manager::CredentialType::CREDENTIAL_TYPE_EMPTY) {

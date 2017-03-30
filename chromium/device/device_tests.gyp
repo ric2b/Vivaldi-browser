@@ -12,11 +12,12 @@
       'type': '<(gtest_target_type)',
       'dependencies': [
         '../base/base.gyp:test_support_base',
+        '../mojo/mojo_base.gyp:mojo_url_type_converters',
         '../mojo/mojo_base.gyp:mojo_environment_chromium',
+        '../mojo/mojo_edk.gyp:mojo_system_impl',
+        '../mojo/mojo_public.gyp:mojo_cpp_bindings',
         '../testing/gmock.gyp:gmock',
         '../testing/gtest.gyp:gtest',
-        '../third_party/mojo/mojo_edk.gyp:mojo_system_impl',
-        '../third_party/mojo/mojo_public.gyp:mojo_cpp_bindings',
         '../tools/usb_gadget/usb_gadget.gyp:usb_gadget',
         'battery/battery.gyp:device_battery',
         'battery/battery.gyp:device_battery_mojo_bindings',
@@ -24,10 +25,10 @@
         'bluetooth/bluetooth.gyp:device_bluetooth_mocks',
         'core/core.gyp:device_core',
         'core/core.gyp:device_core_mocks',
-        'devices_app/devices_app.gyp:devices_app_lib',
         'nfc/nfc.gyp:device_nfc',
         'usb/usb.gyp:device_usb',
         'usb/usb.gyp:device_usb_mocks',
+        'usb/usb.gyp:device_usb_mojo_bindings',
         'hid/hid.gyp:device_hid',
         'hid/hid.gyp:device_hid_mocks',
         'serial/serial.gyp:device_serial',
@@ -57,12 +58,10 @@
         'bluetooth/test/bluetooth_test_android.h',
         'bluetooth/test/bluetooth_test_mac.h',
         'bluetooth/test/bluetooth_test_mac.mm',
+        'bluetooth/test/bluetooth_test_win.h',
+        'bluetooth/test/bluetooth_test_win.cc',
         'bluetooth/test/test_bluetooth_adapter_observer.cc',
         'bluetooth/test/test_bluetooth_adapter_observer.h',
-        'devices_app/usb/device_impl_unittest.cc',
-        'devices_app/usb/device_manager_impl_unittest.cc',
-        'devices_app/usb/fake_permission_provider.cc',
-        'devices_app/usb/fake_permission_provider.h',
         'hid/hid_connection_unittest.cc',
         'hid/hid_device_filter_unittest.cc',
         'hid/hid_report_descriptor_unittest.cc',
@@ -80,6 +79,10 @@
         'test/test_device_client.cc',
         'test/test_device_client.h',
         'test/usb_test_gadget_impl.cc',
+        'usb/mojo/device_impl_unittest.cc',
+        'usb/mojo/device_manager_impl_unittest.cc',
+        'usb/mojo/fake_permission_provider.cc',
+        'usb/mojo/fake_permission_provider.h',
         'usb/usb_descriptors_unittest.cc',
         'usb/usb_device_filter_unittest.cc',
         'usb/usb_device_handle_unittest.cc',
@@ -147,15 +150,6 @@
             ],
           },
         }],
-        ['os_posix == 1 and OS != "mac" and OS != "android" and OS != "ios"', {
-          'conditions': [
-            ['use_allocator!="none"', {
-              'dependencies': [
-                '../base/allocator/allocator.gyp:allocator',
-              ],
-            }],
-          ],
-        }],
         ['use_udev==1', {
           'dependencies': [
             'udev_linux/udev.gyp:udev_linux',
@@ -180,6 +174,14 @@
         ['use_dbus==0', {
           'sources!': [
             'battery/battery_status_manager_linux_unittest.cc',
+          ],
+        }],
+        ['OS=="win"', {
+          'sources': [
+            'bluetooth/bluetooth_classic_win_fake.cc',
+            'bluetooth/bluetooth_classic_win_fake.h',
+            'bluetooth/bluetooth_low_energy_win_fake.h',
+            'bluetooth/bluetooth_low_energy_win_fake.cc',
           ],
         }],
       ],

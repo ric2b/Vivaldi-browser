@@ -20,9 +20,16 @@
 import("//build/buildflag_header.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/nacl/config.gni")
+import("//build/config/sysroot.gni")
 import("//build/config/ui.gni")
 import("//build/nocompile.gni")
 import("//testing/test.gni")
+
+declare_args() {
+  # Override this value to give a specific build date.
+  # See //base/build_time.cc for more details.
+  override_build_date = "N/A"
+}
 
 if (is_android) {
   import("//build/config/android/rules.gni")
@@ -50,6 +57,15 @@ if (is_win) {
       "/DELAYLOAD:cfgmgr32.dll",
       "/DELAYLOAD:powrprof.dll",
       "/DELAYLOAD:setupapi.dll",
+    ]
+  }
+
+  copy("copy_dbghelp.dll") {
+    sources = [
+      "../build/win/dbghelp_xp/dbghelp.dll",
+    ]
+    outputs = [
+      "$root_out_dir/{{source_file_part}}",
     ]
   }
 }
@@ -501,12 +517,16 @@ component("base") {
     "metrics/histogram_delta_serialization.h",
     "metrics/histogram_flattener.h",
     "metrics/histogram_macros.h",
+    "metrics/histogram_persistence.cc",
+    "metrics/histogram_persistence.h",
     "metrics/histogram_samples.cc",
     "metrics/histogram_samples.h",
     "metrics/histogram_snapshot_manager.cc",
     "metrics/histogram_snapshot_manager.h",
     "metrics/metrics_hashes.cc",
     "metrics/metrics_hashes.h",
+    "metrics/persistent_memory_allocator.cc",
+    "metrics/persistent_memory_allocator.h",
     "metrics/sample_map.cc",
     "metrics/sample_map.h",
     "metrics/sample_vector.cc",
@@ -623,8 +643,6 @@ component("base") {
     "process/process_metrics_win.cc",
     "process/process_posix.cc",
     "process/process_win.cc",
-    "profiler/alternate_timer.cc",
-    "profiler/alternate_timer.h",
     "profiler/native_stack_sampler.cc",
     "profiler/native_stack_sampler.h",
     "profiler/native_stack_sampler_posix.cc",
@@ -737,6 +755,8 @@ component("base") {
     "task_runner.cc",
     "task_runner.h",
     "task_runner_util.h",
+    "task_scheduler/task_traits.cc",
+    "task_scheduler/task_traits.h",
     "template_util.h",
     "third_party/dmg_fp/dmg_fp.h",
     "third_party/dmg_fp/dtoa_wrapper.cc",
@@ -847,11 +867,8 @@ component("base") {
     "trace_event/process_memory_dump.h",
     "trace_event/process_memory_maps.cc",
     "trace_event/process_memory_maps.h",
-    "trace_event/process_memory_maps_dump_provider.h",
     "trace_event/process_memory_totals.cc",
     "trace_event/process_memory_totals.h",
-    "trace_event/process_memory_totals_dump_provider.cc",
-    "trace_event/process_memory_totals_dump_provider.h",
     "trace_event/trace_buffer.cc",
     "trace_event/trace_buffer.h",
     "trace_event/trace_config.cc",
@@ -954,6 +971,7 @@ component("base") {
   ]
 
   deps = [
+    "//base/allocator",
     "//base/third_party/dynamic_annotations",
     "//third_party/modp_b64",
   ]
@@ -961,8 +979,14 @@ component("base") {
   public_deps = [
     ":base_paths",
     ":base_static",
+    ":build_date",
     ":debugging_flags",
   ]
+
+  # Needed for <atomic> if using newer C++ library than sysroot
+  if (!use_sysroot && (is_android || is_linux)) {
+    libs = [ "atomic" ]
+  }
 
   # Allow more direct string conversions on platforms with native utf8
   # strings
@@ -991,7 +1015,6 @@ component("base") {
       "sys_info_linux.cc",
       "trace_event/malloc_dump_provider.cc",
       "trace_event/malloc_dump_provider.h",
-      "trace_event/process_memory_maps_dump_provider.cc",
     ]
     set_sources_assignment_filter(sources_assignment_filter)
 
@@ -1058,7 +1081,6 @@ component("base") {
       "sync_socket_posix.cc",
       "sys_info.cc",
       "sys_info_posix.cc",
-      "trace_event/process_memory_totals_dump_provider.cc",
       "trace_event/trace_event_system_stats_monitor.cc",
     ]
 
@@ -1114,6 +1136,9 @@ component("base") {
     data += [ "$root_build_dir/dbghelp.dll" ]
 
     deps += [ "//base/trace_event/etw_manifest:chrome_events_win" ]
+    if (current_toolchain == default_toolchain) {
+      deps += [ ":copy_dbghelp.dll" ]
+    }
 
     if (is_component_build) {
       # Copy the VS runtime DLLs into the isolate so that they don't have to be
@@ -1132,7 +1157,7 @@ component("base") {
         "$root_out_dir/msvcr120${vcrt_suffix}.dll",
       ]
       if (is_asan) {
-        data += [ "//third_party/llvm-build/Release+Asserts/lib/clang/3.8.0/lib/windows/clang_rt.asan_dynamic-i386.dll" ]
+        data += [ "//third_party/llvm-build/Release+Asserts/lib/clang/3.9.0/lib/windows/clang_rt.asan_dynamic-i386.dll" ]
       }
     }
 
@@ -1187,7 +1212,6 @@ component("base") {
     sources += [
       "trace_event/malloc_dump_provider.cc",
       "trace_event/malloc_dump_provider.h",
-      "trace_event/process_memory_maps_dump_provider.cc",
     ]
 
     if (is_asan || is_lsan || is_msan || is_tsan) {
@@ -1287,6 +1311,7 @@ component("base") {
       "mac/scoped_nsobject.h",
       "mac/scoped_objc_class_swizzler.h",
       "mac/scoped_objc_class_swizzler.mm",
+      "memory/shared_memory_posix.cc",
       "message_loop/message_pump_mac.h",
       "message_loop/message_pump_mac.mm",
       "process/memory_stubs.cc",
@@ -1468,85 +1493,6 @@ if (is_ios || is_android || is_win || (is_linux && !is_chromeos)) {
   }
 }
 
-component("prefs") {
-  sources = [
-    "prefs/default_pref_store.cc",
-    "prefs/default_pref_store.h",
-    "prefs/json_pref_store.cc",
-    "prefs/json_pref_store.h",
-    "prefs/overlay_user_pref_store.cc",
-    "prefs/overlay_user_pref_store.h",
-    "prefs/pref_change_registrar.cc",
-    "prefs/pref_change_registrar.h",
-    "prefs/pref_member.cc",
-    "prefs/pref_member.h",
-    "prefs/pref_notifier_impl.cc",
-    "prefs/pref_notifier_impl.h",
-    "prefs/pref_registry.cc",
-    "prefs/pref_registry.h",
-    "prefs/pref_registry_simple.cc",
-    "prefs/pref_registry_simple.h",
-    "prefs/pref_service.cc",
-    "prefs/pref_service.h",
-    "prefs/pref_service_factory.cc",
-    "prefs/pref_service_factory.h",
-    "prefs/pref_store.cc",
-    "prefs/pref_store.h",
-    "prefs/pref_value_map.cc",
-    "prefs/pref_value_map.h",
-    "prefs/pref_value_store.cc",
-    "prefs/pref_value_store.h",
-    "prefs/scoped_user_pref_update.cc",
-    "prefs/scoped_user_pref_update.h",
-    "prefs/value_map_pref_store.cc",
-    "prefs/value_map_pref_store.h",
-  ]
-  if (!is_ios) {
-    sources += [
-      "prefs/base_prefs_export.h",
-      "prefs/persistent_pref_store.h",
-      "prefs/pref_filter.h",
-      "prefs/pref_notifier.h",
-      "prefs/pref_observer.h",
-      "prefs/writeable_pref_store.h",
-    ]
-  }
-
-  defines = [ "BASE_PREFS_IMPLEMENTATION" ]
-
-  deps = [
-    ":base",
-  ]
-
-  if (!is_debug) {
-    configs -= [ "//build/config/compiler:default_optimization" ]
-    configs += [ "//build/config/compiler:optimize_max" ]
-  }
-}
-
-source_set("prefs_test_support") {
-  testonly = true
-  sources = [
-    "prefs/mock_pref_change_callback.cc",
-    "prefs/mock_pref_change_callback.h",
-    "prefs/pref_store_observer_mock.cc",
-    "prefs/pref_store_observer_mock.h",
-    "prefs/testing_pref_service.cc",
-    "prefs/testing_pref_service.h",
-    "prefs/testing_pref_store.cc",
-    "prefs/testing_pref_store.h",
-  ]
-
-  public_deps = [
-    ":prefs",
-  ]
-  deps = [
-    ":base",
-    "//testing/gmock",
-    "//testing/gtest",
-  ]
-}
-
 source_set("message_loop_tests") {
   testonly = true
   sources = [
@@ -1592,15 +1538,6 @@ if (is_win) {
       ]
     }
   }
-}
-
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("base_unittests_run") {
-  testonly = true
-  deps = [
-    ":base_unittests",
-  ]
 }
 
 test("base_unittests") {
@@ -1706,6 +1643,7 @@ test("base_unittests") {
     "memory/scoped_vector_unittest.cc",
     "memory/shared_memory_mac_unittest.cc",
     "memory/shared_memory_unittest.cc",
+    "memory/shared_memory_win_unittest.cc",
     "memory/singleton_unittest.cc",
     "memory/weak_ptr_unittest.cc",
     "message_loop/message_loop_task_runner_unittest.cc",
@@ -1720,6 +1658,7 @@ test("base_unittests") {
     "metrics/histogram_snapshot_manager_unittest.cc",
     "metrics/histogram_unittest.cc",
     "metrics/metrics_hashes_unittest.cc",
+    "metrics/persistent_memory_allocator_unittest.cc",
     "metrics/sample_map_unittest.cc",
     "metrics/sample_vector_unittest.cc",
     "metrics/sparse_histogram_unittest.cc",
@@ -1733,16 +1672,6 @@ test("base_unittests") {
     "posix/file_descriptor_shuffle_unittest.cc",
     "posix/unix_domain_socket_linux_unittest.cc",
     "power_monitor/power_monitor_unittest.cc",
-    "prefs/default_pref_store_unittest.cc",
-    "prefs/json_pref_store_unittest.cc",
-    "prefs/overlay_user_pref_store_unittest.cc",
-    "prefs/pref_change_registrar_unittest.cc",
-    "prefs/pref_member_unittest.cc",
-    "prefs/pref_notifier_impl_unittest.cc",
-    "prefs/pref_service_unittest.cc",
-    "prefs/pref_value_map_unittest.cc",
-    "prefs/pref_value_store_unittest.cc",
-    "prefs/scoped_user_pref_update_unittest.cc",
     "process/memory_unittest.cc",
     "process/memory_unittest_mac.h",
     "process/memory_unittest_mac.mm",
@@ -1824,7 +1753,6 @@ test("base_unittests") {
     "trace_event/memory_allocator_dump_unittest.cc",
     "trace_event/memory_dump_manager_unittest.cc",
     "trace_event/process_memory_dump_unittest.cc",
-    "trace_event/process_memory_totals_dump_provider_unittest.cc",
     "trace_event/trace_config_memory_test_util.h",
     "trace_event/trace_config_unittest.cc",
     "trace_event/trace_event_argument_unittest.cc",
@@ -1864,9 +1792,6 @@ test("base_unittests") {
     ":base",
     ":i18n",
     ":message_loop_tests",
-    ":prefs",
-    ":prefs_test_support",
-    "//base/allocator",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//base/third_party/dynamic_annotations",
@@ -1874,6 +1799,9 @@ test("base_unittests") {
     "//testing/gtest",
     "//third_party/icu",
   ]
+
+  # Some unittests depend on the ALLOCATOR_SHIM macro.
+  configs += [ "//base/allocator:allocator_shim_define" ]
 
   data = [
     "test/data/",
@@ -1926,7 +1854,10 @@ test("base_unittests") {
 
   if (is_linux) {
     sources -= [ "file_version_info_unittest.cc" ]
-    sources += [ "nix/xdg_util_unittest.cc" ]
+
+    if (is_desktop_linux) {
+      sources += [ "nix/xdg_util_unittest.cc" ]
+    }
 
     deps += [ "//base/test:malloc_wrapper" ]
 
@@ -1940,11 +1871,7 @@ test("base_unittests") {
     }
   }
 
-  if (is_linux || is_android) {
-    sources += [ "trace_event/process_memory_maps_dump_provider_unittest.cc" ]
-  }
-
-  if (!is_linux || use_ozone) {
+  if (!use_glib) {
     sources -= [ "message_loop/message_pump_glib_unittest.cc" ]
   }
 
@@ -1978,6 +1905,31 @@ test("base_unittests") {
     } else if (is_mac) {
       data += [ "$root_out_dir/base_unittests.dSYM/" ]
     }
+  }
+}
+
+action("build_date") {
+  script = "//build/write_build_date_header.py"
+
+  # Force recalculation if there's been a change.
+  inputs = [
+    "//build/util/LASTCHANGE",
+  ]
+  outputs = [
+    "$target_gen_dir/generated_build_date.h",
+  ]
+
+  args =
+      [ rebase_path("$target_gen_dir/generated_build_date.h", root_build_dir) ]
+
+  if (is_official_build) {
+    args += [ "official" ]
+  } else {
+    args += [ "default" ]
+  }
+
+  if (override_build_date != "N/A") {
+    args += [ override_build_date ]
   }
 }
 
@@ -2047,7 +1999,7 @@ if (is_android) {
   android_library("base_java") {
     srcjar_deps = [
       ":base_android_java_enums_srcjar",
-      ":base_multidex_gen",
+      ":base_build_config_gen",
       ":base_native_libraries_gen",
     ]
 
@@ -2058,10 +2010,10 @@ if (is_android) {
 
     DEPRECATED_java_in_dir = "android/java/src"
 
-    # New versions of ChromiumMultiDex.java and NativeLibraries.java
+    # New versions of BuildConfig.java and NativeLibraries.java
     # (with the actual correct values) will be created when creating an apk.
     jar_excluded_patterns = [
-      "*/ChromiumMultiDex.class",
+      "*/BuildConfig.class",
       "*/NativeLibraries.class",
       "*/NativeLibraries##*.class",
     ]
@@ -2096,7 +2048,7 @@ if (is_android) {
       "//third_party/robolectric:android-all-4.3_r2-robolectric-0",
       "//third_party/robolectric:robolectric_java",
     ]
-    srcjar_deps = [ ":base_multidex_gen" ]
+    srcjar_deps = [ ":base_build_config_gen" ]
   }
 
   # GYP: //base.gyp:base_junit_tests
@@ -2126,12 +2078,12 @@ if (is_android) {
     ]
   }
 
-  # GYP: //base/base.gyp:base_multidex_gen
-  java_cpp_template("base_multidex_gen") {
+  # GYP: //base/base.gyp:base_build_config_gen
+  java_cpp_template("base_build_config_gen") {
     sources = [
-      "android/java/templates/ChromiumMultiDex.template",
+      "android/java/templates/BuildConfig.template",
     ]
-    package_name = "org/chromium/base/multidex"
+    package_name = "org/chromium/base"
   }
 
   # GYP: //base/base.gyp:base_native_libraries_gen

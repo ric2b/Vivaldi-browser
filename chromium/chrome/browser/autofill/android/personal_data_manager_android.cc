@@ -10,7 +10,6 @@
 #include "base/android/jni_string.h"
 #include "base/command_line.h"
 #include "base/format_macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/autofill/options_util.h"
@@ -26,6 +25,7 @@
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/autofill_switches.h"
+#include "components/prefs/pref_service.h"
 #include "jni/PersonalDataManager_jni.h"
 
 using base::android::ConvertJavaStringToUTF8;
@@ -332,23 +332,17 @@ static jboolean IsAutofillManaged(JNIEnv* env,
   return GetPrefs()->IsManagedPreference(autofill::prefs::kAutofillEnabled);
 }
 
-// Returns whether the Wallet import feature is available.
-static jboolean IsWalletImportFeatureAvailable(
+// Returns whether the Payments integration feature is enabled.
+static jboolean IsPaymentsIntegrationEnabled(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz) {
-  return WalletIntegrationAvailableForProfile(GetProfile());
-}
-
-// Returns whether the Wallet import feature is enabled.
-static jboolean IsWalletImportEnabled(JNIEnv* env,
-                                      const JavaParamRef<jclass>& clazz) {
   return GetPrefs()->GetBoolean(autofill::prefs::kAutofillWalletImportEnabled);
 }
 
-// Enables or disables the Wallet import feature.
-static void SetWalletImportEnabled(JNIEnv* env,
-                                   const JavaParamRef<jclass>& clazz,
-                                   jboolean enable) {
+// Enables or disables the Payments integration feature.
+static void SetPaymentsIntegrationEnabled(JNIEnv* env,
+                                          const JavaParamRef<jclass>& clazz,
+                                          jboolean enable) {
   GetPrefs()->SetBoolean(autofill::prefs::kAutofillWalletImportEnabled, enable);
 }
 

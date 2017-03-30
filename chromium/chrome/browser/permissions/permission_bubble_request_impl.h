@@ -24,7 +24,6 @@ class PermissionBubbleRequestImpl : public PermissionBubbleRequest {
 
   PermissionBubbleRequestImpl(
       const GURL& request_origin,
-      bool user_gesture,
       content::PermissionType permission_type,
       const std::string& display_languages,
       const PermissionDecidedCallback& permission_decided_callback,
@@ -37,11 +36,7 @@ class PermissionBubbleRequestImpl : public PermissionBubbleRequest {
   int GetIconId() const override;
   base::string16 GetMessageText() const override;
   base::string16 GetMessageTextFragment() const override;
-  bool HasUserGesture() const override;
-
-  // TODO(miguelg) Change this method to GetOrigin()
-  GURL GetRequestingHostname() const override;
-
+  GURL GetOrigin() const override;
   // Remember to call RegisterActionTaken for these methods if you are
   // overriding them.
   void PermissionGranted() override;
@@ -54,7 +49,6 @@ class PermissionBubbleRequestImpl : public PermissionBubbleRequest {
 
  private:
   GURL request_origin_;
-  bool user_gesture_;
   content::PermissionType permission_type_;
   std::string display_languages_;
 

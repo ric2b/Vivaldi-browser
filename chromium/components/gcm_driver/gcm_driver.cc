@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "components/gcm_driver/gcm_app_handler.h"
 
 namespace gcm {
@@ -18,11 +19,6 @@ namespace gcm {
 namespace {
 
 const size_t kMaxSenders = 100;
-
-// TODO(peter): Implement an event for GCMAppHandlers that should be called
-// when decryption of an incoming message has failed.
-void DecryptionFailedCallback(
-    GCMEncryptionProvider::DecryptionFailure reason) {}
 
 }  // namespace
 
@@ -192,6 +188,13 @@ void GCMDriver::RegisterFinished(const std::string& app_id,
   callback.Run(registration_id, result);
 }
 
+void GCMDriver::RemoveEncryptionInfoAfterUnregister(const std::string& app_id,
+                                                    GCMClient::Result result) {
+  encryption_provider_.RemoveEncryptionInfo(
+      app_id, base::Bind(&GCMDriver::UnregisterFinished,
+                         weak_ptr_factory_.GetWeakPtr(), app_id, result));
+}
+
 void GCMDriver::UnregisterFinished(const std::string& app_id,
                                    GCMClient::Result result) {
   std::map<std::string, UnregisterCallback>::iterator callback_iter =
@@ -271,16 +274,33 @@ void GCMDriver::ClearCallbacks() {
 
 void GCMDriver::DispatchMessage(const std::string& app_id,
                                 const IncomingMessage& message) {
-  if (!encryption_provider_.IsEncryptedMessage(message)) {
-    GetAppHandler(app_id)->OnMessage(app_id, message);
-    return;
+  encryption_provider_.DecryptMessage(
+      app_id, message, base::Bind(&GCMDriver::DispatchMessageInternal,
+                                  weak_ptr_factory_.GetWeakPtr(), app_id));
+}
+
+void GCMDriver::DispatchMessageInternal(
+    const std::string& app_id,
+    GCMEncryptionProvider::DecryptionResult result,
+    const IncomingMessage& message) {
+  UMA_HISTOGRAM_ENUMERATION("GCM.Crypto.DecryptMessageResult", result,
+                            GCMEncryptionProvider::DECRYPTION_RESULT_LAST + 1);
+
+  switch (result) {
+    case GCMEncryptionProvider::DECRYPTION_RESULT_UNENCRYPTED:
+    case GCMEncryptionProvider::DECRYPTION_RESULT_DECRYPTED:
+      GetAppHandler(app_id)->OnMessage(app_id, message);
+      return;
+    case GCMEncryptionProvider::DECRYPTION_RESULT_INVALID_ENCRYPTION_HEADER:
+    case GCMEncryptionProvider::DECRYPTION_RESULT_INVALID_CRYPTO_KEY_HEADER:
+    case GCMEncryptionProvider::DECRYPTION_RESULT_NO_KEYS:
+    case GCMEncryptionProvider::DECRYPTION_RESULT_INVALID_SHARED_SECRET:
+    case GCMEncryptionProvider::DECRYPTION_RESULT_INVALID_PAYLOAD:
+      RecordDecryptionFailure(app_id, result);
+      return;
   }
 
-  encryption_provider_.DecryptMessage(
-      app_id, message,
-      base::Bind(&GCMDriver::DispatchMessage,
-                 weak_ptr_factory_.GetWeakPtr(), app_id),
-      base::Bind(&DecryptionFailedCallback));
+  NOTREACHED();
 }
 
 void GCMDriver::RegisterAfterUnregister(

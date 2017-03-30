@@ -18,7 +18,7 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "extensions/common/feature_switch.h"
 #include "grit/theme_resources.h"
-#include "ui/base/resource/material_design/material_design_controller.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/color_palette.h"
@@ -35,33 +35,20 @@
 bool AppMenuButton::g_open_app_immediately_for_testing = false;
 
 AppMenuButton::AppMenuButton(ToolbarView* toolbar_view)
-    : views::MenuButton(NULL, base::string16(), toolbar_view, false),
+    : views::MenuButton(base::string16(), toolbar_view, false),
       severity_(AppMenuIconPainter::SEVERITY_NONE),
       toolbar_view_(toolbar_view),
       allow_extension_dragging_(
-          extensions::FeatureSwitch::extension_action_redesign()
-              ->IsEnabled()),
-      destroyed_(nullptr),
+          extensions::FeatureSwitch::extension_action_redesign()->IsEnabled()),
       margin_trailing_(0),
       ink_drop_delegate_(new views::ButtonInkDropDelegate(this, this)),
       weak_factory_(this) {
   set_ink_drop_delegate(ink_drop_delegate_.get());
   if (!ui::MaterialDesignController::IsModeMaterial())
     icon_painter_.reset(new AppMenuIconPainter(this));
-
-  const int kInkDropLargeSize = 32;
-  const int kInkDropLargeCornerRadius = 5;
-  const int kInkDropSmallSize = 24;
-  const int kInkDropSmallCornerRadius = 2;
-  ink_drop_delegate()->SetInkDropSize(
-      kInkDropLargeSize, kInkDropLargeCornerRadius, kInkDropSmallSize,
-      kInkDropSmallCornerRadius);
 }
 
-AppMenuButton::~AppMenuButton() {
-  if (destroyed_)
-    *destroyed_ = true;
-}
+AppMenuButton::~AppMenuButton() {}
 
 void AppMenuButton::SetSeverity(AppMenuIconPainter::Severity severity,
                                 bool animate) {
@@ -96,16 +83,6 @@ void AppMenuButton::ShowMenu(bool for_drop) {
 
   FOR_EACH_OBSERVER(views::MenuListener, menu_listeners_, OnMenuOpened());
 
-  // Because running the menu below spins a nested message loop, |this| can be
-  // deleted by the time RunMenu() returns. To detect this, we set |destroyed_|
-  // (which is normally null) to point to a local. If our destructor runs during
-  // RunMenu(), then this local will be set to true on return, and we'll know
-  // it's not safe to access any member variables.
-  bool destroyed = false;
-  destroyed_ = &destroyed;
-
-  ink_drop_delegate()->OnAction(views::InkDropState::ACTIVATED);
-
   base::TimeTicks menu_open_time = base::TimeTicks::Now();
   menu_->RunMenu(this);
 
@@ -115,11 +92,6 @@ void AppMenuButton::ShowMenu(bool for_drop) {
     // the message loop.
     UMA_HISTOGRAM_TIMES("Toolbar.AppMenuTimeToAction",
                         base::TimeTicks::Now() - menu_open_time);
-  }
-
-  if (!destroyed) {
-    ink_drop_delegate()->OnAction(views::InkDropState::DEACTIVATED);
-    destroyed_ = nullptr;
   }
 }
 
@@ -197,19 +169,7 @@ void AppMenuButton::SetTrailingMargin(int margin) {
   InvalidateLayout();
 }
 
-void AppMenuButton::AddInkDropLayer(ui::Layer* ink_drop_layer) {
-  image()->SetPaintToLayer(true);
-  image()->SetFillsBoundsOpaquely(false);
-  views::MenuButton::AddInkDropLayer(ink_drop_layer);
-}
-
-void AppMenuButton::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
-  views::MenuButton::RemoveInkDropLayer(ink_drop_layer);
-  image()->SetFillsBoundsOpaquely(true);
-  image()->SetPaintToLayer(false);
-}
-
-gfx::Point AppMenuButton::CalculateInkDropCenter() const {
+gfx::Point AppMenuButton::GetInkDropCenter() const {
   // ToolbarView extends the bounds of the app button to the right in maximized
   // mode. So instead of using the center point of local bounds, we use the
   // center point (adjusted for RTL layouts) of the preferred size, which

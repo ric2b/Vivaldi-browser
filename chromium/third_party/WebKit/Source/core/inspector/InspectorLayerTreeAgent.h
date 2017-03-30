@@ -31,10 +31,9 @@
 #define InspectorLayerTreeAgent_h
 
 #include "core/CoreExport.h"
-#include "core/InspectorFrontend.h"
-#include "core/InspectorTypeBuilder.h"
 #include "core/inspector/InspectorBaseAgent.h"
 #include "platform/Timer.h"
+#include "platform/inspector_protocol/TypeBuilder.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
@@ -53,7 +52,7 @@ class PaintLayerCompositor;
 
 typedef String ErrorString;
 
-class CORE_EXPORT InspectorLayerTreeAgent final : public InspectorBaseAgent<InspectorLayerTreeAgent, InspectorFrontend::LayerTree>, public InspectorBackendDispatcher::LayerTreeCommandHandler {
+class CORE_EXPORT InspectorLayerTreeAgent final : public InspectorBaseAgent<InspectorLayerTreeAgent, protocol::Frontend::LayerTree>, public protocol::Dispatcher::LayerTreeCommandHandler {
     WTF_MAKE_NONCOPYABLE(InspectorLayerTreeAgent);
 public:
     static PassOwnPtrWillBeRawPtr<InspectorLayerTreeAgent> create(InspectedFrames* inspectedFrames)
@@ -63,7 +62,6 @@ public:
     ~InspectorLayerTreeAgent() override;
     DECLARE_VIRTUAL_TRACE();
 
-    void disable(ErrorString*) override;
     void restore() override;
 
     // Called from InspectorController
@@ -76,16 +74,17 @@ public:
 
     // Called from the front-end.
     void enable(ErrorString*) override;
-    void compositingReasons(ErrorString*, const String& layerId, RefPtr<TypeBuilder::Array<String>>&) override;
+    void disable(ErrorString*) override;
+    void compositingReasons(ErrorString*, const String& layerId, OwnPtr<protocol::Array<String>>* compositingReasons) override;
     void makeSnapshot(ErrorString*, const String& layerId, String* snapshotId) override;
-    void loadSnapshot(ErrorString*, const RefPtr<JSONArray>& tiles, String* snapshotId) override;
+    void loadSnapshot(ErrorString*, PassOwnPtr<protocol::Array<protocol::LayerTree::PictureTile>> tiles, String* snapshotId) override;
     void releaseSnapshot(ErrorString*, const String& snapshotId) override;
-    void replaySnapshot(ErrorString*, const String& snapshotId, const int* fromStep, const int* toStep, const double* scale, String* dataURL) override;
-    void profileSnapshot(ErrorString*, const String& snapshotId, const int* minRepeatCount, const double* minDuration, const RefPtr<JSONObject>* clipRect, RefPtr<TypeBuilder::Array<TypeBuilder::Array<double>>>&) override;
-    void snapshotCommandLog(ErrorString*, const String& snapshotId, RefPtr<TypeBuilder::Array<JSONObject>>&) override;
+    void profileSnapshot(ErrorString*, const String& snapshotId, const Maybe<int>& minRepeatCount, const Maybe<double>& minDuration, const Maybe<protocol::DOM::Rect>& clipRect, OwnPtr<protocol::Array<protocol::Array<double>>>* timings) override;
+    void replaySnapshot(ErrorString*, const String& snapshotId, const Maybe<int>& fromStep, const Maybe<int>& toStep, const Maybe<double>& scale, String* dataURL) override;
+    void snapshotCommandLog(ErrorString*, const String& snapshotId, OwnPtr<protocol::Array<RefPtr<protocol::DictionaryValue>>>* commandLog) override;
 
     // Called by other agents.
-    PassRefPtr<TypeBuilder::Array<TypeBuilder::LayerTree::Layer> > buildLayerTree();
+    PassOwnPtr<protocol::Array<protocol::LayerTree::Layer>> buildLayerTree();
 
 private:
     static unsigned s_lastSnapshotId;
@@ -100,13 +99,13 @@ private:
 
     typedef HashMap<int, int> LayerIdToNodeIdMap;
     void buildLayerIdToNodeIdMap(PaintLayer*, LayerIdToNodeIdMap&);
-    void gatherGraphicsLayers(GraphicsLayer*, HashMap<int, int>& layerIdToNodeIdMap, RefPtr<TypeBuilder::Array<TypeBuilder::LayerTree::Layer> >&);
+    void gatherGraphicsLayers(GraphicsLayer*, HashMap<int, int>& layerIdToNodeIdMap, OwnPtr<protocol::Array<protocol::LayerTree::Layer>>&, bool hasWheelEventHandlers, int scrollingRootLayerId);
     int idForNode(Node*);
 
     RawPtrWillBeMember<InspectedFrames> m_inspectedFrames;
     Vector<int, 2> m_pageOverlayLayerIds;
 
-    typedef HashMap<String, RefPtr<PictureSnapshot> > SnapshotById;
+    typedef HashMap<String, RefPtr<PictureSnapshot>> SnapshotById;
     SnapshotById m_snapshotById;
 };
 

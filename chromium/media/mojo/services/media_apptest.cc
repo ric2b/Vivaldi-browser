@@ -20,8 +20,6 @@
 #include "media/mojo/interfaces/service_factory.mojom.h"
 #include "media/mojo/services/media_type_converters.h"
 #include "media/mojo/services/mojo_demuxer_stream_impl.h"
-#include "mojo/shell/public/cpp/application_connection.h"
-#include "mojo/shell/public/cpp/application_impl.h"
 #include "mojo/shell/public/cpp/application_test_base.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -61,11 +59,11 @@ class MediaAppTest : public mojo::test::ApplicationTestBase {
   void SetUp() override {
     ApplicationTestBase::SetUp();
 
-    connection_ = application_impl()->ConnectToApplication("mojo:media");
-    connection_->SetRemoteServiceProviderConnectionErrorHandler(
+    connection_ = connector()->Connect("mojo:media");
+    connection_->SetRemoteInterfaceProviderConnectionErrorHandler(
         base::Bind(&MediaAppTest::ConnectionClosed, base::Unretained(this)));
 
-    connection_->ConnectToService(&service_factory_);
+    connection_->GetInterface(&service_factory_);
     service_factory_->CreateCdm(mojo::GetProxy(&cdm_));
     service_factory_->CreateRenderer(mojo::GetProxy(&renderer_));
 
@@ -101,14 +99,11 @@ class MediaAppTest : public mojo::test::ApplicationTestBase {
     interfaces::DemuxerStreamPtr video_stream;
     new MojoDemuxerStreamImpl(&video_demuxer_stream_, GetProxy(&video_stream));
 
-    interfaces::RendererClientPtr client_ptr;
-    renderer_client_binding_.Bind(GetProxy(&client_ptr));
-
     EXPECT_CALL(*this, OnRendererInitialized(expected_result))
         .Times(Exactly(1))
         .WillOnce(InvokeWithoutArgs(run_loop_.get(), &base::RunLoop::Quit));
-    renderer_->Initialize(std::move(client_ptr), nullptr,
-                          std::move(video_stream),
+    renderer_->Initialize(renderer_client_binding_.CreateInterfacePtrAndBind(),
+                          nullptr, std::move(video_stream),
                           base::Bind(&MediaAppTest::OnRendererInitialized,
                                      base::Unretained(this)));
   }
@@ -128,7 +123,7 @@ class MediaAppTest : public mojo::test::ApplicationTestBase {
   StrictMock<MockDemuxerStream> video_demuxer_stream_;
 
  private:
-  scoped_ptr<mojo::ApplicationConnection> connection_;
+  scoped_ptr<mojo::Connection> connection_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaAppTest);
 };

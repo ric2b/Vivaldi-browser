@@ -4,6 +4,9 @@
 
 namespace blink {
 
+// Note: do not add any copy or move constructors to this class: doing so will
+// break test coverage that we don't clobber the class name by trying to emit
+// replacements for synthesized functions.
 class C {
  public:
   // Make sure initializers are updated to use the new names.
@@ -17,7 +20,7 @@ class C {
   // Test that a field without a m_ prefix is correctly renamed.
   static int instanceCount;
 
- private:
+ protected:
   // Test that a field with a m_ prefix is correctly renamed.
   const int m_flagField;
   // Statics should be named with s_, but make sure s_ and m_ are both correctly
@@ -30,11 +33,17 @@ class C {
   int already_google_style_;
 };
 
+struct Derived : public C {
+  using C::m_flagField;
+  using C::m_fieldMentioningHTTPAndHTTPS;
+};
+
 int C::instanceCount = 0;
 
-// Structs are like classes, but don't use a `_` suffix for members.
+// Structs are like classes.
 struct S {
   int m_integerField;
+  int wantsRename;
   int google_style_already;
 };
 
@@ -43,6 +52,7 @@ union U {
   char fourChars[4];
   short twoShorts[2];
   int one_hopefully_four_byte_int;
+  int m_hasPrefix;
 };
 
 }  // namespace blink
@@ -50,4 +60,8 @@ union U {
 void F() {
   // Test that references to a static field are correctly rewritten.
   blink::C::instanceCount++;
+  // Force instantiation of a copy constructor for blink::C to make sure field
+  // initializers for synthesized functions don't cause weird rewrites.
+  blink::C c;
+  blink::C c2 = c;
 }

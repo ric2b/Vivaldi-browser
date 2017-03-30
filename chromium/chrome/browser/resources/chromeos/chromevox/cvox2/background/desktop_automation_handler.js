@@ -10,6 +10,7 @@ goog.provide('DesktopAutomationHandler');
 
 goog.require('BaseAutomationHandler');
 goog.require('ChromeVoxState');
+goog.require('editing.TextEditHandler');
 
 goog.scope(function() {
 var AutomationEvent = chrome.automation.AutomationEvent;
@@ -27,9 +28,16 @@ DesktopAutomationHandler = function(node) {
 
   /**
    * The object that speaks changes to an editable text field.
-   * @type {?cvox.ChromeVoxEditableTextBase}
+   * @type {editing.TextEditHandler}
    */
-  this.editableTextHandler_ = null;
+  this.textEditHandler_ = null;
+
+  /**
+   * The last time we handled a value changed event.
+   * @type {!Date}
+   * @private
+   */
+  this.lastValueChanged_ = new Date(0);
 
   // The focused state gets set on the containing webView node.
   var webView = node.find({role: RoleType.webView, state: {focused: true}});
@@ -41,6 +49,11 @@ DesktopAutomationHandler = function(node) {
            type: chrome.automation.EventType.loadComplete});
     }
   }
+
+  chrome.automation.getFocus((function(focus) {
+    if (focus)
+      this.onFocus({target: focus, type: 'focus'});
+  }).bind(this));
 };
 
 DesktopAutomationHandler.prototype = {
@@ -57,7 +70,6 @@ DesktopAutomationHandler.prototype = {
    */
   onEventDefault: function(evt) {
     var node = evt.target;
-
     if (!node)
       return;
 
@@ -86,9 +98,17 @@ DesktopAutomationHandler.prototype = {
         ChromeVoxState.instance.currentRange.equals(prevRange))
       return;
 
-    new Output().withSpeechAndBraille(
-            ChromeVoxState.instance.currentRange, prevRange, evt.type)
-        .go();
+    var output = new Output();
+    output.withRichSpeech(
+        ChromeVoxState.instance.currentRange, prevRange, evt.type);
+    if (!this.textEditHandler_) {
+      output.withBraille(
+          ChromeVoxState.instance.currentRange, prevRange, evt.type);
+    } else {
+      // Delegate event handling to the text edit handler for braille.
+      this.textEditHandler_.onEvent(evt);
+    }
+    output.go();
   },
 
   /**
@@ -117,32 +137,15 @@ DesktopAutomationHandler.prototype = {
    */
   onFocus: function(evt) {
     // Invalidate any previous editable text handler state.
-    this.editableTextHandler_ = null;
+    this.textEditHandler_ = null;
 
     var node = evt.target;
 
-    // Discard focus events on embeddedObject nodes.
-    if (node.role == RoleType.embeddedObject)
+    // Discard focus events on embeddedObject and client nodes.
+    if (node.role == RoleType.embeddedObject || node.role == RoleType.client)
       return;
 
-    // It almost never makes sense to place focus directly on a rootWebArea.
-    if (node.role == RoleType.rootWebArea) {
-      // Discard focus events for root web areas when focus was previously
-      // placed on a descendant.
-      var currentRange = ChromeVoxState.instance.currentRange;
-      if (currentRange && currentRange.start.node.root == node)
-        return;
-
-      // Discard focused root nodes without focused state set.
-      if (!node.state.focused)
-        return;
-
-      // Try to find a focusable descendant.
-      node = node.find({state: {focused: true}}) || node;
-    }
-
-    if (this.isEditable_(node))
-      this.createEditableTextHandlerIfNeeded_(node);
+    this.createTextEditHandlerIfNeeded_(evt.target);
 
     // Since we queue output mostly for live regions support and there isn't a
     // reliable way to know if this focus event resulted from a user's explicit
@@ -167,45 +170,41 @@ DesktopAutomationHandler.prototype = {
         ChromeVoxState.instance.mode === ChromeVoxMode.CLASSIC)
       return;
 
-    // If initial focus was already placed on this page (e.g. if a user starts
-    // tabbing before load complete), then don't move ChromeVox's position on
-    // the page.
-    if (ChromeVoxState.instance.currentRange &&
-        ChromeVoxState.instance.currentRange.start.node.role !=
-            RoleType.rootWebArea &&
-        ChromeVoxState.instance.currentRange.start.node.root.docUrl ==
-            evt.target.docUrl)
-      return;
+    chrome.automation.getFocus((function(focus) {
+      if (!focus)
+        return;
 
-    var root = evt.target;
-    var webView = root;
-    while (webView && webView.role != RoleType.webView)
-      webView = webView.parent;
+      // If initial focus was already placed on this page (e.g. if a user starts
+      // tabbing before load complete), then don't move ChromeVox's position on
+      // the page.
+      if (ChromeVoxState.instance.currentRange &&
+          ChromeVoxState.instance.currentRange.start.node.root == focus.root)
+        return;
 
-    if (!webView || !webView.state.focused)
-      return;
+      ChromeVoxState.instance.setCurrentRange(cursors.Range.fromNode(focus));
+      new Output().withRichSpeechAndBraille(
+          ChromeVoxState.instance.currentRange, null, evt.type).go();
+    }).bind(this));
+  },
 
-    var node = AutomationUtil.findNodePost(root,
-        Dir.FORWARD,
-        AutomationPredicate.leaf);
+  /** @override */
+  onTextChanged: function(evt) {
+    if (evt.target.state.editable)
+      this.onEditableChanged_(evt);
+  },
 
-    if (node)
-      ChromeVoxState.instance.setCurrentRange(cursors.Range.fromNode(node));
-
-    if (ChromeVoxState.instance.currentRange)
-      new Output().withSpeechAndBraille(
-              ChromeVoxState.instance.currentRange, null, evt.type)
-          .go();
+  /** @override */
+  onTextSelectionChanged: function(evt) {
+    if (evt.target.state.editable)
+      this.onEditableChanged_(evt);
   },
 
   /**
-   * Provides all feedback once a text selection change event fires.
+   * Provides all feedback once a change event in a text field fires.
    * @param {!AutomationEvent} evt
+   * @private
    */
-  onTextOrTextSelectionChanged: function(evt) {
-    if (!this.isEditable_(evt.target))
-      return;
-
+  onEditableChanged_: function(evt) {
     // Don't process nodes inside of web content if ChromeVox Next is inactive.
     if (evt.target.root.role != RoleType.desktop &&
         ChromeVoxState.instance.mode === ChromeVoxMode.CLASSIC)
@@ -220,19 +219,11 @@ DesktopAutomationHandler.prototype = {
           cursors.Range.fromNode(evt.target));
     }
 
-    this.createEditableTextHandlerIfNeeded_(evt.target);
-
-    var textChangeEvent = new cvox.TextChangeEvent(
-        evt.target.value,
-        evt.target.textSelStart,
-        evt.target.textSelEnd,
-        true);  // triggered by user
-
-    this.editableTextHandler_.changed(textChangeEvent);
-
-    new Output().withBraille(
-            ChromeVoxState.instance.currentRange, null, evt.type)
-        .go();
+    this.createTextEditHandlerIfNeeded_(evt.target);
+    // TODO(plundblad): This can currently be null for contenteditables.
+    // Clean up when it can't.
+    if (this.textEditHandler_)
+      this.textEditHandler_.onEvent(evt);
   },
 
   /**
@@ -240,18 +231,27 @@ DesktopAutomationHandler.prototype = {
    * @param {!AutomationEvent} evt
    */
   onValueChanged: function(evt) {
+    // Delegate to the edit text handler if this is an editable.
+    if (evt.target.state.editable) {
+      this.onEditableChanged_(evt);
+      return;
+    }
+
     // Don't process nodes inside of web content if ChromeVox Next is inactive.
     if (evt.target.root.role != RoleType.desktop &&
         ChromeVoxState.instance.mode === ChromeVoxMode.CLASSIC)
       return;
 
-    // Value change events fire on web editables when typing. Suppress them.
-    if (!ChromeVoxState.instance.currentRange ||
-        !this.isEditable_(evt.target)) {
-      var range = cursors.Range.fromNode(evt.target);
-      new Output().withSpeechAndBraille(range, range, evt.type)
-          .go();
-    }
+    if (!evt.target.state.focused && evt.target.root.role != RoleType.desktop)
+      return;
+
+    if (new Date() - this.lastValueChanged_ <= 500)
+      return;
+
+    this.lastValueChanged_ = new Date();
+
+    new Output().format('$value', evt.target)
+        .go();
   },
 
   /**
@@ -259,46 +259,35 @@ DesktopAutomationHandler.prototype = {
    * @override
    */
   onScrollPositionChanged: function(evt) {
+    if (ChromeVoxState.instance.mode === ChromeVoxMode.CLASSIC)
+      return;
+
     var currentRange = ChromeVoxState.instance.currentRange;
     if (currentRange)
       new Output().withLocation(currentRange, null, evt.type).go();
   },
 
-  /**
-   * Create an editable text handler for the given node if needed.
-   * @param {Object} node
-   */
-  createEditableTextHandlerIfNeeded_: function(node) {
-    if (!this.editableTextHandler_ ||
-        node != ChromeVoxState.instance.currentRange.start.node) {
-      var start = node.textSelStart;
-      var end = node.textSelEnd;
-      if (start > end) {
-        var tempOffset = end;
-        end = start;
-        start = tempOffset;
-      }
+  /** @override */
+  onMenuStart: function(evt) {
+    global.backgroundObj.startExcursion();
+    this.onEventDefault(evt);
+  },
 
-      this.editableTextHandler_ =
-          new cvox.ChromeVoxEditableTextBase(
-              node.value,
-              start,
-              end,
-              node.state.protected,
-              cvox.ChromeVox.tts);
-    }
+  /** @override */
+  onMenuEnd: function(evt) {
+    this.onEventDefault(evt);
+    global.backgroundObj.endExcursion();
   },
 
   /**
-   * Returns true if |node| is editable.
-   * @param {AutomationNode} node
-   * @return {boolean}
-   * @private
+   * Create an editable text handler for the given node if needed.
+   * @param {!AutomationNode} node
    */
-  isEditable_: function(node) {
-    // Remove the check for role after m47 whereafter the editable state can be
-    // used to know when to create an editable text handler.
-    return node.role == RoleType.textField || node.state.editable;
+  createTextEditHandlerIfNeeded_: function(node) {
+    if (!this.textEditHandler_ ||
+        this.textEditHandler_.node !== node) {
+      this.textEditHandler_ = editing.TextEditHandler.createForNode(node);
+    }
   }
 };
 

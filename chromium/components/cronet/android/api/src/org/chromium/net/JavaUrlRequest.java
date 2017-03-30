@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -67,6 +68,8 @@ final class JavaUrlRequest implements UrlRequest {
     private String mInitialMethod;
     private UploadDataProvider mUploadDataProvider;
     private Executor mUploadExecutor;
+    private AtomicBoolean mUploadProviderClosed = new AtomicBoolean(false);
+
     /**
      * Holds a subset of StatusValues - {@link State#STARTED} can represent
      * {@link Status#SENDING_REQUEST} or {@link Status#WAITING_FOR_RESPONSE}. While the distinction
@@ -284,6 +287,12 @@ final class JavaUrlRequest implements UrlRequest {
                 @Override
                 public void run() throws Exception {
                     mBuffer.flip();
+                    if (mTotalBytes != -1 && mTotalBytes - mWrittenBytes < mBuffer.remaining()) {
+                        enterUploadErrorState(new IllegalArgumentException(String.format(
+                                "Read upload data length %d exceeds expected length %d",
+                                mWrittenBytes + mBuffer.remaining(), mTotalBytes)));
+                        return;
+                    }
                     while (mBuffer.hasRemaining()) {
                         mWrittenBytes += mOutputChannel.write(mBuffer);
                     }
@@ -301,7 +310,9 @@ final class JavaUrlRequest implements UrlRequest {
                     } else if (mTotalBytes == mWrittenBytes) {
                         finish();
                     } else {
-                        throw new IllegalStateException("Wrote more bytes than were available");
+                        enterUploadErrorState(new IllegalArgumentException(String.format(
+                                "Read upload data length %d exceeds expected length %d",
+                                mWrittenBytes, mTotalBytes)));
                     }
                 }
             }));
@@ -326,7 +337,7 @@ final class JavaUrlRequest implements UrlRequest {
         }
 
         void startRead() {
-            mUserExecutor.execute(uploadErrorSetting(new CheckedRunnable() {
+            mExecutor.execute(errorSetting(State.STARTED, new CheckedRunnable() {
                 @Override
                 public void run() throws Exception {
                     if (mOutputChannel == null) {
@@ -336,7 +347,12 @@ final class JavaUrlRequest implements UrlRequest {
                         mOutputChannel = Channels.newChannel(mUrlConnection.getOutputStream());
                     }
                     mSinkState.set(SinkState.AWAITING_READ_RESULT);
-                    mUploadProvider.read(OutputStreamDataSink.this, mBuffer);
+                    mUserExecutor.execute(uploadErrorSetting(new CheckedRunnable() {
+                        @Override
+                        public void run() throws Exception {
+                            mUploadProvider.read(OutputStreamDataSink.this, mBuffer);
+                        }
+                    }));
                 }
             }));
         }
@@ -404,16 +420,18 @@ final class JavaUrlRequest implements UrlRequest {
     private void enterErrorState(State previousState, final UrlRequestException error) {
         if (mState.compareAndSet(previousState, State.ERROR)) {
             fireDisconnect();
+            fireCloseUploadDataProvider();
             mCallbackAsync.onFailed(mUrlResponseInfo, error);
         }
     }
 
-    /** Ends the reqeust with an error, caused by an exception thrown from user code. */
+    /** Ends the request with an error, caused by an exception thrown from user code. */
     private void enterUserErrorState(State previousState, final Throwable error) {
-        enterErrorState(previousState, new UrlRequestException("User Error", error));
+        enterErrorState(previousState,
+                new UrlRequestException("Exception received from UrlRequest.Callback", error));
     }
 
-    /** Ends the requst with an error, caused by an exception thrown from user code. */
+    /** Ends the request with an error, caused by an exception thrown from user code. */
     private void enterUploadErrorState(final Throwable error) {
         enterErrorState(State.STARTED,
                 new UrlRequestException("Exception received from UploadDataProvider", error));
@@ -486,7 +504,10 @@ final class JavaUrlRequest implements UrlRequest {
                 // TODO(clm) actual redirect handling? post -> get and whatnot?
                 if (responseCode >= 300 && responseCode < 400) {
                     fireRedirectReceived(mUrlResponseInfo.getAllHeaders());
-                } else if (responseCode >= 400) {
+                    return;
+                }
+                fireCloseUploadDataProvider();
+                if (responseCode >= 400) {
                     mResponseChannel = InputStreamChannel.wrap(connection.getErrorStream());
                     mCallbackAsync.onResponseStarted(mUrlResponseInfo);
                 } else {
@@ -495,6 +516,21 @@ final class JavaUrlRequest implements UrlRequest {
                 }
             }
         }));
+    }
+
+    private void fireCloseUploadDataProvider() {
+        if (mUploadDataProvider != null && mUploadProviderClosed.compareAndSet(false, true)) {
+            try {
+                mUploadExecutor.execute(uploadErrorSetting(new CheckedRunnable() {
+                    @Override
+                    public void run() throws Exception {
+                        mUploadDataProvider.close();
+                    }
+                }));
+            } catch (RejectedExecutionException e) {
+                Log.e(TAG, "Exception when closing uploadDataProvider", e);
+            }
+        }
     }
 
     private void fireRedirectReceived(final Map<String, List<String>> headerFields) {
@@ -555,30 +591,6 @@ final class JavaUrlRequest implements UrlRequest {
                 }
             }
         }));
-    }
-
-    @Override
-    public void read(final ByteBuffer buffer) {
-        Preconditions.checkDirect(buffer);
-        if (!(buffer.capacity() - buffer.position() > 0)) {
-            throw new IllegalArgumentException("ByteBuffer is already full.");
-        }
-        transitionStates(State.AWAITING_READ, State.READING, new Runnable() {
-            @Override
-            public void run() {
-                mExecutor.execute(errorSetting(State.READING, new CheckedRunnable() {
-                    @Override
-                    public void run() throws IOException {
-                        int oldPosition = buffer.position();
-                        buffer.limit(buffer.capacity());
-                        int read = mResponseChannel.read(buffer);
-                        buffer.limit(buffer.position());
-                        buffer.position(oldPosition);
-                        processReadResult(read, buffer);
-                    }
-                }));
-            }
-        });
     }
 
     private Runnable errorSetting(final State expectedState, final CheckedRunnable delegate) {
@@ -680,6 +692,7 @@ final class JavaUrlRequest implements UrlRequest {
             case STARTED:
             case READING:
                 fireDisconnect();
+                fireCloseUploadDataProvider();
                 mCallbackAsync.onCanceled(mUrlResponseInfo);
                 break;
             // The rest are all termination cases - we're too late to cancel.

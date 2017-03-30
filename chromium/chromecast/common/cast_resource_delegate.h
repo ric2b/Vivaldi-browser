@@ -40,9 +40,7 @@ class CastResourceDelegate : public ui::ResourceBundle::Delegate {
       const base::FilePath& pack_path,
       const std::string& locale) override;
   gfx::Image GetImageNamed(int resource_id) override;
-  gfx::Image GetNativeImageNamed(
-      int resource_id,
-      ui::ResourceBundle::ImageRTL rtl) override;
+  gfx::Image GetNativeImageNamed(int resource_id) override;
   base::RefCountedStaticMemory* LoadDataResourceBytes(
       int resource_id,
       ui::ScaleFactor scale_factor) override;
@@ -50,7 +48,6 @@ class CastResourceDelegate : public ui::ResourceBundle::Delegate {
                           ui::ScaleFactor scale_factor,
                           base::StringPiece* value) override;
   bool GetLocalizedString(int message_id, base::string16* value) override;
-  scoped_ptr<gfx::Font> GetFont(ui::ResourceBundle::FontStyle style) override;
 
   // Adds/removes/clears extra localized strings.
   void AddExtraLocalizedString(int resource_id,

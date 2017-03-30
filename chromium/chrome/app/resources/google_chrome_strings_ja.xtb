@@ -3,7 +3,6 @@
 <translationbundle lang="ja">
 <translation id="1001534784610492198">インストーラー アーカイブが壊れているか無効です。Google Chrome をダウンロードし直してください。</translation>
 <translation id="1013290471399003443">Chrome で <ph name="ISSUER" /> がこのウェブサイトの証明書を発行したことを確認しました。証明書の透明性に関する有効な情報がサーバーから提供されました。</translation>
-<translation id="1016765312371154165">Chrome は正しく終了しませんでした。</translation>
 <translation id="103396972844768118">Chrome データに関する重要な情報</translation>
 <translation id="1035334672863811645">Chrome にログイン</translation>
 <translation id="1061441684050139317">このサイトとマイクを共有するには Chrome にマイクへのアクセスを許可する必要があります。</translation>
@@ -51,7 +50,6 @@
 <translation id="2397416548179033562">Chrome メニューを表示</translation>
 <translation id="2429317896000329049">お使いのドメインでは同期を利用できないため、Google Chrome はデータを同期できませんでした。</translation>
 <translation id="2485422356828889247">アンインストール</translation>
-<translation id="2576431527583832481">Chrome のアップデートが見つかりました。新しいバージョンが利用可能です。</translation>
 <translation id="2580411288591421699">実行中の Google Chrome と同じバージョンをインストールすることはできません。Google Chrome を閉じてからもう一度お試しください。</translation>
 <translation id="2582790009689336987">この Linux システムはサポートが終了するため、このパソコンでは間もなく Google Chrome のアップデートが受信されなくなります。</translation>
 <translation id="2588322182880276190">Chrome ロゴ</translation>
@@ -111,7 +109,6 @@
 <translation id="4633000520311261472">Chrome をより安全にご利用いただくため、<ph name="IDS_EXTENSION_WEB_STORE_TITLE" />で提供していない一部の拡張機能を無効にしました。これらは知らないうちに追加された可能性があります。</translation>
 <translation id="4700157086864140907">Google Chrome ではブラウザに入力された内容を Google のサーバーに送信することで高度なスペルチェックを実現し、Google 検索で使用されているスペルチェック テクノロジーを活用できます。</translation>
 <translation id="4728575227883772061">原因不明のエラーによりインストールが失敗しました。実行中の Google Chrome を終了してからやり直してください。</translation>
-<translation id="473775607612524610">アップデート</translation>
 <translation id="4743926867934016338">承諾して検索</translation>
 <translation id="4751441238232965030">このパソコンはまもなく 32 ビットの Google Chrome アップデートの受信を停止します。64 ビットの Google Chrome にアップグレードしてください。</translation>
 <translation id="4754614261631455953">Google Chrome Canary（mDNS インバウンド）</translation>
@@ -208,7 +205,6 @@
 <translation id="7808348361785373670">Chrome から削除...</translation>
 <translation id="7825851276765848807">原因不明のエラーによりインストールに失敗しました。Google Chrome をもう一度ダウンロードしてください。</translation>
 <translation id="7890208801193284374">パソコンを共有している場合、友だちや家族はそれぞれ Chrome を自分専用のブラウザとして自分用の設定をして使うことができます。</translation>
-<translation id="8000275528373650868">Google Chrome のご利用には Windows Vista または Windows XP SP2 以降が必要です。</translation>
 <translation id="8005540215158006229">Chrome はすぐに利用できるようになります。</translation>
 <translation id="8008534537613507642">Chrome を再インストール</translation>
 <translation id="8030318113982266900">デバイスを <ph name="CHANNEL_NAME" /> チャンネルに更新しています...</translation>
@@ -237,6 +233,7 @@
 <translation id="8851136666856101339">本文</translation>
 <translation id="8862326446509486874">権限が不十分なためシステムレベルのインストールができません。管理者権限でインストールしてください。</translation>
 <translation id="9026991721384951619">アカウントのログイン情報が最新ではないため、Chrome OS はデータを同期できませんでした。</translation>
+<translation id="9067395829937117663">Google Chrome のご利用には Windows 7 以上が必要です。</translation>
 <translation id="9102715433345326100">不正なファイルです。Chrome はこのファイルをブロックしました。</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />警告:<ph name="END_BOLD" /> 拡張機能による閲覧履歴の記録は Google Chrome で停止することができません。シークレット モードでこの拡張機能を無効にするには、このオプションの選択を解除してください。</translation>
 <translation id="911206726377975832">閲覧データも削除しますか？</translation>

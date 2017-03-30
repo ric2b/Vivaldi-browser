@@ -13,6 +13,7 @@
 #include "chrome/browser/ui/views/tabs/tab_strip_observer.h"
 #include "chrome/test/base/testing_profile.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/path.h"
@@ -159,6 +160,8 @@ class TabStripTest : public views::ViewsTestBase {
     views::View::ConvertPointToTarget(tab_strip_, tab, &point_in_tab_coords);
     return tab->HitTestPoint(point_in_tab_coords);
   }
+
+  void DoLayout() { tab_strip_->DoLayout(); }
 
   // Owned by TabStrip.
   FakeBaseTabStripController* controller_;
@@ -321,6 +324,13 @@ TEST_F(TabStripTest, ImmersiveMode) {
 // of hit tests against the visible/occluded regions of a tab and the tab
 // close button of the active tab.
 TEST_F(TabStripTest, TabHitTestMaskWhenStacked) {
+  // TODO(varkha,pkasting): Update the test for Material Design layout.
+  // crbug.com/575327
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    VLOG(1) << "Test is DISABLED for material design layouts.";
+    return;
+  }
+
   tab_strip_->SetBounds(0, 0, 300, 20);
 
   controller_->AddTab(0, false);
@@ -346,7 +356,6 @@ TEST_F(TabStripTest, TabHitTestMaskWhenStacked) {
   // Switch to stacked layout mode and force a layout to ensure tabs stack.
   tab_strip_->SetStackedLayout(true);
   tab_strip_->DoLayout();
-
 
   // Tests involving |left_tab|, which has part of its bounds occluded by
   // |active_tab|.
@@ -613,4 +622,16 @@ TEST_F(TabStripTest, GetTooltipHandler) {
   // Confirm that tab strip doe not return tooltip handler for points that
   // don't hit it.
   EXPECT_FALSE(tab_strip_->GetTooltipHandlerForPoint(gfx::Point(-1, 2)));
+}
+
+TEST_F(TabStripTest, NewTabButtonStaysVisible) {
+  const int kTabStripWidth = 500;
+  tab_strip_->SetBounds(0, 0, kTabStripWidth, 20);
+
+  for (int i = 0; i < 100; ++i)
+    controller_->AddTab(i, (i == 0));
+
+  DoLayout();
+
+  EXPECT_LE(tab_strip_->GetNewTabButtonBounds().right(), kTabStripWidth);
 }

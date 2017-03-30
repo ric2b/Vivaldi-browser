@@ -20,6 +20,7 @@ class GURL;
 namespace content {
 
 class BrowserContext;
+struct EmbeddedWorkerSettings;
 class SiteInstance;
 
 // Interacts with the UI thread to keep RenderProcessHosts alive while the
@@ -49,9 +50,11 @@ class CONTENT_EXPORT ServiceWorkerProcessManager {
       int embedded_worker_id,
       const GURL& pattern,
       const GURL& script_url,
+      bool can_use_existing_process,
       const base::Callback<void(ServiceWorkerStatusCode,
                                 int process_id,
-                                bool is_new_process)>& callback);
+                                bool is_new_process,
+                                const EmbeddedWorkerSettings&)>& callback);
 
   // Drops a reference to a process that was running a Service Worker, and its
   // SiteInstance.  This must match a call to AllocateWorkerProcess.
@@ -64,6 +67,11 @@ class CONTENT_EXPORT ServiceWorkerProcessManager {
   // loop.
   void SetProcessIdForTest(int process_id) {
     process_id_for_test_ = process_id;
+  }
+
+  // Sets the process ID to be used for tests that force creating a new process.
+  void SetNewProcessIdForTest(int process_id) {
+    new_process_id_for_test_ = process_id;
   }
 
   // Adds/removes process reference for the |pattern|, the process with highest
@@ -87,6 +95,7 @@ class CONTENT_EXPORT ServiceWorkerProcessManager {
   struct ProcessInfo {
     explicit ProcessInfo(const scoped_refptr<SiteInstance>& site_instance);
     explicit ProcessInfo(int process_id);
+    ProcessInfo(const ProcessInfo& other);
     ~ProcessInfo();
 
     // Stores the SiteInstance the Worker lives inside. This needs to outlive
@@ -132,6 +141,7 @@ class CONTENT_EXPORT ServiceWorkerProcessManager {
   // In unit tests, this will be returned as the process for all
   // EmbeddedWorkerInstances.
   int process_id_for_test_;
+  int new_process_id_for_test_;
 
   // Candidate processes info for each pattern, should be accessed on the
   // UI thread.

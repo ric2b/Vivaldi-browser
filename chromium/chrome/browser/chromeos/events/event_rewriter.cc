@@ -14,15 +14,15 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/extensions/extension_commands_global_registry.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
+#include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
@@ -94,7 +94,7 @@ const struct ModifierRemapping {
     {ui::EF_COMMAND_DOWN,
      input_method::kSearchKey,
      prefs::kLanguageRemapSearchKeyTo,
-     {ui::EF_COMMAND_DOWN, ui::DomCode::OS_LEFT, ui::DomKey::OS,
+     {ui::EF_COMMAND_DOWN, ui::DomCode::OS_LEFT, ui::DomKey::META,
       ui::VKEY_LWIN}},
     {ui::EF_ALT_DOWN,
      input_method::kAltKey,
@@ -664,7 +664,7 @@ bool EventRewriter::RewriteModifierKeys(const ui::KeyEvent& key_event,
   // when user logs in as guest.
   // TODO(kpschoedel): check whether this is still necessary.
   if (user_manager::UserManager::Get()->IsLoggedInAsGuest() &&
-      LoginDisplayHostImpl::default_host())
+      LoginDisplayHost::default_host())
     return false;
 
   const PrefService* pref_service = GetPrefService();
@@ -1022,13 +1022,13 @@ void EventRewriter::RewriteFunctionKeys(const ui::KeyEvent& key_event,
            {ui::EF_NONE, ui::DomCode::BRIGHTNESS_UP, ui::DomKey::BRIGHTNESS_UP,
             ui::VKEY_BRIGHTNESS_UP}},
           {{ui::EF_NONE, ui::VKEY_F8},
-           {ui::EF_NONE, ui::DomCode::VOLUME_MUTE, ui::DomKey::VOLUME_MUTE,
-            ui::VKEY_VOLUME_MUTE}},
+           {ui::EF_NONE, ui::DomCode::VOLUME_MUTE,
+            ui::DomKey::AUDIO_VOLUME_MUTE, ui::VKEY_VOLUME_MUTE}},
           {{ui::EF_NONE, ui::VKEY_F9},
-           {ui::EF_NONE, ui::DomCode::VOLUME_DOWN, ui::DomKey::VOLUME_DOWN,
-            ui::VKEY_VOLUME_DOWN}},
+           {ui::EF_NONE, ui::DomCode::VOLUME_DOWN,
+            ui::DomKey::AUDIO_VOLUME_DOWN, ui::VKEY_VOLUME_DOWN}},
           {{ui::EF_NONE, ui::VKEY_F10},
-           {ui::EF_NONE, ui::DomCode::VOLUME_UP, ui::DomKey::VOLUME_UP,
+           {ui::EF_NONE, ui::DomCode::VOLUME_UP, ui::DomKey::AUDIO_VOLUME_UP,
             ui::VKEY_VOLUME_UP}},
       };
       MutableKeyState incoming_without_command = *state;

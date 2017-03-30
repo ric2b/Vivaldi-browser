@@ -17,9 +17,6 @@
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_member.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
@@ -33,6 +30,7 @@
 #include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
+#include "chrome/browser/chromeos/arc/arc_auth_service.h"
 #include "chrome/browser/chromeos/base/locale_util.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chrome/browser/chromeos/first_run/first_run.h"
@@ -42,6 +40,7 @@
 #include "chrome/browser/chromeos/login/chrome_restart_request.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_app_launcher.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_key_manager.h"
+#include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
 #include "chrome/browser/chromeos/login/profile_auth_data.h"
@@ -53,7 +52,6 @@
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/ui/input_events_blocker.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
 #include "chrome/browser/chromeos/login/user_flow.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/supervised_user_manager.h"
@@ -97,6 +95,9 @@
 #include "components/component_updater/component_updater_service.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
+#include "components/prefs/pref_member.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/signin/core/browser/account_tracker_service.h"
@@ -1145,6 +1146,7 @@ void UserSessionManager::FinalizePrepareProfile(Profile* profile) {
       DCHECK(arc::ArcServiceManager::Get());
       arc::ArcServiceManager::Get()->OnPrimaryUserProfilePrepared(
           multi_user_util::GetAccountIdFromProfile(profile));
+      arc::ArcAuthService::Get()->OnPrimaryUserProfilePrepared(profile);
     }
   }
 
@@ -1181,7 +1183,7 @@ void UserSessionManager::FinalizePrepareProfile(Profile* profile) {
 }
 
 void UserSessionManager::ActivateWizard(const std::string& screen_name) {
-  LoginDisplayHost* host = LoginDisplayHostImpl::default_host();
+  LoginDisplayHost* host = LoginDisplayHost::default_host();
   CHECK(host);
   host->StartWizard(screen_name);
 }
@@ -1271,7 +1273,7 @@ bool UserSessionManager::InitializeUserSession(Profile* profile) {
     }
   }
 
-  DoBrowserLaunch(profile, LoginDisplayHostImpl::default_host());
+  DoBrowserLaunch(profile, LoginDisplayHost::default_host());
   return true;
 }
 
@@ -1753,7 +1755,7 @@ void UserSessionManager::SendUserPodsMetrics() {
 void UserSessionManager::OnOAuth2TokensFetched(UserContext context) {
   if (StartupUtils::IsWebviewSigninEnabled() && TokenHandlesEnabled()) {
     CreateTokenUtilIfMissing();
-    if (token_handle_util_->ShouldObtainHandle(context.GetAccountId())) {
+    if (!token_handle_util_->HasToken(context.GetAccountId())) {
       token_handle_fetcher_.reset(new TokenHandleFetcher(
           token_handle_util_.get(), context.GetAccountId()));
       token_handle_fetcher_->FillForNewUser(
@@ -1785,6 +1787,11 @@ bool UserSessionManager::TokenHandlesEnabled() {
 }
 
 void UserSessionManager::Shutdown() {
+  if (arc::ArcBridgeService::GetEnabled(
+          base::CommandLine::ForCurrentProcess())) {
+    DCHECK(arc::ArcServiceManager::Get());
+    arc::ArcAuthService::Get()->Shutdown();
+  }
   token_handle_fetcher_.reset();
   token_handle_util_.reset();
   first_run::GoodiesDisplayer::Delete();

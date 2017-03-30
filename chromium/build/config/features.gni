@@ -30,19 +30,9 @@ declare_args() {
   enable_pdf = !is_android && !is_ios && !is_chromecast
 
   # Enables Native Client support.
-  # TODO(GYP): Get NaCl linking on other platforms.
-  # Also, see if we can always get rid of enable_nacl_untrusted and
-  # enable_pnacl and always build them if enable_nacl is true.
-  # Eventually we want this to be just the first line.
-  enable_nacl = !is_ios && !is_android && !is_chromecast &&
-                current_cpu != "mipsel" && !(is_win && current_cpu != "x64")
-
-  # These default to the non-Boolean "" so that code below can default
-  # them to the explicitly-set value of enable_nacl, whereas initializing
-  # them here uses the default value of enable_nacl above and ignores any
-  # args.gn setting.
-  enable_nacl_untrusted = ""
-  enable_pnacl = ""
+  # TODO(mcgrathr): When mipsel-nacl-clang is available, drop the exclusion.
+  enable_nacl =
+      !is_ios && !is_android && !is_chromecast && current_cpu != "mipsel"
 
   # If debug_devtools is set to true, JavaScript files for DevTools are stored
   # as is and loaded from disk. Otherwise, a concatenated file is stored in
@@ -51,7 +41,6 @@ declare_args() {
   debug_devtools = false
 
   # Enables WebRTC.
-  # TODO(GYP) make mac work.
   enable_webrtc = !is_ios
 
   # Enables the Media Router.
@@ -64,9 +53,6 @@ declare_args() {
   proprietary_codecs = is_android || is_chrome_branded || is_chromecast
 
   enable_configuration_policy = !is_ios
-
-  # Enables support for background apps.
-  enable_background = !is_ios && !is_android
 
   enable_captive_portal_detection = !is_android && !is_ios
 
@@ -82,9 +68,7 @@ declare_args() {
 
   enable_autofill_dialog = !is_ios
 
-  enable_one_click_signin = is_win || is_mac || (is_linux && !is_chromeos)
-
-  enable_remoting = !is_ios && !is_android && !is_chromecast && !is_headless
+  enable_remoting = !is_ios && !is_chromecast && !is_headless
 
   # Enable hole punching for the protected video.
   enable_video_hole = is_android
@@ -120,15 +104,6 @@ declare_args() {
   enable_wifi_display = false
 }
 
-# Default these based on the explicit value of enable_nacl, not just
-# the default value seen inside the declare_args() context.
-if (enable_nacl_untrusted == "") {
-  enable_nacl_untrusted = enable_nacl
-}
-if (enable_pnacl == "") {
-  enable_pnacl = enable_nacl
-}
-
 # Additional dependent variables -----------------------------------------------
 
 # Set the version of CLD.
@@ -157,13 +132,14 @@ enable_print_preview = !is_android && !is_chromecast && !is_ios && !is_headless
 enable_pepper_cdms =
     enable_plugins && (is_linux || is_mac || is_win) && !is_chromecast
 
-# The seccomp-bpf sandbox is only supported on three architectures
+# The seccomp-bpf sandbox is only supported on five architectures
 # currently.
 # Do not disable seccomp_bpf anywhere without talking to
 # security@chromium.org!
-use_seccomp_bpf = (is_linux || is_android) &&
-                  (current_cpu == "x86" || current_cpu == "x64" ||
-                   current_cpu == "arm" || current_cpu == "mipsel")
+use_seccomp_bpf =
+    (is_linux || is_android) &&
+    (current_cpu == "x86" || current_cpu == "x64" || current_cpu == "arm" ||
+     current_cpu == "arm64" || current_cpu == "mipsel")
 
 # Enable notifications everywhere except iOS.
 enable_notifications = !is_ios
@@ -203,4 +179,4 @@ use_gconf = is_linux && !is_chromeos && !is_chromecast && !is_headless
 # Still requires command line flag to access API
 enable_webvr = is_android
 
-use_gio = is_desktop_linux && !is_headless
+use_gio = is_linux && !is_chromeos && !is_chromecast && !is_headless

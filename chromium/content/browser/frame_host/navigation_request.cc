@@ -67,6 +67,7 @@ scoped_ptr<NavigationRequest> NavigationRequest::CreateBrowserInitiated(
     const FrameNavigationEntry& frame_entry,
     const NavigationEntryImpl& entry,
     FrameMsg_Navigate_Type::Value navigation_type,
+    LoFiState lofi_state,
     bool is_same_document_history_load,
     const base::TimeTicks& navigation_start,
     NavigationControllerImpl* controller) {
@@ -93,8 +94,8 @@ scoped_ptr<NavigationRequest> NavigationRequest::CreateBrowserInitiated(
 
   scoped_ptr<NavigationRequest> navigation_request(new NavigationRequest(
       frame_tree_node, entry.ConstructCommonNavigationParams(
-                           dest_url, dest_referrer, navigation_type,
-                           LOFI_UNSPECIFIED, navigation_start),
+                           dest_url, dest_referrer, navigation_type, lofi_state,
+                           navigation_start),
       BeginNavigationParams(method, headers.ToString(),
                             LoadFlagFromNavigationType(navigation_type),
                             false,  // has_user_gestures
@@ -227,8 +228,13 @@ void NavigationRequest::BeginNavigation() {
 }
 
 void NavigationRequest::CreateNavigationHandle() {
-  navigation_handle_ = NavigationHandleImpl::Create(
-      common_params_.url, frame_tree_node_, common_params_.navigation_start);
+  // TODO(nasko): Update the NavigationHandle creation to ensure that the
+  // proper values are specified for is_synchronous and is_srcdoc.
+  navigation_handle_ =
+      NavigationHandleImpl::Create(common_params_.url, frame_tree_node_,
+                                   false,  // is_synchronous
+                                   false,  // is_srcdoc
+                                   common_params_.navigation_start);
 }
 
 void NavigationRequest::TransferNavigationHandleOwnership(
@@ -264,13 +270,19 @@ void NavigationRequest::OnResponseStarted(
 
   // Update the service worker params of the request params.
   request_params_.should_create_service_worker =
-      (frame_tree_node_->current_replication_state().sandbox_flags &
+      (frame_tree_node_->pending_sandbox_flags() &
        blink::WebSandboxFlags::Origin) != blink::WebSandboxFlags::Origin;
   if (navigation_handle_->service_worker_handle()) {
     request_params_.service_worker_provider_id =
         navigation_handle_->service_worker_handle()
             ->service_worker_provider_host_id();
   }
+
+  // Update the lofi state of the request.
+  if (response->head.is_using_lofi)
+    common_params_.lofi_state = LOFI_ON;
+  else
+    common_params_.lofi_state = LOFI_OFF;
 
   frame_tree_node_->navigator()->CommitNavigation(
       frame_tree_node_, response.get(), std::move(body));
@@ -327,14 +339,13 @@ void NavigationRequest::OnRedirectChecksComplete(
   }
 
   loader_->FollowRedirect();
-  navigation_handle_->DidRedirectNavigation(common_params_.url);
 }
 
 void NavigationRequest::InitializeServiceWorkerHandleIfNeeded() {
   // Only initialize the ServiceWorkerNavigationHandle if it can be created for
   // this frame.
   bool can_create_service_worker =
-      (frame_tree_node_->current_replication_state().sandbox_flags &
+      (frame_tree_node_->pending_sandbox_flags() &
        blink::WebSandboxFlags::Origin) != blink::WebSandboxFlags::Origin;
   if (!can_create_service_worker)
     return;

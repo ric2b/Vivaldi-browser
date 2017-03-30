@@ -11,17 +11,17 @@
 #include "base/win/windows_version.h"
 #include "chrome/browser/ui/views/apps/chrome_native_app_window_views_win.h"
 #include "ui/views/win/hwnd_util.h"
+#include "ui/vivaldi_ui_utils.h"
 
 namespace vivaldi {
-
-//TODO(andre@vivaldi.com) make this multiwindow aware, if it is needed.
-extensions::AppWindow* current_vivaldi_window_ = NULL;
-
 void UpdateTaskbarProgressBarForVivaldiWindows(int download_count,
                                                bool progress_known,
                                                float progress) {
 
-  if (!current_vivaldi_window_)
+  extensions::AppWindow* current_vivaldi_window =
+    vivaldi::ui_tools::GetActiveAppWindow();
+
+  if (!current_vivaldi_window)
     return; // Only for vivaldi
 
   // Taskbar progress bar is only supported on Win7.
@@ -40,8 +40,8 @@ void UpdateTaskbarProgressBarForVivaldiWindows(int download_count,
     return;
   }
 
-  HWND frame = views::HWNDForNativeWindow(
-  			current_vivaldi_window_->GetNativeWindow());
+  HWND frame =
+      views::HWNDForNativeWindow(current_vivaldi_window->GetNativeWindow());
   if (download_count == 0 || progress == 1.0f)
     taskbar->SetProgressState(frame, TBPF_NOPROGRESS);
   else if (!progress_known)

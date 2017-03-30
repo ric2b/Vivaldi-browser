@@ -5,8 +5,7 @@
       <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_16" file="vivaldi/product_logo_16.png" />
       <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_32" file="vivaldi/product_logo_32.png" />
       <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_WHITE" file="vivaldi/product_logo_white.png" />
-      <structure type="chrome_scaled_image" name="IDR_ERROR_NETWORK_GENERIC" file="common/error_network_generic.png" />
-      <structure type="chrome_scaled_image" name="IDR_ERROR_NETWORK_OFFLINE" file="common/error_network_offline.png" />
+      <structure type="chrome_scaled_image" name="IDR_ERROR_NETWORK_OFFLINE" file="vivaldi/error_network_offline.png" />
     </structures>
   </release>
 </grit>

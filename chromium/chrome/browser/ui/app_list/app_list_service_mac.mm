@@ -16,11 +16,11 @@
 #include "base/lazy_instance.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
-#include "base/prefs/pref_service.h"
 #import "chrome/browser/app_controller_mac.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/profiles/profile_info_cache.h"
+#include "chrome/browser/profiles/profile_attributes_entry.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/app_list/app_list_positioner.h"
 #include "chrome/browser/ui/app_list/app_list_service.h"
@@ -37,6 +37,7 @@
 #include "chrome/common/mac/app_mode_common.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/google_chrome_strings.h"
+#include "components/prefs/pref_service.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_system.h"
@@ -229,7 +230,7 @@ void AdjustWorkAreaForDock(const gfx::Display& display,
 
 void GetAppListWindowOrigins(
     NSWindow* window, NSPoint* target_origin, NSPoint* start_origin) {
-  gfx::Screen* const screen = gfx::Screen::GetScreenFor([window contentView]);
+  gfx::Screen* const screen = gfx::Screen::GetScreen();
   // Ensure y coordinates are flipped back into AppKit's coordinate system.
   bool cursor_is_visible = CGCursorIsVisible();
   gfx::Display display;
@@ -388,13 +389,11 @@ void AppListServiceMac::InitWithProfilePath(
     // Do not show the launcher window when the profile is locked, or if it
     // can't be displayed unpopulated. In the latter case, the Show will occur
     // in OnShimLaunch() or AppListService::HandleLaunchCommandLine().
-    const ProfileInfoCache& profile_info_cache =
-        g_browser_process->profile_manager()->GetProfileInfoCache();
-    size_t profile_index = profile_info_cache.
-        GetIndexOfProfileWithPath(profile_path);
-    if (profile_index != std::string::npos &&
-        !profile_info_cache.ProfileIsSigninRequiredAtIndex(profile_index) &&
-        ReadyToShow())
+    ProfileAttributesEntry* entry = nullptr;
+    bool has_entry = g_browser_process->profile_manager()->
+        GetProfileAttributesStorage().
+        GetProfileAttributesWithPath(profile_path, &entry);
+    if (has_entry && !entry->IsSigninRequired() && ReadyToShow())
       ShowWindowNearDock();
   }
 }
@@ -509,7 +508,7 @@ void AppListServiceMac::WindowAnimationDidEnd() {
 }
 
 // static
-AppListService* AppListService::Get(chrome::HostDesktopType desktop_type) {
+AppListService* AppListService::Get() {
   return GetActiveInstance();
 }
 

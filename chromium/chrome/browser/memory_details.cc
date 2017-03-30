@@ -18,6 +18,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/nacl/common/nacl_process_type.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_child_process_host_iterator.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
@@ -94,6 +95,9 @@ ProcessMemoryInformation::ProcessMemoryInformation()
       process_type(content::PROCESS_TYPE_UNKNOWN),
       renderer_type(RENDERER_UNKNOWN) {
 }
+
+ProcessMemoryInformation::ProcessMemoryInformation(
+    const ProcessMemoryInformation& other) = default;
 
 ProcessMemoryInformation::~ProcessMemoryInformation() {}
 
@@ -211,11 +215,6 @@ void MemoryDetails::CollectChildInfoOnIOThread(CollectionMode mode) {
 
 void MemoryDetails::CollectChildInfoOnUIThread() {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
-  const pid_t zygote_pid = content::ZygoteHost::GetInstance()->GetPid();
-#endif
-
   ProcessData* const chrome_browser = ChromeBrowser();
 
   // First pass, collate the widgets by process ID.
@@ -367,7 +366,7 @@ void MemoryDetails::CollectChildInfoOnUIThread() {
     }
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
-    if (process.pid == zygote_pid) {
+    if (content::ZygoteHost::GetInstance()->IsZygotePid(process.pid)) {
       process.process_type = content::PROCESS_TYPE_ZYGOTE;
     }
 #endif

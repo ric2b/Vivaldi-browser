@@ -16,8 +16,7 @@ import android.widget.TextView;
 
 import org.chromium.base.Log;
 import org.chromium.net.CronetEngine;
-import org.chromium.net.UploadDataProvider;
-import org.chromium.net.UploadDataSink;
+import org.chromium.net.UploadDataProviders;
 import org.chromium.net.UrlRequest;
 import org.chromium.net.UrlRequestException;
 import org.chromium.net.UrlResponseInfo;
@@ -58,12 +57,13 @@ public class CronetSampleActivity extends Activity {
             Log.i(TAG, "****** Response Started ******");
             Log.i(TAG, "*** Headers Are *** %s", info.getAllHeaders());
 
-            request.read(ByteBuffer.allocateDirect(32 * 1024));
+            request.readNew(ByteBuffer.allocateDirect(32 * 1024));
         }
 
         @Override
         public void onReadCompleted(
                 UrlRequest request, UrlResponseInfo info, ByteBuffer byteBuffer) {
+            byteBuffer.flip();
             Log.i(TAG, "****** onReadCompleted ******%s", byteBuffer);
 
             try {
@@ -71,8 +71,8 @@ public class CronetSampleActivity extends Activity {
             } catch (IOException e) {
                 Log.i(TAG, "IOException during ByteBuffer read. Details: ", e);
             }
-            byteBuffer.position(0);
-            request.read(byteBuffer);
+            byteBuffer.clear();
+            request.readNew(byteBuffer);
         }
 
         @Override
@@ -104,41 +104,6 @@ public class CronetSampleActivity extends Activity {
                     promptForURL(url);
                 }
             });
-        }
-    }
-
-    static class SimpleUploadDataProvider extends UploadDataProvider {
-        private byte[] mUploadData;
-        private int mOffset;
-
-        SimpleUploadDataProvider(byte[] uploadData) {
-            mUploadData = uploadData;
-            mOffset = 0;
-        }
-
-        @Override
-        public long getLength() {
-            return mUploadData.length;
-        }
-
-        @Override
-        public void read(final UploadDataSink uploadDataSink, final ByteBuffer byteBuffer)
-                throws IOException {
-            if (byteBuffer.remaining() >= mUploadData.length - mOffset) {
-                byteBuffer.put(mUploadData, mOffset, mUploadData.length - mOffset);
-                mOffset = mUploadData.length;
-            } else {
-                int length = byteBuffer.remaining();
-                byteBuffer.put(mUploadData, mOffset, length);
-                mOffset += length;
-            }
-            uploadDataSink.onReadSucceeded(false);
-        }
-
-        @Override
-        public void rewind(final UploadDataSink uploadDataSink) throws IOException {
-            mOffset = 0;
-            uploadDataSink.onRewindSucceeded();
         }
     }
 
@@ -188,11 +153,10 @@ public class CronetSampleActivity extends Activity {
     private void applyPostDataToUrlRequestBuilder(
             UrlRequest.Builder builder, Executor executor, String postData) {
         if (postData != null && postData.length() > 0) {
-            UploadDataProvider uploadDataProvider =
-                    new SimpleUploadDataProvider(postData.getBytes());
             builder.setHttpMethod("POST");
             builder.addHeader("Content-Type", "application/x-www-form-urlencoded");
-            builder.setUploadDataProvider(uploadDataProvider, executor);
+            builder.setUploadDataProvider(
+                    UploadDataProviders.create(postData.getBytes()), executor);
         }
     }
 

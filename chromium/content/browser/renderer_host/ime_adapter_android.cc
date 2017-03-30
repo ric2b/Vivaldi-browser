@@ -11,6 +11,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
+#include "base/feature_list.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "content/browser/frame_host/frame_tree.h"
@@ -26,6 +27,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 #include "jni/ImeAdapter_jni.h"
 #include "third_party/WebKit/public/web/WebCompositionUnderline.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
@@ -203,7 +205,8 @@ void ImeAdapterAndroid::SetComposingText(JNIEnv* env,
   if (new_cursor_pos > 0)
     new_cursor_pos = text16.length() + new_cursor_pos - 1;
 
-  rwhi->ImeSetComposition(text16, underlines, new_cursor_pos, new_cursor_pos);
+  rwhi->ImeSetComposition(text16, underlines, gfx::Range::InvalidRange(),
+                          new_cursor_pos, new_cursor_pos);
 }
 
 void ImeAdapterAndroid::CommitText(JNIEnv* env,
@@ -287,6 +290,22 @@ void ImeAdapterAndroid::DeleteSurroundingText(JNIEnv*,
       static_cast<RenderFrameHostImpl*>(GetFocusedFrame());
   if (rfh)
     rfh->ExtendSelectionAndDelete(before, after);
+}
+
+bool ImeAdapterAndroid::RequestTextInputStateUpdate(
+    JNIEnv* env,
+    const JavaParamRef<jobject>&) {
+  RenderWidgetHostImpl* rwhi = GetRenderWidgetHostImpl();
+  if (!rwhi)
+    return false;
+  rwhi->Send(new InputMsg_RequestTextInputStateUpdate(rwhi->GetRoutingID()));
+  return true;
+}
+
+bool ImeAdapterAndroid::IsImeThreadEnabled(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>&) {
+  return base::FeatureList::IsEnabled(features::kImeThread);
 }
 
 void ImeAdapterAndroid::ResetImeAdapter(JNIEnv* env,

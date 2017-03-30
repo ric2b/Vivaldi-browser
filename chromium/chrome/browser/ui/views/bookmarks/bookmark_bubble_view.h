@@ -38,14 +38,16 @@ class BookmarkBubbleView : public views::BubbleDelegateView,
  public:
   // If |anchor_view| is null, |anchor_rect| is used to anchor the bubble and
   // |parent_window| is used to ensure the bubble closes if the parent closes.
-  static void ShowBubble(views::View* anchor_view,
-                         const gfx::Rect& anchor_rect,
-                         gfx::NativeView parent_window,
-                         bookmarks::BookmarkBubbleObserver* observer,
-                         scoped_ptr<BubbleSyncPromoDelegate> delegate,
-                         Profile* profile,
-                         const GURL& url,
-                         bool already_bookmarked);
+  // Returns the newly created bubble's Widget or nullptr in case when the
+  // bubble already exists.
+  static views::Widget* ShowBubble(views::View* anchor_view,
+                                   const gfx::Rect& anchor_rect,
+                                   gfx::NativeView parent_window,
+                                   bookmarks::BookmarkBubbleObserver* observer,
+                                   scoped_ptr<BubbleSyncPromoDelegate> delegate,
+                                   Profile* profile,
+                                   const GURL& url,
+                                   bool already_bookmarked);
 
   static void Hide();
 
@@ -60,6 +62,7 @@ class BookmarkBubbleView : public views::BubbleDelegateView,
  protected:
   // views::BubbleDelegateView method.
   void Init() override;
+  base::string16 GetWindowTitle() const override;
 
  private:
   friend class BookmarkBubbleViewTest;
@@ -69,6 +72,7 @@ class BookmarkBubbleView : public views::BubbleDelegateView,
   // views::BubbleDelegateView:
   const char* GetClassName() const override;
   views::View* GetInitiallyFocusedView() override;
+  scoped_ptr<views::View> CreateFootnoteView() override;
 
   // Creates a BookmarkBubbleView.
   BookmarkBubbleView(views::View* anchor_view,
@@ -135,9 +139,6 @@ class BookmarkBubbleView : public views::BubbleDelegateView,
   // Combobox showing a handful of folders the user can choose from, including
   // the current parent.
   views::Combobox* parent_combobox_;
-
-  // Bookmark sync promo view, if displayed.
-  views::View* sync_promo_view_;
 
   // When the destructor is invoked should the bookmark be removed?
   bool remove_bookmark_;

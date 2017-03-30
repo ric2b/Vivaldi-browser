@@ -34,9 +34,9 @@
 #include "core/CoreExport.h"
 #include "core/inspector/InspectorDebuggerAgent.h"
 
-using blink::TypeBuilder::Debugger::ExceptionDetails;
-using blink::TypeBuilder::Debugger::ScriptId;
-using blink::TypeBuilder::Runtime::RemoteObject;
+using blink::protocol::Runtime::ExceptionDetails;
+using blink::protocol::Runtime::ScriptId;
+using blink::protocol::Runtime::RemoteObject;
 
 namespace blink {
 
@@ -49,21 +49,19 @@ class CORE_EXPORT PageDebuggerAgent final
     WTF_MAKE_NONCOPYABLE(PageDebuggerAgent);
     USING_FAST_MALLOC_WILL_BE_REMOVED(PageDebuggerAgent);
 public:
-    static PassOwnPtrWillBeRawPtr<PageDebuggerAgent> create(MainThreadDebugger*, InspectedFrames*, InjectedScriptManager*);
+    static PassOwnPtrWillBeRawPtr<PageDebuggerAgent> create(MainThreadDebugger*, InspectedFrames*, V8RuntimeAgent*);
     ~PageDebuggerAgent() override;
     DECLARE_VIRTUAL_TRACE();
 
     void enable(ErrorString*) final;
     void disable(ErrorString*) final;
     void restore() final;
-    void compileScript(ErrorString*, const String& expression, const String& sourceURL, bool persistScript, int executionContextId, TypeBuilder::OptOutput<TypeBuilder::Debugger::ScriptId>*, RefPtr<TypeBuilder::Debugger::ExceptionDetails>&) override;
-    void runScript(ErrorString*, const TypeBuilder::Debugger::ScriptId&, int executionContextId, const String* objectGroup, const bool* doNotPauseOnExceptionsAndMuteConsole, RefPtr<TypeBuilder::Runtime::RemoteObject>& result, RefPtr<TypeBuilder::Debugger::ExceptionDetails>&) override;
 
     void didStartProvisionalLoad(LocalFrame*);
     void didClearDocumentOfWindowObject(LocalFrame*);
 
 private:
-    PageDebuggerAgent(MainThreadDebugger*, InspectedFrames*, InjectedScriptManager*);
+    PageDebuggerAgent(MainThreadDebugger*, InspectedFrames*, V8RuntimeAgent*);
     void muteConsole() override;
     void unmuteConsole() override;
 
@@ -71,7 +69,6 @@ private:
     bool canExecuteScripts() const;
 
     RawPtrWillBeMember<InspectedFrames> m_inspectedFrames;
-    RawPtrWillBeMember<InjectedScriptManager> m_injectedScriptManager;
     HashMap<String, String> m_compiledScriptURLs;
 };
 

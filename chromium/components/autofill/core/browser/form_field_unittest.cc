@@ -141,23 +141,54 @@ TEST(FormFieldTest, ParseFormFields) {
   field_data.label = ASCIIToUTF16("Address line2");
   fields.push_back(new AutofillField(field_data, field_data.label));
 
-  ServerFieldTypeMap field_type_map;
-  FormField::ParseFormFields(fields.get(), true, &field_type_map);
   // Does not parse since there are only 2 recognized fields.
-  ASSERT_EQ(0U, field_type_map.size());
+  ASSERT_TRUE(FormField::ParseFormFields(fields.get(), true).empty());
 
   field_data.label = ASCIIToUTF16("City");
   fields.push_back(new AutofillField(field_data, field_data.label));
 
   // Checkable element shouldn't interfere with inference of Address line2.
-  field_type_map.clear();
-  FormField::ParseFormFields(fields.get(), true, &field_type_map);
-  ASSERT_EQ(3U, field_type_map.size());
+  const FieldCandidatesMap field_candidates_map =
+      FormField::ParseFormFields(fields.get(), true);
+  ASSERT_EQ(3U, field_candidates_map.size());
 
   EXPECT_EQ(ADDRESS_HOME_LINE1,
-            field_type_map.find(ASCIIToUTF16("Address line1"))->second);
+            field_candidates_map.find(ASCIIToUTF16("Address line1"))
+                ->second.BestHeuristicType());
   EXPECT_EQ(ADDRESS_HOME_LINE2,
-            field_type_map.find(ASCIIToUTF16("Address line2"))->second);
+            field_candidates_map.find(ASCIIToUTF16("Address line2"))
+                ->second.BestHeuristicType());
+}
+
+// All parsers see the same form and should not modify it.
+// Furthermore, all parsers are allowed to cast their votes on what the
+// ServerFieldType for a given type should be, so for an ambiguous input more
+// than one candidate is expected.
+TEST(FormFieldTest, ParseFormFieldsImmutableForm) {
+  const base::string16 unique_name = ASCIIToUTF16("blah");
+  FormFieldData field_data;
+  field_data.form_control_type = "text";
+  field_data.name = ASCIIToUTF16("business_email_address");
+
+  ScopedVector<AutofillField> fields;
+  fields.push_back(new AutofillField(field_data, unique_name));
+
+  const FieldCandidatesMap field_candidates_map =
+      FormField::ParseFormFields(fields.get(), true);
+
+  // The input form should not be modified.
+  EXPECT_EQ(1U, fields.size());
+
+  // The output should contain detected information for the sole field in the
+  // input.
+  EXPECT_EQ(1U, field_candidates_map.size());
+  EXPECT_TRUE(field_candidates_map.find(unique_name) !=
+              field_candidates_map.end());
+
+  // Because we use a handcrafted field name, we can expect it to match more
+  // than just one parser (at least email, but probably some more from the other
+  // parsers).
+  EXPECT_LT(1U, field_candidates_map.at(unique_name).field_candidates().size());
 }
 
 }  // namespace autofill

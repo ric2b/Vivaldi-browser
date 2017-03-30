@@ -6,21 +6,20 @@
 
 #include "build/build_config.h"
 #include "ui/accessibility/ax_view_state.h"
+#include "ui/base/default_style.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/focus/view_storage.h"
+#include "ui/views/layout/layout_constants.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 
 #if defined(OS_WIN)
 #include "ui/base/win/shell.h"
 #endif
-
-// The defaut margin between the content and the inside border, in pixels.
-static const int kDefaultMargin = 6;
 
 namespace views {
 
@@ -63,7 +62,10 @@ BubbleDelegateView::BubbleDelegateView(View* anchor_view,
       arrow_(arrow),
       shadow_(BubbleBorder::SMALL_SHADOW),
       color_explicitly_set_(false),
-      margins_(kDefaultMargin, kDefaultMargin, kDefaultMargin, kDefaultMargin),
+      margins_(kPanelVertMargin,
+               kPanelHorizMargin,
+               kPanelVertMargin,
+               kPanelHorizMargin),
       accept_events_(true),
       border_accepts_events_(true),
       adjust_if_offscreen_(true),
@@ -119,10 +121,14 @@ View* BubbleDelegateView::GetContentsView() {
 
 NonClientFrameView* BubbleDelegateView::CreateNonClientFrameView(
     Widget* widget) {
-  BubbleFrameView* frame = new BubbleFrameView(margins());
+  BubbleFrameView* frame = new BubbleFrameView(
+      gfx::Insets(kPanelVertMargin, kPanelHorizMargin, 0, kPanelHorizMargin),
+      margins());
   // Note: In CreateBubble, the call to SizeToContents() will cause
   // the relayout that this call requires.
   frame->SetTitleFontList(GetTitleFontList());
+  frame->SetFootnoteView(CreateFootnoteView());
+
   BubbleBorder::Arrow adjusted_arrow = arrow();
   if (base::i18n::IsRTL())
     adjusted_arrow = BubbleBorder::horizontal_mirror(adjusted_arrow);
@@ -199,6 +205,15 @@ gfx::Rect BubbleDelegateView::GetAnchorRect() const {
 
 void BubbleDelegateView::OnBeforeBubbleWidgetInit(Widget::InitParams* params,
                                                   Widget* widget) const {
+}
+
+scoped_ptr<View> BubbleDelegateView::CreateFootnoteView() {
+  return nullptr;
+}
+
+void BubbleDelegateView::UseCompactMargins() {
+  const int kCompactMargin = 6;
+  margins_.Set(kCompactMargin, kCompactMargin, kCompactMargin, kCompactMargin);
 }
 
 void BubbleDelegateView::SetAlignment(BubbleBorder::BubbleAlignment alignment) {
@@ -287,9 +302,8 @@ gfx::Rect BubbleDelegateView::GetBubbleBounds() {
 
 const gfx::FontList& BubbleDelegateView::GetTitleFontList() const {
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  return rb.GetFontList(ui::ResourceBundle::MediumFont);
+  return rb.GetFontListWithDelta(ui::kTitleFontSizeDelta);
 }
-
 
 void BubbleDelegateView::UpdateColorsFromTheme(const ui::NativeTheme* theme) {
   if (!color_explicitly_set_)

@@ -17,6 +17,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "media/base/pipeline_status.h"
+#include "media/base/surface_manager.h"
 #include "media/base/video_decoder.h"
 #include "media/video/video_decode_accelerator.h"
 
@@ -45,15 +46,17 @@ class MEDIA_EXPORT GpuVideoDecoder
     : public VideoDecoder,
       public VideoDecodeAccelerator::Client {
  public:
-  explicit GpuVideoDecoder(GpuVideoAcceleratorFactories* factories);
+  explicit GpuVideoDecoder(GpuVideoAcceleratorFactories* factories,
+                           const RequestSurfaceCB& request_surface_cb);
 
   // VideoDecoder implementation.
   std::string GetDisplayName() const override;
   void Initialize(const VideoDecoderConfig& config,
                   bool low_delay,
-                  const SetCdmReadyCB& set_cdm_ready_cb,
+                  CdmContext* cdm_context,
                   const InitCB& init_cb,
                   const OutputCB& output_cb) override;
+  void CompleteInitialization(int cdm_id, int surface_id);
   void Decode(const scoped_refptr<DecoderBuffer>& buffer,
               const DecodeCB& decode_cb) override;
   void Reset(const base::Closure& closure) override;
@@ -99,6 +102,7 @@ class MEDIA_EXPORT GpuVideoDecoder
     PendingDecoderBuffer(SHMBuffer* s,
                         const scoped_refptr<DecoderBuffer>& b,
                         const DecodeCB& done_cb);
+    PendingDecoderBuffer(const PendingDecoderBuffer& other);
     ~PendingDecoderBuffer();
     SHMBuffer* shm_buffer;
     scoped_refptr<DecoderBuffer> buffer;
@@ -106,10 +110,6 @@ class MEDIA_EXPORT GpuVideoDecoder
   };
 
   typedef std::map<int32_t, PictureBuffer> PictureBufferMap;
-
-  // Callback to set CDM. |cdm_attached_cb| is called when the decryptor in the
-  // CDM has been completely attached to the pipeline.
-  void SetCdm(CdmContext* cdm_context, const CdmAttachedCB& cdm_attached_cb);
 
   void DeliverFrame(const scoped_refptr<VideoFrame>& frame);
 
@@ -171,9 +171,9 @@ class MEDIA_EXPORT GpuVideoDecoder
 
   VideoDecoderConfig config_;
 
-  // Callback to request/cancel CDM ready notification.
-  SetCdmReadyCB set_cdm_ready_cb_;
-  CdmAttachedCB cdm_attached_cb_;
+  // For requesting a suface to render to. If this is null the VDA will return
+  // normal video frames and not render them to a surface.
+  RequestSurfaceCB request_surface_cb_;
 
   // Shared-memory buffer pool.  Since allocating SHM segments requires a
   // round-trip to the browser process, we keep allocation out of the

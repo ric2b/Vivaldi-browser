@@ -1003,6 +1003,12 @@ static const GLenum valid_texture_compare_mode_table[] = {
     GL_NONE, GL_COMPARE_REF_TO_TEXTURE,
 };
 
+static const GLenum valid_texture_depth_renderable_internal_format_table_es3[] =
+    {
+        GL_DEPTH_COMPONENT16, GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT32F,
+        GL_DEPTH24_STENCIL8,  GL_DEPTH32F_STENCIL8,
+};
+
 static const GLenum valid_texture_format_table[] = {
     GL_ALPHA, GL_LUMINANCE, GL_LUMINANCE_ALPHA, GL_RGB, GL_RGBA,
 };
@@ -1192,6 +1198,48 @@ static const GLenum valid_texture_parameter_table_es3[] = {
     GL_TEXTURE_WRAP_R,
 };
 
+static const GLenum
+    valid_texture_sized_color_renderable_internal_format_table[] = {
+        GL_R8,       GL_R8UI,     GL_R8I,          GL_R16UI,      GL_R16I,
+        GL_R32UI,    GL_R32I,     GL_RG8,          GL_RG8UI,      GL_RG8I,
+        GL_RG16UI,   GL_RG16I,    GL_RG32UI,       GL_RG32I,      GL_RGB8,
+        GL_RGB565,   GL_RGBA8,    GL_SRGB8_ALPHA8, GL_RGB5_A1,    GL_RGBA4,
+        GL_RGB10_A2, GL_RGBA8UI,  GL_RGBA8I,       GL_RGB10_A2UI, GL_RGBA16UI,
+        GL_RGBA16I,  GL_RGBA32UI, GL_RGBA32I,
+};
+
+static const GLenum
+    valid_texture_sized_texture_filterable_internal_format_table[] = {
+        GL_R8,
+        GL_R8_SNORM,
+        GL_R16F,
+        GL_RG8,
+        GL_RG8_SNORM,
+        GL_RG16F,
+        GL_RGB8,
+        GL_SRGB8,
+        GL_RGB565,
+        GL_RGB8_SNORM,
+        GL_R11F_G11F_B10F,
+        GL_RGB9_E5,
+        GL_RGB16F,
+        GL_RGBA8,
+        GL_SRGB8_ALPHA8,
+        GL_RGBA8_SNORM,
+        GL_RGB5_A1,
+        GL_RGBA4,
+        GL_RGB10_A2,
+        GL_RGBA16F,
+        GL_RGB_YUV_420_CHROMIUM,
+        GL_RGB_YCBCR_422_CHROMIUM,
+        GL_RGB_YCBCR_420V_CHROMIUM,
+};
+
+static const GLenum
+    valid_texture_stencil_renderable_internal_format_table_es3[] = {
+        GL_STENCIL_INDEX8, GL_DEPTH24_STENCIL8, GL_DEPTH32F_STENCIL8,
+};
+
 static const GLenum valid_texture_target_table[] = {
     GL_TEXTURE_2D,
     GL_TEXTURE_CUBE_MAP_POSITIVE_X,
@@ -1200,6 +1248,10 @@ static const GLenum valid_texture_target_table[] = {
     GL_TEXTURE_CUBE_MAP_NEGATIVE_Y,
     GL_TEXTURE_CUBE_MAP_POSITIVE_Z,
     GL_TEXTURE_CUBE_MAP_NEGATIVE_Z,
+};
+
+static const GLenum valid_texture_unsized_internal_format_table[] = {
+    GL_ALPHA, GL_LUMINANCE, GL_LUMINANCE_ALPHA, GL_RGB, GL_RGBA,
 };
 
 bool Validators::TextureUsageValidator::IsValid(const GLenum value) const {
@@ -1357,6 +1409,7 @@ Validators::Validators()
                           arraysize(valid_texture_bind_target_table)),
       texture_compare_mode(valid_texture_compare_mode_table,
                            arraysize(valid_texture_compare_mode_table)),
+      texture_depth_renderable_internal_format(),
       texture_format(valid_texture_format_table,
                      arraysize(valid_texture_format_table)),
       texture_internal_format(valid_texture_internal_format_table,
@@ -1366,8 +1419,20 @@ Validators::Validators()
           arraysize(valid_texture_internal_format_storage_table)),
       texture_parameter(valid_texture_parameter_table,
                         arraysize(valid_texture_parameter_table)),
+      texture_sized_color_renderable_internal_format(
+          valid_texture_sized_color_renderable_internal_format_table,
+          arraysize(
+              valid_texture_sized_color_renderable_internal_format_table)),
+      texture_sized_texture_filterable_internal_format(
+          valid_texture_sized_texture_filterable_internal_format_table,
+          arraysize(
+              valid_texture_sized_texture_filterable_internal_format_table)),
+      texture_stencil_renderable_internal_format(),
       texture_target(valid_texture_target_table,
                      arraysize(valid_texture_target_table)),
+      texture_unsized_internal_format(
+          valid_texture_unsized_internal_format_table,
+          arraysize(valid_texture_unsized_internal_format_table)),
       transform_feedback_bind_target(
           valid_transform_feedback_bind_target_table,
           arraysize(valid_transform_feedback_bind_target_table)),
@@ -1424,6 +1489,9 @@ void Validators::UpdateValuesES3() {
       arraysize(valid_render_buffer_parameter_table_es3));
   texture_bind_target.AddValues(valid_texture_bind_target_table_es3,
                                 arraysize(valid_texture_bind_target_table_es3));
+  texture_depth_renderable_internal_format.AddValues(
+      valid_texture_depth_renderable_internal_format_table_es3,
+      arraysize(valid_texture_depth_renderable_internal_format_table_es3));
   texture_format.AddValues(valid_texture_format_table_es3,
                            arraysize(valid_texture_format_table_es3));
   texture_internal_format.AddValues(
@@ -1437,6 +1505,9 @@ void Validators::UpdateValuesES3() {
       arraysize(valid_texture_internal_format_storage_table_es3));
   texture_parameter.AddValues(valid_texture_parameter_table_es3,
                               arraysize(valid_texture_parameter_table_es3));
+  texture_stencil_renderable_internal_format.AddValues(
+      valid_texture_stencil_renderable_internal_format_table_es3,
+      arraysize(valid_texture_stencil_renderable_internal_format_table_es3));
   vertex_attrib_type.AddValues(valid_vertex_attrib_type_table_es3,
                                arraysize(valid_vertex_attrib_type_table_es3));
   vertex_attribute.AddValues(valid_vertex_attribute_table_es3,

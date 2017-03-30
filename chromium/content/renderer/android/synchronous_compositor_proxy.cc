@@ -5,9 +5,11 @@
 #include "content/renderer/android/synchronous_compositor_proxy.h"
 
 #include "base/auto_reset.h"
+#include "base/command_line.h"
 #include "base/memory/shared_memory.h"
 #include "content/common/android/sync_compositor_messages.h"
 #include "content/common/cc_messages.h"
+#include "content/public/common/content_switches.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_sender.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -32,6 +34,9 @@ SynchronousCompositorProxy::SynchronousCompositorProxy(
       begin_frame_source_(begin_frame_source),
       input_handler_proxy_(input_handler_proxy),
       input_handler_(handler),
+      use_in_process_zero_copy_software_draw_(
+          base::CommandLine::ForCurrentProcess()->HasSwitch(
+              switches::kSingleProcess)),
       inside_receive_(false),
       hardware_draw_reply_(nullptr),
       software_draw_reply_(nullptr),
@@ -41,9 +46,9 @@ SynchronousCompositorProxy::SynchronousCompositorProxy(
       min_page_scale_factor_(0.f),
       max_page_scale_factor_(0.f),
       need_animate_scroll_(false),
-      need_invalidate_(false),
+      need_invalidate_count_(0u),
       need_begin_frame_(false),
-      did_activate_pending_tree_(false) {
+      did_activate_pending_tree_count_(0u) {
   DCHECK(output_surface_);
   DCHECK(begin_frame_source_);
   DCHECK(input_handler_proxy_);
@@ -101,12 +106,12 @@ void SynchronousCompositorProxy::OnNeedsBeginFramesChange(
 }
 
 void SynchronousCompositorProxy::Invalidate() {
-  need_invalidate_ = true;
+  ++need_invalidate_count_;
   SendAsyncRendererStateIfNeeded();
 }
 
 void SynchronousCompositorProxy::DidActivatePendingTree() {
-  did_activate_pending_tree_ = true;
+  ++did_activate_pending_tree_count_;
   SendAsyncRendererStateIfNeeded();
   DeliverMessages();
 }
@@ -128,7 +133,7 @@ void SynchronousCompositorProxy::SendAsyncRendererStateIfNeeded() {
 }
 
 void SynchronousCompositorProxy::PopulateCommonParams(
-    SyncCompositorCommonRendererParams* params) {
+    SyncCompositorCommonRendererParams* params) const {
   params->version = ++version_;
   params->total_scroll_offset = total_scroll_offset_;
   params->max_scroll_offset = max_scroll_offset_;
@@ -137,12 +142,9 @@ void SynchronousCompositorProxy::PopulateCommonParams(
   params->min_page_scale_factor = min_page_scale_factor_;
   params->max_page_scale_factor = max_page_scale_factor_;
   params->need_animate_scroll = need_animate_scroll_;
-  params->need_invalidate = need_invalidate_;
+  params->need_invalidate_count = need_invalidate_count_;
   params->need_begin_frame = need_begin_frame_;
-  params->did_activate_pending_tree = did_activate_pending_tree_;
-
-  need_invalidate_ = false;
-  did_activate_pending_tree_ = false;
+  params->did_activate_pending_tree_count = did_activate_pending_tree_count_;
 }
 
 void SynchronousCompositorProxy::OnMessageReceived(
@@ -274,6 +276,19 @@ void SynchronousCompositorProxy::SetSharedMemory(
   *success = true;
 }
 
+namespace {
+SkCanvas* g_sk_canvas_for_draw = nullptr;
+}
+
+// static
+void SynchronousCompositorProxy::SetSkCanvasForDraw(SkCanvas* canvas) {
+  DCHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kSingleProcess));
+  DCHECK(canvas || g_sk_canvas_for_draw) << !!canvas;
+  DCHECK(!canvas || !g_sk_canvas_for_draw) << !!canvas;
+  g_sk_canvas_for_draw = canvas;
+}
+
 void SynchronousCompositorProxy::ZeroSharedMemory() {
   DCHECK(!software_draw_shm_->zeroed);
   memset(software_draw_shm_->shm.memory(), 0, software_draw_shm_->buffer_size);
@@ -290,7 +305,13 @@ void SynchronousCompositorProxy::DemandDrawSw(
   {
     base::AutoReset<IPC::Message*> scoped_software_draw_reply(
         &software_draw_reply_, reply_message);
-    DoDemandDrawSw(params);
+    if (use_in_process_zero_copy_software_draw_) {
+      DCHECK(g_sk_canvas_for_draw);
+      output_surface_->DemandDrawSw(g_sk_canvas_for_draw);
+    } else {
+      DCHECK(!g_sk_canvas_for_draw);
+      DoDemandDrawSw(params);
+    }
   }
   if (inside_receive_) {
     // Did not swap.
@@ -357,17 +378,12 @@ void SynchronousCompositorProxy::SwapBuffers(cc::CompositorFrame* frame) {
 
 void SynchronousCompositorProxy::OnComputeScroll(
     const SyncCompositorCommonBrowserParams& common_params,
-    base::TimeTicks animation_time,
-    SyncCompositorCommonRendererParams* common_renderer_params) {
-  DCHECK(!inside_receive_);
-  base::AutoReset<bool> scoped_inside_receive(&inside_receive_, true);
-
+    base::TimeTicks animation_time) {
   ProcessCommonParams(common_params);
   if (need_animate_scroll_) {
     need_animate_scroll_ = false;
     input_handler_proxy_->SynchronouslyAnimate(animation_time);
   }
-  PopulateCommonParams(common_renderer_params);
 }
 
 void SynchronousCompositorProxy::DidOverscroll(

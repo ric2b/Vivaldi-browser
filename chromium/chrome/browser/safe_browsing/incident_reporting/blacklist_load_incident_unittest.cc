@@ -14,34 +14,34 @@ namespace safe_browsing {
 
 namespace {
 
-scoped_ptr<Incident> MakeIncident(const char* digest) {
+scoped_ptr<Incident> MakeIncident(const char* path) {
   scoped_ptr<ClientIncidentReport_IncidentData_BlacklistLoadIncident> incident(
       new ClientIncidentReport_IncidentData_BlacklistLoadIncident);
-  incident->set_path("foo");
+  incident->set_path(path);
   return make_scoped_ptr(new BlacklistLoadIncident(std::move(incident)));
 }
 
 }  // namespace
 
 TEST(BlacklistLoadIncident, GetType) {
-  ASSERT_EQ(IncidentType::BLACKLIST_LOAD, MakeIncident("37")->GetType());
+  ASSERT_EQ(IncidentType::BLACKLIST_LOAD, MakeIncident("foo")->GetType());
 }
 
 // Tests that GetKey returns the dll path.
 TEST(BlacklistLoadIncident, KeyIsPath) {
-  ASSERT_EQ(std::string("foo"), MakeIncident("37")->GetKey());
+  ASSERT_EQ(std::string("foo"), MakeIncident("foo")->GetKey());
 }
 
 // Tests that GetDigest returns the same value for the same incident.
 TEST(BlacklistLoadIncident, SameIncidentSameDigest) {
-  ASSERT_EQ(MakeIncident("37")->ComputeDigest(),
-            MakeIncident("37")->ComputeDigest());
+  ASSERT_EQ(MakeIncident("foo")->ComputeDigest(),
+            MakeIncident("foo")->ComputeDigest());
 }
 
 // Tests that GetDigest returns different values for different incidents.
 TEST(BlacklistLoadIncident, DifferentIncidentDifferentDigest) {
-  ASSERT_EQ(MakeIncident("37")->ComputeDigest(),
-            MakeIncident("42")->ComputeDigest());
+  ASSERT_NE(MakeIncident("foo")->ComputeDigest(),
+            MakeIncident("bar")->ComputeDigest());
 }
 
 }  // namespace safe_browsing

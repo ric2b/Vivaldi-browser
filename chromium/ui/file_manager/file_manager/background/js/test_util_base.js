@@ -31,6 +31,7 @@ function extractElementInfo(element, contentWindow, opt_styleNames) {
     styles[styleNames[i]] = computedStyles[styleNames[i]];
   }
   var text = element.textContent;
+  var size = element.getBoundingClientRect();
   return {
     attributes: attributes,
     text: text,
@@ -38,7 +39,13 @@ function extractElementInfo(element, contentWindow, opt_styleNames) {
     styles: styles,
     // The hidden attribute is not in the element.attributes even if
     // element.hasAttribute('hidden') is true.
-    hidden: !!element.hidden
+    hidden: !!element.hidden,
+    // These attributes are set when element is img or canvas.
+    imageWidth: Number(element.width),
+    imageHeight: Number(element.height),
+    // These attributes are set in any element.
+    renderedWidth: size.width,
+    renderedHeight: size.height
   };
 }
 
@@ -332,17 +339,20 @@ test.util.sync.fakeEvent = function(contentWindow,
  * @param {string} keyIdentifier Identifier of the emulated key.
  * @param {boolean} ctrl Whether CTRL should be pressed, or not.
  * @param {boolean} shift whether SHIFT should be pressed, or not.
+ * @param {boolean} alt whether ALT should be pressed, or not.
  * @param {string=} opt_iframeQuery Optional iframe selector.
  * @return {boolean} True if the event is sent to the target, false otherwise.
  */
 test.util.sync.fakeKeyDown = function(
-    contentWindow, targetQuery, keyIdentifier, ctrl, shift, opt_iframeQuery) {
+    contentWindow, targetQuery, keyIdentifier, ctrl, shift, alt,
+    opt_iframeQuery) {
   var event = new KeyboardEvent('keydown',
       {
         bubbles: true,
         keyIdentifier: keyIdentifier,
         ctrlKey: ctrl,
-        shiftKey: shift
+        shiftKey: shift,
+        altKey: alt
       });
   return test.util.sync.sendEvent(
       contentWindow, targetQuery, event, opt_iframeQuery);
@@ -532,7 +542,8 @@ test.util.registerRemoteTestUtils = function() {
   chrome.runtime.onMessageExternal.addListener(
       function(request, sender, sendResponse) {
     // Check the sender.
-    if (test.util.TESTING_EXTENSION_IDS.indexOf(sender.id) === -1) {
+    if (!sender.id ||
+        test.util.TESTING_EXTENSION_IDS.indexOf(sender.id) === -1) {
       // Silently return.  Don't return false; that short-circuits the
       // propagation of messages, and there are now other listeners that want to
       // handle external messages.

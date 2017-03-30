@@ -14,13 +14,14 @@
 #include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
-#include "base/prefs/pref_change_registrar.h"
 #include "chrome/browser/background/background_application_list_model.h"
-#include "chrome/browser/profiles/profile_info_cache_observer.h"
+#include "chrome/browser/lifetime/scoped_keep_alive.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/status_icons/status_icon.h"
 #include "chrome/browser/status_icons/status_icon_menu_model.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "extensions/common/extension.h"
@@ -29,7 +30,6 @@ class BackgroundTrigger;
 class Browser;
 class PrefRegistrySimple;
 class Profile;
-class ProfileInfoCache;
 class StatusIcon;
 class StatusTray;
 
@@ -57,11 +57,11 @@ class BackgroundModeManager
     : public content::NotificationObserver,
       public chrome::BrowserListObserver,
       public BackgroundApplicationListModel::Observer,
-      public ProfileInfoCacheObserver,
+      public ProfileAttributesStorage::Observer,
       public StatusIconMenuModel::Delegate {
  public:
   BackgroundModeManager(const base::CommandLine& command_line,
-                        ProfileInfoCache* profile_cache);
+                        ProfileAttributesStorage* profile_storage);
   ~BackgroundModeManager() override;
 
   static void RegisterPrefs(PrefRegistrySimple* registry);
@@ -121,9 +121,9 @@ class BackgroundModeManager
   FRIEND_TEST_ALL_PREFIXES(BackgroundModeManagerTest,
                            MultiProfile);
   FRIEND_TEST_ALL_PREFIXES(BackgroundModeManagerTest,
-                           ProfileInfoCacheStorage);
+                           ProfileAttributesStorage);
   FRIEND_TEST_ALL_PREFIXES(BackgroundModeManagerTest,
-                           ProfileInfoCacheObserver);
+                           ProfileAttributesStorageObserver);
   FRIEND_TEST_ALL_PREFIXES(BackgroundModeManagerTest,
                            DeleteBackgroundProfile);
   FRIEND_TEST_ALL_PREFIXES(BackgroundModeManagerTest,
@@ -178,7 +178,7 @@ class BackgroundModeManager
     void SetName(const base::string16& new_profile_name);
 
     // The name associated with this background mode data. This should match
-    // the name in the ProfileInfoCache for this profile.
+    // the name in the ProfileAttributesStorage for this profile.
     base::string16 name();
 
     // Used for sorting BackgroundModeData*s.
@@ -268,7 +268,7 @@ class BackgroundModeManager
                                 Profile* profile) override;
   void OnApplicationListChanged(Profile* profile) override;
 
-  // Overrides from ProfileInfoCacheObserver
+  // Overrides from ProfileAttributesStorage::Observer
   void OnProfileAdded(const base::FilePath& profile_path) override;
   void OnProfileWillBeRemoved(const base::FilePath& profile_path) override;
   void OnProfileNameChanged(const base::FilePath& profile_path,
@@ -282,8 +282,8 @@ class BackgroundModeManager
 
   // Enables or disables background mode as needed, taking into account the
   // number of background clients. Updates the background status of |profile| in
-  // the ProfileInfoCache if needed. If |new_client_names| is not empty the
-  // user will be notified about the added client(s).
+  // the ProfileAttributesStorage if needed. If |new_client_names| is not empty
+  // the user will be notified about the added client(s).
   void OnClientsChanged(Profile* profile,
                         const std::vector<base::string16>& new_client_names);
 
@@ -318,11 +318,15 @@ class BackgroundModeManager
   // is active and not suspended.
   virtual void UpdateKeepAliveAndTrayIcon();
 
+  // Release keep_alive_for_startup_. This is invoked as a callback to make
+  // make sure the message queue was initialized before we attempt to exit.
+  void ReleaseStartupKeepAliveCallback();
+
   // If --no-startup-window is passed, BackgroundModeManager will manually keep
   // chrome running while waiting for apps to load. This is called when we no
   // longer need to do this (either because the user has chosen to exit chrome
   // manually, or all apps have been loaded).
-  void DecrementKeepAliveCountForStartup();
+  void ReleaseStartupKeepAlive();
 
   // Return an appropriate name for a Preferences menu entry.  Preferences is
   // sometimes called Options or Settings.
@@ -381,9 +385,9 @@ class BackgroundModeManager
   // if the profile isn't locked. Returns NULL otherwise.
   BackgroundModeData* GetBackgroundModeDataForLastProfile() const;
 
-  // Reference to the profile info cache. It is used to update the background
-  // app status of profiles when they open/close background apps.
-  ProfileInfoCache* profile_cache_;
+  // Reference to the ProfileAttributesStorage. It is used to update the
+  // background app status of profiles when they open/close background apps.
+  ProfileAttributesStorage* profile_storage_;
 
   // Registrars for managing our change observers.
   content::NotificationRegistrar registrar_;
@@ -414,10 +418,14 @@ class BackgroundModeManager
   // user disables/enables background mode via preferences.
   bool in_background_mode_;
 
+  // Background mode does not always keep Chrome alive. When it does, it is
+  // using this scoped object.
+  scoped_ptr<ScopedKeepAlive> keep_alive_;
+
   // Set when we are keeping chrome running during the startup process - this
   // is required when running with the --no-startup-window flag, as otherwise
   // chrome would immediately exit due to having no open windows.
-  bool keep_alive_for_startup_;
+  scoped_ptr<ScopedKeepAlive> keep_alive_for_startup_;
 
   // Set to true when Chrome is running with the --keep-alive-for-test flag
   // (used for testing background mode without having to install a background
@@ -426,9 +434,6 @@ class BackgroundModeManager
 
   // Set to true when background mode is suspended.
   bool background_mode_suspended_;
-
-  // Set to true when background mode is keeping Chrome alive.
-  bool keeping_alive_;
 
   base::WeakPtrFactory<BackgroundModeManager> weak_factory_;
 

@@ -7,7 +7,6 @@
 #include <algorithm>
 
 #include "base/profiler/scoped_tracker.h"
-#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profiles_state.h"
@@ -35,7 +34,7 @@
 #include "ui/aura/window.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/layout.h"
-#include "ui/base/resource/material_design/material_design_controller.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
 #include "ui/compositor/layer_animator.h"
@@ -49,8 +48,8 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 
-#if defined(ENABLE_SUPERVISED_USERS)
-#include "chrome/browser/ui/views/profiles/supervised_user_avatar_label.h"
+#if !defined(OS_CHROMEOS)
+#define FRAME_AVATAR_BUTTON
 #endif
 
 namespace {
@@ -74,6 +73,7 @@ const int kTabstripTopSpacingShort = 0;
 // to hit easily.
 const int kTabShadowHeight = 4;
 
+#if defined(FRAME_AVATAR_BUTTON)
 // Combines View::ConvertPointToTarget() and View::HitTest() for a given
 // |point|. Converts |point| from |src| to |dst| and hit tests it against |dst|.
 bool ConvertedHitTest(views::View* src,
@@ -85,6 +85,7 @@ bool ConvertedHitTest(views::View* src,
   views::View::ConvertPointToTarget(src, dst, &converted_point);
   return dst->HitTestPoint(converted_point);
 }
+#endif
 
 const views::WindowManagerFrameValues& frame_values() {
   return views::WindowManagerFrameValues::instance();
@@ -103,9 +104,12 @@ BrowserNonClientFrameViewMus::BrowserNonClientFrameViewMus(
     BrowserFrame* frame,
     BrowserView* browser_view)
     : BrowserNonClientFrameView(frame, browser_view),
-      web_app_left_header_view_(nullptr),
       window_icon_(nullptr),
-      tab_strip_(nullptr) {}
+#if defined(FRAME_AVATAR_BUTTON)
+      profile_switcher_(this),
+#endif
+      tab_strip_(nullptr) {
+}
 
 BrowserNonClientFrameViewMus::~BrowserNonClientFrameViewMus() {
   if (tab_strip_) {
@@ -182,15 +186,18 @@ void BrowserNonClientFrameViewMus::UpdateThrobber(bool running) {
 }
 
 void BrowserNonClientFrameViewMus::UpdateToolbar() {
-  if (web_app_left_header_view_)
-    web_app_left_header_view_->Update();
 }
 
 views::View* BrowserNonClientFrameViewMus::GetLocationIconView() const {
-  if (web_app_left_header_view_)
-    return web_app_left_header_view_->GetLocationIconView();
-
   return nullptr;
+}
+
+views::View* BrowserNonClientFrameViewMus::GetProfileSwitcherView() const {
+#if defined(FRAME_AVATAR_BUTTON)
+  return profile_switcher_.view();
+#else
+  return nullptr;
+#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -216,22 +223,8 @@ int BrowserNonClientFrameViewMus::NonClientHitTest(const gfx::Point& point) {
   int hit_test = HTCLIENT;
 
 #if defined(FRAME_AVATAR_BUTTON)
-  if (hit_test == HTCAPTION && new_avatar_button() &&
-      ConvertedHitTest(this, new_avatar_button(), point)) {
-    return HTCLIENT;
-  }
-#endif
-
-  // See if the point is actually within the web app back button.
-  if (hit_test == HTCAPTION && web_app_left_header_view_ &&
-      ConvertedHitTest(this, web_app_left_header_view_, point)) {
-    return HTCLIENT;
-  }
-
-#if defined(ENABLE_SUPERVISED_USERS)
-  // ...or within the avatar label, if it's a supervised user.
-  if (hit_test == HTCAPTION && supervised_user_avatar_label() &&
-      ConvertedHitTest(this, supervised_user_avatar_label(), point)) {
+  if (hit_test == HTCAPTION && profile_switcher_.view() &&
+      ConvertedHitTest(this, profile_switcher_.view(), point)) {
     return HTCLIENT;
   }
 #endif
@@ -281,9 +274,6 @@ void BrowserNonClientFrameViewMus::OnPaint(gfx::Canvas* canvas) {
     return;
   }
 
-  if (web_app_left_header_view_)
-    web_app_left_header_view_->SetPaintAsActive(ShouldPaintAsActive());
-
   if (browser_view()->IsToolbarVisible())
     PaintToolbarBackground(canvas);
   else if (!UsePackagedAppHeaderStyle() && !UseWebAppHeaderStyle())
@@ -292,11 +282,11 @@ void BrowserNonClientFrameViewMus::OnPaint(gfx::Canvas* canvas) {
 
 void BrowserNonClientFrameViewMus::Layout() {
   if (avatar_button())
-    LayoutAvatar();
+    LayoutIncognitoButton();
 
 #if defined(FRAME_AVATAR_BUTTON)
-  if (new_avatar_button())
-    LayoutNewStyleAvatar();
+  if (profile_switcher_.view())
+    LayoutProfileSwitcher();
 #endif
 
   BrowserNonClientFrameView::Layout();
@@ -329,24 +319,6 @@ gfx::Size BrowserNonClientFrameViewMus::GetMinimumSize() const {
   return gfx::Size(min_width, min_client_view_size.height());
 }
 
-void BrowserNonClientFrameViewMus::ChildPreferredSizeChanged(
-    views::View* child) {
-  // FrameCaptionButtonContainerView animates the visibility changes in
-  // UpdateSizeButtonVisibility(false). Due to this a new size is not available
-  // until the completion of the animation. Layout in response to the preferred
-  // size changes.
-  if (!browser_view()->initialized())
-    return;
-  bool needs_layout = false;
-#if defined(FRAME_AVATAR_BUTTON)
-  needs_layout = needs_layout || child == new_avatar_button();
-#endif
-  if (needs_layout) {
-    InvalidateLayout();
-    frame()->GetRootView()->Layout();
-  }
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 // TabIconViewModel:
 
@@ -364,33 +336,17 @@ gfx::ImageSkia BrowserNonClientFrameViewMus::GetFaviconForTabIconView() {
     return gfx::ImageSkia();
   return delegate->GetWindowIcon();
 }
-
-///////////////////////////////////////////////////////////////////////////////
-// views::ButtonListener:
-
-void BrowserNonClientFrameViewMus::ButtonPressed(views::Button* sender,
-                                                 const ui::Event& event) {
-#if !defined(FRAME_AVATAR_BUTTON)
-  NOTREACHED();
-#else
-  DCHECK(sender == new_avatar_button());
-  int command = IDC_SHOW_AVATAR_MENU;
-  if (event.IsMouseEvent() &&
-      static_cast<const ui::MouseEvent&>(event).IsRightMouseButton()) {
-    command = IDC_SHOW_FAST_USER_SWITCHER;
-  }
-  chrome::ExecuteCommand(browser_view()->browser(), command);
-#endif
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 // BrowserNonClientFrameViewMus, protected:
 
 // BrowserNonClientFrameView:
-void BrowserNonClientFrameViewMus::UpdateNewAvatarButtonImpl() {
+void BrowserNonClientFrameViewMus::UpdateAvatar() {
 #if defined(FRAME_AVATAR_BUTTON)
-  UpdateNewAvatarButton(this, NewAvatarButton::NATIVE_BUTTON);
+  if (browser_view()->IsRegularOrGuestSession())
+    profile_switcher_.Update(AvatarButtonStyle::NATIVE);
+  else
 #endif
+    UpdateOldAvatarButton();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -467,9 +423,9 @@ int BrowserNonClientFrameViewMus::GetTabStripRightInset() const {
   int right_inset = kTabstripRightSpacing + frame_right_insets;
 
 #if defined(FRAME_AVATAR_BUTTON)
-  if (new_avatar_button()) {
+  if (profile_switcher_.view()) {
     right_inset += kNewAvatarButtonOffset +
-                   new_avatar_button()->GetPreferredSize().width();
+                   profile_switcher_.view()->GetPreferredSize().width();
   }
 #endif
 
@@ -500,7 +456,7 @@ bool BrowserNonClientFrameViewMus::UseWebAppHeaderStyle() const {
       Browser::FEATURE_WEBAPPFRAME);
 }
 
-void BrowserNonClientFrameViewMus::LayoutAvatar() {
+void BrowserNonClientFrameViewMus::LayoutIncognitoButton() {
   DCHECK(avatar_button());
 #if !defined(OS_CHROMEOS)
   // ChromeOS shows avatar on V1 app.
@@ -529,20 +485,14 @@ void BrowserNonClientFrameViewMus::LayoutAvatar() {
   avatar_button()->SetVisible(avatar_visible);
 }
 
+void BrowserNonClientFrameViewMus::LayoutProfileSwitcher() {
 #if defined(FRAME_AVATAR_BUTTON)
-void BrowserNonClientFrameViewMus::LayoutNewStyleAvatar() {
-  DCHECK(new_avatar_button());
-
-  gfx::Size button_size = new_avatar_button()->GetPreferredSize();
-  int button_x = width() -
-                 caption_button_container_->GetPreferredSize().width() -
-                 kNewAvatarButtonOffset - button_size.width();
-
-  new_avatar_button()->SetBounds(
-      button_x, 0, button_size.width(),
-      caption_button_container_->GetPreferredSize().height());
-}
+  gfx::Size button_size = profile_switcher_.view()->GetPreferredSize();
+  int button_x = width() - GetTabStripRightInset() + kNewAvatarButtonOffset;
+  profile_switcher_.view()->SetBounds(button_x, 0, button_size.width(),
+                                      button_size.height());
 #endif
+}
 
 bool BrowserNonClientFrameViewMus::ShouldPaint() const {
   if (!frame()->IsFullscreen())
@@ -572,19 +522,23 @@ void BrowserNonClientFrameViewMus::PaintToolbarBackground(gfx::Canvas* canvas) {
   int x = toolbar_bounds.x();
   int w = toolbar_bounds.width();
   int y = toolbar_bounds.y();
-  int h = toolbar_bounds.height();
   const ui::ThemeProvider* tp = GetThemeProvider();
 
   if (ui::MaterialDesignController::IsModeMaterial()) {
-    // Paint the main toolbar image.  Since this image is also used to draw the
-    // tab background, we must use the tab strip offset to compute the image
-    // source y position.  If you have to debug this code use an image editor
-    // to paint a diagonal line through the toolbar image and ensure it lines up
-    // across the tab and toolbar.
-    gfx::ImageSkia* theme_toolbar = tp->GetImageSkiaNamed(IDR_THEME_TOOLBAR);
-    canvas->TileImageInt(*theme_toolbar, x + GetThemeBackgroundXInset(),
-                         y - GetTopInset(false), x, y, w,
-                         theme_toolbar->height());
+    if (tp->HasCustomImage(IDR_THEME_TOOLBAR)) {
+      // Paint the main toolbar image.  Since this image is also used to draw
+      // the tab background, we must use the tab strip offset to compute the
+      // image source y position.  If you have to debug this code use an image
+      // editor to paint a diagonal line through the toolbar image and ensure it
+      // lines up across the tab and toolbar.
+      gfx::ImageSkia* theme_toolbar = tp->GetImageSkiaNamed(IDR_THEME_TOOLBAR);
+      canvas->TileImageInt(*theme_toolbar, x + GetThemeBackgroundXInset(),
+                           y - GetTopInset(false), x, y, w,
+                           theme_toolbar->height());
+    } else {
+      canvas->FillRect(toolbar_bounds,
+                       tp->GetColor(ThemeProperties::COLOR_TOOLBAR));
+    }
 
     // Draw the separator line atop the toolbar, on the left and right of the
     // tabstrip.
@@ -609,6 +563,10 @@ void BrowserNonClientFrameViewMus::PaintToolbarBackground(gfx::Canvas* canvas) {
         canvas, tp->GetColor(ThemeProperties::COLOR_TOOLBAR_BOTTOM_SEPARATOR),
         toolbar_bounds, true);
   } else {
+    // NOTE: this ifdef can't be OS_CHROMEOS as we want to see how it looks on
+    // windows as well.
+#if defined(USE_ASH)
+    int h = toolbar_bounds.height();
     // Gross hack: We split the toolbar images into two pieces, since sometimes
     // (popup mode) the toolbar isn't tall enough to show the whole image.  The
     // split happens between the top shadow section and the bottom gradient
@@ -658,6 +616,10 @@ void BrowserNonClientFrameViewMus::PaintToolbarBackground(gfx::Canvas* canvas) {
                   toolbar_bounds.bottom() - kClientEdgeThickness,
                   w - (2 * kClientEdgeThickness), kClientEdgeThickness),
         tp->GetColor(ThemeProperties::COLOR_TOOLBAR_BOTTOM_SEPARATOR));
+#else
+    // This is the case for running on non-chromeos. Decide how we want this to
+    // look.
+#endif
   }
 }
 

@@ -14,7 +14,9 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/page_type.h"
 #include "content/public/common/page_zoom.h"
-#include "net/base/net_util.h"
+#include "net/base/url_util.h"
+
+#include "prefs/vivaldi_tab_zoom_pref.h"
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(ui_zoom::ZoomController);
 
@@ -156,9 +158,18 @@ bool ZoomController::SetZoomLevelByClient(
       event_data_.reset();
       return false;
     }
+
+    bool tabZoom = vivaldi::isTabZoomEnabled(web_contents());
+    if (tabZoom) {
+      int render_process_id = web_contents()->GetRenderProcessHost()->GetID();
+      int render_view_id = web_contents()->GetRenderViewHost()->GetRoutingID();
+      zoom_map->SetTemporaryZoomLevel(
+        render_process_id, render_view_id, zoom_level);
+    } else {
     std::string host =
         net::GetHostOrSpecFromURL(content::HostZoomMap::GetURLFromEntry(entry));
     zoom_map->SetZoomLevelForHost(host, zoom_level);
+    }
   }
 
   DCHECK(!event_data_);

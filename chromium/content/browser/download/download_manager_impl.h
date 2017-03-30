@@ -7,13 +7,12 @@
 
 #include <stdint.h>
 
-#include <map>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "base/callback_forward.h"
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -42,7 +41,7 @@ class DownloadRequestHandleInterface;
 class CONTENT_EXPORT DownloadManagerImpl : public DownloadManager,
                                            private DownloadItemImplDelegate {
  public:
-  typedef base::Callback<void(DownloadItemImpl*)> DownloadItemImplCreated;
+  using DownloadItemImplCreated = base::Callback<void(DownloadItemImpl*)>;
 
   // Caller guarantees that |net_log| will remain valid
   // for the lifetime of DownloadManagerImpl (until Shutdown() is called).
@@ -74,12 +73,10 @@ class CONTENT_EXPORT DownloadManagerImpl : public DownloadManager,
       scoped_ptr<ByteStreamReader> stream,
       const DownloadUrlParameters::OnStartedCallback& on_started) override;
 
-  int RemoveDownloadsByOriginAndTime(const url::Origin& origin,
-                                     base::Time remove_begin,
-                                     base::Time remove_end) override;
-  int RemoveDownloadsBetween(base::Time remove_begin,
-                             base::Time remove_end) override;
-  int RemoveDownloads(base::Time remove_begin) override;
+  int RemoveDownloadsByURLAndTime(
+      const base::Callback<bool(const GURL&)>& url_filter,
+      base::Time remove_begin,
+      base::Time remove_end) override;
   int RemoveAllDownloads() override;
   void DownloadUrl(scoped_ptr<DownloadUrlParameters> params) override;
   void AddObserver(Observer* observer) override;
@@ -118,10 +115,10 @@ class CONTENT_EXPORT DownloadManagerImpl : public DownloadManager,
   void RemoveUrlDownloader(UrlDownloader* downloader);
 
  private:
-  typedef std::set<DownloadItem*> DownloadSet;
-  typedef base::hash_map<uint32_t, DownloadItemImpl*> DownloadMap;
-  typedef std::vector<DownloadItemImpl*> DownloadItemImplVector;
-  typedef base::Callback<bool(const DownloadItemImpl*)> DownloadRemover;
+  using DownloadSet = std::set<DownloadItem*>;
+  using DownloadMap = std::unordered_map<uint32_t, DownloadItemImpl*>;
+  using DownloadItemImplVector = std::vector<DownloadItemImpl*>;
+  using DownloadRemover = base::Callback<bool(const DownloadItemImpl*)>;
 
   // For testing.
   friend class DownloadManagerTest;

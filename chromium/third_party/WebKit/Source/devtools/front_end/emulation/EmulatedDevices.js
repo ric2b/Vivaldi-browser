@@ -119,11 +119,11 @@ WebInspector.EmulatedDevice.fromJSONV1 = function(json)
             var result = {};
 
             result.width = parseIntValue(json, "width");
-            if (result.width < 0 || result.width > WebInspector.OverridesSupport.MaxDeviceSize)
+            if (result.width < 0 || result.width > WebInspector.DeviceModeModel.MaxDeviceSize || result.width < WebInspector.DeviceModeModel.MinDeviceSize)
                 throw new Error("Emulated device has wrong width: " + result.width);
 
             result.height = parseIntValue(json, "height");
-            if (result.height < 0 || result.height > WebInspector.OverridesSupport.MaxDeviceSize)
+            if (result.height < 0 || result.height > WebInspector.DeviceModeModel.MaxDeviceSize || result.height < WebInspector.DeviceModeModel.MinDeviceSize)
                 throw new Error("Emulated device has wrong height: " + result.height);
 
             var outlineInsets = parseValue(json["outline"], "insets", "object", null);
@@ -184,34 +184,8 @@ WebInspector.EmulatedDevice.fromJSONV1 = function(json)
 
         return result;
     } catch (e) {
-        WebInspector.console.error("Failed to update emulated device list. " + String(e));
         return null;
     }
-}
-
-/**
- * @param {!WebInspector.OverridesSupport.Device} device
- * @param {string} title
- * @param {string=} type
- * @return {!WebInspector.EmulatedDevice}
- */
-WebInspector.EmulatedDevice.fromOverridesDevice = function(device, title, type)
-{
-    var result = new WebInspector.EmulatedDevice();
-    result.title = title;
-    result.type = type || WebInspector.EmulatedDevice.Type.Unknown;
-    result.vertical.width = device.width;
-    result.vertical.height = device.height;
-    result.horizontal.width = device.height;
-    result.horizontal.height = device.width;
-    result.deviceScaleFactor = device.deviceScaleFactor;
-    result.userAgent = device.userAgent;
-    result.capabilities = [];
-    if (device.touch)
-        result.capabilities.push(WebInspector.EmulatedDevice.Capability.Touch);
-    if (device.mobile)
-        result.capabilities.push(WebInspector.EmulatedDevice.Capability.Mobile);
-    return result;
 }
 
 /**
@@ -321,23 +295,6 @@ WebInspector.EmulatedDevice.prototype = {
 
     /**
      * @param {!WebInspector.EmulatedDevice.Mode} mode
-     * @return {!WebInspector.OverridesSupport.Device}
-     */
-    modeToOverridesDevice: function(mode)
-    {
-        var result = {};
-        var orientation = this.orientationByName(mode.orientation);
-        result.width = orientation.width - mode.insets.left - mode.insets.right;
-        result.height = orientation.height - mode.insets.top - mode.insets.bottom;
-        result.deviceScaleFactor = this.deviceScaleFactor;
-        result.userAgent = this.userAgent;
-        result.touch = this.touch();
-        result.mobile = this.mobile();
-        return result;
-    },
-
-    /**
-     * @param {!WebInspector.EmulatedDevice.Mode} mode
      * @return {string}
      */
     modeImage: function(mode)
@@ -413,13 +370,16 @@ WebInspector.EmulatedDevicesList = function()
     /** @type {!WebInspector.Setting} */
     this._standardSetting = WebInspector.settings.createSetting("standardEmulatedDeviceList", []);
     /** @type {!Array.<!WebInspector.EmulatedDevice>} */
-    this._standard = this._listFromJSONV1(this._standardSetting.get());
+    this._standard = [];
+    this._listFromJSONV1(this._standardSetting.get(), this._standard);
     this._updateStandardDevices();
 
     /** @type {!WebInspector.Setting} */
     this._customSetting = WebInspector.settings.createSetting("customEmulatedDeviceList", []);
     /** @type {!Array.<!WebInspector.EmulatedDevice>} */
-    this._custom = this._listFromJSONV1(this._customSetting.get());
+    this._custom = [];
+    if (!this._listFromJSONV1(this._customSetting.get(), this._custom))
+        this.saveCustomDevices();
 }
 
 WebInspector.EmulatedDevicesList.Events = {
@@ -444,13 +404,14 @@ WebInspector.EmulatedDevicesList.prototype = {
 
     /**
      * @param {!Array.<*>} jsonArray
-     * @return {!Array.<!WebInspector.EmulatedDevice>}
+     * @param {!Array.<!WebInspector.EmulatedDevice>} result
+     * @return {boolean}
      */
-    _listFromJSONV1: function(jsonArray)
+    _listFromJSONV1: function(jsonArray, result)
     {
-        var result = [];
         if (!Array.isArray(jsonArray))
-            return result;
+            return false;
+        var success = true;
         for (var i = 0; i < jsonArray.length; ++i) {
             var device = WebInspector.EmulatedDevice.fromJSONV1(jsonArray[i]);
             if (device) {
@@ -459,9 +420,11 @@ WebInspector.EmulatedDevicesList.prototype = {
                     device.modes.push({title: "", orientation: WebInspector.EmulatedDevice.Horizontal, insets: new Insets(0, 0, 0, 0), image: null});
                     device.modes.push({title: "", orientation: WebInspector.EmulatedDevice.Vertical, insets: new Insets(0, 0, 0, 0), image: null});
                 }
+            } else {
+                success = false;
             }
         }
-        return result;
+        return success;
     },
 
     /**
@@ -537,5 +500,15 @@ WebInspector.EmulatedDevicesList.prototype = {
     __proto__: WebInspector.Object.prototype
 }
 
-/** @type {!WebInspector.EmulatedDevicesList} */
-WebInspector.emulatedDevicesList;
+/** @type {?WebInspector.EmulatedDevicesList} */
+WebInspector.EmulatedDevicesList._instance;
+
+/**
+ * @return {!WebInspector.EmulatedDevicesList}
+ */
+WebInspector.EmulatedDevicesList.instance = function()
+{
+    if (!WebInspector.EmulatedDevicesList._instance)
+        WebInspector.EmulatedDevicesList._instance = new WebInspector.EmulatedDevicesList();
+    return /** @type {!WebInspector.EmulatedDevicesList} */ (WebInspector.EmulatedDevicesList._instance);
+}

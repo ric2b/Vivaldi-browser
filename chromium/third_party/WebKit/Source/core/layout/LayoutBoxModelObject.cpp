@@ -38,7 +38,6 @@
 #include "core/layout/LayoutView.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
-#include "core/page/scrolling/ScrollingConstraints.h"
 #include "core/paint/PaintLayer.h"
 #include "core/style/BorderEdge.h"
 #include "core/style/ShadowList.h"
@@ -79,11 +78,11 @@ static ContinuationMap* continuationMap = nullptr;
 
 void LayoutBoxModelObject::setSelectionState(SelectionState state)
 {
-    if (state == SelectionInside && selectionState() != SelectionNone)
+    if (state == SelectionInside && getSelectionState() != SelectionNone)
         return;
 
-    if ((state == SelectionStart && selectionState() == SelectionEnd)
-        || (state == SelectionEnd && selectionState() == SelectionStart))
+    if ((state == SelectionStart && getSelectionState() == SelectionEnd)
+        || (state == SelectionEnd && getSelectionState() == SelectionStart))
         LayoutObject::setSelectionState(SelectionBoth);
     else
         LayoutObject::setSelectionState(state);
@@ -183,6 +182,7 @@ void LayoutBoxModelObject::styleDidChange(StyleDifference diff, const ComputedSt
     bool hadLayer = hasLayer();
     bool layerWasSelfPainting = hadLayer && layer()->isSelfPaintingLayer();
     bool wasFloatingBeforeStyleChanged = FloatStateForStyleChange::wasFloating(this);
+    bool wasHorizontalWritingMode = isHorizontalWritingMode();
 
     LayoutObject::styleDidChange(diff, oldStyle);
     updateFromStyle();
@@ -217,7 +217,7 @@ void LayoutBoxModelObject::styleDidChange(StyleDifference diff, const ComputedSt
         PaintLayer* parentLayer = layer()->parent();
         setHasTransformRelatedProperty(false); // Either a transform wasn't specified or the object doesn't support transforms, so just null out the bit.
         setHasReflection(false);
-        layer()->removeOnlyThisLayer(); // calls destroyLayer() which clears m_layer
+        layer()->removeOnlyThisLayerAfterStyleChange(); // calls destroyLayer() which clears m_layer
         if (wasFloatingBeforeStyleChanged && isFloating())
             setChildNeedsLayout();
         if (hadTransform)
@@ -236,6 +236,21 @@ void LayoutBoxModelObject::styleDidChange(StyleDifference diff, const ComputedSt
         layer()->styleChanged(diff, oldStyle);
         if (hadLayer && layer()->isSelfPaintingLayer() != layerWasSelfPainting)
             setChildNeedsLayout();
+    }
+
+    if (oldStyle && wasHorizontalWritingMode != isHorizontalWritingMode()) {
+        // Changing the writingMode() may change isOrthogonalWritingModeRoot()
+        // of children. Make sure all children are marked/unmarked as orthogonal
+        // writing-mode roots.
+        bool newHorizontalWritingMode = isHorizontalWritingMode();
+        for (LayoutObject* child = slowFirstChild(); child; child = child->nextSibling()) {
+            if (!child->isBox())
+                continue;
+            if (newHorizontalWritingMode != child->isHorizontalWritingMode())
+                toLayoutBox(child)->markOrthogonalWritingModeRoot();
+            else
+                toLayoutBox(child)->unmarkOrthogonalWritingModeRoot();
+        }
     }
 
     // Fixed-position is painted using transform. In the case that the object
@@ -280,20 +295,10 @@ void LayoutBoxModelObject::styleDidChange(StyleDifference diff, const ComputedSt
 
 void LayoutBoxModelObject::createLayer(PaintLayerType type)
 {
-    // If the current paint invalidation container is not a stacking context and this object is
-    // a or treated as a stacking context, creating this layer may cause this object and its
-    // descendants to change paint invalidation container. Therefore we must eagerly invalidate
-    // them on the original paint invalidation container before creating the layer.
-    if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled() && isRooted() && styleRef().isTreatedAsOrStackingContext()) {
-        const LayoutBoxModelObject& currentPaintInvalidationContainer = containerForPaintInvalidation();
-        if (!currentPaintInvalidationContainer.styleRef().isStackingContext())
-            invalidatePaintIncludingNonSelfPaintingLayerDescendants(currentPaintInvalidationContainer);
-    }
-
     ASSERT(!m_layer);
     m_layer = adoptPtr(new PaintLayer(this, type));
     setHasLayer(true);
-    m_layer->insertOnlyThisLayer();
+    m_layer->insertOnlyThisLayerAfterStyleChange();
 }
 
 void LayoutBoxModelObject::destroyLayer()
@@ -349,7 +354,7 @@ void LayoutBoxModelObject::invalidateTreeIfNeeded(PaintInvalidationState& paintI
         return;
 
     bool establishesNewPaintInvalidationContainer = isPaintInvalidationContainer();
-    const LayoutBoxModelObject& newPaintInvalidationContainer = *adjustCompositedContainerForSpecialAncestors(establishesNewPaintInvalidationContainer ? this : &paintInvalidationState.paintInvalidationContainer());
+    const LayoutBoxModelObject& newPaintInvalidationContainer = establishesNewPaintInvalidationContainer ? *this : paintInvalidationState.paintInvalidationContainer();
     // FIXME: This assert should be re-enabled when we move paint invalidation to after compositing update. crbug.com/360286
     // ASSERT(&newPaintInvalidationContainer == &containerForPaintInvalidation());
 
@@ -570,9 +575,9 @@ LayoutSize LayoutBoxModelObject::relativePositionOffset() const
         if (!style()->right().isAuto() && !containingBlock->style()->isLeftToRightDirection())
             offset.setWidth(-valueForLength(style()->right(), containingBlock->availableWidth()));
         else
-            offset.expand(valueForLength(style()->left(), containingBlock->availableWidth()), 0);
+            offset.expand(valueForLength(style()->left(), containingBlock->availableWidth()), LayoutUnit());
     } else if (!style()->right().isAuto()) {
-        offset.expand(-valueForLength(style()->right(), containingBlock->availableWidth()), 0);
+        offset.expand(-valueForLength(style()->right(), containingBlock->availableWidth()), LayoutUnit());
     }
 
     // If the containing block of a relatively positioned element does not
@@ -585,13 +590,13 @@ LayoutSize LayoutBoxModelObject::relativePositionOffset() const
         && (!containingBlock->hasAutoHeightOrContainingBlockWithAutoHeight()
             || !style()->top().hasPercent()
             || containingBlock->stretchesToViewport()))
-        offset.expand(0, valueForLength(style()->top(), containingBlock->availableHeight()));
+        offset.expand(LayoutUnit(), valueForLength(style()->top(), containingBlock->availableHeight()));
 
     else if (!style()->bottom().isAuto()
         && (!containingBlock->hasAutoHeightOrContainingBlockWithAutoHeight()
             || !style()->bottom().hasPercent()
             || containingBlock->stretchesToViewport()))
-        offset.expand(0, -valueForLength(style()->bottom(), containingBlock->availableHeight()));
+        offset.expand(LayoutUnit(), -valueForLength(style()->bottom(), containingBlock->availableHeight()));
 
     return offset;
 }
@@ -669,7 +674,7 @@ int LayoutBoxModelObject::pixelSnappedOffsetHeight() const
 
 LayoutUnit LayoutBoxModelObject::computedCSSPadding(const Length& padding) const
 {
-    LayoutUnit w = 0;
+    LayoutUnit w;
     if (padding.hasPercent())
         w = containingBlockLogicalWidthForContent();
     return minimumValueForLength(padding, w);
@@ -677,12 +682,12 @@ LayoutUnit LayoutBoxModelObject::computedCSSPadding(const Length& padding) const
 
 static inline LayoutUnit resolveWidthForRatio(LayoutUnit height, const FloatSize& intrinsicRatio)
 {
-    return height * intrinsicRatio.width() / intrinsicRatio.height();
+    return LayoutUnit(height * intrinsicRatio.width() / intrinsicRatio.height());
 }
 
 static inline LayoutUnit resolveHeightForRatio(LayoutUnit width, const FloatSize& intrinsicRatio)
 {
-    return width * intrinsicRatio.height() / intrinsicRatio.width();
+    return LayoutUnit(width * intrinsicRatio.height() / intrinsicRatio.width());
 }
 
 static inline LayoutSize resolveAgainstIntrinsicWidthOrHeightAndRatio(const LayoutSize& size, const FloatSize& intrinsicRatio, LayoutUnit useWidth, LayoutUnit useHeight)
@@ -730,15 +735,11 @@ LayoutSize LayoutBoxModelObject::calculateImageIntrinsicDimensions(StyleImage* i
     if (image->isGeneratedImage() && image->usesImageContainerSize())
         return positioningAreaSize;
 
-    Length intrinsicWidth(Fixed);
-    Length intrinsicHeight(Fixed);
+    FloatSize intrinsicSize;
     FloatSize intrinsicRatio;
-    image->computeIntrinsicDimensions(this, intrinsicWidth, intrinsicHeight, intrinsicRatio);
+    image->computeIntrinsicDimensions(this, intrinsicSize, intrinsicRatio);
 
-    ASSERT(intrinsicWidth.isFixed());
-    ASSERT(intrinsicHeight.isFixed());
-
-    LayoutSize resolvedSize(intrinsicWidth.value(), intrinsicHeight.value());
+    LayoutSize resolvedSize(intrinsicSize);
     LayoutSize minimumSize(resolvedSize.width() > LayoutUnit() ? LayoutUnit(1) : LayoutUnit(),
         resolvedSize.height() > LayoutUnit() ? LayoutUnit(1) : LayoutUnit());
     if (shouldScaleOrNot == ScaleByEffectiveZoom)
@@ -913,9 +914,9 @@ LayoutRect LayoutBoxModelObject::localCaretRectForEmptyElement(LayoutUnit width,
             x -= textIndentOffset;
         break;
     }
-    x = std::min(x, std::max<LayoutUnit>(maxX - caretWidth(), 0));
+    x = std::min(x, (maxX - caretWidth()).clampNegativeToZero());
 
-    LayoutUnit height = style()->fontMetrics().height();
+    LayoutUnit height = LayoutUnit(style()->fontMetrics().height());
     LayoutUnit verticalSpace = lineHeight(true, currentStyle.isHorizontalWritingMode() ? HorizontalLine : VerticalLine,  PositionOfInteriorLineBoxes) - height;
     LayoutUnit y = paddingTop() + borderTop() + (verticalSpace / 2);
     return currentStyle.isHorizontalWritingMode() ? LayoutRect(x, y, caretWidth(), height) : LayoutRect(y, x, height, caretWidth());
@@ -977,14 +978,23 @@ const LayoutObject* LayoutBoxModelObject::pushMappingToContainer(const LayoutBox
     LayoutSize containerOffset = offsetFromContainer(container, LayoutPoint(), &offsetDependsOnPoint);
 
     bool preserve3D = container->style()->preserves3D() || style()->preserves3D();
+    GeometryInfoFlags flags = 0;
+    if (preserve3D)
+        flags |= AccumulatingTransform;
+    if (offsetDependsOnPoint)
+        flags |= IsNonUniform;
+    if (isFixedPos)
+        flags |= IsFixedPosition;
+    if (hasTransform)
+        flags |= HasTransform;
     if (shouldUseTransformFromContainer(container)) {
         TransformationMatrix t;
         getTransformFromContainer(container, containerOffset, t);
         t.translateRight(adjustmentForSkippedAncestor.width().toFloat(), adjustmentForSkippedAncestor.height().toFloat());
-        geometryMap.push(this, t, preserve3D, offsetDependsOnPoint, isFixedPos, hasTransform);
+        geometryMap.push(this, t, flags);
     } else {
         containerOffset += adjustmentForSkippedAncestor;
-        geometryMap.push(this, containerOffset, preserve3D, offsetDependsOnPoint, isFixedPos, hasTransform);
+        geometryMap.push(this, containerOffset, flags);
     }
 
     return ancestorSkipped ? ancestorToStopAt : container;
@@ -1009,7 +1019,7 @@ void LayoutBoxModelObject::moveChildTo(LayoutBoxModelObject* toBoxModelObject, L
     }
 
     if (fullRemoveInsert && isLayoutBlock() && child->isBox())
-        LayoutBlock::removePercentHeightDescendantIfNeeded(toLayoutBox(child));
+        toLayoutBox(child)->removeFromPercentHeightContainer();
 
     if (fullRemoveInsert && (toBoxModelObject->isLayoutBlock() || toBoxModelObject->isLayoutInline())) {
         // Takes care of adding the new child correctly if toBlock and fromBlock
@@ -1028,7 +1038,7 @@ void LayoutBoxModelObject::moveChildrenTo(LayoutBoxModelObject* toBoxModelObject
     if (fullRemoveInsert && isLayoutBlock()) {
         LayoutBlock* block = toLayoutBlock(this);
         block->removePositionedObjects(nullptr);
-        LayoutBlock::removePercentHeightDescendantIfNeeded(block);
+        block->removeFromPercentHeightContainer();
         if (block->isLayoutBlockFlow())
             toLayoutBlockFlow(block)->removeFloatingObjects();
     }

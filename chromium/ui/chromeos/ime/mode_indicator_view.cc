@@ -18,6 +18,7 @@ namespace ui {
 namespace ime {
 
 namespace {
+
 // Minimum size of inner contents in pixel.
 // 43 is the designed size including the default margin (6 * 2).
 const int kMinSize = 31;
@@ -28,14 +29,15 @@ const int kShowingDuration = 500;
 class ModeIndicatorFrameView : public views::BubbleFrameView {
  public:
   explicit ModeIndicatorFrameView(const gfx::Insets& content_margins)
-      : views::BubbleFrameView(content_margins) {}
+      : views::BubbleFrameView(gfx::Insets(), content_margins) {}
   ~ModeIndicatorFrameView() override {}
 
  private:
   // views::BubbleFrameView overrides:
   gfx::Rect GetAvailableScreenBounds(const gfx::Rect& rect) const override {
-    return gfx::Screen::GetNativeScreen()->GetDisplayNearestPoint(
-        rect.CenterPoint()).bounds();
+    return gfx::Screen::GetScreen()
+        ->GetDisplayNearestPoint(rect.CenterPoint())
+        .bounds();
   }
 
   DISALLOW_COPY_AND_ASSIGN(ModeIndicatorFrameView);

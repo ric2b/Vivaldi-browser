@@ -10,6 +10,7 @@
 #include "ash/display/display_manager.h"
 #include "ash/host/ash_window_tree_host.h"
 #include "ash/shell.h"
+#include "base/strings/string_number_conversions.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/gfx/display.h"
@@ -221,41 +222,63 @@ bool HasDisplayModeForUIScale(const DisplayInfo& info, float ui_scale) {
   return std::find_if(modes.begin(), modes.end(), comparator) != modes.end();
 }
 
-void ComputeBoundary(const gfx::Display& primary_display,
-                     const gfx::Display& secondary_display,
-                     DisplayLayout::Position position,
-                     gfx::Rect* primary_edge_in_screen,
-                     gfx::Rect* secondary_edge_in_screen) {
-  const gfx::Rect& primary = primary_display.bounds();
-  const gfx::Rect& secondary = secondary_display.bounds();
+void ComputeBoundary(const gfx::Display& a_display,
+                     const gfx::Display& b_display,
+                     gfx::Rect* a_edge_in_screen,
+                     gfx::Rect* b_edge_in_screen) {
+  const gfx::Rect& a_bounds = a_display.bounds();
+  const gfx::Rect& b_bounds = b_display.bounds();
+
+  // Find touching side.
+  int rx = std::max(a_bounds.x(), b_bounds.x());
+  int ry = std::max(a_bounds.y(), b_bounds.y());
+  int rr = std::min(a_bounds.right(), b_bounds.right());
+  int rb = std::min(a_bounds.bottom(), b_bounds.bottom());
+
+  DisplayPlacement::Position position;
+  if ((rb - ry) == 0) {
+    // top bottom
+    if (a_bounds.bottom() == b_bounds.y()) {
+      position = DisplayPlacement::BOTTOM;
+    } else {
+      DCHECK_EQ(a_bounds.y(), b_bounds.bottom());
+      position = DisplayPlacement::TOP;
+    }
+  } else {
+    DCHECK((rr - rx) == 0);
+    // left right
+    if (a_bounds.right() == b_bounds.x()) {
+      position = DisplayPlacement::RIGHT;
+    } else {
+      DCHECK_EQ(a_bounds.x(), b_bounds.right());
+      position = DisplayPlacement::LEFT;
+    }
+  }
+
   switch (position) {
-    case DisplayLayout::TOP:
-    case DisplayLayout::BOTTOM: {
-      int left = std::max(primary.x(), secondary.x());
-      int right = std::min(primary.right(), secondary.right());
-      if (position == DisplayLayout::TOP) {
-        primary_edge_in_screen->SetRect(left, primary.y(), right - left, 1);
-        secondary_edge_in_screen->SetRect(left, secondary.bottom() - 1,
-                                          right - left, 1);
+    case DisplayPlacement::TOP:
+    case DisplayPlacement::BOTTOM: {
+      int left = std::max(a_bounds.x(), b_bounds.x());
+      int right = std::min(a_bounds.right(), b_bounds.right());
+      if (position == DisplayPlacement::TOP) {
+        a_edge_in_screen->SetRect(left, a_bounds.y(), right - left, 1);
+        b_edge_in_screen->SetRect(left, b_bounds.bottom() - 1, right - left, 1);
       } else {
-        primary_edge_in_screen->SetRect(left, primary.bottom() - 1,
-                                        right - left, 1);
-        secondary_edge_in_screen->SetRect(left, secondary.y(), right - left, 1);
+        a_edge_in_screen->SetRect(left, a_bounds.bottom() - 1, right - left, 1);
+        b_edge_in_screen->SetRect(left, b_bounds.y(), right - left, 1);
       }
       break;
     }
-    case DisplayLayout::LEFT:
-    case DisplayLayout::RIGHT: {
-      int top = std::max(primary.y(), secondary.y());
-      int bottom = std::min(primary.bottom(), secondary.bottom());
-      if (position == DisplayLayout::LEFT) {
-        primary_edge_in_screen->SetRect(primary.x(), top, 1, bottom - top);
-        secondary_edge_in_screen->SetRect(secondary.right() - 1, top, 1,
-                                          bottom - top);
+    case DisplayPlacement::LEFT:
+    case DisplayPlacement::RIGHT: {
+      int top = std::max(a_bounds.y(), b_bounds.y());
+      int bottom = std::min(a_bounds.bottom(), b_bounds.bottom());
+      if (position == DisplayPlacement::LEFT) {
+        a_edge_in_screen->SetRect(a_bounds.x(), top, 1, bottom - top);
+        b_edge_in_screen->SetRect(b_bounds.right() - 1, top, 1, bottom - top);
       } else {
-        primary_edge_in_screen->SetRect(primary.right() - 1, top, 1,
-                                        bottom - top);
-        secondary_edge_in_screen->SetRect(secondary.y(), top, 1, bottom - top);
+        a_edge_in_screen->SetRect(a_bounds.right() - 1, top, 1, bottom - top);
+        b_edge_in_screen->SetRect(b_bounds.y(), top, 1, bottom - top);
       }
       break;
     }
@@ -348,9 +371,19 @@ int FindDisplayIndexContainingPoint(const std::vector<gfx::Display>& displays,
   return iter == displays.end() ? -1 : (iter - displays.begin());
 }
 
-DisplayIdPair CreateDisplayIdPair(int64_t id1, int64_t id2) {
-  return CompareDisplayIds(id1, id2) ? std::make_pair(id1, id2)
-                                     : std::make_pair(id2, id1);
+DisplayIdList CreateDisplayIdList(const DisplayList& list) {
+  return GenerateDisplayIdList(
+      list.begin(), list.end(),
+      [](const gfx::Display& display) { return display.id(); });
+}
+
+void SortDisplayIdList(DisplayIdList* ids) {
+  std::sort(ids->begin(), ids->end(),
+            [](int64_t a, int64_t b) { return CompareDisplayIds(a, b); });
+}
+
+std::string DisplayIdListToString(const ash::DisplayIdList& list) {
+  return base::Int64ToString(list[0]) + "," + base::Int64ToString(list[1]);
 }
 
 bool CompareDisplayIds(int64_t id1, int64_t id2) {

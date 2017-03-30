@@ -13,6 +13,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/process/process.h"
@@ -70,6 +71,7 @@ class RenderWidgetHostImpl;
 class RenderWidgetHostViewFrameSubscriber;
 class StoragePartition;
 class StoragePartitionImpl;
+class StoragePartitionService;
 
 typedef base::Thread* (*RendererMainThreadFactoryFunction)(
     const InProcessChildThreadParams& params);
@@ -138,7 +140,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
   bool FastShutdownForPageCount(size_t count) override;
   bool FastShutdownStarted() const override;
   base::TimeDelta GetChildProcessIdleTime() const override;
-  void ResumeRequestsForView(int route_id) override;
   void FilterURL(bool empty_allowed, GURL* url) override;
 #if defined(ENABLE_WEBRTC)
   void EnableAudioDebugRecordings(const base::FilePath& file) override;
@@ -263,6 +264,13 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   BluetoothDispatcherHost* GetBluetoothDispatcherHost();
 
+#if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
+  // Launch the zygote early in the browser startup.
+  static void EarlyZygoteLaunch();
+#endif  // defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
+
+  void RecomputeAndUpdateWebKitPreferences();
+
  protected:
   // A proxy for our IPC::Channel that lives on the IO thread.
   scoped_ptr<IPC::ChannelProxy> channel_;
@@ -295,6 +303,9 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   // Registers Mojo services to be exposed to the renderer.
   void RegisterMojoServices();
+
+  void CreateStoragePartitionService(
+      mojo::InterfaceRequest<StoragePartitionService> request);
 
   // Control message handlers.
   void OnShutdownRequest();
@@ -402,6 +413,11 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   // The globally-unique identifier for this RPH.
   const int id_;
+
+  // A secondary ID used by the Mojo shell to distinguish different incarnations
+  // of the same RPH from each other. Unlike |id_| this is not globally unique,
+  // but it is guaranteed to change every time Init() is called.
+  int instance_id_ = 1;
 
   BrowserContext* browser_context_;
 

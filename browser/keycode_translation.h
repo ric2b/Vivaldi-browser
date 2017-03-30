@@ -14,6 +14,7 @@ namespace vivaldi {
 
 void setKeyIdentifierFromXEvent(const ui::KeyEvent& event,
                                 char* keyIdentifier,
+                                size_t keyIdentifier_len,
                                 unsigned short windowsKeyCode);
 
 wchar_t setKeyIdentifierWithWinapi(unsigned short windowsKeyCode);

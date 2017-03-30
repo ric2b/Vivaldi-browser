@@ -36,6 +36,7 @@
 #include "core/fetch/ScriptResource.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorTraceEvents.h"
+#include "platform/Histogram.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/TraceEvent.h"
 #include "public/platform/Platform.h"
@@ -57,7 +58,11 @@ const int kMaxRecursionDepth = 44;
 
 class V8CompileHistogram {
 public:
-    enum Cacheability { Cacheable, Noncacheable };
+    enum Cacheability {
+        Cacheable,
+        Noncacheable,
+        InlineScript
+    };
     explicit V8CompileHistogram(Cacheability);
     ~V8CompileHistogram();
 
@@ -75,8 +80,23 @@ V8CompileHistogram::V8CompileHistogram(V8CompileHistogram::Cacheability cacheabi
 V8CompileHistogram::~V8CompileHistogram()
 {
     int64_t elapsedMicroSeconds = static_cast<int64_t>((WTF::currentTime() - m_timeStamp) * 1000000);
-    const char* name = (m_cacheability == Cacheable) ? "V8.CompileCacheableMicroSeconds" : "V8.CompileNoncacheableMicroSeconds";
-    Platform::current()->histogramCustomCounts(name, elapsedMicroSeconds, 0, 1000000, 50);
+    switch (m_cacheability) {
+    case Cacheable: {
+        DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, compileCacheableHistogram, new CustomCountHistogram("V8.CompileCacheableMicroSeconds", 0, 1000000, 50));
+        compileCacheableHistogram.count(elapsedMicroSeconds);
+        break;
+    }
+    case Noncacheable: {
+        DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, compileNonCacheableHistogram, new CustomCountHistogram("V8.CompileNoncacheableMicroSeconds", 0, 1000000, 50));
+        compileNonCacheableHistogram.count(elapsedMicroSeconds);
+        break;
+    }
+    case InlineScript: {
+        DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, compileInlineHistogram, new CustomCountHistogram("V8.CompileInlineScriptMicroSeconds", 0, 1000000, 50));
+        compileInlineHistogram.count(elapsedMicroSeconds);
+        break;
+    }
+    }
 }
 
 // In order to make sure all pending messages to be processed in
@@ -143,7 +163,8 @@ v8::MaybeLocal<v8::Script> compileAndProduceCache(CachedMetadataHandler* cacheHa
         if (length > 1024) {
             // Omit histogram samples for small cache data to avoid outliers.
             int cacheSizeRatio = static_cast<int>(100.0 * length / code->Length());
-            Platform::current()->histogramCustomCounts("V8.CodeCacheSizeRatio", cacheSizeRatio, 0, 10000, 50);
+            DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, codeCacheSizeHistogram, new CustomCountHistogram("V8.CodeCacheSizeRatio", 0, 10000, 50));
+            codeCacheSizeHistogram.count(cacheSizeRatio);
         }
         cacheHandler->clearCachedMetadata(CachedMetadataHandler::CacheLocally);
         cacheHandler->setCachedMetadata(tag, data, length, cacheType);
@@ -195,7 +216,7 @@ void setCacheTimeStamp(CachedMetadataHandler* cacheHandler)
 // Check previously stored timestamp.
 bool isResourceHotForCaching(CachedMetadataHandler* cacheHandler, int hotHours)
 {
-    const double kCacheWithinSeconds = hotHours * 60 * 60;
+    const double cacheWithinSeconds = hotHours * 60 * 60;
     unsigned tag = cacheTag(CacheTagTimeStamp, cacheHandler);
     CachedMetadata* cachedMetadata = cacheHandler->cachedMetadata(tag);
     if (!cachedMetadata)
@@ -204,7 +225,7 @@ bool isResourceHotForCaching(CachedMetadataHandler* cacheHandler, int hotHours)
     const int size = sizeof(timeStamp);
     ASSERT(cachedMetadata->size() == size);
     memcpy(&timeStamp, cachedMetadata->data(), size);
-    return (WTF::currentTime() - timeStamp) < kCacheWithinSeconds;
+    return (WTF::currentTime() - timeStamp) < cacheWithinSeconds;
 }
 
 // Final compile call for a streamed compilation. Most decisions have already
@@ -258,14 +279,14 @@ PassOwnPtr<CompileFn> bind(const A&... args)
 
 // Select a compile function from any of the above, mainly depending on
 // cacheOptions.
-PassOwnPtr<CompileFn> selectCompileFunction(V8CacheOptions cacheOptions, CachedMetadataHandler* cacheHandler, v8::Local<v8::String> code)
+PassOwnPtr<CompileFn> selectCompileFunction(V8CacheOptions cacheOptions, CachedMetadataHandler* cacheHandler, v8::Local<v8::String> code, V8CompileHistogram::Cacheability cacheabilityIfNoHandler)
 {
     static const int minimalCodeLength = 1024;
     static const int hotHours = 72;
 
+    // Caching is not available in this case.
     if (!cacheHandler)
-        // Caching is not available in this case.
-        return bind(compileWithoutOptions, V8CompileHistogram::Noncacheable);
+        return bind(compileWithoutOptions, cacheabilityIfNoHandler);
 
     if (cacheOptions == V8CacheOptionsNone)
         return bind(compileWithoutOptions, V8CompileHistogram::Cacheable);
@@ -333,7 +354,7 @@ v8::MaybeLocal<v8::Script> V8ScriptRunner::compileScript(const ScriptSourceCode&
     return compileScript(v8String(isolate, source.source()), source.url(), source.sourceMapUrl(), source.startPosition(), isolate, source.resource(), source.streamer(), source.resource() ? source.resource()->cacheHandler() : nullptr, accessControlStatus, cacheOptions);
 }
 
-v8::MaybeLocal<v8::Script> V8ScriptRunner::compileScript(const String& code, const String& fileName, const String& sourceMapUrl, const TextPosition& textPosition, v8::Isolate* isolate, CachedMetadataHandler* cacheMetadataHandler, AccessControlStatus accessControlStatus, V8CacheOptions v8CacheOptions)
+v8::MaybeLocal<v8::Script> V8ScriptRunner::compileScript(const CompressibleString& code, const String& fileName, const String& sourceMapUrl, const TextPosition& textPosition, v8::Isolate* isolate, CachedMetadataHandler* cacheMetadataHandler, AccessControlStatus accessControlStatus, V8CacheOptions v8CacheOptions)
 {
     if (code.length() >= v8::String::kMaxLength) {
         V8ThrowException::throwGeneralError(isolate, "Source file too large.");
@@ -362,9 +383,13 @@ v8::MaybeLocal<v8::Script> V8ScriptRunner::compileScript(v8::Local<v8::String> c
         v8String(isolate, sourceMapUrl),
         v8Boolean(accessControlStatus == OpaqueResource, isolate));
 
+    V8CompileHistogram::Cacheability cacheabilityIfNoHandler = V8CompileHistogram::Cacheability::Noncacheable;
+    if (!cacheHandler && (scriptStartPosition.m_line.zeroBasedInt() == 0) && (scriptStartPosition.m_column.zeroBasedInt() == 0))
+        cacheabilityIfNoHandler = V8CompileHistogram::Cacheability::InlineScript;
+
     OwnPtr<CompileFn> compileFn = streamer
         ? selectCompileFunction(cacheOptions, resource, streamer)
-        : selectCompileFunction(cacheOptions, cacheHandler, code);
+        : selectCompileFunction(cacheOptions, cacheHandler, code, cacheabilityIfNoHandler);
 
     return (*compileFn)(isolate, code, origin);
 }

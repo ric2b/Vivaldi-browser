@@ -52,6 +52,7 @@ Drücken Sie zum Wechseln Shift+Alt.</translation>
 <translation id="252373100621549798">Display unbekannt</translation>
 <translation id="2532589005999780174">Modus mit hohem Kontrast</translation>
 <translation id="2562916301614567480">Privates Netzwerk</translation>
+<translation id="2661637000095600270">Der Bildschirm konnte nicht gespiegelt werden, da die Auflösung nicht unterstützt wird. Stattdessen wurde der Modus für den erweiterten Desktop gestartet. Klicken Sie, um einen Feedbackbericht zu senden.</translation>
 <translation id="2692809339924654275"><ph name="BLUETOOTH" />: Verbindung wird hergestellt...</translation>
 <translation id="2700058918926273959">Sitzung endet in <ph name="SESSION_TIME_REMAINING" />. Sie werden dann abgemeldet.</translation>
 <translation id="2727977024730340865">Das Gerät ist an ein Schwachstrom-Ladegerät angeschlossen. Möglicherweise kann der Akku nicht zuverlässig aufgeladen werden.</translation>
@@ -113,7 +114,6 @@ Drücken Sie die Such-Taste oder Shift, um die Aktivierung aufzuheben.</translat
 <translation id="4250680216510889253">Nein</translation>
 <translation id="4279490309300973883">Spiegelung</translation>
 <translation id="4321179778687042513">Strg</translation>
-<translation id="4379753398862151997">Der Monitor wird nicht unterstützt.</translation>
 <translation id="4421231901400348175">Sie teilen sich die Bildschirmsteuerung mit <ph name="HELPER_NAME" /> per Remote-Unterstützung.</translation>
 <translation id="4430019312045809116">Lautstärke</translation>
 <translation id="4527045527269911712">Das Bluetooth-Gerät "<ph name="DEVICE_NAME" />" bittet um Erlaubnis für das Pairing.</translation>
@@ -182,7 +182,6 @@ Drücken Sie zum Wechseln Shift+Alt.</translation>
 <translation id="6650933572246256093">Das Bluetooth-Gerät "<ph name="DEVICE_NAME" />" bittet um Erlaubnis für das Pairing. Geben Sie auf dem Gerät folgenden Zugangscode ein: <ph name="PASSKEY" />.</translation>
 <translation id="6713285437468012787">Das Pairing für das Bluetooth-Gerät "<ph name="DEVICE_NAME" />" wurde durchgeführt und das Gerät ist nun für alle Nutzer verfügbar. Sie können das Pairing unter "Einstellungen" entfernen.</translation>
 <translation id="6785414152754474415">Akku ist zu <ph name="PERCENTAGE" /> % geladen und wird geladen.</translation>
-<translation id="6803622936009808957">Der Bildschirm konnte nicht gespiegelt werden, da die Auflösung nicht unterstützt wird. Stattdessen wurde der Modus für den erweiterten Desktop gestartet.</translation>
 <translation id="683971173229319003">Suche + L</translation>
 <translation id="68610848741840742">ChromeVox (gesprochenes Feedback)</translation>
 <translation id="6911468394164995108">Andere Netzwerke...</translation>
@@ -237,6 +236,7 @@ Drücken Sie Alt+Suchen oder Shift, um die Aktivierung aufzuheben.</translation>
 <translation id="8878886163241303700">Bildschirmerweiterung</translation>
 <translation id="8938800817013097409">USB-C-Gerät (rechter Port hinten)</translation>
 <translation id="8940956008527784070">Niedriger Akkustand (<ph name="PERCENTAGE" /> %)</translation>
+<translation id="9008540565042607572">Der Monitor wird nicht unterstützt. Klicken Sie, um einen Feedbackbericht zu senden.</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9080206825613744995">Mikrofon wird verwendet.</translation>
 <translation id="9089416786594320554">Eingabemethoden</translation>

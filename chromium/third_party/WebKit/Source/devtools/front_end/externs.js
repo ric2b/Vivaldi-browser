@@ -42,6 +42,9 @@ Event.prototype.isMetaOrCtrlForTest;
 /** @type {string} */
 Event.prototype.code;
 
+/** @type {function():!Array<!EventTarget>|undefined} */
+Event.prototype.deepPath;
+
 /**
  * @type {number}
  */
@@ -198,12 +201,6 @@ DevToolsHost.ContextMenuDescriptor;
  * @return {number}
  */
 DevToolsHost.zoomFactor = function() { }
-
-/**
- * @param {number} length
- * @return {number}
- */
-DevToolsHost.convertLengthForEmbedder = function(length) { }
 
 /**
  * @param {string} origin

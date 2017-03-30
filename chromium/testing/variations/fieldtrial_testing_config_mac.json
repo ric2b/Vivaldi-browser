@@ -15,14 +15,20 @@
             "params": {
                 "limit": "3"
             }
+        },
+        {
+            "group_name": "Enabled"
         }
     ],
     "AutomaticTabDiscarding": [
         {
-            "enable_features": [
+            "enable_featuress": [
                 "AutomaticTabDiscarding"
             ],
-            "group_name": "Enabled_Once"
+            "group_name": "Enabled_Once_5",
+            "params": {
+                "MinimumProtectionTime": "300"
+            }
         }
     ],
     "CaptivePortalInterstitial": [
@@ -81,7 +87,22 @@
             "group_name": "Enabled"
         }
     ],
+    "LocalNTPSuggestionsService": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
+    "MacMemoryMechanism": [
+        {
+            "group_name": "Mach"
+        }
+    ],
     "MaterialDesignDownloads": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
+    "PageRevisitInstrumentation": [
         {
             "group_name": "Enabled"
         }
@@ -93,13 +114,15 @@
     ],
     "QUIC": [
         {
-            "group_name": "Enabled",
-            "params": {
-                "alternate_protocol_probability_threshold": "0.01"
-            }
+            "group_name": "Enabled"
         }
     ],
     "RefreshTokenDeviceId": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
+    "RenderingPipelineThrottling": [
         {
             "group_name": "Enabled"
         }
@@ -146,9 +169,11 @@
     ],
     "SafeBrowsingUnverifiedDownloads": [
         {
-            "group_name": "DisableByParameterExe",
+            "group_name": "DisableByParameterMostSbTypes2",
             "params": {
-                "blacklist": ".exe"
+                "blacklist": ".exe-,.zip-",
+                "block_sb_types": "true",
+                "whitelist": ".rar,.svg,.url,.xml,.zip"
             }
         }
     ],
@@ -158,6 +183,11 @@
             "params": {
                 "NextUpdateIntervalInMinutes": "15"
             }
+        }
+    ],
+    "SchedulerExpensiveTaskBlocking": [
+        {
+            "group_name": "Enabled"
         }
     ],
     "SdchPersistence": [
@@ -208,6 +238,14 @@
     ],
     "WebRTC-PeerConnectionDTLS1.2": [
         {
+            "group_name": "Enabled"
+        }
+    ],
+    "use-new-media-cache": [
+        {
+            "enable_features": [
+                "use-new-media-cache"
+            ],
             "group_name": "Enabled"
         }
     ]

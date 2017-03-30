@@ -12,7 +12,6 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -33,7 +32,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/browser_iterator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -44,12 +42,15 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/app_modal/javascript_app_modal_dialog.h"
 #include "components/app_modal/native_app_modal_dialog.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/worker_service.h"
 #include "content/public/browser/worker_service_observer.h"
@@ -63,6 +64,7 @@
 #include "extensions/common/value_builder.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
+#include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/gl/gl_switches.h"
 
@@ -89,6 +91,8 @@ const char kPageWithContentScript[] =
     "files/devtools/page_with_content_script.html";
 const char kNavigateBackTestPage[] =
     "files/devtools/navigate_back.html";
+const char kWindowOpenTestPage[] = "files/devtools/window_open.html";
+const char kLatencyInfoTestPage[] = "files/devtools/latency_info.html";
 const char kChunkedTestPage[] = "chunked";
 const char kSlowTestPage[] =
     "chunked?waitBeforeHeaders=100&waitBetweenChunks=100&chunksNumber=2";
@@ -100,6 +104,25 @@ const char kReloadSharedWorkerTestPage[] =
     "files/workers/debug_shared_worker_initialization.html";
 const char kReloadSharedWorkerTestWorker[] =
     "files/workers/debug_shared_worker_initialization.js";
+
+template <typename... T>
+void DispatchOnTestSuiteSkipCheck(DevToolsWindow* window,
+                                  const char* method,
+                                  T... args) {
+  RenderViewHost* rvh = DevToolsWindowTesting::Get(window)
+                            ->main_web_contents()
+                            ->GetRenderViewHost();
+  std::string result;
+  const char* args_array[] = {method, args...};
+  std::ostringstream script;
+  script << "uiTests.dispatchOnTestSuite([";
+  for (size_t i = 0; i < arraysize(args_array); ++i)
+    script << (i ? "," : "") << '\"' << args_array[i] << '\"';
+  script << "])";
+  ASSERT_TRUE(
+      content::ExecuteScriptAndExtractString(rvh, script.str(), &result));
+  EXPECT_EQ("[OK]", result);
+}
 
 template <typename... T>
 void DispatchOnTestSuite(DevToolsWindow* window,
@@ -119,16 +142,7 @@ void DispatchOnTestSuite(DevToolsWindow* window,
           "    '' + (window.uiTests && (typeof uiTests.dispatchOnTestSuite)));",
           &result));
   ASSERT_EQ("function", result) << "DevTools front-end is broken.";
-
-  const char* args_array[] = {method, args...};
-  std::ostringstream script;
-  script << "uiTests.dispatchOnTestSuite([";
-  for (size_t i = 0; i < arraysize(args_array); ++i)
-    script << (i ? "," : "") << '\"' << args_array[i] << '\"';
-  script << "])";
-  ASSERT_TRUE(
-      content::ExecuteScriptAndExtractString(rvh, script.str(), &result));
-  EXPECT_EQ("[OK]", result);
+  DispatchOnTestSuiteSkipCheck(window, method, args...);
 }
 
 void RunTestFunction(DevToolsWindow* window, const char* test_name) {
@@ -166,6 +180,21 @@ class DevToolsSanityTest : public InProcessBrowserTest {
     OpenDevToolsWindow(test_page, false);
     RunTestFunction(window_, test_name.c_str());
     CloseDevToolsWindow();
+  }
+
+  template <typename... T>
+  void RunTestMethod(const char* method, T... args) {
+    DispatchOnTestSuiteSkipCheck(window_, method, args...);
+  }
+
+  template <typename... T>
+  void DispatchAndWait(const char* method, T... args) {
+    DispatchOnTestSuiteSkipCheck(window_, "waitForAsync", method, args...);
+  }
+
+  template <typename... T>
+  void DispatchInPageAndWait(const char* method, T... args) {
+    DispatchAndWait("invokePageFunctionAsync", method, args...);
   }
 
   void LoadTestPage(const std::string& test_page) {
@@ -764,7 +793,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestShowScriptsTab) {
 // @see http://crbug.com/26312
 IN_PROC_BROWSER_TEST_F(
     DevToolsSanityTest,
-    TestScriptsTabIsPopulatedOnInspectedPageRefresh) {
+    DISABLED_TestScriptsTabIsPopulatedOnInspectedPageRefresh) {
   RunTest("testScriptsTabIsPopulatedOnInspectedPageRefresh",
           kDebuggerTestPage);
 }
@@ -881,51 +910,36 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest,
   RunTest("testPauseWhenLoadingDevTools", kPauseWhenLoadingDevTools);
 }
 
-// Tests that pressing 'Pause' will pause script execution if the script
-// is already running.
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(ARCH_CPU_ARM_FAMILY)
-// Timing out on linux ARM bot: https://crbug/238453
-#define MAYBE_TestPauseWhenScriptIsRunning DISABLED_TestPauseWhenScriptIsRunning
-#else
-#define MAYBE_TestPauseWhenScriptIsRunning TestPauseWhenScriptIsRunning
-#endif
 IN_PROC_BROWSER_TEST_F(DevToolsSanityTest,
-                       MAYBE_TestPauseWhenScriptIsRunning) {
+                       DISABLED_TestPauseWhenScriptIsRunning) {
   RunTest("testPauseWhenScriptIsRunning", kPauseWhenScriptIsRunning);
 }
 
 // Tests network timing.
-IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestNetworkTiming) {
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, DISABLED_TestNetworkTiming) {
   RunTest("testNetworkTiming", kSlowTestPage);
 }
 
 // Tests network size.
-IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestNetworkSize) {
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, DISABLED_TestNetworkSize) {
   RunTest("testNetworkSize", kChunkedTestPage);
 }
 
 // Tests raw headers text.
-IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestNetworkSyncSize) {
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, DISABLED_TestNetworkSyncSize) {
   RunTest("testNetworkSyncSize", kChunkedTestPage);
 }
 
 // Tests raw headers text.
-IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestNetworkRawHeadersText) {
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, DISABLED_TestNetworkRawHeadersText) {
   RunTest("testNetworkRawHeadersText", kChunkedTestPage);
 }
 
-// Tests that console messages are not duplicated on navigation back.
-#if defined(OS_WIN)
-// Flaking on windows swarm try runs: crbug.com/409285.
-#define MAYBE_TestConsoleOnNavigateBack DISABLED_TestConsoleOnNavigateBack
-#else
-#define MAYBE_TestConsoleOnNavigateBack TestConsoleOnNavigateBack
-#endif
-IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, MAYBE_TestConsoleOnNavigateBack) {
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, DISABLED_TestConsoleOnNavigateBack) {
   RunTest("testConsoleOnNavigateBack", kNavigateBackTestPage);
 }
 
-IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestDeviceEmulation) {
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, DISABLED_TestDeviceEmulation) {
   RunTest("testDeviceMetricsOverrides", "about:blank");
 }
 
@@ -996,6 +1010,38 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestPageWithNoJavaScript) {
   CloseDevToolsWindow();
 }
 
+class DevToolsAutoOpenerTest : public DevToolsSanityTest {
+ public:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitch(switches::kAutoOpenDevToolsForTabs);
+    observer_.reset(new DevToolsWindowCreationObserver());
+  }
+ protected:
+  scoped_ptr<DevToolsWindowCreationObserver> observer_;
+};
+
+IN_PROC_BROWSER_TEST_F(DevToolsAutoOpenerTest, TestAutoOpenForTabs) {
+  {
+    DevToolsWindowCreationObserver observer;
+    AddTabAtIndexToBrowser(browser(), 0, GURL("about:blank"),
+        ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false);
+    observer.WaitForLoad();
+  }
+  Browser* new_browser = nullptr;
+  {
+    DevToolsWindowCreationObserver observer;
+    new_browser = CreateBrowser(browser()->profile());
+    observer.WaitForLoad();
+  }
+  {
+    DevToolsWindowCreationObserver observer;
+    AddTabAtIndexToBrowser(new_browser, 0, GURL("about:blank"),
+        ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false);
+    observer.WaitForLoad();
+  }
+  observer_->CloseAllSync();
+}
+
 class DevToolsReattachAfterCrashTest : public DevToolsSanityTest {
  protected:
   void RunTestWithPanel(const char* panel_name) {
@@ -1024,7 +1070,19 @@ IN_PROC_BROWSER_TEST_F(DevToolsReattachAfterCrashTest,
   RunTestWithPanel("network");
 }
 
-IN_PROC_BROWSER_TEST_F(WorkerDevToolsSanityTest, InspectSharedWorker) {
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, AutoAttachToWindowOpen) {
+  OpenDevToolsWindow(kWindowOpenTestPage, false);
+  DispatchOnTestSuite(window_, "enableAutoAttachToCreatedPages");
+  DevToolsWindowCreationObserver observer;
+  ASSERT_TRUE(content::ExecuteScript(
+      GetInspectedTab(), "window.open('window_open.html', '_blank');"));
+  observer.WaitForLoad();
+  DispatchOnTestSuite(observer.devtools_window(), "waitForDebuggerPaused");
+  DevToolsWindowTesting::CloseDevToolsWindowSync(observer.devtools_window());
+  CloseDevToolsWindow();
+}
+
+IN_PROC_BROWSER_TEST_F(WorkerDevToolsSanityTest, DISABLED_InspectSharedWorker) {
 #if defined(OS_WIN) && defined(USE_ASH)
   // Disable this test in Metro+Ash for now (http://crbug.com/262796).
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -1125,16 +1183,38 @@ class DevToolsPixelOutputTests : public DevToolsSanityTest {
   }
 };
 
-// This test enables switches::kUseGpuInTests which causes false positives
-// with MemorySanitizer.
-#if defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER) || \
-    (defined(OS_CHROMEOS) && defined(OFFICIAL_BUILD))
-#define MAYBE_TestScreenshotRecording DISABLED_TestScreenshotRecording
-#else
-#define MAYBE_TestScreenshotRecording TestScreenshotRecording
-#endif
-// Tests raw headers text.
 IN_PROC_BROWSER_TEST_F(DevToolsPixelOutputTests,
-                       MAYBE_TestScreenshotRecording) {
+                       DISABLED_TestScreenshotRecording) {
   RunTest("testScreenshotRecording", std::string());
+}
+
+IN_PROC_BROWSER_TEST_F(DevToolsPixelOutputTests,
+                       DISABLED_TestLatencyInfoInstrumentation) {
+  WebContents* web_contents = GetInspectedTab();
+  OpenDevToolsWindow(kLatencyInfoTestPage, false);
+  RunTestMethod("enableExperiment", "timelineLatencyInfo");
+  DispatchAndWait("startTimeline");
+
+  for (int i = 0; i < 3; ++i) {
+    SimulateMouseEvent(web_contents, blink::WebInputEvent::MouseMove,
+                       gfx::Point(30, 60));
+    DispatchInPageAndWait("waitForEvent", "mousemove");
+  }
+
+  SimulateMouseClickAt(web_contents, 0, blink::WebPointerProperties::ButtonLeft,
+                       gfx::Point(30, 60));
+  DispatchInPageAndWait("waitForEvent", "click");
+
+  SimulateMouseWheelEvent(web_contents, gfx::Point(300, 100),
+                          gfx::Vector2d(0, 120));
+  DispatchInPageAndWait("waitForEvent", "wheel");
+
+  SimulateTapAt(web_contents, gfx::Point(30, 60));
+  DispatchInPageAndWait("waitForEvent", "gesturetap");
+
+  DispatchAndWait("stopTimeline");
+  RunTestMethod("checkInputEventsPresent", "MouseMove", "MouseDown",
+                "MouseWheel", "GestureTap");
+
+  CloseDevToolsWindow();
 }

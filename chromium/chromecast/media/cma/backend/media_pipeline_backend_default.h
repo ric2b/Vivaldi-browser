@@ -23,6 +23,14 @@ class MediaPipelineBackendDefault : public MediaPipelineBackend {
   MediaPipelineBackendDefault();
   ~MediaPipelineBackendDefault() override;
 
+  bool running() const { return running_; }
+  const AudioDecoderDefault* audio_decoder() const {
+    return audio_decoder_.get();
+  }
+  const VideoDecoderDefault* video_decoder() const {
+    return video_decoder_.get();
+  }
+
   // MediaPipelineBackend implementation:
   AudioDecoder* CreateAudioDecoder() override;
   VideoDecoder* CreateVideoDecoder() override;
@@ -35,7 +43,7 @@ class MediaPipelineBackendDefault : public MediaPipelineBackend {
   bool SetPlaybackRate(float rate) override;
 
  private:
-  base::TimeDelta start_pts_;
+  int64_t start_pts_;
   base::TimeTicks start_clock_;
   bool running_;
   float rate_;

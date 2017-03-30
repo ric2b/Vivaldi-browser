@@ -7,8 +7,8 @@
 #include <utility>
 
 #include "base/stl_util.h"
+#include "content/common/mojo/static_application_loader.h"
 #include "content/public/common/content_client.h"
-#include "mojo/shell/static_application_loader.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -22,7 +22,7 @@ ProcessControlImpl::~ProcessControlImpl() {
 
 void ProcessControlImpl::LoadApplication(
     const mojo::String& url,
-    mojo::InterfaceRequest<mojo::Application> request,
+    mojo::InterfaceRequest<mojo::shell::mojom::ShellClient> request,
     const LoadApplicationCallback& callback) {
   // Only register loaders when we need it.
   if (!has_registered_loaders_) {

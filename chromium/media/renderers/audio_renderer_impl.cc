@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "base/single_thread_task_runner.h"
@@ -24,6 +25,7 @@
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/media_log.h"
+#include "media/base/media_switches.h"
 #include "media/base/timestamp_constants.h"
 #include "media/filters/audio_clock.h"
 #include "media/filters/decrypting_demuxer_stream.h"
@@ -60,6 +62,7 @@ AudioRendererImpl::AudioRendererImpl(
       media_log_(media_log),
       tick_clock_(new base::DefaultTickClock()),
       last_audio_memory_usage_(0),
+      last_decoded_sample_rate_(0),
       playback_rate_(0.0),
       state_(kUninitialized),
       buffering_state_(BUFFERING_HAVE_NOTHING),
@@ -310,7 +313,7 @@ void AudioRendererImpl::StartPlaying() {
 void AudioRendererImpl::Initialize(
     DemuxerStream* stream,
     const PipelineStatusCB& init_cb,
-    const SetCdmReadyCB& set_cdm_ready_cb,
+    CdmContext* cdm_context,
     const StatisticsCB& statistics_cb,
     const BufferingStateCB& buffering_state_cb,
     const base::Closure& ended_cb,
@@ -354,24 +357,71 @@ void AudioRendererImpl::Initialize(
         buffer_size);
     buffer_converter_.reset();
   } else {
-    audio_parameters_.Reset(
-        hw_params.format(),
-        // Always use the source's channel layout to avoid premature downmixing
-        // (http://crbug.com/379288), platform specific issues around channel
-        // layouts (http://crbug.com/266674), and unnecessary upmixing overhead.
-        stream->audio_decoder_config().channel_layout(),
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
-        // On ChromeOS and Android let the OS level resampler handle resampling
-        // unless the initial sample rate is too low; this allows support for
-        // sample rate adaptations where necessary.
-        stream->audio_decoder_config().samples_per_second() < 44100
-            ? hw_params.sample_rate()
-            : stream->audio_decoder_config().samples_per_second(),
-#else
-        hw_params.sample_rate(),
+    // To allow for seamless sample rate adaptations (i.e. changes from say
+    // 16kHz to 48kHz), always resample to the hardware rate.
+    int sample_rate = hw_params.sample_rate();
+    int preferred_buffer_size = hw_params.frames_per_buffer();
+
+#if defined(OS_CHROMEOS)
+    // On ChromeOS let the OS level resampler handle resampling unless the
+    // initial sample rate is too low; this allows support for sample rate
+    // adaptations where necessary.
+    if (stream->audio_decoder_config().samples_per_second() >= 44100) {
+      sample_rate = stream->audio_decoder_config().samples_per_second();
+      preferred_buffer_size = 0;  // No preference.
+    }
 #endif
-        hw_params.bits_per_sample(),
-        hardware_config_.GetHighLatencyBufferSize());
+
+    int stream_channel_count = ChannelLayoutToChannelCount(
+        stream->audio_decoder_config().channel_layout());
+
+    bool try_supported_channel_layouts = false;
+#if defined(OS_WIN)
+    try_supported_channel_layouts =
+        base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kTrySupportedChannelLayouts);
+#endif
+
+    // We don't know how to up-mix for DISCRETE layouts (fancy multichannel
+    // hardware with non-standard speaker arrangement). Instead, pretend the
+    // hardware layout is stereo and let the OS take care of further up-mixing
+    // to the discrete layout (http://crbug.com/266674). Additionally, pretend
+    // hardware is stereo whenever kTrySupportedChannelLayouts is set. This flag
+    // is for savvy users who want stereo content to output in all surround
+    // speakers. Using the actual layout (likely 5.1 or higher) will mean our
+    // mixer will attempt to up-mix stereo source streams to just the left/right
+    // speaker of the 5.1 setup, nulling out the other channels
+    // (http://crbug.com/177872).
+    ChannelLayout hw_channel_layout =
+        hw_params.channel_layout() == CHANNEL_LAYOUT_DISCRETE ||
+                try_supported_channel_layouts
+            ? CHANNEL_LAYOUT_STEREO
+            : hw_params.channel_layout();
+    int hw_channel_count = ChannelLayoutToChannelCount(hw_channel_layout);
+
+    // The layout we pass to |audio_parameters_| will be used for the lifetime
+    // of this audio renderer, regardless of changes to hardware and/or stream
+    // properties. Below we choose the max of stream layout vs. hardware layout
+    // to leave room for changes to the hardware and/or stream (i.e. avoid
+    // premature down-mixing - http://crbug.com/379288).
+    // If stream_channels < hw_channels:
+    //   Taking max means we up-mix to hardware layout. If stream later changes
+    //   to have more channels, we aren't locked into down-mixing to the
+    //   initial stream layout.
+    // If stream_channels > hw_channels:
+    //   We choose to output stream's layout, meaning mixing is a no-op for the
+    //   renderer. Browser-side will down-mix to the hardware config. If the
+    //   hardware later changes to equal stream channels, browser-side will stop
+    //   down-mixing and use the data from all stream channels.
+    ChannelLayout renderer_channel_layout =
+        hw_channel_count > stream_channel_count
+            ? hw_channel_layout
+            : stream->audio_decoder_config().channel_layout();
+
+    audio_parameters_.Reset(hw_params.format(), renderer_channel_layout,
+                            sample_rate, hw_params.bits_per_sample(),
+                            AudioHardwareConfig::GetHighLatencyBufferSize(
+                                sample_rate, preferred_buffer_size));
   }
 
   audio_clock_.reset(
@@ -380,7 +430,7 @@ void AudioRendererImpl::Initialize(
   audio_buffer_stream_->Initialize(
       stream, base::Bind(&AudioRendererImpl::OnAudioBufferStreamInitialized,
                          weak_factory_.GetWeakPtr()),
-      set_cdm_ready_cb, statistics_cb, waiting_for_decryption_key_cb);
+      cdm_context, statistics_cb, waiting_for_decryption_key_cb);
 }
 
 void AudioRendererImpl::OnAudioBufferStreamInitialized(bool success) {
@@ -468,6 +518,16 @@ void AudioRendererImpl::DecodedAudioReady(
   }
 
   if (expecting_config_changes_) {
+    if (last_decoded_sample_rate_ &&
+        buffer->sample_rate() != last_decoded_sample_rate_) {
+      DVLOG(1) << __FUNCTION__ << " Updating audio sample_rate."
+               << " ts:" << buffer->timestamp().InMicroseconds()
+               << " old:" << last_decoded_sample_rate_
+               << " new:" << buffer->sample_rate();
+      OnConfigChange();
+    }
+    last_decoded_sample_rate_ = buffer->sample_rate();
+
     DCHECK(buffer_converter_);
     buffer_converter_->AddInput(buffer);
     while (buffer_converter_->HasNextBuffer()) {
@@ -477,6 +537,26 @@ void AudioRendererImpl::DecodedAudioReady(
       }
     }
   } else {
+    // TODO(chcunningham, tguilbert): Figure out if we want to support implicit
+    // config changes during src=. Doing so requires resampling each individual
+    // stream which is inefficient when there are many tags in a page.
+    //
+    // Check if the buffer we received matches the expected configuration.
+    // Note: We explicitly do not check channel layout here to avoid breaking
+    // weird behavior with multichannel wav files: http://crbug.com/600538.
+    if (!buffer->end_of_stream() &&
+        (buffer->sample_rate() != audio_parameters_.sample_rate() ||
+         buffer->channel_count() != audio_parameters_.channels())) {
+      MEDIA_LOG(ERROR, media_log_)
+          << "Unsupported midstream configuration change!"
+          << " Sample Rate: " << buffer->sample_rate() << " vs "
+          << audio_parameters_.sample_rate()
+          << ", Channels: " << buffer->channel_count() << " vs "
+          << audio_parameters_.channels();
+      HandleAbortedReadOrDecodeError(true);
+      return;
+    }
+
     if (!splicer_->AddInput(buffer)) {
       HandleAbortedReadOrDecodeError(true);
       return;
@@ -628,13 +708,13 @@ bool AudioRendererImpl::IsBeforeStartTime(
 }
 
 int AudioRendererImpl::Render(AudioBus* audio_bus,
-                              uint32_t audio_delay_milliseconds,
+                              uint32_t frames_delayed,
                               uint32_t frames_skipped) {
-  const int requested_frames = audio_bus->frames();
-  base::TimeDelta playback_delay = base::TimeDelta::FromMilliseconds(
-      audio_delay_milliseconds);
-  const int delay_frames = static_cast<int>(playback_delay.InSecondsF() *
-                                            audio_parameters_.sample_rate());
+  const int frames_requested = audio_bus->frames();
+  DVLOG(4) << __FUNCTION__ << " frames_delayed:" << frames_delayed
+           << " frames_skipped:" << frames_skipped
+           << " frames_requested:" << frames_requested;
+
   int frames_written = 0;
   {
     base::AutoLock auto_lock(lock_);
@@ -642,27 +722,27 @@ int AudioRendererImpl::Render(AudioBus* audio_bus,
 
     if (!stop_rendering_time_.is_null()) {
       audio_clock_->CompensateForSuspendedWrites(
-          last_render_time_ - stop_rendering_time_, delay_frames);
+          last_render_time_ - stop_rendering_time_, frames_delayed);
       stop_rendering_time_ = base::TimeTicks();
     }
 
     // Ensure Stop() hasn't destroyed our |algorithm_| on the pipeline thread.
     if (!algorithm_) {
-      audio_clock_->WroteAudio(
-          0, requested_frames, delay_frames, playback_rate_);
+      audio_clock_->WroteAudio(0, frames_requested, frames_delayed,
+                               playback_rate_);
       return 0;
     }
 
     if (playback_rate_ == 0) {
-      audio_clock_->WroteAudio(
-          0, requested_frames, delay_frames, playback_rate_);
+      audio_clock_->WroteAudio(0, frames_requested, frames_delayed,
+                               playback_rate_);
       return 0;
     }
 
     // Mute audio by returning 0 when not playing.
     if (state_ != kPlaying) {
-      audio_clock_->WroteAudio(
-          0, requested_frames, delay_frames, playback_rate_);
+      audio_clock_->WroteAudio(0, frames_requested, frames_delayed,
+                               playback_rate_);
       return 0;
     }
 
@@ -673,24 +753,28 @@ int AudioRendererImpl::Render(AudioBus* audio_bus,
       CHECK_GE(first_packet_timestamp_, base::TimeDelta());
       const base::TimeDelta play_delay =
           first_packet_timestamp_ - audio_clock_->back_timestamp();
-      CHECK_LT(play_delay.InSeconds(), 1000)
-          << "first_packet_timestamp_ = " << first_packet_timestamp_
-          << ", audio_clock_->back_timestamp() = "
-          << audio_clock_->back_timestamp();
       if (play_delay > base::TimeDelta()) {
         DCHECK_EQ(frames_written, 0);
-        frames_written =
-            std::min(static_cast<int>(play_delay.InSecondsF() *
-                                      audio_parameters_.sample_rate()),
-                     requested_frames);
+
+        // Don't multiply |play_delay| out since it can be a huge value on
+        // poorly encoded media and multiplying by the sample rate could cause
+        // the value to overflow.
+        if (play_delay.InSecondsF() > static_cast<double>(frames_requested) /
+                                          audio_parameters_.sample_rate()) {
+          frames_written = frames_requested;
+        } else {
+          frames_written =
+              play_delay.InSecondsF() * audio_parameters_.sample_rate();
+        }
+
         audio_bus->ZeroFramesPartial(0, frames_written);
       }
 
       // If there's any space left, actually render the audio; this is where the
       // aural magic happens.
-      if (frames_written < requested_frames) {
+      if (frames_written < frames_requested) {
         frames_written += algorithm_->FillBuffer(
-            audio_bus, frames_written, requested_frames - frames_written,
+            audio_bus, frames_written, frames_requested - frames_written,
             playback_rate_);
       }
     }
@@ -721,7 +805,7 @@ int AudioRendererImpl::Render(AudioBus* audio_bus,
       if (received_end_of_stream_) {
         if (ended_timestamp_ == kInfiniteDuration())
           ended_timestamp_ = audio_clock_->back_timestamp();
-        frames_after_end_of_stream = requested_frames;
+        frames_after_end_of_stream = frames_requested;
       } else if (state_ == kPlaying &&
                  buffering_state_ != BUFFERING_HAVE_NOTHING) {
         algorithm_->IncreaseQueueCapacity();
@@ -730,9 +814,7 @@ int AudioRendererImpl::Render(AudioBus* audio_bus,
     }
 
     audio_clock_->WroteAudio(frames_written + frames_after_end_of_stream,
-                             requested_frames,
-                             delay_frames,
-                             playback_rate_);
+                             frames_requested, frames_delayed, playback_rate_);
 
     if (CanRead_Locked()) {
       task_runner_->PostTask(FROM_HERE,
@@ -747,7 +829,7 @@ int AudioRendererImpl::Render(AudioBus* audio_bus,
     }
   }
 
-  DCHECK_LE(frames_written, requested_frames);
+  DCHECK_LE(frames_written, frames_requested);
   return frames_written;
 }
 

@@ -222,8 +222,13 @@ import java.util.UUID;
     }
 
     @Override
-    public void releaseMediaPlayers() {
-        nativeReleaseMediaPlayers(mNativeWebContentsAndroid);
+    public void suspendAllMediaPlayers() {
+        nativeSuspendAllMediaPlayers(mNativeWebContentsAndroid);
+    }
+
+    @Override
+    public void setAudioMuted(boolean mute) {
+        nativeSetAudioMuted(mNativeWebContentsAndroid, mute);
     }
 
     @Override
@@ -464,6 +469,11 @@ import java.util.UUID;
         callback.onFinishGetBitmap(bitmap, response);
     }
 
+    @Override
+    public void reloadLoFiImages() {
+        nativeReloadLoFiImages(mNativeWebContentsAndroid);
+    }
+
     // This is static to avoid exposing a public destroy method on the native side of this class.
     private static native void nativeDestroyWebContents(long webContentsAndroidPtr);
 
@@ -483,7 +493,8 @@ import java.util.UUID;
     private native void nativeInsertCSS(long nativeWebContentsAndroid, String css);
     private native void nativeOnHide(long nativeWebContentsAndroid);
     private native void nativeOnShow(long nativeWebContentsAndroid);
-    private native void nativeReleaseMediaPlayers(long nativeWebContentsAndroid);
+    private native void nativeSuspendAllMediaPlayers(long nativeWebContentsAndroid);
+    private native void nativeSetAudioMuted(long nativeWebContentsAndroid, boolean mute);
     private native int nativeGetBackgroundColor(long nativeWebContentsAndroid);
     private native void nativeShowInterstitialPage(long nativeWebContentsAndroid,
             String url, long nativeInterstitialPageDelegateAndroid);
@@ -523,4 +534,5 @@ import java.util.UUID;
             ContentBitmapCallback callback, Bitmap.Config config, float scale,
             float x, float y, float width, float height);
     private native void nativeOnContextMenuClosed(long nativeWebContentsAndroid);
+    private native void nativeReloadLoFiImages(long nativeWebContentsAndroid);
 }

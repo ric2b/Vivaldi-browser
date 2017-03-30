@@ -11,7 +11,6 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/path_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
@@ -23,6 +22,7 @@
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/login/auth/key.h"
 #include "chromeos/login/auth/user_context.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_service.h"
@@ -94,8 +94,8 @@ void LoginManagerTest::SetUp() {
 
 void LoginManagerTest::TearDownOnMainThread() {
   MixinBasedBrowserTest::TearDownOnMainThread();
-  if (LoginDisplayHostImpl::default_host())
-    LoginDisplayHostImpl::default_host()->Finalize();
+  if (LoginDisplayHost::default_host())
+    LoginDisplayHost::default_host()->Finalize();
   base::MessageLoop::current()->RunUntilIdle();
   EXPECT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
 }
@@ -218,7 +218,7 @@ void LoginManagerTest::JSExpect(const std::string& expression) {
 }
 
 void LoginManagerTest::InitializeWebContents() {
-  LoginDisplayHost* host = LoginDisplayHostImpl::default_host();
+  LoginDisplayHost* host = LoginDisplayHost::default_host();
   EXPECT_TRUE(host != NULL);
 
   content::WebContents* web_contents =

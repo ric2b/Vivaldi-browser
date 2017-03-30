@@ -4,19 +4,22 @@
 
 import("//build/config/ui.gni")
 import("//mojo/public/mojo_application.gni")
+import("//mojo/public/mojo_application_manifest.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//tools/grit/repack.gni")
 
 mojo_native_application("task_viewer") {
   sources = [
     "main.cc",
-    "task_viewer_application_delegate.cc",
-    "task_viewer_application_delegate.h",
+    "task_viewer.cc",
+    "task_viewer.h",
   ]
 
   deps = [
+    ":manifest",
     "//base",
     "//mojo/public/cpp/bindings",
+    "//mojo/services/package_manager/public/interfaces",
     "//mojo/services/tracing/public/cpp",
     "//mojo/shell/public/cpp",
     "//mojo/shell/public/cpp:sources",
@@ -30,4 +33,9 @@ mojo_native_application("task_viewer") {
   data_deps = [
     "//components/mus",
   ]
+}
+
+mojo_application_manifest("manifest") {
+  application_name = "task_viewer"
+  source = "manifest.json"
 }

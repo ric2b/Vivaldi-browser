@@ -23,12 +23,6 @@ public:
     }
 
     double value() const { return m_value; }
-    void setValue(double value)
-    {
-        m_value = value;
-    }
-
-    String cssString() const override { return String::number(m_value); }
 
     PassRefPtrWillBeRawPtr<CSSValue> toCSSValue() const override
     {

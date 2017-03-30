@@ -67,7 +67,7 @@ void GCMDriverAndroid::OnUnregisterFinished(
 
   recorder_.RecordUnregistrationResponse(app_id, success);
 
-  UnregisterFinished(app_id, result);
+  RemoveEncryptionInfoAfterUnregister(app_id, result);
 }
 
 void GCMDriverAndroid::OnMessageReceived(
@@ -106,15 +106,6 @@ void GCMDriverAndroid::OnMessageReceived(
   recorder_.RecordDataMessageReceived(app_id, message_byte_size);
 
   DispatchMessage(app_id, message);
-}
-
-void GCMDriverAndroid::OnMessagesDeleted(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jstring>& j_app_id) {
-  std::string app_id = ConvertJavaStringToUTF8(env, j_app_id);
-
-  GetAppHandler(app_id)->OnMessagesDeleted(app_id);
 }
 
 // static
@@ -249,7 +240,8 @@ void GCMDriverAndroid::UnregisterImpl(const std::string& app_id) {
 }
 
 void GCMDriverAndroid::UnregisterWithSenderIdImpl(
-    const std::string& app_id, const std::string& sender_id) {
+    const std::string& app_id,
+    const std::string& sender_id) {
   JNIEnv* env = AttachCurrentThread();
 
   recorder_.RecordUnregistrationSent(app_id);
@@ -263,6 +255,12 @@ void GCMDriverAndroid::SendImpl(const std::string& app_id,
                                 const std::string& receiver_id,
                                 const OutgoingMessage& message) {
   NOTIMPLEMENTED();
+}
+
+void GCMDriverAndroid::RecordDecryptionFailure(
+    const std::string& app_id,
+    GCMEncryptionProvider::DecryptionResult result) {
+  recorder_.RecordDecryptionFailure(app_id, result);
 }
 
 }  // namespace gcm

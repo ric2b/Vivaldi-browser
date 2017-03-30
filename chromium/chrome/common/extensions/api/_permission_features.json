@@ -395,7 +395,9 @@
       "657FEC7E77355CA205B0E226586621F86B33F611",  // http://crbug.com/246857
       "5894126C625EF31852F215ED301A5FF1F9B7D026",  // http://crbug.com/246857
       "8DAE23A10703C926B21862B2F318FB4E110B17BD",  // http://crbug.com/487455
-      "34412790FC81BC9B563CBE599ED10ABF26B209F7"   // http://crbug.com/509149
+      "34412790FC81BC9B563CBE599ED10ABF26B209F7",  // http://crbug.com/509149
+      "7F782E724FF51789B54DA82C7363DAB5043C1677",  // http://crbug.com/570127
+      "2C18988BCDC297196D5D6893005175DA1BC1E893"   // http://crbug.com/570127
     ]
   },
   "experienceSamplingPrivate": {
@@ -972,11 +974,6 @@
     "extension_types": ["platform_app"],
     "location": "component"
   },
-  "searchEnginesPrivate": {
-    "channel": "trunk",
-    "extension_types": ["extension", "platform_app"],
-    "location": "component"
-  },
   "screensaver": {
     "channel": "stable",
     "extension_types": ["legacy_packaged_app", "hosted_app", "platform_app"]
@@ -991,11 +988,19 @@
     "channel": "stable",
     "extension_types": ["extension"]
   }],
-  "settingsPrivate": {
+  "settingsPrivate": [{
     "channel": "trunk",
     "extension_types": ["extension", "platform_app"],
     "location": "component"
   },
+  {
+    "channel": "stable",
+    "extension_types": ["extension"],
+    "whitelist": [
+      "63ED55E43214C211F82122ED56407FF1A807F2A3",  // Media Router Dev
+      "226CF815E39A363090A1E547D53063472B8279FA"   // Media Router Release
+    ]
+  }],
   "signedInDevices": {
     "channel": "dev",
     "extension_types": ["extension", "legacy_packaged_app", "platform_app"]

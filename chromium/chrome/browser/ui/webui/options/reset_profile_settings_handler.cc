@@ -10,7 +10,6 @@
 #include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string16.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -24,6 +23,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_ui.h"
@@ -151,11 +151,6 @@ void ResetProfileSettingsHandler::OnResetProfileSettingsDone(
     int difference = setting_snapshot_->FindDifferentFields(current_snapshot);
     if (difference) {
       setting_snapshot_->Subtract(current_snapshot);
-      std::string report = SerializeSettingsReport(*setting_snapshot_,
-                                                   difference);
-      SendSettingsFeedback(report, profile);
-
-      // Send the same report as a protobuf to a different endpoint.
       scoped_ptr<reset_report::ChromeResetReport> report_proto =
           SerializeSettingsReportToProto(*setting_snapshot_, difference);
       if (report_proto)

@@ -3,6 +3,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import glob
 import json
 import os
 import pipes
@@ -66,11 +67,13 @@ def SetEnvironmentAndGetRuntimeDllDirs():
     os.environ['WINDOWSSDKDIR'] = win_sdk
     os.environ['WDK_DIR'] = wdk
     # Include the VS runtime in the PATH in case it's not machine-installed.
-    runtime_path = ';'.join(vs_runtime_dll_dirs)
-    os.environ['PATH'] = runtime_path + ';' + os.environ['PATH']
+    runtime_path = os.path.pathsep.join(vs_runtime_dll_dirs)
+    os.environ['PATH'] = runtime_path + os.path.pathsep + os.environ['PATH']
   elif sys.platform == 'win32' and not depot_tools_win_toolchain:
     if not 'GYP_MSVS_OVERRIDE_PATH' in os.environ:
       os.environ['GYP_MSVS_OVERRIDE_PATH'] = DetectVisualStudioPath()
+    if not 'GYP_MSVS_VERSION' in os.environ:
+      os.environ['GYP_MSVS_VERSION'] = GetVisualStudioVersion()
 
   return vs_runtime_dll_dirs
 
@@ -149,14 +152,15 @@ def _VersionNumber():
     raise ValueError('Unexpected GYP_MSVS_VERSION')
 
 
-def _CopyRuntimeImpl(target, source):
+def _CopyRuntimeImpl(target, source, verbose=True):
   """Copy |source| to |target| if it doesn't already exist or if it
   needs to be updated.
   """
   if (os.path.isdir(os.path.dirname(target)) and
       (not os.path.isfile(target) or
       os.stat(target).st_mtime != os.stat(source).st_mtime)):
-    print 'Copying %s to %s...' % (source, target)
+    if verbose:
+      print 'Copying %s to %s...' % (source, target)
     if os.path.exists(target):
       os.unlink(target)
     shutil.copy2(source, target)
@@ -172,7 +176,7 @@ def _CopyRuntime2013(target_dir, source_dir, dll_pattern):
     _CopyRuntimeImpl(target, source)
 
 
-def _CopyRuntime2015(target_dir, source_dir, dll_pattern):
+def _CopyRuntime2015(target_dir, source_dir, dll_pattern, suffix):
   """Copy both the msvcp and vccorlib runtime DLLs, only if the target doesn't
   exist, but the target directory does exist."""
   for file_part in ('msvcp', 'vccorlib', 'vcruntime'):
@@ -180,6 +184,14 @@ def _CopyRuntime2015(target_dir, source_dir, dll_pattern):
     target = os.path.join(target_dir, dll)
     source = os.path.join(source_dir, dll)
     _CopyRuntimeImpl(target, source)
+  ucrt_src_dir = os.path.join(source_dir, 'api-ms-win-*.dll')
+  print 'Copying %s to %s...' % (ucrt_src_dir, target_dir)
+  for ucrt_src_file in glob.glob(ucrt_src_dir):
+    file_part = os.path.basename(ucrt_src_file)
+    ucrt_dst_file = os.path.join(target_dir, file_part)
+    _CopyRuntimeImpl(ucrt_dst_file, ucrt_src_file, False)
+  _CopyRuntimeImpl(os.path.join(target_dir, 'ucrtbase' + suffix),
+                    os.path.join(source_dir, 'ucrtbase' + suffix))
 
 
 def _CopyRuntime(target_dir, source_dir, target_cpu, debug):
@@ -187,10 +199,7 @@ def _CopyRuntime(target_dir, source_dir, target_cpu, debug):
   directory does exist. Handles VS 2013 and VS 2015."""
   suffix = "d.dll" if debug else ".dll"
   if GetVisualStudioVersion() == '2015':
-    _CopyRuntime2015(target_dir, source_dir, '%s140' + suffix)
-    if debug:
-      _CopyRuntimeImpl(os.path.join(target_dir, 'ucrtbased.dll'),
-                       os.path.join(source_dir, 'ucrtbased.dll'))
+    _CopyRuntime2015(target_dir, source_dir, '%s140' + suffix, suffix)
   else:
     _CopyRuntime2013(target_dir, source_dir, 'msvc%s120' + suffix)
 
@@ -269,11 +278,11 @@ def _GetDesiredVsToolchainHashes():
   """Load a list of SHA1s corresponding to the toolchains that we want installed
   to build with."""
   if GetVisualStudioVersion() == '2015':
-    # Update 1 with Debuggers, UCRT installers and ucrtbased.dll
-    return ['524956ec6e64e68fead3773e3ce318537657b404']
+    # Update 1 with hot fixes.
+    return ['b349b3cc596d5f7e13d649532ddd7e8db39db0cb']
   else:
     # Default to VS2013.
-    return ['9ff97c632ae1fee0c98bcd53e71770eb3a0d8deb']
+    return ['4087e065abebdca6dbd0caca2910c6718d2ec67f']
 
 
 def ShouldUpdateToolchain():
@@ -327,7 +336,7 @@ def GetToolchainDir():
 
   # If WINDOWSSDKDIR is not set, search the default SDK path and set it.
   if not 'WINDOWSSDKDIR' in os.environ:
-    default_sdk_path = 'C:\\Program Files (x86)\\Windows Kits\\8.1'
+    default_sdk_path = 'C:\\Program Files (x86)\\Windows Kits\\10'
     if os.path.isdir(default_sdk_path):
       os.environ['WINDOWSSDKDIR'] = default_sdk_path
 
@@ -341,7 +350,7 @@ runtime_dirs = "%s"
       os.environ['WINDOWSSDKDIR'],
       GetVisualStudioVersion(),
       os.environ.get('WDK_DIR', ''),
-      ';'.join(runtime_dll_dirs or ['None']))
+      os.path.pathsep.join(runtime_dll_dirs or ['None']))
 
 
 def main():

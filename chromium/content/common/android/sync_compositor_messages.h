@@ -25,7 +25,7 @@ struct SyncCompositorCommonBrowserParams {
   SyncCompositorCommonBrowserParams();
   ~SyncCompositorCommonBrowserParams();
 
-  size_t bytes_limit;
+  uint32_t bytes_limit;
   cc::CompositorFrameAck ack;
   gfx::ScrollOffset root_scroll_offset;
   bool update_root_scroll_offset;
@@ -54,7 +54,7 @@ struct SyncCompositorDemandDrawHwParams {
 struct SyncCompositorSetSharedMemoryParams {
   SyncCompositorSetSharedMemoryParams();
 
-  size_t buffer_size;
+  uint32_t buffer_size;
   base::SharedMemoryHandle shm_handle;
 };
 
@@ -79,9 +79,9 @@ struct SyncCompositorCommonRendererParams {
   float min_page_scale_factor;
   float max_page_scale_factor;
   bool need_animate_scroll;
-  bool need_invalidate;
+  uint32_t need_invalidate_count;
   bool need_begin_frame;
-  bool did_activate_pending_tree;
+  uint32_t did_activate_pending_tree_count;
 };
 
 }  // namespace content
@@ -131,9 +131,9 @@ IPC_STRUCT_TRAITS_BEGIN(content::SyncCompositorCommonRendererParams)
   IPC_STRUCT_TRAITS_MEMBER(min_page_scale_factor)
   IPC_STRUCT_TRAITS_MEMBER(max_page_scale_factor)
   IPC_STRUCT_TRAITS_MEMBER(need_animate_scroll)
-  IPC_STRUCT_TRAITS_MEMBER(need_invalidate)
+  IPC_STRUCT_TRAITS_MEMBER(need_invalidate_count)
   IPC_STRUCT_TRAITS_MEMBER(need_begin_frame)
-  IPC_STRUCT_TRAITS_MEMBER(did_activate_pending_tree)
+  IPC_STRUCT_TRAITS_MEMBER(did_activate_pending_tree_count)
 IPC_STRUCT_TRAITS_END()
 
 // Messages sent from the browser to the renderer.
@@ -149,10 +149,9 @@ IPC_SYNC_MESSAGE_ROUTED2_1(SyncCompositorMsg_BeginFrame,
                            cc::BeginFrameArgs,
                            content::SyncCompositorCommonRendererParams)
 
-IPC_SYNC_MESSAGE_ROUTED2_1(SyncCompositorMsg_ComputeScroll,
-                           content::SyncCompositorCommonBrowserParams,
-                           base::TimeTicks,
-                           content::SyncCompositorCommonRendererParams)
+IPC_MESSAGE_ROUTED2(SyncCompositorMsg_ComputeScroll,
+                    content::SyncCompositorCommonBrowserParams,
+                    base::TimeTicks);
 
 IPC_SYNC_MESSAGE_ROUTED2_2(SyncCompositorMsg_DemandDrawHw,
                            content::SyncCompositorCommonBrowserParams,

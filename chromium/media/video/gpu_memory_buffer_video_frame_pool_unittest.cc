@@ -36,8 +36,8 @@ class TestGLES2Interface : public gpu::gles2::GLES2InterfaceStub {
   void GenSyncTokenCHROMIUM(GLuint64 fence_sync, GLbyte* sync_token) override {
     gpu::SyncToken sync_token_data;
     if (fence_sync <= flushed_fence_sync_) {
-      sync_token_data.Set(gpu::CommandBufferNamespace::GPU_IO, 0, 0,
-                          fence_sync);
+      sync_token_data.Set(gpu::CommandBufferNamespace::GPU_IO, 0,
+                          gpu::CommandBufferId(), fence_sync);
       sync_token_data.SetVerifyFlush();
     }
     memcpy(sync_token, &sync_token_data, sizeof(sync_token_data));
@@ -47,8 +47,8 @@ class TestGLES2Interface : public gpu::gles2::GLES2InterfaceStub {
                                       GLbyte* sync_token) override {
     gpu::SyncToken sync_token_data;
     if (fence_sync <= flushed_fence_sync_) {
-      sync_token_data.Set(gpu::CommandBufferNamespace::GPU_IO, 0, 0,
-                          fence_sync);
+      sync_token_data.Set(gpu::CommandBufferNamespace::GPU_IO, 0,
+                          gpu::CommandBufferId(), fence_sync);
     }
     memcpy(sync_token, &sync_token_data, sizeof(sync_token_data));
   }
@@ -268,6 +268,8 @@ TEST_F(GpuMemoryBufferVideoFramePoolTest, CreateOneHardwareUYUVFrame) {
 
   EXPECT_NE(software_frame.get(), frame.get());
   EXPECT_EQ(1u, gles2_->gen_textures);
+  EXPECT_TRUE(frame->metadata()->IsTrue(
+      media::VideoFrameMetadata::READ_LOCK_FENCES_ENABLED));
 }
 
 TEST_F(GpuMemoryBufferVideoFramePoolTest, CreateOneHardwareNV12Frame) {
@@ -281,6 +283,8 @@ TEST_F(GpuMemoryBufferVideoFramePoolTest, CreateOneHardwareNV12Frame) {
 
   EXPECT_NE(software_frame.get(), frame.get());
   EXPECT_EQ(1u, gles2_->gen_textures);
+  EXPECT_TRUE(frame->metadata()->IsTrue(
+      media::VideoFrameMetadata::READ_LOCK_FENCES_ENABLED));
 }
 
 // AllocateGpuMemoryBuffer can return null (e.g: when the GPU process is down).

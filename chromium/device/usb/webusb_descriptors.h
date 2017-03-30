@@ -8,33 +8,42 @@
 #include <stdint.h>
 #include <vector>
 
+#include "base/callback_forward.h"
+#include "base/memory/ref_counted.h"
 #include "url/gurl.h"
 
 namespace device {
 
+class UsbDeviceHandle;
+
 struct WebUsbFunctionSubset {
   WebUsbFunctionSubset();
+  WebUsbFunctionSubset(const WebUsbFunctionSubset& other);
   ~WebUsbFunctionSubset();
 
   uint8_t first_interface;
+  std::vector<uint8_t> origin_ids;
   std::vector<GURL> origins;
 };
 
 struct WebUsbConfigurationSubset {
   WebUsbConfigurationSubset();
+  WebUsbConfigurationSubset(const WebUsbConfigurationSubset& other);
   ~WebUsbConfigurationSubset();
 
   uint8_t configuration_value;
+  std::vector<uint8_t> origin_ids;
   std::vector<GURL> origins;
   std::vector<WebUsbFunctionSubset> functions;
 };
 
-struct WebUsbDescriptorSet {
-  WebUsbDescriptorSet();
-  ~WebUsbDescriptorSet();
+struct WebUsbAllowedOrigins {
+  WebUsbAllowedOrigins();
+  ~WebUsbAllowedOrigins();
 
   bool Parse(const std::vector<uint8_t>& bytes);
 
+  std::vector<uint8_t> origin_ids;
   std::vector<GURL> origins;
   std::vector<WebUsbConfigurationSubset> configurations;
 };
@@ -47,9 +56,16 @@ struct WebUsbPlatformCapabilityDescriptor {
 
   uint16_t version;
   uint8_t vendor_code;
+  uint8_t landing_page_id;
+  GURL landing_page;
 };
 
 bool ParseWebUsbUrlDescriptor(const std::vector<uint8_t>& bytes, GURL* output);
+
+void ReadWebUsbDescriptors(
+    scoped_refptr<UsbDeviceHandle> device_handle,
+    const base::Callback<void(scoped_ptr<WebUsbAllowedOrigins> allowed_origins,
+                              const GURL& landing_page)>& callback);
 
 }  // device
 

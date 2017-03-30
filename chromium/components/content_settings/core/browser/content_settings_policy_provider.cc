@@ -11,13 +11,13 @@
 #include "base/bind.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/values.h"
 #include "components/content_settings/core/browser/content_settings_rule.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 
 namespace {
 
@@ -89,6 +89,8 @@ const PolicyProvider::PrefsForManagedDefaultMapEntry
         {CONTENT_SETTINGS_TYPE_PLUGINS, prefs::kManagedDefaultPluginsSetting},
         {CONTENT_SETTINGS_TYPE_POPUPS, prefs::kManagedDefaultPopupsSetting},
         {CONTENT_SETTINGS_TYPE_KEYGEN, prefs::kManagedDefaultKeygenSetting},
+        {CONTENT_SETTINGS_TYPE_BLUETOOTH_GUARD,
+         prefs::kManagedDefaultWebBluetoothGuardSetting},
 };
 
 // static
@@ -129,6 +131,8 @@ void PolicyProvider::RegisterProfilePrefs(
   registry->RegisterIntegerPref(prefs::kManagedDefaultPopupsSetting,
                                 CONTENT_SETTING_DEFAULT);
   registry->RegisterIntegerPref(prefs::kManagedDefaultKeygenSetting,
+                                CONTENT_SETTING_DEFAULT);
+  registry->RegisterIntegerPref(prefs::kManagedDefaultWebBluetoothGuardSetting,
                                 CONTENT_SETTING_DEFAULT);
 }
 
@@ -178,6 +182,8 @@ PolicyProvider::PolicyProvider(PrefService* prefs) : prefs_(prefs) {
   pref_change_registrar_.Add(prefs::kManagedDefaultPluginsSetting, callback);
   pref_change_registrar_.Add(prefs::kManagedDefaultPopupsSetting, callback);
   pref_change_registrar_.Add(prefs::kManagedDefaultKeygenSetting, callback);
+  pref_change_registrar_.Add(prefs::kManagedDefaultWebBluetoothGuardSetting,
+                             callback);
 }
 
 PolicyProvider::~PolicyProvider() {

@@ -31,6 +31,7 @@
 #include "ash/test/test_shelf_delegate.h"
 #include "ash/test/test_shelf_item_delegate.h"
 #include "base/compiler_specific.h"
+#include "base/i18n/rtl.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/histogram_tester.h"
@@ -39,7 +40,6 @@
 #include "ui/aura/test/aura_test_base.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
-#include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
@@ -243,8 +243,7 @@ TEST_F(ShelfViewIconObserverTest, BoundsChanged) {
 // value of IsAppPinned(...) is configurable.
 class TestShelfDelegateForShelfView : public ShelfDelegate {
  public:
-  explicit TestShelfDelegateForShelfView(ShelfModel* model)
-      : model_(model) {}
+  TestShelfDelegateForShelfView() {}
   ~TestShelfDelegateForShelfView() override {}
 
   void set_is_app_pinned(bool is_pinned) { is_app_pinned_ = is_pinned; }
@@ -278,8 +277,6 @@ class TestShelfDelegateForShelfView : public ShelfDelegate {
   void UnpinAppWithID(const std::string& app_id) override { NOTREACHED(); }
 
  private:
-  ShelfModel* model_;
-
   // Tracks whether apps are pinned or not.
   bool is_app_pinned_ = false;
 
@@ -681,7 +678,7 @@ class ShelfViewTest : public AshTestBase {
     // Replace ShelfDelegate.
     test::ShellTestApi shell_test_api(Shell::GetInstance());
     shell_test_api.SetShelfDelegate(NULL);
-    shelf_delegate_ = new TestShelfDelegateForShelfView(model_);
+    shelf_delegate_ = new TestShelfDelegateForShelfView();
     shell_test_api.SetShelfDelegate(shelf_delegate_);
     test::ShelfTestAPI(Shelf::ForPrimaryDisplay())
         .SetShelfDelegate(shelf_delegate_);
@@ -710,7 +707,7 @@ const char*
 class ScopedTextDirectionChange {
  public:
   explicit ScopedTextDirectionChange(bool is_rtl) : is_rtl_(is_rtl) {
-    original_locale_ = l10n_util::GetApplicationLocale(std::string());
+    original_locale_ = base::i18n::GetConfiguredLocale();
     if (is_rtl_)
       base::i18n::SetICUDefaultLocale("he");
     CheckTextDirectionIsCorrect();
@@ -997,6 +994,31 @@ TEST_F(ShelfViewTest, AssertNoButtonsOverlap) {
       const gfx::Rect& bounds2 = test_api_->GetBoundsByIndex(i + 1);
       EXPECT_FALSE(bounds1.Intersects(bounds2));
     }
+  }
+}
+
+// Making sure the overflow bubble arrow correctly tracks with shelf position.
+TEST_F(ShelfViewTest, OverflowArrowForShelfPosition) {
+  const ShelfAlignment kAlignments[] = {
+      SHELF_ALIGNMENT_BOTTOM, SHELF_ALIGNMENT_LEFT, SHELF_ALIGNMENT_RIGHT,
+      SHELF_ALIGNMENT_TOP};
+
+  // These must match what is expected for each alignment above.
+  const views::BubbleBorder::Arrow kArrows[] = {
+      views::BubbleBorder::BOTTOM_LEFT, views::BubbleBorder::LEFT_TOP,
+      views::BubbleBorder::RIGHT_TOP, views::BubbleBorder::TOP_LEFT};
+
+  for (int i = 0; i < 4; i++) {
+    shelf_view_->shelf_layout_manager()->SetAlignment(kAlignments[i]);
+
+    // Make sure there are enough icons to trigger the overflow in new
+    // orientation.
+    AddButtonsUntilOverflow();
+    test_api_->ShowOverflowBubble();
+    ASSERT_TRUE(test_api_->overflow_bubble() &&
+                test_api_->overflow_bubble()->IsShowing());
+
+    EXPECT_EQ(test_api_->overflow_bubble()->bubble_view()->arrow(), kArrows[i]);
   }
 }
 
@@ -1662,8 +1684,7 @@ TEST_F(ShelfViewTest, CheckDragInsertBoundsOfScrolledOverflowBubble) {
   ASSERT_TRUE(test_api_->overflow_bubble() &&
               test_api_->overflow_bubble()->IsShowing());
 
-  int item_width = test_api_->GetButtonSize() +
-      test_api_->GetButtonSpacing();
+  int item_width = test_api_->GetButtonSize() + test_api_->GetButtonSpacing();
   OverflowBubbleView* bubble_view = test_api_->overflow_bubble()->bubble_view();
   test::OverflowBubbleViewTestAPI bubble_view_api(bubble_view);
 

@@ -72,19 +72,17 @@ using NewSessionMojoCdmPromise = MojoCdmPromise<std::string>;
 int MojoCdmService::next_cdm_id_ = CdmContext::kInvalidCdmId + 1;
 
 // static
-scoped_refptr<MediaKeys> MojoCdmService::GetCdm(int cdm_id) {
+scoped_refptr<MediaKeys> MojoCdmService::LegacyGetCdm(int cdm_id) {
   DVLOG(1) << __FUNCTION__ << ": " << cdm_id;
   return g_cdm_manager.Get().GetCdm(cdm_id);
 }
 
 MojoCdmService::MojoCdmService(
     base::WeakPtr<MojoCdmServiceContext> context,
-    mojo::ServiceProvider* service_provider,
     CdmFactory* cdm_factory,
     mojo::InterfaceRequest<interfaces::ContentDecryptionModule> request)
     : binding_(this, std::move(request)),
       context_(context),
-      service_provider_(service_provider),
       cdm_factory_(cdm_factory),
       cdm_id_(CdmContext::kInvalidCdmId),
       weak_factory_(this) {
@@ -93,9 +91,12 @@ MojoCdmService::MojoCdmService(
 }
 
 MojoCdmService::~MojoCdmService() {
+  if (cdm_id_ == CdmContext::kInvalidCdmId)
+    return;
+
   g_cdm_manager.Get().UnregisterCdm(cdm_id_);
 
-  if (cdm_id_ != CdmContext::kInvalidCdmId && context_)
+  if (context_)
     context_->UnregisterCdm(cdm_id_);
 }
 
@@ -113,7 +114,7 @@ void MojoCdmService::Initialize(const mojo::String& key_system,
 
   auto weak_this = weak_factory_.GetWeakPtr();
   cdm_factory_->Create(
-      key_system, GURL(security_origin), cdm_config.To<CdmConfig>(),
+      key_system, GURL(security_origin.get()), cdm_config.To<CdmConfig>(),
       base::Bind(&MojoCdmService::OnSessionMessage, weak_this),
       base::Bind(&MojoCdmService::OnSessionClosed, weak_this),
       base::Bind(&MojoCdmService::OnLegacySessionError, weak_this),
@@ -181,8 +182,8 @@ void MojoCdmService::RemoveSession(
                       make_scoped_ptr(new SimpleMojoCdmPromise(callback)));
 }
 
-CdmContext* MojoCdmService::GetCdmContext() {
-  return cdm_->GetCdmContext();
+scoped_refptr<MediaKeys> MojoCdmService::GetCdm() {
+  return cdm_;
 }
 
 void MojoCdmService::OnCdmCreated(const InitializeCallback& callback,
@@ -196,7 +197,7 @@ void MojoCdmService::OnCdmCreated(const InitializeCallback& callback,
   if (!cdm || !context_) {
     cdm_promise_result->success = false;
     cdm_promise_result->exception =
-        interfaces::CDM_EXCEPTION_NOT_SUPPORTED_ERROR;
+        interfaces::CdmException::NOT_SUPPORTED_ERROR;
     cdm_promise_result->system_code = 0;
     cdm_promise_result->error_message = error_message;
     callback.Run(std::move(cdm_promise_result), 0, nullptr);
@@ -212,7 +213,7 @@ void MojoCdmService::OnCdmCreated(const InitializeCallback& callback,
   // If |cdm| has a decryptor, create the MojoDecryptorService
   // and pass the connection back to the client.
   interfaces::DecryptorPtr decryptor_service;
-  CdmContext* const cdm_context = GetCdmContext();
+  CdmContext* const cdm_context = cdm_->GetCdmContext();
   if (cdm_context && cdm_context->GetDecryptor()) {
     // MojoDecryptorService takes a reference to the CDM, but it is still owned
     // by |this|.

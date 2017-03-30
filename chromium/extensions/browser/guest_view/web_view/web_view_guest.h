@@ -15,6 +15,7 @@
 #include "content/public/browser/javascript_dialog_manager.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+#include "content/public/common/security_style.h"
 #include "extensions/browser/guest_view/web_view/javascript_dialog_helper.h"
 #include "extensions/browser/guest_view/web_view/web_view_find_helper.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest_delegate.h"
@@ -93,12 +94,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest>,
   void NavigateGuest(const std::string& src, bool force_navigation, bool wasTyped = false);
 
   // Shows the context menu for the guest.
-  // |items| acts as a filter. This restricts the current context's default
-  // menu items to contain only the items from |items|.
-  // |items| == NULL means no filtering will be applied.
-  void ShowContextMenu(
-      int request_id,
-      const WebViewGuestDelegate::MenuItemVector* items);
+  void ShowContextMenu(int request_id);
 
   // Sets the frame name of the guest.
   void SetName(const std::string& name);
@@ -265,6 +261,11 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest>,
   void ExitFullscreenModeForTab(content::WebContents* web_contents) final;
   bool IsFullscreenForTabOrPending(
       const content::WebContents* web_contents) const final;
+  content::SecurityStyle GetSecurityStyle(
+      content::WebContents* web_contents,
+      content::SecurityStyleExplanations* security_style_explanations) override;
+  void ShowCertificateViewerInDevTools(content::WebContents* web_contents,
+                                       int cert_id) override;
 
   // WebContentsObserver implementation.
   void DidCommitProvisionalLoadForFrame(

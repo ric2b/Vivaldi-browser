@@ -56,8 +56,6 @@ class BackendInitializeChecker : public SingleClientStatusChangeChecker {
       : SingleClientStatusChangeChecker(service) {}
 
   bool IsExitConditionSatisfied() override {
-    if (service()->backend_mode() != ProfileSyncService::SYNC)
-      return false;
     if (service()->IsBackendInitialized())
       return true;
     // Backend initialization is blocked by an auth error.
@@ -161,8 +159,7 @@ bool ProfileSyncServiceHarness::SetupSync(
 
   DCHECK(!username_.empty());
   if (signin_type_ == SigninType::UI_SIGNIN) {
-    Browser* browser =
-        FindBrowserWithProfile(profile_, chrome::GetActiveDesktop());
+    Browser* browser = chrome::FindBrowserWithProfile(profile_);
     DCHECK(browser);
     if (!login_ui_test_utils::SignInWithUI(browser, username_, password_)) {
       LOG(ERROR) << "Could not sign in to GAIA servers.";
@@ -304,13 +301,12 @@ std::string ProfileSyncServiceHarness::GenerateFakeOAuth2RefreshTokenString() {
 }
 
 bool ProfileSyncServiceHarness::IsSyncDisabled() const {
-  return !service()->IsSetupInProgress() &&
-         !service()->HasSyncSetupCompleted();
+  return !service()->IsSetupInProgress() && !service()->IsFirstSetupComplete();
 }
 
 void ProfileSyncServiceHarness::FinishSyncSetup() {
   service()->SetSetupInProgress(false);
-  service()->SetSyncSetupCompleted();
+  service()->SetFirstSetupComplete();
 }
 
 SyncSessionSnapshot ProfileSyncServiceHarness::GetLastSessionSnapshot() const {
@@ -401,7 +397,7 @@ bool ProfileSyncServiceHarness::EnableSyncForAllDatatypes() {
     return false;
   }
 
-  service()->OnUserChoseDatatypes(true, syncer::ModelTypeSet::All());
+  service()->OnUserChoseDatatypes(true, syncer::UserSelectableTypes());
   if (AwaitSyncSetupCompletion()) {
     DVLOG(1) << "EnableSyncForAllDatatypes(): Enabled sync for all datatypes "
              << "on " << profile_debug_name_ << ".";

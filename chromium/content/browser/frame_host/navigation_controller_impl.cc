@@ -76,10 +76,9 @@
 #include "content/public/browser/user_metrics.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_constants.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/common/content_features.h"
 #include "media/base/mime_util.h"
 #include "net/base/escape.h"
-#include "net/base/net_util.h"
 #include "skia/ext/platform_canvas.h"
 #include "url/url_constants.h"
 
@@ -146,13 +145,6 @@ void ConfigureEntriesForRestore(
 // between two NavigationEntries.
 bool ShouldKeepOverride(const NavigationEntry* last_entry) {
   return last_entry && last_entry->GetIsOverridingUserAgent();
-}
-
-// Helper method for FrameTree::ForEach to set the nav_entry_id on each current
-// RenderFrameHost in the tree.
-bool SetFrameNavEntryID(int nav_entry_id, FrameTreeNode* node) {
-  node->current_frame_host()->set_nav_entry_id(nav_entry_id);
-  return true;
 }
 
 }  // namespace
@@ -295,12 +287,27 @@ void NavigationControllerImpl::Reload(bool check_for_repost) {
   ReloadInternal(check_for_repost, RELOAD);
 }
 void NavigationControllerImpl::ReloadToRefreshContent(bool check_for_repost) {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableNonValidatingReloadOnRefreshContent)) {
-    ReloadInternal(check_for_repost, NO_RELOAD);
-  } else {
-    ReloadInternal(check_for_repost, RELOAD);
+  if (base::FeatureList::IsEnabled(
+        features::kNonValidatingReloadOnRefreshContent)) {
+    // Cause this reload to behave like NAVIGATION_TYPE_SAME_PAGE (e.g., enter
+    // in the omnibox), so that the main resource is cache-validated but all
+    // other resources use the cache as much as possible.  This requires
+    // navigating to the current URL in a new pending entry.
+    // TODO(toyoshim): Introduce a new ReloadType for this behavior if it
+    // becomes the default.
+    NavigationEntryImpl* last_committed = GetLastCommittedEntry();
+
+    // If the last committed entry does not exist, or a repost check dialog is
+    // really needed, use a standard reload instead.
+    if (last_committed &&
+        !(check_for_repost && last_committed->GetHasPostData())) {
+      LoadURL(last_committed->GetURL(), last_committed->GetReferrer(),
+              last_committed->GetTransitionType(),
+              last_committed->extra_headers());
+      return;
+    }
   }
+  ReloadInternal(check_for_repost, RELOAD);
 }
 void NavigationControllerImpl::ReloadIgnoringCache(bool check_for_repost) {
   ReloadInternal(check_for_repost, RELOAD_IGNORING_CACHE);
@@ -880,7 +887,7 @@ bool NavigationControllerImpl::RendererDidNavigate(
       RendererDidNavigateToSamePage(rfh, params);
       break;
     case NAVIGATION_TYPE_NEW_SUBFRAME:
-      RendererDidNavigateNewSubframe(rfh, params);
+      RendererDidNavigateNewSubframe(rfh, params, details->did_replace_entry);
       break;
     case NAVIGATION_TYPE_AUTO_SUBFRAME:
       if (!RendererDidNavigateAutoSubframe(rfh, params))
@@ -976,8 +983,9 @@ bool NavigationControllerImpl::RendererDidNavigate(
   // committed anything in this navigation or not). This allows things like
   // state and title updates from RenderFrames to apply to the latest relevant
   // NavigationEntry.
-  delegate_->GetFrameTree()->ForEach(
-      base::Bind(&SetFrameNavEntryID, active_entry->GetUniqueID()));
+  int nav_entry_id = active_entry->GetUniqueID();
+  for (FrameTreeNode* node : delegate_->GetFrameTree()->Nodes())
+    node->current_frame_host()->set_nav_entry_id(nav_entry_id);
   return true;
 }
 
@@ -1262,7 +1270,8 @@ void NavigationControllerImpl::RendererDidNavigateToSamePage(
 
 void NavigationControllerImpl::RendererDidNavigateNewSubframe(
     RenderFrameHostImpl* rfh,
-    const FrameHostMsg_DidCommitProvisionalLoad_Params& params) {
+    const FrameHostMsg_DidCommitProvisionalLoad_Params& params,
+    bool replace_entry) {
   DCHECK(ui::PageTransitionCoreTypeIs(params.transition,
                                       ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
 
@@ -1292,7 +1301,7 @@ void NavigationControllerImpl::RendererDidNavigateNewSubframe(
   }
 
   new_entry->SetPageID(params.page_id);
-  InsertOrReplaceEntry(std::move(new_entry), false);
+  InsertOrReplaceEntry(std::move(new_entry), replace_entry);
 }
 
 bool NavigationControllerImpl::RendererDidNavigateAutoSubframe(
@@ -1592,21 +1601,25 @@ NavigationControllerImpl::GetSessionStorageNamespace(SiteInstance* instance) {
             browser_context_, instance->GetSiteURL());
   }
 
-  SessionStorageNamespaceMap::const_iterator it =
-      session_storage_namespace_map_.find(partition_id);
-  if (it != session_storage_namespace_map_.end())
-    return it->second.get();
-
-  // Create one if no one has accessed session storage for this partition yet.
-  //
   // TODO(ajwong): Should this use the |partition_id| directly rather than
   // re-lookup via |instance|?  http://crbug.com/142685
   StoragePartition* partition =
-              BrowserContext::GetStoragePartition(browser_context_, instance);
+      BrowserContext::GetStoragePartition(browser_context_, instance);
+  DOMStorageContextWrapper* context_wrapper =
+      static_cast<DOMStorageContextWrapper*>(partition->GetDOMStorageContext());
+
+  SessionStorageNamespaceMap::const_iterator it =
+      session_storage_namespace_map_.find(partition_id);
+  if (it != session_storage_namespace_map_.end()) {
+    // Ensure that this namespace actually belongs to this partition.
+    DCHECK(static_cast<SessionStorageNamespaceImpl*>(it->second.get())->
+        IsFromContext(context_wrapper));
+    return it->second.get();
+  }
+
+  // Create one if no one has accessed session storage for this partition yet.
   SessionStorageNamespaceImpl* session_storage_namespace =
-      new SessionStorageNamespaceImpl(
-          static_cast<DOMStorageContextWrapper*>(
-              partition->GetDOMStorageContext()));
+      new SessionStorageNamespaceImpl(context_wrapper);
   session_storage_namespace_map_[partition_id] = session_storage_namespace;
 
   return session_storage_namespace;
@@ -1875,8 +1888,10 @@ void NavigationControllerImpl::FindFramesToNavigate(
       same_document_loads->push_back(std::make_pair(frame, new_item));
     } else {
       different_document_loads->push_back(std::make_pair(frame, new_item));
+      // For a different document, the subframes will be destroyed, so there's
+      // no need to consider them.
+      return;
     }
-    return;
   }
 
   for (size_t i = 0; i < frame->child_count(); i++) {

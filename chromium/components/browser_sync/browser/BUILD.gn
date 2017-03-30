@@ -16,7 +16,6 @@ source_set("browser") {
 
   deps = [
     "//base",
-    "//base:prefs",
     "//components/autofill/core/browser",
     "//components/autofill/core/common",
     "//components/browser_sync/common",
@@ -28,6 +27,7 @@ source_set("browser") {
     "//components/password_manager/core/browser",
     "//components/password_manager/sync/browser",
     "//components/pref_registry",
+    "//components/prefs",
     "//components/signin/core/browser",
     "//components/strings",
     "//components/sync_bookmarks",
@@ -48,20 +48,34 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
+    "profile_sync_service_autofill_unittest.cc",
+    "profile_sync_service_bookmark_unittest.cc",
+    "profile_sync_service_startup_unittest.cc",
+    "profile_sync_service_typed_url_unittest.cc",
     "profile_sync_service_unittest.cc",
   ]
 
   deps = [
     ":browser",
+    ":test_support",
     "//base",
     "//base/test:test_support",
+    "//components/autofill/core/browser:test_support",
+    "//components/autofill/core/common:common",
+    "//components/bookmarks/browser:browser",
+    "//components/bookmarks/managed:managed",
+    "//components/bookmarks/test:test",
     "//components/browser_sync/common",
     "//components/dom_distiller/core",
+    "//components/history/core/browser:browser",
     "//components/invalidation/impl",
     "//components/invalidation/public",
+    "//components/prefs",
     "//components/signin/core/browser",
     "//components/signin/core/browser:test_support",
+    "//components/signin/core/common:common",
     "//components/strings",
+    "//components/sync_bookmarks:sync_bookmarks",
     "//components/sync_driver",
     "//components/sync_driver:test_support",
     "//components/sync_sessions",
@@ -70,8 +84,10 @@ source_set("unit_tests") {
     "//components/syncable_prefs:test_support",
     "//components/version_info",
     "//components/version_info:generate_version_info",
+    "//components/webdata_services:test_support",
     "//google_apis",
     "//net",
+    "//sync:test_support_sync_internal_api",
     "//testing/gmock",
     "//testing/gtest",
     "//ui/base",
@@ -81,15 +97,37 @@ source_set("unit_tests") {
 source_set("test_support") {
   testonly = true
   sources = [
+    "abstract_profile_sync_service_test.cc",
+    "abstract_profile_sync_service_test.h",
     "profile_sync_service_mock.cc",
     "profile_sync_service_mock.h",
+    "profile_sync_test_util.cc",
+    "profile_sync_test_util.h",
+    "test_http_bridge_factory.cc",
+    "test_http_bridge_factory.h",
+    "test_profile_sync_service.cc",
+    "test_profile_sync_service.h",
   ]
 
   deps = [
     ":browser",
     "//base",
+    "//base/test:test_support",
+    "//components/bookmarks/browser:browser",
+    "//components/history/core/browser:browser",
+    "//components/invalidation/impl",
+    "//components/invalidation/impl:test_support",
+    "//components/pref_registry",
+    "//components/signin/core/browser:browser",
+    "//components/signin/core/browser:test_support",
+    "//components/sync_driver",
     "//components/sync_driver:test_support",
+    "//components/sync_sessions:test_support",
+    "//components/syncable_prefs:test_support",
     "//google_apis",
+    "//net:test_support",
+    "//sync:test_support_sync_core",
+    "//sync:test_support_sync_internal_api",
     "//testing/gmock",
   ]
 }

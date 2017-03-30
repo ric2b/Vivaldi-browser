@@ -64,7 +64,7 @@ void UninstallView::SetupControls() {
   // The "delete profile" check box.
   ++column_set_id;
   column_set = layout->AddColumnSet(column_set_id);
-  column_set->AddPaddingColumn(0, views::kPanelHorizIndentation);
+  column_set->AddPaddingColumn(0, views::kCheckboxIndent);
   column_set->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
                         GridLayout::USE_PREF, 0, 0);
   layout->StartRow(0, column_set_id);
@@ -79,11 +79,11 @@ void UninstallView::SetupControls() {
   BrowserDistribution* dist = BrowserDistribution::GetDistribution();
   if (dist->GetDefaultBrowserControlPolicy() !=
           BrowserDistribution::DEFAULT_BROWSER_UNSUPPORTED &&
-      ShellIntegration::GetDefaultBrowser() == ShellIntegration::IS_DEFAULT &&
-      (ShellIntegration::CanSetAsDefaultBrowser() ==
-          ShellIntegration::SET_DEFAULT_NOT_ALLOWED ||
-       ShellIntegration::CanSetAsDefaultBrowser() ==
-          ShellIntegration::SET_DEFAULT_UNATTENDED)) {
+      shell_integration::GetDefaultBrowser() == shell_integration::IS_DEFAULT &&
+      (shell_integration::CanSetAsDefaultBrowser() ==
+           shell_integration::SET_DEFAULT_NOT_ALLOWED ||
+       shell_integration::CanSetAsDefaultBrowser() ==
+           shell_integration::SET_DEFAULT_UNATTENDED)) {
     browsers_.reset(new BrowsersMap());
     ShellUtil::GetRegisteredBrowsers(dist, browsers_.get());
     if (!browsers_->empty()) {
@@ -91,7 +91,7 @@ void UninstallView::SetupControls() {
 
       ++column_set_id;
       column_set = layout->AddColumnSet(column_set_id);
-      column_set->AddPaddingColumn(0, views::kPanelHorizIndentation);
+      column_set->AddPaddingColumn(0, views::kCheckboxIndent);
       column_set->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
                             GridLayout::USE_PREF, 0, 0);
       column_set->AddPaddingColumn(0, views::kRelatedControlHorizontalSpacing);

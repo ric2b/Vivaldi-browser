@@ -42,10 +42,10 @@ source_set("browser") {
   deps = [
     "//base",
     "//base:i18n",
-    "//base:prefs",
     "//components/data_use_measurement/core",
     "//components/language_usage_metrics",
     "//components/pref_registry",
+    "//components/prefs",
     "//components/resources:components_resources",
     "//components/strings",
     "//components/translate/core/common",
@@ -76,6 +76,8 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "language_state_unittest.cc",
+    "mock_translate_driver.cc",
+    "mock_translate_driver.h",
     "translate_browser_metrics_unittest.cc",
     "translate_language_list_unittest.cc",
     "translate_prefs_unittest.cc",
@@ -84,10 +86,14 @@ source_set("unit_tests") {
   deps = [
     ":browser",
     "//base",
-    "//base:prefs",
     "//components/pref_registry:test_support",
+    "//components/prefs",
     "//components/translate/core/common",
     "//net:test_support",
     "//testing/gtest",
   ]
+  if (!use_aura) {
+    sources += [ "translate_ui_delegate_unittest.cc" ]
+    deps += [ "//components/infobars/core" ]
+  }
 }

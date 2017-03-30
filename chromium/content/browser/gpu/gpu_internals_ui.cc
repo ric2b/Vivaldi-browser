@@ -42,6 +42,7 @@
 #endif
 #if defined(OS_WIN)
 #include "ui/base/win/shell.h"
+#include "ui/gfx/win/physical_size.h"
 #endif
 
 #if defined(OS_LINUX) && defined(USE_X11)
@@ -144,9 +145,20 @@ base::DictionaryValue* GpuInfoAsDictionaryValue() {
       ui::win::IsAeroGlassEnabled() ? "Aero Glass" : "none";
   basic_info->Append(
       NewDescriptionValuePair("Desktop compositing", compositor));
-  if (GpuDataManagerImpl::GetInstance()->ShouldUseWarp()) {
-    basic_info->Append(NewDescriptionValuePair("Using WARP",
-        new base::FundamentalValue(true)));
+
+  std::vector<gfx::PhysicalDisplaySize> display_sizes =
+      gfx::GetPhysicalSizeForDisplays();
+  for (const auto& display_size : display_sizes) {
+    const int w = display_size.width_mm;
+    const int h = display_size.height_mm;
+    const double size_mm = sqrt(w * w + h * h);
+    const double size_inches = 0.0393701 * size_mm;
+    const double rounded_size_inches = floor(10.0 * size_inches) / 10.0;
+    std::string size_string = base::StringPrintf("%.1f\"", rounded_size_inches);
+    std::string description_string = base::StringPrintf(
+        "Diagonal Monitor Size of %s", display_size.display_name.c_str());
+    basic_info->Append(
+        NewDescriptionValuePair(description_string, size_string));
   }
 #endif
 
@@ -286,7 +298,19 @@ const char* BufferUsageToString(gfx::BufferUsage usage) {
   return nullptr;
 }
 
-base::DictionaryValue* GpuMemoryBufferInfoAsDictionaryValue() {
+base::ListValue* CompositorInfo() {
+  base::ListValue* compositor_info = new base::ListValue();
+
+  compositor_info->Append(NewDescriptionValuePair(
+      "Tile Update Mode",
+      IsZeroCopyUploadEnabled() ? "Zero-copy" : "One-copy"));
+
+  compositor_info->Append(NewDescriptionValuePair(
+      "Partial Raster", IsPartialRasterEnabled() ? "Enabled" : "Disabled"));
+  return compositor_info;
+}
+
+base::ListValue* GpuMemoryBufferInfo() {
   base::ListValue* gpu_memory_buffer_info = new base::ListValue();
 
   BrowserGpuMemoryBufferManager* gpu_memory_buffer_manager =
@@ -312,11 +336,7 @@ base::DictionaryValue* GpuMemoryBufferInfoAsDictionaryValue() {
         BufferFormatToString(static_cast<gfx::BufferFormat>(format)),
         native_usage_support));
   }
-
-  base::DictionaryValue* info = new base::DictionaryValue();
-  info->Set("gpu_memory_buffer_info", gpu_memory_buffer_info);
-
-  return info;
+  return gpu_memory_buffer_info;
 }
 
 // This class receives javascript messages from the renderer.
@@ -492,18 +512,12 @@ void GpuMessageHandler::OnGpuInfoUpdate() {
     workarounds->AppendString(workaround);
   feature_status->Set("workarounds", workarounds);
   gpu_info_val->Set("featureStatus", feature_status);
+  gpu_info_val->Set("compositorInfo", CompositorInfo());
+  gpu_info_val->Set("gpuMemoryBufferInfo", GpuMemoryBufferInfo());
 
   // Send GPU Info to javascript.
   web_ui()->CallJavascriptFunction("browserBridge.onGpuInfoUpdate",
       *(gpu_info_val.get()));
-
-  // Get GpuMemoryBuffer Info.
-  scoped_ptr<base::DictionaryValue> gpu_memory_buffer_info_val(
-      GpuMemoryBufferInfoAsDictionaryValue());
-
-  // Send GpuMemoryBuffer Info to javascript.
-  web_ui()->CallJavascriptFunction("browserBridge.onGpuMemoryBufferInfoUpdate",
-                                   *(gpu_memory_buffer_info_val.get()));
 }
 
 void GpuMessageHandler::OnGpuSwitched() {

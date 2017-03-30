@@ -41,9 +41,9 @@ WebInspector.ImageView = function(mimeType, contentProvider)
     this._parsedURL = new WebInspector.ParsedURL(this._url);
     this._mimeType = mimeType;
     this._contentProvider = contentProvider;
-    this._sizeLabel = new WebInspector.ToolbarLabel();
-    this._dimensionsLabel = new WebInspector.ToolbarLabel();
-    this._mimeTypeLabel = new WebInspector.ToolbarLabel(mimeType);
+    this._sizeLabel = new WebInspector.ToolbarText();
+    this._dimensionsLabel = new WebInspector.ToolbarText();
+    this._mimeTypeLabel = new WebInspector.ToolbarText(mimeType);
 }
 
 WebInspector.ImageView.prototype = {
@@ -71,7 +71,7 @@ WebInspector.ImageView.prototype = {
         imagePreviewElement.addEventListener("contextmenu", this._contextMenu.bind(this), true);
         WebInspector.Resource.populateImageSource(this._url, this._mimeType, this._contentProvider, imagePreviewElement);
 
-        this._contentProvider.requestContent(onContentAvailable.bind(this));
+        this._contentProvider.requestContent().then(onContentAvailable.bind(this));
 
         /**
          * @param {?string} content

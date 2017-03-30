@@ -318,6 +318,11 @@
           '<@(vivaldi_keycode_translation)',
         ],
       }],
+      ['_target_name == "components_unittests" and _target_build_file=="<(DEPTH)/components/components_tests.gyp"', {
+        'sources': [
+          '<@(vivaldi_tab_zoom_pref)',
+        ],
+      }],
       ['OS=="mac" and _target_name == "chrome_initial"', {
         'mac_bundle_resources!': [
           '<@(vivaldi_remove_mac_resources_chrome_exe)',

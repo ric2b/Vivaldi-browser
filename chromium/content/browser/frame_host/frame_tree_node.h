@@ -51,6 +51,8 @@ class CONTENT_EXPORT FrameTreeNode {
   // regardless of which FrameTree it is in.
   static FrameTreeNode* GloballyFindByID(int frame_tree_node_id);
 
+  // Callers are are expected to initialize sandbox flags separately after
+  // calling the constructor.
   FrameTreeNode(FrameTree* frame_tree,
                 Navigator* navigator,
                 RenderFrameHostDelegate* render_frame_delegate,
@@ -59,7 +61,7 @@ class CONTENT_EXPORT FrameTreeNode {
                 RenderFrameHostManager::Delegate* manager_delegate,
                 blink::WebTreeScopeType scope,
                 const std::string& name,
-                blink::WebSandboxFlags sandbox_flags,
+                const std::string& unique_name,
                 const blink::WebFrameOwnerProperties& frame_owner_properties);
 
   ~FrameTreeNode();
@@ -116,9 +118,9 @@ class CONTENT_EXPORT FrameTreeNode {
     return children_[index].get();
   }
 
-  // Returns the URL of the last committed page in this frame.
+  // Returns the URL of the last committed page in the current frame.
   const GURL& current_url() const {
-    return current_url_;
+    return current_frame_host()->last_committed_url();
   }
 
   // Sets the last committed URL for this frame and updates
@@ -139,22 +141,39 @@ class CONTENT_EXPORT FrameTreeNode {
   void SetCurrentOrigin(const url::Origin& origin);
 
   // Set the current name and notify proxies about the update.
-  void SetFrameName(const std::string& name);
+  void SetFrameName(const std::string& name, const std::string& unique_name);
 
   // Sets the current enforcement of strict mixed content checking and
   // notifies proxies about the update.
   void SetEnforceStrictMixedContentChecking(bool should_enforce);
 
-  blink::WebSandboxFlags effective_sandbox_flags() {
-    return effective_sandbox_flags_;
+  // Returns the currently active sandbox flags for this frame.  This includes
+  // flags inherited from parent frames and the currently active flags from the
+  // <iframe> element hosting this frame.  This does not include flags that
+  // have been updated in an <iframe> element but have not taken effect yet;
+  // use pending_sandbox_flags() for those.
+  blink::WebSandboxFlags effective_sandbox_flags() const {
+    return replication_state_.sandbox_flags;
   }
 
-  void set_sandbox_flags(blink::WebSandboxFlags sandbox_flags) {
-    replication_state_.sandbox_flags = sandbox_flags;
+  // Returns the latest sandbox flags for this frame.  This includes flags
+  // inherited from parent frames and the latest flags from the <iframe>
+  // element hosting this frame.  The returned flags may not yet have taken
+  // effect, since sandbox flag updates in an <iframe> element take effect on
+  // next navigation.  To retrieve the currently active sandbox flags for this
+  // frame, use effective_sandbox_flags().
+  blink::WebSandboxFlags pending_sandbox_flags() const {
+    return pending_sandbox_flags_;
   }
 
-  // Transfer any pending sandbox flags into |effective_sandbox_flags_|, and
-  // return true if the sandbox flags were changed.
+  // Update this frame's sandbox flags.  This is used when a parent frame
+  // updates sandbox flags in the <iframe> element for this frame.  These flags
+  // won't take effect until next navigation.  If this frame's parent is itself
+  // sandboxed, the parent's sandbox flags are combined with |sandbox_flags|.
+  void SetPendingSandboxFlags(blink::WebSandboxFlags sandbox_flags);
+
+  // Set any pending sandbox flags as active, and return true if the sandbox
+  // flags were changed.
   bool CommitPendingSandboxFlags();
 
   const blink::WebFrameOwnerProperties& frame_owner_properties() {
@@ -205,9 +224,10 @@ class CONTENT_EXPORT FrameTreeNode {
       scoped_ptr<NavigationRequest> navigation_request);
 
   // PlzNavigate
-  // Resets the current navigation request. |is_commit| is true if the reset is
-  // due to the commit of the navigation.
-  void ResetNavigationRequest(bool is_commit);
+  // Resets the current navigation request. If |keep_state| is true, any state
+  // created by the NavigationRequest (e.g. speculative RenderFrameHost,
+  // loading state) will not be reset by the function.
+  void ResetNavigationRequest(bool keep_state);
 
   // Returns true if this node is in a state where the loading progress is being
   // tracked.
@@ -219,7 +239,11 @@ class CONTENT_EXPORT FrameTreeNode {
   // A RenderFrameHost in this node started loading.
   // |to_different_document| will be true unless the load is a fragment
   // navigation, or triggered by history.pushState/replaceState.
-  void DidStartLoading(bool to_different_document);
+  // |was_previously_loading| is false if the FrameTree was not loading before.
+  // The caller is required to provide this boolean as the delegate should only
+  // be notified if the FrameTree went from non-loading to loading state.
+  // However, when it is called, the FrameTree should be in a loading state.
+  void DidStartLoading(bool to_different_document, bool was_previously_loading);
 
   // A RenderFrameHost in this node stopped loading.
   void DidStopLoading();
@@ -244,6 +268,11 @@ class CONTENT_EXPORT FrameTreeNode {
   // Called when this node becomes focused.  Updates the node's last focused
   // time and notifies observers.
   void DidFocus();
+
+  // Called when the user closed the modal dialogue for BeforeUnload and
+  // cancelled the navigation. This should stop any load happening in the
+  // FrameTreeNode.
+  void BeforeUnloadCanceled();
 
  private:
   class OpenerDestroyedObserver;
@@ -289,11 +318,6 @@ class CONTENT_EXPORT FrameTreeNode {
   // The immediate children of this specific frame.
   std::vector<scoped_ptr<FrameTreeNode>> children_;
 
-  // Track the current frame's last committed URL.
-  // TODO(creis): Consider storing a reference to the last committed
-  // FrameNavigationEntry here once those are created in all modes.
-  GURL current_url_;
-
   // Whether this frame has committed any real load, replacing its initial
   // about:blank page.
   bool has_committed_real_load_;
@@ -302,15 +326,12 @@ class CONTENT_EXPORT FrameTreeNode {
   // proxies for this frame.
   FrameReplicationState replication_state_;
 
-  // Track the effective sandbox flags for this frame.  When a parent frame
-  // dynamically updates sandbox flags for a child frame, the child's updated
-  // sandbox flags are stored in replication_state_.sandbox_flags. However, the
-  // update only takes effect on the next frame navigation, so the effective
-  // sandbox flags are tracked separately here.  When enforcing sandbox flags
-  // directives in the browser process, |effective_sandbox_flags_| should be
-  // used.  |effective_sandbox_flags_| is updated with any pending sandbox
-  // flags when a navigation for this frame commits.
-  blink::WebSandboxFlags effective_sandbox_flags_;
+  // Track the pending sandbox flags for this frame.  When a parent frame
+  // dynamically updates sandbox flags in the <iframe> element for a child
+  // frame, these updated flags are stored here and are transferred into
+  // replication_state_.sandbox_flags when they take effect on the next frame
+  // navigation.
+  blink::WebSandboxFlags pending_sandbox_flags_;
 
   // Tracks the scrolling and margin properties for this frame.  These
   // properties affect the child renderer but are stored on its parent's

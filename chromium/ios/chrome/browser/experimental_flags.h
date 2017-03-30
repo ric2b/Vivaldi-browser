@@ -18,31 +18,8 @@ bool IsAlertOnBackgroundUploadEnabled();
 // Whether the new bookmark collection experience is enabled.
 bool IsBookmarkCollectionEnabled();
 
-// Sets whether or not the field trial for WKWebView should be enabled. This
-// must be called at most once, and before IsWKWebViewEnabled. If this is never
-// called, IsWKWebViewEnabled will assume ineligibility.
-// Note that an explicit command line flag will ignore this setting; it controls
-// only whether the trial state will be checked in the default state.
-void SetWKWebViewTrialEligibility(bool eligible);
-
 // Whether the lru snapshot cache experiment is enabled.
 bool IsLRUSnapshotCacheEnabled();
-
-// TODO(crbug.com/579697): This always returns true; cleanup codepaths that use
-// this.
-bool IsWKWebViewEnabled();
-
-// Whether the user would be put into a control group for the WKWebView
-// experiment assuming they were eligible. Calling this will *not* activate a
-// trial, so is safe to call without checking eligibility.
-bool IsTargetedToWKWebViewExperimentControlGroup();
-
-// Whether the user is part of a control group for the WKWebView experiment.
-bool IsInWKWebViewExperimentControlGroup();
-
-// Returns a string containing extra params that should be sent along with
-// omnibox search requests.  The returned value contains a leading "&".
-std::string GetWKWebViewSearchParams();
 
 // Whether viewing and copying passwords is enabled.
 bool IsViewCopyPasswordsEnabled();
@@ -56,6 +33,9 @@ bool UseOnlyLocalHeuristicsForPasswordGeneration();
 
 // Whether the Tab Switcher is enabled for iPad or not.
 bool IsTabSwitcherEnabled();
+
+// Whether the reading list is enabled.
+bool IsReadingListEnabled();
 
 }  // namespace experimental_flags
 

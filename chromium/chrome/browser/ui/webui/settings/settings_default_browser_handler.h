@@ -6,10 +6,10 @@
 #define CHROME_BROWSER_UI_WEBUI_SETTINGS_SETTINGS_DEFAULT_BROWSER_HANDLER_H_
 
 #include "base/macros.h"
-#include "base/prefs/pref_member.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/ui/webui/settings/md_settings_ui.h"
+#include "components/prefs/pref_member.h"
 
 namespace base {
 class ListValue;
@@ -26,7 +26,7 @@ namespace settings {
 // settings code to change the default browser settings.
 class DefaultBrowserHandler
     : public SettingsPageUIHandler,
-      public ShellIntegration::DefaultWebClientObserver {
+      public shell_integration::DefaultWebClientObserver {
  public:
   explicit DefaultBrowserHandler(content::WebUI* webui);
   ~DefaultBrowserHandler() override;
@@ -34,11 +34,9 @@ class DefaultBrowserHandler
   // SettingsPageUIHandler implementation.
   void RegisterMessages() override;
 
-  // ShellIntegration::DefaultWebClientObserver implementation.
+  // shell_integration::DefaultWebClientObserver implementation.
   void SetDefaultWebClientUIState(
-      ShellIntegration::DefaultWebClientUIState state) override;
-  bool IsInteractiveSetDefaultPermitted() override;
-  void OnSetAsDefaultConcluded(bool succeeded) override;
+      shell_integration::DefaultWebClientUIState state) override;
 
  private:
   // Called from WebUI to request the current state.
@@ -48,7 +46,8 @@ class DefaultBrowserHandler
   void SetAsDefaultBrowser(const base::ListValue* args);
 
   // Reference to a background worker that handles default browser settings.
-  scoped_refptr<ShellIntegration::DefaultBrowserWorker> default_browser_worker_;
+  scoped_refptr<shell_integration::DefaultBrowserWorker>
+      default_browser_worker_;
 
   // Policy setting to determine if default browser setting is managed.
   BooleanPrefMember default_browser_policy_;

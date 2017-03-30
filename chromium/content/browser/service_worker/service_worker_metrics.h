@@ -82,6 +82,8 @@ class ServiceWorkerMetrics {
     PUSH,
     GEOFENCING,
     SERVICE_PORT_CONNECT,
+    MESSAGE,
+    NOTIFICATION_CLOSE,
     // Add new events to record here.
 
     NUM_TYPES
@@ -89,6 +91,9 @@ class ServiceWorkerMetrics {
 
   // Used for UMA. Append only.
   enum class Site { OTHER, NEW_TAB_PAGE, NUM_TYPES };
+
+  // Converts an event type to a string. Used for tracing.
+  static const char* EventTypeToString(EventType event_type);
 
   // Excludes NTP scope from UMA for now as it tends to dominate the stats and
   // makes the results largely skewed. Some metrics don't follow this policy
@@ -143,16 +148,13 @@ class ServiceWorkerMetrics {
   static void RecordEventTimeout(EventType event);
 
   // Records the amount of time spent handling an event.
-  static void RecordEventDuration(EventType event, const base::TimeDelta& time);
+  static void RecordEventDuration(EventType event,
+                                  const base::TimeDelta& time,
+                                  bool was_handled);
 
   // Records the result of dispatching a fetch event to a service worker.
   static void RecordFetchEventStatus(bool is_main_resource,
                                      ServiceWorkerStatusCode status);
-
-  // Records the amount of time spent handling a fetch event with the given
-  // result.
-  static void RecordFetchEventTime(ServiceWorkerFetchEventResult result,
-                                   const base::TimeDelta& time);
 
   // Records result of a ServiceWorkerURLRequestJob that was forwarded to
   // the service worker.

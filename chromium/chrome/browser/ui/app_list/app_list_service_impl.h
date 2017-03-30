@@ -13,7 +13,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_info_cache_observer.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/ui/app_list/app_list_service.h"
 #include "chrome/browser/ui/app_list/profile_loader.h"
 
@@ -30,7 +30,7 @@ class AppListServiceImplTestApi;
 
 // Parts of the AppListService implementation shared between platforms.
 class AppListServiceImpl : public AppListService,
-                           public ProfileInfoCacheObserver {
+                           public ProfileAttributesStorage::Observer {
  public:
   ~AppListServiceImpl() override;
 
@@ -89,7 +89,7 @@ class AppListServiceImpl : public AppListService,
 
   std::string GetProfileName();
 
-  // ProfileInfoCacheObserver overrides:
+  // ProfileAttributesStorage::Observer overrides:
   void OnProfileWillBeRemoved(const base::FilePath& profile_path) override;
 
   scoped_ptr<ProfileStore> profile_store_;

@@ -48,6 +48,7 @@ source_set("extensions") {
     "//components/dom_distiller/core",
     "//components/onc",
     "//components/proximity_auth",
+    "//components/resources",
     "//components/strings",
     "//components/update_client",
     "//components/url_matcher",
@@ -92,7 +93,6 @@ source_set("extensions") {
     sources -= [ "api/music_manager_private/device_id_linux.cc" ]
     configs += [ "//build/config/linux:dbus" ]
     deps += [
-      "//chromeos/ime:gencode",
       "//components/chrome_apps",
       "//remoting/host/it2me:common",
       "//third_party/protobuf:protobuf_lite",
@@ -106,9 +106,6 @@ source_set("extensions") {
         rebase_path(gypi_values.chrome_browser_extensions_non_chromeos_sources,
                     ".",
                     "//chrome")
-    if (is_android) {
-      sources -= [ "api/messaging/native_process_launcher_posix.cc" ]
-    }
   }
 
   if (enable_service_discovery) {

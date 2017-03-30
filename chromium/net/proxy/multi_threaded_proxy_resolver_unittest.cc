@@ -231,13 +231,7 @@ class MultiThreadedProxyResolverTest : public testing::Test {
   scoped_ptr<ProxyResolver> resolver_;
 };
 
-// Flaky on Android. See http://crbug.com/547786
-#if defined(OS_ANDROID)
-#define MAYBE_SingleThread_Basic DISABLED_SingleThread_Basic
-#else
-#define MAYBE_SingleThread_Basic SingleThread_Basic
-#endif
-TEST_F(MultiThreadedProxyResolverTest, MAYBE_SingleThread_Basic) {
+TEST_F(MultiThreadedProxyResolverTest, SingleThread_Basic) {
   const size_t kNumThreads = 1u;
   ASSERT_NO_FATAL_FAILURE(Init(kNumThreads));
 

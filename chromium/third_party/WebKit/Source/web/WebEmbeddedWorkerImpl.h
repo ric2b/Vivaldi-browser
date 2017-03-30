@@ -62,6 +62,7 @@ public:
     // WebEmbeddedWorker overrides.
     void startWorkerContext(const WebEmbeddedWorkerStartData&) override;
     void terminateWorkerContext() override;
+    void resumeAfterDownload() override;
     void attachDevTools(const WebString& hostId, int sessionId) override;
     void reattachDevTools(const WebString& hostId, int sessionId, const WebString& savedState) override;
     void detachDevTools() override;
@@ -77,7 +78,7 @@ private:
     void willSendRequest(
         WebLocalFrame*, unsigned identifier, WebURLRequest&,
         const WebURLResponse& redirectResponse) override;
-    void didFinishDocumentLoad(WebLocalFrame*, bool documentIsEmpty) override;
+    void didFinishDocumentLoad(WebLocalFrame*) override;
 
     // WebDevToolsAgentClient overrides.
     void sendProtocolMessage(int sessionId, int callId, const WebString&, const WebString&) override;
@@ -121,10 +122,15 @@ private:
     bool m_askedToTerminate;
 
     enum WaitingForDebuggerState {
-        WaitingForDebuggerBeforeLoadingScript,
-        WaitingForDebuggerAfterScriptLoaded,
+        WaitingForDebugger,
         NotWaitingForDebugger
     };
+
+    enum {
+        DontPauseAfterDownload,
+        DoPauseAfterDownload,
+        IsPausedAfterDownload
+    } m_pauseAfterDownloadState;
 
     WaitingForDebuggerState m_waitingForDebuggerState;
 };

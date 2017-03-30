@@ -52,6 +52,7 @@
 <translation id="252373100621549798">Nežinoma pateiktis</translation>
 <translation id="2532589005999780174">Didelio kontrasto režimas</translation>
 <translation id="2562916301614567480">Privatus tinklas</translation>
+<translation id="2661637000095600270">Nepavyko dubliuoti vaizdų, nes nepavyko rasti palaikomų skyrų. Vietoje to įjungtas išplėstinio darbalaukio režimas. Spustelėkite, kad siųstumėte atsiliepimų ataskaitą.</translation>
 <translation id="2692809339924654275">„<ph name="BLUETOOTH" />“: jungiamasi...</translation>
 <translation id="2700058918926273959">Sesija baigsis po <ph name="SESSION_TIME_REMAINING" />. Būsite atjungti.</translation>
 <translation id="2727977024730340865">Prijungtas mažos galios įkroviklis. Akumuliatoriaus įkrovimas gali būti nepatikimas.</translation>
@@ -113,7 +114,6 @@ Jei norite atšaukti, paspauskite paieškos arba antrojo lygio klavišą.</trans
 <translation id="4250680216510889253">Ne</translation>
 <translation id="4279490309300973883">Dubliuojama</translation>
 <translation id="4321179778687042513">ctrl</translation>
-<translation id="4379753398862151997">Mielas monitoriau, mums nepavyksta bendradarbiauti. (Tas monitorius nepalaikomas)</translation>
 <translation id="4421231901400348175"><ph name="HELPER_NAME" /> gali valdyti jūsų ekraną naudodamas (-a) Nuotolinę pagalbą.</translation>
 <translation id="4430019312045809116">Apimtis</translation>
 <translation id="4527045527269911712">„Bluetooth“ įrenginys „<ph name="DEVICE_NAME" />“ prašo leidimo susieti.</translation>
@@ -182,7 +182,6 @@ Jei norite atšaukti, paspauskite paieškos arba antrojo lygio klavišą.</trans
 <translation id="6650933572246256093">„Bluetooth“ įrenginys „<ph name="DEVICE_NAME" />“ prašo leidimo susieti. Šiame įrenginyje įveskite šį slaptąjį raktą: <ph name="PASSKEY" /></translation>
 <translation id="6713285437468012787">„Bluetooth“ įrenginys „<ph name="DEVICE_NAME" />“ susietas ir dabar pasiekiamas visiems naudotojams. Nustatymuose galite pašalinti šį susiejimą.</translation>
 <translation id="6785414152754474415">Likusi akumuliatoriaus įkrova: <ph name="PERCENTAGE" /> %. Jis įkraunamas.</translation>
-<translation id="6803622936009808957">Nepavyko dubliuoti vaizdų, nes nepavyko rasti palaikomų skyrų. Vietoje to įjungtas išplėstinio darbalaukio režimas.</translation>
 <translation id="683971173229319003">Paieškos klavišas + L</translation>
 <translation id="68610848741840742">„ChromeVox“ (žodiniai atsiliepimai)</translation>
 <translation id="6911468394164995108">Prisijungti prie kito...</translation>
@@ -237,6 +236,7 @@ Jei norite atšaukti, paspauskite „Alt“ + paieškos klavišas arba „Alt“
 <translation id="8878886163241303700">Išplečiamas ekranas</translation>
 <translation id="8938800817013097409">USB-C įrenginys (prievadas dešinėje, užpakalinėje dalyje)</translation>
 <translation id="8940956008527784070">Akumuliatorius senka (<ph name="PERCENTAGE" /> %)</translation>
+<translation id="9008540565042607572">Monitorius nepalaikomas. (Spustelėkite, kad siųstumėte atsiliepimų ataskaitą.)</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9080206825613744995">Mikrofonas naudojamas.</translation>
 <translation id="9089416786594320554">Įvesties metodai</translation>

@@ -34,6 +34,7 @@
 #include "modules/EventTargetModules.h"
 #include "modules/ModulesExport.h"
 #include "modules/indexeddb/IDBDatabaseCallbacks.h"
+#include "modules/indexeddb/IDBHistograms.h"
 #include "modules/indexeddb/IDBMetadata.h"
 #include "modules/indexeddb/IDBObjectStore.h"
 #include "modules/indexeddb/IDBObjectStoreParameters.h"
@@ -71,7 +72,7 @@ public:
 
     // Implement the IDL
     const String& name() const { return m_metadata.name; }
-    void version(UnsignedLongLongOrString& result) const;
+    unsigned long long version() const { return m_metadata.version; }
     PassRefPtrWillBeRawPtr<DOMStringList> objectStoreNames() const;
 
     IDBObjectStore* createObjectStore(const String& name, const IDBObjectStoreParameters& options, ExceptionState& exceptionState) { return createObjectStore(name, IDBKeyPath(options.keyPath()), options.autoIncrement(), exceptionState); }
@@ -129,9 +130,11 @@ public:
     static const char transactionReadOnlyErrorMessage[];
     static const char databaseClosedErrorMessage[];
 
+    static void recordApiCallsHistogram(IndexedDatabaseMethods);
+
 protected:
     // EventTarget
-    bool dispatchEventInternal(PassRefPtrWillBeRawPtr<Event>) override;
+    DispatchEventResult dispatchEventInternal(PassRefPtrWillBeRawPtr<Event>) override;
 
 private:
     IDBDatabase(ExecutionContext*, PassOwnPtr<WebIDBDatabase>, IDBDatabaseCallbacks*);

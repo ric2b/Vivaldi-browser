@@ -14,6 +14,7 @@
 #include "content/common/content_switches_internal.h"
 #include "content/public/browser/render_widget_host_view_frame_subscriber.h"
 #include "ui/gfx/display.h"
+#include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/screen.h"
@@ -404,9 +405,8 @@ bool RenderWidgetHostViewBase::GetBackgroundOpaque() {
 }
 
 gfx::Size RenderWidgetHostViewBase::GetPhysicalBackingSize() const {
-  gfx::NativeView view = GetNativeView();
   gfx::Display display =
-      gfx::Screen::GetScreenFor(view)->GetDisplayNearestWindow(view);
+      gfx::Screen::GetScreen()->GetDisplayNearestWindow(GetNativeView());
   return gfx::ScaleToCeiledSize(GetRequestedRendererSize(),
                                 display.device_scale_factor());
 }
@@ -541,7 +541,7 @@ void RenderWidgetHostViewBase::UpdateScreenInfo(gfx::NativeView view) {
 
 bool RenderWidgetHostViewBase::HasDisplayPropertyChanged(gfx::NativeView view) {
   gfx::Display display =
-      gfx::Screen::GetScreenFor(view)->GetDisplayNearestWindow(view);
+      gfx::Screen::GetScreen()->GetDisplayNearestWindow(view);
   if (current_display_area_ == display.work_area() &&
       current_device_scale_factor_ == display.device_scale_factor() &&
       current_display_rotation_ == display.rotation()) {
@@ -683,16 +683,22 @@ uint32_t RenderWidgetHostViewBase::GetSurfaceIdNamespace() {
 }
 
 uint32_t RenderWidgetHostViewBase::SurfaceIdNamespaceAtPoint(
+    cc::SurfaceHittestDelegate* delegate,
     const gfx::Point& point,
     gfx::Point* transformed_point) {
   NOTREACHED();
   return 0;
 }
 
-void RenderWidgetHostViewBase::TransformPointToRootCoordSpace(
-    const gfx::Point& point,
-    gfx::Point* transformed_point) {
-  *transformed_point = point;
+gfx::Point RenderWidgetHostViewBase::TransformPointToRootCoordSpace(
+    const gfx::Point& point) {
+  return point;
+}
+
+gfx::PointF RenderWidgetHostViewBase::TransformPointToRootCoordSpaceF(
+    const gfx::PointF& point) {
+  return gfx::PointF(TransformPointToRootCoordSpace(
+      gfx::ToRoundedPoint(point)));
 }
 
 void RenderWidgetHostViewBase::TransformPointToLocalCoordSpace(
@@ -700,6 +706,10 @@ void RenderWidgetHostViewBase::TransformPointToLocalCoordSpace(
     cc::SurfaceId original_surface,
     gfx::Point* transformed_point) {
   *transformed_point = point;
+}
+
+cc::SurfaceId RenderWidgetHostViewBase::SurfaceIdForTesting() const {
+  return cc::SurfaceId();
 }
 
 }  // namespace content

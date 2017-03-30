@@ -7,7 +7,6 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
-#include "base/prefs/pref_service.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
@@ -25,6 +24,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/signin_pref_names.h"
@@ -184,7 +184,7 @@ bool ChildAccountService::SetActive(bool active) {
   // The logic to do this lives in the SupervisedUserSyncDataTypeController.
   ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
-  if (sync_service->HasSyncSetupCompleted())
+  if (sync_service->IsFirstSetupComplete())
     sync_service->ReconfigureDatatypeManager();
 
   return true;

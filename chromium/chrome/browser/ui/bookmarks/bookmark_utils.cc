@@ -7,7 +7,6 @@
 #include <stddef.h>
 
 #include "base/logging.h"
-#include "base/prefs/pref_service.h"
 #include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -17,6 +16,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node_data.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "components/search/search.h"
 #include "components/url_formatter/url_formatter.h"
 #include "components/user_prefs/user_prefs.h"
@@ -38,7 +38,7 @@
 
 #if defined(OS_WIN)
 #include "chrome/grit/theme_resources.h"
-#include "ui/base/resource/material_design/material_design_controller.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #endif
 
@@ -140,24 +140,22 @@ base::string16 FormatBookmarkURLForDisplay(const GURL& url,
       net::UnescapeRule::SPACES, nullptr, nullptr, nullptr);
 }
 
-bool IsAppsShortcutEnabled(Profile* profile,
-                           chrome::HostDesktopType host_desktop_type) {
+bool IsAppsShortcutEnabled(Profile* profile) {
   // Legacy supervised users can not have apps installed currently so there's no
   // need to show the apps shortcut.
   if (profile->IsLegacySupervised())
     return false;
 
+#if defined(USE_ASH)
   // Don't show the apps shortcut in ash since the app launcher is enabled.
-  if (host_desktop_type == chrome::HOST_DESKTOP_TYPE_ASH)
-    return false;
-
+  return false;
+#else
   return search::IsInstantExtendedAPIEnabled() && !profile->IsOffTheRecord();
+#endif
 }
 
-bool ShouldShowAppsShortcutInBookmarkBar(
-  Profile* profile,
-  chrome::HostDesktopType host_desktop_type) {
-  return IsAppsShortcutEnabled(profile, host_desktop_type) &&
+bool ShouldShowAppsShortcutInBookmarkBar(Profile* profile) {
+  return IsAppsShortcutEnabled(profile) &&
          profile->GetPrefs()->GetBoolean(
              bookmarks::prefs::kShowAppsShortcutInBookmarkBar);
 }

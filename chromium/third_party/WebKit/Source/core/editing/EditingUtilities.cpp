@@ -167,9 +167,9 @@ int comparePositionsInDOMTree(Node* containerA, int offsetA, Node* containerB, i
     return comparePositions<NodeTraversal>(containerA, offsetA, containerB, offsetB, disconnected);
 }
 
-int comparePositionsInComposedTree(Node* containerA, int offsetA, Node* containerB, int offsetB, bool* disconnected)
+int comparePositionsInFlatTree(Node* containerA, int offsetA, Node* containerB, int offsetB, bool* disconnected)
 {
-    return comparePositions<ComposedTreeTraversal>(containerA, offsetA, containerB, offsetB, disconnected);
+    return comparePositions<FlatTreeTraversal>(containerA, offsetA, containerB, offsetB, disconnected);
 }
 
 // Compare two positions, taking into account the possibility that one or both
@@ -221,7 +221,7 @@ ContainerNode* highestEditableRoot(const Position& position, EditableType editab
     if (position.isNull())
         return 0;
 
-    ContainerNode* highestRoot = editableRootForPosition(position, editableType);
+    ContainerNode* highestRoot = rootEditableElementOf(position, editableType);
     if (!highestRoot)
         return 0;
 
@@ -240,7 +240,7 @@ ContainerNode* highestEditableRoot(const Position& position, EditableType editab
     return highestRoot;
 }
 
-ContainerNode* highestEditableRoot(const PositionInComposedTree& position, EditableType editableType)
+ContainerNode* highestEditableRoot(const PositionInFlatTree& position, EditableType editableType)
 {
     return highestEditableRoot(toPositionInDOMTree(position), editableType);
 }
@@ -255,13 +255,15 @@ bool isEditablePosition(const Position& p, EditableType editableType, EUpdateSty
     else
         ASSERT(updateStyle == DoNotUpdateStyle);
 
-    if (isRenderedHTMLTableElement(node))
+    if (isDisplayInsideTable(node))
         node = node->parentNode();
 
+    if (node->isDocumentNode())
+        return false;
     return node->hasEditableStyle(editableType);
 }
 
-bool isEditablePosition(const PositionInComposedTree& p, EditableType editableType, EUpdateStyle updateStyle)
+bool isEditablePosition(const PositionInFlatTree& p, EditableType editableType, EUpdateStyle updateStyle)
 {
     return isEditablePosition(toPositionInDOMTree(p), editableType, updateStyle);
 }
@@ -269,7 +271,7 @@ bool isEditablePosition(const PositionInComposedTree& p, EditableType editableTy
 bool isAtUnsplittableElement(const Position& pos)
 {
     Node* node = pos.anchorNode();
-    return (node == editableRootForPosition(pos) || node == enclosingNodeOfType(pos, &isTableCell));
+    return (node == rootEditableElementOf(pos) || node == enclosingNodeOfType(pos, &isTableCell));
 }
 
 
@@ -279,27 +281,27 @@ bool isRichlyEditablePosition(const Position& p, EditableType editableType)
     if (!node)
         return false;
 
-    if (isRenderedHTMLTableElement(node))
+    if (isDisplayInsideTable(node))
         node = node->parentNode();
 
     return node->layoutObjectIsRichlyEditable(editableType);
 }
 
-Element* editableRootForPosition(const Position& p, EditableType editableType)
+Element* rootEditableElementOf(const Position& p, EditableType editableType)
 {
     Node* node = p.computeContainerNode();
     if (!node)
         return 0;
 
-    if (isRenderedHTMLTableElement(node))
+    if (isDisplayInsideTable(node))
         node = node->parentNode();
 
     return node->rootEditableElement(editableType);
 }
 
-Element* editableRootForPosition(const PositionInComposedTree& p, EditableType editableType)
+Element* rootEditableElementOf(const PositionInFlatTree& p, EditableType editableType)
 {
-    return editableRootForPosition(toPositionInDOMTree(p), editableType);
+    return rootEditableElementOf(toPositionInDOMTree(p), editableType);
 }
 
 // TODO(yosin) This does not handle [table, 0] correctly.
@@ -320,7 +322,7 @@ Element* unsplittableElementForPosition(const Position& p)
     if (enclosingCell)
         return enclosingCell;
 
-    return editableRootForPosition(p);
+    return rootEditableElementOf(p);
 }
 
 template <typename Strategy>
@@ -346,9 +348,9 @@ Position nextCandidate(const Position& position)
     return nextCandidateAlgorithm<EditingStrategy>(position);
 }
 
-PositionInComposedTree nextCandidate(const PositionInComposedTree& position)
+PositionInFlatTree nextCandidate(const PositionInFlatTree& position)
 {
-    return nextCandidateAlgorithm<EditingInComposedTreeStrategy>(position);
+    return nextCandidateAlgorithm<EditingInFlatTreeStrategy>(position);
 }
 
 // |nextVisuallyDistinctCandidate| is similar to |nextCandidate| except
@@ -381,9 +383,9 @@ Position nextVisuallyDistinctCandidate(const Position& position)
     return nextVisuallyDistinctCandidateAlgorithm<EditingStrategy>(position);
 }
 
-PositionInComposedTree nextVisuallyDistinctCandidate(const PositionInComposedTree& position)
+PositionInFlatTree nextVisuallyDistinctCandidate(const PositionInFlatTree& position)
 {
-    return nextVisuallyDistinctCandidateAlgorithm<EditingInComposedTreeStrategy>(position);
+    return nextVisuallyDistinctCandidateAlgorithm<EditingInFlatTreeStrategy>(position);
 }
 
 template <typename Strategy>
@@ -409,9 +411,9 @@ Position previousCandidate(const Position& position)
     return previousCandidateAlgorithm<EditingStrategy>(position);
 }
 
-PositionInComposedTree previousCandidate(const PositionInComposedTree& position)
+PositionInFlatTree previousCandidate(const PositionInFlatTree& position)
 {
-    return previousCandidateAlgorithm<EditingInComposedTreeStrategy>(position);
+    return previousCandidateAlgorithm<EditingInFlatTreeStrategy>(position);
 }
 
 // |previousVisuallyDistinctCandidate| is similar to |previousCandidate| except
@@ -444,9 +446,9 @@ Position previousVisuallyDistinctCandidate(const Position& position)
     return previousVisuallyDistinctCandidateAlgorithm<EditingStrategy>(position);
 }
 
-PositionInComposedTree previousVisuallyDistinctCandidate(const PositionInComposedTree& position)
+PositionInFlatTree previousVisuallyDistinctCandidate(const PositionInFlatTree& position)
 {
-    return previousVisuallyDistinctCandidateAlgorithm<EditingInComposedTreeStrategy>(position);
+    return previousVisuallyDistinctCandidateAlgorithm<EditingInFlatTreeStrategy>(position);
 }
 
 VisiblePosition firstEditableVisiblePositionAfterPositionInRoot(const Position& position, ContainerNode& highestRoot)
@@ -454,7 +456,7 @@ VisiblePosition firstEditableVisiblePositionAfterPositionInRoot(const Position& 
     return createVisiblePosition(firstEditablePositionAfterPositionInRoot(position, highestRoot));
 }
 
-VisiblePositionInComposedTree firstEditableVisiblePositionAfterPositionInRoot(const PositionInComposedTree& position, ContainerNode& highestRoot)
+VisiblePositionInFlatTree firstEditableVisiblePositionAfterPositionInRoot(const PositionInFlatTree& position, ContainerNode& highestRoot)
 {
     return createVisiblePosition(firstEditablePositionAfterPositionInRoot(position, highestRoot));
 }
@@ -490,9 +492,9 @@ Position firstEditablePositionAfterPositionInRoot(const Position& position, Node
     return firstEditablePositionAfterPositionInRootAlgorithm<EditingStrategy>(position, highestRoot);
 }
 
-PositionInComposedTree firstEditablePositionAfterPositionInRoot(const PositionInComposedTree& position, Node& highestRoot)
+PositionInFlatTree firstEditablePositionAfterPositionInRoot(const PositionInFlatTree& position, Node& highestRoot)
 {
-    return firstEditablePositionAfterPositionInRootAlgorithm<EditingInComposedTreeStrategy>(position, highestRoot);
+    return firstEditablePositionAfterPositionInRootAlgorithm<EditingInFlatTreeStrategy>(position, highestRoot);
 }
 
 VisiblePosition lastEditableVisiblePositionBeforePositionInRoot(const Position& position, ContainerNode& highestRoot)
@@ -500,7 +502,7 @@ VisiblePosition lastEditableVisiblePositionBeforePositionInRoot(const Position& 
     return createVisiblePosition(lastEditablePositionBeforePositionInRoot(position, highestRoot));
 }
 
-VisiblePositionInComposedTree lastEditableVisiblePositionBeforePositionInRoot(const PositionInComposedTree& position, ContainerNode& highestRoot)
+VisiblePositionInFlatTree lastEditableVisiblePositionBeforePositionInRoot(const PositionInFlatTree& position, ContainerNode& highestRoot)
 {
     return createVisiblePosition(lastEditablePositionBeforePositionInRoot(position, highestRoot));
 }
@@ -535,9 +537,9 @@ Position lastEditablePositionBeforePositionInRoot(const Position& position, Node
     return lastEditablePositionBeforePositionInRootAlgorithm<EditingStrategy>(position, highestRoot);
 }
 
-PositionInComposedTree lastEditablePositionBeforePositionInRoot(const PositionInComposedTree& position, Node& highestRoot)
+PositionInFlatTree lastEditablePositionBeforePositionInRoot(const PositionInFlatTree& position, Node& highestRoot)
 {
-    return lastEditablePositionBeforePositionInRootAlgorithm<EditingInComposedTreeStrategy>(position, highestRoot);
+    return lastEditablePositionBeforePositionInRootAlgorithm<EditingInFlatTreeStrategy>(position, highestRoot);
 }
 
 int uncheckedPreviousOffset(const Node* n, int current)
@@ -601,9 +603,9 @@ Position previousPositionOf(const Position& position, PositionMoveType moveType)
     return previousPositionOfAlgorithm<EditingStrategy>(position, moveType);
 }
 
-PositionInComposedTree previousPositionOf(const PositionInComposedTree& position, PositionMoveType moveType)
+PositionInFlatTree previousPositionOf(const PositionInFlatTree& position, PositionMoveType moveType)
 {
-    return previousPositionOfAlgorithm<EditingInComposedTreeStrategy>(position, moveType);
+    return previousPositionOfAlgorithm<EditingInFlatTreeStrategy>(position, moveType);
 }
 
 template <typename Strategy>
@@ -642,9 +644,9 @@ Position nextPositionOf(const Position& position, PositionMoveType moveType)
     return nextPositionOfAlgorithm<EditingStrategy>(position, moveType);
 }
 
-PositionInComposedTree nextPositionOf(const PositionInComposedTree& position, PositionMoveType moveType)
+PositionInFlatTree nextPositionOf(const PositionInFlatTree& position, PositionMoveType moveType)
 {
-    return nextPositionOfAlgorithm<EditingInComposedTreeStrategy>(position, moveType);
+    return nextPositionOfAlgorithm<EditingInFlatTreeStrategy>(position, moveType);
 }
 
 bool isEnclosingBlock(const Node* node)
@@ -680,9 +682,9 @@ Element* enclosingBlock(const Position& position, EditingBoundaryCrossingRule ru
     return enclosingBlockAlgorithm<EditingStrategy>(position, rule);
 }
 
-Element* enclosingBlock(const PositionInComposedTree& position, EditingBoundaryCrossingRule rule)
+Element* enclosingBlock(const PositionInFlatTree& position, EditingBoundaryCrossingRule rule)
 {
-    return enclosingBlockAlgorithm<EditingInComposedTreeStrategy>(position, rule);
+    return enclosingBlockAlgorithm<EditingInFlatTreeStrategy>(position, rule);
 }
 
 Element* enclosingBlockFlowElement(Node& node)
@@ -723,9 +725,9 @@ TextDirection directionOfEnclosingBlock(const Position& position)
     return directionOfEnclosingBlockAlgorithm<EditingStrategy>(position);
 }
 
-TextDirection directionOfEnclosingBlock(const PositionInComposedTree& position)
+TextDirection directionOfEnclosingBlock(const PositionInFlatTree& position)
 {
-    return directionOfEnclosingBlockAlgorithm<EditingInComposedTreeStrategy>(position);
+    return directionOfEnclosingBlockAlgorithm<EditingInFlatTreeStrategy>(position);
 }
 
 TextDirection primaryDirectionOf(const Node& node)
@@ -813,7 +815,7 @@ static HTMLElement* firstInSpecialElement(const Position& pos)
             HTMLElement* specialElement = toHTMLElement(n);
             VisiblePosition vPos = createVisiblePosition(pos);
             VisiblePosition firstInElement = createVisiblePosition(firstPositionInOrBeforeNode(specialElement));
-            if (isRenderedTableElement(specialElement) && vPos.deepEquivalent() == nextPositionOf(firstInElement).deepEquivalent())
+            if (isDisplayInsideTable(specialElement) && vPos.deepEquivalent() == nextPositionOf(firstInElement).deepEquivalent())
                 return specialElement;
             if (vPos.deepEquivalent() == firstInElement.deepEquivalent())
                 return specialElement;
@@ -830,7 +832,7 @@ static HTMLElement* lastInSpecialElement(const Position& pos)
             HTMLElement* specialElement = toHTMLElement(n);
             VisiblePosition vPos = createVisiblePosition(pos);
             VisiblePosition lastInElement = createVisiblePosition(lastPositionInOrAfterNode(specialElement));
-            if (isRenderedTableElement(specialElement) && vPos.deepEquivalent() == previousPositionOf(lastInElement).deepEquivalent())
+            if (isDisplayInsideTable(specialElement) && vPos.deepEquivalent() == previousPositionOf(lastInElement).deepEquivalent())
                 return specialElement;
             if (vPos.deepEquivalent() == lastInElement.deepEquivalent())
                 return specialElement;
@@ -869,7 +871,7 @@ template <typename Strategy>
 static Element* isFirstPositionAfterTableAlgorithm(const VisiblePositionTemplate<Strategy>& visiblePosition)
 {
     const PositionTemplate<Strategy> upstream(mostBackwardCaretPosition(visiblePosition.deepEquivalent()));
-    if (isRenderedTableElement(upstream.anchorNode()) && upstream.atLastEditingPositionForNode())
+    if (isDisplayInsideTable(upstream.anchorNode()) && upstream.atLastEditingPositionForNode())
         return toElement(upstream.anchorNode());
 
     return nullptr;
@@ -880,15 +882,15 @@ Element* isFirstPositionAfterTable(const VisiblePosition& visiblePosition)
     return isFirstPositionAfterTableAlgorithm<EditingStrategy>(visiblePosition);
 }
 
-Element* isFirstPositionAfterTable(const VisiblePositionInComposedTree& visiblePosition)
+Element* isFirstPositionAfterTable(const VisiblePositionInFlatTree& visiblePosition)
 {
-    return isFirstPositionAfterTableAlgorithm<EditingInComposedTreeStrategy>(visiblePosition);
+    return isFirstPositionAfterTableAlgorithm<EditingInFlatTreeStrategy>(visiblePosition);
 }
 
 Element* isLastPositionBeforeTable(const VisiblePosition& visiblePosition)
 {
     Position downstream(mostForwardCaretPosition(visiblePosition.deepEquivalent()));
-    if (isRenderedTableElement(downstream.anchorNode()) && downstream.atFirstEditingPositionForNode())
+    if (isDisplayInsideTable(downstream.anchorNode()) && downstream.atFirstEditingPositionForNode())
         return toElement(downstream.anchorNode());
 
     return 0;
@@ -1027,9 +1029,9 @@ Node* enclosingNodeOfType(const Position& p, bool (*nodeIsOfType)(const Node*), 
     return enclosingNodeOfTypeAlgorithm<EditingStrategy>(p, nodeIsOfType, rule);
 }
 
-Node* enclosingNodeOfType(const PositionInComposedTree& p, bool (*nodeIsOfType)(const Node*), EditingBoundaryCrossingRule rule)
+Node* enclosingNodeOfType(const PositionInFlatTree& p, bool (*nodeIsOfType)(const Node*), EditingBoundaryCrossingRule rule)
 {
-    return enclosingNodeOfTypeAlgorithm<EditingInComposedTreeStrategy>(p, nodeIsOfType, rule);
+    return enclosingNodeOfTypeAlgorithm<EditingInFlatTreeStrategy>(p, nodeIsOfType, rule);
 }
 
 Node* highestEnclosingNodeOfType(const Position& p, bool (*nodeIsOfType)(const Node*), EditingBoundaryCrossingRule rule, Node* stayWithin)
@@ -1180,12 +1182,7 @@ bool canMergeLists(Element* firstList, Element* secondList)
     // Make sure there is no visible content between this li and the previous list
 }
 
-bool isRenderedHTMLTableElement(const Node* node)
-{
-    return isHTMLTableElement(*node) && node->layoutObject();
-}
-
-bool isRenderedTableElement(const Node* node)
+bool isDisplayInsideTable(const Node* node)
 {
     if (!node || !node->isElementNode())
         return false;
@@ -1540,9 +1537,9 @@ EphemeralRange normalizeRange(const EphemeralRange& range)
     return normalizeRangeAlgorithm<EditingStrategy>(range);
 }
 
-EphemeralRangeInComposedTree normalizeRange(const EphemeralRangeInComposedTree& range)
+EphemeralRangeInFlatTree normalizeRange(const EphemeralRangeInFlatTree& range)
 {
-    return normalizeRangeAlgorithm<EditingInComposedTreeStrategy>(range);
+    return normalizeRangeAlgorithm<EditingInFlatTreeStrategy>(range);
 }
 
 VisiblePosition visiblePositionForIndex(int index, ContainerNode* scope)
@@ -1584,17 +1581,20 @@ bool isRenderedAsNonInlineTableImageOrHR(const Node* node)
     return layoutObject && ((layoutObject->isTable() && !layoutObject->isInline()) || (layoutObject->isImage() && !layoutObject->isInline()) || layoutObject->isHR());
 }
 
-bool areIdenticalElements(const Node* first, const Node* second)
+bool areIdenticalElements(const Node& first, const Node& second)
 {
-    if (!first->isElementNode() || !second->isElementNode())
+    if (!first.isElementNode() || !second.isElementNode())
         return false;
 
-    const Element* firstElement = toElement(first);
-    const Element* secondElement = toElement(second);
-    if (!firstElement->hasTagName(secondElement->tagQName()))
+    const Element& firstElement = toElement(first);
+    const Element& secondElement = toElement(second);
+    if (!firstElement.hasTagName(secondElement.tagQName()))
         return false;
 
-    return firstElement->hasEquivalentAttributes(secondElement);
+    if (!firstElement.hasEquivalentAttributes(&secondElement))
+        return false;
+
+    return firstElement.hasEditableStyle() && secondElement.hasEditableStyle();
 }
 
 bool isNonTableCellHTMLBlockElement(const Node* node)

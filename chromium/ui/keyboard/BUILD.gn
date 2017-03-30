@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/test.gni")
 import("//third_party/google_input_tools/closure.gni")
 import("//third_party/google_input_tools/inputview.gni")
@@ -126,6 +127,15 @@ build_closure("inputview") {
   path = rebase_path("//third_party/google_input_tools")
 }
 
+mojom("mojom") {
+  sources = [
+    "keyboard.mojom",
+  ]
+  deps = [
+    "//ui/mojo/geometry:interfaces",
+  ]
+}
+
 test("keyboard_unittests") {
   sources = [
     "keyboard_controller_unittest.cc",
@@ -136,7 +146,6 @@ test("keyboard_unittests") {
   deps = [
     ":keyboard",
     "//base",
-    "//base/allocator",
     "//base/test:test_support",
     "//skia",
     "//testing/gtest",

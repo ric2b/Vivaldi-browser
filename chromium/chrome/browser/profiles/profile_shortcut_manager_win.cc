@@ -16,7 +16,6 @@
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -35,6 +34,7 @@
 #include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/product.h"
 #include "chrome/installer/util/shell_util.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "grit/chrome_unscaled_resources.h"
@@ -462,7 +462,7 @@ void CreateOrUpdateDesktopShortcutsAndIconForProfile(
   }
 
   properties.set_app_id(
-      ShellIntegration::GetChromiumModelIdForProfile(params.profile_path));
+      shell_integration::GetChromiumModelIdForProfile(params.profile_path));
 
   ShellUtil::ShortcutOperation operation =
       ShellUtil::SHELL_SHORTCUT_REPLACE_EXISTING;

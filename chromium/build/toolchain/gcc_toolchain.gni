@@ -4,12 +4,12 @@
 
 import("//build/config/nacl/config.gni")
 import("//build/config/sanitizers/sanitizers.gni")
-import("//build/toolchain/ccache.gni")
+import("//build/toolchain/cc_wrapper.gni")
 import("//build/toolchain/goma.gni")
 import("//build/toolchain/toolchain.gni")
 
 # This value will be inherited in the toolchain below.
-if (is_cfi) {
+if (is_lto) {
   concurrent_links =
       exec_script("get_concurrent_links.py", [ "--lto" ], "value")
 } else {
@@ -80,9 +80,10 @@ if (is_cfi) {
 #      default setting.
 #  - is_nacl_glibc
 #      Whether NaCl code is built using Glibc instead of Newlib.
-#  - use_ccache
-#      Override the global use_ccache setting, useful to opt-out of ccache in
-#      a particular toolchain by setting use_ccache = false in it.
+#  - cc_wrapper
+#      Override the global cc_wrapper setting. e.g. "ccache" or "icecc".
+#      useful to opt-out of cc_wrapper in a particular toolchain by setting
+#      cc_wrapper = "" in it.
 #  - use_goma
 #      Override the global use_goma setting, useful to opt-out of goma in a
 #      particular toolchain by setting use_gome = false in it.
@@ -100,17 +101,17 @@ template("gcc_toolchain") {
     assert(defined(invoker.toolchain_os),
            "gcc_toolchain() must specify a \"toolchain_os\"")
 
-    if (defined(invoker.use_ccache)) {
-      use_ccache = invoker.use_ccache
+    if (defined(invoker.cc_wrapper)) {
+      cc_wrapper = invoker.cc_wrapper
     }
     if (defined(invoker.use_goma)) {
       use_goma = invoker.use_goma
     }
     if (use_goma) {
-      assert(!use_ccache, "Goma and ccache can't be used together.")
+      assert(cc_wrapper == "", "Goma and cc_wrapper can't be used together.")
       compiler_prefix = "$goma_dir/gomacc "
-    } else if (use_ccache) {
-      compiler_prefix = "ccache "
+    } else if (cc_wrapper != "") {
+      compiler_prefix = cc_wrapper + " "
     } else {
       compiler_prefix = ""
     }
@@ -216,7 +217,7 @@ template("gcc_toolchain") {
     tool("alink") {
       rspfile = "{{output}}.rsp"
       arflags = ""
-      if (is_cfi && invoker.toolchain_os != "nacl") {
+      if (is_lto && invoker.toolchain_os != "nacl") {
         gold_plugin_path = rebase_path(
                 "//third_party/llvm-build/Release+Asserts/lib/LLVMgold.so",
                 root_build_dir)
@@ -228,7 +229,7 @@ template("gcc_toolchain") {
       # POSIX-like toolchains such as NaCl on Windows).
       ar_wrapper =
           rebase_path("//build/toolchain/gcc_ar_wrapper.py", root_build_dir)
-      command = "$python_path \"$ar_wrapper\" --output={{output}} --ar=\"$ar\" $arflags rcs @\"$rspfile\""
+      command = "$python_path \"$ar_wrapper\" --output={{output}} --ar=\"$ar\" $arflags rcsD @\"$rspfile\""
       description = "AR {{output}}"
       rspfile_content = "{{inputs}}"
       outputs = [

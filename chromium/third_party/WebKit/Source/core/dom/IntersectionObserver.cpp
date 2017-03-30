@@ -16,6 +16,8 @@
 #include "core/dom/NodeIntersectionObserverData.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/layout/LayoutView.h"
+#include "core/timing/DOMWindowPerformance.h"
+#include "core/timing/Performance.h"
 #include "platform/Timer.h"
 #include "wtf/MainThread.h"
 #include <algorithm>
@@ -152,41 +154,26 @@ IntersectionObserver::IntersectionObserver(IntersectionObserverCallback& callbac
     root.document().ensureIntersectionObserverController().addTrackedObserver(*this);
 }
 
+#if ENABLE(OILPAN)
+void IntersectionObserver::clearWeakMembers(Visitor* visitor)
+{
+    if (Heap::isHeapObjectAlive(m_root))
+        return;
+    disconnect();
+    m_root = nullptr;
+}
+#endif
+
 LayoutObject* IntersectionObserver::rootLayoutObject() const
 {
-    Node* rootNode = root();
-    if (rootNode->isDocumentNode())
-        return toDocument(rootNode)->layoutView();
-    return toElement(rootNode)->layoutObject();
-}
-
-bool IntersectionObserver::isDescendantOfRoot(const Element* target) const
-{
-    // Is m_root an ancestor, through the DOM and frame trees, of target?
-    Node* rootNode = root();
-    if (!rootNode || !target || target == rootNode)
-        return false;
-    if (!target->inDocument() || !rootNode->inDocument())
-        return false;
-
-    Document* rootDocument = &rootNode->document();
-    Document* targetDocument = &target->document();
-    while (targetDocument != rootDocument) {
-        target = targetDocument->ownerElement();
-        if (!target)
-            return false;
-        targetDocument = &target->document();
-    }
-    if (rootNode->isDocumentNode()) {
-        ASSERT(targetDocument == rootNode);
-        return true;
-    }
-    return target->isDescendantOf(rootNode);
+    Node* node = rootNode();
+    if (node->isDocumentNode())
+        return toDocument(node)->layoutView();
+    return toElement(node)->layoutObject();
 }
 
 void IntersectionObserver::observe(Element* target, ExceptionState& exceptionState)
 {
-    checkRootAndDetachIfNeeded();
     if (!m_root) {
         exceptionState.throwDOMException(HierarchyRequestError, "Invalid observer: root element or containing document has been deleted.");
         return;
@@ -199,13 +186,9 @@ void IntersectionObserver::observe(Element* target, ExceptionState& exceptionSta
         exceptionState.throwDOMException(HierarchyRequestError, "Cannot use the same element for root and target.");
         return;
     }
-    if (!isDescendantOfRoot(target)) {
-        exceptionState.throwDOMException(HierarchyRequestError, "Observed element must be a descendant of the observer's root element.");
-        return;
-    }
 
     // TODO(szager): Add a pointer to the spec that describes this policy.
-    bool shouldReportRootBounds = target->document().frame()->securityContext()->securityOrigin()->canAccess(root()->document().frame()->securityContext()->securityOrigin());
+    bool shouldReportRootBounds = target->document().frame()->securityContext()->securityOrigin()->canAccess(rootNode()->document().frame()->securityContext()->securityOrigin());
     if (!shouldReportRootBounds && hasPercentMargin()) {
         exceptionState.throwDOMException(HierarchyRequestError, "Cannot observe a cross-origin target because the observer has a root margin value specified as a percent.");
         return;
@@ -221,7 +204,6 @@ void IntersectionObserver::observe(Element* target, ExceptionState& exceptionSta
 
 void IntersectionObserver::unobserve(Element* target, ExceptionState&)
 {
-    checkRootAndDetachIfNeeded();
     if (!target || !target->intersectionObserverData())
         return;
     // TODO(szager): unobserve callback
@@ -229,22 +211,26 @@ void IntersectionObserver::unobserve(Element* target, ExceptionState&)
         observation->disconnect();
 }
 
-void IntersectionObserver::computeIntersectionObservations(double timestamp)
+void IntersectionObserver::computeIntersectionObservations()
 {
-    checkRootAndDetachIfNeeded();
-    if (!m_root)
+    if (!m_root || !m_root->inDocument())
         return;
+    Document* callbackDocument = toDocument(m_callback->executionContext());
+    if (!callbackDocument)
+        return;
+    LocalDOMWindow* callbackDOMWindow = callbackDocument->domWindow();
+    if (!callbackDOMWindow)
+        return;
+    DOMHighResTimeStamp timestamp = DOMWindowPerformance::performance(*callbackDOMWindow)->now();
     for (auto& observation : m_observations)
         observation->computeIntersectionObservations(timestamp);
 }
 
 void IntersectionObserver::disconnect()
 {
-    HeapVector<Member<IntersectionObservation>> observationsToDisconnect;
-    copyToVector(m_observations, observationsToDisconnect);
-    for (auto& observation : observationsToDisconnect)
-        observation->disconnect();
-    ASSERT(m_observations.isEmpty());
+    for (auto& observation : m_observations)
+        observation->clearRootAndRemoveFromTarget();
+    m_observations.clear();
 }
 
 void IntersectionObserver::removeObservation(IntersectionObservation& observation)
@@ -254,10 +240,39 @@ void IntersectionObserver::removeObservation(IntersectionObservation& observatio
 
 HeapVector<Member<IntersectionObserverEntry>> IntersectionObserver::takeRecords()
 {
-    checkRootAndDetachIfNeeded();
     HeapVector<Member<IntersectionObserverEntry>> entries;
     entries.swap(m_entries);
     return entries;
+}
+
+Element* IntersectionObserver::root() const
+{
+    Node* node = rootNode();
+    if (node->isDocumentNode())
+        return nullptr;
+    return toElement(node);
+}
+
+static void appendLength(StringBuilder& stringBuilder, const Length& length)
+{
+    stringBuilder.appendNumber(length.intValue());
+    if (length.type() == Percent)
+        stringBuilder.append('%');
+    else
+        stringBuilder.append("px", 2);
+}
+
+String IntersectionObserver::rootMargin() const
+{
+    StringBuilder stringBuilder;
+    appendLength(stringBuilder, m_topMargin);
+    stringBuilder.append(' ');
+    appendLength(stringBuilder, m_rightMargin);
+    stringBuilder.append(' ');
+    appendLength(stringBuilder, m_bottomMargin);
+    stringBuilder.append(' ');
+    appendLength(stringBuilder, m_leftMargin);
+    return stringBuilder.toString();
 }
 
 void IntersectionObserver::enqueueIntersectionObserverEntry(IntersectionObserverEntry& entry)
@@ -292,14 +307,20 @@ void IntersectionObserver::applyRootMargin(LayoutRect& rect) const
 unsigned IntersectionObserver::firstThresholdGreaterThan(float ratio) const
 {
     unsigned result = 0;
-    while (result < m_thresholds.size() && m_thresholds[result] < ratio)
+
+    // Special handling for zero threshold, which means "any non-zero number of pixels."
+    // If the ratio is zero, then it should be treated as smaller than any threshold,
+    // even a zero threshold.
+    if (!ratio)
+        return 0;
+
+    while (result < m_thresholds.size() && m_thresholds[result] <= ratio)
         ++result;
     return result;
 }
 
 void IntersectionObserver::deliver()
 {
-    checkRootAndDetachIfNeeded();
 
     if (m_entries.isEmpty())
         return;
@@ -307,13 +328,6 @@ void IntersectionObserver::deliver()
     HeapVector<Member<IntersectionObserverEntry>> entries;
     entries.swap(m_entries);
     m_callback->handleEvent(entries, *this);
-}
-
-void IntersectionObserver::setActive(bool active)
-{
-    checkRootAndDetachIfNeeded();
-    for (auto& observation : m_observations)
-        observation->setActive(m_root && active && isDescendantOfRoot(observation->target()));
 }
 
 bool IntersectionObserver::hasPercentMargin() const
@@ -324,27 +338,12 @@ bool IntersectionObserver::hasPercentMargin() const
         || m_leftMargin.type() == Percent);
 }
 
-void IntersectionObserver::checkRootAndDetachIfNeeded()
-{
-#if ENABLE(OILPAN)
-    // TODO(szager): Pre-oilpan, ElementIntersectionObserverData::dispose() will take
-    // care of this cleanup.  When oilpan ships, there will be a potential leak of the
-    // callback's execution context when the root goes away.  For a detailed explanation:
-    //
-    //   https://goo.gl/PC2Baj
-    //
-    // When that happens, this method should catch most potential leaks, but a complete
-    // solution will still be needed, along the lines described in the above link.
-    if (m_root)
-        return;
-    disconnect();
-#endif
-}
-
 DEFINE_TRACE(IntersectionObserver)
 {
+#if ENABLE(OILPAN)
+    visitor->template registerWeakMembers<IntersectionObserver, &IntersectionObserver::clearWeakMembers>(this);
+#endif
     visitor->trace(m_callback);
-    visitor->trace(m_root);
     visitor->trace(m_observations);
     visitor->trace(m_entries);
 }

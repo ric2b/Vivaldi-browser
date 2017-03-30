@@ -10,19 +10,20 @@
 #import <Cocoa/Cocoa.h>
 
 #include "base/strings/string16.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "ui/gfx/range/range.h"
 
-namespace autofill {
-struct PasswordForm;
-}  // autofill
+@class HyperlinkTextView;
 
 const CGFloat kDesiredBubbleWidth = 370;
 const CGFloat kFramePadding = 16;
+const CGFloat kDesiredRowWidth = kDesiredBubbleWidth - 2 * kFramePadding;
 const CGFloat kItemLabelSpacing = 10;
 const CGFloat kRelatedControlHorizontalPadding = 2;
 const CGFloat kRelatedControlVerticalSpacing = 8;
-const CGFloat kUnrelatedControlVerticalPadding = 15;
-const CGFloat kDesiredRowWidth = kDesiredBubbleWidth - 2 * kFramePadding;
 const CGFloat kTitleTextInset = 2;
+const CGFloat kUnrelatedControlVerticalPadding = 15;
+const CGFloat kVerticalAvatarMargin = 8;
 
 // Returns a font for password bubbles.
 NSFont* LabelFont();
@@ -42,5 +43,27 @@ std::pair<CGFloat, CGFloat> GetResizedColumns(
 
 // Returns a password text field initialized with |text|.
 NSSecureTextField* PasswordLabel(const base::string16& text);
+
+// Returns a button of the standard style for the bubble.
+NSButton* DialogButton(NSString* title);
+
+// Returns a title label with |text| for a bubble. Nonempty |range| may specify
+// a link range.
+HyperlinkTextView* TitleBubbleLabelWithLink(const base::string16& text,
+                                            gfx::Range range,
+                                            id<NSTextViewDelegate> delegate);
+
+// Returns a title label with |text| for a dialog. Nonempty |range| may specify
+// a link range.
+HyperlinkTextView* TitleDialogLabelWithLink(const base::string16& text,
+                                            gfx::Range range,
+                                            id<NSTextViewDelegate> delegate);
+
+// Returns a label with |text| and small font. Nonempty |range| may specify a
+// link range.
+HyperlinkTextView* LabelWithLink(const base::string16& text,
+                                 SkColor color,
+                                 gfx::Range range,
+                                 id<NSTextViewDelegate> delegate);
 
 #endif  // CHROME_BROWSER_UI_COCOA_PASSWORDS_PASSWORDS_BUBBLE_UTILS_H_

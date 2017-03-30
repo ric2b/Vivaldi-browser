@@ -29,7 +29,7 @@ public:
 
     void getOverhang(bool firstLine, LineLayoutItem startLayoutItem, LineLayoutItem endLayoutItem, int& startOverhang, int& endOverhang) const
     {
-        toRubyRun()->getOverhang(firstLine, startLayoutItem, endLayoutItem, startOverhang, endOverhang);
+        toRubyRun()->getOverhang(firstLine, startLayoutItem.layoutObject(), endLayoutItem.layoutObject(), startOverhang, endOverhang);
     }
 
     LayoutRubyText* rubyText() const
@@ -40,6 +40,11 @@ public:
     LayoutRubyBase* rubyBase() const
     {
         return toRubyRun()->rubyBase();
+    }
+
+    bool canBreakBefore(const LazyLineBreakIterator& iterator) const
+    {
+        return toRubyRun()->canBreakBefore(iterator);
     }
 
 private:

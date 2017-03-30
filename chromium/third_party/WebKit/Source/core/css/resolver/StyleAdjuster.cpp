@@ -48,14 +48,13 @@
 #include "core/svg/SVGSVGElement.h"
 #include "platform/Length.h"
 #include "platform/transforms/TransformOperations.h"
-#include "public/platform/WebCompositorMutableProperties.h"
 #include "wtf/Assertions.h"
 
 namespace blink {
 
 using namespace HTMLNames;
 
-static EDisplay equivalentBlockDisplay(EDisplay display, bool isFloating, bool strictParsing)
+static EDisplay equivalentBlockDisplay(EDisplay display)
 {
     switch (display) {
     case BLOCK:
@@ -63,12 +62,7 @@ static EDisplay equivalentBlockDisplay(EDisplay display, bool isFloating, bool s
     case BOX:
     case FLEX:
     case GRID:
-        return display;
-
     case LIST_ITEM:
-        // It is a WinIE bug that floated list items lose their bullets, so we'll emulate the quirk, but only in quirks mode.
-        if (!strictParsing && isFloating)
-            return BLOCK;
         return display;
     case INLINE_TABLE:
         return TABLE;
@@ -170,7 +164,7 @@ void StyleAdjuster::adjustComputedStyle(ComputedStyle& style, const ComputedStyl
 
         // Absolute/fixed positioned elements, floating elements and the document element need block-like outside display.
         if (style.hasOutOfFlowPosition() || style.isFloating() || (element && element->document().documentElement() == element))
-            style.setDisplay(equivalentBlockDisplay(style.display(), style.isFloating(), !m_useQuirksModeStyles));
+            style.setDisplay(equivalentBlockDisplay(style.display()));
 
         // We don't adjust the first letter style earlier because we may change the display setting in
         // adjustStyeForTagName() above.
@@ -300,32 +294,6 @@ void StyleAdjuster::adjustStyleForAlignment(ComputedStyle& style, const Computed
         if (isFlexOrGrid)
             style.setAlignItemsPosition(ItemPositionStretch);
     }
-
-    // Block Containers: For table cells, the behavior of the 'auto' depends on the computed
-    // value of 'vertical-align', otherwise behaves as 'start'.
-    // Flex Containers: 'auto' computes to 'flex-start'.
-    // Grid Containers: 'auto' computes to 'start', and 'stretch' behaves like 'start'.
-    if ((style.justifyContentPosition() == ContentPositionAuto) && (style.justifyContentDistribution() == ContentDistributionDefault)) {
-        if (style.isDisplayFlexibleOrGridBox()) {
-            if (style.isDisplayFlexibleBox())
-                style.setJustifyContentPosition(ContentPositionFlexStart);
-            else
-                style.setJustifyContentPosition(ContentPositionStart);
-        }
-    }
-
-    // Block Containers: For table cells, the behavior of the 'auto' depends on the computed
-    // value of 'vertical-align', otherwise behaves as 'start'.
-    // Flex Containers: 'auto' computes to 'stretch'.
-    // Grid Containers: 'auto' computes to 'start', and 'stretch' behaves like 'start'.
-    if (style.alignContentPosition() == ContentPositionAuto && style.alignContentDistribution() == ContentDistributionDefault) {
-        if (style.isDisplayFlexibleOrGridBox()) {
-            if (style.isDisplayFlexibleBox())
-                style.setAlignContentDistribution(ContentDistributionStretch);
-            else
-                style.setAlignContentPosition(ContentPositionStart);
-        }
-    }
 }
 
 void StyleAdjuster::adjustStyleForHTMLElement(ComputedStyle& style, const ComputedStyle& parentStyle, HTMLElement& element)
@@ -335,12 +303,6 @@ void StyleAdjuster::adjustStyleForHTMLElement(ComputedStyle& style, const Comput
         return;
 
     if (isHTMLTableCellElement(element)) {
-        // If we have a <td> that specifies a float property, in quirks mode we just drop the float property.
-        // FIXME: Why is this only <td> and not <th>?
-        if (element.hasTagName(tdTag) && m_useQuirksModeStyles) {
-            style.setDisplay(TABLE_CELL);
-            style.setFloating(NoFloat);
-        }
         // FIXME: We shouldn't be overriding start/-webkit-auto like this. Do it in html.css instead.
         // Table headers with a text-align of -webkit-auto will change the text-align to center.
         if (element.hasTagName(thTag) && style.textAlign() == TASTART)
@@ -358,10 +320,6 @@ void StyleAdjuster::adjustStyleForHTMLElement(ComputedStyle& style, const Comput
     }
 
     if (isHTMLTableElement(element)) {
-        // Sites commonly use display:inline/block on <td>s and <table>s. In quirks mode we force
-        // these tags to retain their display types.
-        if (m_useQuirksModeStyles)
-            style.setDisplay(style.isDisplayInlineType() ? INLINE_TABLE : TABLE);
         // Tables never support the -webkit-* values for text-align and will reset back to the default.
         if (style.textAlign() == WEBKIT_LEFT || style.textAlign() == WEBKIT_CENTER || style.textAlign() == WEBKIT_RIGHT)
             style.setTextAlign(TASTART);
@@ -380,11 +338,6 @@ void StyleAdjuster::adjustStyleForHTMLElement(ComputedStyle& style, const Comput
         // Ruby text does not support float or position. This might change with evolution of the specification.
         style.setPosition(StaticPosition);
         style.setFloating(NoFloat);
-        return;
-    }
-
-    if (isHTMLLegendElement(element)) {
-        style.setDisplay(BLOCK);
         return;
     }
 
@@ -478,7 +431,7 @@ void StyleAdjuster::adjustStyleForDisplay(ComputedStyle& style, const ComputedSt
 
     if (parentStyle.isDisplayFlexibleOrGridBox()) {
         style.setFloating(NoFloat);
-        style.setDisplay(equivalentBlockDisplay(style.display(), style.isFloating(), !m_useQuirksModeStyles));
+        style.setDisplay(equivalentBlockDisplay(style.display()));
 
         // We want to count vertical percentage paddings/margins on flex items because our current
         // behavior is different from the spec and we want to gather compatibility data.
@@ -489,4 +442,4 @@ void StyleAdjuster::adjustStyleForDisplay(ComputedStyle& style, const ComputedSt
     }
 }
 
-}
+} // namespace blink

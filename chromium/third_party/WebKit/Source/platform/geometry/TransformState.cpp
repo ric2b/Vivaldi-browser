@@ -44,7 +44,7 @@ TransformState& TransformState::operator=(const TransformState& other)
     m_accumulatedTransform.clear();
 
     if (other.m_accumulatedTransform)
-        m_accumulatedTransform = adoptPtr(new TransformationMatrix(*other.m_accumulatedTransform));
+        m_accumulatedTransform = TransformationMatrix::create(*other.m_accumulatedTransform);
 
     return *this;
 }
@@ -75,10 +75,6 @@ void TransformState::move(const LayoutSize& offset, TransformAccumulation accumu
         if (m_accumulatingTransform && m_accumulatedTransform) {
             // If we're accumulating into an existing transform, apply the translation.
             translateTransform(offset);
-
-            // Then flatten if necessary.
-            if (accumulate == FlattenTransform)
-                flatten();
         } else {
             // Just move the point and/or quad.
             translateMappedCoordinates(offset);
@@ -113,7 +109,7 @@ void TransformState::applyTransform(const TransformationMatrix& transformFromCon
         *wasClamped = false;
 
     if (transformFromContainer.isIntegerTranslation()) {
-        move(LayoutSize(transformFromContainer.e(), transformFromContainer.f()), accumulate);
+        move(LayoutSize(LayoutUnit(transformFromContainer.e()), LayoutUnit(transformFromContainer.f())), accumulate);
         return;
     }
 
@@ -122,12 +118,12 @@ void TransformState::applyTransform(const TransformationMatrix& transformFromCon
     // If we have an accumulated transform from last time, multiply in this transform
     if (m_accumulatedTransform) {
         if (m_direction == ApplyTransformDirection)
-            m_accumulatedTransform = adoptPtr(new TransformationMatrix(transformFromContainer * *m_accumulatedTransform));
+            m_accumulatedTransform = TransformationMatrix::create(transformFromContainer * *m_accumulatedTransform);
         else
             m_accumulatedTransform->multiply(transformFromContainer);
     } else if (accumulate == AccumulateTransform) {
         // Make one if we started to accumulate
-        m_accumulatedTransform = adoptPtr(new TransformationMatrix(transformFromContainer));
+        m_accumulatedTransform = TransformationMatrix::create(transformFromContainer);
     }
 
     if (accumulate == FlattenTransform) {

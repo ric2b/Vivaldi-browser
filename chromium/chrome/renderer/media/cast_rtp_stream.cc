@@ -27,7 +27,6 @@
 #include "media/audio/audio_parameters.h"
 #include "media/base/audio_bus.h"
 #include "media/base/audio_converter.h"
-#include "media/base/audio_fifo.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/limits.h"
 #include "media/base/video_frame.h"
@@ -513,9 +512,14 @@ CastRtpPayloadParams::CastRtpPayloadParams()
       max_frame_rate(0.0) {
 }
 
+CastRtpPayloadParams::CastRtpPayloadParams(const CastRtpPayloadParams& other) =
+    default;
+
 CastRtpPayloadParams::~CastRtpPayloadParams() {}
 
 CastRtpParams::CastRtpParams() {}
+
+CastRtpParams::CastRtpParams(const CastRtpParams& other) = default;
 
 CastRtpParams::~CastRtpParams() {}
 

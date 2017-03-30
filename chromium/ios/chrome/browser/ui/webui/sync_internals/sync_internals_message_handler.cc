@@ -11,10 +11,10 @@
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/sync_driver/about_sync_util.h"
 #include "components/sync_driver/sync_service.h"
+#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "ios/chrome/common/channel_info.h"
-#include "ios/public/provider/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/public/provider/web/web_ui_ios.h"
 #include "ios/web/public/web_thread.h"
 #include "sync/internal_api/public/events/protocol_event.h"
@@ -49,7 +49,7 @@ SyncInternalsMessageHandler::~SyncInternalsMessageHandler() {
 }
 
 void SyncInternalsMessageHandler::RegisterMessages() {
-  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::UI);
+  DCHECK_CURRENTLY_ON(web::WebThread::UI);
 
   web_ui()->RegisterMessageCallback(
       sync_driver::sync_ui_util::kRegisterForEvents,

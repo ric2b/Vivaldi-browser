@@ -45,7 +45,9 @@ class PermissionMenuButton : public views::MenuButton,
 
  private:
   // Overridden from views::MenuButtonListener.
-  void OnMenuButtonClicked(View* source, const gfx::Point& point) override;
+  void OnMenuButtonClicked(views::MenuButton* source,
+                           const gfx::Point& point,
+                           const ui::Event* event) override;
 
   PermissionMenuModel* menu_model_;  // Owned by |PermissionSelectorView|.
   scoped_ptr<views::MenuRunner> menu_runner_;
@@ -62,8 +64,7 @@ class PermissionMenuButton : public views::MenuButton,
 PermissionMenuButton::PermissionMenuButton(const base::string16& text,
                                            PermissionMenuModel* model,
                                            bool show_menu_marker)
-    : MenuButton(NULL, text, this, show_menu_marker),
-      menu_model_(model) {
+    : MenuButton(text, this, show_menu_marker), menu_model_(model) {
   // Update the themed border before the NativeTheme is applied. Usually this
   // happens in a call to LabelButton::OnNativeThemeChanged(). However, if
   // PermissionMenuButton called that from its override, the NativeTheme would
@@ -91,8 +92,9 @@ void PermissionMenuButton::OnNativeThemeChanged(const ui::NativeTheme* theme) {
       ui::NativeTheme::kColorId_LabelDisabledColor));
 }
 
-void PermissionMenuButton::OnMenuButtonClicked(View* source,
-                                               const gfx::Point& point) {
+void PermissionMenuButton::OnMenuButtonClicked(views::MenuButton* source,
+                                               const gfx::Point& point,
+                                               const ui::Event* event) {
   menu_runner_.reset(
       new views::MenuRunner(menu_model_, views::MenuRunner::HAS_MNEMONICS));
 

@@ -141,6 +141,7 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityMonitor
   struct DOMAIN_RELIABILITY_EXPORT RequestInfo {
     RequestInfo();
     explicit RequestInfo(const net::URLRequest& request);
+    RequestInfo(const RequestInfo& other);
     ~RequestInfo();
 
     static bool ShouldReportRequest(const RequestInfo& request);
@@ -157,6 +158,8 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityMonitor
   };
 
   void OnRequestLegComplete(const RequestInfo& info);
+
+  void MaybeHandleHeader(const RequestInfo& info);
 
   bool OnPrefThread() const {
     return pref_task_runner_->BelongsToCurrentThread();

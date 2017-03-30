@@ -5,10 +5,12 @@
 #include "components/exo/pointer.h"
 
 #include "ash/shell.h"
+#include "ash/shell_window_ids.h"
 #include "components/exo/pointer_delegate.h"
 #include "components/exo/surface.h"
 #include "ui/aura/window.h"
 #include "ui/events/event.h"
+#include "ui/views/widget/widget.h"
 
 namespace exo {
 
@@ -16,15 +18,55 @@ namespace exo {
 // Pointer, public:
 
 Pointer::Pointer(PointerDelegate* delegate)
-    : delegate_(delegate), focus_(nullptr) {
+    : delegate_(delegate), surface_(nullptr), focus_(nullptr) {
   ash::Shell::GetInstance()->AddPreTargetHandler(this);
 }
 
 Pointer::~Pointer() {
   delegate_->OnPointerDestroying(this);
+  if (surface_)
+    surface_->RemoveSurfaceObserver(this);
   if (focus_)
     focus_->RemoveSurfaceObserver(this);
+  if (widget_)
+    widget_->CloseNow();
   ash::Shell::GetInstance()->RemovePreTargetHandler(this);
+}
+
+void Pointer::SetCursor(Surface* surface, const gfx::Point& hotspot) {
+  // Early out if the pointer doesn't have a surface in focus.
+  if (!focus_)
+    return;
+
+  // If surface is different than the current pointer surface then remove the
+  // current surface and add the new surface.
+  if (surface != surface_) {
+    if (surface && surface->HasSurfaceDelegate()) {
+      DLOG(ERROR) << "Surface has already been assigned a role";
+      return;
+    }
+    if (surface_) {
+      widget_->GetNativeWindow()->RemoveChild(surface_);
+      surface_->Hide();
+      surface_->SetSurfaceDelegate(nullptr);
+      surface_->RemoveSurfaceObserver(this);
+    }
+    surface_ = surface;
+    if (surface_) {
+      surface_->SetSurfaceDelegate(this);
+      surface_->AddSurfaceObserver(this);
+      widget_->GetNativeWindow()->AddChild(surface_);
+    }
+  }
+
+  // Update hotspot and show cursor surface if not already visible.
+  hotspot_ = hotspot;
+  if (surface_) {
+    surface_->SetBounds(gfx::Rect(gfx::Point() - hotspot_.OffsetFromOrigin(),
+                                  surface_->layer()->size()));
+    if (!surface_->IsVisible())
+      surface_->Show();
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -51,6 +93,7 @@ void Pointer::OnMouseEvent(ui::MouseEvent* event) {
       focus_->AddSurfaceObserver(this);
     }
   }
+
   switch (event->type()) {
     case ui::ET_MOUSE_PRESSED:
     case ui::ET_MOUSE_RELEASED:
@@ -71,6 +114,14 @@ void Pointer::OnMouseEvent(ui::MouseEvent* event) {
         location_ = event->location();
       }
       break;
+    case ui::ET_SCROLL:
+      if (focus_) {
+        ui::ScrollEvent* scroll_event = static_cast<ui::ScrollEvent*>(event);
+        delegate_->OnPointerWheel(
+            event->time_stamp(),
+            gfx::Vector2d(scroll_event->x_offset(), scroll_event->y_offset()));
+      }
+      break;
     case ui::ET_MOUSEWHEEL:
       if (focus_) {
         delegate_->OnPointerWheel(
@@ -81,24 +132,79 @@ void Pointer::OnMouseEvent(ui::MouseEvent* event) {
     case ui::ET_MOUSE_ENTERED:
     case ui::ET_MOUSE_EXITED:
     case ui::ET_MOUSE_CAPTURE_CHANGED:
+    case ui::ET_SCROLL_FLING_START:
+    case ui::ET_SCROLL_FLING_CANCEL:
       break;
     default:
       NOTREACHED();
       break;
   }
+
+  // Update cursor widget to reflect current focus and pointer location.
+  if (focus_) {
+    if (!widget_)
+      CreatePointerWidget();
+    widget_->SetBounds(gfx::Rect(
+        focus_->GetBoundsInScreen().origin() + location_.OffsetFromOrigin(),
+        gfx::Size(1, 1)));
+    if (!widget_->IsVisible())
+      widget_->Show();
+  } else {
+    if (widget_ && widget_->IsVisible())
+      widget_->Hide();
+  }
+}
+
+void Pointer::OnScrollEvent(ui::ScrollEvent* event) {
+  OnMouseEvent(event);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// SurfaceDelegate overrides:
+
+void Pointer::OnSurfaceCommit() {
+  surface_->CommitSurfaceHierarchy();
+  surface_->SetBounds(gfx::Rect(gfx::Point() - hotspot_.OffsetFromOrigin(),
+                                surface_->layer()->size()));
+}
+
+bool Pointer::IsSurfaceSynchronized() const {
+  // A pointer surface is always desynchronized.
+  return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // SurfaceObserver overrides:
 
 void Pointer::OnSurfaceDestroying(Surface* surface) {
-  DCHECK(surface == focus_);
-  focus_ = nullptr;
+  DCHECK(surface == surface_ || surface == focus_);
+  if (surface == surface_)
+    surface_ = nullptr;
+  if (surface == focus_)
+    focus_ = nullptr;
   surface->RemoveSurfaceObserver(this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Pointer, private:
+
+void Pointer::CreatePointerWidget() {
+  DCHECK(!widget_);
+
+  views::Widget::InitParams params;
+  params.type = views::Widget::InitParams::TYPE_TOOLTIP;
+  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  params.shadow_type = views::Widget::InitParams::SHADOW_TYPE_NONE;
+  params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params.accept_events = false;
+  params.parent =
+      ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(),
+                               ash::kShellWindowId_MouseCursorContainer);
+  widget_.reset(new views::Widget);
+  widget_->Init(params);
+  widget_->GetNativeWindow()->set_owned_by_parent(false);
+  widget_->GetNativeWindow()->SetName("ExoPointer");
+}
 
 Surface* Pointer::GetEffectiveTargetForEvent(ui::Event* event) const {
   Surface* target =

@@ -7,6 +7,7 @@
 
 #include "base/callback.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/download_item.h"
 #include "content/public/common/context_menu_params.h"
 
 namespace content {
@@ -15,7 +16,7 @@ class WebContents;
 
 // Interface to request GET downloads and send notifications for POST
 // downloads.
-class CONTENT_EXPORT DownloadControllerAndroid {
+class CONTENT_EXPORT DownloadControllerAndroid : public DownloadItem::Observer {
  public:
   // Returns the singleton instance of the DownloadControllerAndroid.
   static DownloadControllerAndroid* Get();
@@ -56,8 +57,12 @@ class CONTENT_EXPORT DownloadControllerAndroid {
   // Called by unit test to approve or disapprove file access request.
   virtual void SetApproveFileAccessRequestForTesting(bool approve) {};
 
+  // Called to set the default download file name if it cannot be resolved
+  // from url and content disposition
+  virtual void SetDefaultDownloadFileName(const std::string& file_name) {}
+
  protected:
-  virtual ~DownloadControllerAndroid() {};
+  ~DownloadControllerAndroid() override {};
   static DownloadControllerAndroid* download_controller_;
 };
 

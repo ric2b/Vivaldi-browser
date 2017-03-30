@@ -214,6 +214,9 @@
 [submodule "third_party/wayland/src"]
 	path = third_party/wayland/src
 	url = ../../external/anongit.freedesktop.org/git/wayland/wayland.git
+[submodule "third_party/wds/src"]
+	path = third_party/wds/src
+	url = ../../external/github.com/01org/wds.git
 [submodule "third_party/webdriver/pylib"]
 	path = third_party/webdriver/pylib
 	url = ../../external/selenium/py.git

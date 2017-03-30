@@ -42,19 +42,19 @@ void MojoApplication::OnActivate(
   base::PlatformFile handle = file;
 #endif
 
-  mojo::ScopedMessagePipeHandle message_pipe =
+  mojo::ScopedMessagePipeHandle pipe =
       channel_init_.Init(handle, io_task_runner_);
-  DCHECK(message_pipe.is_valid());
+  DCHECK(pipe.is_valid());
 
   ApplicationSetupPtr application_setup;
   application_setup.Bind(
-      mojo::InterfacePtrInfo<ApplicationSetup>(std::move(message_pipe), 0u));
+      mojo::InterfacePtrInfo<ApplicationSetup>(std::move(pipe), 0u));
 
-  mojo::ServiceProviderPtr services;
-  mojo::ServiceProviderPtr exposed_services;
+  mojo::shell::mojom::InterfaceProviderPtr services;
+  mojo::shell::mojom::InterfaceProviderPtr exposed_services;
   service_registry_.Bind(GetProxy(&exposed_services));
-  application_setup->ExchangeServiceProviders(GetProxy(&services),
-                                              std::move(exposed_services));
+  application_setup->ExchangeInterfaceProviders(GetProxy(&services),
+                                                std::move(exposed_services));
   service_registry_.BindRemoteServiceProvider(std::move(services));
 }
 

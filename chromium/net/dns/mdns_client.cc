@@ -5,7 +5,6 @@
 #include "net/dns/mdns_client.h"
 
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
 #include "net/base/network_interfaces.h"
 #include "net/dns/dns_protocol.h"
 #include "net/dns/mdns_client_impl.h"
@@ -39,7 +38,7 @@ int Bind(const IPEndPoint& multicast_addr,
   if (rv < OK)
     return rv;
 
-  return socket->JoinGroup(multicast_addr.address());
+  return socket->JoinGroup(multicast_addr.address().bytes());
 }
 
 }  // namespace

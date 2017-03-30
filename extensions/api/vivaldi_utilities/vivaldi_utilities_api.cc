@@ -7,7 +7,6 @@
 #include <string>
 #include <vector>
 #include "base/lazy_instance.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -17,8 +16,11 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_view_host.h"
@@ -26,9 +28,66 @@
 #include "url/url_constants.h"
 
 #include <iostream>
-using namespace std;
 
 namespace extensions {
+
+VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext *context)
+    : browser_context_(context) {
+  extensions::AppWindowRegistry::Get(context)->AddObserver(this);
+}
+
+VivaldiUtilitiesAPI::~VivaldiUtilitiesAPI() {
+}
+
+void VivaldiUtilitiesAPI::Shutdown() {
+  extensions::AppWindowRegistry::Get(browser_context_)->RemoveObserver(this);
+}
+
+static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI> >
+    g_factory = LAZY_INSTANCE_INITIALIZER;
+
+// static
+BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI> *
+VivaldiUtilitiesAPI::GetFactoryInstance() {
+  return g_factory.Pointer();
+}
+
+Browser *VivaldiUtilitiesAPI::FindBrowserFromAppWindowId(
+    const std::string &appwindow_id) {
+  WindowIdToAppWindowId::const_iterator iter =
+      appwindow_id_to_window_id_.find(appwindow_id);
+  if (iter == appwindow_id_to_window_id_.end())
+    return nullptr;  // not a window
+
+  int window_id = iter->second;
+  for (auto* browser: *BrowserList::GetInstance()) {
+    if (ExtensionTabUtil::GetWindowId(browser) == window_id &&
+        browser->window()) {
+      return browser;
+    }
+  }
+  return nullptr;
+}
+
+void VivaldiUtilitiesAPI::MapAppWindowIdToWindowId(
+    const std::string &appwindow_id, int window_id) {
+  appwindow_id_to_window_id_.insert(std::make_pair(appwindow_id, window_id));
+}
+
+void VivaldiUtilitiesAPI::OnAppWindowActivated(
+    extensions::AppWindow *app_window) {
+  Browser* browser = FindBrowserFromAppWindowId(app_window->window_key());
+  if (browser) {
+    // Activate the found browser but don't call Activate as that will call back
+    // to the app window again.
+    BrowserList::SetLastActive(browser);
+  }
+}
+
+void VivaldiUtilitiesAPI::OnAppWindowRemoved(extensions::AppWindow* app_window) {
+  appwindow_id_to_window_id_.erase(app_window->window_key());
+}
+
 
 namespace ClearAllRecentlyClosedSessions =
     vivaldi::utilities::ClearAllRecentlyClosedSessions;
@@ -91,6 +150,10 @@ UtilitiesIsUrlValidFunction::UtilitiesIsUrlValidFunction() {}
 
 UtilitiesIsUrlValidFunction::~UtilitiesIsUrlValidFunction() {}
 
+UtilitiesClearAllRecentlyClosedSessionsFunction::
+    ~UtilitiesClearAllRecentlyClosedSessionsFunction() {
+}
+
 bool UtilitiesClearAllRecentlyClosedSessionsFunction::RunAsync() {
   sessions::TabRestoreService *tab_restore_service =
       TabRestoreServiceFactory::GetForProfile(GetProfile());
@@ -101,6 +164,10 @@ bool UtilitiesClearAllRecentlyClosedSessionsFunction::RunAsync() {
   }
   results_ = ClearAllRecentlyClosedSessions::Results::Create(result);
   return result;
+}
+
+UtilitiesGetAvailablePageEncodingsFunction::
+    ~UtilitiesGetAvailablePageEncodingsFunction() {
 }
 
 bool UtilitiesGetAvailablePageEncodingsFunction::RunSync() {
@@ -132,6 +199,26 @@ bool UtilitiesGetAvailablePageEncodingsFunction::RunSync() {
 
   results_ = vivaldi::utilities::GetAvailablePageEncodings::Results::Create(
       encodingItems);
+  return true;
+}
+
+UtilitiesMapFocusAppWindowToWindowIdFunction::UtilitiesMapFocusAppWindowToWindowIdFunction() {
+
+}
+
+UtilitiesMapFocusAppWindowToWindowIdFunction::~UtilitiesMapFocusAppWindowToWindowIdFunction() {
+}
+
+bool UtilitiesMapFocusAppWindowToWindowIdFunction::RunSync() {
+  scoped_ptr<vivaldi::utilities::MapFocusAppWindowToWindowId::Params> params(
+      vivaldi::utilities::MapFocusAppWindowToWindowId::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  VivaldiUtilitiesAPI *api =
+      VivaldiUtilitiesAPI::GetFactoryInstance()->Get(GetProfile());
+
+  api->MapAppWindowIdToWindowId(params->app_window_id, params->window_id);
+
   return true;
 }
 

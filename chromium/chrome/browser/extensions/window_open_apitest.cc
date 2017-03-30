@@ -13,7 +13,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_iterator.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/panels/panel_manager.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
@@ -83,8 +83,7 @@ bool WaitForTabsAndPopups(Browser* browser,
   const base::TimeDelta kWaitTime = base::TimeDelta::FromSeconds(10);
   base::TimeTicks end_time = base::TimeTicks::Now() + kWaitTime;
   while (base::TimeTicks::Now() < end_time) {
-    if (chrome::GetBrowserCount(browser->profile(),
-                                browser->host_desktop_type()) == num_browsers &&
+    if (chrome::GetBrowserCount(browser->profile()) == num_browsers &&
         browser->tab_strip_model()->count() == num_tabs &&
         GetPanelCount(browser) == num_panels)
       break;
@@ -92,25 +91,21 @@ bool WaitForTabsAndPopups(Browser* browser,
     content::RunAllPendingInMessageLoop();
   }
 
-  EXPECT_EQ(num_browsers,
-            chrome::GetBrowserCount(browser->profile(),
-                                    browser->host_desktop_type()));
+  EXPECT_EQ(num_browsers, chrome::GetBrowserCount(browser->profile()));
   EXPECT_EQ(num_tabs, browser->tab_strip_model()->count());
   EXPECT_EQ(num_panels, GetPanelCount(browser));
 
   int num_popups_seen = 0;
-  for (chrome::BrowserIterator iter; !iter.done(); iter.Next()) {
-    if (*iter == browser)
+  for (auto* b : *BrowserList::GetInstance()) {
+    if (b == browser)
       continue;
 
-    EXPECT_TRUE((*iter)->is_type_popup());
+    EXPECT_TRUE(b->is_type_popup());
     ++num_popups_seen;
   }
   EXPECT_EQ(num_popups, num_popups_seen);
 
-  return ((num_browsers ==
-               chrome::GetBrowserCount(browser->profile(),
-                                       browser->host_desktop_type())) &&
+  return ((num_browsers == chrome::GetBrowserCount(browser->profile())) &&
           (num_tabs == browser->tab_strip_model()->count()) &&
           (num_panels == GetPanelCount(browser)) &&
           (num_popups == num_popups_seen));
@@ -124,11 +119,11 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, BrowserIsApp) {
 
   EXPECT_TRUE(WaitForTabsAndPopups(browser(), 0, 2, 0));
 
-  for (chrome::BrowserIterator iter; !iter.done(); iter.Next()) {
-    if (*iter == browser())
-      ASSERT_FALSE(iter->is_app());
+  for (auto* b : *BrowserList::GetInstance()) {
+    if (b == browser())
+      ASSERT_FALSE(b->is_app());
     else
-      ASSERT_TRUE(iter->is_app());
+      ASSERT_TRUE(b->is_app());
   }
 }
 

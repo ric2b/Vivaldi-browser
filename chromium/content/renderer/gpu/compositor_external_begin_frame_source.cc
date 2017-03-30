@@ -32,10 +32,26 @@ CompositorExternalBeginFrameSource::~CompositorExternalBeginFrameSource() {
   }
 }
 
-void CompositorExternalBeginFrameSource::OnNeedsBeginFramesChange(
+void CompositorExternalBeginFrameSource::OnNeedsBeginFramesChanged(
     bool needs_begin_frames) {
   DCHECK(CalledOnValidThread());
+  if (!needs_begin_frames)
+    missed_begin_frame_args_ = cc::BeginFrameArgs();
   Send(new ViewHostMsg_SetNeedsBeginFrames(routing_id_, needs_begin_frames));
+}
+
+void CompositorExternalBeginFrameSource::AddObserver(
+    cc::BeginFrameObserver* obs) {
+  DCHECK(CalledOnValidThread());
+  BeginFrameSourceBase::AddObserver(obs);
+  // Send a MISSED begin frame if necessary.
+  if (missed_begin_frame_args_.IsValid()) {
+    cc::BeginFrameArgs last_args = obs->LastUsedBeginFrameArgs();
+    if (!last_args.IsValid() ||
+        (missed_begin_frame_args_.frame_time > last_args.frame_time)) {
+      obs->OnBeginFrame(missed_begin_frame_args_);
+    }
+  }
 }
 
 void CompositorExternalBeginFrameSource::SetClientReady() {
@@ -57,12 +73,14 @@ void CompositorExternalBeginFrameSource::OnMessageReceived(
   DCHECK(begin_frame_source_proxy_.get());
   IPC_BEGIN_MESSAGE_MAP(CompositorExternalBeginFrameSource, message)
     IPC_MESSAGE_HANDLER(ViewMsg_BeginFrame, OnBeginFrame)
-  IPC_END_MESSAGE_MAP();
+  IPC_END_MESSAGE_MAP()
 }
 
 void CompositorExternalBeginFrameSource::OnBeginFrame(
   const cc::BeginFrameArgs& args) {
   DCHECK(CalledOnValidThread());
+  missed_begin_frame_args_ = args;
+  missed_begin_frame_args_.type = cc::BeginFrameArgs::MISSED;
   CallOnBeginFrame(args);
 }
 

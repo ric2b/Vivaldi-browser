@@ -10,14 +10,13 @@
 #include "build/build_config.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/web_contents.h"
-#include "content/shell/browser/blink_test_controller.h"
 #include "content/shell/browser/shell_javascript_dialog.h"
 #include "content/shell/common/shell_switches.h"
 
 namespace content {
 
-ShellJavaScriptDialogManager::ShellJavaScriptDialogManager() {
-}
+ShellJavaScriptDialogManager::ShellJavaScriptDialogManager()
+    : should_proceed_on_beforeunload_(true) {}
 
 ShellJavaScriptDialogManager::~ShellJavaScriptDialogManager() {
 }
@@ -70,9 +69,14 @@ void ShellJavaScriptDialogManager::RunBeforeUnloadDialog(
     const base::string16& message_text,
     bool is_reload,
     const DialogClosedCallback& callback) {
+  // During tests, if the BeforeUnload should not proceed automatically, store
+  // the callback and return.
   if (!dialog_request_callback_.is_null()) {
     dialog_request_callback_.Run();
-    callback.Run(true, base::string16());
+    if (should_proceed_on_beforeunload_)
+      callback.Run(true, base::string16());
+    else
+      before_unload_callback_ = callback;
     dialog_request_callback_.Reset();
     return;
   }
@@ -116,6 +120,10 @@ void ShellJavaScriptDialogManager::CancelActiveAndPendingDialogs(
 }
 
 void ShellJavaScriptDialogManager::ResetDialogState(WebContents* web_contents) {
+  if (before_unload_callback_.is_null())
+    return;
+  before_unload_callback_.Run(false, base::string16());
+  before_unload_callback_.Reset();
 }
 
 void ShellJavaScriptDialogManager::DialogClosed(ShellJavaScriptDialog* dialog) {

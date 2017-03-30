@@ -29,6 +29,7 @@
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/content_export.h"
 #include "content/common/cursors/webcursor.h"
+#include "content/public/common/context_menu_params.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/aura/client/cursor_client_observer.h"
 #include "ui/aura/client/focus_change_observer.h"
@@ -82,6 +83,7 @@ class LegacyRenderWidgetHostHWND;
 
 class OverscrollController;
 class RenderFrameHostImpl;
+class RenderViewHostDelegateView;
 class RenderWidgetHostImpl;
 class RenderWidgetHostView;
 class TouchSelectionControllerClientAura;
@@ -196,7 +198,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void LockCompositingSurface() override;
   void UnlockCompositingSurface() override;
   uint32_t GetSurfaceIdNamespace() override;
-  uint32_t SurfaceIdNamespaceAtPoint(const gfx::Point& point,
+  uint32_t SurfaceIdNamespaceAtPoint(cc::SurfaceHittestDelegate* delegate,
+                                     const gfx::Point& point,
                                      gfx::Point* transformed_point) override;
   void ProcessMouseEvent(const blink::WebMouseEvent& event) override;
   void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event) override;
@@ -333,12 +336,19 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   }
 
   // Called when the context menu is about to be displayed.
-  void OnShowContextMenu();
+  // Returns true if the context menu should be displayed. We only return false
+  // on Windows if the context menu is being displayed in response to a long
+  // press gesture. On Windows we should be consistent like other apps and
+  // display the menu when the touch is released.
+  bool OnShowContextMenu(const ContextMenuParams& params);
 
   // Used in tests to set a mock client for touch selection controller. It will
   // create a new touch selection controller for the new client.
   void SetSelectionControllerClientForTest(
       scoped_ptr<TouchSelectionControllerClientAura> client);
+
+  // Exposed for tests.
+  cc::SurfaceId SurfaceIdForTesting() const override;
 
  protected:
   ~RenderWidgetHostViewAura() override;
@@ -493,7 +503,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // Returns true if the |event| passed in can be forwarded to the renderer.
   bool CanRendererHandleEvent(const ui::MouseEvent* event,
                               bool mouse_locked,
-                              bool selection_popup);
+                              bool selection_popup) const;
 
   // Returns true when we can do SurfaceHitTesting for the event type.
   bool ShouldRouteEvent(const ui::Event* event) const;
@@ -517,6 +527,13 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // Performs gesture handling needed for touch text selection. Sets event as
   // handled if it should not be further processed.
   void HandleGestureForTouchSelection(ui::GestureEvent* event);
+
+  // Forwards a mouse event to this view's parent window delegate.
+  void ForwardMouseEventToParent(ui::MouseEvent* event);
+
+  // Returns the RenderViewHostDelegateView instance for this view. Returns
+  // NULL on failure.
+  RenderViewHostDelegateView* GetRenderViewHostDelegateView();
 
   // The model object.
   RenderWidgetHostImpl* const host_;
@@ -648,9 +665,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // exercise.
   bool legacy_window_destroyed_;
 
-  // Set to true when a context menu is being displayed. Reset to false when
-  // a mouse leave is received in this context.
-  bool showing_context_menu_;
+  // Contains a copy of the last context menu request parameters. Only set when
+  // we receive a request to show the context menu on a long press.
+  scoped_ptr<ContextMenuParams> last_context_menu_params_;
 #endif
 
   bool has_snapped_to_boundary_;

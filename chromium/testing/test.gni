@@ -85,6 +85,7 @@ template("test") {
     }
     test_runner_script_name = "${_test_name}__test_runner_script"
     test_runner_script(test_runner_script_name) {
+      apk_target = ":$apk_name"
       test_name = _test_name
       test_type = "gtest"
       test_suite = _test_name
@@ -95,6 +96,7 @@ template("test") {
     incremental_test_runner_script_name =
         "${_test_name}_incremental__test_runner_script"
     test_runner_script(incremental_test_runner_script_name) {
+      apk_target = ":$apk_name"
       test_name = "${_test_name}_incremental"
       test_type = "gtest"
       test_suite = _test_name
@@ -120,6 +122,15 @@ template("test") {
       ]
       deps = [
         ":${apk_name}_incremental",
+      ]
+    }
+
+    # TODO(GYP): Delete this after we've converted everything to GN.
+    # The _run targets exist only for compatibility w/ GYP.
+    group("${target_name}_apk_run") {
+      testonly = true
+      deps = [
+        ":$main_target_name",
       ]
     }
   } else if (is_ios) {
@@ -177,6 +188,8 @@ template("test") {
       ]
     }
   } else {
+    main_target_name = target_name
+
     executable(target_name) {
       forward_variables_from(invoker, "*")
 
@@ -192,6 +205,15 @@ template("test") {
 
         # Give tests the default manifest on Windows (a no-op elsewhere).
         "//build/win:default_exe_manifest",
+      ]
+    }
+
+    # TODO(GYP): Delete this after we've converted everything to GN.
+    # The _run targets exist only for compatibility with GYP.
+    group("${target_name}_run") {
+      testonly = true
+      deps = [
+        ":$main_target_name",
       ]
     }
   }

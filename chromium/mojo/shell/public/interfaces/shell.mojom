@@ -2,10 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-module mojo;
+module mojo.shell.mojom;
 
-import "mojo/shell/public/interfaces/service_provider.mojom";
-import "network/public/interfaces/url_loader.mojom";
+import "mojo/shell/public/interfaces/interface_provider.mojom";
 
 // Specifies a whitelist of applications and services an application can connect
 // to. Connections to applications not explicitly specified here as a key are
@@ -21,59 +20,64 @@ struct CapabilityFilter {
   map<string, array<string>> filter;
 };
 
-// An interface through which a Mojo application may communicate with the Mojo
-// system and request connections to other applications.
-interface Shell {
-  // Used to indicate the app was not launched by a content handler.
-  const uint32 kInvalidContentHandlerID = 0;
+// Encapsulates establishing connections with other Mojo applications.
+interface Connector {
+  const uint32 kInvalidApplicationID = 0;
+  const uint32 kUserRoot = 0;
+  const uint32 kUserInherit = 1;
 
-  // Establishes a connection with another application ("target application")
-  // (located at |request->url|) through which the calling application and the
-  // target application may request services from one another.
-  // |application_url| is a URLRequest in case this is called for an HTTP
-  // navigation, in which case HTTP specific information like POST data,
-  // referrer header etc... needed.
+  // Requests a connection with another application. The application originating
+  // the request is referred to as the "source" and the one receiving the
+  // "target".
   //
-  // If the calling application would like to request services from the target
-  // application, it should pass a valid interface request in the |services|
-  // parameter (i.e. one containing a valid message pipe endpoint). If the
-  // target application does not wish to offer services, it may either not bind
-  // an implementation to the interface request, or else bind an implementation
-  // that will reject some or all service requests.
+  // The connection is embodied by a pair of message pipes binding the
+  // InterfaceProvider interface, which allows both the source and target
+  // applications to export interfaces to one another. The interfaces bound via
+  // these InterfaceProviders are brokered by the shell according to the
+  // security policy defined by each application in its manifest .
   //
-  // If the calling application would like to offer services to the target
-  // application, it should pass a bound interface through the
-  // |exposed_services| parameter. The target application may then request
-  // services through that interface.
+  // If the target application is not running, the shell will run it, calling
+  // its Initialize() method before completing the connection.
   //
-  // At least one of |services| or |exposed_services| should be valid/bound in
-  // the call.
+  // Parameters:
   //
-  // If the |application_url| does not contain a domain, but is of the form
-  // "mojo:{service}", it is up to the Mojo shell to select an appropriate
-  // application for the service. Currently, the shell does this based on the
-  // value of its --origin flag.
+  //  url
+  //    A mojo: or exe: URL identifying the target application.
   //
-  // |filter| is a whitelist of application URLs and services that the target
-  // application is permitted to connect to. See documentation for
-  // CapabilityFilter above.
+  //  user_id
+  //    The user id of the target application instance to connect to. If no such
+  //    instance exists, the shell may start one. This user id will be passed
+  //    to the new instance via Initialize(). Applications must generally set
+  //    this to kUserInherit, and the shell will either connect to an existing
+  //    instance matching the caller's user id, create a new instance matching
+  //    the caller's user id, or connect to an existing instance running as
+  //    kUserRoot. By default, applications do not have the ability to pass
+  //    arbitrary values to this method, and doing so will result in a
+  //    connection error on the remote service provider. An application with
+  //    the ability to launch applications with arbitrary user ids (e.g. a login
+  //    app) may set this value to something meaningful to it.
   //
-  // If the connection to |application_url| involves a content handler, then
-  // |content_handler_id| is the id of the deepest content handler used to
-  // establish the connection to |application_url|. If no content handler is
-  // used |content_handler_id| is kInvalidContentHandlerID.
-  // TODO(beng): determine if we need to expose the target application id also.
-  ConnectToApplication(URLRequest application_url,
-                       ServiceProvider&? services,
-                       ServiceProvider? exposed_services,
-                       CapabilityFilter filter) => (uint32 content_handler_id);
+  //  remote_interfaces
+  //    Allows the source application access to interface implementations
+  //    exposed by the target application. The interfaces accessible via this
+  //    InterfaceParameter are filtered by the security policy described by the
+  //    source and target application manifests.
+  //
+  //  local_interfaces
+  //    Allows the remote application access to interface implementations
+  //    exposed by the source application. The interfaces accessible via this
+  //    InterfaceProvider are filtered by the security policy described by the
+  //    source and target application manifests.
+  //
+  //  Response: (application_id)
+  //    The shell responds with a unique identifier for the instance that was
+  //    connected to.
+  //
+  Connect(string url,
+          uint32 user_id,
+          InterfaceProvider&? remote_interfaces,
+          InterfaceProvider? local_interfaces) => (uint32 application_id);
 
-  // When there are no more instantiated services in an application, it should
-  // start its shutdown process by calling this method. Additionally, it should
-  // keep track of any new service requests that come in. The shell will then
-  // call Application::OnQuitRequested and start queueing new service requests.
-  // If the application didn't get any new service requests in the meantime, it
-  // should call the callback with a true value. Otherwise it should call it
-  // with false.
-  QuitApplication();
+  // Clones this Connector so it can be passed to another thread.
+  Clone(Connector& request);
 };

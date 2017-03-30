@@ -403,38 +403,59 @@ TEST_F(RendererAccessibilityTest, DetachAccessibilityObject) {
   // so we don't have a test expectation for it.
 }
 
-TEST_F(RendererAccessibilityTest, EventOnObjectNotInTree) {
-  // Test RendererAccessibility and make sure it doesn't send anything
-  // if we get a notification from Blink for an object that isn't in the
-  // tree, like the scroll area that's the parent of the main document,
-  // which we don't expose.
-  std::string html = "<body><input></body>";
+TEST_F(RendererAccessibilityTest, EventOnDetachedNodeTriggersMainFrameLayout) {
+  std::string html =
+      "<body>"
+      "  <iframe srcdoc='<input>'></iframe>"
+      "  <button>Button</button>"
+      "</body>";
   LoadHTML(html.c_str());
 
   scoped_ptr<TestRendererAccessibility> accessibility(
       new TestRendererAccessibility(frame()));
   accessibility->SendPendingAccessibilityEvents();
-  EXPECT_EQ(3, CountAccessibilityNodesSentToBrowser());
 
   WebDocument document = view()->GetWebView()->mainFrame()->document();
   WebAXObject root_obj = document.accessibilityObject();
-  WebAXObject scroll_area = root_obj.parentObject();
-  EXPECT_EQ(blink::WebAXRoleScrollArea, scroll_area.role());
+  ASSERT_EQ(blink::WebAXRoleWebArea, root_obj.role());
+  WebAXObject group = root_obj.childAt(0);
+  ASSERT_EQ(blink::WebAXRoleGroup, group.role());
+  WebAXObject iframe = group.childAt(0);
+  ASSERT_EQ(blink::WebAXRoleIframe, iframe.role());
+  WebAXObject child_doc = iframe.childAt(0);
+  ASSERT_EQ(blink::WebAXRoleWebArea, child_doc.role());
+  WebAXObject child_group = child_doc.childAt(0);
+  ASSERT_EQ(blink::WebAXRoleGroup, child_group.role());
+  WebAXObject child_textfield = child_group.childAt(0);
+  ASSERT_EQ(blink::WebAXRoleTextField, child_textfield.role());
 
-  // Try to fire a message on the scroll area, and assert that we just
-  // ignore it.
-  sink_->ClearMessages();
-  accessibility->HandleAXEvent(scroll_area,
-                               ui::AX_EVENT_VALUE_CHANGED);
-
+  // Hide the input element inside the iframe.
+  ExecuteJavaScriptForTests(
+      "document.querySelector('iframe').contentDocument"
+      ".querySelector('input').style.display = 'none';");
+  accessibility->HandleAXEvent(
+      child_textfield,
+      ui::AX_EVENT_LAYOUT_COMPLETE);
   accessibility->SendPendingAccessibilityEvents();
 
-  const IPC::Message* message =
-      sink_->GetUniqueMessageMatching(AccessibilityHostMsg_Events::ID);
-  ASSERT_TRUE(message);
-  base::Tuple<std::vector<AccessibilityHostMsg_EventParams>, int> param;
-  AccessibilityHostMsg_Events::Read(message, &param);
-  ASSERT_EQ(0U, base::get<0>(param).size());
+  // Make sure |child_textfield| is invalid now.
+  ASSERT_TRUE(child_textfield.isDetached());
+
+  // Now do a random style change in the iframe to make its layout not clean.
+  ExecuteJavaScriptForTests(
+      "var doc = document.querySelector('iframe').contentDocument; "
+      "doc.body.style.backgroundColor = '#f00';");
+
+  // Now try to handle a "layout complete" event on the detached textfield
+  // object. The event handling will be a no-op, but the layout complete
+  // will trigger calling SendLocationChanges. Make sure that
+  // SendLocationChanges doesn't depend on layout in the main frame being
+  // clean.
+  //
+  // If this doesn't crash, the test passes.
+  accessibility->HandleAXEvent(child_textfield,
+                               ui::AX_EVENT_LAYOUT_COMPLETE);
+  accessibility->SendPendingAccessibilityEvents();
 }
 
 }  // namespace content

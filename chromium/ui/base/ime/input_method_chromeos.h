@@ -22,16 +22,12 @@
 namespace ui {
 
 // A ui::InputMethod implementation based on IBus.
-class UI_BASE_IME_EXPORT InputMethodChromeOS
-    : public InputMethodBase,
-      public ui::IMEInputContextHandlerInterface {
+class UI_BASE_IME_EXPORT InputMethodChromeOS : public InputMethodBase {
  public:
   explicit InputMethodChromeOS(internal::InputMethodDelegate* delegate);
   ~InputMethodChromeOS() override;
 
   // Overridden from InputMethod:
-  void OnFocus() override;
-  void OnBlur() override;
   bool OnUntranslatedIMEMessage(const base::NativeEvent& event,
                                 NativeEventResult* result) override;
   void DispatchKeyEvent(ui::KeyEvent* event) override;
@@ -90,10 +86,6 @@ class UI_BASE_IME_EXPORT InputMethodChromeOS
 
   // Checks if there is pending input method result.
   bool HasInputMethodResult() const;
-
-  // Sends a fake key event for IME composing without physical key events.
-  // Returns true if the faked key event is stopped propagation.
-  bool SendFakeProcessKeyEvent(bool pressed) const;
 
   // Passes keyevent and executes character composition if necessary. Returns
   // true if character composer comsumes key event.

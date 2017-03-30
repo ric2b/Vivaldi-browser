@@ -30,7 +30,7 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/Event.h"
-#include "core/frame/UseCounter.h"
+#include "core/frame/Deprecation.h"
 #include "modules/mediastream/MediaStream.h"
 #include "modules/mediastream/MediaStreamTrackSourcesCallback.h"
 #include "modules/mediastream/MediaStreamTrackSourcesRequestImpl.h"
@@ -145,7 +145,7 @@ void MediaStreamTrack::getSources(ExecutionContext* context, MediaStreamTrackSou
         exceptionState.throwDOMException(NotSupportedError, "No sources controller available; is this a detached window?");
         return;
     }
-    UseCounter::countDeprecation(context, UseCounter::MediaStreamTrackGetSources);
+    Deprecation::countDeprecation(context, UseCounter::MediaStreamTrackGetSources);
     MediaStreamTrackSourcesRequest* request = MediaStreamTrackSourcesRequestImpl::create(*context, callback);
     userMedia->requestSources(request);
 }
@@ -208,6 +208,23 @@ void MediaStreamTrack::propagateTrackEnded()
 void MediaStreamTrack::stop()
 {
     m_stopped = true;
+}
+
+bool MediaStreamTrack::hasPendingActivity() const
+{
+    // If 'ended' listeners exist and the object hasn't yet reached
+    // that state, keep the object alive.
+    //
+    // An otherwise unreachable MediaStreamTrack object in an non-ended
+    // state will otherwise indirectly be transitioned to the 'ended' state
+    // while finalizing m_component. Which dispatches an 'ended' event,
+    // referring to this object as the target. If this object is then GCed
+    // at the same time, v8 objects will retain (wrapper) references to
+    // this dead MediaStreamTrack object. Bad.
+    //
+    // Hence insisting on keeping this object alive until the 'ended'
+    // state has been reached & handled.
+    return !ended() && hasEventListeners(EventTypeNames::ended);
 }
 
 PassOwnPtr<AudioSourceProvider> MediaStreamTrack::createWebAudioSource()

@@ -11,8 +11,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics_action.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/version.h"
@@ -29,6 +27,8 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/user_metrics.h"
@@ -139,7 +139,7 @@ int DefaultBrowserInfoBarDelegate::GetIconId() const {
 }
 
 gfx::VectorIconId DefaultBrowserInfoBarDelegate::GetVectorIconId() const {
-#if defined(OS_MACOSX) || defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_MACOSX) || defined(OS_ANDROID)
   return gfx::VectorIconId::VECTOR_ICON_NONE;
 #else
   return gfx::VectorIconId::CHROME_PRODUCT;
@@ -166,7 +166,7 @@ base::string16 DefaultBrowserInfoBarDelegate::GetButtonLabel(
 // it does require registering it as the protocol handler for "http", so if
 // protocol registration in general requires elevation, this does as well.
 bool DefaultBrowserInfoBarDelegate::OKButtonTriggersUACPrompt() const {
-  return ShellIntegration::IsElevationNeededForSettingDefaultProtocolClient();
+  return shell_integration::IsElevationNeededForSettingDefaultProtocolClient();
 }
 
 bool DefaultBrowserInfoBarDelegate::Accept() {
@@ -176,8 +176,12 @@ bool DefaultBrowserInfoBarDelegate::Accept() {
   UMA_HISTOGRAM_ENUMERATION("DefaultBrowser.InfoBar.UserInteraction",
                             InfoBarUserInteraction::START_SET_AS_DEFAULT,
                             NUM_INFO_BAR_USER_INTERACTION_TYPES);
-  scoped_refptr<ShellIntegration::DefaultBrowserWorker>(
-      new ShellIntegration::DefaultBrowserWorker(nullptr))
+  // The worker pointer is reference counted. While it is running, the
+  // message loops of the FILE and UI thread will hold references to it
+  // and it will be automatically freed once all its tasks have finished.
+  scoped_refptr<shell_integration::DefaultBrowserWorker>(
+      new shell_integration::DefaultBrowserWorker(nullptr,
+                                                  /*delete_observer=*/false))
       ->StartSetAsDefault();
   return true;
 }
@@ -194,22 +198,20 @@ bool DefaultBrowserInfoBarDelegate::Cancel() {
   return true;
 }
 
-// A ShellIntegration::DefaultWebClientObserver that handles the check to
+// A shell_integration::DefaultWebClientObserver that handles the check to
 // determine whether or not to show the default browser prompt. If Chrome is the
 // default browser, then the kCheckDefaultBrowser pref is reset.  Otherwise, the
 // prompt is shown.
 class CheckDefaultBrowserObserver
-    : public ShellIntegration::DefaultWebClientObserver {
+    : public shell_integration::DefaultWebClientObserver {
  public:
   CheckDefaultBrowserObserver(const base::FilePath& profile_path,
-                              bool show_prompt,
-                              chrome::HostDesktopType desktop_type);
+                              bool show_prompt);
   ~CheckDefaultBrowserObserver() override;
 
  private:
   void SetDefaultWebClientUIState(
-      ShellIntegration::DefaultWebClientUIState state) override;
-  bool IsOwnedByWorker() override;
+      shell_integration::DefaultWebClientUIState state) override;
 
   void ResetCheckDefaultBrowserPref();
   void ShowPrompt();
@@ -219,37 +221,28 @@ class CheckDefaultBrowserObserver
 
   // True if the prompt is to be shown if Chrome is not the default browser.
   bool show_prompt_;
-  chrome::HostDesktopType desktop_type_;
 
   DISALLOW_COPY_AND_ASSIGN(CheckDefaultBrowserObserver);
 };
 
 CheckDefaultBrowserObserver::CheckDefaultBrowserObserver(
     const base::FilePath& profile_path,
-    bool show_prompt,
-    chrome::HostDesktopType desktop_type)
-    : profile_path_(profile_path),
-      show_prompt_(show_prompt),
-      desktop_type_(desktop_type) {}
+    bool show_prompt)
+    : profile_path_(profile_path), show_prompt_(show_prompt) {}
 
 CheckDefaultBrowserObserver::~CheckDefaultBrowserObserver() {}
 
 void CheckDefaultBrowserObserver::SetDefaultWebClientUIState(
-    ShellIntegration::DefaultWebClientUIState state) {
-  if (state == ShellIntegration::STATE_IS_DEFAULT) {
+    shell_integration::DefaultWebClientUIState state) {
+  if (state == shell_integration::STATE_IS_DEFAULT) {
     // Notify the user in the future if Chrome ceases to be the user's chosen
     // default browser.
     ResetCheckDefaultBrowserPref();
-  } else if (show_prompt_ && state == ShellIntegration::STATE_NOT_DEFAULT &&
-             ShellIntegration::CanSetAsDefaultBrowser() !=
-                 ShellIntegration::SET_DEFAULT_NOT_ALLOWED) {
+  } else if (show_prompt_ && state == shell_integration::STATE_NOT_DEFAULT &&
+             shell_integration::CanSetAsDefaultBrowser() !=
+                 shell_integration::SET_DEFAULT_NOT_ALLOWED) {
     ShowPrompt();
   }
-}
-
-bool CheckDefaultBrowserObserver::IsOwnedByWorker() {
-  // Instruct the DefaultBrowserWorker to delete this instance when it is done.
-  return true;
 }
 
 void CheckDefaultBrowserObserver::ResetCheckDefaultBrowserPref() {
@@ -260,7 +253,7 @@ void CheckDefaultBrowserObserver::ResetCheckDefaultBrowserPref() {
 }
 
 void CheckDefaultBrowserObserver::ShowPrompt() {
-  Browser* browser = chrome::FindLastActiveWithHostDesktopType(desktop_type_);
+  Browser* browser = chrome::FindLastActive();
   if (!browser)
     return;  // Reached during ui tests.
 
@@ -286,7 +279,7 @@ void RegisterDefaultBrowserPromptPrefs(PrefRegistrySimple* registry) {
       prefs::kBrowserSuppressDefaultBrowserPrompt, std::string());
 }
 
-void ShowDefaultBrowserPrompt(Profile* profile, HostDesktopType desktop_type) {
+void ShowDefaultBrowserPrompt(Profile* profile) {
   // Do not check if Chrome is the default browser if there is a policy in
   // control of this setting.
   if (g_browser_process->local_state()->IsManagedPreference(
@@ -314,16 +307,16 @@ void ShowDefaultBrowserPrompt(Profile* profile, HostDesktopType desktop_type) {
             prefs::kBrowserSuppressDefaultBrowserPrompt);
     const Version disable_version(disable_version_string);
     DCHECK(disable_version_string.empty() || disable_version.IsValid());
-    if (disable_version.IsValid()) {
-      if (disable_version.Equals(Version(version_info::GetVersionNumber())))
-        show_prompt = false;
+    if (disable_version.IsValid() &&
+        disable_version == Version(version_info::GetVersionNumber())) {
+      show_prompt = false;
     }
   }
 
-  scoped_refptr<ShellIntegration::DefaultBrowserWorker>(
-      new ShellIntegration::DefaultBrowserWorker(
-          new CheckDefaultBrowserObserver(profile->GetPath(), show_prompt,
-                                          desktop_type)))
+  scoped_refptr<shell_integration::DefaultBrowserWorker>(
+      new shell_integration::DefaultBrowserWorker(
+          new CheckDefaultBrowserObserver(profile->GetPath(), show_prompt),
+          /*delete_observer=*/true))
       ->StartCheckIsDefault();
 }
 

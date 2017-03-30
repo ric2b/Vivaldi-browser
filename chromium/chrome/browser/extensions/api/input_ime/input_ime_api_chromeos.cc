@@ -35,12 +35,12 @@ namespace SetCursorPosition = extensions::api::input_ime::SetCursorPosition;
 namespace SetCandidates = extensions::api::input_ime::SetCandidates;
 namespace SetCandidateWindowProperties =
     extensions::api::input_ime::SetCandidateWindowProperties;
-namespace CommitText = extensions::api::input_ime::CommitText;
 namespace ClearComposition = extensions::api::input_ime::ClearComposition;
-namespace SetComposition = extensions::api::input_ime::SetComposition;
 namespace OnCompositionBoundsChanged =
     extensions::api::input_method_private::OnCompositionBoundsChanged;
 using ui::IMEEngineHandlerInterface;
+using input_method::InputMethodEngineBase;
+using chromeos::InputMethodEngine;
 
 namespace {
 const char kErrorEngineNotAvailable[] = "Engine is not available";
@@ -48,30 +48,29 @@ const char kErrorSetMenuItemsFail[] = "Could not create menu Items";
 const char kErrorUpdateMenuItemsFail[] = "Could not update menu Items";
 
 void SetMenuItemToMenu(const input_ime::MenuItem& input,
-                       IMEEngineHandlerInterface::MenuItem* out) {
+                       InputMethodEngine::MenuItem* out) {
   out->modified = 0;
   out->id = input.id;
   if (input.label) {
-    out->modified |= IMEEngineHandlerInterface::MENU_ITEM_MODIFIED_LABEL;
+    out->modified |= InputMethodEngine::MENU_ITEM_MODIFIED_LABEL;
     out->label = *input.label;
   }
 
   if (input.style != input_ime::MENU_ITEM_STYLE_NONE) {
-    out->modified |= IMEEngineHandlerInterface::MENU_ITEM_MODIFIED_STYLE;
-    out->style =
-        static_cast<IMEEngineHandlerInterface::MenuItemStyle>(input.style);
+    out->modified |= InputMethodEngine::MENU_ITEM_MODIFIED_STYLE;
+    out->style = static_cast<InputMethodEngine::MenuItemStyle>(input.style);
   }
 
   if (input.visible)
-    out->modified |= IMEEngineHandlerInterface::MENU_ITEM_MODIFIED_VISIBLE;
+    out->modified |= InputMethodEngine::MENU_ITEM_MODIFIED_VISIBLE;
   out->visible = input.visible ? *input.visible : true;
 
   if (input.checked)
-    out->modified |= IMEEngineHandlerInterface::MENU_ITEM_MODIFIED_CHECKED;
+    out->modified |= InputMethodEngine::MENU_ITEM_MODIFIED_CHECKED;
   out->checked = input.checked ? *input.checked : false;
 
   if (input.enabled)
-    out->modified |= IMEEngineHandlerInterface::MENU_ITEM_MODIFIED_ENABLED;
+    out->modified |= InputMethodEngine::MENU_ITEM_MODIFIED_ENABLED;
   out->enabled = input.enabled ? *input.enabled : true;
 }
 
@@ -82,7 +81,7 @@ class ImeObserverChromeOS : public ui::ImeObserver {
 
   ~ImeObserverChromeOS() override {}
 
-  // ui::IMEEngineObserver overrides
+  // input_method::InputMethodEngineBase::Observer overrides.
   void OnInputContextUpdate(
       const IMEEngineHandlerInterface::InputContext& context) override {
     if (extension_id_.empty() ||
@@ -105,22 +104,22 @@ class ImeObserverChromeOS : public ui::ImeObserver {
   void OnCandidateClicked(
       const std::string& component_id,
       int candidate_id,
-      ui::IMEEngineObserver::MouseButtonEvent button) override {
+      InputMethodEngineBase::MouseButtonEvent button) override {
     if (extension_id_.empty() ||
         !HasListener(input_ime::OnCandidateClicked::kEventName))
       return;
 
     input_ime::MouseButton button_enum = input_ime::MOUSE_BUTTON_NONE;
     switch (button) {
-      case ui::IMEEngineObserver::MOUSE_BUTTON_MIDDLE:
+      case InputMethodEngineBase::MOUSE_BUTTON_MIDDLE:
         button_enum = input_ime::MOUSE_BUTTON_MIDDLE;
         break;
 
-      case ui::IMEEngineObserver::MOUSE_BUTTON_RIGHT:
+      case InputMethodEngineBase::MOUSE_BUTTON_RIGHT:
         button_enum = input_ime::MOUSE_BUTTON_RIGHT;
         break;
 
-      case ui::IMEEngineObserver::MOUSE_BUTTON_LEFT:
+      case InputMethodEngineBase::MOUSE_BUTTON_LEFT:
       // Default to left.
       default:
         button_enum = input_ime::MOUSE_BUTTON_LEFT;
@@ -246,6 +245,16 @@ class ImeObserverChromeOS : public ui::ImeObserver {
 
 namespace extensions {
 
+InputMethodEngine* GetActiveEngine(Profile* profile,
+                                   const std::string& extension_id) {
+  InputImeEventRouter* event_router = GetInputImeEventRouter(profile);
+  InputMethodEngine* engine =
+      event_router ? static_cast<InputMethodEngine*>(
+                         event_router->GetActiveEngine(extension_id))
+                   : nullptr;
+  return engine;
+}
+
 InputImeEventRouter::InputImeEventRouter(Profile* profile)
     : InputImeEventRouterBase(profile) {}
 
@@ -295,7 +304,7 @@ bool InputImeEventRouter::RegisterImeExtension(
     }
   }
 
-  scoped_ptr<ui::IMEEngineObserver> observer(
+  scoped_ptr<InputMethodEngineBase::Observer> observer(
       new ImeObserverChromeOS(extension_id, profile()));
   chromeos::InputMethodEngine* engine = new chromeos::InputMethodEngine();
   engine->Initialize(std::move(observer), extension_id.c_str(), profile());
@@ -308,7 +317,7 @@ bool InputImeEventRouter::RegisterImeExtension(
 }
 
 void InputImeEventRouter::UnregisterAllImes(const std::string& extension_id) {
-  std::map<std::string, IMEEngineHandlerInterface*>::iterator it =
+  std::map<std::string, InputMethodEngine*>::iterator it =
       engine_map_.find(extension_id);
   if (it != engine_map_.end()) {
     chromeos::input_method::InputMethodManager::Get()
@@ -319,77 +328,25 @@ void InputImeEventRouter::UnregisterAllImes(const std::string& extension_id) {
   }
 }
 
-IMEEngineHandlerInterface* InputImeEventRouter::GetEngine(
+InputMethodEngine* InputImeEventRouter::GetEngine(
     const std::string& extension_id,
     const std::string& component_id) {
-  std::map<std::string, IMEEngineHandlerInterface*>::iterator it =
+  std::map<std::string, InputMethodEngine*>::iterator it =
       engine_map_.find(extension_id);
   return (it != engine_map_.end()) ? it->second : nullptr;
 }
 
-IMEEngineHandlerInterface* InputImeEventRouter::GetActiveEngine(
+InputMethodEngineBase* InputImeEventRouter::GetActiveEngine(
     const std::string& extension_id) {
-  std::map<std::string, IMEEngineHandlerInterface*>::iterator it =
+  std::map<std::string, InputMethodEngine*>::iterator it =
       engine_map_.find(extension_id);
   return (it != engine_map_.end() && it->second->IsActive()) ? it->second
                                                              : nullptr;
 }
 
-bool InputImeSetCompositionFunction::RunSync() {
-  IMEEngineHandlerInterface* engine =
-      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()))
-          ->GetActiveEngine(extension_id());
-  if (!engine) {
-    SetResult(new base::FundamentalValue(false));
-    return true;
-  }
-
-  scoped_ptr<SetComposition::Params> parent_params(
-      SetComposition::Params::Create(*args_));
-  const SetComposition::Params::Parameters& params = parent_params->parameters;
-  std::vector<IMEEngineHandlerInterface::SegmentInfo> segments;
-  if (params.segments) {
-    const std::vector<linked_ptr<
-        SetComposition::Params::Parameters::SegmentsType> >&
-            segments_args = *params.segments;
-    for (size_t i = 0; i < segments_args.size(); ++i) {
-      EXTENSION_FUNCTION_VALIDATE(
-          segments_args[i]->style !=
-          input_ime::UNDERLINE_STYLE_NONE);
-      segments.push_back(IMEEngineHandlerInterface::SegmentInfo());
-      segments.back().start = segments_args[i]->start;
-      segments.back().end = segments_args[i]->end;
-      if (segments_args[i]->style ==
-          input_ime::UNDERLINE_STYLE_UNDERLINE) {
-        segments.back().style =
-            IMEEngineHandlerInterface::SEGMENT_STYLE_UNDERLINE;
-      } else if (segments_args[i]->style ==
-                 input_ime::UNDERLINE_STYLE_DOUBLEUNDERLINE) {
-        segments.back().style =
-            IMEEngineHandlerInterface::SEGMENT_STYLE_DOUBLE_UNDERLINE;
-      } else {
-        segments.back().style =
-            IMEEngineHandlerInterface::SEGMENT_STYLE_NO_UNDERLINE;
-      }
-    }
-  }
-
-  int selection_start =
-      params.selection_start ? *params.selection_start : params.cursor;
-  int selection_end =
-      params.selection_end ? *params.selection_end : params.cursor;
-
-  SetResult(new base::FundamentalValue(
-      engine->SetComposition(params.context_id, params.text.c_str(),
-                             selection_start, selection_end, params.cursor,
-                             segments, &error_)));
-  return true;
-}
-
 bool InputImeClearCompositionFunction::RunSync() {
-  IMEEngineHandlerInterface* engine =
-      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()))
-          ->GetActiveEngine(extension_id());
+  InputMethodEngine* engine = GetActiveEngine(
+      Profile::FromBrowserContext(browser_context()), extension_id());
   if (!engine) {
     SetResult(new base::FundamentalValue(false));
     return true;
@@ -405,29 +362,9 @@ bool InputImeClearCompositionFunction::RunSync() {
   return true;
 }
 
-bool InputImeCommitTextFunction::RunSync() {
-  IMEEngineHandlerInterface* engine =
-      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()))
-          ->GetActiveEngine(extension_id());
-  if (!engine) {
-    SetResult(new base::FundamentalValue(false));
-    return true;
-  }
-
-  scoped_ptr<CommitText::Params> parent_params(
-      CommitText::Params::Create(*args_));
-  const CommitText::Params::Parameters& params =
-      parent_params->parameters;
-
-  SetResult(new base::FundamentalValue(
-      engine->CommitText(params.context_id, params.text.c_str(), &error_)));
-  return true;
-}
-
 bool InputImeHideInputViewFunction::RunAsync() {
-  IMEEngineHandlerInterface* engine =
-      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()))
-          ->GetActiveEngine(extension_id());
+  InputMethodEngine* engine = GetActiveEngine(
+      Profile::FromBrowserContext(browser_context()), extension_id());
   if (!engine) {
     return true;
   }
@@ -440,9 +377,8 @@ bool InputImeSendKeyEventsFunction::RunAsync() {
       SendKeyEvents::Params::Create(*args_));
   const SendKeyEvents::Params::Parameters& params =
       parent_params->parameters;
-  IMEEngineHandlerInterface* engine =
-      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()))
-          ->GetActiveEngine(extension_id());
+  InputMethodEngine* engine = GetActiveEngine(
+      Profile::FromBrowserContext(browser_context()), extension_id());
   if (!engine) {
     error_ = kErrorEngineNotAvailable;
     return false;
@@ -450,10 +386,10 @@ bool InputImeSendKeyEventsFunction::RunAsync() {
 
   const std::vector<linked_ptr<input_ime::KeyboardEvent> >& key_data =
       params.key_data;
-  std::vector<IMEEngineHandlerInterface::KeyboardEvent> key_data_out;
+  std::vector<InputMethodEngineBase::KeyboardEvent> key_data_out;
 
   for (size_t i = 0; i < key_data.size(); ++i) {
-    IMEEngineHandlerInterface::KeyboardEvent event;
+    InputMethodEngineBase::KeyboardEvent event;
     event.type = input_ime::ToString(key_data[i]->type);
     event.key = key_data[i]->key;
     event.code = key_data[i]->code;
@@ -479,9 +415,11 @@ bool InputImeSetCandidateWindowPropertiesFunction::RunSync() {
   const SetCandidateWindowProperties::Params::Parameters&
       params = parent_params->parameters;
 
-  IMEEngineHandlerInterface* engine =
-      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()))
-          ->GetEngine(extension_id(), params.engine_id);
+  InputImeEventRouter* event_router =
+      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()));
+  InputMethodEngine* engine =
+      event_router ? event_router->GetEngine(extension_id(), params.engine_id)
+                   : nullptr;
   if (!engine) {
     SetResult(new base::FundamentalValue(false));
     return true;
@@ -496,7 +434,7 @@ bool InputImeSetCandidateWindowPropertiesFunction::RunSync() {
     return true;
   }
 
-  IMEEngineHandlerInterface::CandidateWindowProperty properties_out =
+  InputMethodEngine::CandidateWindowProperty properties_out =
       engine->GetCandidateWindowProperty();
   bool modified = false;
 
@@ -544,9 +482,8 @@ bool InputImeSetCandidateWindowPropertiesFunction::RunSync() {
 }
 
 bool InputImeSetCandidatesFunction::RunSync() {
-  IMEEngineHandlerInterface* engine =
-      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()))
-          ->GetActiveEngine(extension_id());
+  InputMethodEngine* engine = GetActiveEngine(
+      Profile::FromBrowserContext(browser_context()), extension_id());
   if (!engine) {
     SetResult(new base::FundamentalValue(false));
     return true;
@@ -557,12 +494,12 @@ bool InputImeSetCandidatesFunction::RunSync() {
   const SetCandidates::Params::Parameters& params =
       parent_params->parameters;
 
-  std::vector<IMEEngineHandlerInterface::Candidate> candidates_out;
+  std::vector<InputMethodEngine::Candidate> candidates_out;
   const std::vector<linked_ptr<
       SetCandidates::Params::Parameters::CandidatesType> >& candidates_in =
           params.candidates;
   for (size_t i = 0; i < candidates_in.size(); ++i) {
-    candidates_out.push_back(IMEEngineHandlerInterface::Candidate());
+    candidates_out.push_back(InputMethodEngine::Candidate());
     candidates_out.back().value = candidates_in[i]->candidate;
     candidates_out.back().id = candidates_in[i]->id;
     if (candidates_in[i]->label)
@@ -581,9 +518,8 @@ bool InputImeSetCandidatesFunction::RunSync() {
 }
 
 bool InputImeSetCursorPositionFunction::RunSync() {
-  IMEEngineHandlerInterface* engine =
-      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()))
-          ->GetActiveEngine(extension_id());
+  InputMethodEngine* engine = GetActiveEngine(
+      Profile::FromBrowserContext(browser_context()), extension_id());
   if (!engine) {
     SetResult(new base::FundamentalValue(false));
     return true;
@@ -606,19 +542,21 @@ bool InputImeSetMenuItemsFunction::RunSync() {
   const SetMenuItems::Params::Parameters& params =
       parent_params->parameters;
 
-  IMEEngineHandlerInterface* engine =
-      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()))
-          ->GetEngine(extension_id(), params.engine_id);
+  InputImeEventRouter* event_router =
+      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()));
+  InputMethodEngine* engine =
+      event_router ? event_router->GetEngine(extension_id(), params.engine_id)
+                   : nullptr;
   if (!engine) {
     error_ = kErrorEngineNotAvailable;
     return false;
   }
 
   const std::vector<linked_ptr<input_ime::MenuItem> >& items = params.items;
-  std::vector<IMEEngineHandlerInterface::MenuItem> items_out;
+  std::vector<InputMethodEngine::MenuItem> items_out;
 
   for (size_t i = 0; i < items.size(); ++i) {
-    items_out.push_back(IMEEngineHandlerInterface::MenuItem());
+    items_out.push_back(InputMethodEngine::MenuItem());
     SetMenuItemToMenu(*items[i], &items_out.back());
   }
 
@@ -633,19 +571,21 @@ bool InputImeUpdateMenuItemsFunction::RunSync() {
   const UpdateMenuItems::Params::Parameters& params =
       parent_params->parameters;
 
-  IMEEngineHandlerInterface* engine =
-      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()))
-          ->GetEngine(extension_id(), params.engine_id);
+  InputImeEventRouter* event_router =
+      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()));
+  InputMethodEngine* engine =
+      event_router ? event_router->GetEngine(extension_id(), params.engine_id)
+                   : nullptr;
   if (!engine) {
     error_ = kErrorEngineNotAvailable;
     return false;
   }
 
   const std::vector<linked_ptr<input_ime::MenuItem> >& items = params.items;
-  std::vector<IMEEngineHandlerInterface::MenuItem> items_out;
+  std::vector<InputMethodEngine::MenuItem> items_out;
 
   for (size_t i = 0; i < items.size(); ++i) {
-    items_out.push_back(IMEEngineHandlerInterface::MenuItem());
+    items_out.push_back(InputMethodEngine::MenuItem());
     SetMenuItemToMenu(*items[i], &items_out.back());
   }
 
@@ -660,9 +600,11 @@ bool InputImeDeleteSurroundingTextFunction::RunSync() {
   const DeleteSurroundingText::Params::Parameters& params =
       parent_params->parameters;
 
-  IMEEngineHandlerInterface* engine =
-      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()))
-          ->GetEngine(extension_id(), params.engine_id);
+  InputImeEventRouter* event_router =
+      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()));
+  InputMethodEngine* engine =
+      event_router ? event_router->GetEngine(extension_id(), params.engine_id)
+                   : nullptr;
   if (!engine) {
     error_ = kErrorEngineNotAvailable;
     return false;
@@ -677,9 +619,11 @@ void InputImeAPI::OnExtensionLoaded(content::BrowserContext* browser_context,
                                     const Extension* extension) {
   const std::vector<InputComponentInfo>* input_components =
       InputComponents::GetInputComponents(extension);
-  if (input_components)
-    GetInputImeEventRouter(Profile::FromBrowserContext(browser_context))
-        ->RegisterImeExtension(extension->id(), *input_components);
+  InputImeEventRouter* event_router =
+      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context));
+  if (input_components && event_router) {
+    event_router->RegisterImeExtension(extension->id(), *input_components);
+  }
 }
 
 void InputImeAPI::OnExtensionUnloaded(content::BrowserContext* browser_context,
@@ -687,19 +631,19 @@ void InputImeAPI::OnExtensionUnloaded(content::BrowserContext* browser_context,
                                       UnloadedExtensionInfo::Reason reason) {
   const std::vector<InputComponentInfo>* input_components =
       InputComponents::GetInputComponents(extension);
-  if (input_components && !input_components->empty()) {
-    GetInputImeEventRouter(Profile::FromBrowserContext(browser_context))
-        ->UnregisterAllImes(extension->id());
+  InputImeEventRouter* event_router =
+      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context));
+  if (input_components && !input_components->empty() && event_router) {
+    event_router->UnregisterAllImes(extension->id());
   }
 }
 
 void InputImeAPI::OnListenerAdded(const EventListenerInfo& details) {
   if (!details.browser_context)
     return;
-  IMEEngineHandlerInterface* engine =
-      GetInputImeEventRouter(
-          Profile::FromBrowserContext(details.browser_context))
-          ->GetActiveEngine(details.extension_id);
+  InputMethodEngine* engine =
+      GetActiveEngine(Profile::FromBrowserContext(details.browser_context),
+                      details.extension_id);
   // Notifies the IME extension for IME ready with onActivate/onFocus events.
   if (engine)
     engine->Enable(engine->GetActiveComponentId());

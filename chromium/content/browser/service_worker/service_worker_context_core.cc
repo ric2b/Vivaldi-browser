@@ -4,6 +4,8 @@
 
 #include "content/browser/service_worker/service_worker_context_core.h"
 
+#include <limits>
+#include <set>
 #include <utility>
 
 #include "base/barrier_closure.h"
@@ -102,8 +104,9 @@ class ClearAllServiceWorkersHelper
 
   void DidGetAllRegistrations(
       const base::WeakPtr<ServiceWorkerContextCore>& context,
+      ServiceWorkerStatusCode status,
       const std::vector<ServiceWorkerRegistrationInfo>& registrations) {
-    if (!context)
+    if (!context || status != SERVICE_WORKER_OK)
       return;
     // Make a copy of live versions map because StopWorker() removes the version
     // from it when we were starting up and don't have a process yet.
@@ -365,12 +368,6 @@ void ServiceWorkerContextCore::RegisterServiceWorker(
     const RegistrationCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   was_service_worker_registered_ = true;
-  if (storage()->IsDisabled()) {
-    callback.Run(SERVICE_WORKER_ERROR_ABORT, std::string(),
-                 kInvalidServiceWorkerRegistrationId);
-    return;
-  }
-
   job_coordinator_->Register(
       pattern,
       script_url,
@@ -385,9 +382,6 @@ void ServiceWorkerContextCore::UpdateServiceWorker(
     ServiceWorkerRegistration* registration,
     bool force_bypass_cache) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (storage()->IsDisabled())
-    return;
-
   job_coordinator_->Update(registration, force_bypass_cache);
 }
 
@@ -398,12 +392,6 @@ void ServiceWorkerContextCore::UpdateServiceWorker(
     ServiceWorkerProviderHost* provider_host,
     const UpdateCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (storage()->IsDisabled()) {
-    callback.Run(SERVICE_WORKER_ERROR_ABORT, std::string(),
-                 kInvalidServiceWorkerRegistrationId);
-    return;
-  }
-
   job_coordinator_->Update(registration, force_bypass_cache,
                            skip_script_comparison, provider_host,
                            base::Bind(&ServiceWorkerContextCore::UpdateComplete,
@@ -431,11 +419,6 @@ void ServiceWorkerContextCore::UnregisterServiceWorker(
     const GURL& pattern,
     const UnregistrationCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (storage()->IsDisabled()) {
-    callback.Run(SERVICE_WORKER_ERROR_ABORT);
-    return;
-  }
-
   job_coordinator_->Unregister(
       pattern,
       base::Bind(&ServiceWorkerContextCore::UnregistrationComplete,
@@ -448,12 +431,6 @@ void ServiceWorkerContextCore::UnregisterServiceWorkers(
     const GURL& origin,
     const UnregistrationCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (storage()->IsDisabled()) {
-    // Not posting as new task to match implementations above.
-    callback.Run(SERVICE_WORKER_ERROR_ABORT);
-    return;
-  }
-
   storage()->GetAllRegistrationsInfos(base::Bind(
       &ServiceWorkerContextCore::DidGetAllRegistrationsForUnregisterForOrigin,
       AsWeakPtr(), callback, origin));
@@ -462,7 +439,12 @@ void ServiceWorkerContextCore::UnregisterServiceWorkers(
 void ServiceWorkerContextCore::DidGetAllRegistrationsForUnregisterForOrigin(
     const UnregistrationCallback& result,
     const GURL& origin,
+    ServiceWorkerStatusCode status,
     const std::vector<ServiceWorkerRegistrationInfo>& registrations) {
+  if (status != SERVICE_WORKER_OK) {
+    result.Run(status);
+    return;
+  }
   std::set<GURL> scopes;
   for (const auto& registration_info : registrations) {
     if (origin == registration_info.pattern.GetOrigin()) {
@@ -716,6 +698,36 @@ void ServiceWorkerContextCore::CheckHasServiceWorker(
       url, base::Bind(&ServiceWorkerContextCore::
                           DidFindRegistrationForCheckHasServiceWorker,
                       AsWeakPtr(), other_url, callback));
+}
+
+void ServiceWorkerContextCore::UpdateVersionFailureCount(
+    int64_t version_id,
+    ServiceWorkerStatusCode status) {
+  // Don't count these, they aren't start worker failures.
+  if (status == SERVICE_WORKER_ERROR_DISALLOWED)
+    return;
+
+  auto it = failure_counts_.find(version_id);
+  if (status == SERVICE_WORKER_OK) {
+    if (it != failure_counts_.end())
+      failure_counts_.erase(it);
+    return;
+  }
+
+  if (it != failure_counts_.end()) {
+    DCHECK_GT(it->second, 0);
+    if (it->second < std::numeric_limits<int>::max())
+      ++it->second;
+  } else {
+    failure_counts_[version_id] = 1;
+  }
+}
+
+int ServiceWorkerContextCore::GetVersionFailureCount(int64_t version_id) {
+  auto it = failure_counts_.find(version_id);
+  if (it == failure_counts_.end())
+    return 0;
+  return it->second;
 }
 
 void ServiceWorkerContextCore::OnRunningStateChanged(

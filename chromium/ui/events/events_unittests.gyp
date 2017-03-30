@@ -57,9 +57,11 @@
         'ipc/latency_info_param_traits_unittest.cc',
         'keycodes/dom/keycode_converter_unittest.cc',
         'keycodes/keyboard_code_conversion_unittest.cc',
+        'keycodes/platform_key_map_win_unittest.cc',
         'latency_info_unittest.cc',
         'platform/platform_event_source_unittest.cc',
         'scoped_target_handler_unittest.cc',
+        'win/event_utils_win_unittest.cc',
         'x/events_x_unittest.cc',
       ],
       'include_dirs': [
@@ -103,11 +105,6 @@
             'gestures/motion_event_aura_unittest.cc',
           ],
         }],
-        ['OS=="linux" and use_allocator!="none"', {
-          'dependencies': [
-            '<(DEPTH)/base/allocator/allocator.gyp:allocator',
-          ],
-        }],
         # Exclude tests that rely on event_utils.h for platforms that do not
         # provide native cracking, i.e., platforms that use events_stub.cc.
         ['OS!="win" and use_x11!=1 and use_ozone!=1', {
@@ -125,6 +122,7 @@
         }],
         ['OS!="ios"', {
           'sources': [
+            'blink/blink_event_util_unittest.cc',
             'blink/input_handler_proxy_unittest.cc',
             'blink/input_scroll_elasticity_controller_unittest.cc',
           ],

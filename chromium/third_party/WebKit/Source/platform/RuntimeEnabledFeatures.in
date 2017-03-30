@@ -17,14 +17,10 @@
 // "stable" features listed here should be rare, as anything which we've shipped stable
 // can have its runtime flag removed soon after.
 //
-// condition=ENABLE_NAME is used for wrapping features in compile-time
-// #if ENABLE(FEATURE) guards.  These are deprecated and should all be removed.
-//
-// api_name=API_NAME is used to integrate the feature with the experimental framework, so that the feature can be
-// enabled at runtime on a per-page basis through a signed API key for the corresponding API name.
-// Declaring the api_name will cause a static method to be generated in
-// ExperimentalFeatures.h/cpp. This static method allows the feature
-// implementation to check if it is enabled for the current context.
+// origin_trial_feature_name=FEATURE_NAME is used to integrate the feature with the experimental framework, so that the
+// feature can be enabled at runtime on a per-page basis through a signed token for the corresponding feature name.
+// Declaring the origin_trial_feature_name will cause a static method to be generated in OriginTrials.h/cpp. This static
+// method allows the feature implementation to check if it is enabled for the current context.
 
 AppBanner status=stable
 AlwaysUseComplexText status=stable
@@ -33,10 +29,9 @@ AudioOutputDevices status=stable
 AudioVideoTracks depends_on=Media, status=experimental
 AuthorShadowDOMForAnyElement
 BackgroundSync status=stable
-BackgroundSyncV2 status=experimental
-CacheStorageMatchAll status=stable
+CacheIgnoreSearchOption status=experimental
 ClientHints status=stable
-ColumnFill status=experimental
+ColumnFill status=stable
 CompositedSelectionUpdate
 CompositorWorker status=experimental
 // Unified Chrome Compositor and Blink Animations engine (Project Heaviside). crbug.com/394772
@@ -56,41 +51,42 @@ CSSIndependentTransformProperties status=experimental
 CSSMaskSourceType status=experimental
 CSSOMSmoothScroll status=experimental
 CSSPropertyD status=experimental
+CSSSnapSize status=experimental
 CSSStickyPosition
 CSSTouchActionPanDirections status=experimental
 CSSTypedOM status=experimental
 CSSVariables status=stable
 CSSViewport status=experimental
 CSSScrollSnapPoints status=test
-// getPropertyCSSValue, CSSValue, etc. will be removed once layout tests no longer depend on them. crbug.com/331608
 CustomSchemeHandler depends_on=NavigatorContentUtils, status=experimental
 Database status=stable
 DecodeToYUV status=experimental
 DeviceLight status=experimental
-DeviceOrientationAbsolute status=experimental
+DeviceOrientationAbsolute status=stable
 DisplayList2dCanvas status=stable
 DurableStorage status=experimental
 ForceDisplayList2dCanvas
 // See crbug.com/585250.
 ForceDisable2dCanvasCopyOnWrite
+// See https://crbug.com/582618.
 EncryptedMedia status=stable
 ExecCommandInJavaScript status=test
 ComputedAccessibilityInfo status=experimental
 EventListenerOptions status=stable
 ExperimentalCanvasFeatures status=test
 ExperimentalContentSecurityPolicyFeatures status=experimental
-ExperimentalFramework status=test
+ExperimentalFramework status=stable
 // Define a sample API for testing integration with the Experimental Framework.
 // The sample API is used in both unit and layout tests for the Experimental
 // Framework. Do not change this flag to stable, as it exists solely to generate
 // code used by the sample API implementation.
-ExperimentalFrameworkSampleAPI api_name=Frobulate
+ExperimentalFrameworkSampleAPI origin_trial_feature_name=Frobulate
 ExperimentalV8Extras status=experimental
 FastMobileScrolling
 FileAPIBlobClose status=experimental
 FileSystem status=stable
 ForeignFetch status=experimental
-FormDataNewMethods status=experimental
+FormDataNewMethods status=stable
 FullscreenUnprefixed status=test
 FrameTimingSupport status=experimental
 Geofencing status=experimental
@@ -102,7 +98,9 @@ ImageColorProfiles
 ImageOrientation status=test
 ImageRenderingPixelated status=stable
 IndexedDBExperimental status=experimental
+InertTopControls status=experimental
 InputDeviceCapabilities status=stable
+InputEvent status=experimental
 InputModeAttribute status=experimental
 IntersectionObserver status=experimental
 IterableCollections status=experimental
@@ -110,12 +108,13 @@ KeyboardEventCode status=stable
 KeyboardEventKey status=experimental
 LangAttributeAwareFormControlUI
 LinkPreconnect status=stable
-LinkPreload status=experimental
+LinkPreload status=stable
 LinkHeader status=stable
 FractionalScrollOffsets status=experimental
 Media status=stable
 MediaCapture
-MediaCaptureFromElement status=test
+MediaCaptureFromCanvas status=experimental
+MediaCaptureFromVideo status=test
 MediaConstraints status=test
 MediaDevices status=stable
 MediaRecorder status=stable
@@ -124,6 +123,7 @@ MediaSource status=stable
 MediaSourceExperimental depends_on=MediaSource, status=experimental
 MediaStreamSpeech status=experimental
 MemoryInfoInWorkers status=experimental
+MobileLayoutTheme
 NavigatorConnect status=experimental
 NavigatorContentUtils
 WebNFC status=experimental
@@ -132,6 +132,7 @@ NetInfoDownlinkMax status=stable
 NewMediaPlaybackUi
 NotificationConstructor status=stable
 NotificationExperimental status=test
+NotificationActionIcons status=stable
 Notifications status=stable
 OrientationEvent
 // For simulating Android's overlay fullscreen video in layout tests on Linux.
@@ -146,7 +147,6 @@ Permissions status=stable
 PermissionsRequestRevoke status=experimental
 PointerEvent
 PreciseMemoryInfo
-PrefixedEncryptedMedia status=test
 // This feature is deprecated and we are evangelizing affected sites.
 // See https://crbug.com/346236 for current status.
 PrefixedVideoFullscreen status=stable
@@ -154,7 +154,7 @@ Presentation status=stable
 PresentationReceiver status=test
 PromiseRejectionEvent status=stable
 PushMessaging status=stable
-PushMessagingData status=experimental
+PushMessagingData status=stable
 QuotaPromise status=experimental
 ReducedReferrerGranularity
 RenderingPipelineThrottling status=experimental
@@ -165,12 +165,14 @@ RestrictIFramePermissions
 SandboxBlocksModals status=stable
 ScreenOrientation status=stable
 ScriptedSpeech status=stable
+// Scrolls to compensate for layout movements (bit.ly/scroll-anchoring).
+ScrollAnchoring
 // Implements documentElement.scrollTop/Left and bodyElement.scrollTop/Left
 // as per the spec, matching other Web engines.
 ScrollTopLeftInterop status=experimental
-SelectionForComposedTree status=stable
-SelectionPaintingWithoutSelectionGaps status=stable
 ServiceWorkerClientAttributes status=stable
+ServiceWorkerExtendableMessageEvent status=experimental
+ServiceWorkerClientsGetID status=experimental
 ServiceWorkerPerformanceTimeline status=stable
 ServiceWorkerWindowClientNavigate status=stable
 ShadowDOMV1 status=experimental
@@ -203,7 +205,8 @@ UnsandboxedAuxiliary status=stable
 UserSelectAll status=experimental
 WebAnimationsAPI status=experimental
 WebAnimationsSVG status=experimental
-WebAudio status=stable
+// TODO(https://crbug.com/584113) Enable Web Bluetooth Experiment.
+// WebBluetooth origin_trial_feature_name=WebBluetooth
 WebBluetooth
 WebGLDraftExtensions status=experimental
 WebGLImageChromium
@@ -217,4 +220,5 @@ ScrollCustomization
 ScrollRestoration status=stable
 WakeLock status=experimental
 WebFontsIntervention status=experimental
-Worklet
+WebFontsInterventionTrigger
+Worklet status=test

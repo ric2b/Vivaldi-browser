@@ -81,9 +81,9 @@ source_set("test_support") {
   deps = [
     ":extensions_resources",
     "//base",
-    "//base:prefs_test_support",
     "//components/guest_view/browser:test_support",
     "//components/pref_registry:test_support",
+    "//components/prefs:test_support",
     "//content/public/common",
     "//content/test:test_support",
     "//extensions/browser",
@@ -141,15 +141,6 @@ repack("shell_and_test_pak") {
   ]
 }
 
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("extensions_unittests_run") {
-  testonly = true
-  deps = [
-    ":extensions_unittests",
-  ]
-}
-
 test("extensions_unittests") {
   sources =
       rebase_path(extensions_tests_gypi_values.extensions_unittests_sources,
@@ -175,10 +166,10 @@ test("extensions_unittests") {
     ":shell_and_test_pak",
     ":test_support",
     "//base",
-    "//base:prefs_test_support",
     "//base/test:test_support",
     "//components/keyed_service/content",
     "//components/pref_registry:test_support",
+    "//components/prefs:test_support",
     "//components/user_prefs",
     "//content/test:test_support",
     "//device/bluetooth:mocks",
@@ -191,23 +182,19 @@ test("extensions_unittests") {
     "//extensions/renderer",
     "//extensions/strings",
     "//extensions/utility",
+    "//mojo/edk/js",
+    "//mojo/edk/system",
     "//mojo/environment:chromium",
     "//mojo/public/cpp/bindings",
     "//mojo/shell/public/interfaces",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/leveldatabase",
-    "//third_party/mojo/src/mojo/edk/js",
-    "//third_party/mojo/src/mojo/edk/system",
   ]
 
   data_deps = [
     "//third_party/mesa:osmesa",
   ]
-
-  if (is_win) {
-    deps += [ "//base/allocator" ]
-  }
 
   if (is_chromeos) {
     sources += [
@@ -220,15 +207,6 @@ test("extensions_unittests") {
 
     deps += [ "//chromeos:test_support" ]
   }
-}
-
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("extensions_browsertests_run") {
-  testonly = true
-  deps = [
-    ":extensions_browsertests",
-  ]
 }
 
 test("extensions_browsertests") {
@@ -255,20 +233,21 @@ test("extensions_browsertests") {
 
     # TODO(yoz): find the right deps
     "//base",
-    "//base:prefs_test_support",
     "//base/test:test_support",
+    "//components/prefs:test_support",
     "//components/storage_monitor:test_support",
+    "//content/test:browsertest_base",
     "//content/test:test_support",
     "//device/bluetooth:mocks",
     "//device/core:mocks",
     "//device/hid:mocks",
     "//device/usb:mocks",
+    "//mojo/edk/js",
+    "//mojo/edk/system",
     "//mojo/environment:chromium",
     "//mojo/public/cpp/bindings",
     "//testing/gmock",
     "//testing/gtest",
-    "//third_party/mojo/src/mojo/edk/js",
-    "//third_party/mojo/src/mojo/edk/system",
   ]
 
   data_deps = [
@@ -276,8 +255,6 @@ test("extensions_browsertests") {
   ]
 
   if (is_win) {
-    deps += [ "//base/allocator" ]
-
     if (target_cpu == "x86") {
       data_deps += [
         # "$root_out_dir/wow_helper.exe"  # TODO(GYP)
@@ -309,7 +286,6 @@ source_set("chrome_extensions_browsertests") {
   deps = [
     "//base",
     "//base:i18n",
-    "//base/allocator",
     "//base/test:test_support",
     "//chrome/browser",
     "//chrome/browser/resources:extension_resource_demo",
@@ -379,7 +355,6 @@ source_set("chrome_extensions_interactive_uitests") {
   # These are the deps from interactive_uitests minus some internal Chrome
   # ones that aren't allowed to be included here and that aren't needed.
   deps = [
-    "//base/allocator",
     "//chrome/browser",
     "//chrome/browser/devtools",
     "//chrome/renderer",

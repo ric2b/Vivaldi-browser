@@ -60,6 +60,8 @@ public:
     // parsing begins.
     void dispatchDidClearWindowObjectInMainWorld() override;
     void documentElementAvailable() override;
+    void runScriptsAtDocumentElementAvailable() override;
+    void runScriptsAtDocumentReady(bool documentIsEmpty) override;
 
     void didCreateScriptContext(v8::Local<v8::Context>, int extensionGroup, int worldId) override;
     void willReleaseScriptContext(v8::Local<v8::Context>, int worldId) override;
@@ -95,11 +97,11 @@ public:
     void dispatchDidCommitLoad(HistoryItem*, HistoryCommitType) override;
     void dispatchDidFailProvisionalLoad(const ResourceError&, HistoryCommitType) override;
     void dispatchDidFailLoad(const ResourceError&, HistoryCommitType) override;
-    void dispatchDidFinishDocumentLoad(bool documentIsEmpty) override;
+    void dispatchDidFinishDocumentLoad() override;
     void dispatchDidFinishLoad() override;
 
     void dispatchDidChangeThemeColor() override;
-    NavigationPolicy decidePolicyForNavigation(const ResourceRequest&, DocumentLoader*, NavigationType, NavigationPolicy, bool shouldReplaceCurrentEntry) override;
+    NavigationPolicy decidePolicyForNavigation(const ResourceRequest&, DocumentLoader*, NavigationType, NavigationPolicy, bool shouldReplaceCurrentEntry, bool isClientRedirect) override;
     bool hasPendingNavigation() override;
     void dispatchWillSendSubmitEvent(HTMLFormElement*) override;
     void dispatchWillSubmitForm(HTMLFormElement*) override;
@@ -127,7 +129,7 @@ public:
         HTMLPlugInElement*, const KURL&,
         const Vector<WTF::String>&, const Vector<WTF::String>&,
         const WTF::String&, bool loadManually, DetachedPluginPolicy) override;
-    PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, const WebURL&, WebMediaPlayerClient*) override;
+    PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, WebMediaPlayer::LoadType, const WebURL&, WebMediaPlayerClient*) override;
     PassOwnPtr<WebMediaSession> createWebMediaSession() override;
     ObjectContentType objectContentType(
         const KURL&, const WTF::String& mimeType, bool shouldPreferPlugInsForImages) override;
@@ -148,7 +150,7 @@ public:
     WebCookieJar* cookieJar() const override;
     bool willCheckAndDispatchMessageEvent(SecurityOrigin* target, MessageEvent*, LocalFrame* sourceFrame) const override;
     void frameFocused() const override;
-    void didChangeName(const String&) override;
+    void didChangeName(const String& name, const String& uniqueName) override;
     void didEnforceStrictMixedContentChecking() override;
     void didChangeSandboxFlags(Frame* childFrame, SandboxFlags) override;
     void didChangeFrameOwnerProperties(HTMLFrameElementBase*) override;

@@ -61,10 +61,10 @@ void copyToActiveInterpolationsMap(const Vector<RefPtr<Interpolation>>& source, 
     }
 }
 
-bool compareEffects(const Member<SampledEffect>& effect1, const Member<SampledEffect>& effect2)
+bool compareSampledEffects(const Member<SampledEffect>& sampledEffect1, const Member<SampledEffect>& sampledEffect2)
 {
-    ASSERT(effect1 && effect2);
-    return effect1->sequenceNumber() < effect2->sequenceNumber();
+    ASSERT(sampledEffect1 && sampledEffect2);
+    return sampledEffect1->sequenceNumber() < sampledEffect2->sequenceNumber();
 }
 
 void copyNewAnimationsToActiveInterpolationsMap(const HeapVector<Member<const InertEffect>>& newAnimations, AnimationStack::PropertyHandleFilter propertyHandleFilter, ActiveInterpolationsMap& result)
@@ -85,7 +85,7 @@ AnimationStack::AnimationStack()
 
 bool AnimationStack::hasActiveAnimationsOnCompositor(CSSPropertyID property) const
 {
-    for (const auto& sampledEffect : m_effects) {
+    for (const auto& sampledEffect : m_sampledEffects) {
         // TODO(dstockwell): move the playing check into AnimationEffect and expose both hasAnimations and hasActiveAnimations
         if (sampledEffect->effect() && sampledEffect->effect()->animation()->playing() && sampledEffect->effect()->hasActiveAnimationsOnCompositor(property))
             return true;
@@ -98,14 +98,14 @@ ActiveInterpolationsMap AnimationStack::activeInterpolations(AnimationStack* ani
     ActiveInterpolationsMap result;
 
     if (animationStack) {
-        HeapVector<Member<SampledEffect>>& effects = animationStack->m_effects;
+        HeapVector<Member<SampledEffect>>& sampledEffects = animationStack->m_sampledEffects;
         // std::sort doesn't work with OwnPtrs
-        nonCopyingSort(effects.begin(), effects.end(), compareEffects);
-        animationStack->removeClearedEffects();
-        for (const auto& effect : effects) {
-            if (effect->priority() != priority || (suppressedAnimations && effect->effect() && suppressedAnimations->contains(effect->effect()->animation())))
+        nonCopyingSort(sampledEffects.begin(), sampledEffects.end(), compareSampledEffects);
+        animationStack->removeRedundantSampledEffects();
+        for (const auto& sampledEffect : sampledEffects) {
+            if (sampledEffect->priority() != priority || (suppressedAnimations && sampledEffect->effect() && suppressedAnimations->contains(sampledEffect->effect()->animation())))
                 continue;
-            copyToActiveInterpolationsMap(effect->interpolations(), propertyHandleFilter, result);
+            copyToActiveInterpolationsMap(sampledEffect->interpolations(), propertyHandleFilter, result);
         }
     }
 
@@ -115,25 +115,36 @@ ActiveInterpolationsMap AnimationStack::activeInterpolations(AnimationStack* ani
     return result;
 }
 
-void AnimationStack::removeClearedEffects()
+void AnimationStack::removeRedundantSampledEffects()
 {
-    size_t dest = 0;
-    for (auto& effect : m_effects) {
-        if (effect->effect())
-            m_effects[dest++].swap(effect);
+    HashSet<PropertyHandle> replacedProperties;
+    for (size_t i = m_sampledEffects.size(); i--;) {
+        SampledEffect& sampledEffect = *m_sampledEffects[i];
+        if (sampledEffect.willNeverChange()) {
+            sampledEffect.removeReplacedInterpolations(replacedProperties);
+            sampledEffect.updateReplacedProperties(replacedProperties);
+        }
     }
-    m_effects.shrink(dest);
+
+    size_t newSize = 0;
+    for (auto& sampledEffect : m_sampledEffects) {
+        if (!sampledEffect->interpolations().isEmpty())
+            m_sampledEffects[newSize++].swap(sampledEffect);
+        else if (sampledEffect->effect())
+            sampledEffect->effect()->notifySampledEffectRemovedFromAnimationStack();
+    }
+    m_sampledEffects.shrink(newSize);
 }
 
 DEFINE_TRACE(AnimationStack)
 {
-    visitor->trace(m_effects);
+    visitor->trace(m_sampledEffects);
 }
 
 bool AnimationStack::getAnimatedBoundingBox(FloatBox& box, CSSPropertyID property) const
 {
     FloatBox originalBox(box);
-    for (const auto& sampledEffect : m_effects) {
+    for (const auto& sampledEffect : m_sampledEffects) {
         if (sampledEffect->effect() && sampledEffect->effect()->affects(PropertyHandle(property))) {
             KeyframeEffect* effect = sampledEffect->effect();
             const Timing& timing = effect->specifiedTiming();

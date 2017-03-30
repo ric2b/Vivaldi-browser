@@ -33,8 +33,8 @@
 #include "core/editing/TextAffinity.h"
 #include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleUnits.h"
+#include "core/layout/api/LineLayoutAPIShim.h"
 #include "core/layout/compositing/CompositedSelectionBound.h"
-#include "core/paint/LineLayoutPaintShim.h"
 #include "core/paint/PaintLayer.h"
 
 namespace blink {
@@ -71,7 +71,7 @@ RenderedPosition::RenderedPosition(const VisiblePosition& position)
 {
 }
 
-RenderedPosition::RenderedPosition(const VisiblePositionInComposedTree& position)
+RenderedPosition::RenderedPosition(const VisiblePositionInFlatTree& position)
     : RenderedPosition(position.deepEquivalent(), position.affinity())
 {
 }
@@ -89,12 +89,12 @@ RenderedPosition::RenderedPosition(const Position& position, TextAffinity affini
     m_inlineBox = boxPosition.inlineBox;
     m_offset = boxPosition.offsetInBox;
     if (m_inlineBox)
-        m_layoutObject = LineLayoutPaintShim::layoutObjectFrom(m_inlineBox->lineLayoutItem());
+        m_layoutObject = LineLayoutAPIShim::layoutObjectFrom(m_inlineBox->getLineLayoutItem());
     else
         m_layoutObject = layoutObjectFromPosition(position);
 }
 
-RenderedPosition::RenderedPosition(const PositionInComposedTree& position, TextAffinity affinity)
+RenderedPosition::RenderedPosition(const PositionInFlatTree& position, TextAffinity affinity)
     : RenderedPosition(toPositionInDOMTree(position), affinity)
 {
 }
@@ -141,7 +141,7 @@ RenderedPosition RenderedPosition::leftBoundaryOfBidiRun(unsigned char bidiLevel
     do {
         InlineBox* prev = box->prevLeafChildIgnoringLineBreak();
         if (!prev || prev->bidiLevel() < bidiLevelOfRun)
-            return RenderedPosition(&box->layoutObject(), box, box->caretLeftmostOffset());
+            return RenderedPosition(LineLayoutAPIShim::layoutObjectFrom(box->getLineLayoutItem()), box, box->caretLeftmostOffset());
         box = prev;
     } while (box);
 
@@ -158,7 +158,7 @@ RenderedPosition RenderedPosition::rightBoundaryOfBidiRun(unsigned char bidiLeve
     do {
         InlineBox* next = box->nextLeafChildIgnoringLineBreak();
         if (!next || next->bidiLevel() < bidiLevelOfRun)
-            return RenderedPosition(&box->layoutObject(), box, box->caretRightmostOffset());
+            return RenderedPosition(LineLayoutAPIShim::layoutObjectFrom(box->getLineLayoutItem()), box, box->caretRightmostOffset());
         box = next;
     } while (box);
 
@@ -213,7 +213,7 @@ Position RenderedPosition::positionAtLeftBoundaryOfBiDiRun() const
     if (atLeftmostOffsetInBox())
         return Position::editingPositionOf(m_layoutObject->node(), m_offset);
 
-    return Position::editingPositionOf(nextLeafChild()->layoutObject().node(), nextLeafChild()->caretLeftmostOffset());
+    return Position::editingPositionOf(nextLeafChild()->getLineLayoutItem().node(), nextLeafChild()->caretLeftmostOffset());
 }
 
 Position RenderedPosition::positionAtRightBoundaryOfBiDiRun() const
@@ -223,7 +223,7 @@ Position RenderedPosition::positionAtRightBoundaryOfBiDiRun() const
     if (atRightmostOffsetInBox())
         return Position::editingPositionOf(m_layoutObject->node(), m_offset);
 
-    return Position::editingPositionOf(prevLeafChild()->layoutObject().node(), prevLeafChild()->caretRightmostOffset());
+    return Position::editingPositionOf(prevLeafChild()->getLineLayoutItem().node(), prevLeafChild()->caretRightmostOffset());
 }
 
 IntRect RenderedPosition::absoluteRect(LayoutUnit* extraWidthToEndOfLine) const
@@ -277,4 +277,4 @@ bool layoutObjectContainsPosition(LayoutObject* target, const Position& position
     return false;
 }
 
-};
+} // namespace blink

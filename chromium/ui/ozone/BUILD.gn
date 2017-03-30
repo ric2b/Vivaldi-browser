@@ -8,6 +8,8 @@ import("//testing/test.gni")
 
 assert(use_ozone)
 
+visibility = [ ":*" ]
+
 # The list of platforms that will be built.
 ozone_platforms = []
 
@@ -43,6 +45,17 @@ if (ozone_platform_cast) {
   ozone_platform_deps += [ "platform/cast" ]
 }
 
+if (ozone_platform_wayland) {
+  ozone_platforms += [ "wayland" ]
+  ozone_platform_deps += [ "platform/wayland" ]
+  ozone_platform_test_deps += [ "platform/wayland:wayland_unittests" ]
+}
+
+if (ozone_platform_x11) {
+  ozone_platforms += [ "x11" ]
+  ozone_platform_deps += [ "platform/x11" ]
+}
+
 platform_list_cc_file = "$target_gen_dir/platform_list.cc"
 platform_list_h_file = "$target_gen_dir/platform_list.h"
 platform_list_txt_file = "$target_gen_dir/platform_list.txt"
@@ -57,23 +70,6 @@ config("vgem_map") {
 # GYP version: ui/ozone/ozone.gyp:ozone_base
 component("ozone_base") {
   sources = [
-    "common/display_mode_proxy.cc",
-    "common/display_mode_proxy.h",
-    "common/display_snapshot_proxy.cc",
-    "common/display_snapshot_proxy.h",
-    "common/display_util.cc",
-    "common/display_util.h",
-    "common/egl_util.cc",
-    "common/egl_util.h",
-    "common/gpu/ozone_gpu_message_generator.cc",
-    "common/gpu/ozone_gpu_message_generator.h",
-    "common/gpu/ozone_gpu_message_params.cc",
-    "common/gpu/ozone_gpu_message_params.h",
-    "common/gpu/ozone_gpu_messages.h",
-    "common/native_display_delegate_ozone.cc",
-    "common/native_display_delegate_ozone.h",
-    "common/stub_overlay_manager.cc",
-    "common/stub_overlay_manager.h",
     "public/cursor_factory_ozone.cc",
     "public/cursor_factory_ozone.h",
     "public/gpu_platform_support.cc",
@@ -97,7 +93,7 @@ component("ozone_base") {
 
   defines = [ "OZONE_BASE_IMPLEMENTATION" ]
 
-  deps = [
+  public_deps = [
     "//base",
     "//ipc",
     "//skia",
@@ -109,50 +105,72 @@ component("ozone_base") {
     "//ui/gfx/geometry",
     "//ui/gfx/ipc",
   ]
+
+  visibility += [
+    # Everyone should depend on //ui/ozone instead except a handful of
+    # things that would otherwise create a cycle.
+    "//ui/base",
+    "//ui/events/ozone/*",
+    "//ui/ozone/platform/*",
+    "//ui/ozone/common/*",
+  ]
 }
 
-component("ozone") {
+source_set("platform") {
   sources = [
     "common/stub_client_native_pixmap_factory.cc",
     "common/stub_client_native_pixmap_factory.h",
     "platform_selection.cc",
     "platform_selection.h",
     "public/client_native_pixmap_factory.cc",
-    "public/client_native_pixmap_factory.h",
     "public/ozone_gpu_test_helper.cc",
-    "public/ozone_gpu_test_helper.h",
     "public/ozone_platform.cc",
-    "public/ozone_platform.h",
     constructor_list_cc_file,
     platform_list_cc_file,
     platform_list_h_file,
+  ]
+
+  public = [
+    "public/client_native_pixmap_factory.h",
+    "public/ozone_gpu_test_helper.h",
+    "public/ozone_platform.h",
   ]
 
   defines = [ "OZONE_IMPLEMENTATION" ]
 
   public_deps = [
     ":ozone_base",
+    "//base",
+    "//ipc",
+    "//skia",
+    "//ui/display/types",
+    "//ui/events",
+    "//ui/events/devices",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/platform_window",
   ]
 
-  deps =
-      [
-        ":generate_constructor_list",
-        ":generate_ozone_platform_list",
-        "//base",
-        "//ipc",
-        "//skia",
-        "//ui/display/types",
-        "//ui/display/util",
-        "//ui/events",
-        "//ui/events/devices",
-        "//ui/events/ozone:events_ozone",
-        "//ui/gfx",
-        "//ui/gfx/geometry",
-        "//ui/gfx/ipc",
+  deps = [
+    ":generate_constructor_list",
+    ":generate_ozone_platform_list",
+  ]
 
-        # TODO(GYP) the GYP version has a way to add additional dependencies via
-        # build flags.
-      ] + ozone_platform_deps
+  # TODO(GYP) the GYP version has a way to add additional dependencies via
+  # build flags.
+  deps += ozone_platform_deps
+
+  # Platforms are always linked into //ui/ozone and can include our headers.
+  allow_circular_includes_from = ozone_platform_deps
+
+  # This is used for platform tests.
+  visibility += [ "//ui/ozone/platform/*" ]
+}
+
+component("ozone") {
+  public_deps = [
+    ":platform",
+  ]
 }
 
 # GYP version: ui/ozone/ozone.gyp:generate_ozone_platform_list
@@ -171,6 +189,8 @@ action("generate_ozone_platform_list") {
         "--output_txt=" + rebase_path(platform_list_txt_file, root_build_dir),
         "--default=$ozone_platform",
       ] + ozone_platforms
+
+  visibility += [ "//media:*" ]
 }
 
 # GYP version: ui/ozone/ozone.gyp:generate_constructor_list
@@ -205,8 +225,15 @@ test("ozone_unittests") {
   ]
 
   deps = [
-           "//base/test:test_support",
-           "//testing/gtest",
-           "//ui/gfx/geometry",
-         ] + ozone_platform_test_deps
+    "//base/test:test_support",
+    "//testing/gtest",
+    "//ui/gfx/geometry",
+  ]
+
+  # Add tests of platform internals.
+  deps += ozone_platform_test_deps
+
+  # Platform tests link ozone statically. Make sure we're not getting a
+  # 2nd copy of any code via the component.
+  assert_no_deps = [ "//ui/ozone" ]
 }

@@ -6,7 +6,7 @@ import("//build/config/android/config.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/nacl/config.gni")
-import("//build/toolchain/ccache.gni")
+import("//build/toolchain/cc_wrapper.gni")
 
 if (current_cpu == "arm") {
   import("//build/config/arm.gni")
@@ -70,6 +70,10 @@ declare_args() {
     # The patch is preapplied to the internal toolchain and hence all bots.
     msvs_xtree_patched = false
   }
+
+  # Omit unwind support in official builds to save space.
+  # We can use breakpad for these builds.
+  exclude_unwind_tables = is_chrome_branded && is_official_build
 }
 
 # Apply the default logic for these values if they were not set explicitly.
@@ -84,7 +88,7 @@ if (gold_path == false) {
 
 if (use_debug_fission == "default") {
   use_debug_fission = is_debug && !is_win && use_gold &&
-                      linux_use_bundled_binutils && !use_ccache
+                      linux_use_bundled_binutils && cc_wrapper == ""
 }
 
 # default_include_dirs ---------------------------------------------------------
@@ -145,6 +149,8 @@ config("compiler") {
     # --------------------------------
     cflags += [ "-fno-strict-aliasing" ]  # See http://crbug.com/32204
     cflags_cc += [
+      # If this is removed then remove the corresponding /Zc:threadSafeInit- for
+      # Windows.
       "-fno-threadsafe-statics",
 
       # Not exporting C++ inline functions can generally be applied anywhere
@@ -159,7 +165,9 @@ config("compiler") {
     } else if (is_posix && !is_chromeos && !is_nacl) {
       # TODO(phajdan.jr): Use -fstack-protector-strong when our gcc supports it.
       cflags += [ "--param=ssp-buffer-size=4" ]
-      if (is_android && (current_cpu == "arm64" || current_cpu == "x86")) {
+
+      # The x86 toolchain currently has problems with stack-protector.
+      if (is_android && current_cpu == "x86") {
         cflags += [ "-fno-stack-protector" ]
       } else {
         cflags += [ "-fstack-protector" ]
@@ -225,9 +233,7 @@ config("compiler") {
     }
 
     if (!is_nacl) {
-      # Omit unwind support in official builds to save space.
-      # We can use breakpad for these builds.
-      if (is_chrome_branded && is_official_build) {
+      if (exclude_unwind_tables) {
         cflags += [
           "-fno-unwind-tables",
           "-fno-asynchronous-unwind-tables",
@@ -305,6 +311,15 @@ config("compiler") {
   # ------------------------------------
   if (is_clang) {
     cflags += [ "-fcolor-diagnostics" ]
+  }
+
+  # Makes builds independent of absolute file path.
+  # clang-cl (used if is_win) doesn't expose this flag.
+  # Currently disabled for nacl since its toolchain lacks this flag (too old).
+  # TODO(zforman): Once nacl's toolchain is updated, remove check.
+  if (is_clang && !is_win && !is_nacl) {
+    absolute_path = rebase_path("//.")
+    cflags += [ "-fdebug-prefix-map=$absolute_path=." ]
   }
 
   # C++11 compiler flags setup.
@@ -575,10 +590,6 @@ config("compiler_codegen") {
           # Else building libyuv gives clang's register allocator issues,
           # see llvm.org/PR15798 / crbug.com/233709
           "-momit-leaf-frame-pointer",
-
-          # Align the stack on 16-byte boundaries, http://crbug.com/418554.
-          "-mstack-alignment=16",
-          "-mstackrealign",
         ]
       }
     } else if (current_cpu == "arm") {
@@ -601,6 +612,20 @@ config("compiler_codegen") {
   }
 
   asmflags = cflags
+}
+
+# This is separate from :compiler_codegen (and not even a sub-config there)
+# so that some targets can remove it from the list with:
+#   configs -= [ "//build/config/compiler:clang_stackrealign" ]
+# See https://crbug.com/556393 for details of where it must be avoided.
+config("clang_stackrealign") {
+  if (is_clang && current_cpu == "x86" && is_linux) {
+    cflags = [
+      # Align the stack on 16-byte boundaries, http://crbug.com/418554.
+      "-mstack-alignment=16",
+      "-mstackrealign",
+    ]
+  }
 }
 
 config("compiler_arm_fpu") {
@@ -831,9 +856,6 @@ config("default_warnings") {
 
   if (is_clang) {
     cflags += [
-      # TODO(thakis): Add -Wfor-loop-analysis to -Wall in clang, remove this:
-      "-Wfor-loop-analysis",
-
       # TODO(thakis): Consider -Wloop-analysis (turns on
       # -Wrange-loop-analysis too).
 
@@ -1074,7 +1096,10 @@ if (is_win) {
   common_optimize_on_ldflags = []
 
   if (is_android) {
-    if (!using_sanitizer) {
+    # We don't omit frame pointers on arm64 since they are required
+    # to correctly unwind stackframes which contain system library
+    # function frames (crbug.com/391706).
+    if (!using_sanitizer && target_cpu != "arm64") {
       common_optimize_on_cflags += [ "-fomit-frame-pointer" ]
     }
 
@@ -1145,7 +1170,11 @@ config("no_optimize") {
       "-fdata-sections",
       "-ffunction-sections",
     ]
-    if (!using_sanitizer) {
+
+    # We don't omit frame pointers on arm64 since they are required
+    # to correctly unwind stackframes which contain system library
+    # function frames (crbug.com/391706).
+    if (!using_sanitizer && target_cpu != "arm64") {
       cflags += [ "-fomit-frame-pointer" ]
     }
 
@@ -1232,7 +1261,7 @@ config("symbols") {
     } else {
       cflags = [ "/Zi" ]  # Produce PDB file, no edit and continue.
     }
-    if (is_win_fastlink) {
+    if (is_win_fastlink && visual_studio_version != "2013") {
       # Tell VS 2015+ to create a PDB that references debug
       # information in .obj and .lib files instead of copying
       # it all. This flag is incompatible with /PROFILE
@@ -1255,7 +1284,7 @@ config("minimal_symbols") {
   if (is_win) {
     # Linker symbols for backtraces only.
     cflags = []
-    if (is_win_fastlink) {
+    if (is_win_fastlink && visual_studio_version != "2013") {
       # Tell VS 2015+ to create a PDB that references debug
       # information in .obj and .lib files instead of copying
       # it all. This flag is incompatible with /PROFILE

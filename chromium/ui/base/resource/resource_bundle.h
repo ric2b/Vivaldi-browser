@@ -43,12 +43,16 @@ class ResourceHandle;
 // such as theme graphics. Every resource is loaded only once.
 class UI_BASE_EXPORT ResourceBundle {
  public:
-  // An enumeration of the various font styles used throughout Chrome.
-  // The following holds true for the font sizes:
-  // Small <= SmallBold <= Base <= Bold <= Medium <= MediumBold <= Large.
+  // Legacy font size deltas. Consider these to be magic numbers. New code
+  // should declare their own size delta constant using an identifier that
+  // imparts some semantic meaning.
+  static const int kSmallFontDelta = -1;
+  static const int kMediumFontDelta = 3;
+  static const int kLargeFontDelta = 8;
+
+  // Legacy font style mappings. TODO(tapted): Phase these out in favour of
+  // client code providing their own constant with the desired font size delta.
   enum FontStyle {
-    // NOTE: depending upon the locale, using one of the *BoldFont below
-    // may *not* actually result in a bold font.
     SmallFont,
     SmallBoldFont,
     BaseFont,
@@ -57,13 +61,6 @@ class UI_BASE_EXPORT ResourceBundle {
     MediumBoldFont,
     LargeFont,
     LargeBoldFont,
-  };
-
-  enum ImageRTL {
-    // Images are flipped in RTL locales.
-    RTL_ENABLED,
-    // Images are never flipped.
-    RTL_DISABLED,
   };
 
   enum LoadResources {
@@ -97,7 +94,7 @@ class UI_BASE_EXPORT ResourceBundle {
 
     // Return an image resource or an empty value to attempt retrieval of the
     // default resource.
-    virtual gfx::Image GetNativeImageNamed(int resource_id, ImageRTL rtl) = 0;
+    virtual gfx::Image GetNativeImageNamed(int resource_id) = 0;
 
     // Return a static memory resource or NULL to attempt retrieval of the
     // default resource.
@@ -114,9 +111,6 @@ class UI_BASE_EXPORT ResourceBundle {
     // Retrieve a localized string. Return true if a string was provided or
     // false to attempt retrieval of the default string.
     virtual bool GetLocalizedString(int message_id, base::string16* value) = 0;
-
-    // Returns a font or NULL to attempt retrieval of the default resource.
-    virtual scoped_ptr<gfx::Font> GetFont(FontStyle style) = 0;
 
    protected:
     virtual ~Delegate() {}
@@ -219,11 +213,6 @@ class UI_BASE_EXPORT ResourceBundle {
   // Note that if the same resource has already been loaded in GetImageNamed(),
   // gfx::Image will perform a conversion, rather than using the native image
   // loading code of ResourceBundle.
-  //
-  // If |rtl| is RTL_ENABLED then the image is flipped in RTL locales.
-  gfx::Image& GetNativeImageNamed(int resource_id, ImageRTL rtl);
-
-  // Same as GetNativeImageNamed() except that RTL is not enabled.
   gfx::Image& GetNativeImageNamed(int resource_id);
 
   // Loads the raw bytes of a scale independent data resource.
@@ -253,10 +242,19 @@ class UI_BASE_EXPORT ResourceBundle {
   // string if the message_id is not found.
   base::string16 GetLocalizedString(int message_id);
 
-  // Returns the font list for the specified style.
-  const gfx::FontList& GetFontList(FontStyle style);
+  // Returns a font list derived from the platform-specific "Base" font list.
+  // The result is always cached and exists for the lifetime of the process.
+  const gfx::FontList& GetFontListWithDelta(
+      int size_delta,
+      gfx::Font::FontStyle style = gfx::Font::NORMAL);
 
-  // Returns the font for the specified style.
+  // Returns the primary font from the FontList given by GetFontListWithDelta().
+  const gfx::Font& GetFontWithDelta(
+      int size_delta,
+      gfx::Font::FontStyle style = gfx::Font::NORMAL);
+
+  // Deprecated. Returns fonts using hard-coded size deltas implied by |style|.
+  const gfx::FontList& GetFontList(FontStyle style);
   const gfx::Font& GetFont(FontStyle style);
 
   // Resets and reloads the cached fonts.  This is useful when the fonts of the
@@ -356,14 +354,6 @@ class UI_BASE_EXPORT ResourceBundle {
   // Initializes the font description of default gfx::FontList.
   void InitDefaultFontList();
 
-  // Initializes all the gfx::FontList members if they haven't yet been
-  // initialized.
-  void LoadFontsIfNecessary();
-
-  // Returns a FontList or NULL by calling Delegate::GetFont and converting
-  // scoped_ptr<gfx::Font> to scoped_ptr<gfx::FontList>.
-  scoped_ptr<gfx::FontList> GetFontListFromDelegate(FontStyle style);
-
   // Fills the |bitmap| given the data file to look in and the |resource_id|.
   // Returns false if the resource does not exist.
   //
@@ -430,17 +420,11 @@ class UI_BASE_EXPORT ResourceBundle {
 
   gfx::Image empty_image_;
 
-  // The various font lists used. Cached to avoid repeated GDI
-  // creation/destruction.
-  scoped_ptr<gfx::FontList> base_font_list_;
-  scoped_ptr<gfx::FontList> bold_font_list_;
-  scoped_ptr<gfx::FontList> small_font_list_;
-  scoped_ptr<gfx::FontList> small_bold_font_list_;
-  scoped_ptr<gfx::FontList> medium_font_list_;
-  scoped_ptr<gfx::FontList> medium_bold_font_list_;
-  scoped_ptr<gfx::FontList> large_font_list_;
-  scoped_ptr<gfx::FontList> large_bold_font_list_;
-  scoped_ptr<gfx::FontList> web_font_list_;
+  // The various font lists used, as a map from a signed size delta from the
+  // platform base font size, plus style, to the FontList. Cached to avoid
+  // repeated GDI creation/destruction and font derivation.
+  // Must be accessed only while holding |images_and_fonts_lock_|.
+  std::map<std::pair<int, gfx::Font::FontStyle>, gfx::FontList> font_cache_;
 
   base::FilePath overridden_pak_path_;
 

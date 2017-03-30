@@ -15,6 +15,7 @@
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
+#include "net/base/ip_address.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/x509_certificate.h"
 #include "net/log/net_log.h"
@@ -51,14 +52,12 @@ scoped_ptr<base::Value> NetLogQuicPacketCallback(
 scoped_ptr<base::Value> NetLogQuicPacketSentCallback(
     const SerializedPacket& serialized_packet,
     TransmissionType transmission_type,
-    size_t packet_size,
     QuicTime sent_time,
     NetLogCaptureMode /* capture_mode */) {
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetInteger("transmission_type", transmission_type);
   dict->SetString("packet_number",
                   base::Uint64ToString(serialized_packet.packet_number));
-  dict->SetInteger("size", packet_size);
   dict->SetString("sent_time_us",
                   base::Int64ToString(sent_time.ToDebuggingValue()));
   return std::move(dict);
@@ -114,9 +113,8 @@ scoped_ptr<base::Value> NetLogQuicAckFrameCallback(
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("largest_observed",
                   base::Uint64ToString(frame->largest_observed));
-  dict->SetString(
-      "delta_time_largest_observed_us",
-      base::Int64ToString(frame->delta_time_largest_observed.ToMicroseconds()));
+  dict->SetString("delta_time_largest_observed_us",
+                  base::Int64ToString(frame->ack_delay_time.ToMicroseconds()));
   dict->SetInteger("entropy_hash", frame->entropy_hash);
   dict->SetBoolean("truncated", frame->is_truncated);
 
@@ -222,11 +220,12 @@ scoped_ptr<base::Value> NetLogQuicCryptoHandshakeMessageCallback(
 
 scoped_ptr<base::Value> NetLogQuicOnConnectionClosedCallback(
     QuicErrorCode error,
-    bool from_peer,
+    ConnectionCloseSource source,
     NetLogCaptureMode /* capture_mode */) {
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetInteger("quic_error", error);
-  dict->SetBoolean("from_peer", from_peer);
+  dict->SetBoolean("from_peer",
+                   source == ConnectionCloseSource::FROM_PEER ? true : false);
   return std::move(dict);
 }
 
@@ -267,9 +266,9 @@ void UpdatePublicResetAddressMismatchHistogram(
 
 // If |address| is an IPv4-mapped IPv6 address, returns ADDRESS_FAMILY_IPV4
 // instead of ADDRESS_FAMILY_IPV6. Othewise, behaves like GetAddressFamily().
-AddressFamily GetRealAddressFamily(const IPAddressNumber& address) {
-  return IsIPv4Mapped(address) ? ADDRESS_FAMILY_IPV4
-                               : GetAddressFamily(address);
+AddressFamily GetRealAddressFamily(const IPAddress& address) {
+  return address.IsIPv4MappedIPv6() ? ADDRESS_FAMILY_IPV4
+                                    : GetAddressFamily(address);
 }
 
 }  // namespace
@@ -429,13 +428,12 @@ void QuicConnectionLogger::OnPacketSent(
     const SerializedPacket& serialized_packet,
     QuicPacketNumber original_packet_number,
     TransmissionType transmission_type,
-    size_t encrypted_length,
     QuicTime sent_time) {
   if (original_packet_number == 0) {
     net_log_.AddEvent(
         NetLog::TYPE_QUIC_SESSION_PACKET_SENT,
         base::Bind(&NetLogQuicPacketSentCallback, serialized_packet,
-                   transmission_type, encrypted_length, sent_time));
+                   transmission_type, sent_time));
   } else {
     net_log_.AddEvent(
         NetLog::TYPE_QUIC_SESSION_PACKET_RETRANSMITTED,
@@ -674,10 +672,10 @@ void QuicConnectionLogger::OnCryptoHandshakeMessageSent(
 }
 
 void QuicConnectionLogger::OnConnectionClosed(QuicErrorCode error,
-                                              bool from_peer) {
+                                              ConnectionCloseSource source) {
   net_log_.AddEvent(
       NetLog::TYPE_QUIC_SESSION_CLOSED,
-      base::Bind(&NetLogQuicOnConnectionClosedCallback, error, from_peer));
+      base::Bind(&NetLogQuicOnConnectionClosedCallback, error, source));
 }
 
 void QuicConnectionLogger::OnSuccessfulVersionNegotiation(

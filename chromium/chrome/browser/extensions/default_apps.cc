@@ -10,7 +10,6 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/first_run/first_run.h"
@@ -19,6 +18,7 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "components/version_info/version_info.h"
 #include "extensions/common/extension.h"
 

@@ -115,12 +115,11 @@ class SQL_EXPORT Recovery {
   // Attempt to recover the named table from the corrupt database into
   // the recovery database using a temporary recover virtual table.
   // The virtual table schema is derived from the named table's schema
-  // in database [main].  Data is copied using INSERT OR REPLACE, so
-  // duplicates overwrite each other.
+  // in database [main].  Data is copied using INSERT OR IGNORE, so
+  // duplicates are dropped.
   //
-  // |extend_columns| allows recovering tables which have excess
-  // columns relative to the target schema.  The recover virtual table
-  // treats more data than specified as a sign of corruption.
+  // If the source table has fewer columns than the target, the target
+  // DEFAULT value will be used for those columns.
   //
   // Returns true if all operations succeeded, with the number of rows
   // recovered in |*rows_recovered|.
@@ -134,9 +133,7 @@ class SQL_EXPORT Recovery {
   //
   // TODO(shess): Flag for INSERT OR REPLACE vs IGNORE.
   // TODO(shess): Handle extended table names.
-  bool AutoRecoverTable(const char* table_name,
-                        size_t extend_columns,
-                        size_t* rows_recovered);
+  bool AutoRecoverTable(const char* table_name, size_t* rows_recovered);
 
   // Setup a recover virtual table at temp.recover_meta, reading from
   // corrupt.meta.  Returns true if created.

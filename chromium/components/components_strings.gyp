@@ -7,6 +7,7 @@
     {
       'target_name': 'components_strings',
       'type': 'none',
+      'hard_dependency': 1,
       'dependencies': [
         '<(VIVALDI)/app/vivaldi_resources.gyp:vivaldi_combined_component_resources',
       ],
@@ -38,6 +39,15 @@
           'disabled':1,
           'variables': {
             'grit_grd_file': 'components_google_chrome_strings.grd',
+          },
+          'includes': [ '../build/grit_action.gypi' ],
+        },
+        {
+          # GN version: //components/strings:components_locale_settings
+          'action_name': 'generate_components_locale_settings',
+          'disabled':1,
+          'variables': {
+            'grit_grd_file': 'components_locale_settings.grd',
           },
           'includes': [ '../build/grit_action.gypi' ],
         },

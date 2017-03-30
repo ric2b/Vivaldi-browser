@@ -53,15 +53,15 @@ LayoutSize StyleGeneratedImage::imageSize(const LayoutObject* layoutObject, floa
         if (multiplier == 1.0f)
             return fixedSize;
 
-        LayoutUnit width = fixedSize.width() * multiplier;
-        LayoutUnit height = fixedSize.height() * multiplier;
+        LayoutUnit width(fixedSize.width() * multiplier);
+        LayoutUnit height(fixedSize.height() * multiplier);
 
         // Don't let images that have a width/height >= 1 shrink below 1 when zoomed.
-        if (fixedSize.width() > 0)
-            width = max<LayoutUnit>(1, width);
+        if (fixedSize.width() > LayoutUnit())
+            width = max(LayoutUnit(1), width);
 
-        if (fixedSize.height() > 0)
-            height = max<LayoutUnit>(1, height);
+        if (fixedSize.height() > LayoutUnit())
+            height = max(LayoutUnit(1), height);
 
         return LayoutSize(width, height);
     }
@@ -69,13 +69,12 @@ LayoutSize StyleGeneratedImage::imageSize(const LayoutObject* layoutObject, floa
     return LayoutSize();
 }
 
-void StyleGeneratedImage::computeIntrinsicDimensions(const LayoutObject* layoutObject, Length& intrinsicWidth, Length& intrinsicHeight, FloatSize& intrinsicRatio)
+void StyleGeneratedImage::computeIntrinsicDimensions(const LayoutObject* layoutObject, FloatSize& intrinsicSize, FloatSize& intrinsicRatio)
 {
     // At a zoom level of 1 the image is guaranteed to have an integer size.
-    IntSize size = flooredIntSize(imageSize(layoutObject, 1));
-    intrinsicWidth = Length(size.width(), Fixed);
-    intrinsicHeight = Length(size.height(), Fixed);
-    intrinsicRatio = FloatSize(size);
+    LayoutSize size = imageSize(layoutObject, 1);
+    ASSERT(size.fraction().isZero());
+    intrinsicSize = intrinsicRatio = FloatSize(size);
 }
 
 void StyleGeneratedImage::addClient(LayoutObject* layoutObject)
@@ -104,4 +103,4 @@ DEFINE_TRACE(StyleGeneratedImage)
     StyleImage::trace(visitor);
 }
 
-}
+} // namespace blink

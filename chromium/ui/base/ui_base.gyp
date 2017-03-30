@@ -8,10 +8,56 @@
   },
   'targets': [
     {
+      # GN version: //ui/base:ui_data_pack
+      # As part of building Chrome on iOS, it is necessary to run a tool on
+      # the host to load datapack and generate output in a format defined
+      # by the platform (this is to support notifications).
+      #
+      # Introduce a standalone target that build on both 'host' and 'target'
+      # toolset that just build the support to load datapack. The dependency
+      # should be kept minimal to have to build too many targets with multiple
+      # toolsets.
+      'target_name': 'ui_data_pack',
+      'toolsets': ['host', 'target'],
+      'type': '<(component)',
+      'dependencies': [
+        '../../base/base.gyp:base',
+      ],
+      'sources': [
+        'resource/data_pack.cc',
+        'resource/data_pack.h',
+        'resource/data_pack_export.h',
+        'resource/resource_handle.h',
+        'resource/scale_factor.cc',
+        'resource/scale_factor.h',
+      ],
+      'defines': [
+        'UI_DATA_PACK_IMPLEMENTATION',
+      ],
+      'conditions': [
+        ['OS=="win"', {
+          # TODO(jschuh): C4267: http://crbug.com/167187 size_t -> int
+          'msvs_disabled_warnings': [ 4267 ],
+        }],
+    ],
+    },
+    { # GN version: //ui/base:ui_features
+      'target_name': 'ui_features',
+      'includes': [ '../../build/buildflag_header.gypi' ],
+      'variables': {
+        'buildflag_header_path': 'ui/base/ui_features.h',
+        'buildflag_flags': [
+          'ENABLE_HIDPI=<(enable_hidpi)',
+        ],
+      },
+    },
+    {
       # GN version: //ui/base
       'target_name': 'ui_base',
       'type': '<(component)',
       'dependencies': [
+        'ui_data_pack',
+        'ui_features',
         '../../base/base.gyp:base',
         '../../base/base.gyp:base_i18n',
         '../../base/base.gyp:base_static',
@@ -163,6 +209,7 @@
         'default_theme_provider.cc',
         'default_theme_provider.h',
         'default_theme_provider_mac.mm',
+        'default_style.h',
         'device_form_factor.h',
         'device_form_factor_android.cc',
         'device_form_factor_android.h',
@@ -230,6 +277,8 @@
         'layout.cc',
         'layout.h',
         'layout_mac.mm',
+        'material_design/material_design_controller.cc',
+        'material_design/material_design_controller.h',
         'models/button_menu_item_model.cc',
         'models/button_menu_item_model.h',
         'models/combobox_model.cc',
@@ -260,10 +309,6 @@
         'nine_image_painter_factory.h',
         'page_transition_types.cc',
         'page_transition_types.h',
-        'resource/data_pack.cc',
-        'resource/data_pack.h',
-        'resource/material_design/material_design_controller.cc',
-        'resource/material_design/material_design_controller.h',
         'resource/resource_bundle.cc',
         'resource/resource_bundle.h',
         'resource/resource_bundle_android.cc',
@@ -274,7 +319,6 @@
         'resource/resource_bundle_win.h',
         'resource/resource_data_dll_win.cc',
         'resource/resource_data_dll_win.h',
-        'resource/resource_handle.h',
         'template_expressions.cc',
         'template_expressions.h',
         'text/bytes_formatting.cc',
@@ -373,6 +417,7 @@
             ['include', '(^|/)ios/'],
             ['include', '^l10n/'],
             ['include', '^layout'],
+            ['include', '^material_design/'],
             ['include', '^page_transition_type'],
             ['include', '^resource/'],
             ['include', 'template_expressions.cc'],
@@ -651,6 +696,7 @@
       'target_name': 'ui_base_test_support',
       'type': 'static_library',
       'dependencies': [
+        'ui_data_pack',
         '../../base/base.gyp:base',
         '../../skia/skia.gyp:skia',
         '../../testing/gtest.gyp:gtest',
@@ -693,6 +739,8 @@
             'test/scoped_fake_nswindow_focus.mm',
             'test/scoped_fake_nswindow_fullscreen.h',
             'test/scoped_fake_nswindow_fullscreen.mm',
+            'test/scoped_preferred_scroller_style_mac.h',
+            'test/scoped_preferred_scroller_style_mac.mm',
             'test/windowed_nsnotification_observer.h',
             'test/windowed_nsnotification_observer.mm',
           ],

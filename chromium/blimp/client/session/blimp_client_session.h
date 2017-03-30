@@ -10,6 +10,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/thread.h"
 #include "blimp/client/blimp_client_export.h"
+#include "blimp/client/session/assignment_source.h"
 #include "blimp/common/proto/blimp_message.pb.h"
 #include "blimp/net/blimp_message_processor.h"
 
@@ -43,15 +44,28 @@ class BLIMP_CLIENT_EXPORT BlimpClientSession {
  public:
   BlimpClientSession();
 
+  // Uses the AssignmentSource to get an Assignment and then uses the assignment
+  // configuration to connect to the Blimplet.
+  // |client_auth_token| is the OAuth2 access token to use when querying
+  // for an assignment.  This token needs the OAuth2 scope of userinfo.email and
+  // only needs to be an access token, not a refresh token.
+  void Connect(const std::string& client_auth_token);
+
   TabControlFeature* GetTabControlFeature() const;
   NavigationFeature* GetNavigationFeature() const;
   RenderWidgetFeature* GetRenderWidgetFeature() const;
 
+  // The AssignmentCallback for when an assignment is ready. This will trigger
+  // a connection to the engine.
+  virtual void ConnectWithAssignment(AssignmentSource::Result result,
+                                     const Assignment& assignment);
+
  protected:
   virtual ~BlimpClientSession();
 
-  // Returns the IPEndPoint to use for connecting to the blimplet.
-  net::IPEndPoint GetBlimpletIPEndpoint();
+  // Notified every time the AssignmentSource returns the result of an attempted
+  // assignment request.
+  virtual void OnAssignmentConnectionAttempted(AssignmentSource::Result result);
 
  private:
   // Registers a message processor which will receive all messages of the |type|
@@ -66,6 +80,10 @@ class BLIMP_CLIENT_EXPORT BlimpClientSession {
   scoped_ptr<NavigationFeature> navigation_feature_;
   scoped_ptr<RenderWidgetFeature> render_widget_feature_;
 
+  // The AssignmentSource is used when the user of BlimpClientSession calls
+  // Connect() to get a valid assignment and later connect to the engine.
+  scoped_ptr<AssignmentSource> assignment_source_;
+
   // Container struct for network components.
   // Must be deleted on the IO thread.
   scoped_ptr<ClientNetworkComponents> net_components_;
@@ -74,6 +92,8 @@ class BLIMP_CLIENT_EXPORT BlimpClientSession {
   // Incoming messages are only routed to the UI thread since all features run
   // on the UI thread.
   std::vector<scoped_ptr<BlimpMessageThreadPipe>> incoming_pipes_;
+
+  base::WeakPtrFactory<BlimpClientSession> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(BlimpClientSession);
 };

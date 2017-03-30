@@ -24,7 +24,7 @@
 
 #include "core/CoreExport.h"
 #include "core/css/CSSSelector.h"
-#include "core/css/invalidation/InvalidationData.h"
+#include "core/css/invalidation/InvalidationSet.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/HashSet.h"
@@ -59,7 +59,9 @@ public:
     void add(const RuleFeatureSet&);
     void clear();
 
-    void collectFeaturesFromRuleData(const RuleData&);
+    enum SelectorPreMatch { SelectorNeverMatches, SelectorMayMatch };
+
+    SelectorPreMatch collectFeaturesFromRuleData(const RuleData&);
 
     bool usesSiblingRules() const { return !siblingRules.isEmpty(); }
     bool usesFirstLineRules() const { return m_metadata.usesFirstLineRules; }
@@ -101,37 +103,29 @@ protected:
     InvalidationSet* invalidationSetForSelector(const CSSSelector&, InvalidationType);
 
 private:
-    using InvalidationSetMap = HashMap<AtomicString, InvalidationData>;
-    using PseudoTypeInvalidationSetMap = HashMap<CSSSelector::PseudoType, InvalidationData, WTF::IntHash<unsigned>, WTF::UnsignedWithZeroKeyHashTraits<unsigned>>;
+    // Each map entry is either a DescendantInvalidationSet or SiblingInvalidationSet.
+    // When both are needed, we store the SiblingInvalidationSet, and use it to hold the DescendantInvalidationSet.
+    using InvalidationSetMap = HashMap<AtomicString, RefPtr<InvalidationSet>>;
+    using PseudoTypeInvalidationSetMap = HashMap<CSSSelector::PseudoType, RefPtr<InvalidationSet>, WTF::IntHash<unsigned>, WTF::UnsignedWithZeroKeyHashTraits<unsigned>>;
 
     struct FeatureMetadata {
         DISALLOW_NEW();
-        FeatureMetadata()
-            : usesFirstLineRules(false)
-            , usesWindowInactiveSelector(false)
-            , foundSiblingSelector(false)
-            , maxDirectAdjacentSelectors(0)
-        { }
         void add(const FeatureMetadata& other);
         void clear();
 
-        bool usesFirstLineRules;
-        bool usesWindowInactiveSelector;
-        bool foundSiblingSelector;
-        unsigned maxDirectAdjacentSelectors;
+        bool usesFirstLineRules = false;
+        bool usesWindowInactiveSelector = false;
+        bool foundSiblingSelector = false;
+        bool foundInsertionPointCrossing = false;
+        unsigned maxDirectAdjacentSelectors = 0;
     };
 
-    void collectFeaturesFromSelector(const CSSSelector&, FeatureMetadata&);
+    SelectorPreMatch collectFeaturesFromSelector(const CSSSelector&, FeatureMetadata&);
 
-    InvalidationData& ensureClassInvalidationData(const AtomicString& className);
-    InvalidationData& ensureAttributeInvalidationData(const AtomicString& attributeName);
-    InvalidationData& ensureIdInvalidationData(const AtomicString& id);
-    InvalidationData& ensurePseudoInvalidationData(CSSSelector::PseudoType);
-
-    InvalidationSet& ensureClassInvalidationSet(const AtomicString& className, InvalidationType type) { return ensureClassInvalidationData(className).ensureInvalidationSet(type); }
-    InvalidationSet& ensureAttributeInvalidationSet(const AtomicString& attributeName, InvalidationType type) { return ensureAttributeInvalidationData(attributeName).ensureInvalidationSet(type); }
-    InvalidationSet& ensureIdInvalidationSet(const AtomicString& id, InvalidationType type) { return ensureIdInvalidationData(id).ensureInvalidationSet(type); }
-    InvalidationSet& ensurePseudoInvalidationSet(CSSSelector::PseudoType pseudoType, InvalidationType type) { return ensurePseudoInvalidationData(pseudoType).ensureInvalidationSet(type); }
+    InvalidationSet& ensureClassInvalidationSet(const AtomicString& className, InvalidationType);
+    InvalidationSet& ensureAttributeInvalidationSet(const AtomicString& attributeName, InvalidationType);
+    InvalidationSet& ensureIdInvalidationSet(const AtomicString& id, InvalidationType);
+    InvalidationSet& ensurePseudoInvalidationSet(CSSSelector::PseudoType, InvalidationType);
 
     void updateInvalidationSets(const RuleData&);
     void updateInvalidationSetsForContentAttribute(const RuleData&);
@@ -151,6 +145,7 @@ private:
         bool insertionPointCrossing = false;
         bool forceSubtree = false;
         bool contentPseudoCrossing = false;
+        bool invalidatesSlotted = false;
     };
 
     static bool extractInvalidationSetFeature(const CSSSelector&, InvalidationSetFeatures&);

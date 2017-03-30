@@ -26,7 +26,7 @@
 
 #include "core/CoreExport.h"
 #include "core/css/CSSStyleSheet.h"
-#include "core/dom/DOMSettableTokenList.h"
+#include "core/dom/DOMTokenList.h"
 #include "core/dom/IconURL.h"
 #include "core/fetch/ResourceOwner.h"
 #include "core/fetch/StyleSheetResource.h"
@@ -58,13 +58,14 @@ using LinkEventSender = EventSender<HTMLLinkElement>;
 //
 class LinkStyle final : public LinkResource, ResourceOwner<StyleSheetResource> {
     USING_FAST_MALLOC_WILL_BE_REMOVED(LinkStyle);
+    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(LinkStyle);
 public:
     static PassOwnPtrWillBeRawPtr<LinkStyle> create(HTMLLinkElement* owner);
 
     explicit LinkStyle(HTMLLinkElement* owner);
     ~LinkStyle() override;
 
-    Type type() const override { return Style; }
+    LinkResourceType type() const override { return Style; }
     void process() override;
     void ownerRemoved() override;
     bool hasLoaded() const override { return m_loadedSheet; }
@@ -128,7 +129,7 @@ private:
 };
 
 
-class CORE_EXPORT HTMLLinkElement final : public HTMLElement, public LinkLoaderClient, private DOMSettableTokenListObserver {
+class CORE_EXPORT HTMLLinkElement final : public HTMLElement, public LinkLoaderClient, private DOMTokenListObserver {
     DEFINE_WRAPPERTYPEINFO();
     WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(HTMLLinkElement);
 public:
@@ -145,7 +146,7 @@ public:
 
     const AtomicString& type() const;
 
-    IconType iconType() const;
+    IconType getIconType() const;
 
     // the icon sizes as parsed from the HTML attribute
     const Vector<IntSize>& iconSizes() const;
@@ -161,7 +162,7 @@ public:
     bool isDisabled() const { return linkStyle() && linkStyle()->isDisabled(); }
     bool isEnabledViaScript() const { return linkStyle() && linkStyle()->isEnabledViaScript(); }
 
-    DOMSettableTokenList* sizes() const;
+    DOMTokenList* sizes() const;
 
     void dispatchPendingEvent(LinkEventSender*);
     void scheduleEvent();
@@ -213,18 +214,18 @@ private:
     void didSendLoadForLinkPrerender() override;
     void didSendDOMContentLoadedForLinkPrerender() override;
 
-    // From DOMSettableTokenListObserver
+    // From DOMTokenListObserver
     void valueWasSet() final;
 
     OwnPtrWillBeMember<LinkResource> m_link;
-    LinkLoader m_linkLoader;
+    OwnPtrWillBeMember<LinkLoader> m_linkLoader;
 
     String m_type;
     String m_as;
     String m_media;
-    RefPtrWillBeMember<DOMSettableTokenList> m_sizes;
+    RefPtrWillBeMember<DOMTokenList> m_sizes;
     Vector<IntSize> m_iconSizes;
-    OwnPtrWillBeMember<RelList> m_relList;
+    RawPtrWillBeMember<RelList> m_relList;
     LinkRelAttribute m_relAttribute;
 
     bool m_createdByParser;

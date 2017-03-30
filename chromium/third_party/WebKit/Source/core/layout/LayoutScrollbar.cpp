@@ -273,7 +273,7 @@ void LayoutScrollbar::updateScrollbarPart(ScrollbarPart partType, bool destroy)
     }
 
     if (partLayoutObject)
-        partLayoutObject->setStyle(partStyle.release());
+        partLayoutObject->setStyleWithWritingModeOfParent(partStyle.release());
 }
 
 IntRect LayoutScrollbar::buttonRect(ScrollbarPart partType) const
@@ -367,4 +367,4 @@ void LayoutScrollbar::invalidateDisplayItemClientsOfScrollbarParts(const LayoutB
         part.value->invalidateDisplayItemClientsIncludingNonCompositingDescendants(&paintInvalidationContainer, PaintInvalidationScroll);
 }
 
-}
+} // namespace blink

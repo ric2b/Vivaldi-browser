@@ -97,21 +97,19 @@ void FontCache::setStatusFontMetrics(const wchar_t* familyName, int32_t fontHeig
 FontCache::FontCache()
     : m_purgePreventCount(0)
 {
-    SkFontMgr* fontManager;
-
-    if (s_useDirectWrite) {
-        fontManager = SkFontMgr_New_DirectWrite(s_directWriteFactory);
-        s_useSubpixelPositioning = true;
+    if (s_fontManager) {
+        m_fontManager = s_fontManager;
+    } else if (s_useDirectWrite) {
+        m_fontManager = adoptRef(SkFontMgr_New_DirectWrite());
     } else {
-        fontManager = SkFontMgr_New_GDI();
-        // Subpixel text positioning is not supported by the GDI backend.
-        s_useSubpixelPositioning = false;
+        m_fontManager = adoptRef(SkFontMgr_New_GDI());
     }
 
-    ASSERT(fontManager);
-    m_fontManager = adoptPtr(fontManager);
-}
+    // Subpixel text positioning is only supported by the DirectWrite backend (not GDI).
+    s_useSubpixelPositioning = s_useDirectWrite;
 
+    ASSERT(m_fontManager.get());
+}
 
 // Given the desired base font, this will create a SimpleFontData for a specific
 // font that can be used to render the given range of characters.
@@ -128,11 +126,11 @@ PassRefPtr<SimpleFontData> FontCache::fallbackFontForCharacter(
             return fontData;
     }
 
-    // FIXME: Consider passing fontDescription.dominantScript()
-    // to GetFallbackFamily here.
     UScriptCode script;
     const wchar_t* family = getFallbackFamily(character,
         fontDescription.genericFamily(),
+        fontDescription.script(),
+        fontDescription.locale(),
         &script,
         m_fontManager.get());
     FontPlatformData* data = 0;
@@ -384,7 +382,8 @@ PassOwnPtr<FontPlatformData> FontCache::createFontPlatformData(const FontDescrip
         { L"simsun", 11 },
         { L"dotum", 12 },
         { L"gulim", 12 },
-        { L"pmingliu", 11 }
+        { L"pmingliu", 11 },
+        { L"pmingliu-extb", 11 }
     };
     size_t numFonts = WTF_ARRAY_LENGTH(minAntiAliasSizeForFont);
     for (size_t i = 0; i < numFonts; i++) {

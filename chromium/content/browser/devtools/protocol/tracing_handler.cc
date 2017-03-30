@@ -8,14 +8,17 @@
 
 #include "base/bind.h"
 #include "base/format_macros.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event_impl.h"
+#include "base/trace_event/tracing_agent.h"
 #include "components/tracing/trace_config_file.h"
 #include "content/browser/devtools/devtools_io_context.h"
+#include "content/browser/tracing/tracing_controller_impl.h"
 
 namespace content {
 namespace devtools {
@@ -85,9 +88,11 @@ class DevToolsStreamTraceSink : public TracingController::TraceDataSink {
 }  // namespace
 
 TracingHandler::TracingHandler(TracingHandler::Target target,
+                               int frame_tree_node_id,
                                DevToolsIOContext* io_context)
     : target_(target),
       io_context_(io_context),
+      frame_tree_node_id_(frame_tree_node_id),
       did_initiate_recording_(false),
       return_as_stream_(false),
       weak_factory_(this) {}
@@ -144,19 +149,13 @@ Response TracingHandler::Start(DevToolsCommandId command_id,
 
   // If inspected target is a render process Tracing.start will be handled by
   // tracing agent in the renderer.
-  if (target_ == Renderer) {
-    TracingController::GetInstance()->StartTracing(
-        trace_config,
-        TracingController::StartTracingDoneCallback());
-    return Response::FallThrough();
-  }
-
   TracingController::GetInstance()->StartTracing(
       trace_config,
       base::Bind(&TracingHandler::OnRecordingEnabled,
                  weak_factory_.GetWeakPtr(),
                  command_id));
-  return Response::OK();
+
+  return target_ == Renderer ? Response::FallThrough() : Response::OK();
 }
 
 Response TracingHandler::End(DevToolsCommandId command_id) {
@@ -188,7 +187,11 @@ Response TracingHandler::GetCategories(DevToolsCommandId command_id) {
 }
 
 void TracingHandler::OnRecordingEnabled(DevToolsCommandId command_id) {
-  client_->SendStartResponse(command_id, StartResponse::Create());
+  TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"),
+                       "TracingStartedInBrowser", TRACE_EVENT_SCOPE_THREAD,
+                       "frameTreeNodeId", frame_tree_node_id_);
+  if (target_ != Renderer)
+    client_->SendStartResponse(command_id, StartResponse::Create());
 }
 
 void TracingHandler::OnBufferUsage(float percent_full,
@@ -231,6 +234,17 @@ void TracingHandler::OnMemoryDumpFinished(DevToolsCommandId command_id,
       RequestMemoryDumpResponse::Create()
           ->set_dump_guid(base::StringPrintf("0x%" PRIx64, dump_guid))
           ->set_success(success));
+}
+
+Response TracingHandler::RecordClockSyncMarker(const std::string& sync_id) {
+  if (!IsTracing())
+    return Response::InternalError("Tracing is not started");
+
+  TracingControllerImpl::GetInstance()->RecordClockSyncMarker(
+      sync_id,
+      base::trace_event::TracingAgent::RecordClockSyncMarkerCallback());
+
+  return Response::OK();
 }
 
 void TracingHandler::SetupTimer(double usage_reporting_interval) {

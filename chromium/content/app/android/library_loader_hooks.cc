@@ -28,6 +28,7 @@
 #include "device/bluetooth/android/bluetooth_jni_registrar.h"
 #include "device/usb/android/usb_jni_registrar.h"
 #include "media/base/android/media_jni_registrar.h"
+#include "media/capture/video/android/capture_jni_registrar.h"
 #include "media/midi/midi_jni_registrar.h"
 #include "net/android/net_jni_registrar.h"
 #include "ui/android/ui_android_jni_registrar.h"
@@ -35,10 +36,7 @@
 #include "ui/events/android/events_jni_registrar.h"
 #include "ui/gfx/android/gfx_jni_registrar.h"
 #include "ui/gl/android/gl_jni_registrar.h"
-
-#if !defined(USE_AURA)
 #include "ui/shell_dialogs/android/shell_dialogs_jni_registrar.h"
-#endif
 
 namespace content {
 
@@ -64,6 +62,9 @@ bool EnsureJniRegistered(JNIEnv* env) {
     if (!ui::events::android::RegisterJni(env))
       return false;
 
+    if (!ui::shell_dialogs::RegisterJni(env))
+      return false;
+
     if (!content::android::RegisterCommonJni(env))
       return false;
 
@@ -82,16 +83,14 @@ bool EnsureJniRegistered(JNIEnv* env) {
     if (!media::RegisterJni(env))
       return false;
 
-    if (!media::midi::RegisterJni(env))
+    if (!media::RegisterCaptureJni(env))
       return false;
 
-#if !defined(USE_AURA)
-    if (!ui::shell_dialogs::RegisterJni(env))
+    if (!media::midi::RegisterJni(env))
       return false;
 
     if (!ui::RegisterUIAndroidJni(env))
       return false;
-#endif
 
     g_jni_init_done = true;
   }

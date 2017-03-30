@@ -15,7 +15,6 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
 #include "base/process/launch.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -28,6 +27,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/network_time/network_time_tracker.h"
+#include "components/prefs/pref_service.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -411,7 +411,7 @@ bool UpgradeDetectorImpl::DetectOutdatedInstall() {
   base::Time network_time;
   base::TimeDelta uncertainty;
   if (!g_browser_process->network_time_tracker()->GetNetworkTime(
-          base::TimeTicks::Now(), &network_time, &uncertainty)) {
+          &network_time, &uncertainty)) {
     // When network time has not been initialized yet, simply rely on the
     // machine's current time.
     network_time = base::Time::Now();

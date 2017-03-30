@@ -44,6 +44,9 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ContentSettingsType;
+import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
+import org.chromium.chrome.browser.offlinepages.OfflinePageItem;
+import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.omnibox.OmniboxUrlEmphasizer;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.Preferences;
@@ -53,6 +56,7 @@ import org.chromium.chrome.browser.preferences.website.ContentSettingsResources;
 import org.chromium.chrome.browser.preferences.website.SingleWebsitePreferences;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.ssl.SecurityStateModel;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.content.browser.ContentViewCore;
@@ -65,7 +69,9 @@ import org.chromium.ui.interpolators.BakedBezierInterpolator;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.text.DateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -224,7 +230,7 @@ public class WebsiteSettingsPopup implements OnClickListener {
     private final WindowAndroid mWindowAndroid;
 
     // A pointer to the C++ object for this UI.
-    private final long mNativeWebsiteSettingsPopup;
+    private long mNativeWebsiteSettingsPopup;
 
     // The outer container, filled with the layout from website_settings.xml.
     private final LinearLayout mContainer;
@@ -267,19 +273,33 @@ public class WebsiteSettingsPopup implements OnClickListener {
     // Permissions available to be displayed in mPermissionsList.
     private List<PageInfoPermissionEntry> mDisplayedPermissions;
 
+    // Original URL of an offline copy, if web contents contains an offline page.
+    private String mOfflinePageOriginalUrl;
+
+    // Creation date of an offline copy, if web contents contains an offline page.
+    private String mOfflinePageCreationDate;
+
+    // The name of the content publisher, if any.
+    private String mContentPublisher;
+
     /**
      * Creates the WebsiteSettingsPopup, but does not display it. Also initializes the corresponding
      * C++ object and saves a pointer to it.
-     *
-     * @param context Context which is used for launching a dialog.
      * @param webContents The WebContents for which to show Website information. This information is
      *                    retrieved for the visible entry.
+     * @param publisher   The name of the content publisher, if any.
      */
-    private WebsiteSettingsPopup(Activity activity, Profile profile, WebContents webContents) {
+    private WebsiteSettingsPopup(Activity activity, Profile profile, WebContents webContents,
+            String offlinePageOriginalUrl, String offlinePageCreationDate, String publisher) {
         mContext = activity;
         mProfile = profile;
         mWebContents = webContents;
+        if (offlinePageOriginalUrl != null && offlinePageCreationDate != null) {
+            mOfflinePageOriginalUrl = offlinePageOriginalUrl;
+            mOfflinePageCreationDate = offlinePageCreationDate;
+        }
         mWindowAndroid = ContentViewCore.fromWebContents(mWebContents).getWindowAndroid();
+        mContentPublisher = publisher;
 
         // Find the container and all it's important subviews.
         mContainer = (LinearLayout) LayoutInflater.from(mContext).inflate(
@@ -381,11 +401,21 @@ public class WebsiteSettingsPopup implements OnClickListener {
                 assert mNativeWebsiteSettingsPopup != 0;
                 webContentsObserver.destroy();
                 nativeDestroy(mNativeWebsiteSettingsPopup);
+                mNativeWebsiteSettingsPopup = 0;
             }
         });
 
-        // Work out the URL and connection message.
-        mFullUrl = mWebContents.getVisibleUrl();
+        // Work out the URL and connection message and status visibility.
+        int statusIconVisibility = View.GONE;
+        if (isShowingOfflinePage()) {
+            mFullUrl = mOfflinePageOriginalUrl;
+            statusIconVisibility = View.VISIBLE;
+        } else {
+            mFullUrl = mWebContents.getVisibleUrl();
+        }
+
+        mContainer.findViewById(R.id.offline_icon).setVisibility(statusIconVisibility);
+
         try {
             mParsedUrl = new URI(mFullUrl);
             mIsInternalPage = UrlUtilities.isInternalScheme(mParsedUrl);
@@ -470,8 +500,9 @@ public class WebsiteSettingsPopup implements OnClickListener {
     private boolean isConnectionDetailsLinkVisible() {
         // TODO(tsergeant): If this logic gets any more complicated from additional deprecations,
         // change it to use something like |SchemeIsCryptographic|.
-        return !mIsInternalPage && (mSecurityLevel != ConnectionSecurityLevel.NONE
-                || mPassiveMixedContentPresent || mDeprecatedSHA1Present);
+        return mContentPublisher == null && !mIsInternalPage
+                && (mSecurityLevel != ConnectionSecurityLevel.NONE || mPassiveMixedContentPresent
+                        || mDeprecatedSHA1Present);
     }
 
     /**
@@ -480,17 +511,22 @@ public class WebsiteSettingsPopup implements OnClickListener {
     private Spannable getUrlConnectionMessage() {
         // Display the appropriate connection message.
         SpannableStringBuilder messageBuilder = new SpannableStringBuilder();
-        if (mDeprecatedSHA1Present) {
+        if (mContentPublisher != null) {
             messageBuilder.append(
-                    mContext.getResources().getString(R.string.page_info_connection_sha1));
+                    mContext.getString(R.string.page_info_domain_hidden, mContentPublisher));
+        } else if (mDeprecatedSHA1Present) {
+            messageBuilder.append(mContext.getString(R.string.page_info_connection_sha1));
         } else if (mPassiveMixedContentPresent) {
-            messageBuilder.append(
-                    mContext.getResources().getString(R.string.page_info_connection_mixed));
+            messageBuilder.append(mContext.getString(R.string.page_info_connection_mixed));
+        } else if (isShowingOfflinePage()) {
+            messageBuilder.append(String.format(
+                    mContext.getString(R.string.page_info_connection_offline),
+                    mOfflinePageCreationDate));
         } else if (mSecurityLevel != ConnectionSecurityLevel.SECURITY_ERROR
                 && mSecurityLevel != ConnectionSecurityLevel.SECURITY_WARNING
                 && mSecurityLevel != ConnectionSecurityLevel.SECURITY_POLICY_WARNING) {
-            messageBuilder.append(mContext.getResources().getString(
-                    getConnectionMessageId(mSecurityLevel, mIsInternalPage)));
+            messageBuilder.append(
+                    mContext.getString(getConnectionMessageId(mSecurityLevel, mIsInternalPage)));
         } else {
             String originToDisplay;
             try {
@@ -501,14 +537,14 @@ public class WebsiteSettingsPopup implements OnClickListener {
                 originToDisplay = mFullUrl;
             }
 
-            messageBuilder.append(mContext.getResources().getString(
-                    R.string.page_info_connection_broken, originToDisplay));
+            messageBuilder.append(
+                    mContext.getString(R.string.page_info_connection_broken, originToDisplay));
         }
 
         if (isConnectionDetailsLinkVisible()) {
             messageBuilder.append(" ");
             SpannableString detailsText = new SpannableString(
-                    mContext.getResources().getString(R.string.page_info_details_link));
+                    mContext.getString(R.string.page_info_details_link));
             final ForegroundColorSpan blueSpan = new ForegroundColorSpan(
                     ApiCompatibilityUtils.getColor(mContext.getResources(),
                             R.color.website_settings_popup_text_link));
@@ -613,12 +649,10 @@ public class WebsiteSettingsPopup implements OnClickListener {
         String status_text = "";
         switch (permission.setting) {
             case ALLOW:
-                status_text =
-                        mContext.getResources().getString(R.string.page_info_permission_allowed);
+                status_text = mContext.getString(R.string.page_info_permission_allowed);
                 break;
             case BLOCK:
-                status_text =
-                        mContext.getResources().getString(R.string.page_info_permission_blocked);
+                status_text = mContext.getString(R.string.page_info_permission_blocked);
                 break;
             default:
                 assert false : "Invalid setting " + permission.setting + " for permission "
@@ -689,6 +723,7 @@ public class WebsiteSettingsPopup implements OnClickListener {
             runAfterDismiss(new Runnable() {
                 @Override
                 public void run() {
+                    recordAction(WebsiteSettingsAction.WEBSITE_SETTINGS_SITE_SETTINGS_OPENED);
                     Bundle fragmentArguments =
                             SingleWebsitePreferences.createFragmentArgsForSite(mFullUrl);
                     fragmentArguments.putParcelable(SingleWebsitePreferences.EXTRA_WEB_CONTENTS,
@@ -708,6 +743,8 @@ public class WebsiteSettingsPopup implements OnClickListener {
                 @Override
                 public void run() {
                     if (!mWebContents.isDestroyed()) {
+                        recordAction(
+                                WebsiteSettingsAction.WEBSITE_SETTINGS_SECURITY_DETAILS_OPENED);
                         ConnectionInfoPopup.show(mContext, mWebContents);
                     }
                 }
@@ -842,23 +879,56 @@ public class WebsiteSettingsPopup implements OnClickListener {
         return animation;
     }
 
+    private void recordAction(int action) {
+        if (mNativeWebsiteSettingsPopup != 0) {
+            nativeRecordWebsiteSettingsAction(mNativeWebsiteSettingsPopup, action);
+        }
+    }
+
     /**
-     * Shows a WebsiteSettings dialog for the provided WebContents. The popup adds itself to the
-     * view hierarchy which owns the reference while it's visible.
+     * Whether website dialog is displayed for an offline page.
+     */
+    private boolean isShowingOfflinePage() {
+        return mOfflinePageOriginalUrl != null && mOfflinePageCreationDate != null;
+    }
+
+    /**
+     * Shows a WebsiteSettings dialog for the provided Tab. The popup adds itself to the view
+     * hierarchy which owns the reference while it's visible.
      *
      * @param activity Activity which is used for launching a dialog.
-     * @param webContents The WebContents for which to show Website information. This information is
-     *                    retrieved for the visible entry.
+     * @param tab The tab hosting the web contents for which to show Website information. This
+     *            information is retrieved for the visible entry.
+     * @param contentPublisher The name of the publisher of the content.
      */
-    @SuppressWarnings("unused")
-    public static void show(Activity activity, Profile profile, WebContents webContents) {
-        new WebsiteSettingsPopup(activity, profile, webContents);
+    public static void show(Activity activity, Tab tab, String contentPublisher) {
+        WebContents webContents = tab.getWebContents();
+        String offlinePageOriginalUrl = null;
+        String offlinePageCreationDate = null;
+
+        if (tab.isOfflinePage()) {
+            OfflinePageBridge offlinePageBridge = new OfflinePageBridge(tab.getProfile());
+            OfflinePageItem item =
+                    offlinePageBridge.getPageByOfflineUrl(webContents.getVisibleUrl());
+            if (item != null) {
+                // Get formatted creation date and original URL of the offline copy.
+                Date creationDate = new Date(item.getCreationTimeMs());
+                DateFormat df = DateFormat.getDateInstance(DateFormat.MEDIUM);
+                offlinePageCreationDate = df.format(creationDate);
+                offlinePageOriginalUrl = OfflinePageUtils.stripSchemeFromOnlineUrl(
+                        tab.getOfflinePageOriginalUrl());
+            }
+            offlinePageBridge.destroy();
+        }
+
+        new WebsiteSettingsPopup(activity, tab.getProfile(), webContents, offlinePageOriginalUrl,
+                offlinePageCreationDate, contentPublisher);
     }
 
     private static native long nativeInit(WebsiteSettingsPopup popup, WebContents webContents);
 
     private native void nativeDestroy(long nativeWebsiteSettingsPopupAndroid);
 
-    private native void nativeOnPermissionSettingChanged(long nativeWebsiteSettingsPopupAndroid,
-            int type, int setting);
+    private native void nativeRecordWebsiteSettingsAction(
+            long nativeWebsiteSettingsPopupAndroid, int action);
 }

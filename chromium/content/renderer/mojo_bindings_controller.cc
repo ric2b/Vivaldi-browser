@@ -26,21 +26,22 @@ struct MojoContextStateData : public base::SupportsUserData::Data {
 
 }  // namespace
 
-MojoBindingsController::MojoBindingsController(RenderFrame* render_frame)
+MojoBindingsController::MojoBindingsController(RenderFrame* render_frame,
+                                               bool for_layout_tests)
     : RenderFrameObserver(render_frame),
-      RenderFrameObserverTracker<MojoBindingsController>(render_frame) {}
+      RenderFrameObserverTracker<MojoBindingsController>(render_frame),
+      for_layout_tests_(for_layout_tests) {}
 
 MojoBindingsController::~MojoBindingsController() {
 }
 
 void MojoBindingsController::CreateContextState() {
   v8::HandleScope handle_scope(blink::mainThreadIsolate());
-  blink::WebLocalFrame* frame =
-      render_frame()->GetWebFrame()->toWebLocalFrame();
+  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
   v8::Local<v8::Context> context = frame->mainWorldScriptContext();
   gin::PerContextData* context_data = gin::PerContextData::From(context);
   MojoContextStateData* data = new MojoContextStateData;
-  data->state.reset(new MojoContextState(frame, context));
+  data->state.reset(new MojoContextState(frame, context, for_layout_tests_));
   context_data->SetUserData(kMojoContextStateKey, data);
 }
 
@@ -70,15 +71,15 @@ void MojoBindingsController::WillReleaseScriptContext(
   DestroyContextState(context);
 }
 
-void MojoBindingsController::DidFinishDocumentLoad() {
+void MojoBindingsController::RunScriptsAtDocumentStart() {
+  CreateContextState();
+}
+
+void MojoBindingsController::RunScriptsAtDocumentReady() {
   v8::HandleScope handle_scope(blink::mainThreadIsolate());
   MojoContextState* state = GetContextState();
   if (state)
     state->Run();
-}
-
-void MojoBindingsController::DidCreateDocumentElement() {
-  CreateContextState();
 }
 
 void MojoBindingsController::DidClearWindowObject() {

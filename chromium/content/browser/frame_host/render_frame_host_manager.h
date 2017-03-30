@@ -9,9 +9,9 @@
 
 #include <list>
 #include <map>
+#include <unordered_map>
 
 #include "base/containers/hash_tables.h"
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
@@ -178,15 +178,6 @@ class CONTENT_EXPORT RenderFrameHostManager
    protected:
     virtual ~Delegate() {}
   };
-
-  // Used with FrameTree::ForEach to delete RenderFrameHosts pending shutdown
-  // from a FrameTreeNode's RenderFrameHostManager. Used during destruction of
-  // WebContentsImpl.
-  static bool ClearRFHsPendingShutdown(FrameTreeNode* node);
-
-  // Used with FrameTree::ForEach to destroy all WebUI instances associated with
-  // RenderFrameHosts.
-  static bool ClearWebUIInstances(FrameTreeNode* node);
 
   // All three delegate pointers must be non-NULL and are not owned by this
   // class. They must outlive this class. The RenderViewHostDelegate and
@@ -406,6 +397,9 @@ class CONTENT_EXPORT RenderFrameHostManager
   // of WebContentsImpl.
   void ResetProxyHosts();
 
+  void ClearRFHsPendingShutdown();
+  void ClearWebUIInstances();
+
   // Returns the routing id for a RenderFrameHost or RenderFrameProxyHost
   // that has the given SiteInstance and is associated with this
   // RenderFrameHostManager. Returns MSG_ROUTING_NONE if none is found.
@@ -439,9 +433,10 @@ class CONTENT_EXPORT RenderFrameHostManager
   void OnDidStartLoading();
   void OnDidStopLoading();
 
-  // Send updated frame name to all frame proxies when the frame changes its
-  // window.name property.
-  void OnDidUpdateName(const std::string& name);
+  // OnDidUpdateName gets called when a frame changes its name - it gets the new
+  // |name| and the recalculated |unique_name| and replicates them into all
+  // frame proxies.
+  void OnDidUpdateName(const std::string& name, const std::string& unique_name);
 
   // Sends updated enforcement of strict mixed content checking to all
   // frame proxies when the frame changes its setting.
@@ -489,9 +484,15 @@ class CONTENT_EXPORT RenderFrameHostManager
   // an inner WebContents.
   void SetRWHViewForInnerContents(RenderWidgetHostView* child_rwhv);
 
-  // Returns a copy of the map of proxy hosts. The keys are SiteInstance IDs,
-  // the values are RenderFrameProxyHosts.
-  std::map<int, RenderFrameProxyHost*> GetAllProxyHostsForTesting();
+  // Returns the number of RenderFrameProxyHosts for this frame.
+  int GetProxyCount();
+
+  // Returns a const reference to the map of proxy hosts. The keys are
+  // SiteInstance IDs, the values are RenderFrameProxyHosts.
+  const std::unordered_map<int32_t, scoped_ptr<RenderFrameProxyHost>>&
+  GetAllProxyHostsForTesting() const {
+    return proxy_hosts_;
+  }
 
   // SiteInstanceImpl::Observer
   void ActiveFrameCountIsZero(SiteInstanceImpl* site_instance) override;
@@ -598,9 +599,7 @@ class CONTENT_EXPORT RenderFrameHostManager
 
   // Determines the appropriate url to use as the current url for SiteInstance
   // selection.
-  const GURL& GetCurrentURLForSiteInstance(
-      SiteInstance* current_instance,
-      NavigationEntry* current_entry);
+  const GURL& GetCurrentURLForSiteInstance(SiteInstance* current_instance);
 
   // Creates a new RenderFrameHostImpl for the |new_instance| and assign it to
   // |pending_render_frame_host_| while respecting the opener route if needed
@@ -757,13 +756,10 @@ class CONTENT_EXPORT RenderFrameHostManager
   scoped_ptr<NavigationHandleImpl> transfer_navigation_handle_;
 
   // Proxy hosts, indexed by site instance ID.
-  base::ScopedPtrHashMap<int32_t, scoped_ptr<RenderFrameProxyHost>>
-      proxy_hosts_;
+  std::unordered_map<int32_t, scoped_ptr<RenderFrameProxyHost>> proxy_hosts_;
 
-  // A list of RenderFrameHosts waiting to shut down after swapping out.  We use
-  // a linked list since we expect frequent deletes and no indexed access, and
-  // because sets don't appear to support linked_ptrs.
-  typedef std::list<linked_ptr<RenderFrameHostImpl> > RFHPendingDeleteList;
+  // A list of RenderFrameHosts waiting to shut down after swapping out.
+  using RFHPendingDeleteList = std::list<scoped_ptr<RenderFrameHostImpl>>;
   RFHPendingDeleteList pending_delete_hosts_;
 
   // The intersitial page currently shown if any, not own by this class

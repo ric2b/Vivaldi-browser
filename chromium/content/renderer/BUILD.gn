@@ -25,28 +25,25 @@ source_set("renderer") {
 
   deps = [
     "//base:i18n",
-
-    # TODO(GYP) bug 376846 remove this. This should be inherited from //net but
-    # those don't cross component boundaries.
-    "//base/allocator",
     "//cc",
     "//cc/blink",
     "//cc/proto",
     "//cc/surfaces",
+    "//cc/surfaces:surface_id",
     "//components/scheduler:scheduler",
-    "//components/startup_metric_utils/common",
     "//components/url_formatter",
     "//components/webusb",
     "//content:resources",
     "//content/common:mojo_bindings",
     "//content/public/child:child_sources",
     "//content/public/common:common_sources",
+    "//content/public/common:feature_h264_with_openh264_ffmpeg",
+    "//content/public/common:features",
     "//content/public/common:mojo_bindings",
     "//crypto:platform",
     "//device/battery:mojo_bindings",
     "//device/bluetooth",
-    "//device/devices_app/public/cpp",
-    "//device/devices_app/usb/public/interfaces",
+    "//device/usb/public/interfaces",
     "//device/vibration:mojo_bindings",
     "//gin",
     "//gpu",
@@ -59,20 +56,22 @@ source_set("renderer") {
     "//media/midi",
     "//mojo/common",
     "//mojo/converters/geometry",
+    "//mojo/edk/js",
     "//mojo/environment:chromium",
     "//mojo/public/cpp/bindings",
     "//mojo/public/js",
     "//mojo/shell/public/cpp",
     "//mojo/shell/public/interfaces",
     "//net",
+    "//sandbox",
     "//skia",
     "//skia/public",
     "//storage/common",
     "//third_party/WebKit/public:blink",
+    "//third_party/boringssl",
     "//third_party/icu",
     "//third_party/libjingle",
     "//third_party/libyuv",
-    "//third_party/mojo/src/mojo/edk/js",
     "//third_party/npapi",
     "//third_party/widevine/cdm:version_h",
     "//ui/accessibility",
@@ -86,9 +85,11 @@ source_set("renderer") {
     "//ui/surface",
     "//v8",
   ]
+  allow_circular_includes_from = []
 
   if (use_aura) {
     deps += [ "//content/renderer/mus" ]
+    allow_circular_includes_from += [ "//content/renderer/mus" ]
   }
 
   if (is_mac) {
@@ -159,10 +160,12 @@ source_set("renderer") {
       "//third_party/libjingle:libjingle_webrtc",
       "//third_party/libjingle:libpeerconnection",
       "//third_party/libjingle:libstunprober",
+      "//third_party/libvpx_new",
       "//third_party/webrtc/base:rtc_base",
       "//third_party/webrtc/common_video",
       "//third_party/webrtc/modules/audio_device",
       "//third_party/webrtc/modules/audio_processing",
+      "//third_party/webrtc/modules/video_coding:webrtc_h264",
       "//third_party/webrtc/system_wrappers",
     ]
   } else {
@@ -203,7 +206,7 @@ source_set("renderer") {
     ]
   }
 
-  if (enable_print_preview) {
+  if (enable_basic_printing || enable_print_preview) {
     deps += [ "//printing" ]
   }
 
@@ -216,7 +219,12 @@ source_set("renderer") {
     ]
   }
 
-  if (enable_mojo_media != "none") {
+  if (enable_mojo_media) {
+    sources += [
+      "media/media_interface_provider.cc",
+      "media/media_interface_provider.h",
+    ]
+
     deps += [
       "//media/mojo/interfaces",
       "//media/mojo/services:proxy",
@@ -234,5 +242,9 @@ source_set("renderer") {
 
   if (use_seccomp_bpf) {
     defines += [ "USE_SECCOMP_BPF" ]
+  }
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
   }
 }

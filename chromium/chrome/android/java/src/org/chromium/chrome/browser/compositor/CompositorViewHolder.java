@@ -19,7 +19,6 @@ import android.support.v4.widget.ExploreByTouchHelper;
 import android.util.AttributeSet;
 import android.util.Pair;
 import android.view.MotionEvent;
-import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
@@ -90,8 +89,6 @@ public class CompositorViewHolder extends FrameLayout
     private final ArrayList<Invalidator.Client> mPendingInvalidations =
             new ArrayList<Invalidator.Client>();
     private boolean mSkipInvalidation = false;
-
-    private boolean mSkipNextToolbarTextureUpdate = false;
 
     /**
      * A task to be performed after a resize event.
@@ -265,13 +262,6 @@ public class CompositorViewHolder extends FrameLayout
     }
 
     /**
-     * @return The CompositorView.
-     */
-    public SurfaceHolder.Callback2 getSurfaceHolderCallback2() {
-        return mCompositorView;
-    }
-
-    /**
      * Reset command line flags. This gets called after the native library finishes
      * loading.
      */
@@ -310,6 +300,15 @@ public class CompositorViewHolder extends FrameLayout
             mCompositorView.getResourceManager().getDynamicResourceLoader().registerResource(
                     R.id.control_container, mControlContainer.getToolbarResourceAdapter());
         }
+    }
+
+    /**
+     * Perform any initialization necessary for showing a reparented tab.
+     */
+    public void prepareForTabReparenting() {
+        // Set the background to white while we wait for the first swap of buffers. This gets
+        // corrected inside the view.
+        mCompositorView.setBackgroundColor(Color.WHITE);
     }
 
     @Override
@@ -422,23 +421,6 @@ public class CompositorViewHolder extends FrameLayout
         sCachedCVCList.clear();
     }
 
-    @Override
-    public void onOverdrawBottomHeightChanged(int overdrawHeight) {
-        mSkipNextToolbarTextureUpdate = true;
-        requestRender();
-    }
-
-    @Override
-    public int getCurrentOverdrawBottomHeight() {
-        if (mTabVisible != null) {
-            float overdrawBottomHeight = mTabVisible.getFullscreenOverdrawBottomHeightPix();
-            if (!Float.isNaN(overdrawBottomHeight)) {
-                return (int) overdrawBottomHeight;
-            }
-        }
-        return mCompositorView.getOverdrawBottomHeight();
-    }
-
     /**
      * Called whenever the host activity is started.
      */
@@ -533,19 +515,11 @@ public class CompositorViewHolder extends FrameLayout
                 assert mProgressBarDrawingInfo == null;
             }
 
-            mCompositorView.finalizeLayers(mLayoutManager, mSkipNextToolbarTextureUpdate,
+            mCompositorView.finalizeLayers(mLayoutManager, false,
                     mProgressBarDrawingInfo);
-
-            // TODO(changwan): Check if this hack can be removed.
-            // This is a hack to draw one more frame if the screen just rotated for Nexus 10 + L.
-            // See http://crbug/440469 for more.
-            if (mSkipNextToolbarTextureUpdate) {
-                requestRender();
-            }
         }
 
         TraceEvent.end("CompositorViewHolder:layout");
-        mSkipNextToolbarTextureUpdate = false;
     }
 
     @Override

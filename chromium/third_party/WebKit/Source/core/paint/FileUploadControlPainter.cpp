@@ -45,21 +45,21 @@ void FileUploadControlPainter::paintObject(const PaintInfo& paintInfo, const Lay
             return;
 
         int buttonWidth = (button && button->layoutBox()) ? button->layoutBox()->pixelSnappedWidth() : 0;
-        LayoutUnit buttonAndSpacingWidth = buttonWidth + LayoutFileUploadControl::afterButtonSpacing;
+        LayoutUnit buttonAndSpacingWidth(buttonWidth + LayoutFileUploadControl::afterButtonSpacing);
         float textWidth = font.width(textRun);
         LayoutUnit textX;
         if (m_layoutFileUploadControl.style()->isLeftToRightDirection())
             textX = contentLeft + buttonAndSpacingWidth;
         else
-            textX = contentLeft + m_layoutFileUploadControl.contentWidth() - buttonAndSpacingWidth - textWidth;
+            textX = LayoutUnit(contentLeft + m_layoutFileUploadControl.contentWidth() - buttonAndSpacingWidth - textWidth);
 
-        LayoutUnit textY = 0;
+        LayoutUnit textY;
         // We want to match the button's baseline
         // FIXME: Make this work with transforms.
         if (LayoutButton* buttonLayoutObject = toLayoutButton(button->layoutObject()))
             textY = paintOffset.y() + m_layoutFileUploadControl.borderTop() + m_layoutFileUploadControl.paddingTop() + buttonLayoutObject->baselinePosition(AlphabeticBaseline, true, HorizontalLine, PositionOnContainingLine);
         else
-            textY = m_layoutFileUploadControl.baselinePosition(AlphabeticBaseline, true, HorizontalLine, PositionOnContainingLine);
+            textY = LayoutUnit(m_layoutFileUploadControl.baselinePosition(AlphabeticBaseline, true, HorizontalLine, PositionOnContainingLine));
         TextRunPaintInfo textRunPaintInfo(textRun);
         // FIXME: Shouldn't these offsets be rounded? crbug.com/350474
         textRunPaintInfo.bounds = FloatRect(textX.toFloat(), textY.toFloat() - m_layoutFileUploadControl.style()->fontMetrics().ascent(),

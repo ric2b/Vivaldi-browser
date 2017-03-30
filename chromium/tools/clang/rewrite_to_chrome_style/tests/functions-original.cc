@@ -6,6 +6,9 @@ namespace blink {
 
 // Tests that the prototype for a function is updated.
 int testFunctionThatTakesTwoInts(int x, int y);
+// Overload to test using declarations that introduce multiple shadow
+// declarations.
+int testFunctionThatTakesTwoInts(int x, int y, int z);
 
 // Test that the actual function definition is also updated.
 int testFunctionThatTakesTwoInts(int x, int y) {
@@ -15,6 +18,18 @@ int testFunctionThatTakesTwoInts(int x, int y) {
   return testFunctionThatTakesTwoInts(x - 1, y + 1);
 }
 
+// This is named like the begin() method which isn't renamed, but
+// here it's not a method so it should be.
+void begin() {}
+// Same for trace() and friends.
+void trace() {}
+void lock() {}
+
+class SwapType {};
+
+// swap() functions are not renamed.
+void swap(SwapType& a, SwapType& b) {}
+
 // Note: F is already Google style and should not change.
 void F() {
   // Test referencing a function without calling it.
@@ -23,6 +38,11 @@ void F() {
 
 }  // namespace blink
 
+using blink::testFunctionThatTakesTwoInts;
+
 void G() {
-  blink::testFunctionThatTakesTwoInts(1, 2);
+  testFunctionThatTakesTwoInts(1, 2);
+
+  blink::SwapType a, b;
+  swap(a, b);
 }

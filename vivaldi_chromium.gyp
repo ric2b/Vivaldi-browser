@@ -33,6 +33,8 @@
         'extraparts/vivaldi_browser_main_extra_parts.cc',
         'importer/imported_notes_entry.cpp',
         'importer/imported_notes_entry.h',
+        'importer/imported_speeddial_entry.cpp',
+        'importer/imported_speeddial_entry.h',
         'importer/viv_importer.cpp',
         'importer/viv_importer.h',
         'importer/chrome_importer_bookmark.cpp',
@@ -72,6 +74,8 @@
         'ui/webgui/vivaldi_web_ui_controller_factory.h',
         'ui/views/vivaldi_pin_shortcut.cpp',
         'ui/views/vivaldi_pin_shortcut.h',
+        'prefs/vivaldi_tab_zoom_pref.h',
+        'prefs/vivaldi_tab_zoom_pref.cc',
       ],
       # Disables warnings about size_t to int conversions when the types
       # have different sizes

@@ -24,8 +24,8 @@ class StartWithUrlColdTBM(startup2._StartupPerfBenchmark):
   options = {'pageset_repeat': 5}
 
   def SetExtraBrowserOptions(self, options):
-      options.clear_sytem_cache_for_browser_and_profile_on_start = True
-      super(StartWithUrlColdTBM, self).SetExtraBrowserOptions(options)
+    options.clear_sytem_cache_for_browser_and_profile_on_start = True
+    super(StartWithUrlColdTBM, self).SetExtraBrowserOptions(options)
 
   @classmethod
   def Name(cls):
@@ -34,6 +34,7 @@ class StartWithUrlColdTBM(startup2._StartupPerfBenchmark):
 
 @benchmark.Enabled('has tabs')
 @benchmark.Enabled('android')
+@benchmark.Disabled('android-reference')  # crbug.com/588786
 @benchmark.Disabled('chromeos', 'linux', 'mac', 'win')
 class StartWithUrlWarmTBM(startup2._StartupPerfBenchmark):
   """Measures stimetime to start Chrome warm with startup URLs."""

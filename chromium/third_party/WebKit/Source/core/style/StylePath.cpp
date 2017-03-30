@@ -7,21 +7,22 @@
 #include "core/css/CSSPathValue.h"
 #include "core/svg/SVGPathByteStream.h"
 #include "core/svg/SVGPathUtilities.h"
+#include "platform/graphics/Path.h"
 
 namespace blink {
 
-StylePath::StylePath(PassRefPtr<SVGPathByteStream> pathByteStream)
+StylePath::StylePath(PassOwnPtr<SVGPathByteStream> pathByteStream)
     : m_byteStream(pathByteStream)
+    , m_pathLength(std::numeric_limits<float>::quiet_NaN())
 {
     ASSERT(m_byteStream);
-    buildPathFromByteStream(*m_byteStream, m_path);
 }
 
 StylePath::~StylePath()
 {
 }
 
-PassRefPtr<StylePath> StylePath::create(PassRefPtr<SVGPathByteStream> pathByteStream)
+PassRefPtr<StylePath> StylePath::create(PassOwnPtr<SVGPathByteStream> pathByteStream)
 {
     return adoptRef(new StylePath(pathByteStream));
 }
@@ -32,6 +33,27 @@ StylePath* StylePath::emptyPath()
     return emptyPath;
 }
 
+const Path& StylePath::path() const
+{
+    if (!m_path) {
+        m_path = adoptPtr(new Path);
+        buildPathFromByteStream(*m_byteStream, *m_path);
+    }
+    return *m_path;
+}
+
+float StylePath::length() const
+{
+    if (std::isnan(m_pathLength))
+        m_pathLength = path().length();
+    return m_pathLength;
+}
+
+bool StylePath::isClosed() const
+{
+    return path().isClosed();
+}
+
 const SVGPathByteStream& StylePath::byteStream() const
 {
     return *m_byteStream;
@@ -39,7 +61,7 @@ const SVGPathByteStream& StylePath::byteStream() const
 
 PassRefPtrWillBeRawPtr<CSSValue> StylePath::computedCSSValue() const
 {
-    return CSSPathValue::create(m_byteStream, const_cast<StylePath*>(this));
+    return CSSPathValue::create(const_cast<StylePath*>(this));
 }
 
 bool StylePath::equals(const StylePath& other) const

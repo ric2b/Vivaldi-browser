@@ -77,7 +77,12 @@ bool BluetoothAdapterAndroid::IsPowered() const {
 void BluetoothAdapterAndroid::SetPowered(bool powered,
                                          const base::Closure& callback,
                                          const ErrorCallback& error_callback) {
-  NOTIMPLEMENTED();
+  if (Java_ChromeBluetoothAdapter_setPowered(AttachCurrentThread(),
+                                             j_adapter_.obj(), powered)) {
+    callback.Run();
+  } else {
+    error_callback.Run();
+  }
 }
 
 bool BluetoothAdapterAndroid::IsDiscoverable() const {
@@ -127,6 +132,13 @@ void BluetoothAdapterAndroid::RegisterAdvertisement(
     const CreateAdvertisementCallback& callback,
     const CreateAdvertisementErrorCallback& error_callback) {
   error_callback.Run(BluetoothAdvertisement::ERROR_UNSUPPORTED_PLATFORM);
+}
+
+void BluetoothAdapterAndroid::OnAdapterStateChanged(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& caller,
+    const bool powered) {
+  NotifyAdapterStateChanged(powered);
 }
 
 void BluetoothAdapterAndroid::OnScanFailed(

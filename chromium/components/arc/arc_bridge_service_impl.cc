@@ -9,8 +9,6 @@
 
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
 #include "base/sequenced_task_runner.h"
 #include "base/sys_info.h"
 #include "base/task_runner_util.h"
@@ -19,6 +17,8 @@
 #include "chromeos/dbus/dbus_method_call_status.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
 
 namespace arc {
 
@@ -32,13 +32,6 @@ ArcBridgeServiceImpl::ArcBridgeServiceImpl(
 }
 
 ArcBridgeServiceImpl::~ArcBridgeServiceImpl() {
-}
-
-void ArcBridgeServiceImpl::DetectAvailability() {
-  chromeos::SessionManagerClient* session_manager_client =
-      chromeos::DBusThreadManager::Get()->GetSessionManagerClient();
-  session_manager_client->CheckArcAvailability(base::Bind(
-      &ArcBridgeServiceImpl::OnArcAvailable, weak_factory_.GetWeakPtr()));
 }
 
 void ArcBridgeServiceImpl::HandleStartup() {
@@ -81,7 +74,7 @@ void ArcBridgeServiceImpl::StopInstance() {
   bootstrap_->Stop();
 }
 
-void ArcBridgeServiceImpl::OnArcAvailable(bool arc_available) {
+void ArcBridgeServiceImpl::SetDetectedAvailability(bool arc_available) {
   DCHECK(CalledOnValidThread());
   if (available() == arc_available)
     return;
@@ -101,9 +94,7 @@ void ArcBridgeServiceImpl::OnConnectionEstablished(
   instance_ptr_.set_connection_error_handler(base::Bind(
       &ArcBridgeServiceImpl::OnChannelClosed, weak_factory_.GetWeakPtr()));
 
-  ArcBridgeHostPtr host;
-  binding_.Bind(GetProxy(&host));
-  instance_ptr_->Init(std::move(host));
+  instance_ptr_->Init(binding_.CreateInterfacePtrAndBind());
 
   SetState(State::READY);
 }

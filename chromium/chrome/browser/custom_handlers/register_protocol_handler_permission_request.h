@@ -29,8 +29,7 @@ class RegisterProtocolHandlerPermissionRequest
   int GetIconId() const override;
   base::string16 GetMessageText() const override;
   base::string16 GetMessageTextFragment() const override;
-  bool HasUserGesture() const override;
-  GURL GetRequestingHostname() const override;
+  GURL GetOrigin() const override;
   void PermissionGranted() override;
   void PermissionDenied() override;
   void Cancelled() override;
@@ -39,8 +38,7 @@ class RegisterProtocolHandlerPermissionRequest
  private:
   ProtocolHandlerRegistry* registry_;
   ProtocolHandler handler_;
-  GURL url_;
-  bool user_gesture_;
+  GURL origin_;
 
   DISALLOW_COPY_AND_ASSIGN(RegisterProtocolHandlerPermissionRequest);
 };

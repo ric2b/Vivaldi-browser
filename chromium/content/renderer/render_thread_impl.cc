@@ -12,6 +12,7 @@
 
 #include "base/allocator/allocator_extension.h"
 #include "base/command_line.h"
+#include "base/debug/crash_logging.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -74,7 +75,7 @@
 #include "content/common/frame_messages.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/common/gpu/client/gpu_channel_host.h"
-#include "content/common/gpu/gpu_messages.h"
+#include "content/common/gpu/gpu_host_messages.h"
 #include "content/common/gpu/gpu_process_launch_causes.h"
 #include "content/common/render_frame_setup.mojom.h"
 #include "content/common/render_process_messages.h"
@@ -139,9 +140,9 @@
 #include "mojo/common/common_type_converters.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
 #include "net/base/port_util.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "net/base/url_util.h"
 #include "skia/ext/event_tracer_impl.h"
 #include "skia/ext/skia_memory_dump_provider.h"
 #include "third_party/WebKit/public/platform/WebImageGenerator.h"
@@ -171,6 +172,7 @@
 #include "content/renderer/android/synchronous_compositor_filter.h"
 #include "content/renderer/media/android/renderer_demuxer_android.h"
 #include "content/renderer/media/android/stream_texture_factory_impl.h"
+#include "media/base/android/media_codec_util.h"
 #endif
 
 #if defined(OS_MACOSX)
@@ -374,10 +376,10 @@ class RenderFrameSetupImpl : public RenderFrameSetup {
       mojo::InterfaceRequest<RenderFrameSetup> request)
       : routing_id_highmark_(-1), binding_(this, std::move(request)) {}
 
-  void ExchangeServiceProviders(
+  void ExchangeInterfaceProviders(
       int32_t frame_routing_id,
-      mojo::InterfaceRequest<mojo::ServiceProvider> services,
-      mojo::ServiceProviderPtr exposed_services)
+      mojo::shell::mojom::InterfaceProviderRequest services,
+      mojo::shell::mojom::InterfaceProviderPtr exposed_services)
       override {
     // TODO(morrita): This is for investigating http://crbug.com/415059 and
     // should be removed once it is fixed.
@@ -418,8 +420,8 @@ blink::WebGraphicsContext3D::Attributes GetOffscreenAttribs() {
 }
 
 void SetupEmbeddedWorkerOnWorkerThread(
-    mojo::InterfaceRequest<mojo::ServiceProvider> services,
-    mojo::InterfacePtrInfo<mojo::ServiceProvider> exposed_services) {
+    mojo::shell::mojom::InterfaceProviderRequest services,
+    mojo::shell::mojom::InterfaceProviderPtrInfo exposed_services) {
   ServiceWorkerContextClient* client =
       ServiceWorkerContextClient::ThreadSpecificInstance();
   // It is possible for client to be null if for some reason the worker died
@@ -437,10 +439,10 @@ class EmbeddedWorkerSetupImpl : public EmbeddedWorkerSetup {
       mojo::InterfaceRequest<EmbeddedWorkerSetup> request)
       : binding_(this, std::move(request)) {}
 
-  void ExchangeServiceProviders(
+  void ExchangeInterfaceProviders(
       int32_t thread_id,
-      mojo::InterfaceRequest<mojo::ServiceProvider> services,
-      mojo::ServiceProviderPtr exposed_services) override {
+      mojo::shell::mojom::InterfaceProviderRequest services,
+      mojo::shell::mojom::InterfaceProviderPtr exposed_services) override {
     WorkerThreadRegistry::Instance()->GetTaskRunnerFor(thread_id)->PostTask(
         FROM_HERE,
         base::Bind(&SetupEmbeddedWorkerOnWorkerThread, base::Passed(&services),
@@ -542,6 +544,8 @@ std::string RenderThreadImpl::HistogramCustomizer::HostToCustomHistogramSuffix(
     return ".plus";
   if (host == "inbox.google.com")
     return ".inbox";
+  if (host == "calendar.google.com")
+    return ".calendar";
   if (host == "www.youtube.com")
     return ".youtube";
   if (IsAlexaTop10NonGoogleSite(host))
@@ -811,6 +815,13 @@ void RenderThreadImpl::Init() {
   // been initialized by the Zygote before this instance became a Renderer.
   media::InitializeMediaLibrary();
 
+#if defined(OS_ANDROID)
+  if (!command_line.HasSwitch(switches::kDisableAcceleratedVideoDecode) &&
+      media::MediaCodecUtil::IsMediaCodecAvailable()) {
+    media::EnablePlatformDecoderSupport();
+  }
+#endif
+
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   if (media::IPCAudioDecoder::IsAvailable()) {
     media::IPCAudioDecoder::Preinitialize(GetIPCMediaPipelineHostCreator(),
@@ -830,20 +841,15 @@ void RenderThreadImpl::Init() {
   DCHECK(parsed_num_raster_threads) << string_value;
   DCHECK_GT(num_raster_threads, 0);
 
+#if defined(OS_ANDROID)
   // Note: Currently, enabling image decode tasks only provides a benefit if
-  // there's more than one raster thread. This might change in the future but we
-  // avoid it for now to reduce the cost of recording.
-  are_image_decode_tasks_enabled_ = num_raster_threads > 1;
-
-  base::SimpleThread::Options thread_options;
-#if defined(OS_ANDROID) || defined(OS_LINUX)
-  if (!command_line.HasSwitch(
-          switches::kUseNormalPriorityForTileTaskWorkerThreads)) {
-    thread_options.set_priority(base::ThreadPriority::BACKGROUND);
-  }
+  // we use high quality interpolation filters, which are disabled on android.
+  are_image_decode_tasks_enabled_ = false;
+#else
+  are_image_decode_tasks_enabled_ = true;
 #endif
 
-  raster_worker_pool_->Start(num_raster_threads, thread_options);
+  raster_worker_pool_->Start(num_raster_threads);
 
   // TODO(boliu): In single process, browser main loop should set up the
   // discardable memory manager, and should skip this if kSingleProcess.
@@ -859,9 +865,14 @@ void RenderThreadImpl::Init() {
 #if defined(MOJO_SHELL_CLIENT)
   // We may not have a MojoShellConnection object in tests that directly
   // instantiate a RenderThreadImpl.
-  if (MojoShellConnection::Get())
+  if (MojoShellConnection::Get() &&
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kUseMusInRenderer))
     CreateRenderWidgetWindowTreeClientFactory();
 #endif
+
+  service_registry()->ConnectToRemoteService(
+      mojo::GetProxy(&storage_partition_service_));
 }
 
 RenderThreadImpl::~RenderThreadImpl() {
@@ -974,14 +985,27 @@ void RenderThreadImpl::Shutdown() {
   // Shut down the message loop and the renderer scheduler before shutting down
   // Blink. This prevents a scenario where a pending task in the message loop
   // accesses Blink objects after Blink shuts down.
-  // This must be at the very end of the shutdown sequence. You must not touch
-  // the message loop after this.
   renderer_scheduler_->Shutdown();
-  main_message_loop_.reset();
+  if (main_message_loop_)
+    main_message_loop_->RunUntilIdle();
+
   if (blink_platform_impl_) {
     blink_platform_impl_->Shutdown();
+    // This must be at the very end of the shutdown sequence.
+    // blink::shutdown() must be called after all strong references from
+    // Chromium to Blink are cleared.
     blink::shutdown();
   }
+
+  // Delay shutting down DiscardableSharedMemoryManager until blink::shutdown
+  // is complete, because blink::shutdown destructs Blink Resources and they
+  // may try to unlock their underlying discardable memory.
+  ChildThreadImpl::ShutdownDiscardableSharedMemoryManager();
+
+  // The message loop must be cleared after shutting down
+  // the DiscardableSharedMemoryManager, which needs to send messages
+  // to the browser process.
+  main_message_loop_.reset();
 
   lazy_tls.Pointer()->Set(NULL);
 }
@@ -1081,9 +1105,9 @@ void RenderThreadImpl::AddRoute(int32_t routing_id, IPC::Listener* listener) {
     return;
 
   scoped_refptr<PendingRenderFrameConnect> connection(it->second);
-  mojo::InterfaceRequest<mojo::ServiceProvider> services(
+  mojo::shell::mojom::InterfaceProviderRequest services(
       std::move(connection->services()));
-  mojo::ServiceProviderPtr exposed_services(
+  mojo::shell::mojom::InterfaceProviderPtr exposed_services(
       std::move(connection->exposed_services()));
   exposed_services.set_connection_error_handler(mojo::Closure());
   pending_render_frame_connects_.erase(it);
@@ -1114,14 +1138,18 @@ void RenderThreadImpl::RemoveEmbeddedWorkerRoute(int32_t routing_id) {
 
 void RenderThreadImpl::RegisterPendingRenderFrameConnect(
     int routing_id,
-    mojo::InterfaceRequest<mojo::ServiceProvider> services,
-    mojo::ServiceProviderPtr exposed_services) {
+    mojo::shell::mojom::InterfaceProviderRequest services,
+    mojo::shell::mojom::InterfaceProviderPtr exposed_services) {
   std::pair<PendingRenderFrameConnectMap::iterator, bool> result =
       pending_render_frame_connects_.insert(std::make_pair(
           routing_id,
           make_scoped_refptr(new PendingRenderFrameConnect(
               routing_id, std::move(services), std::move(exposed_services)))));
   CHECK(result.second) << "Inserting a duplicate item.";
+}
+
+StoragePartitionService* RenderThreadImpl::GetStoragePartitionService() {
+  return storage_partition_service_.get();
 }
 
 int RenderThreadImpl::GenerateRoutingID() {
@@ -1475,16 +1503,6 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
 
   const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
 
-#if defined(OS_ANDROID)
-  if (SynchronousCompositorFactory::GetInstance()) {
-    if (!cmd_line->HasSwitch(switches::kDisableAcceleratedVideoDecode)) {
-      DLOG(WARNING) << "Accelerated video decoding is not explicitly disabled, "
-                       "but is not supported by in-process rendering";
-    }
-    return NULL;
-  }
-#endif
-
   scoped_refptr<base::SingleThreadTaskRunner> media_task_runner =
       GetMediaThreadTaskRunner();
   scoped_refptr<ContextProviderCommandBuffer> shared_context_provider =
@@ -1494,21 +1512,21 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
     const bool enable_video_accelerator =
         !cmd_line->HasSwitch(switches::kDisableAcceleratedVideoDecode);
     const bool enable_gpu_memory_buffer_video_frames =
-#if defined(OS_MACOSX)
+#if defined(OS_MACOSX) || defined(OS_LINUX)
         !cmd_line->HasSwitch(switches::kDisableGpuMemoryBufferVideoFrames);
 #else
         cmd_line->HasSwitch(switches::kEnableGpuMemoryBufferVideoFrames);
 #endif
-    std::string image_texture_target_string =
+    std::vector<unsigned> image_texture_targets;
+    std::string video_frame_image_texture_target_string =
         cmd_line->GetSwitchValueASCII(switches::kVideoImageTextureTarget);
-    unsigned image_texture_target = 0;
-    const bool parsed_image_texture_target =
-        base::StringToUint(image_texture_target_string, &image_texture_target);
-    DCHECK(parsed_image_texture_target);
+    StringToUintVector(video_frame_image_texture_target_string,
+                       &image_texture_targets);
+
     gpu_factories_.push_back(RendererGpuVideoAcceleratorFactories::Create(
         gpu_channel_host.get(), base::ThreadTaskRunnerHandle::Get(),
         media_task_runner, shared_context_provider,
-        enable_gpu_memory_buffer_video_frames, image_texture_target,
+        enable_gpu_memory_buffer_video_frames, image_texture_targets,
         enable_video_accelerator));
     return gpu_factories_.back();
   }
@@ -1573,11 +1591,25 @@ RenderThreadImpl::SharedMainThreadContextProvider() {
 }
 
 #if defined(OS_ANDROID)
+
+namespace {
+base::LazyInstance<scoped_refptr<StreamTextureFactory>>
+    g_stream_texture_factory_override;
+}
+
+// static
+void RenderThreadImpl::SetStreamTextureFactory(
+    scoped_refptr<StreamTextureFactory> factory) {
+  g_stream_texture_factory_override.Get() = factory;
+}
+
 scoped_refptr<StreamTextureFactory> RenderThreadImpl::GetStreamTexureFactory() {
   DCHECK(IsMainThread());
-  if (!stream_texture_factory_.get() ||
-      stream_texture_factory_->ContextGL()->GetGraphicsResetStatusKHR() !=
-          GL_NO_ERROR) {
+  if (g_stream_texture_factory_override.Get()) {
+    stream_texture_factory_ = g_stream_texture_factory_override.Get();
+  } else if (!stream_texture_factory_.get() ||
+             stream_texture_factory_->ContextGL()
+                     ->GetGraphicsResetStatusKHR() != GL_NO_ERROR) {
     if (!SharedMainThreadContextProvider().get()) {
       stream_texture_factory_ = NULL;
       return NULL;
@@ -1594,6 +1626,12 @@ scoped_refptr<StreamTextureFactory> RenderThreadImpl::GetStreamTexureFactory() {
   }
   return stream_texture_factory_;
 }
+
+bool RenderThreadImpl::EnableStreamTextureCopy() {
+  return !g_stream_texture_factory_override.Get() &&
+         sync_compositor_message_filter_.get();
+}
+
 #endif
 
 AudioRendererMixerManager* RenderThreadImpl::GetAudioRendererMixerManager() {
@@ -1712,6 +1750,11 @@ RenderThreadImpl::CreateExternalBeginFrameSource(int routing_id) {
       compositor_message_filter_.get(), sync_message_filter(), routing_id));
 }
 
+cc::ImageSerializationProcessor*
+RenderThreadImpl::GetImageSerializationProcessor() {
+  return GetContentClient()->renderer()->GetImageSerializationProcessor();
+}
+
 cc::TaskGraphRunner* RenderThreadImpl::GetTaskGraphRunner() {
   return raster_worker_pool_->GetTaskGraphRunner();
 }
@@ -1738,12 +1781,9 @@ scoped_ptr<base::SharedMemory> RenderThreadImpl::AllocateSharedMemory(
   return HostAllocateSharedMemoryBuffer(size);
 }
 
-CreateCommandBufferResult RenderThreadImpl::CreateViewCommandBuffer(
-    int32_t surface_id,
-    const GPUCreateCommandBufferConfig& init_params,
-    int32_t route_id) {
+gfx::GLSurfaceHandle RenderThreadImpl::GetSurfaceHandle(int32_t surface_id) {
   NOTREACHED();
-  return CREATE_COMMAND_BUFFER_FAILED;
+  return gfx::GLSurfaceHandle();
 }
 
 void RenderThreadImpl::DoNotNotifyWebKitOfModalLoop() {
@@ -1818,6 +1858,15 @@ void RenderThreadImpl::OnCreateNewFrameProxy(
     int opener_routing_id,
     int parent_routing_id,
     const FrameReplicationState& replicated_state) {
+  // Debug cases of https://crbug.com/575245.
+  base::debug::SetCrashKeyValue("newproxy_proxy_id",
+                                base::IntToString(routing_id));
+  base::debug::SetCrashKeyValue("newproxy_view_id",
+                                base::IntToString(render_view_routing_id));
+  base::debug::SetCrashKeyValue("newproxy_opener_id",
+                                base::IntToString(opener_routing_id));
+  base::debug::SetCrashKeyValue("newproxy_parent_id",
+                                base::IntToString(parent_routing_id));
   RenderFrameProxy::CreateFrameProxy(routing_id, render_view_routing_id,
                                      opener_routing_id, parent_routing_id,
                                      replicated_state);
@@ -1856,10 +1905,8 @@ GpuChannelHost* RenderThreadImpl::EstablishGpuChannelSync(
   int client_id = 0;
   IPC::ChannelHandle channel_handle;
   gpu::GPUInfo gpu_info;
-  if (!Send(new GpuHostMsg_EstablishGpuChannel(cause_for_gpu_launch,
-                                               &client_id,
-                                               &channel_handle,
-                                               &gpu_info)) ||
+  if (!Send(new GpuHostMsg_EstablishGpuChannel(cause_for_gpu_launch, &client_id,
+                                               &channel_handle, &gpu_info)) ||
 #if defined(OS_POSIX)
       channel_handle.socket.fd == -1 ||
 #endif
@@ -1979,7 +2026,7 @@ void RenderThreadImpl::OnUpdateScrollbarTheme(
   blink::WebScrollbarTheme::updateScrollbarsWithNSDefaults(
       params.initial_button_delay, params.autoscroll_button_delay,
       params.preferred_scroller_style, params.redraw,
-      params.scroll_animation_enabled, params.button_placement);
+      params.button_placement);
 }
 
 void RenderThreadImpl::OnSystemColorsChanged(
@@ -2151,14 +2198,15 @@ void RenderThreadImpl::ReleaseFreeMemory() {
 
 RenderThreadImpl::PendingRenderFrameConnect::PendingRenderFrameConnect(
     int routing_id,
-    mojo::InterfaceRequest<mojo::ServiceProvider> services,
-    mojo::ServiceProviderPtr exposed_services)
+    mojo::shell::mojom::InterfaceProviderRequest services,
+    mojo::shell::mojom::InterfaceProviderPtr exposed_services)
     : routing_id_(routing_id),
       services_(std::move(services)),
       exposed_services_(std::move(exposed_services)) {
-  // The RenderFrame may be deleted before the ExchangeServiceProviders message
-  // is received. In that case, the RenderFrameHost should close the connection,
-  // which is detected by setting an error handler on |exposed_services_|.
+  // The RenderFrame may be deleted before the ExchangeInterfaceProviders
+  // message is received. In that case, the RenderFrameHost should close the
+  // connection, which is detected by setting an error handler on
+  // |exposed_services_|.
   exposed_services_.set_connection_error_handler(base::Bind(
       &RenderThreadImpl::PendingRenderFrameConnect::OnConnectionError,
       base::Unretained(this)));

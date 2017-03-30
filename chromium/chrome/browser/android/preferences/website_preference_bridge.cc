@@ -9,10 +9,9 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/files/file_path.h"
 #include "base/macros.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_local_storage_helper.h"
+#include "chrome/browser/browsing_data/browsing_data_quota_helper.h"
 #include "chrome/browser/browsing_data/cookies_tree_model.h"
 #include "chrome/browser/browsing_data/local_data_container.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
@@ -22,13 +21,14 @@
 #include "chrome/browser/notifications/desktop_notification_profile_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/storage/storage_info_fetcher.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "jni/WebsitePreferenceBridge_jni.h"
-#include "storage/browser/quota/quota_client.h"
 #include "storage/browser/quota/quota_manager.h"
+#include "storage/common/quota/quota_status_code.h"
 #include "url/url_constants.h"
 
 using base::android::ConvertJavaStringToUTF8;
@@ -307,15 +307,15 @@ static void SetProtectedMediaIdentifierSettingForOrigin(
                       (ContentSetting) value, is_incognito);
 }
 
-static void GetPushNotificationOrigins(JNIEnv* env,
-                                       const JavaParamRef<jclass>& clazz,
-                                       const JavaParamRef<jobject>& list) {
+static void GetNotificationOrigins(JNIEnv* env,
+                                   const JavaParamRef<jclass>& clazz,
+                                   const JavaParamRef<jobject>& list) {
   GetOrigins(env, CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
-             &Java_WebsitePreferenceBridge_insertPushNotificationIntoList, list,
+             &Java_WebsitePreferenceBridge_insertNotificationIntoList, list,
              false);
 }
 
-static jint GetPushNotificationSettingForOrigin(
+static jint GetNotificationSettingForOrigin(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& origin,
@@ -326,14 +326,14 @@ static jint GetPushNotificationSettingForOrigin(
       GURL(ConvertJavaStringToUTF8(env, origin)));
 }
 
-static void SetPushNotificationSettingForOrigin(
+static void SetNotificationSettingForOrigin(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& origin,
     const JavaParamRef<jstring>& embedder,
     jint value,
     jboolean is_incognito) {
-  // TODO(peter): Web Notification permission behaves differently from all other
+  // Note: Web Notification permission behaves differently from all other
   // permission types. See https://crbug.com/416894.
   Profile* profile = GetActiveUserProfile(is_incognito);
   GURL url = GURL(ConvertJavaStringToUTF8(env, origin));
@@ -595,51 +595,19 @@ class SiteDataDeleteHelper :
   DISALLOW_COPY_AND_ASSIGN(SiteDataDeleteHelper);
 };
 
-class StorageInfoFetcher :
-      public base::RefCountedThreadSafe<StorageInfoFetcher> {
+class StorageInfoReadyCallback {
  public:
-  StorageInfoFetcher(storage::QuotaManager* quota_manager,
-                     const JavaRef<jobject>& java_callback)
+  explicit StorageInfoReadyCallback(const JavaRef<jobject>& java_callback)
       : env_(base::android::AttachCurrentThread()),
-        quota_manager_(quota_manager),
         java_callback_(java_callback) {
   }
 
-  void Run() {
-    // QuotaManager must be called on IO thread, but java_callback must then be
-    // called back on UI thread.
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::Bind(&StorageInfoFetcher::GetUsageInfo, this));
-  }
-
- protected:
-  virtual ~StorageInfoFetcher() {}
-
- private:
-  friend class base::RefCountedThreadSafe<StorageInfoFetcher>;
-
-  void GetUsageInfo() {
-    // We will have no explicit owner as soon as we leave this method.
-    AddRef();
-    quota_manager_->GetUsageInfo(
-        base::Bind(&StorageInfoFetcher::OnGetUsageInfo, this));
-  }
-
-  void OnGetUsageInfo(const storage::UsageInfoEntries& entries) {
-    entries_.insert(entries_.begin(), entries.begin(), entries.end());
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(&StorageInfoFetcher::InvokeCallback, this));
-    Release();
-  }
-
-  void InvokeCallback() {
+  void OnStorageInfoReady(const storage::UsageInfoEntries& entries) {
     ScopedJavaLocalRef<jobject> list =
         Java_WebsitePreferenceBridge_createStorageInfoList(env_);
 
     storage::UsageInfoEntries::const_iterator i;
-    for (i = entries_.begin(); i != entries_.end(); ++i) {
+    for (i = entries.begin(); i != entries.end(); ++i) {
       if (i->usage <= 0) continue;
       ScopedJavaLocalRef<jstring> host =
           ConvertUTF8ToJavaString(env_, i->host);
@@ -647,72 +615,36 @@ class StorageInfoFetcher :
       Java_WebsitePreferenceBridge_insertStorageInfoIntoList(
           env_, list.obj(), host.obj(), i->type, i->usage);
     }
+
     Java_StorageInfoReadyCallback_onStorageInfoReady(
         env_, java_callback_.obj(), list.obj());
+
+    delete this;
   }
 
+ private:
   JNIEnv* env_;
-  storage::QuotaManager* quota_manager_;
   ScopedJavaGlobalRef<jobject> java_callback_;
-  storage::UsageInfoEntries entries_;
-
-  DISALLOW_COPY_AND_ASSIGN(StorageInfoFetcher);
 };
 
-class StorageDataDeleter :
-      public base::RefCountedThreadSafe<StorageDataDeleter> {
+class StorageInfoClearedCallback {
  public:
-  StorageDataDeleter(storage::QuotaManager* quota_manager,
-                     const std::string& host,
-                     storage::StorageType type,
-                     const JavaRef<jobject>& java_callback)
+  explicit StorageInfoClearedCallback(const JavaRef<jobject>& java_callback)
       : env_(base::android::AttachCurrentThread()),
-        quota_manager_(quota_manager),
-        host_(host),
-        type_(type),
         java_callback_(java_callback) {
   }
 
-  void Run() {
-    // QuotaManager must be called on IO thread, but java_callback must then be
-    // called back on UI thread.  Grant ourself an extra reference to avoid
-    // being deleted after DeleteHostData will return.
-    AddRef();
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::Bind(&storage::QuotaManager::DeleteHostData,
-                   quota_manager_,
-                   host_,
-                   type_,
-                   storage::QuotaClient::kAllClientsMask,
-                   base::Bind(&StorageDataDeleter::OnHostDataDeleted,
-                              this)));
-  }
+  void OnStorageInfoCleared(storage::QuotaStatusCode code) {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
- protected:
-  virtual ~StorageDataDeleter() {}
-
- private:
-  friend class base::RefCountedThreadSafe<StorageDataDeleter>;
-
-  void OnHostDataDeleted(storage::QuotaStatusCode) {
-    DCHECK_CURRENTLY_ON(BrowserThread::IO);
-    quota_manager_->ResetUsageTracker(type_);
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(&StorageDataDeleter::InvokeCallback, this));
-    Release();
-  }
-
-  void InvokeCallback() {
     Java_StorageInfoClearedCallback_onStorageInfoCleared(
         env_, java_callback_.obj());
+
+    delete this;
   }
 
+ private:
   JNIEnv* env_;
-  storage::QuotaManager* quota_manager_;
-  std::string host_;
-  storage::StorageType type_;
   ScopedJavaGlobalRef<jobject> java_callback_;
 };
 
@@ -785,10 +717,15 @@ static void FetchStorageInfo(JNIEnv* env,
                              const JavaParamRef<jclass>& clazz,
                              const JavaParamRef<jobject>& java_callback) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
-  scoped_refptr<StorageInfoFetcher> storage_info_fetcher(new StorageInfoFetcher(
-      content::BrowserContext::GetDefaultStoragePartition(
-          profile)->GetQuotaManager(), java_callback));
-  storage_info_fetcher->Run();
+
+  // storage_info_ready_callback will delete itself when it is run.
+  StorageInfoReadyCallback* storage_info_ready_callback =
+      new StorageInfoReadyCallback(java_callback);
+  scoped_refptr<StorageInfoFetcher> storage_info_fetcher =
+      new StorageInfoFetcher(profile);
+  storage_info_fetcher->FetchStorageInfo(
+      base::Bind(&StorageInfoReadyCallback::OnStorageInfoReady,
+          base::Unretained(storage_info_ready_callback)));
 }
 
 static void ClearLocalStorageData(JNIEnv* env,
@@ -808,12 +745,17 @@ static void ClearStorageData(JNIEnv* env,
                              const JavaParamRef<jobject>& java_callback) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
   std::string host = ConvertJavaStringToUTF8(env, jhost);
-  scoped_refptr<StorageDataDeleter> storage_data_deleter(new StorageDataDeleter(
-      content::BrowserContext::GetDefaultStoragePartition(
-          profile)->GetQuotaManager(),
+
+  // storage_info_cleared_callback will delete itself when it is run.
+  StorageInfoClearedCallback* storage_info_cleared_callback =
+      new StorageInfoClearedCallback(java_callback);
+  scoped_refptr<StorageInfoFetcher> storage_info_fetcher =
+      new StorageInfoFetcher(profile);
+  storage_info_fetcher->ClearStorage(
       host,
-      static_cast<storage::StorageType>(type), java_callback));
-  storage_data_deleter->Run();
+      static_cast<storage::StorageType>(type),
+      base::Bind(&StorageInfoClearedCallback::OnStorageInfoCleared,
+          base::Unretained(storage_info_cleared_callback)));
 }
 
 static void ClearCookieData(JNIEnv* env,

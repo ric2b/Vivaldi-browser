@@ -33,6 +33,7 @@
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/task_management/web_contents_tags.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
@@ -213,15 +214,18 @@ bool ChromeExtensionsBrowserClient::DidVersionUpdate(
     last_version = base::Version(last_version_str);
   }
 
-  std::string current_version = version_info::GetVersionNumber();
-  pref_service->SetString(pref_names::kLastChromeVersion,
-                          current_version);
+  std::string current_version_str = version_info::GetVersionNumber();
+  base::Version current_version(current_version_str);
+  pref_service->SetString(pref_names::kLastChromeVersion, current_version_str);
 
   // If there was no version string in prefs, assume we're out of date.
   if (!last_version.IsValid())
     return true;
+  // If the current version string is invalid, assume we didn't update.
+  if (!current_version.IsValid())
+    return false;
 
-  return last_version.IsOlderThan(current_version);
+  return last_version < current_version;
 }
 
 void ChromeExtensionsBrowserClient::PermitExternalProtocolHandler() {
@@ -392,6 +396,11 @@ ChromeExtensionsBrowserClient::CreateUpdateClient(
     content::BrowserContext* context) {
   return update_client::UpdateClientFactory(
       make_scoped_refptr(new ChromeUpdateClientConfig(context)));
+}
+
+int ChromeExtensionsBrowserClient::GetTabIdForWebContents(
+    content::WebContents* web_contents) {
+  return SessionTabHelper::IdForTab(web_contents);
 }
 
 }  // namespace extensions

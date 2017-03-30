@@ -289,6 +289,7 @@ cvox.TtsBackground.prototype.speak = function(
 
   var utterance = new cvox.Utterance(textString, mergedProperties);
   this.speakUsingQueue_(utterance, queueMode);
+  return this;
 };
 
 /**
@@ -474,6 +475,7 @@ cvox.TtsBackground.prototype.shouldCancel_ =
       return (utteranceToCancel.properties['category'] ==
           newUtterance.properties['category']);
   }
+  return false;
 };
 
 /**
@@ -534,17 +536,6 @@ cvox.TtsBackground.prototype.addCapturingEventListener = function(listener) {
 cvox.TtsBackground.prototype.onError_ = function(errorMessage) {
   this.updateVoice_(this.currentVoice);
 };
-
-/**
- * Converts an engine property value to a percentage from 0.00 to 1.00.
- * @param {string} property The property to convert.
- * @return {?number} The percentage of the property.
- */
-cvox.TtsBackground.prototype.propertyToPercentage = function(property) {
-  return (this.ttsProperties[property] - this.propertyMin[property]) /
-         Math.abs(this.propertyMax[property] - this.propertyMin[property]);
-};
-
 
 /**
  * @override

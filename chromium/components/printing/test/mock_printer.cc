@@ -57,8 +57,6 @@ MockPrinterPage::~MockPrinterPage() {
 
 MockPrinter::MockPrinter()
     : dpi_(printing::kPointsPerInch),
-      max_shrink_(2.0),
-      min_shrink_(1.25),
       desired_dpi_(printing::kPointsPerInch),
       selection_only_(false),
       should_print_backgrounds_(false),
@@ -106,8 +104,6 @@ void MockPrinter::GetDefaultPrintSettings(PrintMsg_Print_Params* params) {
 
 void MockPrinter::SetDefaultPrintSettings(const PrintMsg_Print_Params& params) {
   dpi_ = params.dpi;
-  max_shrink_ = params.max_shrink;
-  min_shrink_ = params.min_shrink;
   desired_dpi_ = params.desired_dpi;
   selection_only_ = params.selection_only;
   should_print_backgrounds_ = params.should_print_backgrounds;
@@ -145,8 +141,6 @@ void MockPrinter::ScriptedPrint(int cookie,
   settings->Reset();
 
   settings->params.dpi = dpi_;
-  settings->params.max_shrink = max_shrink_;
-  settings->params.min_shrink = min_shrink_;
   settings->params.desired_dpi = desired_dpi_;
   settings->params.selection_only = selection_only_;
   settings->params.should_print_backgrounds = should_print_backgrounds_;
@@ -205,12 +199,7 @@ void MockPrinter::PrintPage(const PrintHostMsg_DidPrintPage_Params& params) {
   // We duplicate the given file handle when creating a base::SharedMemory
   // instance so that its destructor closes the copy.
   EXPECT_GT(params.data_size, 0U);
-#if defined(OS_WIN)
-  base::SharedMemory metafile_data(params.metafile_data_handle, true,
-                                   GetCurrentProcess());
-#elif defined(OS_MACOSX)
   base::SharedMemory metafile_data(params.metafile_data_handle, true);
-#endif
   metafile_data.Map(params.data_size);
 #if defined(OS_MACOSX)
   printing::PdfMetafileCg metafile;
@@ -239,10 +228,9 @@ int MockPrinter::GetPrintedPages() const {
 }
 
 const MockPrinterPage* MockPrinter::GetPrintedPage(unsigned int pageno) const {
-  if (pages_.size() > pageno)
-    return pages_[pageno].get();
-  else
-    return NULL;
+  if (pageno >= pages_.size())
+    return nullptr;
+  return pages_[pageno].get();
 }
 
 int MockPrinter::GetWidth(unsigned int page) const {
@@ -291,8 +279,6 @@ int MockPrinter::CreateDocumentCookie() {
 
 void MockPrinter::SetPrintParams(PrintMsg_Print_Params* params) {
   params->dpi = dpi_;
-  params->max_shrink = max_shrink_;
-  params->min_shrink = min_shrink_;
   params->desired_dpi = desired_dpi_;
   params->selection_only = selection_only_;
   params->should_print_backgrounds = should_print_backgrounds_;

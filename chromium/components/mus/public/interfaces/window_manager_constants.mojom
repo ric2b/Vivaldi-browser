@@ -8,7 +8,7 @@ import "ui/mojo/geometry/geometry.mojom";
 
 enum WindowManagerErrorCode {
   SUCCESS,
-  ERROR_ACCESS_DENIED
+  ACCESS_DENIED
 };
 
 enum ShowState {
@@ -26,11 +26,24 @@ enum Rotation {
   VALUE_270,
 };
 
-enum ResizeBehavior {
-  NONE = 0,
-  CAN_RESIZE = 1,
-  CAN_MAXIMIZE = 2,
-  CAN_MINIMIZE = 4,
+const int32 kResizeBehaviorNone = 0;
+const int32 kResizeBehaviorCanResize = 1;
+const int32 kResizeBehaviorCanMaximize = 2;
+const int32 kResizeBehaviorCanMinimize = 4;
+
+struct FrameDecorationValues {
+  mojo.Insets normal_client_area_insets;
+  mojo.Insets maximized_client_area_insets;
+  // Max width needed to display the buttons on the title bar. The buttons are
+  // aligned to the trailing edge of the titlebar.
+  // TODO(sky): this API is very narrow, and assumes a particular config.
+  uint32 max_title_bar_button_width;
+};
+
+enum TouchSupport {
+  UNKNOWN,
+  AVAILABLE,
+  UNAVAILABLE,
 };
 
 struct Display {
@@ -39,6 +52,9 @@ struct Display {
   mojo.Rect work_area;
   float device_pixel_ratio;
   Rotation rotation;
+  TouchSupport touch_support;
+  bool is_primary;
+  FrameDecorationValues frame_decoration_values;
 };
 
 enum WindowType {

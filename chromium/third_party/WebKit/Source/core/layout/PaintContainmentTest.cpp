@@ -51,4 +51,4 @@ TEST_F(PaintContainmentTest, InlinePaintContainment)
     checkIsClippingStackingContextAndContainer(layoutBlock);
 }
 
-}
+} // namespace blink

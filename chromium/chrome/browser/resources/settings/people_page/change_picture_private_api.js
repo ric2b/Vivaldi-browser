@@ -68,6 +68,23 @@ cr.define('settings', function() {
     chrome.send('selectImage', ['', 'profile']);
   };
 
+  /**
+   * Called from JavaScript. Provides the taken photo as a data URL to the C++.
+   * No response is expected.
+   * @param {string} photoDataUrl
+   */
+  ChangePicturePrivateApi.photoTaken = function(photoDataUrl) {
+    chrome.send('photoTaken', [photoDataUrl]);
+  };
+
+  /**
+   * Called from JavaScript. Requests a file chooser to select a new user image.
+   * No response is expected.
+   */
+  ChangePicturePrivateApi.chooseFile = function() {
+    chrome.send('chooseFile');
+  };
+
   return {
     ChangePicturePrivateApi: ChangePicturePrivateApi,
   };

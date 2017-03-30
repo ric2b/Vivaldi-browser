@@ -15,11 +15,12 @@
 #include "base/thread_task_runner_handle.h"
 #include "jingle/glue/thread_wrapper.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "remoting/protocol/chromium_port_allocator.h"
+#include "remoting/base/url_request.h"
+#include "remoting/protocol/chromium_port_allocator_factory.h"
 #include "remoting/protocol/connection_tester.h"
 #include "remoting/protocol/fake_authenticator.h"
-#include "remoting/protocol/p2p_stream_socket.h"
-#include "remoting/protocol/stream_channel_factory.h"
+#include "remoting/protocol/message_channel_factory.h"
+#include "remoting/protocol/message_pipe.h"
 #include "remoting/protocol/transport_context.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -51,7 +52,7 @@ ACTION_P2(QuitRunLoopOnCounter, run_loop, counter) {
 
 class MockChannelCreatedCallback {
  public:
-  MOCK_METHOD1(OnDone, void(P2PStreamSocket* socket));
+  MOCK_METHOD1(OnDone, void(MessagePipe* socket));
 };
 
 class TestTransportEventHandler : public IceTransport::EventHandler {
@@ -89,8 +90,8 @@ class IceTransportTest : public testing::Test {
   }
 
   void TearDown() override {
-    client_socket_.reset();
-    host_socket_.reset();
+    client_message_pipe_.reset();
+    host_message_pipe_.reset();
     client_transport_.reset();
     host_transport_.reset();
     message_loop_.RunUntilIdle();
@@ -113,17 +114,23 @@ class IceTransportTest : public testing::Test {
   }
 
   void InitializeConnection() {
-    host_transport_.reset(
-        new IceTransport(TransportContext::ForTests(TransportRole::SERVER),
-                         &host_event_handler_));
+    jingle_glue::JingleThreadWrapper::EnsureForCurrentMessageLoop();
+
+    host_transport_.reset(new IceTransport(
+        new TransportContext(
+            nullptr, make_scoped_ptr(new ChromiumPortAllocatorFactory()),
+            nullptr, network_settings_, TransportRole::SERVER),
+        &host_event_handler_));
     if (!host_authenticator_) {
       host_authenticator_.reset(new FakeAuthenticator(
           FakeAuthenticator::HOST, 0, FakeAuthenticator::ACCEPT, true));
     }
 
-    client_transport_.reset(
-        new IceTransport(TransportContext::ForTests(TransportRole::CLIENT),
-                         &client_event_handler_));
+    client_transport_.reset(new IceTransport(
+        new TransportContext(
+            nullptr, make_scoped_ptr(new ChromiumPortAllocatorFactory()),
+            nullptr, network_settings_, TransportRole::CLIENT),
+        &client_event_handler_));
     if (!client_authenticator_) {
       client_authenticator_.reset(new FakeAuthenticator(
           FakeAuthenticator::CLIENT, 0, FakeAuthenticator::ACCEPT, true));
@@ -156,21 +163,22 @@ class IceTransportTest : public testing::Test {
 
     run_loop_->Run();
 
-    EXPECT_TRUE(client_socket_.get());
-    EXPECT_TRUE(host_socket_.get());
+    EXPECT_TRUE(client_message_pipe_.get());
+    EXPECT_TRUE(host_message_pipe_.get());
   }
 
-  void OnClientChannelCreated(scoped_ptr<P2PStreamSocket> socket) {
-    client_socket_ = std::move(socket);
-    client_channel_callback_.OnDone(client_socket_.get());
+  void OnClientChannelCreated(scoped_ptr<MessagePipe> message_pipe) {
+    client_message_pipe_ = std::move(message_pipe);
+    client_channel_callback_.OnDone(client_message_pipe_.get());
   }
 
-  void OnHostChannelCreated(scoped_ptr<P2PStreamSocket> socket) {
-    host_socket_ = std::move(socket);
-    host_channel_callback_.OnDone(host_socket_.get());
+  void OnHostChannelCreated(scoped_ptr<MessagePipe> message_pipe) {
+    host_message_pipe_ = std::move(message_pipe);
+    host_channel_callback_.OnDone(host_message_pipe_.get());
   }
 
   void OnTransportError(ErrorCode error) {
+    LOG(ERROR) << "Transport Error";
     error_ = error;
     run_loop_->Quit();
   }
@@ -194,8 +202,8 @@ class IceTransportTest : public testing::Test {
   MockChannelCreatedCallback client_channel_callback_;
   MockChannelCreatedCallback host_channel_callback_;
 
-  scoped_ptr<P2PStreamSocket> client_socket_;
-  scoped_ptr<P2PStreamSocket> host_socket_;
+  scoped_ptr<MessagePipe> client_message_pipe_;
+  scoped_ptr<MessagePipe> host_message_pipe_;
 
   ErrorCode error_ = OK;
 };
@@ -203,20 +211,19 @@ class IceTransportTest : public testing::Test {
 TEST_F(IceTransportTest, DataStream) {
   InitializeConnection();
 
-  client_transport_->GetStreamChannelFactory()->CreateChannel(
+  client_transport_->GetChannelFactory()->CreateChannel(
       kChannelName, base::Bind(&IceTransportTest::OnClientChannelCreated,
                                base::Unretained(this)));
-  host_transport_->GetStreamChannelFactory()->CreateChannel(
+  host_transport_->GetChannelFactory()->CreateChannel(
       kChannelName, base::Bind(&IceTransportTest::OnHostChannelCreated,
                                base::Unretained(this)));
 
   WaitUntilConnected();
 
-  StreamConnectionTester tester(host_socket_.get(), client_socket_.get(),
-                                kMessageSize, kMessages);
-  tester.Start();
-  message_loop_.Run();
-  tester.CheckResults();
+  MessagePipeConnectionTester tester(host_message_pipe_.get(),
+                                     client_message_pipe_.get(), kMessageSize,
+                                     kMessages);
+  tester.RunAndCheckResults();
 }
 
 TEST_F(IceTransportTest, MuxDataStream) {
@@ -231,11 +238,10 @@ TEST_F(IceTransportTest, MuxDataStream) {
 
   WaitUntilConnected();
 
-  StreamConnectionTester tester(host_socket_.get(), client_socket_.get(),
-                                kMessageSize, kMessages);
-  tester.Start();
-  message_loop_.Run();
-  tester.CheckResults();
+  MessagePipeConnectionTester tester(host_message_pipe_.get(),
+                                     client_message_pipe_.get(), kMessageSize,
+                                     kMessages);
+  tester.RunAndCheckResults();
 }
 
 TEST_F(IceTransportTest, FailedChannelAuth) {
@@ -245,23 +251,24 @@ TEST_F(IceTransportTest, FailedChannelAuth) {
 
   InitializeConnection();
 
-  client_transport_->GetStreamChannelFactory()->CreateChannel(
+  client_transport_->GetChannelFactory()->CreateChannel(
       kChannelName, base::Bind(&IceTransportTest::OnClientChannelCreated,
                                base::Unretained(this)));
-  host_transport_->GetStreamChannelFactory()->CreateChannel(
+  host_transport_->GetChannelFactory()->CreateChannel(
       kChannelName, base::Bind(&IceTransportTest::OnHostChannelCreated,
                                base::Unretained(this)));
 
   run_loop_.reset(new base::RunLoop());
 
-  EXPECT_CALL(host_channel_callback_, OnDone(nullptr))
-      .WillOnce(QuitRunLoop(run_loop_.get()));
+  // The callback should never be called.
+  EXPECT_CALL(host_channel_callback_, OnDone(_)).Times(0);
 
   run_loop_->Run();
 
-  EXPECT_FALSE(host_socket_);
+  EXPECT_FALSE(host_message_pipe_);
+  EXPECT_EQ(CHANNEL_CONNECTION_ERROR, error_);
 
-  client_transport_->GetStreamChannelFactory()->CancelChannelCreation(
+  client_transport_->GetChannelFactory()->CancelChannelCreation(
       kChannelName);
 }
 
@@ -269,40 +276,46 @@ TEST_F(IceTransportTest, FailedChannelAuth) {
 // established.
 TEST_F(IceTransportTest, TestBrokenTransport) {
   // Allow only incoming connections on both ends, which effectively renders
-  // transport unusable.
+  // transport unusable. Also reduce connection timeout so the test finishes
+  // quickly.
   network_settings_ = NetworkSettings(NetworkSettings::NAT_TRAVERSAL_DISABLED);
+  network_settings_.ice_timeout = base::TimeDelta::FromSeconds(1);
+  network_settings_.ice_reconnect_attempts = 1;
 
   InitializeConnection();
 
-  client_transport_->GetStreamChannelFactory()->CreateChannel(
+  client_transport_->GetChannelFactory()->CreateChannel(
       kChannelName, base::Bind(&IceTransportTest::OnClientChannelCreated,
                                base::Unretained(this)));
-  host_transport_->GetStreamChannelFactory()->CreateChannel(
+  host_transport_->GetChannelFactory()->CreateChannel(
       kChannelName, base::Bind(&IceTransportTest::OnHostChannelCreated,
                                base::Unretained(this)));
 
-  message_loop_.RunUntilIdle();
+  // The RunLoop should quit in OnTransportError().
+  run_loop_.reset(new base::RunLoop());
+  run_loop_->Run();
 
   // Verify that neither of the two ends of the channel is connected.
-  EXPECT_FALSE(client_socket_);
-  EXPECT_FALSE(host_socket_);
+  EXPECT_FALSE(client_message_pipe_);
+  EXPECT_FALSE(host_message_pipe_);
+  EXPECT_EQ(CHANNEL_CONNECTION_ERROR, error_);
 
-  client_transport_->GetStreamChannelFactory()->CancelChannelCreation(
+  client_transport_->GetChannelFactory()->CancelChannelCreation(
       kChannelName);
-  host_transport_->GetStreamChannelFactory()->CancelChannelCreation(
+  host_transport_->GetChannelFactory()->CancelChannelCreation(
       kChannelName);
 }
 
 TEST_F(IceTransportTest, TestCancelChannelCreation) {
   InitializeConnection();
 
-  client_transport_->GetStreamChannelFactory()->CreateChannel(
+  client_transport_->GetChannelFactory()->CreateChannel(
       kChannelName, base::Bind(&IceTransportTest::OnClientChannelCreated,
                                base::Unretained(this)));
-  client_transport_->GetStreamChannelFactory()->CancelChannelCreation(
+  client_transport_->GetChannelFactory()->CancelChannelCreation(
       kChannelName);
 
-  EXPECT_TRUE(!client_socket_.get());
+  EXPECT_TRUE(!client_message_pipe_.get());
 }
 
 // Verify that we can still connect even when there is a delay in signaling
@@ -312,20 +325,19 @@ TEST_F(IceTransportTest, TestDelayedSignaling) {
 
   InitializeConnection();
 
-  client_transport_->GetStreamChannelFactory()->CreateChannel(
+  client_transport_->GetChannelFactory()->CreateChannel(
       kChannelName, base::Bind(&IceTransportTest::OnClientChannelCreated,
                                base::Unretained(this)));
-  host_transport_->GetStreamChannelFactory()->CreateChannel(
+  host_transport_->GetChannelFactory()->CreateChannel(
       kChannelName, base::Bind(&IceTransportTest::OnHostChannelCreated,
                                base::Unretained(this)));
 
   WaitUntilConnected();
 
-  StreamConnectionTester tester(host_socket_.get(), client_socket_.get(),
-                                kMessageSize, kMessages);
-  tester.Start();
-  message_loop_.Run();
-  tester.CheckResults();
+  MessagePipeConnectionTester tester(host_message_pipe_.get(),
+                                     client_message_pipe_.get(), kMessageSize,
+                                     kMessages);
+  tester.RunAndCheckResults();
 }
 
 

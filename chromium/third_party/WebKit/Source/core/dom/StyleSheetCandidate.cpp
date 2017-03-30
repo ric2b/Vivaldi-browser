@@ -93,6 +93,10 @@ bool StyleSheetCandidate::canBeActivated(const String& currentPreferrableName) c
     StyleSheet* sheet = this->sheet();
     if (!sheet || sheet->disabled() || !sheet->isCSSStyleSheet())
         return false;
+
+    if (sheet->ownerNode() && sheet->ownerNode()->isInShadowTree())
+        return true;
+
     const AtomicString& title = this->title();
     if (!isEnabledViaScript() && !title.isEmpty() && title != currentPreferrableName)
         return false;
@@ -104,7 +108,7 @@ bool StyleSheetCandidate::canBeActivated(const String& currentPreferrableName) c
 
 StyleSheetCandidate::Type StyleSheetCandidate::typeOf(Node& node)
 {
-    if (node.nodeType() == Node::PROCESSING_INSTRUCTION_NODE)
+    if (node.getNodeType() == Node::PROCESSING_INSTRUCTION_NODE)
         return Pi;
 
     if (node.isHTMLElement()) {
@@ -141,4 +145,4 @@ StyleSheet* StyleSheetCandidate::sheet() const
     return 0;
 }
 
-}
+} // namespace blink

@@ -16,6 +16,7 @@
 #include "content/browser/service_worker/service_worker_context_watcher.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_version.h"
+#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
@@ -23,6 +24,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/push_event_payload.h"
 #include "content/public/common/push_messaging_status.h"
 #include "url/gurl.h"
 
@@ -142,17 +144,27 @@ scoped_refptr<ServiceWorkerDevToolsAgentHost> GetMatchingServiceWorker(
     const ServiceWorkerDevToolsAgentHost::List& agent_hosts,
     const GURL& url) {
   scoped_refptr<ServiceWorkerDevToolsAgentHost> best_host;
-  std::string best_scope;
+  bool best_host_scope_matched = false;
+  int best_host_scope_length = 0;
+
   for (auto host : agent_hosts) {
     if (host->GetURL().host_piece() != url.host_piece())
       continue;
-    std::string path = host->GetURL().path();
-    std::string file = host->GetURL().ExtractFileName();
-    std::string scope = path.substr(0, path.length() - file.length());
-    // Choose the latest, longest scope match worker.
-    if (scope.length() >= best_scope.length()) {
+    const bool scope_matched =
+        ServiceWorkerUtils::ScopeMatches(host->scope(), url);
+    const int scope_length = host->scope().spec().length();
+    bool replace = false;
+    if (!best_host)
+      replace = true;
+    else if (best_host_scope_matched)
+      replace = scope_matched && scope_length >= best_host_scope_length;
+    else
+      replace = scope_matched || scope_length >= best_host_scope_length;
+
+    if (replace) {
       best_host = host;
-      best_scope = scope;
+      best_host_scope_matched = scope_matched;
+      best_host_scope_length = scope_length;
     }
   }
   return best_host;
@@ -174,11 +186,6 @@ ServiceWorkerDevToolsAgentHost::Map GetMatchingServiceWorkers(
       result[host->GetId()] = host;
   }
   return result;
-}
-
-bool CollectURLs(std::set<GURL>* urls, FrameTreeNode* tree_node) {
-  urls->insert(tree_node->current_url());
-  return false;
 }
 
 void StopServiceWorkerOnIO(scoped_refptr<ServiceWorkerContextWrapper> context,
@@ -246,6 +253,7 @@ void ServiceWorkerHandler::SetRenderFrameHost(
   render_frame_host_ = render_frame_host;
   // Do not call UpdateHosts yet, wait for load to commit.
   if (!render_frame_host) {
+    ClearForceUpdate();
     context_ = nullptr;
     return;
   }
@@ -268,8 +276,10 @@ void ServiceWorkerHandler::UpdateHosts() {
   urls_.clear();
   BrowserContext* browser_context = nullptr;
   if (render_frame_host_) {
-    render_frame_host_->frame_tree_node()->frame_tree()->ForEach(
-        base::Bind(&CollectURLs, &urls_));
+    for (FrameTreeNode* node :
+         render_frame_host_->frame_tree_node()->frame_tree()->Nodes())
+      urls_.insert(node->current_url());
+
     browser_context = render_frame_host_->GetProcess()->GetBrowserContext();
   }
 
@@ -277,12 +287,12 @@ void ServiceWorkerHandler::UpdateHosts() {
   ServiceWorkerDevToolsAgentHost::Map new_hosts =
       GetMatchingServiceWorkers(browser_context, urls_);
 
-  for (auto pair : old_hosts) {
+  for (const auto& pair : old_hosts) {
     if (new_hosts.find(pair.first) == new_hosts.end())
       ReportWorkerTerminated(pair.second.get());
   }
 
-  for (auto pair : new_hosts) {
+  for (const auto& pair : new_hosts) {
     if (old_hosts.find(pair.first) == old_hosts.end())
       ReportWorkerCreated(pair.second.get());
   }
@@ -325,6 +335,7 @@ Response ServiceWorkerHandler::Disable() {
   enabled_ = false;
 
   ServiceWorkerDevToolsManager::GetInstance()->RemoveObserver(this);
+  ClearForceUpdate();
   for (const auto& pair : attached_hosts_)
     pair.second->DetachClient();
   attached_hosts_.clear();
@@ -425,6 +436,10 @@ Response ServiceWorkerHandler::SetForceUpdateOnPageLoad(
   int64_t id = kInvalidServiceWorkerRegistrationId;
   if (!base::StringToInt64(registration_id, &id))
     return CreateInvalidVersionIdErrorResponse();
+  if (force_update_on_page_load)
+    force_update_enabled_registrations_.insert(id);
+  else
+    force_update_enabled_registrations_.erase(id);
   context_->SetForceUpdateOnPageLoad(id, force_update_on_page_load);
   return Response::OK();
 }
@@ -440,9 +455,12 @@ Response ServiceWorkerHandler::DeliverPushMessage(
   int64_t id = 0;
   if (!base::StringToInt64(registration_id, &id))
     return CreateInvalidVersionIdErrorResponse();
+  PushEventPayload payload;
+  if (data.size() > 0)
+    payload.setData(data);
   BrowserContext::DeliverPushMessage(
       render_frame_host_->GetProcess()->GetBrowserContext(), GURL(origin), id,
-      data, base::Bind(&PushDeliveryNoOp));
+      payload, base::Bind(&PushDeliveryNoOp));
   return Response::OK();
 }
 
@@ -595,6 +613,14 @@ void ServiceWorkerHandler::ReportWorkerTerminated(
   client_->WorkerTerminated(WorkerTerminatedParams::Create()->
       set_worker_id(host->GetId()));
   attached_hosts_.erase(it);
+}
+
+void ServiceWorkerHandler::ClearForceUpdate() {
+  if (context_) {
+    for (const auto registration_id : force_update_enabled_registrations_)
+      context_->SetForceUpdateOnPageLoad(registration_id, false);
+  }
+  force_update_enabled_registrations_.clear();
 }
 
 }  // namespace service_worker

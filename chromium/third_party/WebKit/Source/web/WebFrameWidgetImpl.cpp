@@ -46,6 +46,7 @@
 #include "core/page/Page.h"
 #include "platform/KeyboardCodes.h"
 #include "platform/NotImplemented.h"
+#include "public/platform/WebFrameScheduler.h"
 #include "public/web/WebWidgetClient.h"
 #include "web/ContextMenuAllowedScope.h"
 #include "web/WebDevToolsAgentImpl.h"
@@ -97,6 +98,7 @@ WebFrameWidgetImpl::WebFrameWidgetImpl(WebWidgetClient* client, WebLocalFrame* l
     , m_layerTreeViewClosed(false)
     , m_suppressNextKeypressEvent(false)
     , m_ignoreInputEvents(false)
+    , m_isTransparent(false)
 #if ENABLE(OILPAN)
     , m_selfKeepAlive(this)
 #endif
@@ -105,6 +107,9 @@ WebFrameWidgetImpl::WebFrameWidgetImpl(WebWidgetClient* client, WebLocalFrame* l
     initializeLayerTreeView();
     m_localRoot->setFrameWidget(this);
     allInstances().add(this);
+
+    if (localRoot->parent())
+        setIsTransparent(true);
 }
 
 WebFrameWidgetImpl::~WebFrameWidgetImpl()
@@ -277,7 +282,7 @@ void WebFrameWidgetImpl::updateLayerTreeBackgroundColor()
     if (!m_layerTreeView)
         return;
 
-    m_layerTreeView->setBackgroundColor(alphaChannel(view()->backgroundColorOverride()) ? view()->backgroundColorOverride() : view()->backgroundColor());
+    m_layerTreeView->setBackgroundColor(backgroundColor());
 }
 
 void WebFrameWidgetImpl::updateLayerTreeDeviceScaleFactor()
@@ -289,10 +294,17 @@ void WebFrameWidgetImpl::updateLayerTreeDeviceScaleFactor()
     m_layerTreeView->setDeviceScaleFactor(deviceScaleFactor);
 }
 
+void WebFrameWidgetImpl::setIsTransparent(bool isTransparent)
+{
+    m_isTransparent = isTransparent;
+
+    if (m_layerTreeView)
+        m_layerTreeView->setHasTransparentBackground(isTransparent);
+}
+
 bool WebFrameWidgetImpl::isTransparent() const
 {
-    // FIXME: This might need to proxy to the WebView's isTransparent().
-    return false;
+    return m_isTransparent;
 }
 
 void WebFrameWidgetImpl::layoutAndPaintAsync(WebLayoutAndPaintAsyncCallback* callback)
@@ -380,6 +392,18 @@ bool WebFrameWidgetImpl::hasTouchEventHandlersAt(const WebPoint& point)
     return true;
 }
 
+void WebFrameWidgetImpl::setBaseBackgroundColor(WebColor color)
+{
+    if (m_baseBackgroundColor == color)
+        return;
+
+    m_baseBackgroundColor = color;
+
+    m_localRoot->frameView()->setBaseBackgroundColor(color);
+
+    updateAllLifecyclePhases();
+}
+
 void WebFrameWidgetImpl::scheduleAnimation()
 {
     if (m_layerTreeView) {
@@ -426,7 +450,7 @@ void WebFrameWidgetImpl::setFocus(bool enable)
                     // instead. Note that this has the side effect of moving the
                     // caret back to the beginning of the text.
                     Position position(element, 0);
-                    focusedFrame->selection().setSelection(VisibleSelection(position, SEL_DEFAULT_AFFINITY));
+                    focusedFrame->selection().setSelection(VisibleSelection(position, SelDefaultAffinity));
                 }
             }
         }
@@ -482,7 +506,7 @@ WebColor WebFrameWidgetImpl::backgroundColor() const
     if (isTransparent())
         return Color::transparent;
     if (!m_localRoot->frameView())
-        return view()->backgroundColor();
+        return m_baseBackgroundColor;
     FrameView* view = m_localRoot->frameView();
     return view->documentBackgroundColor().rgb();
 }
@@ -1015,8 +1039,7 @@ void WebFrameWidgetImpl::setIsAcceleratedCompositingActive(bool active)
         TRACE_EVENT0("blink", "WebViewImpl::setIsAcceleratedCompositingActive(true)");
         m_layerTreeView->setRootLayer(*m_rootLayer);
 
-        bool visible = page()->visibilityState() == PageVisibilityStateVisible;
-        m_layerTreeView->setVisible(visible);
+        m_layerTreeView->setVisible(page()->isPageVisible());
         updateLayerTreeDeviceScaleFactor();
         updateLayerTreeBackgroundColor();
         m_layerTreeView->setHasTransparentBackground(isTransparent());
@@ -1050,17 +1073,17 @@ void WebFrameWidgetImpl::setRootGraphicsLayer(GraphicsLayer* layer)
         m_layerTreeView->clearRootLayer();
 }
 
-void WebFrameWidgetImpl::attachCompositorAnimationTimeline(WebCompositorAnimationTimeline* compositorTimeline)
+void WebFrameWidgetImpl::attachCompositorAnimationTimeline(CompositorAnimationTimeline* compositorTimeline)
 {
     if (m_layerTreeView)
-        m_layerTreeView->attachCompositorAnimationTimeline(compositorTimeline);
+        m_layerTreeView->attachCompositorAnimationTimeline(compositorTimeline->animationTimeline());
 
 }
 
-void WebFrameWidgetImpl::detachCompositorAnimationTimeline(WebCompositorAnimationTimeline* compositorTimeline)
+void WebFrameWidgetImpl::detachCompositorAnimationTimeline(CompositorAnimationTimeline* compositorTimeline)
 {
     if (m_layerTreeView)
-        m_layerTreeView->detachCompositorAnimationTimeline(compositorTimeline);
+        m_layerTreeView->detachCompositorAnimationTimeline(compositorTimeline->animationTimeline());
 }
 
 void WebFrameWidgetImpl::setVisibilityState(WebPageVisibilityState visibilityState, bool isInitialState)
@@ -1071,6 +1094,8 @@ void WebFrameWidgetImpl::setVisibilityState(WebPageVisibilityState visibilitySta
     // FIXME: This is not correct, since Show and Hide messages for a frame's Widget do not necessarily
     // correspond to Page visibility, but is necessary until we properly sort out OOPIF visibility.
     page()->setVisibilityState(static_cast<PageVisibilityState>(visibilityState), isInitialState);
+
+    m_localRoot->frame()->frameScheduler()->setPageVisible(visibilityState == WebPageVisibilityStateVisible);
 
     if (m_layerTreeView) {
         bool visible = visibilityState == WebPageVisibilityStateVisible;

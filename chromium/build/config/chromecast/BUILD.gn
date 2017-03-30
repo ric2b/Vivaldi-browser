@@ -19,7 +19,24 @@ config("static_config") {
   ]
 }
 
+config("ldconfig") {
+  visibility = [ ":*" ]
+
+  # Chromecast executables depend on several shared libraries in
+  # /oem_cast_shlib, $ORIGIN, and $ORIGIN/lib. Add these rpaths to each binary.
+  # This is explicitly disabled in Chrome for security reasons (see comments in
+  # //build/config/gcc/BUILD.gn), but necessary on Chromecast so that OEM's may
+  # override the default libraries shipped in the Cast receiver package.
+  ldflags = [
+    "-Wl,-rpath=/oem_cast_shlib",
+    "-Wl,-rpath=\$ORIGIN/lib",
+    "-Wl,-rpath=\$ORIGIN",
+  ]
+}
+
 config("executable_config") {
+  configs = [ ":ldconfig" ]
+
   if (current_cpu == "arm") {
     ldflags = [
       # Export stdlibc++ and libgcc symbols to force shlibs to refer to these
@@ -40,12 +57,13 @@ config("executable_config") {
     # Despite including libstdc++/libgcc archives, we still need to specify
     # static linking for them in order to prevent the executable from having a
     # dynamic dependency on them.
-    configs = [ ":static_config" ]
+    configs += [ ":static_config" ]
   }
 }
 
 config("shared_library_config") {
+  configs = [ ":ldconfig" ]
   if (current_cpu == "arm") {
-    configs = [ ":static_config" ]
+    configs += [ ":static_config" ]
   }
 }

@@ -20,7 +20,6 @@
 #include "remoting/protocol/errors.h"
 #include "remoting/protocol/ice_transport.h"
 #include "remoting/protocol/input_filter.h"
-#include "remoting/protocol/message_reader.h"
 #include "remoting/protocol/monitored_video_stub.h"
 #include "remoting/protocol/session.h"
 #include "remoting/protocol/session_config.h"
@@ -67,15 +66,11 @@ class IceConnectionToHost : public ConnectionToHost,
 
   // ChannelDispatcherBase::EventHandler interface.
   void OnChannelInitialized(ChannelDispatcherBase* channel_dispatcher) override;
-  void OnChannelError(ChannelDispatcherBase* channel_dispatcher,
-                      ErrorCode error) override;
 
   // MonitoredVideoStub::EventHandler interface.
   virtual void OnVideoChannelStatus(bool active);
 
   void NotifyIfChannelsReady();
-
-  void CloseOnError(ErrorCode error);
 
   // Closes the P2P connection.
   void CloseChannels();

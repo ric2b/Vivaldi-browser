@@ -31,15 +31,13 @@
 #define InspectorDOMAgent_h
 
 #include "core/CoreExport.h"
-#include "core/InspectorFrontend.h"
 #include "core/events/EventListenerMap.h"
-#include "core/inspector/InjectedScript.h"
-#include "core/inspector/InjectedScriptManager.h"
 #include "core/inspector/InspectorBaseAgent.h"
 #include "core/inspector/InspectorHighlight.h"
 #include "core/style/ComputedStyleConstants.h"
-#include "platform/JSONValues.h"
 #include "platform/geometry/FloatQuad.h"
+#include "platform/inspector_protocol/Values.h"
+#include "platform/v8_inspector/public/V8RuntimeAgent.h"
 
 #include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
@@ -74,7 +72,7 @@ class ShadowRoot;
 
 typedef String ErrorString;
 
-class CORE_EXPORT InspectorDOMAgent final : public InspectorBaseAgent<InspectorDOMAgent, InspectorFrontend::DOM>, public InspectorBackendDispatcher::DOMCommandHandler {
+class CORE_EXPORT InspectorDOMAgent final : public InspectorBaseAgent<InspectorDOMAgent, protocol::Frontend::DOM>, public protocol::Dispatcher::DOMCommandHandler {
     WTF_MAKE_NONCOPYABLE(InspectorDOMAgent);
 public:
     struct CORE_EXPORT DOMListener : public WillBeGarbageCollectedMixin {
@@ -98,65 +96,64 @@ public:
         virtual void setInspectedNode(Node*) { }
     };
 
-    static PassOwnPtrWillBeRawPtr<InspectorDOMAgent> create(InspectedFrames* inspectedFrames, InjectedScriptManager* injectedScriptManager, Client* client)
+    static PassOwnPtrWillBeRawPtr<InspectorDOMAgent> create(v8::Isolate* isolate, InspectedFrames* inspectedFrames, V8RuntimeAgent* runtimeAgent, Client* client)
     {
-        return adoptPtrWillBeNoop(new InspectorDOMAgent(inspectedFrames, injectedScriptManager, client));
+        return adoptPtrWillBeNoop(new InspectorDOMAgent(isolate, inspectedFrames, runtimeAgent, client));
     }
 
     static String toErrorString(ExceptionState&);
-    static bool getPseudoElementType(PseudoId, TypeBuilder::DOM::PseudoType::Enum*);
+    static bool getPseudoElementType(PseudoId, String*);
     static ShadowRoot* userAgentShadowRoot(Node*);
 
     ~InspectorDOMAgent() override;
     DECLARE_VIRTUAL_TRACE();
 
-    void disable(ErrorString*) override;
     void restore() override;
 
-    WillBeHeapVector<RawPtrWillBeMember<Document> > documents();
+    WillBeHeapVector<RawPtrWillBeMember<Document>> documents();
     void reset();
 
     // Methods called from the frontend for DOM nodes inspection.
     void enable(ErrorString*) override;
-    void querySelector(ErrorString*, int nodeId, const String& selectors, int* elementId) override;
-    void querySelectorAll(ErrorString*, int nodeId, const String& selectors, RefPtr<TypeBuilder::Array<int>>& result) override;
-    void getDocument(ErrorString*, RefPtr<TypeBuilder::DOM::Node>& root) override;
-    void requestChildNodes(ErrorString*, int nodeId, const int* depth) override;
-    void setAttributeValue(ErrorString*, int elementId, const String& name, const String& value) override;
-    void setAttributesAsText(ErrorString*, int elementId, const String& text, const String* name) override;
-    void removeAttribute(ErrorString*, int elementId, const String& name) override;
-    void removeNode(ErrorString*, int nodeId) override;
-    void setNodeName(ErrorString*, int nodeId, const String& name, int* newId) override;
-    void getOuterHTML(ErrorString*, int nodeId, WTF::String* outerHTML) override;
-    void setOuterHTML(ErrorString*, int nodeId, const String& outerHTML) override;
+    void disable(ErrorString*) override;
+    void getDocument(ErrorString*, OwnPtr<protocol::DOM::Node>* root) override;
+    void requestChildNodes(ErrorString*, int nodeId, const Maybe<int>& depth) override;
+    void querySelector(ErrorString*, int nodeId, const String& selector, int* outNodeId) override;
+    void querySelectorAll(ErrorString*, int nodeId, const String& selector, OwnPtr<protocol::Array<int>>* nodeIds) override;
+    void setNodeName(ErrorString*, int nodeId, const String& name, int* outNodeId) override;
     void setNodeValue(ErrorString*, int nodeId, const String& value) override;
-    void performSearch(ErrorString*, const String& whitespaceTrimmedQuery, const bool* includeUserAgentShadowDOM, String* searchId, int* resultCount) override;
-    void getSearchResults(ErrorString*, const String& searchId, int fromIndex, int toIndex, RefPtr<TypeBuilder::Array<int>>&) override;
+    void removeNode(ErrorString*, int nodeId) override;
+    void setAttributeValue(ErrorString*, int nodeId, const String& name, const String& value) override;
+    void setAttributesAsText(ErrorString*, int nodeId, const String& text, const Maybe<String>& name) override;
+    void removeAttribute(ErrorString*, int nodeId, const String& name) override;
+    void getOuterHTML(ErrorString*, int nodeId, String* outerHTML) override;
+    void setOuterHTML(ErrorString*, int nodeId, const String& outerHTML) override;
+    void performSearch(ErrorString*, const String& query, const Maybe<bool>& includeUserAgentShadowDOM, String* searchId, int* resultCount) override;
+    void getSearchResults(ErrorString*, const String& searchId, int fromIndex, int toIndex, OwnPtr<protocol::Array<int>>* nodeIds) override;
     void discardSearchResults(ErrorString*, const String& searchId) override;
-    void resolveNode(ErrorString*, int nodeId, const String* objectGroup, RefPtr<TypeBuilder::Runtime::RemoteObject>& result) override;
-    void getAttributes(ErrorString*, int nodeId, RefPtr<TypeBuilder::Array<String>>& result) override;
-    void setInspectMode(ErrorString*, const String&, const RefPtr<JSONObject>* highlightConfig) override;
-    void requestNode(ErrorString*, const String& objectId, int* nodeId) override;
-    void pushNodeByPathToFrontend(ErrorString*, const String& path, int* nodeId) override;
-    void pushNodesByBackendIdsToFrontend(ErrorString*, const RefPtr<JSONArray>& nodeIds, RefPtr<TypeBuilder::Array<int>>&) override;
-    void setInspectedNode(ErrorString*, int nodeId) override;
+    void requestNode(ErrorString*, const String& objectId, int* outNodeId) override;
+    void setInspectMode(ErrorString*, const String& mode, const Maybe<protocol::DOM::HighlightConfig>&) override;
+    void highlightRect(ErrorString*, int x, int y, int width, int height, const Maybe<protocol::DOM::RGBA>& color, const Maybe<protocol::DOM::RGBA>& outlineColor) override;
+    void highlightQuad(ErrorString*, PassOwnPtr<protocol::Array<double>> quad, const Maybe<protocol::DOM::RGBA>& color, const Maybe<protocol::DOM::RGBA>& outlineColor) override;
+    void highlightNode(ErrorString*, PassOwnPtr<protocol::DOM::HighlightConfig>, const Maybe<int>& nodeId, const Maybe<int>& backendNodeId, const Maybe<String>& objectId) override;
     void hideHighlight(ErrorString*) override;
-    void highlightRect(ErrorString*, int x, int y, int width, int height, const RefPtr<JSONObject>* color, const RefPtr<JSONObject>* outlineColor) override;
-    void highlightQuad(ErrorString*, const RefPtr<JSONArray>& quad, const RefPtr<JSONObject>* color, const RefPtr<JSONObject>* outlineColor) override;
-    void highlightNode(ErrorString*, const RefPtr<JSONObject>& highlightConfig, const int* nodeId, const int* backendNodeId, const String* objectId) override;
-    void highlightFrame(ErrorString*, const String& frameId, const RefPtr<JSONObject>* color, const RefPtr<JSONObject>* outlineColor) override;
-
-    void copyTo(ErrorString*, int nodeId, int targetElementId, const int* anchorNodeId, int* newNodeId) override;
-    void moveTo(ErrorString*, int nodeId, int targetNodeId, const int* anchorNodeId, int* newNodeId) override;
+    void highlightFrame(ErrorString*, const String& frameId, const Maybe<protocol::DOM::RGBA>& contentColor, const Maybe<protocol::DOM::RGBA>& contentOutlineColor) override;
+    void pushNodeByPathToFrontend(ErrorString*, const String& path, int* outNodeId) override;
+    void pushNodesByBackendIdsToFrontend(ErrorString*, PassOwnPtr<protocol::Array<int>> backendNodeIds, OwnPtr<protocol::Array<int>>* nodeIds) override;
+    void setInspectedNode(ErrorString*, int nodeId) override;
+    void resolveNode(ErrorString*, int nodeId, const Maybe<String>& objectGroup, OwnPtr<protocol::Runtime::RemoteObject>*) override;
+    void getAttributes(ErrorString*, int nodeId, OwnPtr<protocol::Array<String>>* attributes) override;
+    void copyTo(ErrorString*, int nodeId, int targetNodeId, const Maybe<int>& insertBeforeNodeId, int* outNodeId) override;
+    void moveTo(ErrorString*, int nodeId, int targetNodeId, const Maybe<int>& insertBeforeNodeId, int* outNodeId) override;
     void undo(ErrorString*) override;
     void redo(ErrorString*) override;
     void markUndoableState(ErrorString*) override;
     void focus(ErrorString*, int nodeId) override;
-    void setFileInputFiles(ErrorString*, int nodeId, const RefPtr<JSONArray>& files) override;
-    void getBoxModel(ErrorString*, int nodeId, RefPtr<TypeBuilder::DOM::BoxModel>&) override;
-    void getNodeForLocation(ErrorString*, int x, int y, int* nodeId) override;
-    void getRelayoutBoundary(ErrorString*, int nodeId, int* relayoutBoundaryNodeId) override;
-    void getHighlightObjectForTest(ErrorString*, int nodeId, RefPtr<JSONObject>&) override;
+    void setFileInputFiles(ErrorString*, int nodeId, PassOwnPtr<protocol::Array<String>> files) override;
+    void getBoxModel(ErrorString*, int nodeId, OwnPtr<protocol::DOM::BoxModel>*) override;
+    void getNodeForLocation(ErrorString*, int x, int y, int* outNodeId) override;
+    void getRelayoutBoundary(ErrorString*, int nodeId, int* outNodeId) override;
+    void getHighlightObjectForTest(ErrorString*, int nodeId, RefPtr<protocol::DictionaryValue>* highlight) override;
 
     bool enabled() const;
     void releaseDanglingNodes();
@@ -169,7 +166,7 @@ public:
     void willModifyDOMAttr(Element*, const AtomicString& oldValue, const AtomicString& newValue);
     void didModifyDOMAttr(Element*, const QualifiedName&, const AtomicString& value);
     void didRemoveDOMAttr(Element*, const QualifiedName&);
-    void styleAttributeInvalidated(const WillBeHeapVector<RawPtrWillBeMember<Element> >& elements);
+    void styleAttributeInvalidated(const WillBeHeapVector<RawPtrWillBeMember<Element>>& elements);
     void characterDataModified(CharacterData*);
     void didInvalidateStyleAttr(Node*);
     void didPushShadowRoot(Element* host, ShadowRoot*);
@@ -187,7 +184,7 @@ public:
 
     static String documentURLString(Document*);
 
-    PassRefPtr<TypeBuilder::Runtime::RemoteObject> resolveNode(Node*, const String& objectGroup);
+    PassOwnPtr<protocol::Runtime::RemoteObject> resolveNode(Node*, const String& objectGroup);
 
     InspectorHistory* history() { return m_history.get(); }
 
@@ -205,13 +202,13 @@ public:
     Document* assertDocument(ErrorString*, int nodeId);
 
 private:
-    InspectorDOMAgent(InspectedFrames*, InjectedScriptManager*, Client*);
+    InspectorDOMAgent(v8::Isolate*, InspectedFrames*, V8RuntimeAgent*, Client*);
 
     void setDocument(Document*);
     void innerEnable();
 
-    void setSearchingForNode(ErrorString*, SearchMode, JSONObject* highlightConfig);
-    PassOwnPtr<InspectorHighlightConfig> highlightConfigFromInspectorObject(ErrorString*, JSONObject* highlightInspectorObject);
+    void setSearchingForNode(ErrorString*, SearchMode, const Maybe<protocol::DOM::HighlightConfig>&);
+    PassOwnPtr<InspectorHighlightConfig> highlightConfigFromInspectorObject(ErrorString*, const Maybe<protocol::DOM::HighlightConfig>& highlightInspectorObject);
 
     // Node-related methods.
     typedef WillBeHeapHashMap<RefPtrWillBeMember<Node>, int> NodeToIdMap;
@@ -228,38 +225,39 @@ private:
 
     void invalidateFrameOwnerElement(LocalFrame*);
 
-    PassRefPtr<TypeBuilder::DOM::Node> buildObjectForNode(Node*, int depth, NodeToIdMap*);
-    PassRefPtr<TypeBuilder::Array<String> > buildArrayForElementAttributes(Element*);
-    PassRefPtr<TypeBuilder::Array<TypeBuilder::DOM::Node> > buildArrayForContainerChildren(Node* container, int depth, NodeToIdMap* nodesMap);
-    PassRefPtr<TypeBuilder::Array<TypeBuilder::DOM::Node> > buildArrayForPseudoElements(Element*, NodeToIdMap* nodesMap);
-    PassRefPtr<TypeBuilder::Array<TypeBuilder::DOM::BackendNode>> buildArrayForDistributedNodes(InsertionPoint*);
+    PassOwnPtr<protocol::DOM::Node> buildObjectForNode(Node*, int depth, NodeToIdMap*);
+    PassOwnPtr<protocol::Array<String>> buildArrayForElementAttributes(Element*);
+    PassOwnPtr<protocol::Array<protocol::DOM::Node>> buildArrayForContainerChildren(Node* container, int depth, NodeToIdMap* nodesMap);
+    PassOwnPtr<protocol::Array<protocol::DOM::Node>> buildArrayForPseudoElements(Element*, NodeToIdMap* nodesMap);
+    PassOwnPtr<protocol::Array<protocol::DOM::BackendNode>> buildArrayForDistributedNodes(InsertionPoint*);
 
     Node* nodeForPath(const String& path);
     Node* nodeForRemoteId(ErrorString*, const String& id);
 
     void discardFrontendBindings();
 
-    void innerHighlightQuad(PassOwnPtr<FloatQuad>, const RefPtr<JSONObject>* color, const RefPtr<JSONObject>* outlineColor);
+    void innerHighlightQuad(PassOwnPtr<FloatQuad>, const Maybe<protocol::DOM::RGBA>& color, const Maybe<protocol::DOM::RGBA>& outlineColor);
 
     bool pushDocumentUponHandlelessOperation(ErrorString*);
 
     RawPtrWillBeMember<InspectorRevalidateDOMTask> revalidateTask();
 
+    v8::Isolate* m_isolate;
     RawPtrWillBeMember<InspectedFrames> m_inspectedFrames;
-    RawPtrWillBeMember<InjectedScriptManager> m_injectedScriptManager;
+    V8RuntimeAgent* m_runtimeAgent;
     Client* m_client;
     RawPtrWillBeMember<DOMListener> m_domListener;
     OwnPtrWillBeMember<NodeToIdMap> m_documentNodeToIdMap;
     // Owns node mappings for dangling nodes.
-    WillBeHeapVector<OwnPtrWillBeMember<NodeToIdMap> > m_danglingNodeToIdMaps;
-    WillBeHeapHashMap<int, RawPtrWillBeMember<Node> > m_idToNode;
-    WillBeHeapHashMap<int, RawPtrWillBeMember<NodeToIdMap> > m_idToNodesMap;
+    WillBeHeapVector<OwnPtrWillBeMember<NodeToIdMap>> m_danglingNodeToIdMaps;
+    WillBeHeapHashMap<int, RawPtrWillBeMember<Node>> m_idToNode;
+    WillBeHeapHashMap<int, RawPtrWillBeMember<NodeToIdMap>> m_idToNodesMap;
     HashSet<int> m_childrenRequested;
     HashSet<int> m_distributedNodesRequested;
     HashMap<int, int> m_cachedChildCount;
     int m_lastNodeId;
     RefPtrWillBeMember<Document> m_document;
-    typedef WillBeHeapHashMap<String, WillBeHeapVector<RefPtrWillBeMember<Node> > > SearchResults;
+    typedef WillBeHeapHashMap<String, WillBeHeapVector<RefPtrWillBeMember<Node>>> SearchResults;
     SearchResults m_searchResults;
     OwnPtrWillBeMember<InspectorRevalidateDOMTask> m_revalidateTask;
     OwnPtrWillBeMember<InspectorHistory> m_history;

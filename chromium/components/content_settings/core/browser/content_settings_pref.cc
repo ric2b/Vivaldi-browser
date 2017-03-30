@@ -8,7 +8,6 @@
 #include "base/bind.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string_split.h"
 #include "base/time/clock.h"
 #include "components/content_settings/core/browser/content_settings_info.h"
@@ -19,6 +18,7 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/pref_names.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "url/gurl.h"
 
 namespace {
@@ -143,27 +143,32 @@ bool ContentSettingsPref::SetWebsiteSetting(
   return true;
 }
 
+void ContentSettingsPref::ClearPref() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(prefs_);
+
+  {
+    base::AutoLock auto_lock(lock_);
+    value_map_.clear();
+  }
+
+  {
+    base::AutoReset<bool> auto_reset(&updating_preferences_, true);
+    DictionaryPrefUpdate update(prefs_, pref_name_);
+    base::DictionaryValue* pattern_pairs_settings = update.Get();
+    pattern_pairs_settings->Clear();
+  }
+}
+
 void ContentSettingsPref::ClearAllContentSettingsRules() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(prefs_);
 
-  OriginIdentifierValueMap* map_to_modify = &incognito_value_map_;
-  if (!is_incognito_)
-    map_to_modify = &value_map_;
-
-  {
+  if (is_incognito_) {
     base::AutoLock auto_lock(lock_);
-    map_to_modify->clear();
-  }
-
-  if (!is_incognito_) {
-    // Clear the preference.
-    {
-      base::AutoReset<bool> auto_reset(&updating_preferences_, true);
-      DictionaryPrefUpdate update(prefs_, pref_name_);
-      base::DictionaryValue* pattern_pairs_settings = update.Get();
-      pattern_pairs_settings->Clear();
-    }
+    incognito_value_map_.clear();
+  } else {
+    ClearPref();
   }
 
   notify_callback_.Run(ContentSettingsPattern(),

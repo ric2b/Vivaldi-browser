@@ -22,6 +22,7 @@ class BluetoothTestAndroid : public BluetoothTestBase {
 
   // Test overrides:
   void SetUp() override;
+  void TearDown() override;
 
   // BluetoothTestBase overrides:
   bool PlatformSupportsLowEnergy() override;
@@ -70,6 +71,10 @@ class BluetoothTestAndroid : public BluetoothTestBase {
   void SimulateGattDescriptorWriteWillFailSynchronouslyOnce(
       BluetoothGattDescriptor* descriptor) override;
 
+  // Instruct the fake adapter to throw an IllegalStateException for
+  // startScan and stopScan.
+  void ForceIllegalStateException();
+
   // Records that Java FakeBluetoothDevice connectGatt was called.
   void OnFakeBluetoothDeviceConnectGattCalled(
       JNIEnv* env,
@@ -77,6 +82,11 @@ class BluetoothTestAndroid : public BluetoothTestBase {
 
   // Records that Java FakeBluetoothGatt disconnect was called.
   void OnFakeBluetoothGattDisconnect(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& caller);
+
+  // Records that Java FakeBluetoothGatt close was called.
+  void OnFakeBluetoothGattClose(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& caller);
 
@@ -108,7 +118,15 @@ class BluetoothTestAndroid : public BluetoothTestBase {
       const base::android::JavaParamRef<jobject>& caller,
       const base::android::JavaParamRef<jbyteArray>& value);
 
+  // Records that Java FakeBluetoothAdapter onAdapterStateChanged was called.
+  void OnFakeAdapterStateChanged(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& caller,
+      const bool powered);
+
   base::android::ScopedJavaGlobalRef<jobject> j_fake_bluetooth_adapter_;
+
+  int gatt_open_connections_ = 0;
 };
 
 // Defines common test fixture name. Use TEST_F(BluetoothTest, YourTestName).

@@ -16,6 +16,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/worker_pool.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/gl/egl_util.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_image.h"
 #include "ui/gl/gl_image_ozone_native_pixmap.h"
@@ -37,6 +38,32 @@ namespace gfx {
 
 namespace {
 
+// Helper function for base::Bind to create callback to eglChooseConfig.
+bool EglChooseConfig(EGLDisplay display,
+                     const int32_t* attribs,
+                     EGLConfig* configs,
+                     int32_t config_size,
+                     int32_t* num_configs) {
+  return eglChooseConfig(display, attribs, configs, config_size, num_configs);
+}
+
+// Helper function for base::Bind to create callback to eglGetConfigAttrib.
+bool EglGetConfigAttribute(EGLDisplay display,
+                           EGLConfig config,
+                           int32_t attribute,
+                           int32_t* value) {
+  return eglGetConfigAttrib(display, config, attribute, value);
+}
+
+// Populates EglConfigCallbacks with appropriate callbacks.
+ui::EglConfigCallbacks GetEglConfigCallbacks(EGLDisplay display) {
+  ui::EglConfigCallbacks callbacks;
+  callbacks.choose_config = base::Bind(EglChooseConfig, display);
+  callbacks.get_config_attribute = base::Bind(EglGetConfigAttribute, display);
+  callbacks.get_last_error_string = base::Bind(&ui::GetLastEGLErrorString);
+  return callbacks;
+}
+
 void WaitForFence(EGLDisplay display, EGLSyncKHR fence) {
   eglClientWaitSyncKHR(display, fence, EGL_SYNC_FLUSH_COMMANDS_BIT_KHR,
                        EGL_FOREVER_KHR);
@@ -49,7 +76,7 @@ class GL_EXPORT GLSurfaceOzoneEGL : public NativeViewGLSurfaceEGL {
                     AcceleratedWidget widget);
 
   // GLSurface:
-  bool Initialize() override;
+  bool Initialize(gfx::GLSurface::Format format) override;
   bool Resize(const gfx::Size& size,
               float scale_factor,
               bool has_alpha) override;
@@ -59,6 +86,7 @@ class GL_EXPORT GLSurfaceOzoneEGL : public NativeViewGLSurfaceEGL {
                             GLImage* image,
                             const Rect& bounds_rect,
                             const RectF& crop_rect) override;
+  EGLConfig GetConfig() override;
 
  private:
   using NativeViewGLSurfaceEGL::Initialize;
@@ -81,7 +109,8 @@ GLSurfaceOzoneEGL::GLSurfaceOzoneEGL(
       ozone_surface_(std::move(ozone_surface)),
       widget_(widget) {}
 
-bool GLSurfaceOzoneEGL::Initialize() {
+bool GLSurfaceOzoneEGL::Initialize(gfx::GLSurface::Format format) {
+  format_ = format;
   return Initialize(ozone_surface_->CreateVSyncProvider());
 }
 
@@ -115,6 +144,16 @@ bool GLSurfaceOzoneEGL::ScheduleOverlayPlane(int z_order,
                                      crop_rect);
 }
 
+EGLConfig GLSurfaceOzoneEGL::GetConfig() {
+  if (!config_) {
+    ui::EglConfigCallbacks callbacks = GetEglConfigCallbacks(GetDisplay());
+    config_ = ozone_surface_->GetEGLSurfaceConfig(callbacks);
+  }
+  if (config_)
+    return config_;
+  return NativeViewGLSurfaceEGL::GetConfig();
+}
+
 GLSurfaceOzoneEGL::~GLSurfaceOzoneEGL() {
   Destroy();  // The EGL surface must be destroyed before SurfaceOzone.
 }
@@ -137,7 +176,7 @@ bool GLSurfaceOzoneEGL::ReinitializeNativeSurface() {
   }
 
   window_ = ozone_surface_->GetNativeWindow();
-  if (!Initialize()) {
+  if (!Initialize(format_)) {
     LOG(ERROR) << "Failed to initialize.";
     return false;
   }
@@ -151,7 +190,7 @@ class GL_EXPORT GLSurfaceOzoneSurfaceless : public SurfacelessEGL {
                             AcceleratedWidget widget);
 
   // GLSurface:
-  bool Initialize() override;
+  bool Initialize(gfx::GLSurface::Format format) override;
   bool Resize(const gfx::Size& size,
               float scale_factor,
               bool has_alpha) override;
@@ -172,6 +211,7 @@ class GL_EXPORT GLSurfaceOzoneSurfaceless : public SurfacelessEGL {
                           int width,
                           int height,
                           const SwapCompletionCallback& callback) override;
+  EGLConfig GetConfig() override;
 
  protected:
   struct PendingFrame {
@@ -205,6 +245,7 @@ class GL_EXPORT GLSurfaceOzoneSurfaceless : public SurfacelessEGL {
 
   base::WeakPtrFactory<GLSurfaceOzoneSurfaceless> weak_factory_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(GLSurfaceOzoneSurfaceless);
 };
 
@@ -232,8 +273,8 @@ GLSurfaceOzoneSurfaceless::GLSurfaceOzoneSurfaceless(
   unsubmitted_frames_.push_back(new PendingFrame());
 }
 
-bool GLSurfaceOzoneSurfaceless::Initialize() {
-  if (!SurfacelessEGL::Initialize())
+bool GLSurfaceOzoneSurfaceless::Initialize(gfx::GLSurface::Format format) {
+  if (!SurfacelessEGL::Initialize(format))
     return false;
   vsync_provider_ = ozone_surface_->CreateVSyncProvider();
   if (!vsync_provider_)
@@ -360,6 +401,16 @@ void GLSurfaceOzoneSurfaceless::PostSubBufferAsync(
     const SwapCompletionCallback& callback) {
   // The actual sub buffer handling is handled at higher layers.
   SwapBuffersAsync(callback);
+}
+
+EGLConfig GLSurfaceOzoneSurfaceless::GetConfig() {
+  if (!config_) {
+    ui::EglConfigCallbacks callbacks = GetEglConfigCallbacks(GetDisplay());
+    config_ = ozone_surface_->GetEGLSurfaceConfig(callbacks);
+  }
+  if (config_)
+    return config_;
+  return SurfacelessEGL::GetConfig();
 }
 
 GLSurfaceOzoneSurfaceless::~GLSurfaceOzoneSurfaceless() {
@@ -691,7 +742,7 @@ scoped_refptr<GLSurface> GLSurface::CreateOffscreenGLSurface(
   switch (GetGLImplementation()) {
     case kGLImplementationOSMesaGL: {
       scoped_refptr<GLSurface> surface(
-          new GLSurfaceOSMesa(OSMesaSurfaceFormatBGRA, size));
+          new GLSurfaceOSMesa(SURFACE_OSMESA_BGRA, size));
       if (!surface->Initialize())
         return nullptr;
 
@@ -702,8 +753,9 @@ scoped_refptr<GLSurface> GLSurface::CreateOffscreenGLSurface(
       if (GLSurfaceEGL::IsEGLSurfacelessContextSupported() &&
           (size.width() == 0 && size.height() == 0)) {
         surface = new SurfacelessEGL(size);
-      } else
+      } else {
         surface = new PbufferGLSurfaceEGL(size);
+      }
 
       if (!surface->Initialize())
         return nullptr;

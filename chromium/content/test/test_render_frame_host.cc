@@ -4,6 +4,7 @@
 
 #include "content/test/test_render_frame_host.h"
 
+#include "base/guid.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/navigation_handle_impl.h"
 #include "content/browser/frame_host/navigation_request.h"
@@ -75,6 +76,7 @@ MockRenderProcessHost* TestRenderFrameHost::GetProcess() {
 
 void TestRenderFrameHost::InitializeRenderFrameIfNeeded() {
   if (!render_view_host()->IsRenderViewLive()) {
+    render_view_host()->GetProcess()->Init();
     RenderViewHostTester::For(render_view_host())->CreateTestRenderView(
         base::string16(), MSG_ROUTING_NONE, MSG_ROUTING_NONE, -1, false);
   }
@@ -82,12 +84,17 @@ void TestRenderFrameHost::InitializeRenderFrameIfNeeded() {
 
 TestRenderFrameHost* TestRenderFrameHost::AppendChild(
     const std::string& frame_name) {
+  std::string frame_unique_name = base::GenerateGUID();
   OnCreateChildFrame(GetProcess()->GetNextRoutingID(),
                      blink::WebTreeScopeType::Document, frame_name,
-                     blink::WebSandboxFlags::None,
+                     frame_unique_name, blink::WebSandboxFlags::None,
                      blink::WebFrameOwnerProperties());
   return static_cast<TestRenderFrameHost*>(
       child_creation_observer_.last_created_frame());
+}
+
+void TestRenderFrameHost::Detach() {
+  OnDetach();
 }
 
 void TestRenderFrameHost::SimulateNavigationStart(const GURL& url) {
@@ -110,24 +117,29 @@ void TestRenderFrameHost::SimulateRedirect(const GURL& new_url) {
     return;
   }
 
-  // Note that this does not simulate
-  // WebContentsImpl::DidGetRedirectForResourceRequest due to the difficulty in
-  // creating fake ResourceRequestDetails on the UI thread.
-  navigation_handle()->DidRedirectNavigation(new_url);
+  navigation_handle()->CallWillRedirectRequestForTesting(new_url, false, GURL(),
+                                                         false);
 }
 
 void TestRenderFrameHost::SimulateNavigationCommit(const GURL& url) {
   if (frame_tree_node()->navigation_request())
     PrepareForCommit();
 
+  bool is_auto_subframe =
+      GetParent() && !frame_tree_node()->has_committed_real_load();
+
   FrameHostMsg_DidCommitProvisionalLoad_Params params;
   params.page_id = ComputeNextPageID();
   params.nav_entry_id = 0;
   params.url = url;
-  params.transition = GetParent() ? ui::PAGE_TRANSITION_MANUAL_SUBFRAME
-                                  : ui::PAGE_TRANSITION_LINK;
+  if (!GetParent())
+    params.transition = ui::PAGE_TRANSITION_LINK;
+  else if (is_auto_subframe)
+    params.transition = ui::PAGE_TRANSITION_AUTO_SUBFRAME;
+  else
+    params.transition = ui::PAGE_TRANSITION_MANUAL_SUBFRAME;
   params.should_update_history = true;
-  params.did_create_new_entry = true;
+  params.did_create_new_entry = !is_auto_subframe;
   params.gesture = NavigationGestureUser;
   params.contents_mime_type = contents_mime_type_;
   params.is_post = false;

@@ -14,6 +14,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/media/router/create_presentation_connection_request.h"
 #include "chrome/browser/media/router/issue.h"
@@ -29,6 +30,7 @@
 #include "chrome/browser/media/router/media_source.h"
 #include "chrome/browser/media/router/media_source_helper.h"
 #include "chrome/browser/media/router/presentation_service_delegate_impl.h"
+#include "chrome/browser/media/router/route_request_result.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/webui/media_router/media_router_localized_strings_provider.h"
@@ -52,6 +54,8 @@ namespace {
 
 // The amount of time to wait for a response when creating a new route.
 const int kCreateRouteTimeoutSeconds = 20;
+const int kCreateRouteTimeoutSecondsForTab = 60;
+const int kCreateRouteTimeoutSecondsForDesktop = 120;
 
 std::string GetHostFromURL(const GURL& gurl) {
   if (gurl.is_empty()) return std::string();
@@ -68,6 +72,20 @@ std::string TruncateHost(const std::string& host) {
   // The truncation will be empty in some scenarios (e.g. host is
   // simply an IP address). Fail gracefully.
   return truncated.empty() ? host : truncated;
+}
+
+base::TimeDelta GetRouteRequestTimeout(MediaCastMode cast_mode) {
+  switch (cast_mode) {
+    case DEFAULT:
+      return base::TimeDelta::FromSeconds(kCreateRouteTimeoutSeconds);
+    case TAB_MIRROR:
+      return base::TimeDelta::FromSeconds(kCreateRouteTimeoutSecondsForTab);
+    case DESKTOP_MIRROR:
+      return base::TimeDelta::FromSeconds(kCreateRouteTimeoutSecondsForDesktop);
+    default:
+      NOTREACHED();
+      return base::TimeDelta();
+  }
 }
 
 }  // namespace
@@ -158,8 +176,8 @@ MediaRouterUI::MediaRouterUI(content::WebUI* web_ui)
   content::WebContents* wc = web_ui->GetWebContents();
   DCHECK(wc);
 
-  router_ = static_cast<MediaRouterMojoImpl*>(
-      MediaRouterFactory::GetApiForBrowserContext(wc->GetBrowserContext()));
+  router_ =
+      MediaRouterFactory::GetApiForBrowserContext(wc->GetBrowserContext());
 
   // Allows UI to load extensionview.
   // TODO(haibinlu): limit object-src to current extension once crbug/514866
@@ -233,6 +251,9 @@ void MediaRouterUI::InitCommon(content::WebContents* initiator) {
   TRACE_EVENT_NESTABLE_ASYNC_INSTANT1("media_router", "UI", initiator,
                                       "MediaRouterUI::InitCommon", this);
 
+#if defined(OS_WIN)
+  router_->OnUserGesture();
+#endif
   // Create |collator_| before |query_result_manager_| so that |collator_| is
   // already set up when we get a callback from |query_result_manager_|.
   UErrorCode error = U_ZERO_ERROR;
@@ -247,22 +268,37 @@ void MediaRouterUI::InitCommon(content::WebContents* initiator) {
   query_result_manager_.reset(new QueryResultManager(router_));
   query_result_manager_->AddObserver(this);
 
-  // These modes are always available.
+  // Use a placeholder URL as origin for mirroring.
+  GURL origin(chrome::kChromeUIMediaRouterURL);
+
+  // Desktop mirror mode is always available.
   query_result_manager_->StartSinksQuery(MediaCastMode::DESKTOP_MIRROR,
-                                         MediaSourceForDesktop());
+                                         MediaSourceForDesktop(), origin);
   initiator_ = initiator;
-  MediaSource mirroring_source(
-      MediaSourceForTab(SessionTabHelper::IdForTab(initiator)));
-  query_result_manager_->StartSinksQuery(MediaCastMode::TAB_MIRROR,
-                                         mirroring_source);
+  SessionID::id_type tab_id = SessionTabHelper::IdForTab(initiator);
+  if (tab_id != -1) {
+    MediaSource mirroring_source(MediaSourceForTab(tab_id));
+    query_result_manager_->StartSinksQuery(MediaCastMode::TAB_MIRROR,
+                                           mirroring_source, origin);
+  }
   UpdateCastModes();
+}
+
+void MediaRouterUI::InitForTest(MediaRouter* router,
+                                content::WebContents* initiator,
+                                MediaRouterWebUIMessageHandler* handler) {
+  router_ = router;
+  handler_ = handler;
+  InitCommon(initiator);
 }
 
 void MediaRouterUI::OnDefaultPresentationChanged(
     const PresentationRequest& presentation_request) {
   MediaSource source = presentation_request.GetMediaSource();
   presentation_request_.reset(new PresentationRequest(presentation_request));
-  query_result_manager_->StartSinksQuery(MediaCastMode::DEFAULT, source);
+  query_result_manager_->StartSinksQuery(
+      MediaCastMode::DEFAULT, source,
+      presentation_request_->frame_url().GetOrigin());
   // Register for MediaRoute updates.
   routes_observer_.reset(new UIMediaRoutesObserver(
       router_, source.id(),
@@ -339,13 +375,9 @@ bool MediaRouterUI::CreateOrConnectRoute(const MediaSink::Id& sink_id,
   }
 
   current_route_request_id_ = ++route_request_counter_;
-  GURL origin;
-  if (for_default_source) {
-    origin = presentation_request_->frame_url().GetOrigin();
-  } else {
-    // Requesting route for mirroring. Use a placeholder URL as origin.
-    origin = GURL(chrome::kChromeUIMediaRouterURL);
-  }
+  GURL origin = for_default_source
+                    ? presentation_request_->frame_url().GetOrigin()
+                    : GURL(chrome::kChromeUIMediaRouterURL);
   DCHECK(origin.is_valid());
 
   DVLOG(1) << "DoCreateRoute: origin: " << origin;
@@ -379,17 +411,14 @@ bool MediaRouterUI::CreateOrConnectRoute(const MediaSink::Id& sink_id,
     }
   }
 
-  // Start the timer.
-  route_creation_timer_.Start(
-      FROM_HERE, base::TimeDelta::FromSeconds(kCreateRouteTimeoutSeconds), this,
-      &MediaRouterUI::RouteCreationTimeout);
-
+  base::TimeDelta timeout = GetRouteRequestTimeout(cast_mode);
   if (route_id.empty()) {
     router_->CreateRoute(source.id(), sink_id, origin, initiator_,
-                         route_response_callbacks);
+                         route_response_callbacks, timeout,
+                         Profile::FromWebUI(web_ui())->IsOffTheRecord());
   } else {
-    router_->ConnectRouteByRouteId(source.id(), route_id, origin,
-                                   initiator_, route_response_callbacks);
+    router_->ConnectRouteByRouteId(source.id(), route_id, origin, initiator_,
+                                   route_response_callbacks, timeout);
   }
   return true;
 }
@@ -451,29 +480,27 @@ void MediaRouterUI::OnRoutesUpdated(
   if (ui_initialized_) handler_->UpdateRoutes(routes_, joinable_route_ids_);
 }
 
-void MediaRouterUI::OnRouteResponseReceived(const int route_request_id,
+void MediaRouterUI::OnRouteResponseReceived(int route_request_id,
                                             const MediaSink::Id& sink_id,
-                                            const MediaRoute* route,
-                                            const std::string& presentation_id,
-                                            const std::string& error) {
+                                            const RouteRequestResult& result) {
   DVLOG(1) << "OnRouteResponseReceived";
   // If we receive a new route that we aren't expecting, do nothing.
   if (route_request_id != current_route_request_id_) return;
 
+  const MediaRoute* route = result.route();
   if (!route) {
     // The provider will handle sending an issue for a failed route request.
-    DVLOG(0) << "MediaRouteResponse returned error: " << error;
+    DVLOG(1) << "MediaRouteResponse returned error: " << result.error();
   }
 
-  std::string route_id = route ? route->media_route_id() : std::string();
-  handler_->OnCreateRouteResponseReceived(sink_id, route_id);
+  handler_->OnCreateRouteResponseReceived(sink_id, route);
   current_route_request_id_ = -1;
-  route_creation_timer_.Stop();
+
+  if (result.result_code() == RouteRequestResult::TIMED_OUT)
+    SendIssueForRouteTimeout();
 }
 
-void MediaRouterUI::RouteCreationTimeout() {
-  current_route_request_id_ = -1;
-
+void MediaRouterUI::SendIssueForRouteTimeout() {
   base::string16 host =
       base::UTF8ToUTF16(GetTruncatedPresentationRequestSourceName());
 
@@ -490,7 +517,6 @@ void MediaRouterUI::RouteCreationTimeout() {
               std::vector<IssueAction>(), std::string(), Issue::NOTIFICATION,
               false, std::string());
   AddIssue(issue);
-  handler_->NotifyRouteCreationTimeout();
 }
 
 GURL MediaRouterUI::GetFrameURL() const {
@@ -514,7 +540,9 @@ std::string MediaRouterUI::GetTruncatedPresentationRequestSourceName() const {
 }
 
 const std::string& MediaRouterUI::GetRouteProviderExtensionId() const {
-  return router_->media_route_provider_extension_id();
+  // TODO(imcheng): Get rid of this hack once we no longer need this method.
+  return static_cast<MediaRouterMojoImpl*>(router_)
+      ->media_route_provider_extension_id();
 }
 
 void MediaRouterUI::SetUIInitializationTimer(const base::Time& start_time) {

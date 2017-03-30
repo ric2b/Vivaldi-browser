@@ -13,7 +13,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
-#include "base/prefs/pref_service.h"
 #include "base/run_loop.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config_test_utils.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_configurator.h"
@@ -22,6 +21,7 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params_test_utils.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_response_headers.h"
@@ -289,6 +289,8 @@ class DataReductionProxyInterceptorEndToEndTest : public testing::Test {
             .Build();
     drp_test_context_->AttachToURLRequestContext(&context_storage_);
     context_.set_client_socket_factory(&mock_socket_factory_);
+    proxy_delegate_ = drp_test_context_->io_data()->CreateProxyDelegate();
+    context_.set_proxy_delegate(proxy_delegate_.get());
     context_.Init();
     drp_test_context_->EnableDataReductionProxyWithSecureProxyCheckSuccess();
 
@@ -330,6 +332,7 @@ class DataReductionProxyInterceptorEndToEndTest : public testing::Test {
   net::MockClientSocketFactory mock_socket_factory_;
   net::TestURLRequestContext context_;
   net::URLRequestContextStorage context_storage_;
+  scoped_ptr<net::ProxyDelegate> proxy_delegate_;
   scoped_ptr<DataReductionProxyTestContext> drp_test_context_;
 };
 

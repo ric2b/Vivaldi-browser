@@ -1,15 +1,15 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-slider/paper-slider.html">
 <link rel="import" href="chrome://md-settings/controls/settings_dropdown_menu.html">
+<link rel="import" href="chrome://md-settings/settings_shared_css.html">
 
 <dom-module id="settings-appearance-fonts-page">
   <link rel="import" type="css"
-      href="chrome://md-settings/settings_shared.css">
-  <link rel="import" type="css"
       href="chrome://md-settings/appearance_page/appearance_shared.css">
   <template>
+    <style include="settings-shared"></style>
     <div>[[selectedStandardFont_]]</div>
-    <div class="settings-box">
+    <div class="settings-box first">
       <div i18n-content="fontSize"></div>
       <paper-slider id="sizeSlider" value="{{fontSizeIndex_}}"
           max="[[fontSizeRangeLimit_]]"
@@ -24,8 +24,7 @@
           menu-options="[[fontOptions_]]">
       </settings-dropdown-menu>
       <div class="settings-column"
-          style$="[[computeStyle_(defaultFontSize_,
-              prefs.webkit.webprefs.fonts.standard.Zyyy.value)]]">
+          style$="[[computeStyle_(defaultFontSize_, prefs.webkit.webprefs.fonts.standard.Zyyy.value)]]">
         <span>[[defaultFontSize_]]</span>:
         <span i18n-content="loremIpsum"></span>
       </div>
@@ -37,8 +36,7 @@
           menu-options="[[fontOptions_]]">
       </settings-dropdown-menu>
       <div class="settings-column"
-          style$="[[computeStyle_(defaultFontSize_,
-              prefs.webkit.webprefs.fonts.serif.Zyyy.value)]]">
+          style$="[[computeStyle_(defaultFontSize_, prefs.webkit.webprefs.fonts.serif.Zyyy.value)]]">
         <span>[[defaultFontSize_]]</span>:
         <span i18n-content="loremIpsum"></span>
       </div>
@@ -50,8 +48,7 @@
           menu-options="[[fontOptions_]]">
       </settings-dropdown-menu>
       <div class="settings-column"
-          style$="{{computeStyle_(defaultFontSize_,
-              prefs.webkit.webprefs.fonts.sansserif.Zyyy.value)}}">
+          style$="[[computeStyle_(defaultFontSize_, prefs.webkit.webprefs.fonts.sansserif.Zyyy.value)]]">
         <span>[[defaultFontSize_]]</span>:
         <span i18n-content="loremIpsum"></span>
       </div>
@@ -63,8 +60,7 @@
           menu-options="[[fontOptions_]]">
       </settings-dropdown-menu>
       <div class="settings-column"
-          style$="[[computeStyle_(defaultFontSize_,
-              prefs.webkit.webprefs.fonts.fixed.Zyyy.value)]]">
+          style$="[[computeStyle_(defaultFontSize_, prefs.webkit.webprefs.fonts.fixed.Zyyy.value)]]">
         <span i18n-content="loremIpsum"></span>
       </div>
     </div>
@@ -77,8 +73,7 @@
             on-immediate-value-change="immediateMinimumSizeIndexChanged_">
         </paper-slider>
       </div>
-      <div style$="[[computeStyle_(minimumFontSize_,
-              prefs.webkit.webprefs.fonts.standard.Zyyy.value)]]">
+      <div style$="[[computeStyle_(minimumFontSize_, prefs.webkit.webprefs.fonts.standard.Zyyy.value)]]">
         <span>[[minimumFontSize_]]</span>:
         <span i18n-content="loremIpsum"></span>
       </div>

@@ -5,7 +5,6 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
 #include "chrome/browser/devtools/devtools_window_testing.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
@@ -16,6 +15,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -85,9 +85,7 @@ class TestWebContentsObserver : public content::WebContentsObserver {
 // Additionally when one of the tabs is destroyed NotifyNavigationStateChanged()
 // is invoked on the other.
 IN_PROC_BROWSER_TEST_F(BrowserViewTest, CloseWithTabs) {
-  Browser* browser2 =
-      new Browser(Browser::CreateParams(browser()->profile(),
-                                        browser()->host_desktop_type()));
+  Browser* browser2 = new Browser(Browser::CreateParams(browser()->profile()));
   chrome::AddTabAt(browser2, GURL(), -1, true);
   chrome::AddTabAt(browser2, GURL(), -1, true);
   TestWebContentsObserver observer(
@@ -99,9 +97,7 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, CloseWithTabs) {
 // Same as CloseWithTabs, but activates the first tab, which is the first tab
 // BrowserView will destroy.
 IN_PROC_BROWSER_TEST_F(BrowserViewTest, CloseWithTabsStartWithActive) {
-  Browser* browser2 =
-      new Browser(Browser::CreateParams(browser()->profile(),
-                                        browser()->host_desktop_type()));
+  Browser* browser2 = new Browser(Browser::CreateParams(browser()->profile()));
   chrome::AddTabAt(browser2, GURL(), -1, true);
   chrome::AddTabAt(browser2, GURL(), -1, true);
   browser2->tab_strip_model()->ActivateTabAt(0, true);

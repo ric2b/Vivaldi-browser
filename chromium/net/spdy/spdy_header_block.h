@@ -35,7 +35,9 @@ using ::operator<<;
 // It's expected that keys are rarely deleted from a SpdyHeaderBlock.
 class NET_EXPORT SpdyHeaderBlock {
  private:
-  using MapType = linked_hash_map<base::StringPiece, base::StringPiece>;
+  using MapType = linked_hash_map<base::StringPiece,
+                                  base::StringPiece,
+                                  base::StringPieceHash>;
   class Storage;
 
  public:
@@ -87,6 +89,7 @@ class NET_EXPORT SpdyHeaderBlock {
   class NET_EXPORT StringPieceProxy {
    public:
     ~StringPieceProxy();
+    StringPieceProxy(const StringPieceProxy& other);
 
     // Assignment modifies the underlying SpdyHeaderBlock.
     StringPieceProxy& operator=(const base::StringPiece other);

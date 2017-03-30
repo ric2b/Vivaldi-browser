@@ -21,7 +21,32 @@ const base::Feature kDownloadResumption{"DownloadResumption",
 
 // The Experimental Framework for controlling access to API experiments.
 const base::Feature kExperimentalFramework{"ExperimentalFramework",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Non-validating reload on reload-to-refresh-content (e.g. pull-to-refresh).
+// See https://crbug.com/558829
+const base::Feature kNonValidatingReloadOnRefreshContent{
+    "kNonValidatingReloadOnRefreshContent",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// An experiment to optimize resource loading IPC for small resources.
+// http://crbug.com/580928
+const base::Feature kOptimizeIPCForSmallResource{
+    "OptimizeForSmallResource",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Throttle Blink's rendering pipeline based on frame visibility.
+const base::Feature kRenderingPipelineThrottling{
+    "RenderingPipelineThrottling", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Scrolls to compensate for layout movements (bit.ly/scroll-anchoring).
+const base::Feature kScrollAnchoring{"ScrollAnchoring",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables token binding
+// (https://www.ietf.org/id/draft-ietf-tokbind-protocol-04.txt).
+const base::Feature kTokenBinding{"token-binding",
+                                  base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Control whether the priority of a renderer is set when the process is
 // launched. This is in response to a bug seen on Windows. See
@@ -34,6 +59,11 @@ const base::Feature kWebFontsIntervention{"WebFontsIntervention",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
+// Use IME's own thread instead of using main UI thread. It also means that
+// we will not use replica editor and do a round trip to renderer to synchronize
+// with Blink data.
+const base::Feature kImeThread{"ImeThread", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // FeatureList definition for the Seccomp field trial.
 const base::Feature kSeccompSandboxAndroid{"SeccompSandboxAndroid",
                                            base::FEATURE_DISABLED_BY_DEFAULT};

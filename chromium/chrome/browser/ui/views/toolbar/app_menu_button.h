@@ -70,9 +70,7 @@ class AppMenuButton : public views::MenuButton,
 
  private:
   // views::MenuButton:
-  void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
-  void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
-  gfx::Point CalculateInkDropCenter() const override;
+  gfx::Point GetInkDropCenter() const override;
 
   // views::MenuButton:
   const char* GetClassName() const override;
@@ -111,9 +109,6 @@ class AppMenuButton : public views::MenuButton,
   scoped_ptr<AppMenuModel> menu_model_;
   scoped_ptr<AppMenu> menu_;
 
-  // Used by ShowMenu() to detect when |this| has been deleted; see comments
-  // there.
-  bool* destroyed_;
 
   // Any trailing margin to be applied. Used when the browser is in
   // a maximized state to extend to the full window width.

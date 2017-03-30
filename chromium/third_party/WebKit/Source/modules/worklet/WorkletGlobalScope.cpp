@@ -9,16 +9,19 @@
 namespace blink {
 
 // static
-PassRefPtrWillBeRawPtr<WorkletGlobalScope> WorkletGlobalScope::create(const KURL& url, const String& userAgent, v8::Isolate* isolate)
+PassRefPtrWillBeRawPtr<WorkletGlobalScope> WorkletGlobalScope::create(const KURL& url, const String& userAgent, PassRefPtr<SecurityOrigin> securityOrigin, v8::Isolate* isolate)
 {
-    RefPtrWillBeRawPtr<WorkletGlobalScope> workletGlobalScope = adoptRefWillBeNoop(new WorkletGlobalScope(url, userAgent, isolate));
-    workletGlobalScope->script()->initializeContextIfNeeded();
+    RefPtrWillBeRawPtr<WorkletGlobalScope> workletGlobalScope = adoptRefWillBeNoop(new WorkletGlobalScope(url, userAgent, securityOrigin, isolate));
+    workletGlobalScope->scriptController()->initializeContextIfNeeded();
     return workletGlobalScope.release();
 }
 
-WorkletGlobalScope::WorkletGlobalScope(const KURL& url, const String& userAgent, v8::Isolate* isolate)
-    : m_script(WorkerOrWorkletScriptController::create(this, isolate))
+WorkletGlobalScope::WorkletGlobalScope(const KURL& url, const String& userAgent, PassRefPtr<SecurityOrigin> securityOrigin, v8::Isolate* isolate)
+    : m_url(url)
+    , m_userAgent(userAgent)
+    , m_scriptController(WorkerOrWorkletScriptController::create(this, isolate))
 {
+    setSecurityOrigin(securityOrigin);
 }
 
 WorkletGlobalScope::~WorkletGlobalScope()
@@ -41,7 +44,7 @@ v8::Local<v8::Object> WorkletGlobalScope::associateWithWrapper(v8::Isolate*, con
 
 void WorkletGlobalScope::disableEval(const String& errorMessage)
 {
-    m_script->disableEval(errorMessage);
+    m_scriptController->disableEval(errorMessage);
 }
 
 bool WorkletGlobalScope::isSecureContext(String& errorMessage, const SecureContextCheck privilegeContextCheck) const
@@ -49,7 +52,10 @@ bool WorkletGlobalScope::isSecureContext(String& errorMessage, const SecureConte
     // Until there are APIs that are available in worklets and that
     // require a privileged context test that checks ancestors, just do
     // a simple check here.
-    return securityOrigin()->isPotentiallyTrustworthy(errorMessage);
+    if (securityOrigin()->isPotentiallyTrustworthy())
+        return true;
+    errorMessage = securityOrigin()->isPotentiallyTrustworthyErrorMessage();
+    return false;
 }
 
 KURL WorkletGlobalScope::virtualCompleteURL(const String& url) const
@@ -65,7 +71,7 @@ KURL WorkletGlobalScope::virtualCompleteURL(const String& url) const
 
 DEFINE_TRACE(WorkletGlobalScope)
 {
-    visitor->trace(m_script);
+    visitor->trace(m_scriptController);
     ExecutionContext::trace(visitor);
     SecurityContext::trace(visitor);
 }

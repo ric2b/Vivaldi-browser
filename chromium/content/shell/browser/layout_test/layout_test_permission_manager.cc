@@ -65,7 +65,6 @@ int LayoutTestPermissionManager::RequestPermission(
     PermissionType permission,
     RenderFrameHost* render_frame_host,
     const GURL& requesting_origin,
-    bool user_gesture,
     const base::Callback<void(PermissionStatus)>& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -80,7 +79,6 @@ int LayoutTestPermissionManager::RequestPermissions(
     const std::vector<PermissionType>& permissions,
     content::RenderFrameHost* render_frame_host,
     const GURL& requesting_origin,
-    bool user_gesture,
     const base::Callback<void(
         const std::vector<PermissionStatus>&)>& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -129,7 +127,7 @@ PermissionStatus LayoutTestPermissionManager::GetPermissionStatus(
   auto it = permissions_.find(
       PermissionDescription(permission, requesting_origin, embedding_origin));
   if (it == permissions_.end())
-    return PERMISSION_STATUS_DENIED;
+    return PermissionStatus::DENIED;
   return it->second;
 }
 

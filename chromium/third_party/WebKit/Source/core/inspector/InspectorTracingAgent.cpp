@@ -9,7 +9,6 @@
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectedFrames.h"
-#include "core/inspector/InspectorState.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/inspector/InspectorWorkerAgent.h"
 #include "platform/TraceEvent.h"
@@ -25,7 +24,7 @@ const char devtoolsMetadataEventCategory[] = TRACE_DISABLED_BY_DEFAULT("devtools
 }
 
 InspectorTracingAgent::InspectorTracingAgent(Client* client, InspectorWorkerAgent* workerAgent, InspectedFrames* inspectedFrames)
-    : InspectorBaseAgent<InspectorTracingAgent, InspectorFrontend::Tracing>("Tracing")
+    : InspectorBaseAgent<InspectorTracingAgent, protocol::Frontend::Tracing>("Tracing")
     , m_layerTreeId(0)
     , m_client(client)
     , m_workerAgent(workerAgent)
@@ -44,17 +43,21 @@ void InspectorTracingAgent::restore()
 {
     emitMetadataEvents();
 }
-
-void InspectorTracingAgent::start(ErrorString*, const String* categoryFilter, const String*, const double*, const String*, PassRefPtrWillBeRawPtr<StartCallback> callback)
+void InspectorTracingAgent::start(ErrorString*,
+    const Maybe<String>& categories,
+    const Maybe<String>& options,
+    const Maybe<double>& bufferUsageReportingInterval,
+    const Maybe<String>& transferMode,
+    PassRefPtr<StartCallback> callback)
 {
-    ASSERT(m_state->getString(TracingAgentState::sessionId).isEmpty());
+    ASSERT(sessionId().isEmpty());
     m_state->setString(TracingAgentState::sessionId, IdentifiersFactory::createIdentifier());
-    m_client->enableTracing(categoryFilter ? *categoryFilter : String());
+    m_client->enableTracing(categories.fromMaybe(String()));
     emitMetadataEvents();
     callback->sendSuccess();
 }
 
-void InspectorTracingAgent::end(ErrorString* errorString, PassRefPtrWillBeRawPtr<EndCallback> callback)
+void InspectorTracingAgent::end(ErrorString* errorString, PassRefPtr<EndCallback> callback)
 {
     m_client->disableTracing();
     resetSessionId();
@@ -63,7 +66,9 @@ void InspectorTracingAgent::end(ErrorString* errorString, PassRefPtrWillBeRawPtr
 
 String InspectorTracingAgent::sessionId()
 {
-    return m_state->getString(TracingAgentState::sessionId);
+    String result;
+    m_state->getString(TracingAgentState::sessionId, &result);
+    return result;
 }
 
 void InspectorTracingAgent::emitMetadataEvents()
@@ -91,4 +96,4 @@ void InspectorTracingAgent::resetSessionId()
     m_workerAgent->setTracingSessionId(sessionId());
 }
 
-}
+} // namespace blink

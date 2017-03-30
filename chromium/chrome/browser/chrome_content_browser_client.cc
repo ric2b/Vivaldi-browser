@@ -16,9 +16,8 @@
 #include "base/files/scoped_file.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -112,6 +111,7 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/data_reduction_proxy/content/browser/data_reduction_proxy_message_filter.h"
 #include "components/dom_distiller/core/dom_distiller_switches.h"
 #include "components/dom_distiller/core/url_constants.h"
@@ -120,6 +120,8 @@
 #include "components/metrics/client_info.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/rappor/rappor_utils.h"
 #include "components/security_interstitials/core/ssl_error_ui.h"
 #include "components/signin/core/common/profile_management_switches.h"
@@ -151,9 +153,9 @@
 #include "content/public/common/service_registry.h"
 #include "content/public/common/url_utils.h"
 #include "content/public/common/web_preferences.h"
-#include "device/devices_app/usb/public/interfaces/device_manager.mojom.h"
+#include "device/usb/public/interfaces/device_manager.mojom.h"
 #include "gin/v8_initializer.h"
-#include "mojo/shell/public/cpp/application_delegate.h"
+#include "mojo/shell/public/cpp/shell_client.h"
 #include "net/base/mime_util.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_options.h"
@@ -163,6 +165,8 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/resources/grit/ui_resources.h"
+#include "url/gurl.h"
+#include "url/origin.h"
 
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -224,12 +228,12 @@
 #include "chrome/browser/ui/views/chrome_browser_main_extra_parts_views.h"
 #endif
 
-#if defined(USE_ASH)
-#include "chrome/browser/ui/views/ash/chrome_browser_main_extra_parts_ash.h"
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#include "chrome/browser/ui/views/chrome_browser_main_extra_parts_views_linux.h"
 #endif
 
-#if defined(USE_AURA)
-#include "chrome/browser/ui/aura/chrome_browser_main_extra_parts_aura.h"
+#if defined(USE_ASH)
+#include "chrome/browser/ui/views/ash/chrome_browser_main_extra_parts_ash.h"
 #endif
 
 #if defined(USE_X11)
@@ -292,12 +296,16 @@
 #include "chrome/browser/media/router/presentation_service_delegate_impl.h"
 #endif
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 #include "components/webusb/public/interfaces/webusb_permission_bubble.mojom.h"
 #endif
 
 #if defined(ENABLE_WAYLAND_SERVER)
 #include "chrome/browser/chrome_browser_main_extra_parts_exo.h"
+#endif
+
+#if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+#include "media/mojo/services/mojo_media_application_factory.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -380,6 +388,12 @@ const char* const kPredefinedAllowedSocketOrigins[] = {
 };
 #endif
 
+enum AppLoadedInTabSource {
+  APP_LOADED_IN_TAB_SOURCE_APP = 0,
+  APP_LOADED_IN_TAB_SOURCE_BACKGROUND_PAGE,
+  APP_LOADED_IN_TAB_SOURCE_MAX
+};
+
 // Returns a copy of the given url with its host set to given host and path set
 // to given path. Other parts of the url will be the same.
 GURL ReplaceURLHostAndPath(const GURL& url,
@@ -394,7 +408,9 @@ GURL ReplaceURLHostAndPath(const GURL& url,
 // Maps "foo://bar/baz/" to "foo://chrome/bar/baz/".
 GURL AddUberHost(const GURL& url) {
   const std::string uber_host = chrome::kChromeUIUberHost;
-  const std::string new_path = url.host() + url.path();
+  std::string new_path;
+  url.host_piece().AppendToString(&new_path);
+  url.path_piece().AppendToString(&new_path);
 
   return ReplaceURLHostAndPath(url, uber_host, new_path);
 }
@@ -680,7 +696,7 @@ void CreateUsbDeviceManager(
   tab_helper->CreateDeviceManager(render_frame_host, std::move(request));
 }
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 void CreateWebUsbPermissionBubble(
     RenderFrameHost* render_frame_host,
     mojo::InterfaceRequest<webusb::WebUsbPermissionBubble> request) {
@@ -695,7 +711,7 @@ void CreateWebUsbPermissionBubble(
       UsbTabHelper::GetOrCreateForWebContents(web_contents);
   tab_helper->CreatePermissionBubble(render_frame_host, std::move(request));
 }
-#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
+#endif  // !defined(OS_ANDROID)
 
 bool GetDataSaverEnabledPref(const PrefService* prefs) {
   // Enable data saver only when data saver pref is enabled and not part of
@@ -792,17 +808,17 @@ content::BrowserMainParts* ChromeContentBrowserClient::CreateBrowserMainParts(
   // Construct additional browser parts. Stages are called in the order in
   // which they are added.
 #if defined(TOOLKIT_VIEWS)
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  main_parts->AddParts(new ChromeBrowserMainExtraPartsViewsLinux());
+#else
   main_parts->AddParts(new ChromeBrowserMainExtraPartsViews());
+#endif
 #endif
 
 // TODO(oshima): Athena on chrome currently requires USE_ASH to build.
 // We should reduce the dependency as much as possible.
 #if defined(USE_ASH)
   main_parts->AddParts(new ChromeBrowserMainExtraPartsAsh());
-#endif
-
-#if defined(USE_AURA)
-  main_parts->AddParts(new ChromeBrowserMainExtraPartsAura());
 #endif
 
 #if defined(USE_X11)
@@ -836,6 +852,13 @@ std::string ChromeContentBrowserClient::GetStoragePartitionIdForSite(
   // SiteInstance URL - "chrome-guest://app_id/persist?partition".
   if (site.SchemeIs(content::kGuestScheme) || site.SchemeIs("chrome-extension"))
     partition_id = site.spec();
+#if defined(ENABLE_EXTENSIONS)
+  // The partition ID for extensions with isolated storage is treated similarly
+  // to the above.
+  else if (site.SchemeIs(extensions::kExtensionScheme) &&
+           extensions::util::SiteHasIsolatedStorage(site, browser_context))
+    partition_id = site.spec();
+#endif
 
   DCHECK(IsValidStoragePartitionId(browser_context, partition_id));
   return partition_id;
@@ -905,27 +928,6 @@ content::WebContentsViewDelegate*
     ChromeContentBrowserClient::GetWebContentsViewDelegate(
         content::WebContents* web_contents) {
   return chrome::CreateWebContentsViewDelegate(web_contents);
-}
-
-content::WebContents* ChromeContentBrowserClient::GetGuestWebContentsByTabId(
-      int tab_id,
-      content::BrowserContext* browser_context,
-      bool include_incognito) {
-#if defined(ENABLE_EXTENSIONS)
-  Profile* profile = Profile::FromBrowserContext(browser_context);
-  Browser* browser;
-  TabStripModel* tab_strip;
-  WebContents* guest_web_contents;
-  int tab_index;
-  if (!extensions::ExtensionTabUtil::GetTabById(tab_id, profile, include_incognito,
-    &browser, &tab_strip, &guest_web_contents, &tab_index)) {
-    // TODO(gisli):  Handle error.
-  }
-
-  return guest_web_contents;
-#else // !defined(ENABLE_EXTENSIONS)
-  return NULL;
-#endif // defined(ENABLE_EXTENSIONS)
 }
 
 void ChromeContentBrowserClient::RenderProcessWillLaunch(
@@ -1163,7 +1165,7 @@ bool ChromeContentBrowserClient::ShouldAllowOpenURL(
   // the signin page may host untrusted web content.
   if (from_url.GetOrigin().spec() == chrome::kChromeUIChromeSigninURL &&
       url.SchemeIs(content::kChromeUIScheme) &&
-      url.host() != chrome::kChromeUIChromeSigninHost) {
+      url.host_piece() != chrome::kChromeUIChromeSigninHost) {
     VLOG(1) << "Blocked navigation to " << url.spec() << " from "
             << chrome::kChromeUIChromeSigninURL;
     return false;
@@ -1442,11 +1444,15 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
   }
 #elif defined(OS_POSIX)
   if (breakpad::IsCrashReporterEnabled()) {
+    std::string switch_value;
     scoped_ptr<metrics::ClientInfo> client_info =
         GoogleUpdateSettings::LoadMetricsClientInfo();
+    if (client_info)
+      switch_value = client_info->client_id;
+    switch_value.push_back(',');
+    switch_value.append(chrome::GetChannelString());
     command_line->AppendSwitchASCII(switches::kEnableCrashReporter,
-                                    client_info ? client_info->client_id
-                                                : std::string());
+                                    switch_value);
   }
 #endif
 
@@ -1646,12 +1652,14 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
 #if !defined(DISABLE_NACL)
       switches::kEnableNaClDebug,
       switches::kEnableNaClNonSfiMode,
-      switches::kEnablePNaClSubzero,
 #endif
       switches::kEnableNetBenchmarking,
       switches::kEnableNewBookmarkApps,
 #if defined(OS_ANDROID)
       switches::kEnableOfflinePagesAsBookmarks,
+#endif
+#if !defined(DISABLE_NACL)
+      switches::kForcePNaClSubzero,
 #endif
       switches::kJavaScriptHarmony,
       switches::kMessageLoopHistogrammer,
@@ -1696,7 +1704,7 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
 #if !defined(DISABLE_NACL)
       switches::kEnableNaClDebug,
       switches::kEnableNaClNonSfiMode,
-      switches::kEnablePNaClSubzero,
+      switches::kForcePNaClSubzero,
       switches::kNaClDangerousNoSandboxNonSfi,
 #endif
       switches::kPpapiFlashPath,
@@ -1735,6 +1743,15 @@ std::string ChromeContentBrowserClient::GetAcceptLangs(
 const gfx::ImageSkia* ChromeContentBrowserClient::GetDefaultFavicon() {
   ResourceBundle& rb = ResourceBundle::GetSharedInstance();
   return rb.GetNativeImageNamed(IDR_DEFAULT_FAVICON).ToImageSkia();
+}
+
+bool ChromeContentBrowserClient::IsDataSaverEnabled(
+    content::BrowserContext* browser_context) {
+  Profile* profile = Profile::FromBrowserContext(browser_context);
+  if (!profile)
+    return false;
+  PrefService* prefs = profile->GetPrefs();
+  return prefs && prefs->GetBoolean(prefs::kDataSaverEnabled);
 }
 
 bool ChromeContentBrowserClient::AllowAppCache(
@@ -1842,7 +1859,6 @@ bool ChromeContentBrowserClient::AllowWorkerDatabase(
     const GURL& url,
     const base::string16& name,
     const base::string16& display_name,
-    unsigned long estimated_size,
     content::ResourceContext* context,
     const std::vector<std::pair<int, int> >& render_frames) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -2003,6 +2019,21 @@ bool ChromeContentBrowserClient::AllowKeygen(
   return content_settings->GetContentSetting(
              url, url, CONTENT_SETTINGS_TYPE_KEYGEN, std::string()) ==
          CONTENT_SETTING_ALLOW;
+}
+
+bool ChromeContentBrowserClient::AllowWebBluetooth(
+    content::BrowserContext* browser_context,
+    const url::Origin& requesting_origin,
+    const url::Origin& embedding_origin) {
+  const HostContentSettingsMap* const content_settings =
+      HostContentSettingsMapFactory::GetForProfile(
+          Profile::FromBrowserContext(browser_context));
+
+  return content_settings->GetContentSetting(
+             GURL(requesting_origin.Serialize()),
+             GURL(embedding_origin.Serialize()),
+             CONTENT_SETTINGS_TYPE_BLUETOOTH_GUARD,
+             std::string()) != CONTENT_SETTING_BLOCK;
 }
 
 net::URLRequestContext*
@@ -2208,8 +2239,35 @@ bool ChromeContentBrowserClient::CanCreateWindow(
 
 #if defined(ENABLE_EXTENSIONS)
   if (vivaldi::IsVivaldiRunning() ||
-      extensions::WebViewRendererState::GetInstance()->IsGuest(render_process_id))
+      extensions::WebViewRendererState::GetInstance()->IsGuest(
+      render_process_id)) {
     return true;
+  }
+
+  if (target_url.SchemeIs(extensions::kExtensionScheme) ||
+      target_url.SchemeIs(extensions::kExtensionResourceScheme)) {
+    // Intentionally duplicating |io_data| and |map| code from above because we
+    // want to reduce calls to retrieve them as this function is a SYNC IPC
+    // handler.
+    ProfileIOData* io_data = ProfileIOData::FromResourceContext(context);
+    InfoMap* map = io_data->GetExtensionInfoMap();
+    const Extension* extension =
+        map->extensions().GetExtensionOrAppByURL(opener_url);
+    // TODO(lazyboy): http://crbug.com/585570, if |extension| is a platform app,
+    // disallow loading it in a tab via window.open(). Currently there are apps
+    // that rely on this to be allowed to get Cast API to work, so we are
+    // allowing this temporarily. Once Media Router is available on stable, this
+    // exception should not be required.
+    if (extension && extension->is_platform_app()) {
+      AppLoadedInTabSource source =
+          opener_top_level_frame_url ==
+                  extensions::BackgroundInfo::GetBackgroundURL(extension)
+              ? APP_LOADED_IN_TAB_SOURCE_BACKGROUND_PAGE
+              : APP_LOADED_IN_TAB_SOURCE_APP;
+      UMA_HISTOGRAM_ENUMERATION("Extensions.AppLoadedInTab", source,
+                                APP_LOADED_IN_TAB_SOURCE_MAX);
+    }
+  }
 #endif
 
   HostContentSettingsMap* content_settings =
@@ -2746,10 +2804,18 @@ void ChromeContentBrowserClient::RegisterRenderFrameMojoServices(
     content::ServiceRegistry* registry,
     content::RenderFrameHost* render_frame_host) {
   registry->AddService(base::Bind(&CreateUsbDeviceManager, render_frame_host));
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
   registry->AddService(
       base::Bind(&CreateWebUsbPermissionBubble, render_frame_host));
-#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
+#endif  // !defined(OS_ANDROID)
+}
+
+void ChromeContentBrowserClient::RegisterInProcessMojoApplications(
+    StaticMojoApplicationMap* apps) {
+#if (ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+  apps->insert(std::make_pair(GURL("mojo:media"),
+                              base::Bind(&media::CreateMojoMediaApplication)));
+#endif
 }
 
 void ChromeContentBrowserClient::RegisterOutOfProcessMojoApplications(
@@ -2769,7 +2835,7 @@ void ChromeContentBrowserClient::OpenURL(
 #if BUILDFLAG(ANDROID_JAVA_UI)
   service_tab_launcher::ServiceTabLauncher::GetInstance()->LaunchTab(
       browser_context, params, callback);
-#elif !defined(OS_IOS)
+#else
   chrome::NavigateParams nav_params(
       Profile::FromBrowserContext(browser_context),
       params.url,
@@ -2779,8 +2845,6 @@ void ChromeContentBrowserClient::OpenURL(
 
   Navigate(&nav_params);
   callback.Run(nav_params.target_contents);
-#else
-  NOTIMPLEMENTED();
 #endif
 }
 

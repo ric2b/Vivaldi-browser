@@ -127,7 +127,7 @@ public:
         RootLayerAttachedViaEnclosingFrame
     };
 
-    RootLayerAttachment rootLayerAttachment() const { return m_rootLayerAttachment; }
+    RootLayerAttachment getRootLayerAttachment() const { return m_rootLayerAttachment; }
     void updateRootLayerAttachment();
     void updateRootLayerPosition();
 
@@ -178,6 +178,8 @@ private:
 #if ENABLE(ASSERT)
     void assertNoUnresolvedDirtyBits();
 #endif
+
+    void updateIfNeededRecursiveInternal();
 
     // GraphicsLayerClient implementation
     IntRect computeInterestRect(const GraphicsLayer*, const IntRect&) const override;

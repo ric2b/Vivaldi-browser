@@ -30,12 +30,12 @@
 #ifndef AXObject_h
 #define AXObject_h
 
-#include "core/InspectorTypeBuilder.h"
 #include "core/editing/VisiblePosition.h"
 #include "modules/ModulesExport.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/Color.h"
+#include "platform/inspector_protocol/TypeBuilder.h"
 #include "wtf/Forward.h"
 #include "wtf/Vector.h"
 
@@ -51,12 +51,12 @@ class NameSource;
 class Node;
 class LayoutObject;
 class ScrollableArea;
-class Widget;
 
 typedef unsigned AXID;
 
 enum AccessibilityRole {
     UnknownRole = 0,
+    AbbrRole, // No mapping to ARIA role
     AlertDialogRole,
     AlertRole,
     AnnotationRole, // No mapping to ARIA role
@@ -547,8 +547,6 @@ public:
     virtual bool isAXLayoutObject() const { return false; }
     virtual bool isAXListBox() const { return false; }
     virtual bool isAXListBoxOption() const { return false; }
-    virtual bool isAXScrollbar() const { return false; }
-    virtual bool isAXScrollView() const { return false; }
     virtual bool isAXSVGRoot() const { return false; }
 
     // Check object role or purpose.
@@ -557,7 +555,6 @@ public:
     virtual bool isARIATreeGridRow() const { return false; }
     virtual bool isAXTable() const { return false; }
     virtual bool isAnchor() const { return false; }
-    virtual bool isAttachment() const { return false; }
     bool isButton() const;
     bool isCanvas() const { return roleValue() == CanvasRole; }
     bool isCheckbox() const { return roleValue() == CheckBoxRole; }
@@ -824,7 +821,6 @@ public:
 
     // Properties of the object's owning document or page.
     virtual double estimatedLoadingProgress() const { return 0; }
-    AXObject* focusedUIElement() const;
 
     // DOM and layout tree access.
     virtual Node* node() const { return 0; }
@@ -833,7 +829,6 @@ public:
     virtual FrameView* documentFrameView() const;
     virtual Element* anchorElement() const { return 0; }
     virtual Element* actionElement() const { return 0; }
-    virtual Widget* widgetForAttachmentView() const { return 0; }
     String language() const;
     bool hasAttribute(const QualifiedName&) const;
     const AtomicString& getAttribute(const QualifiedName&) const;

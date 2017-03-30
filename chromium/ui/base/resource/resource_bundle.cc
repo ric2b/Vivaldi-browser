@@ -29,10 +29,11 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/data_pack.h"
-#include "ui/base/resource/material_design/material_design_controller.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
+#include "ui/base/ui_features.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
@@ -62,11 +63,6 @@
 namespace ui {
 
 namespace {
-
-// Font sizes relative to base font.
-const int kSmallFontSizeDelta = -1;
-const int kMediumFontSizeDelta = 3;
-const int kLargeFontSizeDelta = 8;
 
 // PNG-related constants.
 const unsigned char kPngMagic[8] = { 0x89, 'P', 'N', 'G', 13, 10, 26, 10 };
@@ -406,12 +402,14 @@ gfx::Image& ResourceBundle::GetImageNamed(int resource_id) {
     DCHECK(!data_packs_.empty()) <<
         "Missing call to SetResourcesDataDLL?";
 
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
-  ui::ScaleFactor scale_factor_to_load = GetMaxScaleFactor();
+#if defined(OS_CHROMEOS)
+    ui::ScaleFactor scale_factor_to_load = GetMaxScaleFactor();
+#elif defined(OS_WIN)
+    ui::ScaleFactor scale_factor_to_load =
+        gfx::GetDPIScale() > 1.25 ? GetMaxScaleFactor() : ui::SCALE_FACTOR_100P;
 #else
-  ui::ScaleFactor scale_factor_to_load = ui::SCALE_FACTOR_100P;
+    ui::ScaleFactor scale_factor_to_load = ui::SCALE_FACTOR_100P;
 #endif
-
     // TODO(oshima): Consider reading the image size from png IHDR chunk and
     // skip decoding here and remove #ifdef below.
     // ResourceBundle::GetSharedInstance() is destroyed after the
@@ -438,10 +436,6 @@ gfx::Image& ResourceBundle::GetImageNamed(int resource_id) {
 
   images_[resource_id] = image;
   return images_[resource_id];
-}
-
-gfx::Image& ResourceBundle::GetNativeImageNamed(int resource_id) {
-  return GetNativeImageNamed(resource_id, RTL_DISABLED);
 }
 
 base::RefCountedStaticMemory* ResourceBundle::LoadDataResourceBytes(
@@ -551,29 +545,72 @@ base::string16 ResourceBundle::GetLocalizedString(int message_id) {
   return msg;
 }
 
-const gfx::FontList& ResourceBundle::GetFontList(FontStyle style) {
-  {
-    base::AutoLock lock_scope(*images_and_fonts_lock_);
-    LoadFontsIfNecessary();
-  }
-  switch (style) {
-    case BoldFont:
-      return *bold_font_list_;
+const gfx::FontList& ResourceBundle::GetFontListWithDelta(
+    int size_delta,
+    gfx::Font::FontStyle style) {
+  base::AutoLock lock_scope(*images_and_fonts_lock_);
+
+  typedef std::pair<int, gfx::Font::FontStyle> Key;
+  const Key styled_key(size_delta, style);
+
+  auto found = font_cache_.find(styled_key);
+  if (found != font_cache_.end())
+    return found->second;
+
+  const Key base_key(0, gfx::Font::NORMAL);
+  gfx::FontList& base = font_cache_[base_key];
+  if (styled_key == base_key)
+    return base;
+
+  // Fonts of a given style are derived from the unstyled font of the same size.
+  // Cache the unstyled font by first inserting a default-constructed font list.
+  // Then, derive it for the initial insertion, or use the iterator that points
+  // to the existing entry that the insertion collided with.
+  const Key sized_key(size_delta, gfx::Font::NORMAL);
+  auto sized = font_cache_.insert(std::make_pair(sized_key, gfx::FontList()));
+  if (sized.second)
+    sized.first->second = base.DeriveWithSizeDelta(size_delta);
+  if (styled_key == sized_key)
+    return sized.first->second;
+
+  auto styled = font_cache_.insert(std::make_pair(styled_key, gfx::FontList()));
+  DCHECK(styled.second);  // Otherwise font_cache_.find(..) would have found it.
+  styled.first->second = sized.first->second.DeriveWithStyle(
+      sized.first->second.GetFontStyle() | style);
+  return styled.first->second;
+}
+
+const gfx::Font& ResourceBundle::GetFontWithDelta(int size_delta,
+                                                  gfx::Font::FontStyle style) {
+  return GetFontListWithDelta(size_delta, style).GetPrimaryFont();
+}
+
+const gfx::FontList& ResourceBundle::GetFontList(FontStyle legacy_style) {
+  gfx::Font::FontStyle font_style = gfx::Font::NORMAL;
+  if (legacy_style == BoldFont || legacy_style == SmallBoldFont ||
+      legacy_style == MediumBoldFont || legacy_style == LargeBoldFont)
+    font_style = gfx::Font::BOLD;
+
+  int size_delta = 0;
+  switch (legacy_style) {
     case SmallFont:
-      return *small_font_list_;
-    case MediumFont:
-      return *medium_font_list_;
     case SmallBoldFont:
-      return *small_bold_font_list_;
+      size_delta = kSmallFontDelta;
+      break;
+    case MediumFont:
     case MediumBoldFont:
-      return *medium_bold_font_list_;
+      size_delta = kMediumFontDelta;
+      break;
     case LargeFont:
-      return *large_font_list_;
     case LargeBoldFont:
-      return *large_bold_font_list_;
-    default:
-      return *base_font_list_;
+      size_delta = kLargeFontDelta;
+      break;
+    case BaseFont:
+    case BoldFont:
+      break;
   }
+
+  return GetFontListWithDelta(size_delta, font_style);
 }
 
 const gfx::Font& ResourceBundle::GetFont(FontStyle style) {
@@ -583,12 +620,11 @@ const gfx::Font& ResourceBundle::GetFont(FontStyle style) {
 void ResourceBundle::ReloadFonts() {
   base::AutoLock lock_scope(*images_and_fonts_lock_);
   InitDefaultFontList();
-  base_font_list_.reset();
-  LoadFontsIfNecessary();
+  font_cache_.clear();
 }
 
 ScaleFactor ResourceBundle::GetMaxScaleFactor() const {
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#if defined(OS_CHROMEOS) || defined(OS_WIN) || defined(OS_LINUX)
   return max_scale_factor_;
 #else
   return GetSupportedScaleFactors().back();
@@ -620,7 +656,7 @@ void ResourceBundle::InitSharedInstance(Delegate* delegate) {
   DCHECK(g_shared_instance_ == NULL) << "ResourceBundle initialized twice";
   g_shared_instance_ = new ResourceBundle(delegate);
   static std::vector<ScaleFactor> supported_scale_factors;
-#if !defined(OS_IOS) && !defined(OS_WIN)
+#if !defined(OS_IOS)
   // On platforms other than iOS, 100P is always a supported scale factor.
   // For Windows we have a separate case in this function.
   supported_scale_factors.push_back(SCALE_FACTOR_100P);
@@ -637,7 +673,7 @@ void ResourceBundle::InitSharedInstance(Delegate* delegate) {
   if (closest != SCALE_FACTOR_100P)
     supported_scale_factors.push_back(closest);
 #elif defined(OS_IOS)
-    gfx::Display display = gfx::Screen::GetNativeScreen()->GetPrimaryDisplay();
+  gfx::Display display = gfx::Screen::GetScreen()->GetPrimaryDisplay();
   if (display.device_scale_factor() > 2.0) {
     DCHECK_EQ(3.0, display.device_scale_factor());
     supported_scale_factors.push_back(SCALE_FACTOR_300P);
@@ -650,22 +686,8 @@ void ResourceBundle::InitSharedInstance(Delegate* delegate) {
 #elif defined(OS_MACOSX)
   if (base::mac::IsOSLionOrLater())
     supported_scale_factors.push_back(SCALE_FACTOR_200P);
-#elif defined(OS_CHROMEOS)
-  // TODO(oshima): Include 200P only if the device support 200P
+#elif defined(OS_CHROMEOS) || defined(OS_LINUX) || defined(OS_WIN)
   supported_scale_factors.push_back(SCALE_FACTOR_200P);
-#elif defined(OS_LINUX) && defined(ENABLE_HIDPI)
-  supported_scale_factors.push_back(SCALE_FACTOR_200P);
-#elif defined(OS_WIN)
-  bool default_to_100P = true;
-  // On Windows if the dpi scale is greater than 1.25 on high dpi machines
-  // downscaling from 200 percent looks better than scaling up from 100
-  // percent.
-  if (gfx::GetDPIScale() > 1.25) {
-    supported_scale_factors.push_back(SCALE_FACTOR_200P);
-    default_to_100P = false;
-  }
-  if (default_to_100P)
-    supported_scale_factors.push_back(SCALE_FACTOR_100P);
 #endif
   ui::SetSupportedScaleFactors(supported_scale_factors);
 }
@@ -759,76 +781,6 @@ void ResourceBundle::InitDefaultFontList() {
   // Use a single default font as the default font list.
   gfx::FontList::SetDefaultFontDescription(std::string());
 #endif
-}
-
-void ResourceBundle::LoadFontsIfNecessary() {
-  images_and_fonts_lock_->AssertAcquired();
-  if (!base_font_list_.get()) {
-    if (delegate_) {
-      base_font_list_ = GetFontListFromDelegate(BaseFont);
-      bold_font_list_ = GetFontListFromDelegate(BoldFont);
-      small_font_list_ = GetFontListFromDelegate(SmallFont);
-      small_bold_font_list_ = GetFontListFromDelegate(SmallBoldFont);
-      medium_font_list_ = GetFontListFromDelegate(MediumFont);
-      medium_bold_font_list_ = GetFontListFromDelegate(MediumBoldFont);
-      large_font_list_ = GetFontListFromDelegate(LargeFont);
-      large_bold_font_list_ = GetFontListFromDelegate(LargeBoldFont);
-    }
-
-    if (!base_font_list_.get())
-      base_font_list_.reset(new gfx::FontList());
-
-    if (!bold_font_list_.get()) {
-      bold_font_list_.reset(new gfx::FontList());
-      *bold_font_list_ = base_font_list_->DeriveWithStyle(
-          base_font_list_->GetFontStyle() | gfx::Font::BOLD);
-    }
-
-    if (!small_font_list_.get()) {
-      small_font_list_.reset(new gfx::FontList());
-      *small_font_list_ =
-          base_font_list_->DeriveWithSizeDelta(kSmallFontSizeDelta);
-    }
-
-    if (!small_bold_font_list_.get()) {
-      small_bold_font_list_.reset(new gfx::FontList());
-      *small_bold_font_list_ = small_font_list_->DeriveWithStyle(
-          small_font_list_->GetFontStyle() | gfx::Font::BOLD);
-    }
-
-    if (!medium_font_list_.get()) {
-      medium_font_list_.reset(new gfx::FontList());
-      *medium_font_list_ =
-          base_font_list_->DeriveWithSizeDelta(kMediumFontSizeDelta);
-    }
-
-    if (!medium_bold_font_list_.get()) {
-      medium_bold_font_list_.reset(new gfx::FontList());
-      *medium_bold_font_list_ = medium_font_list_->DeriveWithStyle(
-          medium_font_list_->GetFontStyle() | gfx::Font::BOLD);
-    }
-
-    if (!large_font_list_.get()) {
-      large_font_list_.reset(new gfx::FontList());
-      *large_font_list_ =
-          base_font_list_->DeriveWithSizeDelta(kLargeFontSizeDelta);
-    }
-
-    if (!large_bold_font_list_.get()) {
-      large_bold_font_list_.reset(new gfx::FontList());
-      *large_bold_font_list_ = large_font_list_->DeriveWithStyle(
-          large_font_list_->GetFontStyle() | gfx::Font::BOLD);
-    }
-  }
-}
-
-scoped_ptr<gfx::FontList> ResourceBundle::GetFontListFromDelegate(
-    FontStyle style) {
-  DCHECK(delegate_);
-  scoped_ptr<gfx::Font> font = delegate_->GetFont(style);
-  if (font.get())
-    return make_scoped_ptr(new gfx::FontList(*font));
-  return nullptr;
 }
 
 bool ResourceBundle::LoadBitmap(const ResourceHandle& data_handle,

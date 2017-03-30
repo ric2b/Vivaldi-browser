@@ -99,6 +99,7 @@ class DiskCacheBackendTest : public DiskCacheTestWithCache {
   void BackendShutdownWithPendingFileIO(bool fast);
   void BackendShutdownWithPendingIO(bool fast);
   void BackendShutdownWithPendingCreate(bool fast);
+  void BackendShutdownWithPendingDoom();
   void BackendSetSize();
   void BackendLoad();
   void BackendChain();
@@ -136,6 +137,8 @@ class DiskCacheBackendTest : public DiskCacheTestWithCache {
   void BackendDisable3();
   void BackendDisable4();
   void BackendDisabledAPI();
+
+  void BackendEviction();
 };
 
 int DiskCacheBackendTest::GeneratePendingIO(net::TestCompletionCallback* cb) {
@@ -640,6 +643,7 @@ void DiskCacheBackendTest::BackendShutdownWithPendingIO(bool fast) {
   }
 
   base::MessageLoop::current()->RunUntilIdle();
+  EXPECT_FALSE(cb.have_result());
 }
 
 TEST_F(DiskCacheBackendTest, ShutdownWithPendingIO) {
@@ -679,6 +683,7 @@ void DiskCacheBackendTest::BackendShutdownWithPendingCreate(bool fast) {
   }
 
   base::MessageLoop::current()->RunUntilIdle();
+  EXPECT_FALSE(cb.have_result());
 }
 
 TEST_F(DiskCacheBackendTest, ShutdownWithPendingCreate) {
@@ -694,6 +699,38 @@ TEST_F(DiskCacheBackendTest, ShutdownWithPendingCreate_Fast) {
   BackendShutdownWithPendingCreate(true);
 }
 #endif
+
+void DiskCacheBackendTest::BackendShutdownWithPendingDoom() {
+  net::TestCompletionCallback cb;
+  {
+    ASSERT_TRUE(CleanupCacheDir());
+    base::Thread cache_thread("CacheThread");
+    ASSERT_TRUE(cache_thread.StartWithOptions(
+        base::Thread::Options(base::MessageLoop::TYPE_IO, 0)));
+
+    disk_cache::BackendFlags flags = disk_cache::kNoRandom;
+    CreateBackend(flags, &cache_thread);
+
+    disk_cache::Entry* entry;
+    int rv = cache_->CreateEntry("some key", &entry, cb.callback());
+    ASSERT_EQ(net::OK, cb.GetResult(rv));
+    entry->Close();
+    entry = nullptr;
+
+    rv = cache_->DoomEntry("some key", cb.callback());
+    ASSERT_EQ(net::ERR_IO_PENDING, rv);
+
+    cache_.reset();
+    EXPECT_FALSE(cb.have_result());
+  }
+
+  base::MessageLoop::current()->RunUntilIdle();
+  EXPECT_FALSE(cb.have_result());
+}
+
+TEST_F(DiskCacheBackendTest, ShutdownWithPendingDoom) {
+  BackendShutdownWithPendingDoom();
+}
 
 // Disabled on android since this test requires cache creator to create
 // blockfile caches.
@@ -2867,6 +2904,49 @@ TEST_F(DiskCacheBackendTest, NewEvictionDisabledAPI) {
   BackendDisabledAPI();
 }
 
+// Test that some eviction of some kind happens.
+void DiskCacheBackendTest::BackendEviction() {
+  const int kMaxSize = 200 * 1024;
+  const int kMaxEntryCount = 20;
+  const int kWriteSize = kMaxSize / kMaxEntryCount;
+
+  const int kWriteEntryCount = kMaxEntryCount * 2;
+
+  static_assert(kWriteEntryCount * kWriteSize > kMaxSize,
+                "must write more than MaxSize");
+
+  SetMaxSize(kMaxSize);
+  InitSparseCache(nullptr, nullptr);
+
+  scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(kWriteSize));
+  CacheTestFillBuffer(buffer->data(), kWriteSize, false);
+
+  std::string key_prefix("prefix");
+  for (int i = 0; i < kWriteEntryCount; ++i) {
+    AddDelay();
+    disk_cache::Entry* entry = NULL;
+    ASSERT_EQ(net::OK, CreateEntry(key_prefix + base::IntToString(i), &entry));
+    disk_cache::ScopedEntryPtr entry_closer(entry);
+    EXPECT_EQ(kWriteSize,
+              WriteData(entry, 1, 0, buffer.get(), kWriteSize, false));
+  }
+
+  int size = CalculateSizeOfAllEntries();
+  EXPECT_GT(kMaxSize, size);
+}
+
+TEST_F(DiskCacheBackendTest, BackendEviction) {
+  BackendEviction();
+}
+
+TEST_F(DiskCacheBackendTest, MemoryOnlyBackendEviction) {
+  SetMemoryOnlyMode();
+  BackendEviction();
+}
+
+// TODO(gavinp): Enable BackendEviction test for simple cache after performance
+// problems are addressed. See crbug.com/588184 for more information.
+
 // This overly specific looking test is a regression test aimed at
 // crbug.com/589186.
 TEST_F(DiskCacheBackendTest, MemoryOnlyUseAfterFree) {
@@ -3320,6 +3400,12 @@ TEST_F(DiskCacheBackendTest, SimpleCacheShutdownWithPendingCreate) {
   SetCacheType(net::APP_CACHE);
   SetSimpleCacheMode();
   BackendShutdownWithPendingCreate(false);
+}
+
+TEST_F(DiskCacheBackendTest, SimpleCacheShutdownWithPendingDoom) {
+  SetCacheType(net::APP_CACHE);
+  SetSimpleCacheMode();
+  BackendShutdownWithPendingDoom();
 }
 
 TEST_F(DiskCacheBackendTest, SimpleCacheShutdownWithPendingFileIO) {

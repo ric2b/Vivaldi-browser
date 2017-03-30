@@ -8,7 +8,6 @@
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
-#include "base/prefs/pref_service.h"
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
 #include "build/build_config.h"
@@ -23,13 +22,14 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_iterator.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/notification_service.h"
@@ -64,8 +64,7 @@ namespace {
 // This currently checks if there is pending download, or if it needs to
 // handle unload handler.
 bool AreAllBrowsersCloseable() {
-  chrome::BrowserIterator browser_it;
-  if (browser_it.done())
+  if (BrowserList::GetInstance()->empty())
     return true;
 
   // If there are any downloads active, all browsers are not closeable.
@@ -74,16 +73,16 @@ bool AreAllBrowsersCloseable() {
     return false;
 
   // Check TabsNeedBeforeUnloadFired().
-  for (; !browser_it.done(); browser_it.Next()) {
-    if (browser_it->TabsNeedBeforeUnloadFired())
+  for (auto* browser : *BrowserList::GetInstance()) {
+    if (browser->TabsNeedBeforeUnloadFired())
       return false;
   }
   return true;
 }
-#endif  // !defined(OS_ANDROID)
 
 int g_keep_alive_count = 0;
 bool g_disable_shutdown_for_testing = false;
+#endif  // !defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
 // Whether chrome should send stop request to a session manager.
@@ -94,8 +93,8 @@ bool g_send_stop_request_to_session_manager = false;
 
 void MarkAsCleanShutdown() {
   // TODO(beng): Can this use ProfileManager::GetLoadedProfiles() instead?
-  for (chrome::BrowserIterator it; !it.done(); it.Next())
-    it->profile()->SetExitType(Profile::EXIT_NORMAL);
+  for (auto* browser : *BrowserList::GetInstance())
+    browser->profile()->SetExitType(Profile::EXIT_NORMAL);
 }
 
 void AttemptExitInternal(bool try_to_quit_application) {
@@ -113,6 +112,7 @@ void AttemptExitInternal(bool try_to_quit_application) {
   g_browser_process->platform_part()->AttemptExit();
 }
 
+#if !defined(OS_ANDROID)
 void CloseAllBrowsersAndQuit() {
   browser_shutdown::SetTryingToQuit(true);
   CloseAllBrowsers();
@@ -126,12 +126,11 @@ void CloseAllBrowsers() {
   if (vivaldi::IsVivaldiRunning()) {
     // For Vivaldi closing all browsers means session end.
 
-    chrome::BrowserIterator browser_it;
     // UnloadController::is_attempting_to_close_browser_ will be set so that
     // webcontents WebContentsImpl being destroyed during the closedown will
     // be removed correctly from the list of unload-webcontents.
-    for (; !browser_it.done(); browser_it.Next()) {
-      browser_it->ShouldCloseWindow();
+    for (auto* browser: *BrowserList::GetInstance()) {
+      browser->ShouldCloseWindow();
     }
     g_browser_process->EndSession();
     browser_shutdown::OnShutdownStarting(browser_shutdown::END_SESSION);
@@ -162,6 +161,7 @@ void CloseAllBrowsers() {
       new BrowserCloseManager;
   browser_close_manager->StartClosingBrowsers();
 }
+#endif  // !defined(OS_ANDROID)
 
 void AttemptUserExit() {
 #if defined(OS_CHROMEOS)
@@ -201,8 +201,8 @@ void AttemptUserExit() {
 #if !defined(OS_ANDROID)
 void AttemptRestart() {
   // TODO(beng): Can this use ProfileManager::GetLoadedProfiles instead?
-  for (chrome::BrowserIterator it; !it.done(); it.Next())
-    content::BrowserContext::SaveSessionState(it->profile());
+  for (auto* browser : *BrowserList::GetInstance())
+    content::BrowserContext::SaveSessionState(browser->profile());
 
   PrefService* pref_service = g_browser_process->local_state();
   pref_service->SetBoolean(prefs::kWasRestarted, true);
@@ -259,6 +259,7 @@ void ExitCleanly() {
 }
 #endif
 
+#if !defined(OS_ANDROID)
 void SessionEnding() {
   // This is a time-limited shutdown where we need to write as much to
   // disk as we can as soon as we can, and where we must kill the
@@ -331,9 +332,14 @@ void DecrementKeepAliveCount() {
   }
 }
 
+int GetKeepAliveCountForTesting() {
+  return g_keep_alive_count;
+}
+
 bool WillKeepAlive() {
   return g_keep_alive_count > 0;
 }
+#endif  // !defined(OS_ANDROID)
 
 void NotifyAppTerminating() {
   static bool notified = false;
@@ -384,6 +390,7 @@ void NotifyAndTerminate(bool fast_path) {
 #endif
 }
 
+#if !defined(OS_ANDROID)
 void OnAppExiting() {
   static bool notified = false;
   if (notified)
@@ -397,5 +404,6 @@ void DisableShutdownForTesting(bool disable_shutdown_for_testing) {
   if (!g_disable_shutdown_for_testing && !WillKeepAlive())
     CloseAllBrowsersIfNeeded();
 }
+#endif  // !defined(OS_ANDROID)
 
 }  // namespace chrome

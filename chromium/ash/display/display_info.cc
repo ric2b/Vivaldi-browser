@@ -2,11 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/display/display_info.h"
+
 #include <stdio.h>
+
+#include <algorithm>
 #include <string>
 #include <vector>
 
-#include "ash/display/display_info.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -260,6 +263,8 @@ DisplayInfo::DisplayInfo(int64_t id, const std::string& name, bool has_overscan)
       is_aspect_preserving_scaling_(false),
       clear_overscan_insets_(false),
       color_profile_(ui::COLOR_PROFILE_STANDARD) {}
+
+DisplayInfo::DisplayInfo(const DisplayInfo& other) = default;
 
 DisplayInfo::~DisplayInfo() {
 }

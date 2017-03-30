@@ -8,7 +8,7 @@
 
 #include "components/resource_provider/file_utils.h"
 #include "components/resource_provider/resource_provider_impl.h"
-#include "mojo/shell/public/cpp/application_connection.h"
+#include "mojo/shell/public/cpp/connection.h"
 #include "url/gurl.h"
 
 namespace resource_provider {
@@ -21,27 +21,28 @@ ResourceProviderApp::ResourceProviderApp(
 ResourceProviderApp::~ResourceProviderApp() {
 }
 
-void ResourceProviderApp::Initialize(mojo::ApplicationImpl* app) {
-  tracing_.Initialize(app);
+void ResourceProviderApp::Initialize(mojo::Connector* connector,
+                                     const std::string& url,
+                                     uint32_t id, uint32_t user_id) {
+  tracing_.Initialize(connector, url);
 }
 
-bool ResourceProviderApp::ConfigureIncomingConnection(
-    mojo::ApplicationConnection* connection) {
+bool ResourceProviderApp::AcceptConnection(mojo::Connection* connection) {
   const base::FilePath app_path(
       GetPathForApplicationUrl(connection->GetRemoteApplicationURL()));
   if (app_path.empty())
     return false;  // The specified app has no resources.
 
-  connection->AddService<ResourceProvider>(this);
+  connection->AddInterface<ResourceProvider>(this);
   return true;
 }
 
 void ResourceProviderApp::Create(
-    mojo::ApplicationConnection* connection,
+    mojo::Connection* connection,
     mojo::InterfaceRequest<ResourceProvider> request) {
   const base::FilePath app_path(
       GetPathForApplicationUrl(connection->GetRemoteApplicationURL()));
-  // We validated path at ConfigureIncomingConnection() time, so it should still
+  // We validated path at AcceptConnection() time, so it should still
   // be valid.
   CHECK(!app_path.empty());
   bindings_.AddBinding(

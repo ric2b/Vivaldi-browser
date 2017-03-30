@@ -9,7 +9,6 @@
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -25,7 +24,7 @@
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
-#include "chrome/browser/ui/webui/signin/inline_login_ui.h"
+#include "chrome/browser/ui/webui/signin/get_auth_frame.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
@@ -35,6 +34,7 @@
 #include "chromeos/system/devicetype.h"
 #include "chromeos/system/version_loader.h"
 #include "components/login/localized_values_builder.h"
+#include "components/prefs/pref_service.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/version_info/version_info.h"
@@ -54,8 +54,6 @@ namespace {
 
 const char kJsScreenPath[] = "login.GaiaSigninScreen";
 const char kAuthIframeParentName[] = "signin-frame";
-const char kAuthIframeParentOrigin[] =
-    "chrome-extension://mfffpogegjflfpflabcdkioaeobkgjik/";
 
 const char kRestrictiveProxyURL[] = "https://www.google.com/generate_204";
 
@@ -604,10 +602,8 @@ void GaiaScreenHandler::ShowSigninScreenForTest(const std::string& username,
 void GaiaScreenHandler::SubmitLoginFormForTest() {
   VLOG(2) << "Submit login form for test, user=" << test_user_;
 
-  content::RenderFrameHost* frame = InlineLoginUI::GetAuthFrame(
-      web_ui()->GetWebContents(),
-      GURL(kAuthIframeParentOrigin),
-      kAuthIframeParentName);
+  content::RenderFrameHost* frame =
+      signin::GetAuthFrame(web_ui()->GetWebContents(), kAuthIframeParentName);
 
   std::string code =
       "document.getElementById('identifier').value = '" + test_user_ + "';"

@@ -32,7 +32,7 @@ class NativeViewGLSurfaceOSMesa : public GLSurfaceOSMesa {
   static bool InitializeOneOff();
 
   // Implement a subset of GLSurface.
-  bool Initialize() override;
+  bool Initialize(GLSurface::Format format) override;
   void Destroy() override;
   bool Resize(const gfx::Size& new_size,
               float scale_factor,
@@ -84,7 +84,7 @@ bool GLSurface::InitializeOneOffInternal() {
 
 NativeViewGLSurfaceOSMesa::NativeViewGLSurfaceOSMesa(
     gfx::AcceleratedWidget window)
-    : GLSurfaceOSMesa(OSMesaSurfaceFormatBGRA, gfx::Size(1, 1)),
+    : GLSurfaceOSMesa(SURFACE_OSMESA_BGRA, gfx::Size(1, 1)),
       xdisplay_(gfx::GetXDisplay()),
       window_graphics_context_(0),
       window_(window),
@@ -109,8 +109,8 @@ bool NativeViewGLSurfaceOSMesa::InitializeOneOff() {
   return true;
 }
 
-bool NativeViewGLSurfaceOSMesa::Initialize() {
-  if (!GLSurfaceOSMesa::Initialize())
+bool NativeViewGLSurfaceOSMesa::Initialize(GLSurface::Format format) {
+  if (!GLSurfaceOSMesa::Initialize(format))
     return false;
 
   window_graphics_context_ = XCreateGC(xdisplay_, window_, 0, NULL);
@@ -308,7 +308,7 @@ scoped_refptr<GLSurface> GLSurface::CreateOffscreenGLSurface(
   switch (GetGLImplementation()) {
     case kGLImplementationOSMesaGL: {
       scoped_refptr<GLSurface> surface(
-          new GLSurfaceOSMesa(OSMesaSurfaceFormatRGBA, size));
+          new GLSurfaceOSMesa(SURFACE_OSMESA_RGBA, size));
       if (!surface->Initialize())
         return NULL;
 

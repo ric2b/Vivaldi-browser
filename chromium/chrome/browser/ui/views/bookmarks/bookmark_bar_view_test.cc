@@ -8,7 +8,6 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
-#include "base/prefs/pref_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -38,6 +37,7 @@
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
 #include "components/constrained_window/constrained_window_views.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/test/test_browser_thread.h"
@@ -52,6 +52,10 @@
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/submenu_view.h"
 #include "ui/views/widget/widget.h"
+
+#if defined(OS_WIN)
+#include "ui/aura/window_tree_host.h"
+#endif
 
 using base::ASCIIToUTF16;
 using bookmarks::BookmarkModel;
@@ -206,12 +210,21 @@ void MoveMouseAndPress(const gfx::Point& screen_pos,
 // PageNavigator implementation that records the URL.
 class TestingPageNavigator : public PageNavigator {
  public:
+  TestingPageNavigator() {}
+  ~TestingPageNavigator() override {}
+
   WebContents* OpenURL(const OpenURLParams& params) override {
-    url_ = params.url;
+    urls_.push_back(params.url);
     return NULL;
   }
 
-  GURL url_;
+  const std::vector<GURL>& urls() const { return urls_; }
+  GURL last_url() const { return urls_.empty() ? GURL() : urls_.back(); }
+
+ private:
+  std::vector<GURL> urls_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestingPageNavigator);
 };
 
 // TODO(erg): Fix bookmark DND tests on linux_aura. crbug.com/163931
@@ -233,6 +246,7 @@ class TestingPageNavigator : public PageNavigator {
 //   f1a
 //   F11
 //     f11a
+//   f1b
 //   *
 // a
 // b
@@ -276,8 +290,7 @@ class BookmarkBarViewEventTestBase : public ViewEventTestBase {
     bookmarks::test::WaitForBookmarkModelToLoad(model_);
     profile_->GetPrefs()->SetBoolean(bookmarks::prefs::kShowBookmarkBar, true);
 
-    Browser::CreateParams native_params(profile_.get(),
-                                        chrome::GetActiveDesktop());
+    Browser::CreateParams native_params(profile_.get());
     browser_ = chrome::CreateBrowserWithTestWindowForParams(&native_params);
 
     local_state_.reset(new ScopedTestingLocalState(
@@ -367,6 +380,7 @@ class BookmarkBarViewEventTestBase : public ViewEventTestBase {
     model_->AddURL(f1, 0, ASCIIToUTF16("f1a"), GURL(test_base + "f1a"));
     const BookmarkNode* f11 = model_->AddFolder(f1, 1, ASCIIToUTF16("F11"));
     model_->AddURL(f11, 0, ASCIIToUTF16("f11a"), GURL(test_base + "f11a"));
+    model_->AddURL(f1, 2, ASCIIToUTF16("f1b"), GURL(test_base + "f1b"));
     if (big_menu) {
       for (int i = 1; i <= 100; ++i) {
         model_->AddURL(f1, i + 1, ASCIIToUTF16("f") + base::IntToString16(i),
@@ -435,8 +449,8 @@ class BookmarkBarViewTest1 : public BookmarkBarViewEventTestBase {
 
   void Step3() {
     // We should have navigated to URL f1a.
-    ASSERT_TRUE(navigator_.url_ ==
-                model_->bookmark_bar_node()->GetChild(0)->GetChild(0)->url());
+    ASSERT_EQ(navigator_.last_url(),
+              model_->bookmark_bar_node()->GetChild(0)->GetChild(0)->url());
 
     // Make sure button is no longer pushed.
     views::LabelButton* button = GetBookmarkButton(0);
@@ -573,7 +587,7 @@ class BookmarkBarViewTest3 : public BookmarkBarViewEventTestBase {
     ASSERT_TRUE(child_menu->GetSubmenu()->IsShowing());
 
     // Nothing should have been selected.
-    EXPECT_EQ(GURL(), navigator_.url_);
+    EXPECT_EQ(GURL(), navigator_.last_url());
 
     // Hide menu.
     menu->GetMenuController()->CancelAll();
@@ -664,7 +678,7 @@ class BookmarkBarViewTest4 : public BookmarkBarViewEventTestBase {
   }
 
   void Step4() {
-    EXPECT_EQ(navigator_.url_, model_->other_node()->GetChild(0)->url());
+    EXPECT_EQ(navigator_.last_url(), model_->other_node()->GetChild(0)->url());
     Done();
   }
 
@@ -774,8 +788,8 @@ class BookmarkBarViewTest6 : public BookmarkBarViewEventTestBase {
   }
 
   void Step3() {
-    ASSERT_TRUE(navigator_.url_ ==
-                model_->bookmark_bar_node()->GetChild(6)->url());
+    ASSERT_EQ(navigator_.last_url(),
+              model_->bookmark_bar_node()->GetChild(6)->url());
     Done();
   }
 
@@ -1145,7 +1159,7 @@ class BookmarkBarViewTest10 : public BookmarkBarViewEventTestBase {
     ASSERT_TRUE(submenu->IsSelected());
     ASSERT_TRUE(!submenu->GetSubmenu() || !submenu->GetSubmenu()->IsShowing());
 
-    // Send a down arrow to wrap back to f1a
+    // Send a down arrow to go down to f1b.
     ASSERT_TRUE(ui_controls::SendKeyPressNotifyWhenDone(
         window_->GetNativeWindow(), ui::VKEY_DOWN, false, false, false, false,
         CreateEventTask(this, &BookmarkBarViewTest10::Step7)));
@@ -1156,18 +1170,30 @@ class BookmarkBarViewTest10 : public BookmarkBarViewEventTestBase {
     views::MenuItemView* menu = bb_view_->GetMenu();
     ASSERT_TRUE(menu != NULL);
     ASSERT_TRUE(menu->GetSubmenu()->IsShowing());
+    ASSERT_TRUE(menu->GetSubmenu()->GetMenuItemAt(2)->IsSelected());
+
+    // Send a down arrow to wrap back to f1a.
+    ASSERT_TRUE(ui_controls::SendKeyPressNotifyWhenDone(
+        window_->GetNativeWindow(), ui::VKEY_DOWN, false, false, false, false,
+        CreateEventTask(this, &BookmarkBarViewTest10::Step8)));
+  }
+
+  void Step8() {
+    // Make sure menu is showing and item is selected.
+    views::MenuItemView* menu = bb_view_->GetMenu();
+    ASSERT_TRUE(menu != NULL);
+    ASSERT_TRUE(menu->GetSubmenu()->IsShowing());
     ASSERT_TRUE(menu->GetSubmenu()->GetMenuItemAt(0)->IsSelected());
 
     // Send enter, which should select the item.
     ASSERT_TRUE(ui_controls::SendKeyPressNotifyWhenDone(
         window_->GetNativeWindow(), ui::VKEY_RETURN, false, false, false, false,
-        CreateEventTask(this, &BookmarkBarViewTest10::Step8)));
+        CreateEventTask(this, &BookmarkBarViewTest10::Step9)));
   }
 
-  void Step8() {
-    ASSERT_TRUE(
-        model_->bookmark_bar_node()->GetChild(0)->GetChild(0)->url() ==
-        navigator_.url_);
+  void Step9() {
+    ASSERT_EQ(navigator_.last_url(),
+              model_->bookmark_bar_node()->GetChild(0)->GetChild(0)->url());
     Done();
   }
 };
@@ -2144,7 +2170,7 @@ class BookmarkBarViewTest23 : public BookmarkBarViewEventTestBase {
   }
 
   void Step5() {
-    EXPECT_EQ(navigator_.url_, model_->other_node()->GetChild(0)->url());
+    EXPECT_EQ(navigator_.last_url(), model_->other_node()->GetChild(0)->url());
     Done();
   }
 
@@ -2243,3 +2269,112 @@ class BookmarkBarViewTest24 : public BookmarkBarViewEventTestBase {
 #endif
 VIEW_TEST(BookmarkBarViewTest24, MAYBE_ContextMenusKeyboardEscape)
 
+#if defined(OS_WIN)
+// Tests that pressing the key KEYCODE closes the menu.
+template <ui::KeyboardCode KEYCODE>
+class BookmarkBarViewTest25 : public BookmarkBarViewEventTestBase {
+ protected:
+  void DoTestOnMessageLoop() override {
+    // Move the mouse to the first folder on the bookmark bar and press the
+    // mouse.
+    views::LabelButton* button = GetBookmarkButton(0);
+    ui_test_utils::MoveMouseToCenterAndPress(
+        button, ui_controls::LEFT, ui_controls::DOWN | ui_controls::UP,
+        CreateEventTask(this, &BookmarkBarViewTest25::Step2));
+    base::MessageLoop::current()->RunUntilIdle();
+  }
+
+ private:
+  void Step2() {
+    // Menu should be showing.
+    views::MenuItemView* menu = bb_view_->GetMenu();
+    ASSERT_TRUE(menu != nullptr);
+    ASSERT_TRUE(menu->GetSubmenu()->IsShowing());
+
+    // Send KEYCODE key event, which should close the menu.
+    ASSERT_TRUE(ui_controls::SendKeyPressNotifyWhenDone(
+        window_->GetNativeWindow(), KEYCODE, false, false, false, false,
+        CreateEventTask(this, &BookmarkBarViewTest25::Step3)));
+  }
+
+  void Step3() {
+    // Make sure menu is not showing.
+    views::MenuItemView* menu = bb_view_->GetMenu();
+    ASSERT_TRUE(menu == nullptr);
+
+    Done();
+  }
+};
+
+// Tests that pressing F10 system key closes the menu.
+using BookmarkBarViewTest25F10 = BookmarkBarViewTest25<ui::VKEY_F10>;
+VIEW_TEST(BookmarkBarViewTest25F10, F10ClosesMenu);
+
+// Tests that pressing Alt system key closes the menu.
+using BookmarkBarViewTest25Alt = BookmarkBarViewTest25<ui::VKEY_MENU>;
+VIEW_TEST(BookmarkBarViewTest25Alt, AltClosesMenu);
+
+// Tests that WM_CANCELMODE closes the menu.
+class BookmarkBarViewTest26 : public BookmarkBarViewEventTestBase {
+ protected:
+  void DoTestOnMessageLoop() override {
+    // Move the mouse to the first folder on the bookmark bar and press the
+    // mouse.
+    views::LabelButton* button = GetBookmarkButton(0);
+    ui_test_utils::MoveMouseToCenterAndPress(
+        button, ui_controls::LEFT, ui_controls::DOWN | ui_controls::UP,
+        CreateEventTask(this, &BookmarkBarViewTest26::Step2));
+    base::MessageLoop::current()->RunUntilIdle();
+  }
+
+ private:
+  void Step2() {
+    // Menu should be showing.
+    views::MenuItemView* menu = bb_view_->GetMenu();
+    ASSERT_TRUE(menu != nullptr);
+    ASSERT_TRUE(menu->GetSubmenu()->IsShowing());
+
+    // Send WM_CANCELMODE, which should close the menu. The message is sent
+    // synchronously, however, we post a task to make sure that the message is
+    // processed completely before finishing the test.
+    ::SendMessage(
+        GetWidget()->GetNativeView()->GetHost()->GetAcceleratedWidget(),
+        WM_CANCELMODE, 0, 0);
+
+    base::MessageLoop::current()->PostTask(
+        FROM_HERE, base::Bind(&BookmarkBarViewTest26::Step3, this));
+  }
+
+  void Step3() {
+    // Menu should not be showing anymore.
+    views::MenuItemView* menu = bb_view_->GetMenu();
+    ASSERT_TRUE(menu == nullptr);
+
+    Done();
+  }
+};
+
+VIEW_TEST(BookmarkBarViewTest26, CancelModeClosesMenu);
+#endif
+
+class BookmarkBarViewTest27 : public BookmarkBarViewEventTestBase {
+ protected:
+  void DoTestOnMessageLoop() override {
+    views::LabelButton* button = GetBookmarkButton(0);
+    ui_test_utils::MoveMouseToCenterAndPress(
+        button, ui_controls::MIDDLE, ui_controls::DOWN | ui_controls::UP,
+        CreateEventTask(this, &BookmarkBarViewTest27::Step2));
+  }
+
+ private:
+  void Step2() {
+    ASSERT_EQ(2u, navigator_.urls().size());
+    EXPECT_EQ(navigator_.urls()[0],
+              model_->bookmark_bar_node()->GetChild(0)->GetChild(0)->url());
+    EXPECT_EQ(navigator_.urls()[1],
+              model_->bookmark_bar_node()->GetChild(0)->GetChild(2)->url());
+    Done();
+  }
+};
+
+VIEW_TEST(BookmarkBarViewTest27, MiddleClickOnFolderOpensAllBookmarks);

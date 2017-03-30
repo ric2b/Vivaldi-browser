@@ -21,7 +21,6 @@
 
 #include "core/svg/SVGFEImageElement.h"
 
-#include "core/XLinkNames.h"
 #include "core/dom/Document.h"
 #include "core/fetch/FetchRequest.h"
 #include "core/fetch/ResourceFetcher.h"
@@ -47,7 +46,7 @@ SVGFEImageElement::~SVGFEImageElement()
 #if ENABLE(OILPAN)
     if (m_cachedImage) {
         m_cachedImage->removeClient(this);
-        m_cachedImage = 0;
+        m_cachedImage = nullptr;
     }
 #else
     clearResourceReferences();
@@ -57,6 +56,7 @@ SVGFEImageElement::~SVGFEImageElement()
 DEFINE_TRACE(SVGFEImageElement)
 {
     visitor->trace(m_preserveAspectRatio);
+    visitor->trace(m_cachedImage);
     SVGFilterPrimitiveStandardAttributes::trace(visitor);
     SVGURIReference::trace(visitor);
 }
@@ -73,7 +73,7 @@ void SVGFEImageElement::clearResourceReferences()
 {
     if (m_cachedImage) {
         m_cachedImage->removeClient(this);
-        m_cachedImage = 0;
+        m_cachedImage = nullptr;
     }
 
     removeAllOutgoingReferences();
@@ -168,4 +168,4 @@ PassRefPtrWillBeRawPtr<FilterEffect> SVGFEImageElement::build(SVGFilterBuilder*,
     return FEImage::createWithIRIReference(filter, treeScope(), hrefString(), m_preserveAspectRatio->currentValue());
 }
 
-}
+} // namespace blink

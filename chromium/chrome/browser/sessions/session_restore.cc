@@ -92,7 +92,6 @@ class SessionRestoreImpl : public content::NotificationObserver {
  public:
   SessionRestoreImpl(Profile* profile,
                      Browser* browser,
-                     chrome::HostDesktopType host_desktop_type,
                      bool synchronous,
                      bool clobber_existing_tab,
                      bool always_create_tabbed_browser,
@@ -100,7 +99,6 @@ class SessionRestoreImpl : public content::NotificationObserver {
                      SessionRestore::CallbackList* callbacks)
       : profile_(profile),
         browser_(browser),
-        host_desktop_type_(host_desktop_type),
         synchronous_(synchronous),
         clobber_existing_tab_(clobber_existing_tab),
         always_create_tabbed_browser_(always_create_tabbed_browser),
@@ -108,10 +106,6 @@ class SessionRestoreImpl : public content::NotificationObserver {
         active_window_id_(0),
         restore_started_(base::TimeTicks::Now()),
         on_session_restored_callbacks_(callbacks) {
-    // For sanity's sake, if |browser| is non-null: force |host_desktop_type| to
-    // be the same as |browser|'s desktop type.
-    DCHECK(!browser || browser->host_desktop_type() == host_desktop_type);
-
     if (active_session_restorers == nullptr)
       active_session_restorers = new std::set<SessionRestoreImpl*>();
 
@@ -215,7 +209,7 @@ class SessionRestoreImpl : public content::NotificationObserver {
 
     Browser* browser =
         use_new_window
-            ? new Browser(Browser::CreateParams(profile_, host_desktop_type_))
+            ? new Browser(Browser::CreateParams(profile_))
             : browser_;
 
     RecordAppLaunchForTab(browser, tab, selected_index);
@@ -298,7 +292,7 @@ class SessionRestoreImpl : public content::NotificationObserver {
                                std::vector<RestoredTab>* contents_created) {
     Browser* browser = nullptr;
     if (!created_tabbed_browser && always_create_tabbed_browser_) {
-      Browser::CreateParams params(profile_, host_desktop_type_);
+      Browser::CreateParams params(profile_);
       params.is_vivaldi = vivaldi::IsVivaldiRunning();
       browser = new Browser(params);
       if (urls_to_open_.empty()) {
@@ -478,7 +472,7 @@ class SessionRestoreImpl : public content::NotificationObserver {
     chromeos::BootTimesRecorder::Get()->AddLoginTimeMarker(
         "SessionRestore-CreatingTabs-End", false);
 #endif
-    if (browser_to_activate && !browser_to_activate->is_vivaldi())
+    if (browser_to_activate)
       browser_to_activate->window()->Activate();
 
     // If last_browser is NULL and urls_to_open_ is non-empty,
@@ -644,11 +638,11 @@ class SessionRestoreImpl : public content::NotificationObserver {
                                  gfx::Rect bounds,
                                  ui::WindowShowState show_state,
                                  const std::string& app_name) {
-    Browser::CreateParams params(type, profile_, host_desktop_type_);
+    Browser::CreateParams params(type, profile_);
     if (!app_name.empty()) {
       const bool trusted_source = true;  // We only store trusted app windows.
-      params = Browser::CreateParams::CreateForApp(
-          app_name, trusted_source, bounds, profile_, host_desktop_type_);
+      params = Browser::CreateParams::CreateForApp(app_name, trusted_source,
+                                                   bounds, profile_);
     } else {
       params.initial_bounds = bounds;
     }
@@ -707,10 +701,6 @@ class SessionRestoreImpl : public content::NotificationObserver {
   // The first browser to restore to, may be null.
   Browser* browser_;
 
-  // The desktop on which all new browsers should be created (browser_, if it is
-  // not NULL, must be of this desktop type as well).
-  chrome::HostDesktopType host_desktop_type_;
-
   // Whether or not restore is synchronous.
   const bool synchronous_;
 
@@ -761,7 +751,6 @@ class SessionRestoreImpl : public content::NotificationObserver {
 Browser* SessionRestore::RestoreSession(
     Profile* profile,
     Browser* browser,
-    chrome::HostDesktopType host_desktop_type,
     uint32_t behavior,
     const std::vector<GURL>& urls_to_open) {
 #if defined(OS_CHROMEOS)
@@ -779,10 +768,9 @@ Browser* SessionRestore::RestoreSession(
   profile->set_restored_last_session(true);
   // SessionRestoreImpl takes care of deleting itself when done.
   SessionRestoreImpl* restorer = new SessionRestoreImpl(
-      profile, browser, host_desktop_type, (behavior & SYNCHRONOUS) != 0,
+      profile, browser, (behavior & SYNCHRONOUS) != 0,
       (behavior & CLOBBER_CURRENT_TAB) != 0,
-      (behavior & ALWAYS_CREATE_TABBED_BROWSER) != 0,
-      urls_to_open,
+      (behavior & ALWAYS_CREATE_TABBED_BROWSER) != 0, urls_to_open,
       SessionRestore::on_session_restored_callbacks());
   return restorer->Restore();
 }
@@ -800,20 +788,18 @@ void SessionRestore::RestoreSessionAfterCrash(Browser* browser) {
       behavior = SessionRestore::CLOBBER_CURRENT_TAB;
     }
   }
-  SessionRestore::RestoreSession(browser->profile(), browser,
-                                 browser->host_desktop_type(), behavior,
+  SessionRestore::RestoreSession(browser->profile(), browser, behavior,
                                  std::vector<GURL>());
 }
 
 // static
 std::vector<Browser*> SessionRestore::RestoreForeignSessionWindows(
     Profile* profile,
-    chrome::HostDesktopType host_desktop_type,
     std::vector<const sessions::SessionWindow*>::const_iterator begin,
     std::vector<const sessions::SessionWindow*>::const_iterator end) {
   std::vector<GURL> gurls;
-  SessionRestoreImpl restorer(profile, static_cast<Browser*>(nullptr),
-                              host_desktop_type, true, false, true, gurls,
+  SessionRestoreImpl restorer(profile, static_cast<Browser*>(nullptr), true,
+                              false, true, gurls,
                               on_session_restored_callbacks());
   return restorer.RestoreForeignSession(begin, end);
 }
@@ -826,8 +812,7 @@ WebContents* SessionRestore::RestoreForeignSessionTab(
   Browser* browser = chrome::FindBrowserWithWebContents(source_web_contents);
   Profile* profile = browser->profile();
   std::vector<GURL> gurls;
-  SessionRestoreImpl restorer(profile, browser, browser->host_desktop_type(),
-                              true, false, false, gurls,
+  SessionRestoreImpl restorer(profile, browser, true, false, false, gurls,
                               on_session_restored_callbacks());
   return restorer.RestoreForeignTab(tab, disposition);
 }

@@ -51,8 +51,6 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
     : public NON_EXPORTED_BASE(ServiceWorkerRegistration::Listener),
       public base::SupportsWeakPtr<ServiceWorkerProviderHost> {
  public:
-  using GetClientInfoCallback =
-      base::Callback<void(const ServiceWorkerClientInfo&)>;
   using GetRegistrationForReadyCallback =
       base::Callback<void(ServiceWorkerRegistration* reigstration)>;
 
@@ -175,20 +173,6 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
       const base::string16& message,
       const std::vector<TransferredMessagePort>& sent_message_ports);
 
-  // Activates the WebContents associated with
-  // { render_process_id_, route_id_ }.
-  // Runs the |callback| with the updated ServiceWorkerClientInfo in parameter.
-  void Focus(const GetClientInfoCallback& callback);
-
-  // Asks the renderer to send back the document information.
-  void GetWindowClientInfo(const GetClientInfoCallback& callback) const;
-
-  // Same as above but has to be called from the UI thread.
-  // It is taking the process and frame ids in parameter because |this| is meant
-  // to live on the IO thread.
-  static ServiceWorkerClientInfo GetWindowClientInfoOnUI(int render_process_id,
-                                                         int render_frame_id);
-
   // Adds reference of this host's process to the |pattern|, the reference will
   // be removed in destructor.
   void AddScopedProcessReferenceToPattern(const GURL& pattern);
@@ -270,6 +254,8 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
                            UpdateAfter24Hours);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerContextRequestHandlerTest,
                            UpdateForceBypassCache);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerContextRequestHandlerTest,
+                           ServiceWorkerDataRequestAnnotation);
 
   struct OneShotGetReadyCallback {
     GetRegistrationForReadyCallback callback;

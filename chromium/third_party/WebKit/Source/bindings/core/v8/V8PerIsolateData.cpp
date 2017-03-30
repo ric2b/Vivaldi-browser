@@ -32,19 +32,26 @@
 #include "bindings/core/v8/V8ObjectConstructor.h"
 #include "bindings/core/v8/V8RecursionScope.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
-#include "core/frame/UseCounter.h"
+#include "core/frame/Deprecation.h"
 #include "core/inspector/MainThreadDebugger.h"
+#include "platform/ScriptForbiddenScope.h"
 #include "public/platform/Platform.h"
+#include "wtf/LeakAnnotations.h"
 #include "wtf/MainThread.h"
 
 namespace blink {
 
 static V8PerIsolateData* mainThreadPerIsolateData = 0;
 
-#if ENABLE(ASSERT)
-static void assertV8RecursionScope()
+static void beforeCallEnteredCallback(v8::Isolate* isolate)
 {
-    ASSERT(V8RecursionScope::properlyUsed(v8::Isolate::GetCurrent()));
+    RELEASE_ASSERT(!ScriptForbiddenScope::isScriptForbidden());
+}
+
+#if ENABLE(ASSERT)
+static void assertV8RecursionScope(v8::Isolate* isolate)
+{
+    ASSERT(V8RecursionScope::properlyUsed(isolate));
 }
 
 static bool runningUnitTest()
@@ -86,13 +93,46 @@ static void useCounterCallback(v8::Isolate* isolate, v8::Isolate::UseCounterFeat
     case v8::Isolate::kRegExpPrototypeToString:
         blinkFeature = UseCounter::V8RegExpPrototypeToString;
         break;
+    case v8::Isolate::kRegExpPrototypeUnicodeGetter:
+        blinkFeature = UseCounter::V8RegExpPrototypeUnicodeGetter;
+        break;
+    case v8::Isolate::kIntlV8Parse:
+        blinkFeature = UseCounter::V8IntlV8Parse;
+        break;
+    case v8::Isolate::kIntlPattern:
+        blinkFeature = UseCounter::V8IntlPattern;
+        break;
+    case v8::Isolate::kIntlResolved:
+        blinkFeature = UseCounter::V8IntlResolved;
+        break;
+    case v8::Isolate::kPromiseChain:
+        blinkFeature = UseCounter::V8PromiseChain;
+        break;
+    case v8::Isolate::kPromiseAccept:
+        blinkFeature = UseCounter::V8PromiseAccept;
+        break;
+    case v8::Isolate::kPromiseDefer:
+        blinkFeature = UseCounter::V8PromiseDefer;
+        break;
+    case v8::Isolate::kHtmlCommentInExternalScript:
+        blinkFeature = UseCounter::V8HTMLCommentInExternalScript;
+        break;
+    case v8::Isolate::kHtmlComment:
+        blinkFeature = UseCounter::V8HTMLComment;
+        break;
+    case v8::Isolate::kSloppyModeBlockScopedFunctionRedefinition:
+        blinkFeature = UseCounter::V8SloppyModeBlockScopedFunctionRedefinition;
+        break;
+    case v8::Isolate::kForInInitializer:
+        blinkFeature = UseCounter::V8ForInInitializer;
+        break;
     default:
         // This can happen if V8 has added counters that this version of Blink
         // does not know about. It's harmless.
         return;
     }
     if (deprecated)
-        UseCounter::countDeprecation(currentExecutionContext(isolate), blinkFeature);
+        Deprecation::countDeprecation(currentExecutionContext(isolate), blinkFeature);
     else
         UseCounter::count(currentExecutionContext(isolate), blinkFeature);
 }
@@ -110,7 +150,6 @@ V8PerIsolateData::V8PerIsolateData()
     , m_internalScriptRecursionLevel(0)
 #endif
     , m_performingMicrotaskCheckpoint(false)
-    , m_scriptDebugger(nullptr)
 {
     // FIXME: Remove once all v8::Isolate::GetCurrent() calls are gone.
     isolate()->Enter();
@@ -118,6 +157,7 @@ V8PerIsolateData::V8PerIsolateData()
     if (!runningUnitTest())
         isolate()->AddCallCompletedCallback(&assertV8RecursionScope);
 #endif
+    isolate()->AddBeforeCallEnteredCallback(&beforeCallEnteredCallback);
     if (isMainThread())
         mainThreadPerIsolateData = this;
     isolate()->SetUseCounterCallback(&useCounterCallback);
@@ -163,7 +203,7 @@ void V8PerIsolateData::willBeDestroyed(v8::Isolate* isolate)
     ASSERT(!data->m_destructionPending);
     data->m_destructionPending = true;
 
-    data->m_scriptDebugger.clear();
+    data->m_threadDebugger.clear();
     // Clear any data that may have handles into the heap,
     // prior to calling ThreadState::detach().
     data->clearEndOfScopeTasks();
@@ -177,6 +217,7 @@ void V8PerIsolateData::destroy(v8::Isolate* isolate)
     if (!runningUnitTest())
         isolate->RemoveCallCompletedCallback(&assertV8RecursionScope);
 #endif
+    isolate->RemoveBeforeCallEnteredCallback(&beforeCallEnteredCallback);
     V8PerIsolateData* data = from(isolate);
 
     // Clear everything before exiting the Isolate.
@@ -232,6 +273,7 @@ void V8PerIsolateData::setDOMTemplate(const void* domTemplateKey, v8::Local<v8::
 v8::Local<v8::Context> V8PerIsolateData::ensureScriptRegexpContext()
 {
     if (!m_scriptRegexpScriptState) {
+        LEAK_SANITIZER_DISABLED_SCOPE;
         v8::Local<v8::Context> context(v8::Context::New(isolate()));
         m_scriptRegexpScriptState = ScriptState::create(context, DOMWrapperWorld::create(isolate()));
     }
@@ -281,7 +323,7 @@ v8::Local<v8::Object> V8PerIsolateData::findInstanceInPrototypeChain(const Wrapp
 
 void V8PerIsolateData::addEndOfScopeTask(PassOwnPtr<EndOfScopeTask> task)
 {
-    m_endOfScopeTasks.append(task);
+    m_endOfScopeTasks.append(std::move(task));
 }
 
 void V8PerIsolateData::runEndOfScopeTasks()
@@ -298,10 +340,15 @@ void V8PerIsolateData::clearEndOfScopeTasks()
     m_endOfScopeTasks.clear();
 }
 
-void V8PerIsolateData::setScriptDebugger(PassOwnPtr<MainThreadDebugger> debugger)
+void V8PerIsolateData::setThreadDebugger(PassOwnPtr<ThreadDebugger> threadDebugger)
 {
-    ASSERT(!m_scriptDebugger);
-    m_scriptDebugger = std::move(debugger);
+    ASSERT(!m_threadDebugger);
+    m_threadDebugger = std::move(threadDebugger);
+}
+
+ThreadDebugger* V8PerIsolateData::threadDebugger()
+{
+    return m_threadDebugger.get();
 }
 
 } // namespace blink

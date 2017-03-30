@@ -14,7 +14,8 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_info_cache.h"
+#include "chrome/browser/profiles/profile_attributes_entry.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/app_list/test/chrome_app_list_test_support.h"
@@ -45,8 +46,8 @@ class AppListServiceInteractiveTest : public InProcessBrowserTest {
 
  protected:
   Profile* profile2_;
-  ProfileInfoCache* profile_info_cache() {
-    return &(g_browser_process->profile_manager()->GetProfileInfoCache());
+  ProfileAttributesStorage& profile_attributes_storage() {
+    return g_browser_process->profile_manager()->GetProfileAttributesStorage();
   }
 
  private:
@@ -71,7 +72,7 @@ class AppListServiceInteractiveTest : public InProcessBrowserTest {
 
 // Show the app list, then dismiss it.
 IN_PROC_BROWSER_TEST_F(AppListServiceInteractiveTest, MAYBE_ShowAndDismiss) {
-  AppListService* service = test::GetAppListService();
+  AppListService* service = AppListService::Get();
   ASSERT_FALSE(service->IsAppListVisible());
   service->ShowForProfile(browser()->profile());
   ASSERT_TRUE(service->IsAppListVisible());
@@ -84,7 +85,7 @@ IN_PROC_BROWSER_TEST_F(AppListServiceInteractiveTest,
                        DISABLED_SwitchAppListProfiles) {
   InitSecondProfile();
 
-  AppListService* service = test::GetAppListService();
+  AppListService* service = AppListService::Get();
   ASSERT_TRUE(service);
 
   AppListControllerDelegate* controller(service->GetControllerDelegate());
@@ -118,7 +119,7 @@ IN_PROC_BROWSER_TEST_F(AppListServiceInteractiveTest,
                        MAYBE_SwitchAppListLockedProfile) {
   InitSecondProfile();
 
-  AppListService* service = test::GetAppListService();
+  AppListService* service = AppListService::Get();
   ASSERT_TRUE(service);
 
   AppListControllerDelegate* controller(service->GetControllerDelegate());
@@ -147,9 +148,10 @@ IN_PROC_BROWSER_TEST_F(AppListServiceInteractiveTest,
       ProfileManager::GetSystemProfilePath());
 
   // Lock the second profile.
-  profile_info_cache()->SetProfileSigninRequiredAtIndex(
-      profile_info_cache()->GetIndexOfProfileWithPath(profile2_->GetPath()),
-      true);
+  ProfileAttributesEntry* entry;
+  ASSERT_TRUE(profile_attributes_storage().GetProfileAttributesWithPath(
+      profile2_->GetPath(), &entry));
+  entry->SetIsSigninRequired(true);
 
   // Attempt to open the app list with the second profile.
   controller->ShowForProfileByPath(profile2_->GetPath());
@@ -175,7 +177,7 @@ IN_PROC_BROWSER_TEST_F(AppListServiceInteractiveTest,
                        DISABLED_SwitchAppListProfilesDuringSearch) {
   InitSecondProfile();
 
-  AppListService* service = test::GetAppListService();
+  AppListService* service = AppListService::Get();
   ASSERT_TRUE(service);
 
   AppListControllerDelegate* controller(service->GetControllerDelegate());
@@ -224,7 +226,7 @@ class ShowAppListInteractiveTest : public InProcessBrowserTest {
 #define MAYBE_ShowAppListFlag ShowAppListFlag
 #endif
 IN_PROC_BROWSER_TEST_F(ShowAppListInteractiveTest, MAYBE_ShowAppListFlag) {
-  AppListService* service = test::GetAppListService();
+  AppListService* service = AppListService::Get();
   // The app list should already be shown because we passed
   // switches::kShowAppList.
   EXPECT_TRUE(service->IsAppListVisible());
@@ -293,7 +295,7 @@ class ShowAppListNonDefaultInteractiveTest : public ShowAppListInteractiveTest {
 // profile.
 IN_PROC_BROWSER_TEST_F(ShowAppListNonDefaultInteractiveTest,
                        ShowAppListNonDefaultProfile) {
-  AppListService* service = test::GetAppListService();
+  AppListService* service = AppListService::Get();
   EXPECT_TRUE(service->IsAppListVisible());
   EXPECT_EQ(second_profile_name_.value(),
             service->GetCurrentAppListProfile()->GetPath().BaseName().value());
@@ -316,7 +318,7 @@ IN_PROC_BROWSER_TEST_F(ShowAppListNonDefaultInteractiveTest,
 // app list is visible.
 IN_PROC_BROWSER_TEST_F(ShowAppListNonDefaultInteractiveTest,
                        DeleteShowingAppList) {
-  AppListService* service = test::GetAppListService();
+  AppListService* service = AppListService::Get();
   EXPECT_TRUE(service->IsAppListVisible());
   EXPECT_EQ(second_profile_name_.value(),
             service->GetCurrentAppListProfile()->GetPath().BaseName().value());

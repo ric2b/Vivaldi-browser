@@ -55,7 +55,7 @@ public:
 
     bool isSVGImage() const override { return true; }
     bool isTextureBacked() override { return false; }
-    IntSize size() const override { return m_intrinsicSize; }
+    IntSize size() const override { return m_concreteObjectSize; }
 
     bool currentFrameHasSingleSecurityOrigin() const override;
 
@@ -79,7 +79,7 @@ public:
 
     // DisplayItemClient methods.
     String debugName() const final { return "SVGImage"; }
-    IntRect visualRect() const override;
+    LayoutRect visualRect() const override;
 
 private:
     friend class AXLayoutObject;
@@ -90,10 +90,10 @@ private:
 
     String filenameExtension() const override;
 
-    void setContainerSize(const IntSize&);
+    FloatSize calculateConcreteObjectSize(const FloatSize&) const;
     IntSize containerSize() const;
     bool usesContainerSize() const override { return true; }
-    void computeIntrinsicDimensions(Length& intrinsicWidth, Length& intrinsicHeight, FloatSize& intrinsicRatio) override;
+    void computeIntrinsicDimensions(FloatSize& intrinsicSize, FloatSize& intrinsicRatio) override;
 
     bool dataChanged(bool allDataReceived) override;
 
@@ -115,7 +115,19 @@ private:
 
     OwnPtrWillBePersistent<SVGImageChromeClient> m_chromeClient;
     OwnPtrWillBePersistent<Page> m_page;
-    IntSize m_intrinsicSize;
+
+    // "The concrete object size is the result of combining an
+    // object’s intrinsic dimensions and specified size with the
+    // default object size of the context it’s used in, producing a
+    // rectangle with a definite width and height."
+    //
+    // https://drafts.csswg.org/css-images-3/#concrete-object-size
+    //
+    // Note: For SVGImage there are no specified size
+    // constraints. Such constraints are handled by the layout
+    // machinery in LayoutReplaced. An image has only intrinsic size,
+    // aspect ratio and default object size to consider.
+    IntSize m_concreteObjectSize;
 };
 
 DEFINE_IMAGE_TYPE_CASTS(SVGImage);
@@ -137,9 +149,9 @@ public:
     }
 private:
     Image* m_image;
-    ImageObserver* m_observer;
+    RawPtrWillBeMember<ImageObserver> m_observer;
 };
 
-}
+} // namespace blink
 
 #endif // SVGImage_h

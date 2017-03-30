@@ -222,6 +222,13 @@ PerfProvider::PerfProvider()
       login_observer_(this),
       next_profiling_interval_start_(base::TimeTicks::Now()),
       weak_factory_(this) {
+}
+
+PerfProvider::~PerfProvider() {
+  chromeos::LoginState::Get()->RemoveObserver(&login_observer_);
+}
+
+void PerfProvider::Init() {
   CHECK(command_selector_.SetOdds(
       internal::GetDefaultCommandsForCpu(GetCPUIdentity())));
   std::map<std::string, std::string> params;
@@ -247,10 +254,6 @@ PerfProvider::PerfProvider()
   // when this class is instantiated. By calling LoggedInStateChanged() here,
   // PerfProvider will recognize that the system is already logged in.
   login_observer_.LoggedInStateChanged();
-}
-
-PerfProvider::~PerfProvider() {
-  chromeos::LoginState::Get()->RemoveObserver(&login_observer_);
 }
 
 namespace internal {
@@ -453,9 +456,10 @@ void PerfProvider::SuspendDone(const base::TimeDelta& sleep_duration) {
     return;
 
   // Collect a profile only 1/|sampling_factor| of the time, to avoid
-  // collecting too much data.
+  // collecting too much data. (0 means disable the trigger)
   const auto& resume_params = collection_params_.resume_from_suspend();
-  if (base::RandGenerator(resume_params.sampling_factor()) != 0)
+  if (resume_params.sampling_factor() == 0 ||
+      base::RandGenerator(resume_params.sampling_factor()) != 0)
     return;
 
   // Override any existing profiling.
@@ -480,9 +484,12 @@ void PerfProvider::OnSessionRestoreDone(int num_tabs_restored) {
 
   // Collect a profile only 1/|sampling_factor| of the time, to
   // avoid collecting too much data and potentially causing UI latency.
+  // (0 means disable the trigger)
   const auto& restore_params = collection_params_.restore_session();
-  if (base::RandGenerator(restore_params.sampling_factor()) != 0)
+  if (restore_params.sampling_factor() == 0 ||
+      base::RandGenerator(restore_params.sampling_factor()) != 0) {
     return;
+  }
 
   const auto min_interval = base::TimeDelta::FromSeconds(
       kMinIntervalBetweenSessionRestoreCollectionsInSec);

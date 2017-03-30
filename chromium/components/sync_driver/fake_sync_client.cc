@@ -12,8 +12,6 @@ namespace sync_driver {
 
 namespace {
 
-void DummyClearBrowsingDataCallback(base::Time start, base::Time end) {}
-
 void DummyRegisterPlatformTypesCallback(SyncService* sync_service,
                                         syncer::ModelTypeSet,
                                         syncer::ModelTypeSet) {}
@@ -52,10 +50,6 @@ history::HistoryService* FakeSyncClient::GetHistoryService() {
   return nullptr;
 }
 
-ClearBrowsingDataCallback FakeSyncClient::GetClearBrowsingDataCallback() {
-  return base::Bind(&DummyClearBrowsingDataCallback);
-}
-
 base::Closure FakeSyncClient::GetPasswordStateChangedCallback() {
   return base::Bind(&base::DoNothing);
 }
@@ -89,6 +83,11 @@ sync_sessions::SyncSessionsClient* FakeSyncClient::GetSyncSessionsClient() {
 base::WeakPtr<syncer::SyncableService>
 FakeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
   return base::WeakPtr<syncer::SyncableService>();
+}
+
+base::WeakPtr<syncer_v2::ModelTypeService>
+FakeSyncClient::GetModelTypeServiceForType(syncer::ModelType type) {
+  return base::WeakPtr<syncer_v2::ModelTypeService>();
 }
 
 scoped_refptr<syncer::ModelSafeWorker>

@@ -13,6 +13,7 @@
 #include "content/browser/frame_host/navigation_controller_impl.h"
 #include "content/browser/frame_host/navigator.h"
 #include "content/common/content_export.h"
+#include "content/common/navigation_params.h"
 #include "url/gurl.h"
 
 class GURL;
@@ -23,9 +24,6 @@ class NavigationControllerImpl;
 class NavigatorDelegate;
 class NavigatorTest;
 struct LoadCommittedDetails;
-struct CommitNavigationParams;
-struct CommonNavigationParams;
-struct RequestNavigationParams;
 
 // This class is an implementation of Navigator, responsible for managing
 // navigations in regular browser tabs.
@@ -68,6 +66,7 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
                       bool user_gesture) override;
   void RequestTransferURL(RenderFrameHostImpl* render_frame_host,
                           const GURL& url,
+                          SiteInstance* source_site_instance,
                           const std::vector<GURL>& redirect_chain,
                           const Referrer& referrer,
                           ui::PageTransition page_transition,
@@ -123,6 +122,7 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
                          const FrameNavigationEntry& frame_entry,
                          const NavigationEntryImpl& entry,
                          NavigationController::ReloadType reload_type,
+                         LoFiState lofi_state,
                          bool is_same_document_history_load,
                          base::TimeTicks navigation_start);
 

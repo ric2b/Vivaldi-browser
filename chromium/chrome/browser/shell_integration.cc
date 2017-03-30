@@ -8,7 +8,6 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -18,6 +17,7 @@
 #include "chrome/browser/policy/policy_path_parser.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/prefs/pref_service.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -35,33 +35,29 @@
 
 using content::BrowserThread;
 
+namespace shell_integration {
+
 namespace {
 
-const struct ShellIntegration::AppModeInfo* gAppModeInfo = nullptr;
+const struct AppModeInfo* gAppModeInfo = nullptr;
 
 }  // namespace
 
 #if !defined(OS_WIN)
-// static
-bool ShellIntegration::SetAsDefaultBrowserInteractive() {
+bool SetAsDefaultBrowserInteractive() {
   return false;
 }
 
-// static
-bool ShellIntegration::IsSetAsDefaultAsynchronous() {
+bool IsSetAsDefaultAsynchronous() {
   return false;
 }
 
-// static
-bool ShellIntegration::SetAsDefaultProtocolClientInteractive(
-    const std::string& protocol) {
+bool SetAsDefaultProtocolClientInteractive(const std::string& protocol) {
   return false;
 }
 #endif  // !defined(OS_WIN)
 
-// static
-ShellIntegration::DefaultWebClientSetPermission
-    ShellIntegration::CanSetAsDefaultProtocolClient() {
+DefaultWebClientSetPermission CanSetAsDefaultProtocolClient() {
   // Allowed as long as the browser can become the operating system default
   // browser.
   DefaultWebClientSetPermission permission = CanSetAsDefaultBrowser();
@@ -72,29 +68,24 @@ ShellIntegration::DefaultWebClientSetPermission
 }
 
 #if !defined(OS_WIN)
-// static
-bool ShellIntegration::IsElevationNeededForSettingDefaultProtocolClient() {
+bool IsElevationNeededForSettingDefaultProtocolClient() {
   return false;
 }
 #endif  // !defined(OS_WIN)
 
-// static
-void ShellIntegration::SetAppModeInfo(const struct AppModeInfo* info) {
+void SetAppModeInfo(const struct AppModeInfo* info) {
   gAppModeInfo = info;
 }
 
-// static
-const struct ShellIntegration::AppModeInfo* ShellIntegration::AppModeInfo() {
+const struct AppModeInfo* AppModeInfo() {
   return gAppModeInfo;
 }
 
-// static
-bool ShellIntegration::IsRunningInAppMode() {
+bool IsRunningInAppMode() {
   return gAppModeInfo != NULL;
 }
 
-// static
-base::CommandLine ShellIntegration::CommandLineArgsForLauncher(
+base::CommandLine CommandLineArgsForLauncher(
     const GURL& url,
     const std::string& extension_app_id,
     const base::FilePath& profile_path) {
@@ -122,9 +113,8 @@ base::CommandLine ShellIntegration::CommandLineArgsForLauncher(
   return new_cmd_line;
 }
 
-// static
-void ShellIntegration::AppendProfileArgs(const base::FilePath& profile_path,
-                                         base::CommandLine* command_line) {
+void AppendProfileArgs(const base::FilePath& profile_path,
+                       base::CommandLine* command_line) {
   DCHECK(command_line);
   const base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
 
@@ -154,7 +144,7 @@ void ShellIntegration::AppendProfileArgs(const base::FilePath& profile_path,
 }
 
 #if !defined(OS_WIN)
-base::string16 ShellIntegration::GetAppShortcutsSubdirName() {
+base::string16 GetAppShortcutsSubdirName() {
   if (chrome::GetChannel() == version_info::Channel::CANARY)
     return l10n_util::GetStringUTF16(IDS_APP_SHORTCUTS_SUBDIR_NAME_CANARY);
   return l10n_util::GetStringUTF16(IDS_APP_SHORTCUTS_SUBDIR_NAME);
@@ -162,27 +152,15 @@ base::string16 ShellIntegration::GetAppShortcutsSubdirName() {
 #endif  // !defined(OS_WIN)
 
 ///////////////////////////////////////////////////////////////////////////////
-// ShellIntegration::DefaultWebClientObserver
+// DefaultWebClientWorker
 //
 
-bool ShellIntegration::DefaultWebClientObserver::IsOwnedByWorker() {
-  return false;
-}
+DefaultWebClientWorker::DefaultWebClientWorker(
+    DefaultWebClientObserver* observer,
+    bool delete_observer)
+    : observer_(observer), delete_observer_(delete_observer) {}
 
-bool ShellIntegration::DefaultWebClientObserver::
-    IsInteractiveSetDefaultPermitted() {
-  return false;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// ShellIntegration::DefaultWebClientWorker
-//
-
-ShellIntegration::DefaultWebClientWorker::DefaultWebClientWorker(
-    DefaultWebClientObserver* observer)
-    : observer_(observer) {}
-
-void ShellIntegration::DefaultWebClientWorker::StartCheckIsDefault() {
+void DefaultWebClientWorker::StartCheckIsDefault() {
   if (observer_)
     observer_->SetDefaultWebClientUIState(STATE_PROCESSING);
 
@@ -191,7 +169,7 @@ void ShellIntegration::DefaultWebClientWorker::StartCheckIsDefault() {
       base::Bind(&DefaultWebClientWorker::CheckIsDefault, this));
 }
 
-void ShellIntegration::DefaultWebClientWorker::StartSetAsDefault() {
+void DefaultWebClientWorker::StartSetAsDefault() {
   // Cancel the already running process if another start is requested.
   if (set_as_default_in_progress_) {
     if (set_as_default_initialized_) {
@@ -203,23 +181,20 @@ void ShellIntegration::DefaultWebClientWorker::StartSetAsDefault() {
   }
 
   set_as_default_in_progress_ = true;
-  bool interactive_permitted = true;
-  if (observer_) {
+  if (observer_)
     observer_->SetDefaultWebClientUIState(STATE_PROCESSING);
-    interactive_permitted = observer_->IsInteractiveSetDefaultPermitted();
-  }
 
   set_as_default_initialized_ = InitializeSetAsDefault();
 
   // Remember the start time.
   start_time_ = base::TimeTicks::Now();
 
-  BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE,
-                          base::Bind(&DefaultWebClientWorker::SetAsDefault,
-                                     this, interactive_permitted));
+  BrowserThread::PostTask(
+      BrowserThread::FILE, FROM_HERE,
+      base::Bind(&DefaultWebClientWorker::SetAsDefault, this));
 }
 
-void ShellIntegration::DefaultWebClientWorker::ObserverDestroyed() {
+void DefaultWebClientWorker::ObserverDestroyed() {
   // Our associated view has gone away, so we shouldn't call back to it if
   // our worker thread returns after the view is dead.
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -237,9 +212,9 @@ void ShellIntegration::DefaultWebClientWorker::ObserverDestroyed() {
 ///////////////////////////////////////////////////////////////////////////////
 // DefaultWebClientWorker, private:
 
-ShellIntegration::DefaultWebClientWorker::~DefaultWebClientWorker() {}
+DefaultWebClientWorker::~DefaultWebClientWorker() {}
 
-void ShellIntegration::DefaultWebClientWorker::OnCheckIsDefaultComplete(
+void DefaultWebClientWorker::OnCheckIsDefaultComplete(
     DefaultWebClientState state) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   UpdateUI(state);
@@ -254,13 +229,13 @@ void ShellIntegration::DefaultWebClientWorker::OnCheckIsDefaultComplete(
 
   // The worker has finished everything it needs to do, so free the observer
   // if we own it.
-  if (observer_ && observer_->IsOwnedByWorker()) {
+  if (observer_ && delete_observer_) {
     delete observer_;
     observer_ = nullptr;
   }
 }
 
-void ShellIntegration::DefaultWebClientWorker::OnSetAsDefaultAttemptComplete(
+void DefaultWebClientWorker::OnSetAsDefaultAttemptComplete(
     AttemptResult result) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   // Hold on to a reference because if this was called via the default browser
@@ -276,11 +251,6 @@ void ShellIntegration::DefaultWebClientWorker::OnSetAsDefaultAttemptComplete(
       FinalizeSetAsDefault();
       set_as_default_initialized_ = false;
     }
-    if (observer_) {
-      bool succeeded = result == AttemptResult::SUCCESS ||
-                       result == AttemptResult::ALREADY_DEFAULT;
-      observer_->OnSetAsDefaultConcluded(succeeded);
-    }
 
     // Report failures here. Successes are reported in
     // OnCheckIsDefaultComplete() after checking that the change is verified.
@@ -289,16 +259,12 @@ void ShellIntegration::DefaultWebClientWorker::OnSetAsDefaultAttemptComplete(
       ReportAttemptResult(result);
 
     // Start the default browser check which will notify the observer as to
-    // whether Chrome is really the default browser. This is needed because
-    // detecting that the process was successful is not 100% sure.
-    // For example, on Windows 10+, the user might have unchecked the "Always
-    // use this app" checkbox which can't be detected.
+    // whether Chrome was sucessfully set as the default web client.
     StartCheckIsDefault();
   }
 }
 
-void ShellIntegration::DefaultWebClientWorker::ReportAttemptResult(
-    AttemptResult result) {
+void DefaultWebClientWorker::ReportAttemptResult(AttemptResult result) {
   const char* histogram_prefix = GetHistogramPrefix();
 
   // Report result.
@@ -320,14 +286,13 @@ void ShellIntegration::DefaultWebClientWorker::ReportAttemptResult(
   }
 }
 
-bool ShellIntegration::DefaultWebClientWorker::InitializeSetAsDefault() {
+bool DefaultWebClientWorker::InitializeSetAsDefault() {
   return true;
 }
 
-void ShellIntegration::DefaultWebClientWorker::FinalizeSetAsDefault() {}
+void DefaultWebClientWorker::FinalizeSetAsDefault() {}
 
-void ShellIntegration::DefaultWebClientWorker::UpdateUI(
-    DefaultWebClientState state) {
+void DefaultWebClientWorker::UpdateUI(DefaultWebClientState state) {
   if (observer_) {
     switch (state) {
       case NOT_DEFAULT:
@@ -345,15 +310,13 @@ void ShellIntegration::DefaultWebClientWorker::UpdateUI(
   }
 }
 
-// static
-bool ShellIntegration::DefaultWebClientWorker::ShouldReportDurationForResult(
+bool DefaultWebClientWorker::ShouldReportDurationForResult(
     AttemptResult result) {
   return result == SUCCESS || result == FAILURE || result == ABANDONED ||
          result == RETRY;
 }
 
-// static
-const char* ShellIntegration::DefaultWebClientWorker::AttemptResultToString(
+const char* DefaultWebClientWorker::AttemptResultToString(
     AttemptResult result) {
   switch (result) {
     case SUCCESS:
@@ -380,28 +343,26 @@ const char* ShellIntegration::DefaultWebClientWorker::AttemptResultToString(
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// ShellIntegration::DefaultBrowserWorker
+// DefaultBrowserWorker
 //
 
-ShellIntegration::DefaultBrowserWorker::DefaultBrowserWorker(
-    DefaultWebClientObserver* observer)
-    : DefaultWebClientWorker(observer) {
-}
+DefaultBrowserWorker::DefaultBrowserWorker(DefaultWebClientObserver* observer,
+                                           bool delete_observer)
+    : DefaultWebClientWorker(observer, delete_observer) {}
 
-ShellIntegration::DefaultBrowserWorker::~DefaultBrowserWorker() {}
+DefaultBrowserWorker::~DefaultBrowserWorker() {}
 
 ///////////////////////////////////////////////////////////////////////////////
 // DefaultBrowserWorker, private:
 
-void ShellIntegration::DefaultBrowserWorker::CheckIsDefault() {
+void DefaultBrowserWorker::CheckIsDefault() {
   DefaultWebClientState state = GetDefaultBrowser();
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::Bind(&DefaultBrowserWorker::OnCheckIsDefaultComplete, this, state));
 }
 
-void ShellIntegration::DefaultBrowserWorker::SetAsDefault(
-    bool interactive_permitted) {
+void DefaultBrowserWorker::SetAsDefault() {
   AttemptResult result = AttemptResult::FAILURE;
   switch (CanSetAsDefaultBrowser()) {
     case SET_DEFAULT_NOT_ALLOWED:
@@ -412,12 +373,12 @@ void ShellIntegration::DefaultBrowserWorker::SetAsDefault(
         result = AttemptResult::SUCCESS;
       break;
     case SET_DEFAULT_INTERACTIVE:
-      if (interactive_permitted && SetAsDefaultBrowserInteractive())
+      if (interactive_permitted_ && SetAsDefaultBrowserInteractive())
         result = AttemptResult::SUCCESS;
       break;
     case SET_DEFAULT_ASYNCHRONOUS:
 #if defined(OS_WIN)
-      if (!interactive_permitted)
+      if (!interactive_permitted_)
         break;
       if (GetDefaultBrowser() == IS_DEFAULT) {
         // Don't start the asynchronous operation since it could result in
@@ -443,26 +404,26 @@ void ShellIntegration::DefaultBrowserWorker::SetAsDefault(
                  result));
 }
 
-const char* ShellIntegration::DefaultBrowserWorker::GetHistogramPrefix() {
+const char* DefaultBrowserWorker::GetHistogramPrefix() {
   return "DefaultBrowser";
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// ShellIntegration::DefaultProtocolClientWorker
+// DefaultProtocolClientWorker
 //
 
-ShellIntegration::DefaultProtocolClientWorker::DefaultProtocolClientWorker(
-    DefaultWebClientObserver* observer, const std::string& protocol)
-    : DefaultWebClientWorker(observer),
-      protocol_(protocol) {
-}
+DefaultProtocolClientWorker::DefaultProtocolClientWorker(
+    DefaultWebClientObserver* observer,
+    const std::string& protocol,
+    bool delete_observer)
+    : DefaultWebClientWorker(observer, delete_observer), protocol_(protocol) {}
 
 ///////////////////////////////////////////////////////////////////////////////
 // DefaultProtocolClientWorker, private:
 
-ShellIntegration::DefaultProtocolClientWorker::~DefaultProtocolClientWorker() {}
+DefaultProtocolClientWorker::~DefaultProtocolClientWorker() {}
 
-void ShellIntegration::DefaultProtocolClientWorker::CheckIsDefault() {
+void DefaultProtocolClientWorker::CheckIsDefault() {
   DefaultWebClientState state = IsDefaultProtocolClient(protocol_);
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
@@ -470,8 +431,7 @@ void ShellIntegration::DefaultProtocolClientWorker::CheckIsDefault() {
                  state));
 }
 
-void ShellIntegration::DefaultProtocolClientWorker::SetAsDefault(
-    bool interactive_permitted) {
+void DefaultProtocolClientWorker::SetAsDefault() {
   AttemptResult result = AttemptResult::FAILURE;
   switch (CanSetAsDefaultProtocolClient()) {
     case SET_DEFAULT_NOT_ALLOWED:
@@ -482,7 +442,7 @@ void ShellIntegration::DefaultProtocolClientWorker::SetAsDefault(
         result = AttemptResult::SUCCESS;
       break;
     case SET_DEFAULT_INTERACTIVE:
-      if (interactive_permitted &&
+      if (interactive_permitted_ &&
           SetAsDefaultProtocolClientInteractive(protocol_)) {
         result = AttemptResult::SUCCESS;
       }
@@ -497,7 +457,8 @@ void ShellIntegration::DefaultProtocolClientWorker::SetAsDefault(
                  this, result));
 }
 
-const char*
-ShellIntegration::DefaultProtocolClientWorker::GetHistogramPrefix() {
+const char* DefaultProtocolClientWorker::GetHistogramPrefix() {
   return "DefaultProtocolClient";
 }
+
+}  // namespace shell_integration

@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/allocator.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//build/util/version.gni")
@@ -259,7 +258,6 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
       "desktop_shape_tracker_unittest.cc",
       "gcd_rest_client_unittest.cc",
       "gcd_state_updater_unittest.cc",
-      "gnubby_auth_handler_posix_unittest.cc",
       "heartbeat_sender_unittest.cc",
       "host_change_notification_listener_unittest.cc",
       "host_config_unittest.cc",
@@ -272,6 +270,7 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
       "linux/unicode_to_keysym_unittest.cc",
       "linux/x_server_clipboard_unittest.cc",
       "local_input_monitor_unittest.cc",
+      "mouse_cursor_monitor_proxy_unittest.cc",
       "mouse_shape_pump_unittest.cc",
       "native_messaging/native_messaging_reader_unittest.cc",
       "native_messaging/native_messaging_writer_unittest.cc",
@@ -284,6 +283,8 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
       "resizing_host_observer_unittest.cc",
       "resources_unittest.cc",
       "screen_resolution_unittest.cc",
+      "security_key/gnubby_auth_handler_linux_unittest.cc",
+      "security_key/gnubby_extension_session_unittest.cc",
       "server_log_entry_host_unittest.cc",
       "setup/me2me_native_messaging_host_unittest.cc",
       "setup/oauth_helper_unittest.cc",
@@ -335,7 +336,7 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
                          [
                            remoting_srcs_gypi_values.daemon_controller_guid,
                            remoting_srcs_gypi_values.rdp_desktop_session_guid,
-                           version_full,
+                           chrome_version_full,
                          ],
                          "value")
     daemon_controller_clsid = clsids[0]
@@ -545,9 +546,7 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
                     "$remoting_version_patch" + "." + "$chrome_version_build" +
                     "." + "$chrome_version_patch" ]
 
-        if (is_linux && use_allocator != "none") {
-          deps += [ "//base/allocator" ]
-        } else if (is_mac || is_win) {
+        if (is_mac || is_win) {
           assert(false, "not implemented on mac or win yet")
         }
       }

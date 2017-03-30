@@ -19,13 +19,11 @@
 #include "content/public/common/main_function_params.h"
 #include "content/public/common/page_state.h"
 #include "content/public/test/mock_render_thread.h"
+#include "mojo/edk/test/scoped_ipc_support.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebLeakDetector.h"
-#include "third_party/mojo/src/mojo/edk/test/scoped_ipc_support.h"
-
-struct ViewMsg_Resize_Params;
 
 namespace blink {
 class WebInputElement;
@@ -50,6 +48,7 @@ class PageState;
 class RendererMainPlatformDelegate;
 class RendererBlinkPlatformImplTestOverrideImpl;
 class RenderView;
+struct ResizeParams;
 
 class RenderViewTest : public testing::Test, blink::WebLeakDetectorClient {
  public:
@@ -178,7 +177,7 @@ class RenderViewTest : public testing::Test, blink::WebLeakDetectorClient {
   virtual ContentRendererClient* CreateContentRendererClient();
 
   // Allows a subclass to customize the initial size of the RenderView.
-  virtual scoped_ptr<ViewMsg_Resize_Params> InitialSizeParams();
+  virtual scoped_ptr<ResizeParams> InitialSizeParams();
 
   // testing::Test
   void SetUp() override;
@@ -207,7 +206,7 @@ class RenderViewTest : public testing::Test, blink::WebLeakDetectorClient {
 
   // For Mojo.
   scoped_ptr<base::TestIOThread> test_io_thread_;
-  scoped_ptr<mojo::test::ScopedIPCSupport> ipc_support_;
+  scoped_ptr<mojo::edk::test::ScopedIPCSupport> ipc_support_;
 
 #if defined(OS_MACOSX)
   scoped_ptr<base::mac::ScopedNSAutoreleasePool> autorelease_pool_;

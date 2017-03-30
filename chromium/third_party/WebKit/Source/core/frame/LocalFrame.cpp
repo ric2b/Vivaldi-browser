@@ -57,9 +57,12 @@
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoaderClient.h"
 #include "core/loader/NavigationScheduler.h"
+#include "core/page/ChromeClient.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
+#include "core/paint/ObjectPainter.h"
+#include "core/paint/PaintInfo.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/TransformRecorder.h"
 #include "core/svg/SVGDocumentExtensions.h"
@@ -71,8 +74,10 @@
 #include "platform/graphics/StaticBitmapImage.h"
 #include "platform/graphics/paint/ClipRecorder.h"
 #include "platform/graphics/paint/SkPictureBuilder.h"
+#include "platform/graphics/paint/TransformDisplayItem.h"
 #include "platform/text/TextStream.h"
 #include "public/platform/WebFrameScheduler.h"
+#include "public/platform/WebScreenInfo.h"
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebViewScheduler.h"
 #include "third_party/skia/include/core/SkImage.h"
@@ -85,27 +90,59 @@ using namespace HTMLNames;
 
 namespace {
 
-struct ScopedFramePaintingState {
+// Convenience class for initializing a GraphicsContext to build a DragImage from a specific
+// region specified by |bounds|. After painting the using context(), the DragImage returned from
+// createImage() will only contain the content in |bounds| with the appropriate device scale
+// factor included.
+class DragImageBuilder {
     STACK_ALLOCATED();
 public:
-    ScopedFramePaintingState(LocalFrame* frame, Node* node)
-        : frame(frame)
-        , node(node)
+    DragImageBuilder(const LocalFrame* localFrame, const FloatRect& bounds, Node* draggedNode, float opacity = 1)
+        : m_localFrame(localFrame)
+        , m_draggedNode(draggedNode)
+        , m_bounds(bounds)
+        , m_opacity(opacity)
     {
-        ASSERT(!node || node->layoutObject());
-        if (node)
-            node->layoutObject()->updateDragState(true);
+        if (m_draggedNode && m_draggedNode->layoutObject())
+            m_draggedNode->layoutObject()->updateDragState(true);
+
+        float deviceScaleFactor = m_localFrame->host()->deviceScaleFactor();
+        m_bounds.setWidth(m_bounds.width() * deviceScaleFactor);
+        m_bounds.setHeight(m_bounds.height() * deviceScaleFactor);
+        m_pictureBuilder = adoptPtr(new SkPictureBuilder(SkRect::MakeIWH(m_bounds.width(), m_bounds.height())));
+
+        AffineTransform transform;
+        transform.scale(deviceScaleFactor, deviceScaleFactor);
+        transform.translate(-m_bounds.x(), -m_bounds.y());
+        context().paintController().createAndAppend<BeginTransformDisplayItem>(*m_localFrame, transform);
     }
 
-    ~ScopedFramePaintingState()
+    GraphicsContext& context() { return m_pictureBuilder->context(); }
+
+    PassOwnPtr<DragImage> createImage()
     {
-        if (node && node->layoutObject())
-            node->layoutObject()->updateDragState(false);
-        frame->view()->setNodeToDraw(0);
+        if (m_draggedNode && m_draggedNode->layoutObject())
+            m_draggedNode->layoutObject()->updateDragState(false);
+        context().paintController().endItem<EndTransformDisplayItem>(*m_localFrame);
+        RefPtr<const SkPicture> recording = m_pictureBuilder->endRecording();
+        RefPtr<SkImage> skImage = adoptRef(SkImage::NewFromPicture(recording.get(),
+            SkISize::Make(m_bounds.width(), m_bounds.height()), nullptr, nullptr));
+        RefPtr<Image> image = StaticBitmapImage::create(skImage.release());
+        RespectImageOrientationEnum imageOrientation = DoNotRespectImageOrientation;
+        if (m_draggedNode && m_draggedNode->layoutObject())
+            imageOrientation = LayoutObject::shouldRespectImageOrientation(m_draggedNode->layoutObject());
+
+        float screenDeviceScaleFactor = m_localFrame->page()->chromeClient().screenInfo().deviceScaleFactor;
+
+        return DragImage::create(image.get(), imageOrientation, screenDeviceScaleFactor, InterpolationHigh, m_opacity);
     }
 
-    RawPtrWillBeMember<LocalFrame> frame;
-    RawPtrWillBeMember<Node> node;
+private:
+    RawPtrWillBeMember<const LocalFrame> m_localFrame;
+    RawPtrWillBeMember<Node> m_draggedNode;
+    FloatRect m_bounds;
+    float m_opacity;
+    OwnPtr<SkPictureBuilder> m_pictureBuilder;
 };
 
 inline float parentPageZoomFactor(LocalFrame* frame)
@@ -255,8 +292,6 @@ void LocalFrame::navigate(Document& originDocument, const KURL& url, bool replac
 
 void LocalFrame::navigate(const FrameLoadRequest& request)
 {
-    if (!isNavigationAllowed())
-        return;
     m_loader.load(request);
 }
 
@@ -301,6 +336,10 @@ void LocalFrame::detach(FrameDetachType type)
     m_loader.stopAllLoaders();
     m_loader.detach();
     document()->detach();
+    // This is the earliest that scripting can be disabled:
+    // - FrameLoader::detach() can fire XHR abort events
+    // - Document::detach()'s deferred widget updates can run script.
+    ScriptForbiddenScope forbidScript;
     m_loader.clear();
     if (!client())
         return;
@@ -309,7 +348,6 @@ void LocalFrame::detach(FrameDetachType type)
     // Notify ScriptController that the frame is closing, since its cleanup ends up calling
     // back to FrameLoaderClient via WindowProxy.
     script().clearForClose();
-    ScriptForbiddenScope forbidScript;
     setView(nullptr);
     willDetachFrameHost();
     InspectorInstrumentation::frameDetachedFromParent(this);
@@ -318,28 +356,7 @@ void LocalFrame::detach(FrameDetachType type)
     // Signal frame destruction here rather than in the destructor.
     // Main motivation is to avoid being dependent on its exact timing (Oilpan.)
     LocalFrameLifecycleNotifier::notifyContextDestroyed();
-    // TODO(dcheng): Temporary, to debug https://crbug.com/531291.
-    // If this is true, we somehow re-entered LocalFrame::detach. But this is
-    // probably OK?
-    if (m_supplementStatus == SupplementStatus::Cleared)
-        RELEASE_ASSERT(m_supplements.isEmpty());
-    // If this is true, we somehow re-entered LocalFrame::detach in the middle
-    // of cleaning up supplements.
-    RELEASE_ASSERT(m_supplementStatus != SupplementStatus::Clearing);
-    RELEASE_ASSERT(m_supplementStatus == SupplementStatus::Uncleared);
-    m_supplementStatus = SupplementStatus::Clearing;
-
-    // TODO(haraken): Temporary code to debug https://crbug.com/531291.
-    // Check that m_supplements doesn't duplicate OwnPtrs.
-    HashSet<void*> supplementPointers;
-    for (auto& it : m_supplements) {
-        void* pointer = reinterpret_cast<void*>(it.value.get());
-        RELEASE_ASSERT(!supplementPointers.contains(pointer));
-        supplementPointers.add(pointer);
-    }
-
     m_supplements.clear();
-    m_supplementStatus = SupplementStatus::Cleared;
     WeakIdentifierMap<LocalFrame>::notifyObjectDestroyed(this);
 }
 
@@ -612,63 +629,27 @@ double LocalFrame::devicePixelRatio() const
     return ratio;
 }
 
-PassOwnPtr<DragImage> LocalFrame::paintIntoDragImage(
-    const DisplayItemClient& displayItemClient,
-    RespectImageOrientationEnum shouldRespectImageOrientation,
-    const GlobalPaintFlags globalPaintFlags, IntRect paintingRect, float opacity)
-{
-    ASSERT(document()->isActive());
-    // Not flattening compositing layers will result in a broken image being painted.
-    ASSERT(globalPaintFlags & GlobalPaintFlattenCompositingLayers);
-
-    float deviceScaleFactor = m_host->deviceScaleFactor();
-    paintingRect.setWidth(paintingRect.width() * deviceScaleFactor);
-    paintingRect.setHeight(paintingRect.height() * deviceScaleFactor);
-
-    // The content is shifted to origin, to fit within the image bounds - which are the same
-    // as the picture bounds.
-    SkRect pictureBounds = SkRect::MakeIWH(paintingRect.width(), paintingRect.height());
-    SkPictureBuilder pictureBuilder(pictureBounds);
-    {
-        GraphicsContext& paintContext = pictureBuilder.context();
-
-        AffineTransform transform;
-        transform.scale(deviceScaleFactor, deviceScaleFactor);
-        transform.translate(-paintingRect.x(), -paintingRect.y());
-        TransformRecorder transformRecorder(paintContext, displayItemClient, transform);
-
-        m_view->paintContents(paintContext, globalPaintFlags, paintingRect);
-
-    }
-    RefPtr<const SkPicture> recording = pictureBuilder.endRecording();
-    RefPtr<SkImage> skImage = adoptRef(SkImage::NewFromPicture(recording.get(),
-        SkISize::Make(paintingRect.width(), paintingRect.height()), nullptr, nullptr));
-    RefPtr<Image> image = StaticBitmapImage::create(skImage.release());
-
-    return DragImage::create(image.get(), shouldRespectImageOrientation, deviceScaleFactor,
-        InterpolationHigh, opacity);
-}
-
 PassOwnPtr<DragImage> LocalFrame::nodeImage(Node& node)
 {
-    if (!node.layoutObject())
-        return nullptr;
-
-    const ScopedFramePaintingState state(this, &node);
-
     m_view->updateAllLifecyclePhases();
-
-    m_view->setNodeToDraw(&node); // Enable special sub-tree drawing mode.
-
-    // Document::updateLayout may have blown away the original LayoutObject.
     LayoutObject* layoutObject = node.layoutObject();
     if (!layoutObject)
         return nullptr;
 
-    IntRect rect;
-
-    return paintIntoDragImage(*layoutObject, LayoutObject::shouldRespectImageOrientation(layoutObject),
-        GlobalPaintFlattenCompositingLayers, layoutObject->paintingRootRect(rect));
+    // Paint starting at the nearest self painting layer, clipped to the object itself.
+    // TODO(pdr): This will also paint the content behind the object if the object contains
+    // transparency but the layer is opaque. We could directly call layoutObject->paint(...)
+    // (see ObjectPainter::paintAsPseudoStackingContext) but this would skip self-painting children.
+    PaintLayer* layer = layoutObject->enclosingLayer()->enclosingSelfPaintingLayer();
+    IntRect absoluteBoundingBox = layoutObject->absoluteBoundingBoxRectIncludingDescendants();
+    FloatRect boundingBox = layer->layoutObject()->absoluteToLocalQuad(FloatQuad(absoluteBoundingBox), UseTransforms).boundingBox();
+    DragImageBuilder dragImageBuilder(this, boundingBox, &node);
+    {
+        PaintLayerPaintingInfo paintingInfo(layer, LayoutRect(boundingBox), GlobalPaintFlattenCompositingLayers, LayoutSize(), 0);
+        PaintLayerFlags flags = PaintLayerHaveTransparency | PaintLayerAppliedTransform | PaintLayerUncachedClipRects;
+        PaintLayerPainter(*layer).paintLayer(dragImageBuilder.context(), paintingInfo, flags);
+    }
+    return dragImageBuilder.createImage();
 }
 
 PassOwnPtr<DragImage> LocalFrame::dragImageForSelection(float opacity)
@@ -676,12 +657,14 @@ PassOwnPtr<DragImage> LocalFrame::dragImageForSelection(float opacity)
     if (!selection().isRange())
         return nullptr;
 
-    const ScopedFramePaintingState state(this, 0);
     m_view->updateAllLifecyclePhases();
+    ASSERT(document()->isActive());
 
-    return paintIntoDragImage(*this, DoNotRespectImageOrientation,
-        GlobalPaintSelectionOnly | GlobalPaintFlattenCompositingLayers,
-        enclosingIntRect(selection().bounds()), opacity);
+    FloatRect paintingRect = FloatRect(selection().bounds());
+    DragImageBuilder dragImageBuilder(this, paintingRect, nullptr, opacity);
+    GlobalPaintFlags paintFlags = GlobalPaintSelectionOnly | GlobalPaintFlattenCompositingLayers;
+    m_view->paintContents(dragImageBuilder.context(), paintFlags, enclosingIntRect(paintingRect));
+    return dragImageBuilder.createImage();
 }
 
 String LocalFrame::selectedText() const
@@ -779,15 +762,15 @@ void LocalFrame::removeSpellingMarkersUnderWords(const Vector<String>& words)
     spellChecker().removeSpellingMarkersUnderWords(words);
 }
 
-static ScrollResult scrollAreaOnBothAxes(const FloatSize& delta, ScrollableArea& view)
+static ScrollResult scrollAreaOnBothAxes(ScrollGranularity granularity, const FloatSize& delta, ScrollableArea& view)
 {
-    ScrollResultOneDimensional scrolledHorizontal = view.userScroll(ScrollLeft, ScrollByPrecisePixel, delta.width());
-    ScrollResultOneDimensional scrolledVertical = view.userScroll(ScrollUp, ScrollByPrecisePixel, delta.height());
+    ScrollResultOneDimensional scrolledHorizontal = view.userScroll(ScrollLeft, granularity, delta.width());
+    ScrollResultOneDimensional scrolledVertical = view.userScroll(ScrollUp, granularity, delta.height());
     return ScrollResult(scrolledHorizontal.didScroll, scrolledVertical.didScroll, scrolledHorizontal.unusedScrollDelta, scrolledVertical.unusedScrollDelta);
 }
 
 // Returns true if a scroll occurred.
-ScrollResult LocalFrame::applyScrollDelta(const FloatSize& delta, bool isScrollBegin)
+ScrollResult LocalFrame::applyScrollDelta(ScrollGranularity granularity, const FloatSize& delta, bool isScrollBegin)
 {
     if (isScrollBegin)
         host()->topControls().scrollBegin();
@@ -804,7 +787,7 @@ ScrollResult LocalFrame::applyScrollDelta(const FloatSize& delta, bool isScrollB
     if (remainingDelta.isZero())
         return ScrollResult(delta.width(), delta.height(), 0.0f, 0.0f);
 
-    ScrollResult result = scrollAreaOnBothAxes(remainingDelta, *view()->scrollableArea());
+    ScrollResult result = scrollAreaOnBothAxes(granularity, remainingDelta, *view()->scrollableArea());
     result.didScrollX = result.didScrollX || (remainingDelta.width() != delta.width());
     result.didScrollY = result.didScrollY || (remainingDelta.height() != delta.height());
 

@@ -42,23 +42,6 @@
         'OZONE_BASE_IMPLEMENTATION',
       ],
       'sources': [
-        'common/display_mode_proxy.cc',
-        'common/display_mode_proxy.h',
-        'common/display_snapshot_proxy.cc',
-        'common/display_snapshot_proxy.h',
-        'common/display_util.cc',
-        'common/display_util.h',
-        'common/egl_util.cc',
-        'common/egl_util.h',
-        'common/gpu/ozone_gpu_message_generator.cc',
-        'common/gpu/ozone_gpu_message_generator.h',
-        'common/gpu/ozone_gpu_message_params.cc',
-        'common/gpu/ozone_gpu_message_params.h',
-        'common/gpu/ozone_gpu_messages.h',
-        'common/native_display_delegate_ozone.cc',
-        'common/native_display_delegate_ozone.h',
-        'common/stub_overlay_manager.cc',
-        'common/stub_overlay_manager.h',
         'public/client_native_pixmap.h',
         'public/cursor_factory_ozone.cc',
         'public/cursor_factory_ozone.h',
@@ -83,9 +66,43 @@
       ],
     },
     {
-      # GN version: //ui/ozone
-      'target_name': 'ozone',
-      'type': '<(component)',
+      # GN version: //ui/ozone/common
+      'target_name': 'ozone_common',
+      'type': 'static_library',
+      'dependencies': [
+        'ozone_base',
+        '<(DEPTH)/base/base.gyp:base',
+        '<(DEPTH)/ipc/ipc.gyp:ipc',
+        '<(DEPTH)/skia/skia.gyp:skia',
+        '<(DEPTH)/ui/display/display.gyp:display_types',
+        '<(DEPTH)/ui/display/display.gyp:display_util',
+        '<(DEPTH)/ui/gfx/gfx.gyp:gfx_geometry',
+        '<(DEPTH)/ui/gfx/ipc/gfx_ipc.gyp:gfx_ipc',
+      ],
+      'sources': [
+        'common/display_mode_proxy.cc',
+        'common/display_mode_proxy.h',
+        'common/display_snapshot_proxy.cc',
+        'common/display_snapshot_proxy.h',
+        'common/display_util.cc',
+        'common/display_util.h',
+        'common/egl_util.cc',
+        'common/egl_util.h',
+        'common/gpu/ozone_gpu_message_generator.cc',
+        'common/gpu/ozone_gpu_message_generator.h',
+        'common/gpu/ozone_gpu_message_params.cc',
+        'common/gpu/ozone_gpu_message_params.h',
+        'common/gpu/ozone_gpu_messages.h',
+        'common/native_display_delegate_ozone.cc',
+        'common/native_display_delegate_ozone.h',
+        'common/stub_overlay_manager.cc',
+        'common/stub_overlay_manager.h',
+      ],
+    },
+    {
+      # GN version: //ui/ozone:platform
+      'target_name': 'ozone_platform',
+      'type': 'static_library',
       'dependencies': [
         '<(DEPTH)/base/base.gyp:base',
         '<(DEPTH)/ipc/ipc.gyp:ipc',
@@ -195,13 +212,23 @@
       ],
     },
     {
+      # GN version: //ui/ozone
+      'target_name': 'ozone',
+      'type': '<(component)',
+      'sources': [
+        'empty.cc',
+      ],
+      'dependencies': [
+        'ozone_platform',
+      ],
+    },
+    {
       'target_name': 'ozone_unittests',
       'type': '<(gtest_target_type)',
       'sources': [
         'run_all_unittests.cc',
       ],
       'dependencies': [
-        'ozone',
         '../../base/base.gyp:base',
         '../../base/base.gyp:test_support_base',
         '../../testing/gtest.gyp:gtest',
@@ -248,6 +275,11 @@
     ['<(ozone_platform_headless) == 1', {
       'includes': [
         'platform/headless/headless.gypi',
+      ],
+    }],
+    ['<(ozone_platform_wayland) == 1', {
+      'includes': [
+        'platform/wayland/wayland.gypi',
       ],
     }],
   ],

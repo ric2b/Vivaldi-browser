@@ -16,9 +16,6 @@
 #include "base/md5.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -34,13 +31,16 @@
 #include "components/history/core/browser/top_sites_observer.h"
 #include "components/history/core/browser/url_utils.h"
 #include "components/history/core/common/thumbnail_score.h"
-#include "content/public/browser/browser_thread.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_util.h"
 
 #include "app/vivaldi_apptools.h"
+#include "content/public/browser/browser_thread.h"
 #include "prefs/vivaldi_pref_names.h"
 
 using base::DictionaryValue;
@@ -95,7 +95,7 @@ const int64_t kMinUpdateIntervalMinutes = 1;
 // On mobile, having the max at 60 minutes results in the topsites database
 // being not updated often enough since the app isn't usually running for long
 // stretches of time.
-const int64_t kMaxUpdateIntervalMinutes = 1;
+const int64_t kMaxUpdateIntervalMinutes = 5;
 #else
 const int64_t kMaxUpdateIntervalMinutes = 60;
 #endif  // defined(OS_IOS) || defined(OS_ANDROID)

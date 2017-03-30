@@ -9,36 +9,41 @@
 #include "mojo/public/cpp/bindings/array.h"
 #include "mojo/public/cpp/bindings/string.h"
 #include "mojo/public/cpp/system/macros.h"
-#include "mojo/shell/public/cpp/application_delegate.h"
-#include "mojo/shell/public/interfaces/application.mojom.h"
+#include "mojo/shell/public/cpp/connector.h"
+#include "mojo/shell/public/cpp/shell_client.h"
+#include "mojo/shell/public/cpp/shell_connection.h"
+#include "mojo/shell/public/interfaces/shell_client.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace mojo {
 
-class ApplicationImpl;
+class ShellConnection;
 
 namespace test {
 
 // Run all application tests. This must be called after the environment is
 // initialized, to support construction of a default run loop.
-MojoResult RunAllTests(MojoHandle application_request_handle);
+MojoResult RunAllTests(MojoHandle shell_client_request_handle);
 
-// Used to configure the ApplicationImpl. This is used internally by
+// Used to configure the ShellConnection. This is used internally by
 // ApplicationTestBase, but useful if you do not want to subclass
 // ApplicationTestBase.
 class TestHelper {
  public:
-  explicit TestHelper(ApplicationDelegate* delegate);
+  explicit TestHelper(ShellClient* client);
   ~TestHelper();
 
-  ApplicationImpl* application_impl() { return application_impl_.get(); }
+  Connector* connector() { return shell_connection_->connector(); }
+  std::string test_url() { return url_; }
 
  private:
-  // The application delegate used if GetApplicationDelegate is not overridden.
-  ApplicationDelegate default_application_delegate_;
+  // The application delegate used if GetShellClient is not overridden.
+  ShellClient default_shell_client_;
 
   // The application implementation instance, reconstructed for each test.
-  scoped_ptr<ApplicationImpl> application_impl_;
+  scoped_ptr<ShellConnection> shell_connection_;
+
+  std::string url_;
 
   MOJO_DISALLOW_COPY_AND_ASSIGN(TestHelper);
 };
@@ -50,12 +55,15 @@ class ApplicationTestBase : public testing::Test {
   ~ApplicationTestBase() override;
 
  protected:
-  ApplicationImpl* application_impl() {
-    return test_helper_ ? test_helper_->application_impl() : nullptr;
+  Connector* connector() {
+    return test_helper_ ? test_helper_->connector() : nullptr;
+  }
+  std::string test_url() const {
+    return test_helper_ ? test_helper_->test_url() : std::string();
   }
 
-  // Get the ApplicationDelegate for the application to be tested.
-  virtual ApplicationDelegate* GetApplicationDelegate();
+  // Get the ShellClient for the application to be tested.
+  virtual ShellClient* GetShellClient();
 
   // testing::Test:
   void SetUp() override;

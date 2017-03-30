@@ -23,6 +23,7 @@ import android.support.v4.app.NotificationManagerCompat;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
+import android.support.v7.media.MediaRouter;
 import android.util.SparseArray;
 import android.view.KeyEvent;
 import android.view.View;
@@ -31,7 +32,6 @@ import android.widget.RemoteViews;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.tab.Tab;
 
 import javax.annotation.Nullable;
 
@@ -201,7 +201,20 @@ public class MediaNotificationManager {
         }
     }
 
-    // Two classes to specify the right notification id in the intent.
+    /**
+     * This class is used internally but have to be public to be able to launch the service.
+     */
+    public static final class CastListenerService extends ListenerService {
+        private static final int NOTIFICATION_ID = R.id.remote_notification;
+
+        @Override
+        @Nullable
+        protected MediaNotificationManager getManager() {
+            return MediaNotificationManager.getManager(NOTIFICATION_ID);
+        }
+    }
+
+    // Three classes to specify the right notification id in the intent.
 
     /**
      * This class is used internally but have to be public to be able to launch the service.
@@ -223,12 +236,24 @@ public class MediaNotificationManager {
         }
     }
 
+    /**
+     * This class is used internally but have to be public to be able to launch the service.
+     */
+    public static final class CastMediaButtonReceiver extends MediaButtonReceiver {
+        @Override
+        public String getServiceClassName() {
+            return CastListenerService.class.getName();
+        }
+    }
+
     private Intent createIntent(Context context) {
         Intent intent = null;
         if (mMediaNotificationInfo.id == PlaybackListenerService.NOTIFICATION_ID) {
             intent = new Intent(context, PlaybackListenerService.class);
         } else if (mMediaNotificationInfo.id == PresentationListenerService.NOTIFICATION_ID) {
             intent = new Intent(context, PresentationListenerService.class);
+        }  else if (mMediaNotificationInfo.id == CastListenerService.NOTIFICATION_ID) {
+            intent = new Intent(context, CastListenerService.class);
         }
         return intent;
     }
@@ -246,6 +271,10 @@ public class MediaNotificationManager {
 
         if (mMediaNotificationInfo.id == PresentationListenerService.NOTIFICATION_ID) {
             return PresentationMediaButtonReceiver.class.getName();
+        }
+
+        if (mMediaNotificationInfo.id == CastListenerService.NOTIFICATION_ID) {
+            return CastMediaButtonReceiver.class.getName();
         }
 
         assert false;
@@ -348,7 +377,7 @@ public class MediaNotificationManager {
 
     private Bitmap mNotificationIcon;
 
-    private final Bitmap mMediaSessionIcon;
+    private final Bitmap mDefaultMediaSessionImage;
 
     // |mMediaNotificationInfo| should be not null if and only if the notification is showing.
     private MediaNotificationInfo mMediaNotificationInfo;
@@ -383,8 +412,8 @@ public class MediaNotificationManager {
 
         // The MediaSession icon is a plain color.
         int size = context.getResources().getDimensionPixelSize(R.dimen.media_session_icon_size);
-        mMediaSessionIcon = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
-        mMediaSessionIcon.eraseColor(ApiCompatibilityUtils.getColor(
+        mDefaultMediaSessionImage = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        mDefaultMediaSessionImage.eraseColor(ApiCompatibilityUtils.getColor(
                 context.getResources(), R.color.media_session_icon_color));
     }
 
@@ -506,19 +535,29 @@ public class MediaNotificationManager {
     private MediaMetadataCompat createMetadata() {
         MediaMetadataCompat.Builder metadataBuilder = new MediaMetadataCompat.Builder();
 
+        // Choose the image to use as the icon.
+        Bitmap mediaSessionImage = mMediaNotificationInfo.image == null ? mDefaultMediaSessionImage
+                : mMediaNotificationInfo.image;
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE,
                     mMediaNotificationInfo.title);
             metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE,
                     mMediaNotificationInfo.origin);
             metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON,
-                    mMediaSessionIcon);
+                    mediaSessionImage);
+            // METADATA_KEY_ART is optional and should only be used if we can provide something
+            // better than the default image.
+            if (mMediaNotificationInfo.image != null) {
+                metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART,
+                        mMediaNotificationInfo.image);
+            }
         } else {
             metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_TITLE,
                     mMediaNotificationInfo.title);
             metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ARTIST,
                     mMediaNotificationInfo.origin);
-            metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, mMediaSessionIcon);
+            metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, mediaSessionImage);
         }
 
         return metadataBuilder.build();
@@ -549,11 +588,12 @@ public class MediaNotificationManager {
             mNotificationBuilder.setOngoing(!mMediaNotificationInfo.isPaused);
         }
 
-        int tabId = mMediaNotificationInfo.tabId;
-        Intent tabIntent = Tab.createBringTabToFrontIntent(tabId);
-        if (tabIntent != null) {
-            mNotificationBuilder
-                    .setContentIntent(PendingIntent.getActivity(mContext, tabId, tabIntent, 0));
+        // The intent will currently only be null when using a custom tab.
+        // TODO(avayvod) work out what we should do in this case. See https://crbug.com/585395.
+        if (mMediaNotificationInfo.contentIntent != null) {
+            mNotificationBuilder.setContentIntent(PendingIntent.getActivity(mContext,
+                    mMediaNotificationInfo.tabId,
+                    mMediaNotificationInfo.contentIntent, 0));
         }
 
         mNotificationBuilder.setContent(createContentView());
@@ -561,9 +601,20 @@ public class MediaNotificationManager {
                 mMediaNotificationInfo.isPrivate ? NotificationCompat.VISIBILITY_PRIVATE
                                                  : NotificationCompat.VISIBILITY_PUBLIC);
 
-        if (mMediaNotificationInfo.supportsPlayPause()) {
-            if (mMediaSession == null) mMediaSession = createMediaSession();
 
+        if (mMediaNotificationInfo.supportsPlayPause()) {
+
+            if (mMediaSession == null) mMediaSession = createMediaSession();
+            try {
+                // Tell the MediaRouter about the session, so that Chrome can control the volume
+                // on the remote cast device (if any).
+                // Pre-MR1 versions of JB do not have the complete MediaRouter APIs,
+                // so getting the MediaRouter instance will throw an exception.
+                MediaRouter.getInstance(mContext).setMediaSessionCompat(mMediaSession);
+            } catch (NoSuchMethodError e) {
+                // Do nothing. Chrome can't be casting without a MediaRouter, so there is nothing
+                // to do here.
+            }
             mMediaSession.setMetadata(createMetadata());
 
             PlaybackStateCompat.Builder playbackStateBuilder = new PlaybackStateCompat.Builder()
@@ -572,7 +623,6 @@ public class MediaNotificationManager {
                 playbackStateBuilder.setState(PlaybackStateCompat.STATE_PAUSED,
                         PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1.0f);
             } else {
-                // If notification only supports stop, still pretend
                 playbackStateBuilder.setState(PlaybackStateCompat.STATE_PLAYING,
                         PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1.0f);
             }

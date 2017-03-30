@@ -15,7 +15,6 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/sparse_histogram.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -29,6 +28,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "third_party/icu/source/common/unicode/uloc.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -481,6 +481,8 @@ void InputMethodManagerImpl::StateImpl::AddInputMethodExtension(
     if (contain)
       manager_->MaybeInitializeCandidateWindowController();
   }
+
+  manager_->NotifyImeMenuListChanged();
 }
 
 void InputMethodManagerImpl::StateImpl::RemoveInputMethodExtension(
@@ -889,6 +891,11 @@ void InputMethodManagerImpl::AddCandidateWindowObserver(
   candidate_window_observers_.AddObserver(observer);
 }
 
+void InputMethodManagerImpl::AddImeMenuObserver(
+    InputMethodManager::ImeMenuObserver* observer) {
+  ime_menu_observers_.AddObserver(observer);
+}
+
 void InputMethodManagerImpl::RemoveObserver(
     InputMethodManager::Observer* observer) {
   observers_.RemoveObserver(observer);
@@ -897,6 +904,11 @@ void InputMethodManagerImpl::RemoveObserver(
 void InputMethodManagerImpl::RemoveCandidateWindowObserver(
     InputMethodManager::CandidateWindowObserver* observer) {
   candidate_window_observers_.RemoveObserver(observer);
+}
+
+void InputMethodManagerImpl::RemoveImeMenuObserver(
+    InputMethodManager::ImeMenuObserver* observer) {
+  ime_menu_observers_.RemoveObserver(observer);
 }
 
 InputMethodManager::UISessionState InputMethodManagerImpl::GetUISessionState() {
@@ -1023,6 +1035,8 @@ void InputMethodManagerImpl::ChangeInputMethodInternal(
   // Update input method indicators (e.g. "US", "DV") in Chrome windows.
   FOR_EACH_OBSERVER(InputMethodManager::Observer, observers_,
                     InputMethodChanged(this, profile, show_message));
+  // Update the current input method in IME menu.
+  NotifyImeMenuListChanged();
 }
 
 void InputMethodManagerImpl::LoadNecessaryComponentExtensions(
@@ -1151,6 +1165,16 @@ void InputMethodManagerImpl::CandidateWindowClosed() {
   FOR_EACH_OBSERVER(InputMethodManager::CandidateWindowObserver,
                     candidate_window_observers_,
                     CandidateWindowClosed(this));
+}
+
+void InputMethodManagerImpl::ImeMenuActivationChanged(bool is_active) {
+  FOR_EACH_OBSERVER(InputMethodManager::ImeMenuObserver, ime_menu_observers_,
+                    ImeMenuActivationChanged(is_active));
+}
+
+void InputMethodManagerImpl::NotifyImeMenuListChanged() {
+  FOR_EACH_OBSERVER(InputMethodManager::ImeMenuObserver, ime_menu_observers_,
+                    ImeMenuListChanged());
 }
 
 void InputMethodManagerImpl::MaybeInitializeCandidateWindowController() {

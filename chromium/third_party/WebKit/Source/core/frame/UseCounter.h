@@ -119,8 +119,6 @@ public:
         UnprefixedUserTiming = 67,
         WindowEvent = 69,
         ContentSecurityPolicyWithBaseElement = 70,
-        PrefixedMediaAddKey = 71,
-        PrefixedMediaGenerateKeyRequest = 72,
         DocumentClear = 74,
         XMLDocument = 77,
         XSLProcessingInstruction = 78,
@@ -130,7 +128,6 @@ public:
         FormElement = 84,
         DemotedFormElement = 85,
         SVGAnimationElement = 90,
-        KeyboardEventKeyLocation = 91,
         LineClamp = 96,
         SubFrameBeforeUnloadRegistered = 97,
         SubFrameBeforeUnloadFired = 98,
@@ -223,8 +220,6 @@ public:
         // The above items are available in M33 branch.
 
         InitMessageEvent = 222,
-        PrefixedMediaCancelKeyRequest = 229,
-        CanPlayTypeKeySystem = 232,
         PrefixedDevicePixelRatioMediaFeature = 233,
         PrefixedMaxDevicePixelRatioMediaFeature = 234,
         PrefixedMinDevicePixelRatioMediaFeature = 235,
@@ -279,8 +274,6 @@ public:
         NamedNodeMapGetNamedItemNS = 310,
         NamedNodeMapSetNamedItemNS = 311,
         NamedNodeMapRemoveNamedItemNS = 312,
-        XHRProgressEventPosition = 316,
-        XHRProgressEventTotalSize = 317,
         PrefixedDocumentIsFullscreen = 318,
         PrefixedDocumentCurrentFullScreenElement = 320,
         PrefixedDocumentCancelFullScreen = 321,
@@ -355,7 +348,6 @@ public:
         DocumentPointerLockElement = 422,
         PrefixedCursorZoomIn = 424,
         PrefixedCursorZoomOut = 425,
-        DocumentDefaultCharset = 428,
         TextEncoderConstructor = 429,
         TextEncoderEncode = 430,
         TextDecoderConstructor = 431,
@@ -468,7 +460,6 @@ public:
         NotificationSecureOrigin = 563,
         NotificationInsecureOrigin = 564,
         NotificationShowEvent = 565,
-        CSSXGetComputedStyleQueries = 566,
         SVGTransformListConsolidate = 569,
         SVGAnimatedTransformListBaseVal = 570,
         QuotedAnimationName = 571,
@@ -736,11 +727,6 @@ public:
         HTMLKeygenElement = 886,
         // The above items are available in M45 branch.
 
-        V8SVGElement_OffsetParent_AttributeGetter = 887,
-        V8SVGElement_OffsetTop_AttributeGetter = 888,
-        V8SVGElement_OffsetLeft_AttributeGetter = 889,
-        V8SVGElement_OffsetWidth_AttributeGetter = 890,
-        V8SVGElement_OffsetHeight_AttributeGetter = 891,
         HTMLMediaElementPreloadNone = 892,
         HTMLMediaElementPreloadMetadata = 893,
         HTMLMediaElementPreloadAuto = 894,
@@ -791,8 +777,6 @@ public:
         // The above items are available in M46 branch.
 
         HTMLImportsHasStyleSheets = 940,
-        WebkitTextInClipProperty = 941,
-        WebkitTextInColorProperty = 942,
         ClipPathOfPositionedElement = 944,
         ClipCssOfPositionedElement = 945,
         NetInfoType = 946,
@@ -947,7 +931,6 @@ public:
         V8SVGSVGElement_CreateSVGTransform_Method = 1091,
         V8SVGSVGElement_CreateSVGTransformFromMatrix_Method = 1092,
         FormNameAccessForNonDescendantImageElement = 1093,
-        FormControlsCollectionNameAccessForImageElement = 1094,
         V8SVGSVGElement_Viewport_AttributeGetter = 1095,
         V8RegExpPrototypeStickyGetter = 1096,
         V8RegExpPrototypeToString = 1097,
@@ -971,9 +954,30 @@ public:
         SVG1DOMImageElement = 1115,
         SVG1DOMForeignObjectElement = 1116,
         AudioContextCreateIIRFilter = 1117,
+        // The above items are available in M49 branch
+
+        CSSSelectorPseudoSlotted = 1118,
+        MediaDevicesEnumerateDevices = 1119,
         NonSecureSharedWorkerAccessedFromSecureContext = 1120,
         SecureSharedWorkerAccessedFromNonSecureContext = 1121,
-        NonCSSStyleSheetType = 1122,
+        EventDeepPath = 1123,
+        LinkHeaderPreload = 1124,
+        MouseWheelEvent = 1125,
+        WheelEvent = 1126,
+        MouseWheelAndWheelEvent = 1127,
+        BodyScrollsInAdditionToViewport = 1128,
+        DocumentDesignModeEnabeld = 1129,
+        ContentEditableTrue = 1130,
+        ContentEditableTrueOnHTML = 1131,
+        ContentEditablePlainTextOnly = 1132,
+        V8RegExpPrototypeUnicodeGetter = 1133,
+        V8IntlV8Parse = 1134,
+        V8IntlPattern = 1135,
+        V8IntlResolved = 1136,
+        V8PromiseChain = 1137,
+        V8PromiseAccept = 1138,
+        V8PromiseDefer = 1139,
+        EventScoped = 1140,
         GeolocationInsecureOriginIframe = 1141,
         GeolocationSecureOriginIframe = 1142,
         RequestMIDIAccessIframe = 1143,
@@ -982,6 +986,112 @@ public:
         ElementRequestPointerLockIframe = 1146,
         NotificationAPIInsecureOriginIframe = 1147,
         NotificationAPISecureOriginIframe = 1148,
+        WebSocket = 1149,
+        MediaStreamConstraintsNameValue = 1150,
+        MediaStreamConstraintsFromDictionary = 1151,
+        MediaStreamConstraintsConformant = 1152,
+        CSSSelectorIndirectAdjacent = 1153,
+        NodeTreeRoot = 1154,
+        BluetoothDeviceConnectGATT = 1155,
+        CreateImageBitmap = 1156,
+        PresentationConnectionConnectEventListener = 1157,
+        PresentationConnectionCloseEventListener = 1158,
+        PresentationConnectionTerminateEventListener = 1159,
+        DocumentCreateEventFontFaceSetLoadEvent = 1160,
+        DocumentCreateEventMediaQueryListEvent = 1161,
+        DocumentCreateEventAnimationEvent = 1162,
+        DocumentCreateEventAnimationPlayerEvent = 1163,
+        DocumentCreateEventApplicationCacheErrorEvent = 1164,
+        DocumentCreateEventAutocompleteErrorEvent = 1165,
+        DocumentCreateEventBeforeUnloadEvent = 1166,
+        DocumentCreateEventClipboardEvent = 1167,
+        DocumentCreateEventCompositionEvent = 1168,
+        DocumentCreateEventDragEvent = 1169,
+        DocumentCreateEventErrorEvent = 1170,
+        DocumentCreateEventFocusEvent = 1171,
+        DocumentCreateEventHashChangeEvent = 1172,
+        DocumentCreateEventMutationEvent = 1173,
+        DocumentCreateEventPageTransitionEvent = 1174,
+        DocumentCreateEventPointerEvent = 1175,
+        DocumentCreateEventPopStateEvent = 1176,
+        DocumentCreateEventProgressEvent = 1177,
+        DocumentCreateEventPromiseRejectionEvent = 1178,
+        DocumentCreateEventRelatedEvent = 1179,
+        DocumentCreateEventResourceProgressEvent = 1180,
+        DocumentCreateEventSecurityPolicyViolationEvent = 1181,
+        DocumentCreateEventTextEvent = 1182,
+        DocumentCreateEventTransitionEvent = 1183,
+        DocumentCreateEventWheelEvent = 1184,
+        DocumentCreateEventMediaKeyEvent = 1185,
+        DocumentCreateEventTrackEvent = 1186,
+        DocumentCreateEventWebKitAnimationEvent = 1187,
+        DocumentCreateEventMutationEvents = 1188,
+        DocumentCreateEventOrientationEvent = 1189,
+        DocumentCreateEventSVGEvents = 1190,
+        DocumentCreateEventWebKitTransitionEvent = 1191,
+        DocumentCreateEventBeforeInstallPromptEvent = 1192,
+        DocumentCreateEventSyncEvent = 1193,
+        DocumentCreateEventDeviceLightEvent = 1194,
+        DocumentCreateEventDeviceMotionEvent = 1195,
+        DocumentCreateEventDeviceOrientationEvent = 1196,
+        DocumentCreateEventMediaEncryptedEvent = 1197,
+        DocumentCreateEventMediaKeyMessageEvent = 1198,
+        DocumentCreateEventGamepadEvent = 1199,
+        DocumentCreateEventGeofencingEvent = 1200,
+        DocumentCreateEventIDBVersionChangeEvent = 1201,
+        DocumentCreateEventBlobEvent = 1202,
+        DocumentCreateEventMediaStreamEvent = 1203,
+        DocumentCreateEventMediaStreamTrackEvent = 1204,
+        DocumentCreateEventRTCDTMFToneChangeEvent = 1205,
+        DocumentCreateEventRTCDataChannelEvent = 1206,
+        DocumentCreateEventRTCIceCandidateEvent = 1207,
+        DocumentCreateEventServicePortConnectEvent = 1208,
+        DocumentCreateEventNotificationEvent = 1209,
+        DocumentCreateEventPresentationConnectionAvailableEvent = 1210,
+        DocumentCreateEventPresentationConnectionCloseEvent = 1211,
+        DocumentCreateEventPushEvent = 1212,
+        DocumentCreateEventExtendableEvent = 1213,
+        DocumentCreateEventExtendableMessageEvent = 1214,
+        DocumentCreateEventFetchEvent = 1215,
+        DocumentCreateEventInstallEvent = 1216,
+        DocumentCreateEventServiceWorkerMessageEvent = 1217,
+        DocumentCreateEventSpeechRecognitionError = 1218,
+        DocumentCreateEventSpeechRecognitionEvent = 1219,
+        DocumentCreateEventSpeechSynthesisEvent = 1220,
+        DocumentCreateEventStorageEvent = 1221,
+        DocumentCreateEventAudioProcessingEvent = 1222,
+        DocumentCreateEventOfflineAudioCompletionEvent = 1223,
+        DocumentCreateEventWebGLContextEvent = 1224,
+        DocumentCreateEventMIDIConnectionEvent = 1225,
+        DocumentCreateEventMIDIMessageEvent = 1226,
+        DocumentCreateEventCloseEvent = 1227,
+        DocumentCreateEventKeyboardEvents = 1228,
+        HTMLMediaElement = 1229,
+        HTMLMediaElementInDocument = 1230,
+        HTMLMediaElementControlsAttribute = 1231,
+        SVGZoomEvent = 1232,
+        V8Animation_Oncancel_AttributeGetter = 1233,
+        V8Animation_Oncancel_AttributeSetter = 1234,
+        V8HTMLCommentInExternalScript = 1235,
+        V8HTMLComment = 1236,
+        V8SloppyModeBlockScopedFunctionRedefinition = 1237,
+        V8ForInInitializer = 1238,
+        V8Animation_Id_AttributeGetter = 1239,
+        V8Animation_Id_AttributeSetter = 1240,
+        MediaStreamOnEnded = 1241,
+        DocumentCreateEventInputEvent = 1242,
+        WebAnimationHyphenatedProperty = 1243,
+        FormControlsCollectionReturnsRadioNodeListForFieldSet = 1244,
+        ApplicationCacheManifestSelectInsecureOrigin = 1245,
+        ApplicationCacheManifestSelectSecureOrigin = 1246,
+        ApplicationCacheAPIInsecureOrigin = 1247,
+        ApplicationCacheAPISecureOrigin = 1248,
+        // The above items are available in M50 branch
+
+        HTMLLabelElementFormIsDifferentFromControlForm = 1261,
+        HTMLLabelElementHasNoControlAndFormIsAncestor = 1262,
+        HTMLLabelElementControlForNonFormAssociatedElement = 1263,
+        PatternAttributeUnicodeFlagIsIncompatible = 1264,
 
         // Add new features immediately above this line. Don't change assigned
         // numbers of any item, and don't reuse removed slots.
@@ -1006,24 +1116,6 @@ public:
     void count(CSSParserMode, CSSPropertyID);
     void count(Feature);
 
-    // "countDeprecation" sets the bit for this feature to 1, and sends a deprecation
-    // warning to the console. Repeated calls are ignored.
-    //
-    // Be considerate to developers' consoles: features should only send
-    // deprecation warnings when we're actively interested in removing them from
-    // the platform.
-    //
-    // For shared workers and service workers, the ExecutionContext* overload
-    // doesn't count the usage but only sends a console warning.
-    static void countDeprecation(const LocalFrame*, Feature);
-    static void countDeprecation(ExecutionContext*, Feature);
-    static void countDeprecation(const Document&, Feature);
-    // Use countDeprecationIfNotPrivateScript() instead of countDeprecation()
-    // if you don't want to count metrics in private scripts. You should use
-    // countDeprecationIfNotPrivateScript() in a binding layer.
-    static void countDeprecationIfNotPrivateScript(v8::Isolate*, ExecutionContext*, Feature);
-    static String deprecationMessage(Feature);
-
     // Count only features if they're being used in an iframe which does not
     // have script access into the top level document.
     static void countCrossOriginIframe(const Document&, Feature);
@@ -1031,6 +1123,10 @@ public:
     // Return whether the Feature was previously counted for this document.
     // NOTE: only for use in testing.
     static bool isCounted(Document&, Feature);
+    // Return whether the CSSPropertyID was previously counted for this document.
+    // NOTE: only for use in testing.
+    static bool isCounted(Document&, const String&);
+    bool isCounted(CSSPropertyID);
 
     void didCommitLoad();
 
@@ -1042,6 +1138,11 @@ public:
 
     static void muteForInspector();
     static void unmuteForInspector();
+
+    void recordMeasurement(Feature feature) { m_countBits.recordMeasurement(feature); }
+    void updateMeasurements();
+
+    bool hasRecordedMeasurement(Feature feature) const { return m_countBits.hasRecordedMeasurement(feature); }
 
     class CountBits {
         DISALLOW_NEW();
@@ -1077,11 +1178,6 @@ public:
 protected:
     friend class UseCounterTest;
     static int m_muteCount;
-
-    void recordMeasurement(Feature feature) { m_countBits.recordMeasurement(feature); }
-    void updateMeasurements();
-
-    bool hasRecordedMeasurement(Feature feature) const { return m_countBits.hasRecordedMeasurement(feature); }
 
     CountBits m_countBits;
     BitVector m_CSSFeatureBits;

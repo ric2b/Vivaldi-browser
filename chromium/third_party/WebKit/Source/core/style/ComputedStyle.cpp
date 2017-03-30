@@ -30,11 +30,11 @@
 #include "core/style/ContentData.h"
 #include "core/style/DataEquivalency.h"
 #include "core/style/ComputedStyleConstants.h"
-#include "core/style/PathStyleMotionPath.h"
 #include "core/style/QuotesData.h"
 #include "core/style/ShadowList.h"
 #include "core/style/StyleImage.h"
 #include "core/style/StyleInheritedData.h"
+#include "core/style/StyleVariableData.h"
 #include "platform/LengthFunctions.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/Font.h"
@@ -67,7 +67,7 @@ struct SameSizeAsComputedStyle : public RefCounted<SameSizeAsComputedStyle> {
     } inherited_flags;
 
     struct NonInheritedFlags {
-        unsigned m_bitfields[2];
+        unsigned m_bitfields[3];
     } noninherited_flags;
 };
 
@@ -81,6 +81,11 @@ PassRefPtr<ComputedStyle> ComputedStyle::create()
 PassRefPtr<ComputedStyle> ComputedStyle::createInitialStyle()
 {
     return adoptRef(new ComputedStyle(InitialStyle));
+}
+
+void ComputedStyle::invalidateInitialStyle()
+{
+    initialStyle()->setTapHighlightColor(initialTapHighlightColor());
 }
 
 PassRefPtr<ComputedStyle> ComputedStyle::createAnonymousStyleWithDisplay(const ComputedStyle& parentStyle, EDisplay display)
@@ -109,7 +114,7 @@ ALWAYS_INLINE ComputedStyle::ComputedStyle()
 {
     setBitDefaults(); // Would it be faster to copy this from the default style?
     static_assert((sizeof(InheritedFlags) <= 8), "InheritedFlags should not grow");
-    static_assert((sizeof(NonInheritedFlags) <= 8), "NonInheritedFlags should not grow");
+    static_assert((sizeof(NonInheritedFlags) <= 12), "NonInheritedFlags should not grow");
 }
 
 ALWAYS_INLINE ComputedStyle::ComputedStyle(InitialStyleTag)
@@ -223,6 +228,36 @@ ItemPosition ComputedStyle::resolveJustification(const ComputedStyle& parentStyl
     return childStyle.justifySelfPosition();
 }
 
+static inline ContentPosition resolvedContentAlignmentPosition(const StyleContentAlignmentData& value, const StyleContentAlignmentData& normalValueBehavior)
+{
+    return (value.position() == ContentPositionNormal && value.distribution() == ContentDistributionDefault) ? normalValueBehavior.position() : value.position();
+}
+
+static inline ContentDistributionType resolvedContentAlignmentDistribution(const StyleContentAlignmentData& value, const StyleContentAlignmentData& normalValueBehavior)
+{
+    return (value.position() == ContentPositionNormal && value.distribution() == ContentDistributionDefault) ? normalValueBehavior.distribution() : value.distribution();
+}
+
+ContentPosition ComputedStyle::resolvedJustifyContentPosition(const StyleContentAlignmentData& normalValueBehavior) const
+{
+    return resolvedContentAlignmentPosition(justifyContent(), normalValueBehavior);
+}
+
+ContentDistributionType ComputedStyle::resolvedJustifyContentDistribution(const StyleContentAlignmentData& normalValueBehavior) const
+{
+    return resolvedContentAlignmentDistribution(justifyContent(), normalValueBehavior);
+}
+
+ContentPosition ComputedStyle::resolvedAlignContentPosition(const StyleContentAlignmentData& normalValueBehavior) const
+{
+    return resolvedContentAlignmentPosition(alignContent(), normalValueBehavior);
+}
+
+ContentDistributionType ComputedStyle::resolvedAlignContentDistribution(const StyleContentAlignmentData& normalValueBehavior) const
+{
+    return resolvedContentAlignmentDistribution(alignContent(), normalValueBehavior);
+}
+
 void ComputedStyle::inheritFrom(const ComputedStyle& inheritParent, IsAtShadowBoundary isAtShadowBoundary)
 {
     if (isAtShadowBoundary == AtShadowBoundary) {
@@ -260,9 +295,9 @@ void ComputedStyle::copyNonInheritedFromCached(const ComputedStyle& other)
     noninherited_flags.tableLayout = other.noninherited_flags.tableLayout;
     noninherited_flags.unicodeBidi = other.noninherited_flags.unicodeBidi;
     noninherited_flags.hasViewportUnits = other.noninherited_flags.hasViewportUnits;
-    noninherited_flags.pageBreakBefore = other.noninherited_flags.pageBreakBefore;
-    noninherited_flags.pageBreakAfter = other.noninherited_flags.pageBreakAfter;
-    noninherited_flags.pageBreakInside = other.noninherited_flags.pageBreakInside;
+    noninherited_flags.breakBefore = other.noninherited_flags.breakBefore;
+    noninherited_flags.breakAfter = other.noninherited_flags.breakAfter;
+    noninherited_flags.breakInside = other.noninherited_flags.breakInside;
     noninherited_flags.hasRemUnits = other.noninherited_flags.hasRemUnits;
 
     // Correctly set during selector matching:
@@ -553,6 +588,8 @@ bool ComputedStyle::diffNeedsFullLayoutAndPaintInvalidation(const ComputedStyle&
             || rareInheritedData->m_textCombine != other.rareInheritedData->m_textCombine
             || rareInheritedData->m_tabSize != other.rareInheritedData->m_tabSize
             || rareInheritedData->listStyleImage != other.rareInheritedData->listStyleImage
+            || rareInheritedData->m_snapHeightUnit != other.rareInheritedData->m_snapHeightUnit
+            || rareInheritedData->m_snapHeightPosition != other.rareInheritedData->m_snapHeightPosition
             || rareInheritedData->textStrokeWidth != other.rareInheritedData->textStrokeWidth)
             return true;
 
@@ -1001,8 +1038,8 @@ void ComputedStyle::applyTransform(TransformationMatrix& result, const FloatRect
 void ComputedStyle::applyMotionPathTransform(float originX, float originY, TransformationMatrix& transform) const
 {
     const StyleMotionData& motionData = rareNonInheritedData->m_transform->m_motion;
-    ASSERT(motionData.m_path && motionData.m_path->isPathStyleMotionPath());
-    const PathStyleMotionPath& motionPath = toPathStyleMotionPath(*motionData.m_path);
+    ASSERT(motionData.m_path);
+    const StylePath& motionPath = *motionData.m_path;
     float pathLength = motionPath.length();
     float distance = floatValueForLength(motionData.m_offset, pathLength);
     float computedDistance;
@@ -1018,11 +1055,11 @@ void ComputedStyle::applyMotionPathTransform(float originX, float originY, Trans
     float angle;
     motionPath.path().pointAndNormalAtLength(computedDistance, point, angle);
 
-    if (motionData.m_rotationType == MotionRotationFixed)
+    if (motionData.m_rotation.type == MotionRotationFixed)
         angle = 0;
 
     transform.translate(point.x() - originX, point.y() - originY);
-    transform.rotate(angle + motionData.m_rotation);
+    transform.rotate(angle + motionData.m_rotation.angle);
 }
 
 void ComputedStyle::setTextShadow(PassRefPtr<ShadowList> s)
@@ -1351,7 +1388,7 @@ int ComputedStyle::computedLineHeight() const
         return fontMetrics().lineSpacing();
 
     if (lh.hasPercent())
-        return minimumValueForLength(lh, computedFontSize());
+        return minimumValueForLength(lh, LayoutUnit(computedFontSize()));
 
     return std::min(lh.value(), LayoutUnit::max().toFloat());
 }
@@ -1467,7 +1504,7 @@ StyleColor ComputedStyle::decorationColorIncludingFallback(bool visitedLink) con
     if (textStrokeWidth()) {
         // Prefer stroke color if possible, but not if it's fully transparent.
         StyleColor textStrokeStyleColor = visitedLink ? visitedLinkTextStrokeColor() : textStrokeColor();
-        if (!textStrokeStyleColor.isCurrentColor() && textStrokeStyleColor.color().alpha())
+        if (!textStrokeStyleColor.isCurrentColor() && textStrokeStyleColor.getColor().alpha())
             return textStrokeStyleColor;
     }
 
@@ -1504,7 +1541,7 @@ Color ComputedStyle::colorIncludingFallback(int colorProperty, bool visitedLink)
     case CSSPropertyOutlineColor:
         result = visitedLink ? visitedLinkOutlineColor() : outlineColor();
         break;
-    case CSSPropertyWebkitColumnRuleColor:
+    case CSSPropertyColumnRuleColor:
         result = visitedLink ? visitedLinkColumnRuleColor() : columnRuleColor();
         break;
     case CSSPropertyWebkitTextEmphasisColor:
@@ -1537,7 +1574,7 @@ Color ComputedStyle::colorIncludingFallback(int colorProperty, bool visitedLink)
     }
 
     if (!result.isCurrentColor())
-        return result.color();
+        return result.getColor();
 
     // FIXME: Treating styled borders with initial color differently causes problems
     // See crbug.com/316559, crbug.com/276231
@@ -1690,15 +1727,9 @@ void ComputedStyle::setMarginEnd(const Length& margin)
     }
 }
 
-void ComputedStyle::setMotionPath(PassRefPtr<StyleMotionPath> path)
+void ComputedStyle::setMotionPath(PassRefPtr<StylePath> path)
 {
-    ASSERT(path);
     rareNonInheritedData.access()->m_transform.access()->m_motion.m_path = path;
-}
-
-void ComputedStyle::resetMotionPath()
-{
-    rareNonInheritedData.access()->m_transform.access()->m_motion.m_path = nullptr;
 }
 
 int ComputedStyle::outlineOutsetExtent() const
@@ -1714,7 +1745,7 @@ bool ComputedStyle::columnRuleEquivalent(const ComputedStyle* otherStyle) const
 {
     return columnRuleStyle() == otherStyle->columnRuleStyle()
         && columnRuleWidth() == otherStyle->columnRuleWidth()
-        && visitedDependentColor(CSSPropertyWebkitColumnRuleColor) == otherStyle->visitedDependentColor(CSSPropertyWebkitColumnRuleColor);
+        && visitedDependentColor(CSSPropertyColumnRuleColor) == otherStyle->visitedDependentColor(CSSPropertyColumnRuleColor);
 }
 
 TextEmphasisMark ComputedStyle::textEmphasisMark() const
@@ -1843,6 +1874,17 @@ void ComputedStyle::copyChildDependentFlagsFrom(const ComputedStyle& other)
     setEmptyState(other.emptyState());
     if (other.hasExplicitlyInheritedProperties())
         setHasExplicitlyInheritedProperties();
+}
+
+bool ComputedStyle::shadowListHasCurrentColor(const ShadowList* shadowList)
+{
+    if (!shadowList)
+        return false;
+    for (size_t i = shadowList->shadows().size(); i--; ) {
+        if (shadowList->shadows()[i].color().isCurrentColor())
+            return true;
+    }
+    return false;
 }
 
 } // namespace blink

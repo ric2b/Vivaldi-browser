@@ -24,7 +24,6 @@
         <structure name="IDR_APP_LIST_START_PAGE_JS" file="resources\app_list\start_page.js" flattenhtml="true" type="chrome_html" />
       </if>
       <if expr="not is_android">
-        <structure name="IDR_DOWNLOADS_DOWNLOADS_HTML" file="resources\downloads\downloads.html" flattenhtml="true" allowexternalscript="true" type="chrome_html" />
         <if expr="use_vulcanize">
           <then>
             <structure name="IDR_MD_DOWNLOADS_VULCANIZED_HTML" file="resources\md_downloads\vulcanized.html" flattenhtml="true" allowexternalscript="true" type="chrome_html" />
@@ -119,13 +118,6 @@
       <include name="IDR_DOMAIN_RELIABILITY_INTERNALS_CSS" file="resources\domain_reliability_internals.css" type="BINDATA" />
       <include name="IDR_DOMAIN_RELIABILITY_INTERNALS_JS" file="resources\domain_reliability_internals.js" type="BINDATA" />
       <if expr="not is_android">
-        <include name="IDR_DOWNLOADS_CONSTANTS_HTML" file="resources\downloads\constants.html" type="BINDATA" />
-        <include name="IDR_DOWNLOADS_CONSTANTS_JS" file="resources\downloads\constants.js" type="BINDATA" />
-        <include name="IDR_DOWNLOADS_FOCUS_ROW_JS" file="resources\downloads\focus_row.js" type="BINDATA" />
-        <include name="IDR_DOWNLOADS_ITEM_VIEW_JS" file="resources\downloads\item_view.js" type="BINDATA" />
-        <include name="IDR_DOWNLOADS_MANAGER_JS" file="resources\downloads\manager.js" type="BINDATA" />
-        <include name="IDR_DOWNLOADS_THROTTLED_ICON_LOADER_HTML" file="resources\downloads\throttled_icon_loader.html" type="BINDATA" />
-        <include name="IDR_DOWNLOADS_THROTTLED_ICON_LOADER_JS" file="resources\downloads\throttled_icon_loader.js" type="BINDATA" />
         <include name="IDR_MD_DOWNLOADS_1X_INCOGNITO_MARKER_PNG" file="resources\md_downloads\1x\incognito_marker.png" type="BINDATA" />
         <include name="IDR_MD_DOWNLOADS_2X_INCOGNITO_MARKER_PNG" file="resources\md_downloads\2x\incognito_marker.png" type="BINDATA" />
         <include name="IDR_MD_DOWNLOADS_1X_NO_DOWNLOADS_PNG" file="resources\md_downloads\1x\no_downloads.png" type="BINDATA" />
@@ -201,8 +193,16 @@
       <include name="IDR_HISTORY_HTML" file="resources\history\history.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
       <include name="IDR_HISTORY_JS" file="resources\history\history.js" flattenhtml="true" type="BINDATA" />
 
-      <if expr="not is_ios">
+      <if expr="not is_android and not is_ios">
         <include name="IDR_MD_HISTORY_HISTORY_HTML" file="resources\md_history\history.html" type="BINDATA" />
+        <include name="IDR_MD_HISTORY_HISTORY_ITEM_HTML" file="resources\md_history\history_item.html" type="BINDATA" />
+        <include name="IDR_MD_HISTORY_HISTORY_ITEM_JS" file="resources\md_history\history_item.js" type="BINDATA" />
+        <include name="IDR_MD_HISTORY_HISTORY_JS" file="resources\md_history\history.js" type="BINDATA" />
+        <include name="IDR_MD_HISTORY_HISTORY_LIST_HTML" file="resources\md_history\history_list.html" type="BINDATA" />
+        <include name="IDR_MD_HISTORY_HISTORY_LIST_JS" file="resources\md_history\history_list.js" type="BINDATA" />
+        <include name="IDR_MD_HISTORY_HISTORY_TOOLBAR_HTML" file="resources\md_history\history_toolbar.html" type="BINDATA" />
+        <include name="IDR_MD_HISTORY_HISTORY_TOOLBAR_JS" file="resources\md_history\history_toolbar.js" type="BINDATA" />
+        <include name="IDR_MD_HISTORY_SHARED_STYLE_HTML" file="resources\md_history\shared_style.html" type="BINDATA" />
       </if>
 
       <include name="IDR_OTHER_DEVICES_JS" file="resources\history\other_devices.js" flattenhtml="true" type="BINDATA" />
@@ -262,6 +262,7 @@
       <if expr="enable_plugins">
         <include name="IDR_PLUGINS_HTML" file="resources\plugins.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
         <include name="IDR_PLUGINS_JS" file="resources\plugins.js" type="BINDATA" />
+        <include name="IDR_PLUGINS_MOJO_JS" file="${root_gen_dir}\chrome\browser\ui\webui\plugins\plugins.mojom.js" use_base_dir="false" type="BINDATA"/>
       </if>
       <include name="IDR_COMPONENTS_HTML" file="resources\components.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
       <include name="IDR_COMPONENTS_JS" file="resources\components.js" type="BINDATA" />
@@ -319,12 +320,17 @@
       <if expr="enable_google_now">
         <include name="IDR_GOOGLE_NOW_MANIFEST" file="resources\google_now\manifest.json" type="BINDATA" />
       </if>
-      <include name="IDR_SITE_ENGAGEMENT_HTML" file="resources\engagement\site_engagement.html" flattenhtml="true" type="BINDATA" />
-      <include name="IDR_SITE_ENGAGEMENT_JS" file="resources\engagement\site_engagement.js" flattenhtml="true" type="BINDATA" />
-      <include name="IDR_SITE_ENGAGEMENT_MOJO_JS" file="${root_gen_dir}\chrome\browser\ui\webui\engagement\site_engagement.mojom.js" use_base_dir="false" type="BINDATA"/>
-      <include name="IDR_SITE_ENGAGEMENT_ENGAGEMENT_TABLE_CSS" file="resources\engagement\engagement_table.css" type="BINDATA" />
-      <include name="IDR_SITE_ENGAGEMENT_ENGAGEMENT_TABLE_HTML" file="resources\engagement\engagement_table.html" type="BINDATA" />
-      <include name="IDR_SITE_ENGAGEMENT_ENGAGEMENT_TABLE_JS" file="resources\engagement\engagement_table.js" type="BINDATA" />
+      <if expr="not is_android">
+        <include name="IDR_SITE_ENGAGEMENT_HTML" file="resources\engagement\site_engagement.html" flattenhtml="true" type="BINDATA" />
+        <include name="IDR_SITE_ENGAGEMENT_JS" file="resources\engagement\site_engagement.js" flattenhtml="true" type="BINDATA" />
+        <include name="IDR_SITE_ENGAGEMENT_MOJO_JS" file="${root_gen_dir}\chrome\browser\ui\webui\engagement\site_engagement.mojom.js" use_base_dir="false" type="BINDATA"/>
+        <include name="IDR_SITE_ENGAGEMENT_ENGAGEMENT_TABLE_CSS" file="resources\engagement\engagement_table.css" type="BINDATA" />
+        <include name="IDR_SITE_ENGAGEMENT_ENGAGEMENT_TABLE_HTML" file="resources\engagement\engagement_table.html" type="BINDATA" />
+        <include name="IDR_SITE_ENGAGEMENT_ENGAGEMENT_TABLE_JS" file="resources\engagement\engagement_table.js" type="BINDATA" />
+      </if>
+      <include name="IDR_SYNC_CONFIRMATION_CSS" file="resources\sync_confirmation\sync_confirmation.css" type="BINDATA" />
+      <include name="IDR_SYNC_CONFIRMATION_HTML" file="resources\sync_confirmation\sync_confirmation.html" allowexternalscript="true" type="BINDATA" />
+      <include name="IDR_SYNC_CONFIRMATION_JS" file="resources\sync_confirmation\sync_confirmation.js" type="BINDATA" />
       <include name="IDR_UBER_HTML" file="resources\uber\uber.html" flattenhtml="true" type="BINDATA" />
       <include name="IDR_UBER_JS" file="resources\uber\uber.js" type="BINDATA" />
       <include name="IDR_UBER_FRAME_HTML" file="resources\uber\uber_frame.html" flattenhtml="true" type="BINDATA" />
@@ -376,6 +382,7 @@
         <include name="IDR_DEMO_APP_MANIFEST" file="resources\chromeos\demo_app\manifest.json" type="BINDATA" />
         <include name="IDR_WALLPAPERMANAGER_MANIFEST" file="resources\chromeos\wallpaper_manager\manifest.json" type="BINDATA" />
         <include name="IDR_FIRST_RUN_DIALOG_MANIFEST" file="resources\chromeos\first_run\app/manifest.json" type="BINDATA" />
+        <include name="IDR_ARC_SUPPORT_MANIFEST" file="resources\chromeos\arc_support\manifest.json" type="BINDATA" />
       </if>
       <if expr="chromeos and _google_chrome">
         <include name="IDR_GENIUS_APP_MANIFEST" file="resources\chromeos\genius_app\manifest.json" type="BINDATA" />
@@ -470,6 +477,11 @@
       <include name="IDR_WHISPERNET_PROXY_MANIFEST" file="resources\whispernet_proxy\manifest.json" type="BINDATA" />
       <if expr="enable_media_router">
         <part file="media_router_resources.grdp" />
+      </if>
+      <if expr="not is_android and not is_ios and not chromeos">
+        <include name="IDR_IME_WINDOW_CLOSE" file="resources\input_ime\ime_window_close.png" type="BINDATA" />
+        <include name="IDR_IME_WINDOW_CLOSE_C" file="resources\input_ime\ime_window_close_click.png" type="BINDATA" />
+        <include name="IDR_IME_WINDOW_CLOSE_H" file="resources\input_ime\ime_window_close_hover.png" type="BINDATA" />
       </if>
     </includes>
   </release>

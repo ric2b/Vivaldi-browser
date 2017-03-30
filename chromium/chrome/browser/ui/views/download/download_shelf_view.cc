@@ -26,7 +26,7 @@
 #include "grit/components_strings.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/resource/material_design/material_design_controller.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/animation/slide_animation.h"
@@ -134,6 +134,10 @@ DownloadShelfView::DownloadShelfView(Browser* browser, BrowserView* parent)
       parent_(parent),
       mouse_watcher_(new views::MouseWatcherViewHost(this, gfx::Insets()),
                      this) {
+  // Start out hidden: the shelf might be created but never shown in some
+  // cases, like when installing a theme. See DownloadShelf::AddDownload().
+  SetVisible(false);
+
   mouse_watcher_.set_notify_on_exit_time(
       base::TimeDelta::FromMilliseconds(kNotifyOnExitTimeMS));
   set_id(VIEW_ID_DOWNLOAD_SHELF);

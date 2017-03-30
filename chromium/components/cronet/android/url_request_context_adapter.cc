@@ -19,9 +19,9 @@
 #include "components/cronet/url_request_context_config.h"
 #include "net/android/network_change_notifier_factory_android.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/network_delegate_impl.h"
+#include "net/base/url_util.h"
 #include "net/cert/cert_verifier.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_network_layer.h"
@@ -147,7 +147,7 @@ void URLRequestContextAdapter::InitRequestContextOnNetworkThread() {
   // TODO(mef): Remove this work around for crbug.com/543366 once it is fixed.
   net::URLRequestContextBuilder::HttpNetworkSessionParams
       custom_http_network_session_params;
-  custom_http_network_session_params.use_alternative_services = false;
+  custom_http_network_session_params.parse_alternative_services = false;
   context_builder.set_http_network_session_params(
       custom_http_network_session_params);
 

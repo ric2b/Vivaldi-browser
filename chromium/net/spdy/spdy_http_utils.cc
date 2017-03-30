@@ -11,7 +11,7 @@
 #include "base/time/time.h"
 #include "net/base/escape.h"
 #include "net/base/load_flags.h"
-#include "net/base/net_util.h"
+#include "net/base/url_util.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_request_info.h"
 #include "net/http/http_response_headers.h"
@@ -164,7 +164,7 @@ void CreateSpdyHeadersFromHttpResponse(
       std::find(after_version + 1, status_line.end(), ' ');
   (*headers)[status_key] = std::string(after_version + 1, after_status);
 
-  void* iter = NULL;
+  size_t iter = 0;
   std::string raw_name, value;
   while (response_headers.EnumerateHeaderLines(&iter, &raw_name, &value)) {
     std::string name = base::ToLowerASCII(raw_name);
@@ -193,9 +193,7 @@ NET_EXPORT_PRIVATE RequestPriority ConvertSpdyPriorityToRequestPriority(
 }
 
 GURL GetUrlFromHeaderBlock(const SpdyHeaderBlock& headers,
-                           SpdyMajorVersion protocol_version,
-                           bool pushed) {
-  DCHECK_LE(SPDY3, protocol_version);
+                           SpdyMajorVersion protocol_version) {
   SpdyHeaderBlock::const_iterator it = headers.find(":scheme");
   if (it == headers.end())
     return GURL();

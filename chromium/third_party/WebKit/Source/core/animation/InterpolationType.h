@@ -7,9 +7,10 @@
 
 #include "core/animation/InterpolationValue.h"
 #include "core/animation/Keyframe.h"
+#include "core/animation/PairwiseInterpolationValue.h"
 #include "core/animation/PrimitiveInterpolation.h"
 #include "core/animation/PropertyHandle.h"
-#include "core/animation/UnderlyingValue.h"
+#include "core/animation/UnderlyingValueOwner.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Allocator.h"
 
@@ -17,9 +18,10 @@ namespace blink {
 
 class InterpolationEnvironment;
 
-// A singleton that:
-// - Converts from animation keyframe(s) to interpolation compatible representations: maybeConvertPairwise() and maybeConvertSingle()
-// - Applies interpolation compatible representations of values to a StyleResolverState: apply()
+// Subclasses of InterpolationType implement the logic for a specific value type of a specific PropertyHandle to:
+// - Convert PropertySpecificKeyframe values to (Pairwise)?InterpolationValues: maybeConvertPairwise() and maybeConvertSingle()
+// - Convert the target Element's property value to an InterpolationValue: maybeConvertUnderlyingValue()
+// - Apply an InterpolationValue to a target Element's property: apply().
 class InterpolationType {
     USING_FAST_MALLOC(InterpolationType);
     WTF_MAKE_NONCOPYABLE(InterpolationType);
@@ -28,43 +30,44 @@ public:
 
     PropertyHandle property() const { return m_property; }
 
-    // Represents logic for determining whether a conversion decision is no longer valid given the current environment.
+    // ConversionCheckers are returned from calls to maybeConvertPairwise() and maybeConvertSingle() to enable the caller to check
+    // whether the result is still valid given changes in the InterpolationEnvironment and underlying InterpolationValue.
     class ConversionChecker {
         USING_FAST_MALLOC(ConversionChecker);
         WTF_MAKE_NONCOPYABLE(ConversionChecker);
     public:
         virtual ~ConversionChecker() { }
-        virtual bool isValid(const InterpolationEnvironment&, const UnderlyingValue&) const = 0;
-        const InterpolationType& type() const { return m_type; }
-        DEFINE_INLINE_VIRTUAL_TRACE() { }
+        void setType(const InterpolationType& type) { m_type = &type; }
+        const InterpolationType& type() const { return *m_type; }
+        virtual bool isValid(const InterpolationEnvironment&, const InterpolationValue& underlying) const = 0;
     protected:
-        ConversionChecker(const InterpolationType& type)
-            : m_type(type)
+        ConversionChecker()
+            : m_type(nullptr)
         { }
-        const InterpolationType& m_type;
+        const InterpolationType* m_type;
     };
     using ConversionCheckers = Vector<OwnPtr<ConversionChecker>>;
 
-    virtual PassOwnPtr<PairwisePrimitiveInterpolation> maybeConvertPairwise(const PropertySpecificKeyframe& startKeyframe, const PropertySpecificKeyframe& endKeyframe, const InterpolationEnvironment& environment, const UnderlyingValue& underlyingValue, ConversionCheckers& conversionCheckers) const
+    virtual PairwiseInterpolationValue maybeConvertPairwise(const PropertySpecificKeyframe& startKeyframe, const PropertySpecificKeyframe& endKeyframe, const InterpolationEnvironment& environment, const InterpolationValue& underlying, ConversionCheckers& conversionCheckers) const
     {
-        OwnPtr<InterpolationValue> startValue = maybeConvertSingle(startKeyframe, environment, underlyingValue, conversionCheckers);
-        if (!startValue)
+        InterpolationValue start = maybeConvertSingle(startKeyframe, environment, underlying, conversionCheckers);
+        if (!start)
             return nullptr;
-        OwnPtr<InterpolationValue> endValue = maybeConvertSingle(endKeyframe, environment, underlyingValue, conversionCheckers);
-        if (!endValue)
+        InterpolationValue end = maybeConvertSingle(endKeyframe, environment, underlying, conversionCheckers);
+        if (!end)
             return nullptr;
-        return mergeSingleConversions(*startValue, *endValue);
+        return mergeSingleConversions(start, end);
     }
 
-    virtual PassOwnPtr<InterpolationValue> maybeConvertSingle(const PropertySpecificKeyframe&, const InterpolationEnvironment&, const UnderlyingValue&, ConversionCheckers&) const = 0;
+    virtual InterpolationValue maybeConvertSingle(const PropertySpecificKeyframe&, const InterpolationEnvironment&, const InterpolationValue& underlying, ConversionCheckers&) const = 0;
 
-    virtual PassOwnPtr<InterpolationValue> maybeConvertUnderlyingValue(const InterpolationEnvironment&) const = 0;
+    virtual InterpolationValue maybeConvertUnderlyingValue(const InterpolationEnvironment&) const = 0;
 
-    virtual void composite(UnderlyingValue& underlyingValue, double underlyingFraction, const InterpolationValue& value) const
+    virtual void composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value) const
     {
-        ASSERT(!underlyingValue->nonInterpolableValue());
-        ASSERT(!value.nonInterpolableValue());
-        underlyingValue.mutableComponent().interpolableValue->scaleAndAdd(underlyingFraction, value.interpolableValue());
+        ASSERT(!underlyingValueOwner.value().nonInterpolableValue);
+        ASSERT(!value.nonInterpolableValue);
+        underlyingValueOwner.mutableValue().interpolableValue->scaleAndAdd(underlyingFraction, *value.interpolableValue);
     }
 
     virtual void apply(const InterpolableValue&, const NonInterpolableValue*, InterpolationEnvironment&) const = 0;
@@ -78,13 +81,13 @@ protected:
         : m_property(property)
     { }
 
-    virtual PassOwnPtr<PairwisePrimitiveInterpolation> mergeSingleConversions(InterpolationValue& startValue, InterpolationValue& endValue) const
+    virtual PairwiseInterpolationValue mergeSingleConversions(InterpolationValue& start, InterpolationValue& end) const
     {
-        ASSERT(!startValue.nonInterpolableValue());
-        ASSERT(!endValue.nonInterpolableValue());
-        return PairwisePrimitiveInterpolation::create(*this,
-            startValue.mutableComponent().interpolableValue.release(),
-            endValue.mutableComponent().interpolableValue.release(),
+        ASSERT(!start.nonInterpolableValue);
+        ASSERT(!end.nonInterpolableValue);
+        return PairwiseInterpolationValue(
+            start.interpolableValue.release(),
+            end.interpolableValue.release(),
             nullptr);
     }
 

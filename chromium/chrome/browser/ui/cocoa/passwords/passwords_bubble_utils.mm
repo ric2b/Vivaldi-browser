@@ -6,11 +6,50 @@
 
 #include "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
-#import "chrome/browser/ui/cocoa/passwords/base_passwords_content_view_controller.h"
-#include "components/autofill/core/common/password_form.h"
+#include "chrome/browser/ui/chrome_style.h"
+#include "skia/ext/skia_utils_mac.h"
+#include "ui/base/cocoa/controls/hyperlink_text_view.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/resources/grit/ui_resources.h"
+
+namespace {
+
+HyperlinkTextView* LabelWithLink(const base::string16& text,
+                                 SkColor color,
+                                 NSFont* font,
+                                 gfx::Range range,
+                                 id<NSTextViewDelegate> delegate) {
+  base::scoped_nsobject<HyperlinkTextView> textView(
+      [[HyperlinkTextView alloc] initWithFrame:NSZeroRect]);
+  NSColor* textColor = skia::SkColorToCalibratedNSColor(color);
+  [textView setMessage:base::SysUTF16ToNSString(text)
+              withFont:font
+          messageColor:textColor];
+  NSRange brandRange = range.ToNSRange();
+  if (brandRange.length) {
+    NSColor* linkColor =
+        skia::SkColorToCalibratedNSColor(chrome_style::GetLinkColor());
+    [textView addLinkRange:brandRange
+                    withURL:nil
+                  linkColor:linkColor];
+    [textView setDelegate:delegate];
+
+    // Create the link with no underlining.
+    [textView setLinkTextAttributes:nil];
+    NSTextStorage* text = [textView textStorage];
+    [text addAttribute:NSUnderlineStyleAttributeName
+                 value:@(NSUnderlineStyleNone)
+                 range:brandRange];
+  } else {
+    // TODO(vasilii): remove if crbug.com/515189 is fixed.
+    [textView setRefusesFirstResponder:YES];
+  }
+
+  return textView.autorelease();
+}
+
+}  // namespace
 
 NSFont* LabelFont() {
   return [NSFont systemFontOfSize:[NSFont smallSystemFontSize]];
@@ -55,4 +94,49 @@ NSSecureTextField* PasswordLabel(const base::string16& text) {
       [[NSSecureTextField alloc] initWithFrame:NSZeroRect]);
   InitLabel(textField, text);
   return textField.autorelease();
+}
+
+NSButton* DialogButton(NSString* title) {
+  base::scoped_nsobject<NSButton> button(
+      [[NSButton alloc] initWithFrame:NSZeroRect]);
+  [button setFont:[NSFont systemFontOfSize:[NSFont smallSystemFontSize]]];
+  [button setTitle:title];
+  [button setBezelStyle:NSRoundedBezelStyle];
+  [[button cell] setControlSize:NSSmallControlSize];
+  [button sizeToFit];
+  return button.autorelease();
+}
+
+HyperlinkTextView* TitleBubbleLabelWithLink(const base::string16& text,
+                                            gfx::Range range,
+                                            id<NSTextViewDelegate> delegate) {
+  return LabelWithLink(
+      text, SK_ColorBLACK,
+      [NSFont systemFontOfSize:[NSFont systemFontSize]],
+      range, delegate);
+}
+
+HyperlinkTextView* TitleDialogLabelWithLink(const base::string16& text,
+                                            gfx::Range range,
+                                            id<NSTextViewDelegate> delegate) {
+  return LabelWithLink(
+      text, SK_ColorBLACK,
+      ResourceBundle::GetSharedInstance()
+          .GetFontList(chrome_style::kTitleFontStyle)
+          .GetPrimaryFont()
+          .GetNativeFont(),
+      range, delegate);
+}
+
+HyperlinkTextView* LabelWithLink(const base::string16& text,
+                                 SkColor color,
+                                 gfx::Range range,
+                                 id<NSTextViewDelegate> delegate) {
+  return LabelWithLink(
+      text, color,
+      ResourceBundle::GetSharedInstance()
+          .GetFontList(ResourceBundle::SmallFont)
+          .GetPrimaryFont()
+          .GetNativeFont(),
+      range, delegate);
 }

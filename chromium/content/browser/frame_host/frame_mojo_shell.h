@@ -7,7 +7,7 @@
 
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "mojo/common/weak_binding_set.h"
+#include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/shell/public/interfaces/shell.mojom.h"
 
@@ -16,33 +16,35 @@ namespace content {
 class RenderFrameHost;
 class ServiceRegistryImpl;
 
-// This provides the |mojo::Shell| service interface to each frame's
-// ServiceRegistry, giving frames the ability to connect to Mojo applications.
-class FrameMojoShell : public mojo::Shell {
+// This provides the |mojo::shell::mojom::Shell| service interface to each
+// frame's ServiceRegistry, giving frames the ability to connect to Mojo
+// applications.
+class FrameMojoShell : public mojo::shell::mojom::Connector {
  public:
   explicit FrameMojoShell(RenderFrameHost* frame_host);
   ~FrameMojoShell() override;
 
-  void BindRequest(mojo::InterfaceRequest<mojo::Shell> shell_request);
+  void BindRequest(mojo::shell::mojom::ConnectorRequest request);
 
  private:
-  // mojo::Shell:
-  void ConnectToApplication(
-      mojo::URLRequestPtr application_url,
-      mojo::InterfaceRequest<mojo::ServiceProvider> services,
-      mojo::ServiceProviderPtr exposed_services,
-      mojo::CapabilityFilterPtr filter,
-      const ConnectToApplicationCallback& callback) override;
-  void QuitApplication() override;
+  // mojo::Connector:
+  void Connect(
+      const mojo::String& application_url,
+      uint32_t user_id,
+      mojo::shell::mojom::InterfaceProviderRequest services,
+      mojo::shell::mojom::InterfaceProviderPtr exposed_services,
+      const mojo::shell::mojom::Connector::ConnectCallback& callback) override;
+  void Clone(mojo::shell::mojom::ConnectorRequest request) override;
 
   ServiceRegistryImpl* GetServiceRegistry();
 
   RenderFrameHost* frame_host_;
-  mojo::WeakBindingSet<mojo::Shell> bindings_;
+  mojo::BindingSet<mojo::shell::mojom::Connector> connectors_;
 
   // ServiceRegistry providing browser services to connected applications.
   scoped_ptr<ServiceRegistryImpl> service_registry_;
-  mojo::WeakBindingSet<mojo::ServiceProvider> service_provider_bindings_;
+  mojo::BindingSet<mojo::shell::mojom::InterfaceProvider>
+      service_provider_bindings_;
 
   DISALLOW_COPY_AND_ASSIGN(FrameMojoShell);
 };

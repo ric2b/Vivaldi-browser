@@ -26,8 +26,6 @@
     <!-- Compositor Tab Title Text -->
     <bool name="compositor_tab_title_fake_bold_text">true</bool>
 
-    <!-- The maximum indent depth of folders when selecting bookmarks. -->
-    <integer name="select_bookmark_folder_max_depth_indent">5</integer>
     <!-- TabSwitcher - Maximum amount to tilt tabs in over scroll in degrees. -->
     <integer name="over_scroll_angle">15</integer>
 
@@ -55,5 +53,7 @@
     <string name="help_context_usage_reports">send_crash_report</string>
     <string name="help_context_sad_tab">mobile_awsnap</string>
     <string name="help_context_physical_web">physical_web</string>
+    <string name="help_context_clear_browsing_data">clear_browsing_data</string>
+    <string name="help_context_change_sync_passphrase">change_sync_passphrase</string>
 
 </resources>

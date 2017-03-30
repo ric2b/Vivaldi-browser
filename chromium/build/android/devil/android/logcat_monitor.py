@@ -21,6 +21,7 @@ from devil.utils import reraiser_thread
 
 class LogcatMonitor(object):
 
+  _RECORD_THREAD_JOIN_WAIT = 2.0
   _WAIT_TIME = 0.2
   _THREADTIME_RE_FORMAT = (
       r'(?P<date>\S*) +(?P<time>\S*) +(?P<proc_id>%s) +(?P<thread_id>%s) +'
@@ -43,8 +44,13 @@ class LogcatMonitor(object):
     self._filter_specs = filter_specs
     self._output_file = output_file
     self._record_file = None
+    self._record_file_lock = threading.Lock()
     self._record_thread = None
     self._stop_recording_event = threading.Event()
+
+  @property
+  def output_file(self):
+    return self._output_file
 
   @decorators.WithTimeoutAndRetriesDefaults(10, 0)
   def WaitFor(self, success_regex, failure_regex=None, timeout=None,
@@ -155,13 +161,13 @@ class LogcatMonitor(object):
     def record_to_file():
       # Write the log with line buffering so the consumer sees each individual
       # line.
-      with open(self._record_file.name, 'a', 1) as f:
-        for data in self._adb.Logcat(filter_specs=self._filter_specs,
-                                     logcat_format='threadtime'):
+      for data in self._adb.Logcat(filter_specs=self._filter_specs,
+                                   logcat_format='threadtime'):
+        with self._record_file_lock:
           if self._stop_recording_event.isSet():
-            f.flush()
             return
-          f.write(data + '\n')
+          if self._record_file and not self._record_file.closed:
+            self._record_file.write(data + '\n')
 
     self._stop_recording_event.clear()
     if not self._record_thread:
@@ -172,7 +178,7 @@ class LogcatMonitor(object):
     """Finish recording logcat."""
     if self._record_thread:
       self._stop_recording_event.set()
-      self._record_thread.join()
+      self._record_thread.join(timeout=self._RECORD_THREAD_JOIN_WAIT)
       self._record_thread.ReraiseIfException()
       self._record_thread = None
 
@@ -184,7 +190,7 @@ class LogcatMonitor(object):
     if self._clear:
       self._adb.Logcat(clear=True)
     if not self._record_file:
-      self._record_file = tempfile.NamedTemporaryFile()
+      self._record_file = tempfile.NamedTemporaryFile(mode='a', bufsize=1)
     self._StartRecording()
 
   def Stop(self):
@@ -194,22 +200,24 @@ class LogcatMonitor(object):
     |self._output_file|.
     """
     self._StopRecording()
-    if self._record_file and self._output_file:
-      try:
-        os.makedirs(os.path.dirname(self._output_file))
-      except OSError as e:
-        if e.errno != errno.EEXIST:
-          raise
-      shutil.copy(self._record_file.name, self._output_file)
+    with self._record_file_lock:
+      if self._record_file and self._output_file:
+        try:
+          os.makedirs(os.path.dirname(self._output_file))
+        except OSError as e:
+          if e.errno != errno.EEXIST:
+            raise
+        shutil.copy(self._record_file.name, self._output_file)
 
   def Close(self):
     """Closes logcat recording file.
 
     Should be called when finished using the logcat monitor.
     """
-    if self._record_file:
-      self._record_file.close()
-      self._record_file = None
+    with self._record_file_lock:
+      if self._record_file:
+        self._record_file.close()
+        self._record_file = None
 
   def __enter__(self):
     """Starts the logcat monitor."""
@@ -222,9 +230,12 @@ class LogcatMonitor(object):
 
   def __del__(self):
     """Closes logcat recording file in case |Close| was never called."""
-    if self._record_file:
-      logging.warning('Need to call |Close| on the logcat monitor when done!')
-      self._record_file.close()
+    with self._record_file_lock:
+      if self._record_file:
+        logging.warning(
+            'Need to call |Close| on the logcat monitor when done!')
+        self._record_file.close()
+
 
 class LogcatMonitorCommandError(device_errors.CommandFailedError):
   """Exception for errors with logcat monitor commands."""

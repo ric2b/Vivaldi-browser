@@ -23,10 +23,14 @@ namespace sync_driver_v2 {
 NonBlockingDataTypeController::NonBlockingDataTypeController(
     const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
     const base::Closure& error_callback,
+    syncer::ModelType model_type,
     sync_driver::SyncClient* sync_client)
     : sync_driver::DataTypeController(ui_thread, error_callback),
+      model_type_(model_type),
       sync_client_(sync_client),
-      state_(NOT_RUNNING) {}
+      state_(NOT_RUNNING) {
+  DCHECK(BelongsToUIThread());
+}
 
 NonBlockingDataTypeController::~NonBlockingDataTypeController() {}
 
@@ -50,7 +54,8 @@ void NonBlockingDataTypeController::LoadModels(
   if (!RunOnModelThread(
           FROM_HERE,
           base::Bind(
-              &syncer_v2::SharedModelTypeProcessor::Start, type_processor(),
+              &syncer_v2::SharedModelTypeProcessor::OnSyncStarting,
+              type_processor(),
               base::Bind(&NonBlockingDataTypeController::OnProcessorStarted,
                          this)))) {
     LoadModelsDone(
@@ -87,20 +92,23 @@ void NonBlockingDataTypeController::LoadModelsDone(
 void NonBlockingDataTypeController::OnProcessorStarted(
     syncer::SyncError error,
     scoped_ptr<syncer_v2::ActivationContext> activation_context) {
-  if (BelongsToUIThread()) {
-    // Hold on to the activation context until ActivateDataType is called.
-    if (state_ == MODEL_STARTING) {
-      activation_context_ = std::move(activation_context);
-    }
-    // TODO(stanisc): Figure out if UNRECOVERABLE_ERROR is OK in this case.
-    ConfigureResult result = error.IsSet() ? UNRECOVERABLE_ERROR : OK;
-    LoadModelsDone(result, error);
-  } else {
-    RunOnUIThread(
-        FROM_HERE,
-        base::Bind(&NonBlockingDataTypeController::OnProcessorStarted, this,
-                   error, base::Passed(std::move(activation_context))));
+  RunOnUIThread(
+      FROM_HERE,
+      base::Bind(&NonBlockingDataTypeController::OnProcessorStartedOnUIThread,
+                 this, error, base::Passed(std::move(activation_context))));
+}
+
+void NonBlockingDataTypeController::OnProcessorStartedOnUIThread(
+    syncer::SyncError error,
+    scoped_ptr<syncer_v2::ActivationContext> activation_context) {
+  DCHECK(BelongsToUIThread());
+  // Hold on to the activation context until ActivateDataType is called.
+  if (state_ == MODEL_STARTING) {
+    activation_context_ = std::move(activation_context);
   }
+  // TODO(stanisc): Figure out if UNRECOVERABLE_ERROR is OK in this case.
+  ConfigureResult result = error.IsSet() ? UNRECOVERABLE_ERROR : OK;
+  LoadModelsDone(result, error);
 }
 
 void NonBlockingDataTypeController::StartAssociating(
@@ -142,7 +150,8 @@ void NonBlockingDataTypeController::Stop() {
 
   RunOnModelThread(
       FROM_HERE,
-      base::Bind(&syncer_v2::SharedModelTypeProcessor::Stop, type_processor()));
+      base::Bind(&syncer_v2::SharedModelTypeProcessor::DisconnectSync,
+                 type_processor()));
 }
 
 std::string NonBlockingDataTypeController::name() const {
@@ -157,13 +166,6 @@ sync_driver::DataTypeController::State NonBlockingDataTypeController::state()
 
 bool NonBlockingDataTypeController::BelongsToUIThread() const {
   return ui_thread()->BelongsToCurrentThread();
-}
-
-void NonBlockingDataTypeController::RunOnUIThread(
-    const tracked_objects::Location& from_here,
-    const base::Closure& task) {
-  DCHECK(!BelongsToUIThread());
-  ui_thread()->PostTask(from_here, task);
 }
 
 void NonBlockingDataTypeController::OnSingleDataTypeUnrecoverableError(
@@ -209,6 +211,42 @@ void NonBlockingDataTypeController::RecordUnrecoverableError() {
   UMA_HISTOGRAM_ENUMERATION("Sync.DataTypeRunFailures",
                             ModelTypeToHistogramInt(type()),
                             syncer::MODEL_TYPE_COUNT);
+}
+
+base::WeakPtr<syncer_v2::SharedModelTypeProcessor>
+NonBlockingDataTypeController::type_processor() const {
+  return type_processor_;
+}
+
+syncer::ModelType NonBlockingDataTypeController::type() const {
+  return model_type_;
+}
+
+void NonBlockingDataTypeController::InitializeProcessorOnModelThread() {
+  base::WeakPtr<syncer_v2::ModelTypeService> model_type_service =
+      sync_client_->GetModelTypeServiceForType(type());
+  if (!model_type_service.get()) {
+    LOG(WARNING) << "ModelTypeService destroyed before "
+                    "ModelTypeController was started.";
+    // TODO(gangwu): Add SyncError and then call start_callback with it. also
+    // set an error state to |state_|.
+  }
+
+  scoped_ptr<syncer_v2::SharedModelTypeProcessor> shared_model_type_processor(
+      make_scoped_ptr(new syncer_v2::SharedModelTypeProcessor(
+          type(), model_type_service.get())));
+  type_processor_ = shared_model_type_processor->AsWeakPtrForUI();
+  model_type_service->set_change_processor(
+      std::move(shared_model_type_processor));
+}
+
+void NonBlockingDataTypeController::InitializeProcessor() {
+  DCHECK(BelongsToUIThread());
+  RunOnModelThread(
+      FROM_HERE,
+      base::Bind(
+          &NonBlockingDataTypeController::InitializeProcessorOnModelThread,
+          this));
 }
 
 }  // namespace sync_driver_v2

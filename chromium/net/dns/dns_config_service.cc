@@ -48,7 +48,8 @@ NameServerClassifier::NameServersType NameServerClassifier::GetNameServersType(
   for (std::vector<IPEndPoint>::const_iterator it = nameservers.begin();
        it != nameservers.end();
        ++it) {
-    type = MergeNameServersTypes(type, GetNameServerType(it->address()));
+    type =
+        MergeNameServersTypes(type, GetNameServerType(it->address().bytes()));
   }
   return type;
 }
@@ -105,6 +106,8 @@ DnsConfig::DnsConfig()
       rotate(false),
       edns0(false),
       use_local_ipv6(false) {}
+
+DnsConfig::DnsConfig(const DnsConfig& other) = default;
 
 DnsConfig::~DnsConfig() {}
 

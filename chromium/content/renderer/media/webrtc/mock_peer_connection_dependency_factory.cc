@@ -15,9 +15,9 @@
 #include "content/renderer/media/webrtc_audio_capturer.h"
 #include "content/renderer/media/webrtc_local_audio_track.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
-#include "third_party/libjingle/source/talk/app/webrtc/mediastreaminterface.h"
-#include "third_party/libjingle/source/talk/media/base/videocapturer.h"
+#include "third_party/webrtc/api/mediastreaminterface.h"
 #include "third_party/webrtc/base/scoped_ref_ptr.h"
+#include "third_party/webrtc/media/base/videocapturer.h"
 
 using webrtc::AudioSourceInterface;
 using webrtc::AudioTrackInterface;
@@ -208,11 +208,13 @@ cricket::VideoCapturer* MockVideoSource::GetVideoCapturer() {
   return capturer_.get();
 }
 
-void MockVideoSource::AddSink(cricket::VideoRenderer* output) {
+void MockVideoSource::AddSink(
+    rtc::VideoSinkInterface<cricket::VideoFrame>* output) {
   NOTIMPLEMENTED();
 }
 
-void MockVideoSource::RemoveSink(cricket::VideoRenderer* output) {
+void MockVideoSource::RemoveSink(
+    rtc::VideoSinkInterface<cricket::VideoFrame>* output) {
   NOTIMPLEMENTED();
 }
 
@@ -310,7 +312,7 @@ void MockWebRtcVideoTrack::AddRenderer(VideoRendererInterface* renderer) {
 }
 
 void MockWebRtcVideoTrack::RemoveRenderer(VideoRendererInterface* renderer) {
-  DCHECK_EQ(renderer_, renderer);
+  DCHECK(renderer_ == renderer);
   renderer_ = NULL;
 }
 

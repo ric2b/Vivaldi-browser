@@ -6,12 +6,13 @@ from telemetry.core import exceptions
 from telemetry import decorators
 from telemetry.testing import tab_test_case
 
+
 class TabStackTraceTest(tab_test_case.TabTestCase):
 
-  # For now just work on a single platform (mac).
-  @decorators.Enabled('mac')
-   # Stack traces do not currently work on 10.6, but they are also being
-   # disabled shortly so just disable it for now.
+  # TODO(dyen): For now this works on a mac & linux but continue to expand this.
+  @decorators.Enabled('mac', 'linux')
+  # Stack traces do not currently work on 10.6, but they are also being
+  # disabled shortly so just disable it for now.
   @decorators.Disabled('snowleopard')
   def testStackTrace(self):
     try:
@@ -20,9 +21,9 @@ class TabStackTraceTest(tab_test_case.TabTestCase):
       self.assertIn('Thread 0 (crashed)', '\n'.join(e.stack_trace))
 
   # Currently stack traces do not work on windows: http://crbug.com/476110
-  # Currently symbols do not work on swarming: http://crbug.com/563716
   # Linux stack traces depends on fission support: http://crbug.com/405623
-  @decorators.Disabled('all')
+  @decorators.Enabled('mac')
+  @decorators.Disabled('snowleopard')
   def testCrashSymbols(self):
     try:
       self._tab.Navigate('chrome://crash', timeout=5)

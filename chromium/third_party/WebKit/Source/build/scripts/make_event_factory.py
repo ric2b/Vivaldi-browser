@@ -47,7 +47,16 @@ HEADER_TEMPLATE = """%(license)s
 """
 
 
-def case_insensitive_matching(name):
+# All events on the following whitelist are matched case-insensitively
+# in createEvent.
+#
+# All events not on the list are being measured (except for already
+# deprecated ones). The plan is to limit createEvent to just a few
+# selected events necessary for legacy content in accordance with the
+# specification:
+#
+# https://dom.spec.whatwg.org/#dom-document-createevent
+def create_event_whitelist(name):
     return (name == ('HTMLEvents')
             or name == 'Event'
             or name == 'Events'
@@ -57,6 +66,21 @@ def case_insensitive_matching(name):
             or name == 'MessageEvent'
             or name.startswith('MouseEvent')
             or name == 'TouchEvent')
+
+
+def create_event_deprecate_list(name):
+    return (name == 'SVGZoomEvent'
+            or name == 'SVGZoomEvents')
+
+
+def measure_name(name):
+    return 'DocumentCreateEvent' + name
+
+
+def deprecate_name(name):
+    if (name.startswith('SVGZoomEvent')):
+        return 'SVGZoomEvent'
+    return None
 
 
 class EventFactoryWriter(in_generator.Writer):
@@ -72,8 +96,11 @@ class EventFactoryWriter(in_generator.Writer):
     filters = {
         'cpp_name': name_utilities.cpp_name,
         'lower_first': name_utilities.lower_first,
-        'case_insensitive_matching': case_insensitive_matching,
         'script_name': name_utilities.script_name,
+        'create_event_whitelist': create_event_whitelist,
+        'create_event_deprecate_list': create_event_deprecate_list,
+        'measure_name': measure_name,
+        'deprecate_name': deprecate_name,
     }
 
     def __init__(self, in_file_path):

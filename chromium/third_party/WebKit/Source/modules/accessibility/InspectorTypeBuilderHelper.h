@@ -5,40 +5,27 @@
 #ifndef InspectorTypeBuilderHelper_h
 #define InspectorTypeBuilderHelper_h
 
-#include "core/InspectorTypeBuilder.h"
 #include "modules/ModulesExport.h"
 #include "modules/accessibility/AXObject.h"
 #include "modules/accessibility/AXObjectCacheImpl.h"
+#include "platform/inspector_protocol/TypeBuilder.h"
 
 namespace blink {
 
-using TypeBuilder::Accessibility::AXGlobalStates;
-using TypeBuilder::Accessibility::AXLiveRegionAttributes;
-using TypeBuilder::Accessibility::AXProperty;
-using TypeBuilder::Accessibility::AXValueType;
-using TypeBuilder::Accessibility::AXRelationshipAttributes;
-using TypeBuilder::Accessibility::AXValue;
-using TypeBuilder::Accessibility::AXValueSource;
-using TypeBuilder::Accessibility::AXWidgetAttributes;
-using TypeBuilder::Accessibility::AXWidgetStates;
+using namespace protocol::Accessibility;
 
-PassRefPtr<AXProperty> createProperty(String name, PassRefPtr<AXValue>);
-PassRefPtr<AXProperty> createProperty(AXGlobalStates::Enum name, PassRefPtr<AXValue>);
-PassRefPtr<AXProperty> createProperty(AXLiveRegionAttributes::Enum name, PassRefPtr<AXValue>);
-PassRefPtr<AXProperty> createProperty(AXRelationshipAttributes::Enum name, PassRefPtr<AXValue>);
-PassRefPtr<AXProperty> createProperty(AXWidgetAttributes::Enum name, PassRefPtr<AXValue>);
-PassRefPtr<AXProperty> createProperty(AXWidgetStates::Enum name, PassRefPtr<AXValue>);
-PassRefPtr<AXProperty> createProperty(IgnoredReason);
+PassOwnPtr<AXProperty> createProperty(const String& name, PassOwnPtr<AXValue>);
+PassOwnPtr<AXProperty> createProperty(IgnoredReason);
 
-PassRefPtr<AXValue> createValue(String value, AXValueType::Enum = AXValueType::String);
-PassRefPtr<AXValue> createValue(int value, AXValueType::Enum = AXValueType::Integer);
-PassRefPtr<AXValue> createValue(float value, AXValueType::Enum = AXValueType::Number);
-PassRefPtr<AXValue> createBooleanValue(bool value, AXValueType::Enum = AXValueType::Boolean);
-PassRefPtr<AXValue> createRelatedNodeListValue(const AXObject*, String* name = nullptr, AXValueType::Enum = AXValueType::Idref);
-PassRefPtr<AXValue> createRelatedNodeListValue(AXRelatedObjectVector&, AXValueType::Enum);
-PassRefPtr<AXValue> createRelatedNodeListValue(AXObject::AXObjectVector& axObjects, AXValueType::Enum = AXValueType::IdrefList);
+PassOwnPtr<AXValue> createValue(const String& value, const String& type = AXValueTypeEnum::String);
+PassOwnPtr<AXValue> createValue(int value, const String& type = AXValueTypeEnum::Integer);
+PassOwnPtr<AXValue> createValue(float value, const String& valueType = AXValueTypeEnum::Number);
+PassOwnPtr<AXValue> createBooleanValue(bool value, const String& valueType = AXValueTypeEnum::Boolean);
+PassOwnPtr<AXValue> createRelatedNodeListValue(const AXObject*, String* name = nullptr, const String& valueType = AXValueTypeEnum::Idref);
+PassOwnPtr<AXValue> createRelatedNodeListValue(AXRelatedObjectVector&, const String& valueType);
+PassOwnPtr<AXValue> createRelatedNodeListValue(AXObject::AXObjectVector& axObjects, const String& valueType = AXValueTypeEnum::IdrefList);
 
-PassRefPtr<AXValueSource> createValueSource(NameSource&);
+PassOwnPtr<AXValueSource> createValueSource(NameSource&);
 
 } // namespace blink
 

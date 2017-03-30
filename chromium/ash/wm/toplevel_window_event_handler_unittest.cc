@@ -14,7 +14,6 @@
 #include "ash/wm/window_util.h"
 #include "ash/wm/workspace_controller.h"
 #include "base/compiler_specific.h"
-#include "base/message_loop/message_loop.h"
 #include "base/thread_task_runner_handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/aura_constants.h"
@@ -305,8 +304,9 @@ TEST_F(ToplevelWindowEventHandlerTest, BottomRightPastMinimum) {
 
 TEST_F(ToplevelWindowEventHandlerTest, BottomRightWorkArea) {
   scoped_ptr<aura::Window> target(CreateWindow(HTBOTTOMRIGHT));
-  gfx::Rect work_area = Shell::GetScreen()->GetDisplayNearestWindow(
-      target.get()).work_area();
+  gfx::Rect work_area = gfx::Screen::GetScreen()
+                            ->GetDisplayNearestWindow(target.get())
+                            .work_area();
   gfx::Point position = target->bounds().origin();
   // Drag further than work_area bottom.
   DragFromCenterBy(target.get(), 100, work_area.height());
@@ -320,8 +320,9 @@ TEST_F(ToplevelWindowEventHandlerTest, BottomRightWorkArea) {
 
 TEST_F(ToplevelWindowEventHandlerTest, BottomLeftWorkArea) {
   scoped_ptr<aura::Window> target(CreateWindow(HTBOTTOMLEFT));
-  gfx::Rect work_area = Shell::GetScreen()->GetDisplayNearestWindow(
-      target.get()).work_area();
+  gfx::Rect work_area = gfx::Screen::GetScreen()
+                            ->GetDisplayNearestWindow(target.get())
+                            .work_area();
   gfx::Point position = target->bounds().origin();
   // Drag further than work_area bottom.
   DragFromCenterBy(target.get(), -30, work_area.height());
@@ -336,8 +337,9 @@ TEST_F(ToplevelWindowEventHandlerTest, BottomLeftWorkArea) {
 
 TEST_F(ToplevelWindowEventHandlerTest, BottomWorkArea) {
   scoped_ptr<aura::Window> target(CreateWindow(HTBOTTOM));
-  gfx::Rect work_area = Shell::GetScreen()->GetDisplayNearestWindow(
-      target.get()).work_area();
+  gfx::Rect work_area = gfx::Screen::GetScreen()
+                            ->GetDisplayNearestWindow(target.get())
+                            .work_area();
   gfx::Point position = target->bounds().origin();
   // Drag further than work_area bottom.
   DragFromCenterBy(target.get(), 0, work_area.height());
@@ -383,8 +385,8 @@ TEST_F(ToplevelWindowEventHandlerTest, DontDragToNegativeY) {
 // Verifies we don't let windows go bigger than the display width.
 TEST_F(ToplevelWindowEventHandlerTest, DontGotWiderThanScreen) {
   scoped_ptr<aura::Window> target(CreateWindow(HTRIGHT));
-  gfx::Rect work_area = Shell::GetScreen()->GetDisplayNearestWindow(
-      target.get()).bounds();
+  gfx::Rect work_area =
+      gfx::Screen::GetScreen()->GetDisplayNearestWindow(target.get()).bounds();
   DragFromCenterBy(target.get(), work_area.width() * 2, 0);
   // The y location and height should not have changed.
   EXPECT_EQ(work_area.width(), target->bounds().width());
@@ -715,11 +717,10 @@ TEST_F(ToplevelWindowEventHandlerTest, CaptureLossAfterMouseRelease) {
 
   aura::client::WindowMoveClient* move_client =
       aura::client::GetWindowMoveClient(window->GetRootWindow());
-  base::MessageLoopForUI::current()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(&SendMouseReleaseAndReleaseCapture,
-                 base::Unretained(&generator),
-                 base::Unretained(window.get())));
+                 base::Unretained(&generator), base::Unretained(window.get())));
   EXPECT_EQ(aura::client::MOVE_SUCCESSFUL,
             move_client->RunMoveLoop(window.get(), gfx::Vector2d(),
                 aura::client::WINDOW_MOVE_SOURCE_MOUSE));

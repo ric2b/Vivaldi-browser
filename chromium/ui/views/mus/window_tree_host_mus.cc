@@ -4,11 +4,8 @@
 
 #include "ui/views/mus/window_tree_host_mus.h"
 
-#include "components/bitmap_uploader/bitmap_uploader.h"
-#include "mojo/shell/public/interfaces/shell.mojom.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
-#include "ui/base/view_prop.h"
 #include "ui/events/event.h"
 #include "ui/views/mus/input_method_mus.h"
 #include "ui/views/mus/native_widget_mus.h"
@@ -19,26 +16,19 @@ namespace views {
 ////////////////////////////////////////////////////////////////////////////////
 // WindowTreeHostMus, public:
 
-WindowTreeHostMus::WindowTreeHostMus(mojo::Shell* shell,
+WindowTreeHostMus::WindowTreeHostMus(mojo::Connector* connector,
                                      NativeWidgetMus* native_widget,
-                                     mus::Window* window,
-                                     mus::mojom::SurfaceType surface_type)
+                                     mus::Window* window)
     : native_widget_(native_widget),
       show_state_(ui::PLATFORM_WINDOW_STATE_UNKNOWN) {
-  SetPlatformWindow(make_scoped_ptr(new PlatformWindowMus(this, window)));
+  SetPlatformWindow(
+      make_scoped_ptr(new PlatformWindowMus(this, connector, window)));
   // The location of events is already transformed, and there is no way to
   // correctly determine the reverse transform. So, don't attempt to transform
   // event locations, else the root location is wrong.
   // TODO(sky): we need to transform for device scale though.
   dispatcher()->set_transform_events(false);
   compositor()->SetHostHasTransparentBackground(true);
-
-  bitmap_uploader_.reset(new bitmap_uploader::BitmapUploader(window));
-  bitmap_uploader_->Init(shell);
-  prop_.reset(
-      new ui::ViewProp(GetAcceleratedWidget(),
-                       bitmap_uploader::kBitmapUploaderForAcceleratedWidget,
-                       bitmap_uploader_.get()));
 
   input_method_.reset(new InputMethodMUS(this, window));
   SetSharedInputMethod(input_method_.get());

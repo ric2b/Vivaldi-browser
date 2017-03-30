@@ -12,7 +12,6 @@
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/media_log.h"
-#include "media/base/pipeline.h"
 
 namespace media {
 
@@ -43,23 +42,37 @@ std::string DecryptingDemuxerStream::GetDisplayName() const {
 }
 
 void DecryptingDemuxerStream::Initialize(DemuxerStream* stream,
-                                         const SetCdmReadyCB& set_cdm_ready_cb,
+                                         CdmContext* cdm_context,
                                          const PipelineStatusCB& status_cb) {
   DVLOG(2) << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK_EQ(state_, kUninitialized) << state_;
-
+  DCHECK(stream);
+  DCHECK(cdm_context);
   DCHECK(!demuxer_stream_);
+
   weak_this_ = weak_factory_.GetWeakPtr();
   demuxer_stream_ = stream;
-  set_cdm_ready_cb_ = set_cdm_ready_cb;
   init_cb_ = BindToCurrentLoop(status_cb);
 
   InitializeDecoderConfig();
 
-  state_ = kDecryptorRequested;
-  set_cdm_ready_cb_.Run(BindToCurrentLoop(
-      base::Bind(&DecryptingDemuxerStream::SetCdm, weak_this_)));
+  if (!cdm_context->GetDecryptor()) {
+    MEDIA_LOG(DEBUG, media_log_) << GetDisplayName() << ": no decryptor";
+    state_ = kUninitialized;
+    base::ResetAndReturn(&init_cb_).Run(DECODER_ERROR_NOT_SUPPORTED);
+    return;
+  }
+
+  decryptor_ = cdm_context->GetDecryptor();
+
+  decryptor_->RegisterNewKeyCB(
+      GetDecryptorStreamType(),
+      BindToCurrentLoop(
+          base::Bind(&DecryptingDemuxerStream::OnKeyAdded, weak_this_)));
+
+  state_ = kIdle;
+  base::ResetAndReturn(&init_cb_).Run(PIPELINE_OK);
 }
 
 void DecryptingDemuxerStream::Read(const ReadCB& read_cb) {
@@ -83,16 +96,6 @@ void DecryptingDemuxerStream::Reset(const base::Closure& closure) {
 
   reset_cb_ = BindToCurrentLoop(closure);
 
-  // TODO(xhwang): This should not happen. Remove it, DCHECK against the
-  // condition and clean up related tests.
-  if (state_ == kDecryptorRequested) {
-    DCHECK(!init_cb_.is_null());
-    set_cdm_ready_cb_.Run(CdmReadyCB());
-    base::ResetAndReturn(&init_cb_).Run(PIPELINE_ERROR_ABORT);
-    DoReset();
-    return;
-  }
-
   decryptor_->CancelDecrypt(GetDecryptorStreamType());
 
   // Reset() cannot complete if the read callback is still pending.
@@ -115,24 +118,24 @@ void DecryptingDemuxerStream::Reset(const base::Closure& closure) {
 }
 
 AudioDecoderConfig DecryptingDemuxerStream::audio_decoder_config() {
-  DCHECK(state_ != kUninitialized && state_ != kDecryptorRequested) << state_;
+  DCHECK(state_ != kUninitialized) << state_;
   CHECK_EQ(demuxer_stream_->type(), AUDIO);
   return audio_config_;
 }
 
 VideoDecoderConfig DecryptingDemuxerStream::video_decoder_config() {
-  DCHECK(state_ != kUninitialized && state_ != kDecryptorRequested) << state_;
+  DCHECK(state_ != kUninitialized) << state_;
   CHECK_EQ(demuxer_stream_->type(), VIDEO);
   return video_config_;
 }
 
 DemuxerStream::Type DecryptingDemuxerStream::type() const {
-  DCHECK(state_ != kUninitialized && state_ != kDecryptorRequested) << state_;
+  DCHECK(state_ != kUninitialized) << state_;
   return demuxer_stream_->type();
 }
 
 DemuxerStream::Liveness DecryptingDemuxerStream::liveness() const {
-  DCHECK(state_ != kUninitialized && state_ != kDecryptorRequested) << state_;
+  DCHECK(state_ != kUninitialized) << state_;
   return demuxer_stream_->liveness();
 }
 
@@ -159,8 +162,6 @@ DecryptingDemuxerStream::~DecryptingDemuxerStream() {
     decryptor_->CancelDecrypt(GetDecryptorStreamType());
     decryptor_ = NULL;
   }
-  if (!set_cdm_ready_cb_.is_null())
-    base::ResetAndReturn(&set_cdm_ready_cb_).Run(CdmReadyCB());
   if (!init_cb_.is_null())
     base::ResetAndReturn(&init_cb_).Run(PIPELINE_ERROR_ABORT);
   if (!read_cb_.is_null())
@@ -168,36 +169,6 @@ DecryptingDemuxerStream::~DecryptingDemuxerStream() {
   if (!reset_cb_.is_null())
     base::ResetAndReturn(&reset_cb_).Run();
   pending_buffer_to_decrypt_ = NULL;
-}
-
-void DecryptingDemuxerStream::SetCdm(CdmContext* cdm_context,
-                                     const CdmAttachedCB& cdm_attached_cb) {
-  DVLOG(2) << __FUNCTION__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
-  DCHECK_EQ(state_, kDecryptorRequested) << state_;
-  DCHECK(!init_cb_.is_null());
-  DCHECK(!set_cdm_ready_cb_.is_null());
-
-  set_cdm_ready_cb_.Reset();
-
-  if (!cdm_context || !cdm_context->GetDecryptor()) {
-    MEDIA_LOG(DEBUG, media_log_) << GetDisplayName() << ": decryptor not set";
-    state_ = kUninitialized;
-    base::ResetAndReturn(&init_cb_).Run(DECODER_ERROR_NOT_SUPPORTED);
-    cdm_attached_cb.Run(false);
-    return;
-  }
-
-  decryptor_ = cdm_context->GetDecryptor();
-
-  decryptor_->RegisterNewKeyCB(
-      GetDecryptorStreamType(),
-      BindToCurrentLoop(
-          base::Bind(&DecryptingDemuxerStream::OnKeyAdded, weak_this_)));
-
-  state_ = kIdle;
-  base::ResetAndReturn(&init_cb_).Run(PIPELINE_OK);
-  cdm_attached_cb.Run(true);
 }
 
 void DecryptingDemuxerStream::DecryptBuffer(
@@ -219,6 +190,7 @@ void DecryptingDemuxerStream::DecryptBuffer(
     // Update the decoder config, which the decoder will use when it is notified
     // of kConfigChanged.
     InitializeDecoderConfig();
+
     state_ = kIdle;
     base::ResetAndReturn(&read_cb_).Run(kConfigChanged, NULL);
     if (!reset_cb_.is_null())
@@ -353,10 +325,7 @@ void DecryptingDemuxerStream::DoReset() {
   DCHECK(init_cb_.is_null());
   DCHECK(read_cb_.is_null());
 
-  if (state_ == kDecryptorRequested)
-    state_ = kUninitialized;
-  else
-    state_ = kIdle;
+  state_ = kIdle;
 
   base::ResetAndReturn(&reset_cb_).Run();
 }

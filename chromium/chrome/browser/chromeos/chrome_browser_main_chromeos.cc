@@ -19,7 +19,6 @@
 #include "base/linux_util.h"
 #include "base/macros.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/sys_info.h"
@@ -33,12 +32,12 @@
 #include "chrome/browser/chromeos/app_mode/kiosk_app_launch_error.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_mode_idle_app_name_notification.h"
-#include "chrome/browser/chromeos/arc/arc_auth_service_impl.h"
-#include "chrome/browser/chromeos/arc/arc_settings_bridge_impl.h"
+#include "chrome/browser/chromeos/arc/arc_service_launcher.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chrome/browser/chromeos/dbus/chrome_console_service_provider_delegate.h"
 #include "chrome/browser/chromeos/dbus/chrome_display_power_service_provider_delegate.h"
 #include "chrome/browser/chromeos/dbus/chrome_proxy_resolver_delegate.h"
+#include "chrome/browser/chromeos/dbus/kiosk_info_service_provider.h"
 #include "chrome/browser/chromeos/dbus/screen_lock_service_provider.h"
 #include "chrome/browser/chromeos/events/event_rewriter.h"
 #include "chrome/browser/chromeos/events/event_rewriter_controller.h"
@@ -114,21 +113,16 @@
 #include "chromeos/network/portal_detector/network_portal_detector_stub.h"
 #include "chromeos/system/statistics_provider.h"
 #include "chromeos/tpm/tpm_token_loader.h"
-#include "components/arc/arc_bridge_service.h"
-#include "components/arc/arc_service_manager.h"
-#include "components/arc/settings/arc_settings_bridge.h"
-#include "components/arc/video/arc_video_bridge.h"
-#include "components/arc/video/video_host_delegate.h"
 #include "components/browser_sync/common/browser_sync_switches.h"
 #include "components/device_event_log/device_event_log.h"
 #include "components/metrics/metrics_service.h"
 #include "components/ownership/owner_key_util.h"
+#include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/wallpaper/wallpaper_manager_base.h"
-#include "content/public/browser/arc_video_host_delegate.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/common/content_switches.h"
@@ -154,6 +148,10 @@
 #include "chrome/browser/chromeos/device_uma.h"
 #include "chrome/browser/chromeos/events/system_key_event_listener.h"
 #include "chrome/browser/chromeos/events/xinput_hierarchy_changed_event_listener.h"
+#endif
+
+#if defined(MOJO_SHELL_CLIENT)
+#include "chrome/browser/chromeos/chrome_interface_factory.h"
 #endif
 
 namespace chromeos {
@@ -187,6 +185,14 @@ void InitializeNetworkPortalDetector() {
   }
 }
 
+bool IsRunningAsMusClient() {
+#if defined(MOJO_SHELL_CLIENT)
+  return content::MojoShellConnection::Get() &&
+         content::MojoShellConnection::Get()->UsingExternalShell();
+#endif
+  return false;
+}
+
 }  // namespace
 
 namespace internal {
@@ -218,6 +224,7 @@ class DBusServices {
     service_providers.push_back(new ScreenLockServiceProvider);
     service_providers.push_back(new ConsoleServiceProvider(
         make_scoped_ptr(new ChromeConsoleServiceProviderDelegate)));
+    service_providers.push_back(new KioskInfoService);
     CrosDBusService::Initialize(std::move(service_providers));
 
     // Initialize PowerDataCollector after DBusThreadManager is initialized.
@@ -375,6 +382,13 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopStart() {
 // Threads are initialized between MainMessageLoopStart and MainMessageLoopRun.
 // about_flags settings are applied in ChromeBrowserMainParts::PreCreateThreads.
 void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
+#if defined(MOJO_SHELL_CLIENT)
+  if (IsRunningAsMusClient()) {
+    interface_factory_.reset(new ChromeInterfaceFactory);
+    content::MojoShellConnection::Get()->AddListener(interface_factory_.get());
+  }
+#endif
+
   // Set the crypto thread after the IO thread has been created/started.
   TPMTokenLoader::Get()->SetCryptoTaskRunner(
       content::BrowserThread::GetMessageLoopProxyForThread(
@@ -398,12 +412,8 @@ void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
 
   wake_on_wifi_manager_.reset(new WakeOnWifiManager());
 
-  arc_service_manager_.reset(new arc::ArcServiceManager(
-      make_scoped_ptr(new arc::ArcAuthServiceImpl()),
-      make_scoped_ptr(new arc::ArcSettingsBridgeImpl()),
-      make_scoped_ptr(
-          new arc::ArcVideoBridge(content::CreateArcVideoHostDelegate()))));
-  arc_service_manager_->arc_bridge_service()->DetectAvailability();
+  arc_service_launcher_.reset(new arc::ArcServiceLauncher());
+  arc_service_launcher_->Initialize();
 
   chromeos::ResourceReporter::GetInstance()->StartMonitoring();
 
@@ -463,10 +473,16 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
 
   media::SoundsManager::Create();
 
-  // Initialize magnification manager before ash tray is created. And this must
-  // be placed after UserManager::SessionStarted();
-  AccessibilityManager::Initialize();
-  MagnificationManager::Initialize();
+  if (!IsRunningAsMusClient()) {
+    // Initialize magnification manager before ash tray is created. And this
+    // must be placed after UserManager::SessionStarted();
+    // TODO(sad): These components expects the ash::Shell instance to be
+    // created. However, when running as a mus-client, an ash::Shell instance is
+    // not created. These accessibility services should instead be exposed as
+    // separate services. crbug.com/557401
+    AccessibilityManager::Initialize();
+    MagnificationManager::Initialize();
+  }
 
   wallpaper::WallpaperManagerBase::SetPathIds(
       chrome::DIR_USER_DATA,
@@ -697,21 +713,25 @@ void ChromeBrowserMainPartsChromeos::PreBrowserStart() {
 void ChromeBrowserMainPartsChromeos::PostBrowserStart() {
   system::InputDeviceSettings::Get()->InitTouchDevicesStatusFromLocalPrefs();
 
-  // These are dependent on the ash::Shell singleton already having been
-  // initialized.
-  // TODO(oshima): Remove ash dependency in PowerButtonObserver.
-  // crbug.com/408832.
-  power_button_observer_.reset(new PowerButtonObserver);
-  data_promo_notification_.reset(new DataPromoNotification());
+  if (!IsRunningAsMusClient()) {
+    // These are dependent on the ash::Shell singleton already having been
+    // initialized. Consequently, these cannot be used when running as a mus
+    // client.
+    // TODO(oshima): Remove ash dependency in PowerButtonObserver.
+    // crbug.com/408832.
+    power_button_observer_.reset(new PowerButtonObserver);
+    data_promo_notification_.reset(new DataPromoNotification());
 
-  keyboard_event_rewriters_.reset(new EventRewriterController());
-  keyboard_event_rewriters_->AddEventRewriter(
-      scoped_ptr<ui::EventRewriter>(new KeyboardDrivenEventRewriter()));
-  keyboard_event_rewriters_->AddEventRewriter(
-      scoped_ptr<ui::EventRewriter>(new SpokenFeedbackEventRewriter()));
-  keyboard_event_rewriters_->AddEventRewriter(scoped_ptr<ui::EventRewriter>(
-      new EventRewriter(ash::Shell::GetInstance()->sticky_keys_controller())));
-  keyboard_event_rewriters_->Init();
+    keyboard_event_rewriters_.reset(new EventRewriterController());
+    keyboard_event_rewriters_->AddEventRewriter(
+        scoped_ptr<ui::EventRewriter>(new KeyboardDrivenEventRewriter()));
+    keyboard_event_rewriters_->AddEventRewriter(
+        scoped_ptr<ui::EventRewriter>(new SpokenFeedbackEventRewriter()));
+    keyboard_event_rewriters_->AddEventRewriter(
+        scoped_ptr<ui::EventRewriter>(new EventRewriter(
+            ash::Shell::GetInstance()->sticky_keys_controller())));
+    keyboard_event_rewriters_->Init();
+  }
 
   ChromeBrowserMainPartsLinux::PostBrowserStart();
 }
@@ -722,7 +742,7 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
 
   BootTimesRecorder::Get()->AddLogoutTimeMarker("UIMessageLoopEnded", true);
 
-  arc_service_manager_->arc_bridge_service()->Shutdown();
+  arc_service_launcher_->Shutdown();
 
   // Destroy the application name notifier for Kiosk mode.
   KioskModeIdleAppNameNotification::Shutdown();

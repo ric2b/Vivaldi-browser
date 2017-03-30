@@ -16,6 +16,9 @@ cr.define('cr.ui.Oobe', function() {
      * be invoked to do final setup.
      */
     initialize: function() {
+      // TODO(jdufault): Remove this after resolving crbug.com/452599.
+      console.log('Initializing OOBE');
+
       cr.ui.login.DisplayManager.initialize();
       login.WrongHWIDScreen.register();
       login.AccountPickerScreen.register();
@@ -33,6 +36,7 @@ cr.define('cr.ui.Oobe', function() {
       login.ConfirmPasswordScreen.register();
       login.FatalErrorScreen.register();
       login.DeviceDisabledScreen.register();
+      login.UnrecoverableCryptohomeErrorScreen.register();
 
       cr.ui.Bubble.decorate($('bubble'));
       login.HeaderBar.decorate($('login-header-bar'));

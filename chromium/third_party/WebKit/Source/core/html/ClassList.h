@@ -30,7 +30,6 @@
 #include "core/dom/Element.h"
 #include "core/dom/SpaceSplitString.h"
 #include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
 
 namespace blink {
 
@@ -40,9 +39,9 @@ typedef int ExceptionCode;
 
 class ClassList final : public DOMTokenList {
 public:
-    static PassOwnPtrWillBeRawPtr<ClassList> create(Element* element)
+    static PassRefPtrWillBeRawPtr<ClassList> create(Element* element)
     {
-        return adoptPtrWillBeNoop(new ClassList(element));
+        return adoptRefWillBeNoop(new ClassList(element));
     }
 
 #if !ENABLE(OILPAN)

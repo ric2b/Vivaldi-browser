@@ -27,7 +27,6 @@
 #include "net/http/http_server_properties_impl.h"
 #include "net/http/http_stream_factory.h"
 #include "net/proxy/proxy_service.h"
-#include "net/socket/next_proto.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/default_channel_id_store.h"
 #include "net/ssl/ssl_config_service_defaults.h"
@@ -292,11 +291,6 @@ void URLRequestContextFactory::PopulateNetworkSessionParams(
   params->http_server_properties = http_server_properties_->GetWeakPtr();
   params->ignore_certificate_errors = ignore_certificate_errors;
   params->proxy_service = proxy_service_.get();
-
-  // TODO(lcwu): http://crbug.com/329681. Remove this once spdy is enabled
-  // by default at the content level.
-  params->next_protos = net::NextProtosSpdy31();
-  params->use_alternative_services = true;
 }
 
 net::URLRequestContext* URLRequestContextFactory::CreateSystemRequestContext() {

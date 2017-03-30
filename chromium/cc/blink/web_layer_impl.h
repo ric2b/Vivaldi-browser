@@ -18,7 +18,6 @@
 #include "cc/layers/layer_client.h"
 #include "third_party/WebKit/public/platform/WebCString.h"
 #include "third_party/WebKit/public/platform/WebColor.h"
-#include "third_party/WebKit/public/platform/WebCompositorAnimation.h"
 #include "third_party/WebKit/public/platform/WebDoublePoint.h"
 #include "third_party/WebKit/public/platform/WebFloatPoint.h"
 #include "third_party/WebKit/public/platform/WebLayer.h"
@@ -30,7 +29,6 @@
 #include "third_party/skia/include/utils/SkMatrix44.h"
 
 namespace blink {
-class WebFilterOperations;
 struct WebFloatRect;
 }
 
@@ -41,6 +39,8 @@ class ConvertableToTraceFormat;
 }
 
 namespace cc {
+class Animation;
+class FilterOperations;
 class Layer;
 class LayerSettings;
 }
@@ -104,14 +104,12 @@ class WebLayerImpl : public blink::WebLayer {
   void setUseParentBackfaceVisibility(bool visible) override;
   void setBackgroundColor(blink::WebColor color) override;
   blink::WebColor backgroundColor() const override;
-  void setFilters(const blink::WebFilterOperations& filters) override;
-  void setBackgroundFilters(const blink::WebFilterOperations& filters) override;
+  void setFilters(const cc::FilterOperations& filters) override;
+  void setBackgroundFilters(const cc::FilterOperations& filters) override;
   void setAnimationDelegate(
       blink::WebCompositorAnimationDelegate* delegate) override;
-  bool addAnimation(blink::WebCompositorAnimation* animation) override;
+  bool addAnimation(cc::Animation* animation) override;
   void removeAnimation(int animation_id) override;
-  void removeAnimation(int animation_id,
-                       blink::WebCompositorAnimation::TargetProperty) override;
   void pauseAnimation(int animation_id, double time_offset) override;
   void abortAnimation(int animation_id) override;
   bool hasActiveAnimation() override;
@@ -124,11 +122,11 @@ class WebLayerImpl : public blink::WebLayer {
   void setUserScrollable(bool horizontal, bool vertical) override;
   bool userScrollableHorizontal() const override;
   bool userScrollableVertical() const override;
-  void setHaveWheelEventHandlers(bool have_wheel_event_handlers) override;
-  bool haveWheelEventHandlers() const override;
-  void setHaveScrollEventHandlers(bool have_scroll_event_handlers) override;
-  bool haveScrollEventHandlers() const override;
-  void setShouldScrollOnMainThread(bool scroll_on_main) override;
+  void addMainThreadScrollingReasons(
+      uint32_t main_thread_scrolling_reasons) override;
+  void clearMainThreadScrollingReasons(
+      uint32_t main_thread_scrolling_reasons_to_clear) override;
+  uint32_t mainThreadScrollingReasons() override;
   bool shouldScrollOnMainThread() const override;
   void setNonFastScrollableRegion(
       const blink::WebVector<blink::WebRect>& region) override;
@@ -136,8 +134,6 @@ class WebLayerImpl : public blink::WebLayer {
   void setTouchEventHandlerRegion(
       const blink::WebVector<blink::WebRect>& region) override;
   blink::WebVector<blink::WebRect> touchEventHandlerRegion() const override;
-  void setScrollBlocksOn(blink::WebScrollBlocksOn) override;
-  blink::WebScrollBlocksOn scrollBlocksOn() const override;
   void setFrameTimingRequests(
       const blink::WebVector<std::pair<int64_t, blink::WebRect>>& requests)
       override;
@@ -149,7 +145,6 @@ class WebLayerImpl : public blink::WebLayer {
       const blink::WebLayerPositionConstraint& constraint) override;
   blink::WebLayerPositionConstraint positionConstraint() const override;
   void setScrollClient(blink::WebLayerScrollClient* client) override;
-  bool isOrphan() const override;
   void setLayerClient(cc::LayerClient* client) override;
   const cc::Layer* ccLayer() const override;
   void setElementId(uint64_t id) override;

@@ -5,8 +5,7 @@
 # found in the LICENSE file.
 
 # Script to install everything needed to build chromium (well, ideally, anyway)
-# See http://code.google.com/p/chromium/wiki/LinuxBuildInstructions
-# and http://code.google.com/p/chromium/wiki/LinuxBuild64Bit
+# See https://chromium.googlesource.com/chromium/src/+/master/docs/linux_build_instructions.md
 
 usage() {
   echo "Usage: $0 [--options]"
@@ -73,11 +72,12 @@ if ! which lsb_release > /dev/null; then
 fi
 
 lsb_release=$(lsb_release --codename --short)
-ubuntu_codenames="(precise|trusty|utopic|vivid)"
+ubuntu_codenames="(precise|trusty|utopic|vivid|wily)"
 if [ 0 -eq "${do_unsupported-0}" ] && [ 0 -eq "${do_quick_check-0}" ] ; then
   if [[ ! $lsb_release =~ $ubuntu_codenames ]]; then
     echo "ERROR: Only Ubuntu 12.04 (precise), 14.04 (trusty), " \
-      "14.10 (utopic) and 15.04 (vivid) are currently supported" >&2
+      "14.10 (utopic), 15.04 (vivid) and 15.10 (wily) "
+      "are currently supported" >&2
     exit 1
   fi
 
@@ -97,7 +97,7 @@ fi
 chromeos_dev_list="libbluetooth-dev libxkbcommon-dev realpath"
 
 # Packages needed for development
-dev_list="apache2.2-bin bison cdbs curl dpkg-dev elfutils devscripts fakeroot
+dev_list="bison cdbs curl dpkg-dev elfutils devscripts fakeroot
           flex fonts-thai-tlwg g++ git-core git-svn gperf language-pack-da
           language-pack-fr language-pack-he language-pack-zh-hant
           libapache2-mod-php5 libasound2-dev libbrlapi-dev libav-tools
@@ -110,7 +110,7 @@ dev_list="apache2.2-bin bison cdbs curl dpkg-dev elfutils devscripts fakeroot
           openbox patch perl php5-cgi pkg-config python python-cherrypy3
           python-crypto python-dev python-numpy python-opencv python-openssl
           python-psutil python-yaml rpm ruby subversion ttf-dejavu-core
-          ttf-indic-fonts ttf-kochi-gothic ttf-kochi-mincho wdiff xfonts-mathml
+          ttf-indic-fonts ttf-kochi-gothic ttf-kochi-mincho wdiff
           chrpath
           zip $chromeos_dev_list"
 
@@ -183,7 +183,7 @@ nacl_list="g++-mingw-w64-i686 lib32z1-dev
 # be more than one with the same name in the case of multiarch). Expand into an
 # array.
 mesa_packages=($(dpkg-query -Wf'${package} ${status}\n' \
-                            libgl1-mesa-glx-lts-\* | \
+                            libgl1-mesa-glx-lts-\* 2>/dev/null | \
                  grep " ok installed" | cut -d " " -f 1 | sort -u))
 if [ "${#mesa_packages[@]}" -eq 0 ]; then
   mesa_variant=""
@@ -229,7 +229,16 @@ if package_exists libbrlapi0.6; then
 else
   dev_list="${dev_list} libbrlapi0.5"
 fi
-
+if package_exists apache2-bin; then
+  dev_list="${dev_list} apache2-bin"
+else
+  dev_list="${dev_list} apache2.2-bin"
+fi
+if package_exists fonts-stix; then
+  dev_list="${dev_list} fonts-stix"
+else
+  dev_list="${dev_list} xfonts-mathml"
+fi
 
 # Some packages are only needed if the distribution actually supports
 # installing them.

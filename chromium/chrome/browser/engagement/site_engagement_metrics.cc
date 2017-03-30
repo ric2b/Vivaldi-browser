@@ -5,6 +5,18 @@
 #include "chrome/browser/engagement/site_engagement_metrics.h"
 
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/string_number_conversions.h"
+
+namespace {
+
+// These numbers are used as suffixes for the
+// SiteEngagementService.EngagementScoreBucket_* histogram. If these bases
+// change, the EngagementScoreBuckets suffix in histograms.xml should be
+// updated.
+const int kEngagementBucketHistogramBuckets[] = {0,  10, 20, 30, 40,
+                                                 50, 60, 70, 80, 90};
+
+}  // namespace
 
 const char SiteEngagementMetrics::kTotalEngagementHistogram[] =
     "SiteEngagementService.TotalEngagement";
@@ -21,6 +33,12 @@ const char SiteEngagementMetrics::kMedianEngagementHistogram[] =
 const char SiteEngagementMetrics::kEngagementScoreHistogram[] =
     "SiteEngagementService.EngagementScore";
 
+const char SiteEngagementMetrics::kEngagementScoreHistogramHTTP[] =
+    "SiteEngagementService.EngagementScore.HTTP";
+
+const char SiteEngagementMetrics::kEngagementScoreHistogramHTTPS[] =
+    "SiteEngagementService.EngagementScore.HTTPS";
+
 const char SiteEngagementMetrics::kOriginsWithMaxEngagementHistogram[] =
     "SiteEngagementService.OriginsWithMaxEngagement";
 
@@ -33,11 +51,19 @@ const char SiteEngagementMetrics::kPercentOriginsWithMaxEngagementHistogram[] =
 const char SiteEngagementMetrics::kEngagementTypeHistogram[] =
     "SiteEngagementService.EngagementType";
 
+const char SiteEngagementMetrics::kEngagementBucketHistogramBase[] =
+    "SiteEngagementService.EngagementScoreBucket_";
+
 const char SiteEngagementMetrics::kDaysSinceLastShortcutLaunchHistogram[] =
     "SiteEngagementService.DaysSinceLastShortcutLaunch";
 
-void SiteEngagementMetrics::RecordTotalSiteEngagement(
-    double total_engagement) {
+const char SiteEngagementMetrics::kScoreDecayedFromHistogram[] =
+    "SiteEngagementService.ScoreDecayedFrom";
+
+const char SiteEngagementMetrics::kScoreDecayedToHistogram[] =
+    "SiteEngagementService.ScoreDecayedTo";
+
+void SiteEngagementMetrics::RecordTotalSiteEngagement(double total_engagement) {
   UMA_HISTOGRAM_COUNTS_10000(kTotalEngagementHistogram, total_engagement);
 }
 
@@ -55,8 +81,31 @@ void SiteEngagementMetrics::RecordMedianEngagement(double median_engagement) {
 
 void SiteEngagementMetrics::RecordEngagementScores(
     std::map<GURL, double> score_map) {
-  for (const auto& value: score_map) {
+  if (score_map.size() == 0)
+    return;
+
+  std::map<int, int> score_buckets;
+  for (size_t i = 0; i < arraysize(kEngagementBucketHistogramBuckets); ++i)
+    score_buckets[kEngagementBucketHistogramBuckets[i]] = 0;
+
+  for (const auto& value : score_map) {
     UMA_HISTOGRAM_COUNTS_100(kEngagementScoreHistogram, value.second);
+    score_buckets.lower_bound(value.second)->second++;
+
+    if (value.first.SchemeIs(url::kHttpsScheme))
+      UMA_HISTOGRAM_COUNTS_100(kEngagementScoreHistogramHTTPS, value.second);
+    else if (value.first.SchemeIs(url::kHttpScheme))
+      UMA_HISTOGRAM_COUNTS_100(kEngagementScoreHistogramHTTP, value.second);
+  }
+
+  for (const auto& b : score_buckets) {
+    std::string histogram_name =
+        kEngagementBucketHistogramBase + base::IntToString(b.first);
+
+    base::LinearHistogram::FactoryGet(
+        histogram_name, 1, 100, 10,
+        base::HistogramBase::kUmaTargetedHistogramFlag)
+        ->Add(b.second * 100 / score_map.size());
   }
 }
 
@@ -82,4 +131,25 @@ void SiteEngagementMetrics::RecordEngagement(EngagementType type) {
 
 void SiteEngagementMetrics::RecordDaysSinceLastShortcutLaunch(int days) {
   UMA_HISTOGRAM_COUNTS_100(kDaysSinceLastShortcutLaunchHistogram, days);
+}
+
+void SiteEngagementMetrics::RecordScoreDecayedFrom(double score) {
+  UMA_HISTOGRAM_COUNTS_100(kScoreDecayedFromHistogram, score);
+}
+
+void SiteEngagementMetrics::RecordScoreDecayedTo(double score) {
+  UMA_HISTOGRAM_COUNTS_100(kScoreDecayedToHistogram, score);
+}
+
+// static
+std::vector<std::string>
+SiteEngagementMetrics::GetEngagementBucketHistogramNames() {
+  std::vector<std::string> histogram_names;
+  for (size_t i = 0; i < arraysize(kEngagementBucketHistogramBuckets); ++i) {
+    histogram_names.push_back(
+        kEngagementBucketHistogramBase +
+        base::IntToString(kEngagementBucketHistogramBuckets[i]));
+  }
+
+  return histogram_names;
 }

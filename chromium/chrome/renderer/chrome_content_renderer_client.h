@@ -16,6 +16,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
+#include "chrome/renderer/origin_trials/origin_trial_key_manager.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "v8/include/v8.h"
@@ -64,10 +65,6 @@ class WebCacheRenderProcessObserver;
 
 namespace blink {
 class WebSecurityOrigin;
-}
-
-namespace password_manager {
-class CredentialManagerClient;
 }
 
 #if defined(ENABLE_WEBRTC)
@@ -123,7 +120,6 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
   bool ShouldOverridePageVisibilityState(
       const content::RenderFrame* render_frame,
       blink::WebPageVisibilityState* override_state) override;
-  const void* CreatePPAPIInterface(const std::string& interface_name) override;
   bool IsExternalPepperPlugin(const std::string& module_name) override;
   blink::WebSpeechSynthesizer* OverrideSpeechSynthesizer(
       blink::WebSpeechSynthesizerClient* client) override;
@@ -150,6 +146,8 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
   void AddImageContextMenuProperties(
       const blink::WebURLResponse& response,
       std::map<std::string, std::string>* properties) override;
+  void RunScriptsAtDocumentStart(content::RenderFrame* render_frame) override;
+  void RunScriptsAtDocumentEnd(content::RenderFrame* render_frame) override;
   void DidInitializeServiceWorkerContextOnWorkerThread(
       v8::Local<v8::Context> context,
       const GURL& url) override;
@@ -157,6 +155,7 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
       v8::Local<v8::Context> context,
       const GURL& url) override;
   bool ShouldEnforceWebRTCRoutingPreferences() override;
+  base::StringPiece GetOriginTrialPublicKey() override;
 
 #if defined(ENABLE_SPELLCHECK)
   // Sets a new |spellcheck|. Used for testing only.
@@ -185,6 +184,10 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
   static GURL GetNaClContentHandlerURL(const std::string& actual_mime_type,
                                        const content::WebPluginInfo& plugin);
 
+  // Time at which this object was created. This is very close to the time at
+  // which the RendererMain function was entered.
+  base::TimeTicks main_entry_time_;
+
 #if !defined(DISABLE_NACL)
   // Determines if a NaCl app is allowed, and modifies params to pass the app's
   // permissions to the trusted NaCl plugin.
@@ -200,8 +203,8 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
 
   scoped_ptr<network_hints::PrescientNetworkingDispatcher>
       prescient_networking_dispatcher_;
-  scoped_ptr<password_manager::CredentialManagerClient>
-      credential_manager_client_;
+
+  OriginTrialKeyManager origin_trial_key_manager_;
 
 #if defined(ENABLE_SPELLCHECK)
   scoped_ptr<SpellCheck> spellcheck_;

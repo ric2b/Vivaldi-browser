@@ -40,6 +40,7 @@
 
 namespace blink {
 
+class Frame;
 class FrameLoaderClient;
 class LocalFrame;
 class KURL;
@@ -75,9 +76,9 @@ public:
 
     // Returns the frame that should be considered the effective frame
     // for a mixed content check for the given frame type.
-    static LocalFrame* effectiveFrameForFrameType(LocalFrame*, WebURLRequest::FrameType);
+    static Frame* effectiveFrameForFrameType(LocalFrame*, WebURLRequest::FrameType);
 
-    static void handleCertificateError(LocalFrame*, const ResourceRequest&, const ResourceResponse&);
+    static void handleCertificateError(LocalFrame*, const ResourceResponse&, WebURLRequest::FrameType, WebURLRequest::RequestContext);
 
 private:
     FRIEND_TEST_ALL_PREFIXES(MixedContentCheckerTest, HandleCertificateError);
@@ -88,13 +89,13 @@ private:
         Submission
     };
 
-    static LocalFrame* inWhichFrameIsContentMixed(LocalFrame*, WebURLRequest::FrameType, const KURL&);
+    static Frame* inWhichFrameIsContentMixed(Frame*, WebURLRequest::FrameType, const KURL&);
 
-    static ContextType contextTypeFromContext(WebURLRequest::RequestContext, LocalFrame*);
+    static ContextType contextTypeFromContext(WebURLRequest::RequestContext, Frame*);
     static const char* typeNameFromContext(WebURLRequest::RequestContext);
-    static void logToConsoleAboutFetch(LocalFrame*, const KURL&, WebURLRequest::RequestContext, bool allowed);
-    static void logToConsoleAboutWebSocket(LocalFrame*, const KURL&, bool allowed);
-    static void count(LocalFrame*, WebURLRequest::RequestContext);
+    static void logToConsoleAboutFetch(LocalFrame*, const KURL&, const KURL&, WebURLRequest::RequestContext, bool allowed);
+    static void logToConsoleAboutWebSocket(LocalFrame*, const KURL&, const KURL&, bool allowed);
+    static void count(Frame*, WebURLRequest::RequestContext);
 };
 
 } // namespace blink

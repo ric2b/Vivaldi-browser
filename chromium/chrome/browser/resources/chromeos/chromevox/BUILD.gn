@@ -147,6 +147,7 @@ run_jsbundler("chromevox_copied_files") {
     "chromevox/background/options.html",
     "chromevox/injected/api.js",
     "cvox2/background/background.html",
+    "cvox2/background/panel.css",
     "cvox2/background/panel.html",
   ]
   if (chromevox_compress_js) {
@@ -316,7 +317,6 @@ test("chromevox_tests") {
     ":chromevox_unitjs_tests",
     "//base",
     "//base:i18n",
-    "//base/allocator",
     "//base/test:test_support",
     "//chrome:browser_tests_pak",
     "//chrome:packed_extra_resources",
@@ -327,6 +327,7 @@ test("chromevox_tests") {
     "//chrome/renderer",
     "//chrome/test:test_support",
     "//chrome/test:test_support_ui",
+    "//content/test:browsertest_base",
     "//testing/gmock",
     "//testing/gtest",
   ]

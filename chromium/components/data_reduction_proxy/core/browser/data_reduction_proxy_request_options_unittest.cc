@@ -38,7 +38,6 @@ const char kOtherProxy[] = "testproxy:17";
 const char kVersion[] = "0.1.2.3";
 const char kExpectedBuild[] = "2";
 const char kExpectedPatch[] = "3";
-const char kBogusVersion[] = "0.0";
 const char kExpectedCredentials[] = "96bd72ec4a050ba60981743d41787768";
 const char kExpectedSession[] = "0-1633771873-1633771873-1633771873";
 
@@ -114,14 +113,13 @@ void SetHeaderExpectations(const std::string& session,
     expected_options.push_back(
         std::string(kClientHeaderOption) + "=" + client);
   }
-  if (!build.empty()) {
-    expected_options.push_back(
-        std::string(kBuildNumberHeaderOption) + "=" + build);
-  }
-  if (!patch.empty()) {
-    expected_options.push_back(
-        std::string(kPatchNumberHeaderOption) + "=" + patch);
-  }
+  EXPECT_FALSE(build.empty());
+  expected_options.push_back(std::string(kBuildNumberHeaderOption) + "=" +
+                             build);
+  EXPECT_FALSE(patch.empty());
+  expected_options.push_back(std::string(kPatchNumberHeaderOption) + "=" +
+                             patch);
+
   for (const auto& experiment : experiments) {
     expected_options.push_back(
         std::string(kExperimentsOption) + "=" + experiment);
@@ -258,26 +256,13 @@ TEST_F(DataReductionProxyRequestOptionsTest, AuthorizationIgnoresEmptyKey) {
   VerifyExpectedHeader(params()->DefaultOrigin(), expected_header);
 }
 
-TEST_F(DataReductionProxyRequestOptionsTest, AuthorizationBogusVersion) {
-  std::string expected_header;
-  SetHeaderExpectations(kExpectedSession2, kExpectedCredentials2, std::string(),
-                        kClientStr, std::string(), std::string(),
-                        std::vector<std::string>(), &expected_header);
-
-  CreateRequestOptions(kBogusVersion);
-
-  // Now set a key.
-  request_options()->SetKeyOnIO(kTestKey2);
-  VerifyExpectedHeader(params()->DefaultOrigin(), expected_header);
-}
-
 TEST_F(DataReductionProxyRequestOptionsTest, SecureSession) {
   std::string expected_header;
   SetHeaderExpectations(std::string(), std::string(), kSecureSession,
-                        kClientStr, std::string(), std::string(),
+                        kClientStr, kExpectedBuild, kExpectedPatch,
                         std::vector<std::string>(), &expected_header);
 
-  CreateRequestOptions(kBogusVersion);
+  CreateRequestOptions(kVersion);
   request_options()->SetSecureSession(kSecureSession);
   VerifyExpectedHeader(params()->DefaultOrigin(), expected_header);
 }
@@ -291,10 +276,10 @@ TEST_F(DataReductionProxyRequestOptionsTest, ParseExperiments) {
   expected_experiments.push_back("\"foo,bar\"");
   std::string expected_header;
   SetHeaderExpectations(kExpectedSession, kExpectedCredentials, std::string(),
-                        kClientStr, std::string(), std::string(),
+                        kClientStr, kExpectedBuild, kExpectedPatch,
                         expected_experiments, &expected_header);
 
-  CreateRequestOptions(kBogusVersion);
+  CreateRequestOptions(kVersion);
   VerifyExpectedHeader(params()->DefaultOrigin(), expected_header);
 }
 
@@ -347,11 +332,47 @@ TEST_F(DataReductionProxyRequestOptionsTest, ParseExperimentsFromFieldTrial) {
       expected_experiments.push_back(test.expected_experiment);
 
     SetHeaderExpectations(kExpectedSession, kExpectedCredentials, std::string(),
-                          kClientStr, std::string(), std::string(),
+                          kClientStr, kExpectedBuild, kExpectedPatch,
                           expected_experiments, &expected_header);
 
-    CreateRequestOptions(kBogusVersion);
+    CreateRequestOptions(kVersion);
     VerifyExpectedHeader(params()->DefaultOrigin(), expected_header);
+  }
+}
+
+TEST_F(DataReductionProxyRequestOptionsTest, GetSessionKeyFromRequestHeaders) {
+  const struct {
+    std::string chrome_proxy_header_key;
+    std::string chrome_proxy_header_value;
+    std::string expected_session_key;
+  } tests[] = {
+      {"chrome-proxy", "something=something_else, s=123, key=value", "123"},
+      {"chrome-proxy", "something=something_else, s= 123  456 , key=value",
+       "123  456"},
+      {"chrome-proxy", "something=something_else, s=123456,    key=value",
+       "123456"},
+      {"chrome-proxy", "something=something else, s=123456,    key=value",
+       "123456"},
+      {"chrome-proxy", "something=something else, s=123456  ", "123456"},
+      {"chrome-proxy", "something=something_else, s=, key=value", ""},
+      {"chrome-proxy", "something=something_else, key=value", ""},
+      {"chrome-proxy", "s=123", "123"},
+      {"chrome-proxy", " s = 123 ", "123"},
+      {"some_other_header", "s=123", ""},
+  };
+
+  for (const auto& test : tests) {
+    net::HttpRequestHeaders request_headers;
+    request_headers.SetHeader("some_random_header_before", "some_random_key");
+    request_headers.SetHeader(test.chrome_proxy_header_key,
+                              test.chrome_proxy_header_value);
+    request_headers.SetHeader("some_random_header_after", "some_random_key");
+
+    std::string session_key =
+        request_options()->GetSessionKeyFromRequestHeaders(request_headers);
+    EXPECT_EQ(test.expected_session_key, session_key)
+        << test.chrome_proxy_header_key << ":"
+        << test.chrome_proxy_header_value;
   }
 }
 

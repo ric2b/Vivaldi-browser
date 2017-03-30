@@ -29,9 +29,9 @@
 
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
+#include "core/frame/Deprecation.h"
 #include "core/frame/OriginsUsingFeatures.h"
 #include "core/frame/Settings.h"
-#include "core/frame/UseCounter.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "modules/geolocation/Coordinates.h"
 #include "modules/geolocation/GeolocationController.h"
@@ -159,7 +159,7 @@ void Geolocation::recordOriginTypeAccess() const
         UseCounter::count(document, UseCounter::GeolocationSecureOrigin);
         UseCounter::countCrossOriginIframe(*document, UseCounter::GeolocationSecureOriginIframe);
     } else {
-        UseCounter::countDeprecation(document, UseCounter::GeolocationInsecureOrigin);
+        Deprecation::countDeprecation(document, UseCounter::GeolocationInsecureOrigin);
         UseCounter::countCrossOriginIframe(*document, UseCounter::GeolocationInsecureOriginIframe);
         OriginsUsingFeatures::countAnyWorld(*document, OriginsUsingFeatures::Feature::GeolocationInsecureOrigin);
     }
@@ -169,8 +169,6 @@ void Geolocation::getCurrentPosition(PositionCallback* successCallback, Position
 {
     if (!frame())
         return;
-
-    recordOriginTypeAccess();
 
     GeoNotifier* notifier = GeoNotifier::create(this, successCallback, errorCallback, options);
     startRequest(notifier);
@@ -182,8 +180,6 @@ int Geolocation::watchPosition(PositionCallback* successCallback, PositionErrorC
 {
     if (!frame())
         return 0;
-
-    recordOriginTypeAccess();
 
     GeoNotifier* notifier = GeoNotifier::create(this, successCallback, errorCallback, options);
     startRequest(notifier);
@@ -198,12 +194,11 @@ int Geolocation::watchPosition(PositionCallback* successCallback, PositionErrorC
 
 void Geolocation::startRequest(GeoNotifier *notifier)
 {
-    if (frame()->settings()->strictPowerfulFeatureRestrictions()) {
-        String errorMessage;
-        if (!executionContext()->isSecureContext(errorMessage)) {
-            notifier->setFatalError(PositionError::create(PositionError::POSITION_UNAVAILABLE, errorMessage));
-            return;
-        }
+    recordOriginTypeAccess();
+    String errorMessage;
+    if (!frame()->settings()->allowGeolocationOnInsecureOrigins() && !executionContext()->isSecureContext(errorMessage)) {
+        notifier->setFatalError(PositionError::create(PositionError::PERMISSION_DENIED, errorMessage));
+        return;
     }
 
     if (RuntimeEnabledFeatures::restrictIFramePermissionsEnabled()) {
@@ -211,7 +206,7 @@ void Geolocation::startRequest(GeoNotifier *notifier)
         Element* owner = document()->ownerElement();
         if (owner && owner->hasAttribute(HTMLNames::permissionsAttr)) {
             String errorMessage = "A cross-origin iframe needs its permissions attribute properly set in order to use the geolocation API.";
-            notifier->setFatalError(PositionError::create(PositionError::POSITION_UNAVAILABLE, errorMessage));
+            notifier->setFatalError(PositionError::create(PositionError::PERMISSION_DENIED, errorMessage));
             return;
         }
     }

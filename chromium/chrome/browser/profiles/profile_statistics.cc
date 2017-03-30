@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/prefs/pref_service.h"
 #include "base/task_runner.h"
 #include "base/time/time.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -18,13 +17,13 @@
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
-#include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace {
@@ -354,10 +353,9 @@ void GatherProfileStatistics(Profile* profile,
 
 ProfileCategoryStats GetProfileStatisticsFromCache(
     const base::FilePath& profile_path) {
-  ProfileInfoCache& profile_info_cache =
-      g_browser_process->profile_manager()->GetProfileInfoCache();
   ProfileAttributesEntry* entry = nullptr;
-  bool has_entry = profile_info_cache.
+  bool has_entry = g_browser_process->profile_manager()->
+      GetProfileAttributesStorage().
       GetProfileAttributesWithPath(profile_path, &entry);
 
   ProfileCategoryStats stats;
@@ -397,9 +395,9 @@ void SetProfileStatisticsInCache(const base::FilePath& profile_path,
   if (!profile_manager)
     return;
 
-  ProfileInfoCache& profile_info_cache = profile_manager->GetProfileInfoCache();
   ProfileAttributesEntry* entry = nullptr;
-  if (!profile_info_cache.GetProfileAttributesWithPath(profile_path, &entry))
+  if (!profile_manager->GetProfileAttributesStorage().
+      GetProfileAttributesWithPath(profile_path, &entry))
     return;
 
   if (category == kProfileStatisticsBrowsingHistory) {

@@ -9,7 +9,6 @@
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -19,6 +18,7 @@
 #include "chrome/browser/ui/browser_window_state.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/prefs/pref_service.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gfx/screen.h"
 
@@ -110,16 +110,15 @@ class DefaultStateProvider : public WindowSizer::StateProvider {
     if (browser_ && browser_->window()) {
       window = browser_->window();
     } else {
-      // This code is only ran on the native desktop (on the ash
+      // This code is only run on the native desktop (on the ash
       // desktop, GetTabbedBrowserBoundsAsh should take over below
       // before this is reached).  TODO(gab): This code should go in a
       // native desktop specific window sizer as part of fixing
       // crbug.com/175812.
-      const BrowserList* native_browser_list =
-          BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_NATIVE);
+      const BrowserList* browser_list = BrowserList::GetInstance();
       for (BrowserList::const_reverse_iterator it =
-               native_browser_list->begin_last_active();
-           it != native_browser_list->end_last_active(); ++it) {
+               browser_list->begin_last_active();
+           it != browser_list->end_last_active(); ++it) {
         Browser* last_active = *it;
         if (last_active && last_active->is_type_tabbed()) {
           window = last_active->window();
@@ -155,24 +154,8 @@ class DefaultTargetDisplayProvider : public WindowSizer::TargetDisplayProvider {
   gfx::Display GetTargetDisplay(const gfx::Screen* screen,
                                 const gfx::Rect& bounds) const override {
 #if defined(USE_ASH)
-    bool force_ash = false;
-    // On Windows check if the browser is launched to serve ASH. If yes then
-    // we should get the display for the corresponding root window created for
-    // ASH. This ensures that the display gets the correct workarea, etc.
-    // If the ASH shell does not exist then the current behavior is to open
-    // browser windows if any on the desktop. Preserve that for now.
-    // TODO(ananta).
-    // This effectively means that the running browser process is in a split
-    // personality mode, part of it running in ASH and the other running in
-    // desktop. This may cause apps and other widgets to not work correctly.
-    // Revisit and address.
-#if defined(OS_WIN)
-    force_ash = ash::Shell::HasInstance() &&
-                base::CommandLine::ForCurrentProcess()->HasSwitch(
-                    switches::kViewerConnect);
-#endif
     // Use the target display on ash.
-    if (chrome::ShouldOpenAshOnStartup() || force_ash) {
+    if (chrome::ShouldOpenAshOnStartup()) {
       aura::Window* target = ash::Shell::GetTargetRootWindow();
       return screen->GetDisplayNearestWindow(target);
     }
@@ -197,8 +180,7 @@ WindowSizer::WindowSizer(
     const Browser* browser)
     : state_provider_(std::move(state_provider)),
       target_display_provider_(std::move(target_display_provider)),
-      // TODO(scottmg): NativeScreen is wrong. http://crbug.com/133312
-      screen_(gfx::Screen::GetNativeScreen()),
+      screen_(gfx::Screen::GetScreen()),
       browser_(browser) {}
 
 WindowSizer::WindowSizer(

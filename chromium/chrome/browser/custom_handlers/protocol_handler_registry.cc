@@ -12,7 +12,6 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile_io_data.h"
@@ -20,6 +19,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "net/base/network_delegate.h"
@@ -53,8 +53,8 @@ bool ShouldRemoveHandlersNotInOS() {
   // difference (http://crbug.com/88255).
   return false;
 #else
-  return ShellIntegration::CanSetAsDefaultProtocolClient() !=
-      ShellIntegration::SET_DEFAULT_NOT_ALLOWED;
+  return shell_integration::CanSetAsDefaultProtocolClient() !=
+         shell_integration::SET_DEFAULT_NOT_ALLOWED;
 #endif
 }
 
@@ -250,10 +250,10 @@ ProtocolHandlerRegistry::DefaultClientObserver::~DefaultClientObserver() {
 }
 
 void ProtocolHandlerRegistry::DefaultClientObserver::SetDefaultWebClientUIState(
-    ShellIntegration::DefaultWebClientUIState state) {
+    shell_integration::DefaultWebClientUIState state) {
   if (worker_) {
     if (ShouldRemoveHandlersNotInOS() &&
-        (state == ShellIntegration::STATE_NOT_DEFAULT)) {
+        (state == shell_integration::STATE_NOT_DEFAULT)) {
       registry_->ClearDefault(worker_->protocol());
     }
   } else {
@@ -261,18 +261,9 @@ void ProtocolHandlerRegistry::DefaultClientObserver::SetDefaultWebClientUIState(
   }
 }
 
-bool ProtocolHandlerRegistry::DefaultClientObserver::
-    IsInteractiveSetDefaultPermitted() {
-  return true;
-}
-
 void ProtocolHandlerRegistry::DefaultClientObserver::SetWorker(
-    ShellIntegration::DefaultProtocolClientWorker* worker) {
+    shell_integration::DefaultProtocolClientWorker* worker) {
   worker_ = worker;
-}
-
-bool ProtocolHandlerRegistry::DefaultClientObserver::IsOwnedByWorker() {
-  return true;
 }
 
 // Delegate --------------------------------------------------------------------
@@ -299,11 +290,12 @@ bool ProtocolHandlerRegistry::Delegate::IsExternalHandlerRegistered(
   return ProfileIOData::IsHandledProtocol(protocol);
 }
 
-ShellIntegration::DefaultProtocolClientWorker*
+shell_integration::DefaultProtocolClientWorker*
 ProtocolHandlerRegistry::Delegate::CreateShellWorker(
-    ShellIntegration::DefaultWebClientObserver* observer,
+    shell_integration::DefaultWebClientObserver* observer,
     const std::string& protocol) {
-  return new ShellIntegration::DefaultProtocolClientWorker(observer, protocol);
+  return new shell_integration::DefaultProtocolClientWorker(
+      observer, protocol, /*delete_observer=*/true);
 }
 
 ProtocolHandlerRegistry::DefaultClientObserver*
@@ -315,10 +307,10 @@ ProtocolHandlerRegistry::Delegate::CreateShellObserver(
 void ProtocolHandlerRegistry::Delegate::RegisterWithOSAsDefaultClient(
     const std::string& protocol, ProtocolHandlerRegistry* registry) {
   DefaultClientObserver* observer = CreateShellObserver(registry);
-  // The worker pointer is reference counted. While it is running the
+  // The worker pointer is reference counted. While it is running, the
   // message loops of the FILE and UI thread will hold references to it
   // and it will be automatically freed once all its tasks have finished.
-  scoped_refptr<ShellIntegration::DefaultProtocolClientWorker> worker;
+  scoped_refptr<shell_integration::DefaultProtocolClientWorker> worker;
   worker = CreateShellWorker(observer, protocol);
   observer->SetWorker(worker.get());
   registry->default_client_observers_.push_back(observer);
@@ -477,7 +469,7 @@ void ProtocolHandlerRegistry::InitProtocolSettings() {
          p != default_handlers_.end(); ++p) {
       ProtocolHandler handler = p->second;
       DefaultClientObserver* observer = delegate_->CreateShellObserver(this);
-      scoped_refptr<ShellIntegration::DefaultProtocolClientWorker> worker;
+      scoped_refptr<shell_integration::DefaultProtocolClientWorker> worker;
       worker = delegate_->CreateShellWorker(observer, handler.protocol());
       observer->SetWorker(worker.get());
       default_client_observers_.push_back(observer);

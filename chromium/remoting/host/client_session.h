@@ -17,7 +17,6 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "remoting/host/client_session_control.h"
-#include "remoting/host/gnubby_auth_handler.h"
 #include "remoting/host/host_extension_session_manager.h"
 #include "remoting/host/remote_input_filter.h"
 #include "remoting/protocol/clipboard_echo_filter.h"
@@ -86,19 +85,13 @@ class ClientSession
 
   // |event_handler| and |desktop_environment_factory| must outlive |this|.
   // All |HostExtension|s in |extensions| must outlive |this|.
-  ClientSession(
-      EventHandler* event_handler,
-      scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner,
-      scoped_refptr<base::SingleThreadTaskRunner> input_task_runner,
-      scoped_refptr<base::SingleThreadTaskRunner> video_capture_task_runner,
-      scoped_refptr<base::SingleThreadTaskRunner> video_encode_task_runner,
-      scoped_refptr<base::SingleThreadTaskRunner> network_task_runner,
-      scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner,
-      scoped_ptr<protocol::ConnectionToClient> connection,
-      DesktopEnvironmentFactory* desktop_environment_factory,
-      const base::TimeDelta& max_duration,
-      scoped_refptr<protocol::PairingRegistry> pairing_registry,
-      const std::vector<HostExtension*>& extensions);
+  ClientSession(EventHandler* event_handler,
+                scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner,
+                scoped_ptr<protocol::ConnectionToClient> connection,
+                DesktopEnvironmentFactory* desktop_environment_factory,
+                const base::TimeDelta& max_duration,
+                scoped_refptr<protocol::PairingRegistry> pairing_registry,
+                const std::vector<HostExtension*>& extensions);
   ~ClientSession() override;
 
   // Returns the set of capabilities negotiated between client and host.
@@ -136,8 +129,6 @@ class ClientSession
   void OnLocalMouseMoved(const webrtc::DesktopVector& position) override;
   void SetDisableInputs(bool disable_inputs) override;
   void ResetVideoPipeline() override;
-
-  void SetGnubbyAuthHandlerForTesting(GnubbyAuthHandler* gnubby_auth_handler);
 
   protocol::ConnectionToClient* connection() const {
     return connection_.get();
@@ -203,11 +194,6 @@ class ClientSession
   base::OneShotTimer max_duration_timer_;
 
   scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner_;
-  scoped_refptr<base::SingleThreadTaskRunner> input_task_runner_;
-  scoped_refptr<base::SingleThreadTaskRunner> video_capture_task_runner_;
-  scoped_refptr<base::SingleThreadTaskRunner> video_encode_task_runner_;
-  scoped_refptr<base::SingleThreadTaskRunner> network_task_runner_;
-  scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner_;
 
   // Objects responsible for sending video, audio and mouse shape.
   // |video_stream_| and |mouse_shape_pump_| may be nullptr if the video
@@ -233,9 +219,6 @@ class ClientSession
 
   // The pairing registry for PIN-less authentication.
   scoped_refptr<protocol::PairingRegistry> pairing_registry_;
-
-  // Used to proxy gnubby auth traffic.
-  scoped_ptr<GnubbyAuthHandler> gnubby_auth_handler_;
 
   // Used to manage extension functionality.
   scoped_ptr<HostExtensionSessionManager> extension_manager_;

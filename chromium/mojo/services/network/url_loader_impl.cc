@@ -77,7 +77,7 @@ URLResponsePtr MakeURLResponse(const net::URLRequest* url_request) {
 
     response->headers = Array<HttpHeaderPtr>::New(0);
     std::vector<String> header_lines;
-    void* iter = nullptr;
+    size_t iter = 0;
     std::string name, value;
     while (headers->EnumerateHeaderLines(&iter, &name, &value)) {
       HttpHeaderPtr header = HttpHeader::New();
@@ -141,7 +141,7 @@ class UploadDataPipeElementReader : public net::UploadElementReader {
 
 URLLoaderImpl::URLLoaderImpl(NetworkContext* context,
                              InterfaceRequest<URLLoader> request,
-                             scoped_ptr<mojo::AppRefCount> app_refcount)
+                             scoped_ptr<mojo::MessageLoopRef> app_refcount)
     : context_(context),
       response_body_buffer_size_(0),
       response_body_bytes_read_(0),
@@ -177,7 +177,7 @@ void URLLoaderImpl::Start(URLRequestPtr request,
   }
 
   url_request_ = context_->url_request_context()->CreateRequest(
-      GURL(request->url), net::DEFAULT_PRIORITY, this);
+      GURL(request->url.get()), net::DEFAULT_PRIORITY, this);
   url_request_->set_method(request->method);
   // TODO(jam): need to specify this policy.
   url_request_->set_referrer_policy(

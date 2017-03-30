@@ -28,7 +28,6 @@ namespace remoting {
 
 class ClientSessionControl;
 class DesktopSessionProxy;
-class GnubbyAuthHandler;
 class ScreenResolution;
 
 // A variant of desktop environment integrating with the desktop by means of
@@ -41,7 +40,6 @@ class IpcDesktopEnvironment : public DesktopEnvironment {
   IpcDesktopEnvironment(
       scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner,
-      scoped_refptr<base::SingleThreadTaskRunner> capture_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
       base::WeakPtr<ClientSessionControl> client_session_control,
       base::WeakPtr<DesktopSessionConnector> desktop_session_connector,
@@ -57,8 +55,6 @@ class IpcDesktopEnvironment : public DesktopEnvironment {
   scoped_ptr<webrtc::MouseCursorMonitor> CreateMouseCursorMonitor() override;
   std::string GetCapabilities() const override;
   void SetCapabilities(const std::string& capabilities) override;
-  scoped_ptr<GnubbyAuthHandler> CreateGnubbyAuthHandler(
-      protocol::ClientStub* client_stub) override;
 
  private:
   scoped_refptr<DesktopSessionProxy> desktop_session_proxy_;
@@ -77,7 +73,6 @@ class IpcDesktopEnvironmentFactory
   IpcDesktopEnvironmentFactory(
       scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner,
-      scoped_refptr<base::SingleThreadTaskRunner> capture_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
       IPC::Sender* daemon_channel);
   ~IpcDesktopEnvironmentFactory() override;
@@ -114,14 +109,11 @@ class IpcDesktopEnvironmentFactory
   // be called.
   scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner_;
 
-  // Used to run the video capturer.
-  scoped_refptr<base::SingleThreadTaskRunner> capture_task_runner_;
-
   // Task runner used for running background I/O.
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
 
   // True if curtain mode is enabled.
-  bool curtain_enabled_;
+  bool curtain_enabled_ = false;
 
   // IPC channel connected to the daemon process.
   IPC::Sender* daemon_channel_;
@@ -133,14 +125,14 @@ class IpcDesktopEnvironmentFactory
   // Next desktop session ID. IDs are allocated sequentially starting from 0.
   // This gives us more than 67 years of unique IDs assuming a new ID is
   // allocated every second.
-  int next_id_;
+  int next_id_ = 0;
+
+  // Defines whether desktop environments created by this factory will support
+  // touch events by default.
+  bool supports_touch_events_ = false;
 
   // Factory for weak pointers to DesktopSessionConnector interface.
   base::WeakPtrFactory<DesktopSessionConnector> connector_factory_;
-
-  // If true then the newly Create()ed desktop environments support touch
-  // events.
-  bool supports_touch_events_;
 
   DISALLOW_COPY_AND_ASSIGN(IpcDesktopEnvironmentFactory);
 };

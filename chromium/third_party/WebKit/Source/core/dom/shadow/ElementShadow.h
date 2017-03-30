@@ -77,6 +77,7 @@ public:
 
     void distributeIfNeeded();
     void setNeedsDistributionRecalc();
+    bool needsDistributionRecalc() const { return m_needsDistributionRecalc; }
 
     const InsertionPoint* finalDestinationInsertionPointFor(const Node*) const;
     const DestinationInsertionPoints* destinationInsertionPointsFor(const Node*) const;
@@ -167,6 +168,6 @@ inline void ElementShadow::distributeIfNeeded()
     m_needsDistributionRecalc = false;
 }
 
-} // namespace
+} // namespace blink
 
 #endif

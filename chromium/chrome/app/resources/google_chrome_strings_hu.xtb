@@ -3,7 +3,6 @@
 <translationbundle lang="hu">
 <translation id="1001534784610492198">A telepítő tömörített állománya megsérült vagy érvénytelen. Kérjük, töltse le újra a Google Chrome böngészőt.</translation>
 <translation id="1013290471399003443">A Chrome megerősítette, hogy a(z) <ph name="ISSUER" /> állította ki ennek a webhelynek a tanúsítványát. A szerver megadott érvényes tanúsítványátláthatósági adatokat.</translation>
-<translation id="1016765312371154165">A Chrome nem záródott be megfelelően.</translation>
 <translation id="103396972844768118">Fontos információ az Ön Chrome-adatairól</translation>
 <translation id="1035334672863811645">bejelentkezés a Chrome-ba</translation>
 <translation id="1061441684050139317">A Chrome-nak rendelkeznie kell hozzáféréssel a mikrofonhoz, hogy megoszthassa ezzel a webhellyel.</translation>
@@ -51,7 +50,6 @@ Ha mindenképp bejelentkezik, akkor egyesíti a(z) <ph name="ACCOUNT_EMAIL_NEW" 
 <translation id="2397416548179033562">A Chrome-menü megjelenítése</translation>
 <translation id="2429317896000329049">A Google Chrome nem tudta szinkronizálni az adatait, mert a szinkronizálás nem érhető el az Ön domainjénél.</translation>
 <translation id="2485422356828889247">Eltávolítás</translation>
-<translation id="2576431527583832481">A Chrome most még jobb lett! Új verzió áll rendelkezésre.</translation>
 <translation id="2580411288591421699">Nem lehet ugyanazt a Google Chrome verziót telepíteni, amely jelenleg is fut. Zárja be a Google Chrome-ot, és próbálja újra.</translation>
 <translation id="2582790009689336987">Ez a számítógép hamarosan nem fog több Google Chrome-frissítést kapni, mert a böngésző többé nem fogja támogatni ezt a Linux rendszert.</translation>
 <translation id="2588322182880276190">Chrome embléma</translation>
@@ -111,7 +109,6 @@ Ha mindenképp bejelentkezik, akkor egyesíti a(z) <ph name="ACCOUNT_EMAIL_NEW" 
 <translation id="4633000520311261472">A Chrome biztonságosabbá tétele érdekében kikapcsoltunk néhány bővítményt, amelyek nem a(z) <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> szolgáltatásból származnak, és előfordulhat, hogy az Ön tudta nélkül lettek telepítve.</translation>
 <translation id="4700157086864140907">A Google Chrome pontosabb helyesírás-ellenőrzést tud biztosítani azáltal, hogy a böngészőbe beírt szöveget elküldi a Google szervereinek, ami lehetővé teszi, hogy ugyanazt a helyesírás-ellenőrző technológiát használja, amelyet a Google-keresés is.</translation>
 <translation id="4728575227883772061">A telepítés váratlan hiba miatt nem sikerült. Ha a Google Chrome jelenleg fut, zárja be, majd próbálkozzon újra.</translation>
-<translation id="473775607612524610">Frissítés</translation>
 <translation id="4743926867934016338">Elfogadás és keresés</translation>
 <translation id="4751441238232965030">Ez a számítógép hamarosan nem kap további frissítéseket a Google Chrome 32 bites változatához. Kérjük, frissítsen a Google Chrome 64 bites változatára.</translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
@@ -208,7 +205,6 @@ Ha mindenképp bejelentkezik, akkor egyesíti a(z) <ph name="ACCOUNT_EMAIL_NEW" 
 <translation id="7808348361785373670">Eltávolítás a Chrome-ból…</translation>
 <translation id="7825851276765848807">A telepítés egy meg nem határozott hiba miatt nem sikerült. Kérjük, töltse le újra a Google Chrome-ot.</translation>
 <translation id="7890208801193284374">Ha megoszt egy számítógépet, ismerősei és családtagjai külön fiókokban internetezve a saját kívánságaik szerint állíthatják be a Chrome-ot.</translation>
-<translation id="8000275528373650868">A Google Chrome futtatásához Windows Vista, illetve Windows XP SP2 vagy újabb verzió szükséges.</translation>
 <translation id="8005540215158006229">A Chrome majdnem készen áll.</translation>
 <translation id="8008534537613507642">A Chrome újratelepítése</translation>
 <translation id="8030318113982266900">Eszköz frissítése a(z) <ph name="CHANNEL_NAME" /> csatornára...</translation>
@@ -237,6 +233,7 @@ Ha mindenképp bejelentkezik, akkor egyesíti a(z) <ph name="ACCOUNT_EMAIL_NEW" 
 <translation id="8851136666856101339">fő</translation>
 <translation id="8862326446509486874">Nincsenek meg a megfelelő jogai a rendszerszintű telepítéshez. Indítsa újra a telepítőt rendszergazdaként.</translation>
 <translation id="9026991721384951619">A Chrome OS nem tudta szinkronizálni az adatokat, mert a fiók bejelentkezési adatai elavultak.</translation>
+<translation id="9067395829937117663">A Google Chrome futtatásához Windows 7 vagy újabb verzió szükséges.</translation>
 <translation id="9102715433345326100">Ez a fájl rosszindulatú, ezért a Chrome letiltotta.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Figyelmeztetés:<ph name="END_BOLD" /> A Google Chrome nem tudja megakadályozni, hogy a bővítmények rögzítsék a böngészési előzményeit. A bővítmény inkognitómódban való használatának letiltásához törölje e lehetőség bejelölését.</translation>
 <translation id="911206726377975832">Törli a böngészési adatait is?</translation>

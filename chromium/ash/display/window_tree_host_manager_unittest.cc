@@ -71,7 +71,7 @@ class TestObserver : public WindowTreeHostManager::Observer,
         focus_changed_count_(0),
         activation_changed_count_(0) {
     Shell::GetInstance()->window_tree_host_manager()->AddObserver(this);
-    Shell::GetScreen()->AddObserver(this);
+    gfx::Screen::GetScreen()->AddObserver(this);
     aura::client::GetFocusClient(Shell::GetPrimaryRootWindow())
         ->AddObserver(this);
     aura::client::GetActivationClient(Shell::GetPrimaryRootWindow())
@@ -80,7 +80,7 @@ class TestObserver : public WindowTreeHostManager::Observer,
 
   ~TestObserver() override {
     Shell::GetInstance()->window_tree_host_manager()->RemoveObserver(this);
-    Shell::GetScreen()->RemoveObserver(this);
+    gfx::Screen::GetScreen()->RemoveObserver(this);
     aura::client::GetFocusClient(Shell::GetPrimaryRootWindow())
         ->RemoveObserver(this);
     aura::client::GetActivationClient(Shell::GetPrimaryRootWindow())
@@ -174,31 +174,34 @@ class TestObserver : public WindowTreeHostManager::Observer,
 };
 
 gfx::Display GetPrimaryDisplay() {
-  return Shell::GetScreen()->GetDisplayNearestWindow(
+  return gfx::Screen::GetScreen()->GetDisplayNearestWindow(
       Shell::GetAllRootWindows()[0]);
 }
 
 gfx::Display GetSecondaryDisplay() {
-  return Shell::GetScreen()->GetDisplayNearestWindow(
+  return gfx::Screen::GetScreen()->GetDisplayNearestWindow(
       Shell::GetAllRootWindows()[1]);
 }
 
-void SetSecondaryDisplayLayoutAndOffset(DisplayLayout::Position position,
+void SetSecondaryDisplayLayoutAndOffset(DisplayPlacement::Position position,
                                         int offset) {
-  DisplayLayout layout(position, offset);
-  ASSERT_GT(Shell::GetScreen()->GetNumDisplays(), 1);
-  Shell::GetInstance()->display_manager()->SetLayoutForCurrentDisplays(layout);
+  scoped_ptr<DisplayLayout> layout(test::CreateDisplayLayout(position, offset));
+  ASSERT_GT(gfx::Screen::GetScreen()->GetNumDisplays(), 1);
+  Shell::GetInstance()->display_manager()->SetLayoutForCurrentDisplays(
+      std::move(layout));
 }
 
-void SetSecondaryDisplayLayout(DisplayLayout::Position position) {
+void SetSecondaryDisplayLayout(DisplayPlacement::Position position) {
   SetSecondaryDisplayLayoutAndOffset(position, 0);
 }
 
-void SetDefaultDisplayLayout(DisplayLayout::Position position) {
+void SetDefaultDisplayLayout(DisplayPlacement::Position position) {
+  DisplayPlacement default_placement(position, 0);
+
   Shell::GetInstance()
       ->display_manager()
       ->layout_store()
-      ->SetDefaultDisplayLayout(DisplayLayout(position, 0));
+      ->SetDefaultDisplayPlacement(default_placement);
 }
 
 class WindowTreeHostManagerShutdownTest : public test::AshTestBase {
@@ -212,9 +215,9 @@ class WindowTreeHostManagerShutdownTest : public test::AshTestBase {
       return;
 
     // Make sure that primary display is accessible after shutdown.
-    gfx::Display primary = Shell::GetScreen()->GetPrimaryDisplay();
+    gfx::Display primary = gfx::Screen::GetScreen()->GetPrimaryDisplay();
     EXPECT_EQ("0,0 444x333", primary.bounds().ToString());
-    EXPECT_EQ(2, Shell::GetScreen()->GetNumDisplays());
+    EXPECT_EQ(2, gfx::Screen::GetScreen()->GetNumDisplays());
   }
 
  private:
@@ -273,7 +276,7 @@ class WindowTreeHostManagerStartupTest : public test::AshTestBase {
 class TestEventHandler : public ui::EventHandler {
  public:
   TestEventHandler()
-      : target_root_(NULL),
+      : target_root_(nullptr),
         touch_radius_x_(0.0),
         touch_radius_y_(0.0),
         scroll_x_offset_(0.0),
@@ -300,8 +303,8 @@ class TestEventHandler : public ui::EventHandler {
     // entire root window.
     if (target->name() != kDesktopBackgroundView)
       return;
-    touch_radius_x_ = event->pointer_details().radius_x();
-    touch_radius_y_ = event->pointer_details().radius_y();
+    touch_radius_x_ = event->pointer_details().radius_x;
+    touch_radius_y_ = event->pointer_details().radius_y;
     event->StopPropagation();
   }
 
@@ -324,7 +327,7 @@ class TestEventHandler : public ui::EventHandler {
   std::string GetLocationAndReset() {
     std::string result = mouse_location_.ToString();
     mouse_location_.SetPoint(0, 0);
-    target_root_ = NULL;
+    target_root_ = nullptr;
     return result;
   }
 
@@ -413,7 +416,7 @@ TEST_F(WindowTreeHostManagerTest, SecondaryDisplayLayout) {
   EXPECT_EQ(0, observer.GetActivationChangedCountAndReset());
 
   // Layout the secondary display to the bottom of the primary.
-  SetSecondaryDisplayLayout(DisplayLayout::BOTTOM);
+  SetSecondaryDisplayLayout(DisplayPlacement::BOTTOM);
   EXPECT_EQ(1, observer.CountAndReset());
   EXPECT_EQ(1, observer.GetBoundsChangedCountAndReset());
   EXPECT_EQ(1, observer.GetWorkareaChangedCountAndReset());
@@ -425,7 +428,7 @@ TEST_F(WindowTreeHostManagerTest, SecondaryDisplayLayout) {
   EXPECT_EQ("5,505 390x390", GetSecondaryDisplay().work_area().ToString());
 
   // Layout the secondary display to the left of the primary.
-  SetSecondaryDisplayLayout(DisplayLayout::LEFT);
+  SetSecondaryDisplayLayout(DisplayPlacement::LEFT);
   EXPECT_EQ(1, observer.CountAndReset());
   EXPECT_EQ(1, observer.GetBoundsChangedCountAndReset());
   EXPECT_EQ(1, observer.GetWorkareaChangedCountAndReset());
@@ -437,7 +440,7 @@ TEST_F(WindowTreeHostManagerTest, SecondaryDisplayLayout) {
   EXPECT_EQ("-395,5 390x390", GetSecondaryDisplay().work_area().ToString());
 
   // Layout the secondary display to the top of the primary.
-  SetSecondaryDisplayLayout(DisplayLayout::TOP);
+  SetSecondaryDisplayLayout(DisplayPlacement::TOP);
   EXPECT_EQ(1, observer.CountAndReset());
   EXPECT_EQ(1, observer.GetBoundsChangedCountAndReset());
   EXPECT_EQ(1, observer.GetWorkareaChangedCountAndReset());
@@ -449,7 +452,7 @@ TEST_F(WindowTreeHostManagerTest, SecondaryDisplayLayout) {
   EXPECT_EQ("5,-395 390x390", GetSecondaryDisplay().work_area().ToString());
 
   // Layout to the right with an offset.
-  SetSecondaryDisplayLayoutAndOffset(DisplayLayout::RIGHT, 300);
+  SetSecondaryDisplayLayoutAndOffset(DisplayPlacement::RIGHT, 300);
   EXPECT_EQ(1, observer.CountAndReset());  // resize and add
   EXPECT_EQ(1, observer.GetBoundsChangedCountAndReset());
   EXPECT_EQ(1, observer.GetWorkareaChangedCountAndReset());
@@ -460,7 +463,7 @@ TEST_F(WindowTreeHostManagerTest, SecondaryDisplayLayout) {
   EXPECT_EQ("500,300 400x400", GetSecondaryDisplay().bounds().ToString());
 
   // Keep the minimum 100.
-  SetSecondaryDisplayLayoutAndOffset(DisplayLayout::RIGHT, 490);
+  SetSecondaryDisplayLayoutAndOffset(DisplayPlacement::RIGHT, 490);
   EXPECT_EQ(1, observer.CountAndReset());  // resize and add
   EXPECT_EQ(1, observer.GetBoundsChangedCountAndReset());
   EXPECT_EQ(1, observer.GetWorkareaChangedCountAndReset());
@@ -470,7 +473,7 @@ TEST_F(WindowTreeHostManagerTest, SecondaryDisplayLayout) {
   EXPECT_EQ("0,0 500x500", GetPrimaryDisplay().bounds().ToString());
   EXPECT_EQ("500,400 400x400", GetSecondaryDisplay().bounds().ToString());
 
-  SetSecondaryDisplayLayoutAndOffset(DisplayLayout::RIGHT, -400);
+  SetSecondaryDisplayLayoutAndOffset(DisplayPlacement::RIGHT, -400);
   EXPECT_EQ(secondary_display_id, observer.GetChangedDisplayIdAndReset());
   EXPECT_EQ(1, observer.GetBoundsChangedCountAndReset());
   EXPECT_EQ(1, observer.GetWorkareaChangedCountAndReset());
@@ -481,7 +484,7 @@ TEST_F(WindowTreeHostManagerTest, SecondaryDisplayLayout) {
   EXPECT_EQ("500,-300 400x400", GetSecondaryDisplay().bounds().ToString());
 
   //  Layout to the bottom with an offset.
-  SetSecondaryDisplayLayoutAndOffset(DisplayLayout::BOTTOM, -200);
+  SetSecondaryDisplayLayoutAndOffset(DisplayPlacement::BOTTOM, -200);
   EXPECT_EQ(secondary_display_id, observer.GetChangedDisplayIdAndReset());
   EXPECT_EQ(1, observer.GetBoundsChangedCountAndReset());
   EXPECT_EQ(1, observer.GetWorkareaChangedCountAndReset());
@@ -492,7 +495,7 @@ TEST_F(WindowTreeHostManagerTest, SecondaryDisplayLayout) {
   EXPECT_EQ("-200,500 400x400", GetSecondaryDisplay().bounds().ToString());
 
   // Keep the minimum 100.
-  SetSecondaryDisplayLayoutAndOffset(DisplayLayout::BOTTOM, 490);
+  SetSecondaryDisplayLayoutAndOffset(DisplayPlacement::BOTTOM, 490);
   EXPECT_EQ(secondary_display_id, observer.GetChangedDisplayIdAndReset());
   EXPECT_EQ(1, observer.GetBoundsChangedCountAndReset());
   EXPECT_EQ(1, observer.GetWorkareaChangedCountAndReset());
@@ -502,7 +505,7 @@ TEST_F(WindowTreeHostManagerTest, SecondaryDisplayLayout) {
   EXPECT_EQ("0,0 500x500", GetPrimaryDisplay().bounds().ToString());
   EXPECT_EQ("400,500 400x400", GetSecondaryDisplay().bounds().ToString());
 
-  SetSecondaryDisplayLayoutAndOffset(DisplayLayout::BOTTOM, -400);
+  SetSecondaryDisplayLayoutAndOffset(DisplayPlacement::BOTTOM, -400);
   EXPECT_EQ(secondary_display_id, observer.GetChangedDisplayIdAndReset());
   EXPECT_EQ(1, observer.GetBoundsChangedCountAndReset());
   EXPECT_EQ(1, observer.GetWorkareaChangedCountAndReset());
@@ -513,7 +516,7 @@ TEST_F(WindowTreeHostManagerTest, SecondaryDisplayLayout) {
   EXPECT_EQ("-300,500 400x400", GetSecondaryDisplay().bounds().ToString());
 
   // Setting the same layout shouldn't invoke observers.
-  SetSecondaryDisplayLayoutAndOffset(DisplayLayout::BOTTOM, -400);
+  SetSecondaryDisplayLayoutAndOffset(DisplayPlacement::BOTTOM, -400);
   EXPECT_EQ(0, observer.GetChangedDisplayIdAndReset());
   EXPECT_EQ(0, observer.GetBoundsChangedCountAndReset());
   EXPECT_EQ(0, observer.GetWorkareaChangedCountAndReset());
@@ -606,7 +609,7 @@ TEST_F(WindowTreeHostManagerTest, BoundsUpdated) {
   w1->Focus();
 
   TestObserver observer;
-  SetDefaultDisplayLayout(DisplayLayout::BOTTOM);
+  SetDefaultDisplayLayout(DisplayPlacement::BOTTOM);
   UpdateDisplay("200x200,300x300");  // layout, resize and add.
   EXPECT_EQ(1, observer.CountAndReset());
   EXPECT_EQ(0, observer.GetFocusChangedCountAndReset());
@@ -640,13 +643,13 @@ TEST_F(WindowTreeHostManagerTest, BoundsUpdated) {
   EXPECT_LE(1, observer.GetFocusChangedCountAndReset());
   EXPECT_LE(1, observer.GetActivationChangedCountAndReset());
   EXPECT_EQ("0,0 400x400", GetPrimaryDisplay().bounds().ToString());
-  EXPECT_EQ(1, Shell::GetScreen()->GetNumDisplays());
+  EXPECT_EQ(1, gfx::Screen::GetScreen()->GetNumDisplays());
 
   UpdateDisplay("400x500*2,300x300");
   EXPECT_EQ(1, observer.CountAndReset());
   EXPECT_EQ(0, observer.GetFocusChangedCountAndReset());
   EXPECT_EQ(0, observer.GetActivationChangedCountAndReset());
-  ASSERT_EQ(2, Shell::GetScreen()->GetNumDisplays());
+  ASSERT_EQ(2, gfx::Screen::GetScreen()->GetNumDisplays());
   EXPECT_EQ("0,0 200x250", GetPrimaryDisplay().bounds().ToString());
   EXPECT_EQ("0,250 300x300", GetSecondaryDisplay().bounds().ToString());
 
@@ -704,94 +707,6 @@ TEST_F(WindowTreeHostManagerTest, BoundsUpdated) {
   EXPECT_EQ(0, observer.GetActivationChangedCountAndReset());
 }
 
-TEST_F(WindowTreeHostManagerTest, SwapPrimary) {
-  if (!SupportsMultipleDisplays())
-    return;
-
-  WindowTreeHostManager* window_tree_host_manager =
-      Shell::GetInstance()->window_tree_host_manager();
-  DisplayManager* display_manager = Shell::GetInstance()->display_manager();
-
-  UpdateDisplay("200x200,300x300");
-  gfx::Display primary_display = Shell::GetScreen()->GetPrimaryDisplay();
-  gfx::Display secondary_display = ScreenUtil::GetSecondaryDisplay();
-
-  DisplayLayout display_layout(DisplayLayout::RIGHT, 50);
-  display_manager->SetLayoutForCurrentDisplays(display_layout);
-
-  EXPECT_NE(primary_display.id(), secondary_display.id());
-  aura::Window* primary_root =
-      window_tree_host_manager->GetRootWindowForDisplayId(primary_display.id());
-  aura::Window* secondary_root =
-      window_tree_host_manager->GetRootWindowForDisplayId(
-          secondary_display.id());
-  EXPECT_NE(primary_root, secondary_root);
-  aura::Window* shelf_window =
-      Shelf::ForPrimaryDisplay()->shelf_widget()->GetNativeView();
-  EXPECT_TRUE(primary_root->Contains(shelf_window));
-  EXPECT_FALSE(secondary_root->Contains(shelf_window));
-  EXPECT_EQ(
-      primary_display.id(),
-      Shell::GetScreen()->GetDisplayNearestPoint(gfx::Point(-100, -100)).id());
-  EXPECT_EQ(primary_display.id(),
-            Shell::GetScreen()->GetDisplayNearestWindow(NULL).id());
-
-  EXPECT_EQ("0,0 200x200", primary_display.bounds().ToString());
-  EXPECT_EQ("0,0 200x153", primary_display.work_area().ToString());
-  EXPECT_EQ("200,0 300x300", secondary_display.bounds().ToString());
-  EXPECT_EQ("200,0 300x253", secondary_display.work_area().ToString());
-  EXPECT_EQ("right, 50", display_manager->GetCurrentDisplayLayout().ToString());
-
-  // Switch primary and secondary
-  window_tree_host_manager->SetPrimaryDisplay(secondary_display);
-  const DisplayLayout& inverted_layout =
-      display_manager->GetCurrentDisplayLayout();
-  EXPECT_EQ("left, -50", inverted_layout.ToString());
-
-  EXPECT_EQ(secondary_display.id(),
-            Shell::GetScreen()->GetPrimaryDisplay().id());
-  EXPECT_EQ(primary_display.id(), ScreenUtil::GetSecondaryDisplay().id());
-  EXPECT_EQ(
-      primary_display.id(),
-      Shell::GetScreen()->GetDisplayNearestPoint(gfx::Point(-100, -100)).id());
-  EXPECT_EQ(secondary_display.id(),
-            Shell::GetScreen()->GetDisplayNearestWindow(NULL).id());
-
-  EXPECT_EQ(primary_root, window_tree_host_manager->GetRootWindowForDisplayId(
-                              secondary_display.id()));
-  EXPECT_EQ(secondary_root, window_tree_host_manager->GetRootWindowForDisplayId(
-                                primary_display.id()));
-  EXPECT_TRUE(primary_root->Contains(shelf_window));
-  EXPECT_FALSE(secondary_root->Contains(shelf_window));
-
-  // Test if the bounds are correctly swapped.
-  gfx::Display swapped_primary = Shell::GetScreen()->GetPrimaryDisplay();
-  gfx::Display swapped_secondary = ScreenUtil::GetSecondaryDisplay();
-  EXPECT_EQ("0,0 300x300", swapped_primary.bounds().ToString());
-  EXPECT_EQ("0,0 300x253", swapped_primary.work_area().ToString());
-  EXPECT_EQ("-200,-50 200x200", swapped_secondary.bounds().ToString());
-
-  EXPECT_EQ("-200,-50 200x153", swapped_secondary.work_area().ToString());
-
-  aura::WindowTracker tracker;
-  tracker.Add(primary_root);
-  tracker.Add(secondary_root);
-
-  // Deleting 2nd display should move the primary to original primary display.
-  UpdateDisplay("200x200");
-  RunAllPendingInMessageLoop();  // RootWindow is deleted in a posted task.
-  EXPECT_EQ(1, Shell::GetScreen()->GetNumDisplays());
-  EXPECT_EQ(primary_display.id(), Shell::GetScreen()->GetPrimaryDisplay().id());
-  EXPECT_EQ(
-      primary_display.id(),
-      Shell::GetScreen()->GetDisplayNearestPoint(gfx::Point(-100, -100)).id());
-  EXPECT_EQ(primary_display.id(),
-            Shell::GetScreen()->GetDisplayNearestWindow(NULL).id());
-  EXPECT_TRUE(tracker.Contains(primary_root));
-  EXPECT_FALSE(tracker.Contains(secondary_root));
-  EXPECT_TRUE(primary_root->Contains(shelf_window));
-}
-
 TEST_F(WindowTreeHostManagerTest, FindNearestDisplay) {
   if (!SupportsMultipleDisplays())
     return;
@@ -801,10 +716,10 @@ TEST_F(WindowTreeHostManagerTest, FindNearestDisplay) {
   DisplayManager* display_manager = Shell::GetInstance()->display_manager();
 
   UpdateDisplay("200x200,300x300");
-  DisplayLayout display_layout(DisplayLayout::RIGHT, 50);
-  display_manager->SetLayoutForCurrentDisplays(display_layout);
+  display_manager->SetLayoutForCurrentDisplays(
+      test::CreateDisplayLayout(DisplayPlacement::RIGHT, 50));
 
-  gfx::Display primary_display = Shell::GetScreen()->GetPrimaryDisplay();
+  gfx::Display primary_display = gfx::Screen::GetScreen()->GetPrimaryDisplay();
   gfx::Display secondary_display = ScreenUtil::GetSecondaryDisplay();
   EXPECT_NE(primary_display.id(), secondary_display.id());
   aura::Window* primary_root =
@@ -815,33 +730,42 @@ TEST_F(WindowTreeHostManagerTest, FindNearestDisplay) {
   EXPECT_NE(primary_root, secondary_root);
 
   // Test that points outside of any display return the nearest display.
-  EXPECT_EQ(
-      primary_display.id(),
-      Shell::GetScreen()->GetDisplayNearestPoint(gfx::Point(-100, 0)).id());
-  EXPECT_EQ(
-      primary_display.id(),
-      Shell::GetScreen()->GetDisplayNearestPoint(gfx::Point(0, -100)).id());
-  EXPECT_EQ(
-      primary_display.id(),
-      Shell::GetScreen()->GetDisplayNearestPoint(gfx::Point(100, 100)).id());
-  EXPECT_EQ(
-      primary_display.id(),
-      Shell::GetScreen()->GetDisplayNearestPoint(gfx::Point(224, 25)).id());
-  EXPECT_EQ(
-      secondary_display.id(),
-      Shell::GetScreen()->GetDisplayNearestPoint(gfx::Point(226, 25)).id());
-  EXPECT_EQ(
-      secondary_display.id(),
-      Shell::GetScreen()->GetDisplayNearestPoint(gfx::Point(600, 100)).id());
-  EXPECT_EQ(
-      primary_display.id(),
-      Shell::GetScreen()->GetDisplayNearestPoint(gfx::Point(174, 225)).id());
-  EXPECT_EQ(
-      secondary_display.id(),
-      Shell::GetScreen()->GetDisplayNearestPoint(gfx::Point(176, 225)).id());
-  EXPECT_EQ(
-      secondary_display.id(),
-      Shell::GetScreen()->GetDisplayNearestPoint(gfx::Point(300, 400)).id());
+  EXPECT_EQ(primary_display.id(),
+            gfx::Screen::GetScreen()
+                ->GetDisplayNearestPoint(gfx::Point(-100, 0))
+                .id());
+  EXPECT_EQ(primary_display.id(),
+            gfx::Screen::GetScreen()
+                ->GetDisplayNearestPoint(gfx::Point(0, -100))
+                .id());
+  EXPECT_EQ(primary_display.id(),
+            gfx::Screen::GetScreen()
+                ->GetDisplayNearestPoint(gfx::Point(100, 100))
+                .id());
+  EXPECT_EQ(primary_display.id(),
+            gfx::Screen::GetScreen()
+                ->GetDisplayNearestPoint(gfx::Point(224, 25))
+                .id());
+  EXPECT_EQ(secondary_display.id(),
+            gfx::Screen::GetScreen()
+                ->GetDisplayNearestPoint(gfx::Point(226, 25))
+                .id());
+  EXPECT_EQ(secondary_display.id(),
+            gfx::Screen::GetScreen()
+                ->GetDisplayNearestPoint(gfx::Point(600, 100))
+                .id());
+  EXPECT_EQ(primary_display.id(),
+            gfx::Screen::GetScreen()
+                ->GetDisplayNearestPoint(gfx::Point(174, 225))
+                .id());
+  EXPECT_EQ(secondary_display.id(),
+            gfx::Screen::GetScreen()
+                ->GetDisplayNearestPoint(gfx::Point(176, 225))
+                .id());
+  EXPECT_EQ(secondary_display.id(),
+            gfx::Screen::GetScreen()
+                ->GetDisplayNearestPoint(gfx::Point(300, 400))
+                .id());
 }
 
 TEST_F(WindowTreeHostManagerTest, SwapPrimaryById) {
@@ -853,11 +777,11 @@ TEST_F(WindowTreeHostManagerTest, SwapPrimaryById) {
   DisplayManager* display_manager = Shell::GetInstance()->display_manager();
 
   UpdateDisplay("200x200,300x300");
-  gfx::Display primary_display = Shell::GetScreen()->GetPrimaryDisplay();
+  gfx::Display primary_display = gfx::Screen::GetScreen()->GetPrimaryDisplay();
   gfx::Display secondary_display = ScreenUtil::GetSecondaryDisplay();
 
-  DisplayLayout display_layout(DisplayLayout::RIGHT, 50);
-  display_manager->SetLayoutForCurrentDisplays(display_layout);
+  display_manager->SetLayoutForCurrentDisplays(
+      test::CreateDisplayLayout(DisplayPlacement::RIGHT, 50));
 
   EXPECT_NE(primary_display.id(), secondary_display.id());
   aura::Window* primary_root =
@@ -870,17 +794,26 @@ TEST_F(WindowTreeHostManagerTest, SwapPrimaryById) {
   EXPECT_TRUE(primary_root->Contains(shelf_window));
   EXPECT_FALSE(secondary_root->Contains(shelf_window));
   EXPECT_NE(primary_root, secondary_root);
-  EXPECT_EQ(
-      primary_display.id(),
-      Shell::GetScreen()->GetDisplayNearestPoint(gfx::Point(-100, -100)).id());
   EXPECT_EQ(primary_display.id(),
-            Shell::GetScreen()->GetDisplayNearestWindow(NULL).id());
+            gfx::Screen::GetScreen()
+                ->GetDisplayNearestPoint(gfx::Point(-100, -100))
+                .id());
+  EXPECT_EQ(primary_display.id(),
+            gfx::Screen::GetScreen()->GetDisplayNearestWindow(nullptr).id());
+
+  EXPECT_EQ("0,0 200x200", primary_display.bounds().ToString());
+  EXPECT_EQ("0,0 200x153", primary_display.work_area().ToString());
+  EXPECT_EQ("200,0 300x300", secondary_display.bounds().ToString());
+  EXPECT_EQ("200,0 300x253", secondary_display.work_area().ToString());
+  EXPECT_EQ(
+      "id=2200000001, parent=2200000000, right, 50",
+      display_manager->GetCurrentDisplayLayout().placement_list[0]->ToString());
 
   // Switch primary and secondary by display ID.
   TestObserver observer;
   window_tree_host_manager->SetPrimaryDisplayId(secondary_display.id());
   EXPECT_EQ(secondary_display.id(),
-            Shell::GetScreen()->GetPrimaryDisplay().id());
+            gfx::Screen::GetScreen()->GetPrimaryDisplay().id());
   EXPECT_EQ(primary_display.id(), ScreenUtil::GetSecondaryDisplay().id());
   EXPECT_LT(0, observer.CountAndReset());
 
@@ -894,7 +827,15 @@ TEST_F(WindowTreeHostManagerTest, SwapPrimaryById) {
   const DisplayLayout& inverted_layout =
       display_manager->GetCurrentDisplayLayout();
 
-  EXPECT_EQ("left, -50", inverted_layout.ToString());
+  EXPECT_EQ("id=2200000000, parent=2200000001, left, -50",
+            inverted_layout.placement_list[0]->ToString());
+  // Test if the bounds are correctly swapped.
+  gfx::Display swapped_primary = gfx::Screen::GetScreen()->GetPrimaryDisplay();
+  gfx::Display swapped_secondary = ScreenUtil::GetSecondaryDisplay();
+  EXPECT_EQ("0,0 300x300", swapped_primary.bounds().ToString());
+  EXPECT_EQ("0,0 300x253", swapped_primary.work_area().ToString());
+  EXPECT_EQ("-200,-50 200x200", swapped_secondary.bounds().ToString());
+  EXPECT_EQ("-200,-50 200x153", swapped_secondary.work_area().ToString());
 
   // Calling the same ID don't do anything.
   window_tree_host_manager->SetPrimaryDisplayId(secondary_display.id());
@@ -907,13 +848,15 @@ TEST_F(WindowTreeHostManagerTest, SwapPrimaryById) {
   // Deleting 2nd display should move the primary to original primary display.
   UpdateDisplay("200x200");
   RunAllPendingInMessageLoop();  // RootWindow is deleted in a posted task.
-  EXPECT_EQ(1, Shell::GetScreen()->GetNumDisplays());
-  EXPECT_EQ(primary_display.id(), Shell::GetScreen()->GetPrimaryDisplay().id());
-  EXPECT_EQ(
-      primary_display.id(),
-      Shell::GetScreen()->GetDisplayNearestPoint(gfx::Point(-100, -100)).id());
+  EXPECT_EQ(1, gfx::Screen::GetScreen()->GetNumDisplays());
   EXPECT_EQ(primary_display.id(),
-            Shell::GetScreen()->GetDisplayNearestWindow(NULL).id());
+            gfx::Screen::GetScreen()->GetPrimaryDisplay().id());
+  EXPECT_EQ(primary_display.id(),
+            gfx::Screen::GetScreen()
+                ->GetDisplayNearestPoint(gfx::Point(-100, -100))
+                .id());
+  EXPECT_EQ(primary_display.id(),
+            gfx::Screen::GetScreen()->GetDisplayNearestWindow(nullptr).id());
   EXPECT_TRUE(tracker.Contains(primary_root));
   EXPECT_FALSE(tracker.Contains(secondary_root));
   EXPECT_TRUE(primary_root->Contains(shelf_window));
@@ -925,11 +868,12 @@ TEST_F(WindowTreeHostManagerTest, SwapPrimaryById) {
       display_manager->GetDisplayInfo(primary_display.id()));
   display_info_list.push_back(
       display_manager->GetDisplayInfo(secondary_display.id()));
+
   display_manager->OnNativeDisplaysChanged(display_info_list);
 
-  EXPECT_EQ(2, Shell::GetScreen()->GetNumDisplays());
+  EXPECT_EQ(2, gfx::Screen::GetScreen()->GetNumDisplays());
   EXPECT_EQ(secondary_display.id(),
-            Shell::GetScreen()->GetPrimaryDisplay().id());
+            gfx::Screen::GetScreen()->GetPrimaryDisplay().id());
   EXPECT_EQ(primary_display.id(), ScreenUtil::GetSecondaryDisplay().id());
   EXPECT_EQ(primary_root, window_tree_host_manager->GetRootWindowForDisplayId(
                               secondary_display.id()));
@@ -951,14 +895,26 @@ TEST_F(WindowTreeHostManagerTest, SwapPrimaryById) {
   display_info_list2.push_back(primary_display_info);
   display_info_list2.push_back(third_display_info);
   display_manager->OnNativeDisplaysChanged(display_info_list2);
-  EXPECT_EQ(2, Shell::GetScreen()->GetNumDisplays());
-  EXPECT_EQ(primary_display.id(), Shell::GetScreen()->GetPrimaryDisplay().id());
+  EXPECT_EQ(2, gfx::Screen::GetScreen()->GetNumDisplays());
+  EXPECT_EQ(primary_display.id(),
+            gfx::Screen::GetScreen()->GetPrimaryDisplay().id());
   EXPECT_EQ(third_display_info.id(), ScreenUtil::GetSecondaryDisplay().id());
   EXPECT_EQ(primary_root, window_tree_host_manager->GetRootWindowForDisplayId(
                               primary_display.id()));
   EXPECT_NE(primary_root, window_tree_host_manager->GetRootWindowForDisplayId(
                               third_display_info.id()));
   EXPECT_TRUE(primary_root->Contains(shelf_window));
+}
+
+TEST_F(WindowTreeHostManagerTest, NoSwapPrimaryWithThreeDisplays) {
+  if (!SupportsMultipleDisplays())
+    return;
+  int64_t primary = gfx::Screen::GetScreen()->GetPrimaryDisplay().id();
+  UpdateDisplay("500x400,400x300,300x200");
+  EXPECT_EQ(primary, gfx::Screen::GetScreen()->GetPrimaryDisplay().id());
+  Shell::GetInstance()->window_tree_host_manager()->SetPrimaryDisplayId(
+      ScreenUtil::GetSecondaryDisplay().id());
+  EXPECT_EQ(primary, gfx::Screen::GetScreen()->GetPrimaryDisplay().id());
 }
 
 TEST_F(WindowTreeHostManagerTest, OverscanInsets) {
@@ -971,7 +927,7 @@ TEST_F(WindowTreeHostManagerTest, OverscanInsets) {
   Shell::GetInstance()->AddPreTargetHandler(&event_handler);
 
   UpdateDisplay("120x200,300x400*2");
-  gfx::Display display1 = Shell::GetScreen()->GetPrimaryDisplay();
+  gfx::Display display1 = gfx::Screen::GetScreen()->GetPrimaryDisplay();
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
   window_tree_host_manager->SetOverscanInsets(display1.id(),
@@ -1002,7 +958,7 @@ TEST_F(WindowTreeHostManagerTest, OverscanInsets) {
       &point);
   EXPECT_EQ("15,10", point.ToString());
 
-  window_tree_host_manager->SwapPrimaryDisplay();
+  test::SwapPrimaryDisplay();
   point.SetPoint(0, 0);
   Shell::GetAllRootWindows()[1]->GetHost()->GetRootTransform().TransformPoint(
       &point);
@@ -1020,7 +976,7 @@ TEST_F(WindowTreeHostManagerTest, Rotate) {
   Shell::GetInstance()->AddPreTargetHandler(&event_handler);
 
   UpdateDisplay("120x200,300x400*2");
-  gfx::Display display1 = Shell::GetScreen()->GetPrimaryDisplay();
+  gfx::Display display1 = gfx::Screen::GetScreen()->GetPrimaryDisplay();
   int64_t display2_id = ScreenUtil::GetSecondaryDisplay().id();
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   ui::test::EventGenerator generator1(root_windows[0]);
@@ -1048,8 +1004,8 @@ TEST_F(WindowTreeHostManagerTest, Rotate) {
   EXPECT_EQ(gfx::Display::ROTATE_0, GetActiveDisplayRotation(display2_id));
   EXPECT_EQ(1, observer.GetRotationChangedCountAndReset());
 
-  DisplayLayout display_layout(DisplayLayout::BOTTOM, 50);
-  display_manager->SetLayoutForCurrentDisplays(display_layout);
+  display_manager->SetLayoutForCurrentDisplays(
+      test::CreateDisplayLayout(DisplayPlacement::BOTTOM, 50));
   EXPECT_EQ("50,120 150x200",
             ScreenUtil::GetSecondaryDisplay().bounds().ToString());
 
@@ -1095,7 +1051,7 @@ TEST_F(WindowTreeHostManagerTest, ScaleRootWindow) {
 
   UpdateDisplay("600x400*2@1.5,500x300");
 
-  gfx::Display display1 = Shell::GetScreen()->GetPrimaryDisplay();
+  gfx::Display display1 = gfx::Screen::GetScreen()->GetPrimaryDisplay();
   test::ScopedSetInternalDisplayId set_internal(display1.id());
 
   gfx::Display display2 = ScreenUtil::GetSecondaryDisplay();
@@ -1111,7 +1067,7 @@ TEST_F(WindowTreeHostManagerTest, ScaleRootWindow) {
   EXPECT_EQ("449,150", event_handler.GetLocationAndReset());
 
   SetDisplayUIScale(display1.id(), 1.25f);
-  display1 = Shell::GetScreen()->GetPrimaryDisplay();
+  display1 = gfx::Screen::GetScreen()->GetPrimaryDisplay();
   display2 = ScreenUtil::GetSecondaryDisplay();
   EXPECT_EQ("0,0 375x250", display1.bounds().ToString());
   EXPECT_EQ("0,0 375x250", root_windows[0]->bounds().ToString());
@@ -1130,7 +1086,7 @@ TEST_F(WindowTreeHostManagerTest, TouchScale) {
   Shell::GetInstance()->AddPreTargetHandler(&event_handler);
 
   UpdateDisplay("200x200*2");
-  gfx::Display display = Shell::GetScreen()->GetPrimaryDisplay();
+  gfx::Display display = gfx::Screen::GetScreen()->GetPrimaryDisplay();
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   aura::Window* root_window = root_windows[0];
   ui::test::EventGenerator generator(root_window);
@@ -1163,7 +1119,7 @@ TEST_F(WindowTreeHostManagerTest, ConvertHostToRootCoords) {
 
   UpdateDisplay("600x400*2/r@1.5");
 
-  gfx::Display display1 = Shell::GetScreen()->GetPrimaryDisplay();
+  gfx::Display display1 = gfx::Screen::GetScreen()->GetPrimaryDisplay();
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   EXPECT_EQ("0,0 300x450", display1.bounds().ToString());
   EXPECT_EQ("0,0 300x450", root_windows[0]->bounds().ToString());
@@ -1180,7 +1136,7 @@ TEST_F(WindowTreeHostManagerTest, ConvertHostToRootCoords) {
   EXPECT_EQ("299,449", event_handler.GetLocationAndReset());
 
   UpdateDisplay("600x400*2/u@1.5");
-  display1 = Shell::GetScreen()->GetPrimaryDisplay();
+  display1 = gfx::Screen::GetScreen()->GetPrimaryDisplay();
   root_windows = Shell::GetAllRootWindows();
   EXPECT_EQ("0,0 450x300", display1.bounds().ToString());
   EXPECT_EQ("0,0 450x300", root_windows[0]->bounds().ToString());
@@ -1196,7 +1152,7 @@ TEST_F(WindowTreeHostManagerTest, ConvertHostToRootCoords) {
   EXPECT_EQ("449,0", event_handler.GetLocationAndReset());
 
   UpdateDisplay("600x400*2/l@1.5");
-  display1 = Shell::GetScreen()->GetPrimaryDisplay();
+  display1 = gfx::Screen::GetScreen()->GetPrimaryDisplay();
   root_windows = Shell::GetAllRootWindows();
   EXPECT_EQ("0,0 300x450", display1.bounds().ToString());
   EXPECT_EQ("0,0 300x450", root_windows[0]->bounds().ToString());
@@ -1278,9 +1234,9 @@ TEST_F(WindowTreeHostManagerTest, ReplaceSwappedPrimary) {
   display_info_list.push_back(second_display_info);
   display_manager->OnNativeDisplaysChanged(display_info_list);
 
-  Shell::GetInstance()->window_tree_host_manager()->SwapPrimaryDisplay();
+  test::SwapPrimaryDisplay();
 
-  EXPECT_EQ(11, Shell::GetScreen()->GetPrimaryDisplay().id());
+  EXPECT_EQ(11, gfx::Screen::GetScreen()->GetPrimaryDisplay().id());
 
   display_info_list.clear();
   const DisplayInfo new_first_display_info =
@@ -1291,7 +1247,7 @@ TEST_F(WindowTreeHostManagerTest, ReplaceSwappedPrimary) {
   display_info_list.push_back(new_second_display_info);
   display_manager->OnNativeDisplaysChanged(display_info_list);
 
-  EXPECT_EQ(20, Shell::GetScreen()->GetPrimaryDisplay().id());
+  EXPECT_EQ(20, gfx::Screen::GetScreen()->GetPrimaryDisplay().id());
 }
 
 namespace {
@@ -1408,9 +1364,8 @@ TEST_F(WindowTreeHostManagerTest,
   // Set the 2nd display on the left.
   DisplayLayoutStore* layout_store =
       Shell::GetInstance()->display_manager()->layout_store();
-  DisplayLayout layout = layout_store->default_display_layout();
-  layout.position = DisplayLayout::LEFT;
-  layout_store->SetDefaultDisplayLayout(layout);
+  DisplayPlacement new_default(DisplayPlacement::LEFT, 0);
+  layout_store->SetDefaultDisplayPlacement(new_default);
 
   UpdateDisplay("200x200,300x300");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
@@ -1461,7 +1416,7 @@ TEST_F(WindowTreeHostManagerTest,
   EXPECT_EQ(1.0f, test_api.GetCurrentCursor().device_scale_factor());
   EXPECT_EQ(gfx::Display::ROTATE_0, test_api.GetCurrentCursorRotation());
 
-  window_tree_host_manager->SwapPrimaryDisplay();
+  test::SwapPrimaryDisplay();
 
   EXPECT_EQ("20,50", env->last_mouse_location().ToString());
   EXPECT_EQ(2.0f, test_api.GetCurrentCursor().device_scale_factor());
@@ -1484,7 +1439,7 @@ TEST_F(WindowTreeHostManagerTest,
   UpdateDisplay("300x300*2/r,200x200");
   // Swap the primary display to make it possible to remove the primary display
   // via UpdateDisplay().
-  window_tree_host_manager->SwapPrimaryDisplay();
+  test::SwapPrimaryDisplay();
   int primary_display_id = window_tree_host_manager->GetPrimaryDisplayId();
 
   window_tree_host_manager->GetPrimaryRootWindow()->MoveCursorTo(

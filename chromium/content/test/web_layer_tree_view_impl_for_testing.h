@@ -37,10 +37,8 @@ class WebLayerTreeViewImplForTesting
   // blink::WebLayerTreeView implementation.
   void setRootLayer(const blink::WebLayer& layer) override;
   void clearRootLayer() override;
-  void attachCompositorAnimationTimeline(
-      blink::WebCompositorAnimationTimeline*) override;
-  void detachCompositorAnimationTimeline(
-      blink::WebCompositorAnimationTimeline*) override;
+  void attachCompositorAnimationTimeline(cc::AnimationTimeline*) override;
+  void detachCompositorAnimationTimeline(cc::AnimationTimeline*) override;
   virtual void setViewportSize(const blink::WebSize& unused_deprecated,
                                const blink::WebSize& device_viewport_size);
   void setViewportSize(const blink::WebSize& device_viewport_size) override;
@@ -67,6 +65,13 @@ class WebLayerTreeViewImplForTesting
   void clearViewportLayers() override;
   void registerSelection(const blink::WebSelection& selection) override;
   void clearSelection() override;
+  void setEventListenerProperties(
+      blink::WebEventListenerClass event_class,
+      blink::WebEventListenerProperties properties) override;
+  blink::WebEventListenerProperties eventListenerProperties(
+      blink::WebEventListenerClass event_class) const override;
+  void setHaveScrollEventHandlers(bool) override;
+  bool haveScrollEventHandlers() const override;
 
   // cc::LayerTreeHostClient implementation.
   void WillBeginMainFrame() override {}

@@ -40,6 +40,7 @@
 #include "third_party/kasko/kasko_features.h"
 
 #if BUILDFLAG(ENABLE_KASKO)
+#include "components/crash/content/app/crashpad.h"
 #include "syzygy/kasko/api/reporter.h"
 #endif
 
@@ -233,53 +234,60 @@ void GetKaskoCrashReportsBaseDir(const base::char16* browser_data_directory,
 void DumpHungBrowserProcess(DWORD main_thread_id,
                             const base::string16& channel,
                             const base::Process& process) {
-  // TODO(erikwright): Rather than recreating these crash keys here, it would be
-  // ideal to read them directly from the browser process.
+  // Read the Crashpad module annotations for the process.
+  std::vector<kasko::api::CrashKey> annotations;
+  crash_reporter::ReadMainModuleAnnotationsForKasko(process, &annotations);
 
-  // This is looking up the version of chrome_watcher.dll, which is equivalent
-  // for our purposes to chrome.dll.
-  scoped_ptr<FileVersionInfo> version_info(
-      CREATE_FILE_VERSION_INFO_FOR_CURRENT_MODULE());
-  using CrashKeyStrings = std::pair<base::string16, base::string16>;
-  std::vector<CrashKeyStrings> crash_key_strings;
-  if (version_info.get()) {
-    crash_key_strings.push_back(
-        CrashKeyStrings(L"prod", version_info->product_short_name()));
-    base::string16 version = version_info->product_version();
-    if (!version_info->is_official_build())
-      version.append(base::ASCIIToUTF16("-devel"));
-    crash_key_strings.push_back(CrashKeyStrings(L"ver", version));
-  } else {
-    // No version info found. Make up the values.
-    crash_key_strings.push_back(CrashKeyStrings(L"prod", L"Chrome"));
-    crash_key_strings.push_back(CrashKeyStrings(L"ver", L"0.0.0.0-devel"));
-  }
-  crash_key_strings.push_back(CrashKeyStrings(L"channel", channel));
-  crash_key_strings.push_back(CrashKeyStrings(L"plat", L"Win32"));
-  crash_key_strings.push_back(CrashKeyStrings(L"ptype", L"browser"));
-  crash_key_strings.push_back(
-      CrashKeyStrings(L"pid", base::IntToString16(process.Pid())));
-  crash_key_strings.push_back(CrashKeyStrings(L"hung-process", L"1"));
+  // Add a special crash key to distinguish reports generated for a hung
+  // process.
+  annotations.push_back(kasko::api::CrashKey{L"hung-process", L"1"});
 
   std::vector<const base::char16*> key_buffers;
   std::vector<const base::char16*> value_buffers;
-  for (auto& strings : crash_key_strings) {
-    key_buffers.push_back(strings.first.c_str());
-    value_buffers.push_back(strings.second.c_str());
+  for (const auto& crash_key : annotations) {
+    key_buffers.push_back(crash_key.name);
+    value_buffers.push_back(crash_key.value);
   }
   key_buffers.push_back(nullptr);
   value_buffers.push_back(nullptr);
 
-  // Synthesize an exception for the main thread.
+  // Synthesize an exception for the main thread. Populate the record with the
+  // current context of the thread to get the stack trace bucketed on the crash
+  // backend.
   CONTEXT thread_context = {};
   EXCEPTION_RECORD exception_record = {};
   exception_record.ExceptionCode = EXCEPTION_ARRAY_BOUNDS_EXCEEDED;
   EXCEPTION_POINTERS exception_pointers = {&exception_record, &thread_context};
 
+  base::win::ScopedHandle main_thread(::OpenThread(
+      THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION,
+      FALSE, main_thread_id));
+
+  bool have_context = false;
+  if (main_thread.IsValid()) {
+    DWORD suspend_count = ::SuspendThread(main_thread.Get());
+    const DWORD kSuspendFailed = static_cast<DWORD>(-1);
+    if (suspend_count != kSuspendFailed) {
+      // Best effort capture of the context.
+      thread_context.ContextFlags = CONTEXT_FLOATING_POINT | CONTEXT_SEGMENTS |
+                                    CONTEXT_INTEGER | CONTEXT_CONTROL;
+      if (::GetThreadContext(main_thread.Get(), &thread_context) == TRUE)
+        have_context = true;
+
+      ::ResumeThread(main_thread.Get());
+    }
+  }
+
   // TODO(erikwright): Make the dump-type channel-dependent.
-  kasko::api::SendReportForProcess(
-      process.Handle(), main_thread_id, &exception_pointers,
-      kasko::api::LARGER_DUMP_TYPE, key_buffers.data(), value_buffers.data());
+  if (have_context) {
+    kasko::api::SendReportForProcess(
+        process.Handle(), main_thread_id, &exception_pointers,
+        kasko::api::LARGER_DUMP_TYPE, key_buffers.data(), value_buffers.data());
+  } else {
+    kasko::api::SendReportForProcess(process.Handle(), 0, nullptr,
+                                     kasko::api::LARGER_DUMP_TYPE,
+                                     key_buffers.data(), value_buffers.data());
+  }
 }
 
 void LoggedDeregisterEventSource(HANDLE event_source_handle) {
@@ -339,8 +347,6 @@ void OnCrashReportUpload(void* context,
                      0, strings, nullptr)) {
     DPLOG(ERROR);
   }
-
-  // TODO(erikwright): Copy minidump to some "last dump" location?
 }
 
 #endif  // BUILDFLAG(ENABLE_KASKO)
@@ -354,7 +360,6 @@ extern "C" int WatcherMain(const base::char16* registry_path,
                            DWORD main_thread_id,
                            HANDLE on_initialized_event_handle,
                            const base::char16* browser_data_directory,
-                           const base::char16* message_window_name,
                            const base::char16* channel_name) {
   base::Process process(process_handle);
   base::win::ScopedHandle on_initialized_event(on_initialized_event_handle);
@@ -391,8 +396,11 @@ extern "C" int WatcherMain(const base::char16* registry_path,
           .c_str(),
       &OnCrashReportUpload, nullptr);
 #if BUILDFLAG(ENABLE_KASKO_HANG_REPORTS)
+  // Only activate hang reports for the canary channel. For testing purposes,
+  // Chrome instances with no channels will also report hangs.
   if (launched_kasko &&
-      base::StringPiece16(channel_name) == installer::kChromeChannelCanary) {
+      (base::StringPiece16(channel_name) == L"" ||
+       base::StringPiece16(channel_name) == installer::kChromeChannelCanary)) {
     on_hung_callback =
         base::Bind(&DumpHungBrowserProcess, main_thread_id, channel_name);
   }
@@ -416,7 +424,7 @@ extern "C" int WatcherMain(const base::char16* registry_path,
         base::TimeDelta::FromSeconds(60), base::TimeDelta::FromSeconds(20),
         base::Bind(&OnWindowEvent, registry_path,
                    base::Passed(process.Duplicate()), on_hung_callback));
-    hang_monitor.Initialize(process.Duplicate(), message_window_name);
+    hang_monitor.Initialize(process.Duplicate());
 
     run_loop.Run();
   }

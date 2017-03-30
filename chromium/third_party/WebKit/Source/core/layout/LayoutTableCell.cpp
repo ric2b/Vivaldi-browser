@@ -50,7 +50,7 @@ static_assert(sizeof(CollapsedBorderValue) == 8, "CollapsedBorderValue should st
 
 LayoutTableCell::LayoutTableCell(Element* element)
     : LayoutBlockFlow(element)
-    , m_column(unsetColumnIndex)
+    , m_absoluteColumnIndex(unsetColumnIndex)
     , m_cellWidthChanged(false)
     , m_intrinsicPaddingBefore(0)
     , m_intrinsicPaddingAfter(0)
@@ -106,7 +106,7 @@ void LayoutTableCell::colSpanOrRowSpanChanged()
 
 Length LayoutTableCell::logicalWidthFromColumns(LayoutTableCol* firstColForThisCell, Length widthFromStyle) const
 {
-    ASSERT(firstColForThisCell && firstColForThisCell == table()->colElement(col()).innermostColOrColGroup());
+    ASSERT(firstColForThisCell && firstColForThisCell == table()->colElementAtAbsoluteColumn(absoluteColumnIndex()).innermostColOrColGroup());
     LayoutTableCol* tableCol = firstColForThisCell;
 
     unsigned colSpanCount = colSpan();
@@ -154,7 +154,7 @@ void LayoutTableCell::computePreferredLogicalWidths()
             // to make the minwidth of the cell into the fixed width.  They do this
             // even in strict mode, so do not make this a quirk.  Affected the top
             // of hiptop.com.
-            m_minPreferredLogicalWidth = std::max<LayoutUnit>(w.value(), m_minPreferredLogicalWidth);
+            m_minPreferredLogicalWidth = std::max(LayoutUnit(w.value()), m_minPreferredLogicalWidth);
         }
     }
 }
@@ -183,7 +183,7 @@ void LayoutTableCell::computeIntrinsicPadding(int rowHeight, SubtreeLayoutScope&
     case TEXT_BOTTOM:
     case LENGTH:
     case BASELINE: {
-        LayoutUnit baseline = cellBaselinePosition();
+        int baseline = cellBaselinePosition();
         if (baseline > borderBefore() + paddingBefore())
             intrinsicPaddingBefore = section()->rowBaseline(rowIndex()) - (baseline - oldIntrinsicPaddingBefore);
         break;
@@ -221,7 +221,7 @@ void LayoutTableCell::setCellLogicalWidth(int tableLayoutLogicalWidth, SubtreeLa
 
     layouter.setNeedsLayout(this, LayoutInvalidationReason::SizeChanged);
 
-    setLogicalWidth(tableLayoutLogicalWidth);
+    setLogicalWidth(LayoutUnit(tableLayoutLogicalWidth));
     setCellWidthChanged(true);
 }
 
@@ -238,7 +238,7 @@ void LayoutTableCell::layout()
     // of them wrong. So if our content's intrinsic height has changed push the new content up into the intrinsic padding and relayout so that the rest of
     // table and row layout can use the correct baseline and height for this cell.
     if (isBaselineAligned() && section()->rowBaseline(rowIndex()) && cellBaselinePosition() > section()->rowBaseline(rowIndex())) {
-        int newIntrinsicPaddingBefore = std::max<LayoutUnit>(0, intrinsicPaddingBefore() - std::max<LayoutUnit>(0, cellBaselinePosition() - oldCellBaseline));
+        int newIntrinsicPaddingBefore = std::max(intrinsicPaddingBefore() - std::max(cellBaselinePosition() - oldCellBaseline, 0), 0);
         setIntrinsicPaddingBefore(newIntrinsicPaddingBefore);
         SubtreeLayoutScope layouter(*this);
         layouter.setNeedsLayout(this, LayoutInvalidationReason::TableChanged);
@@ -254,50 +254,54 @@ void LayoutTableCell::layout()
 
 LayoutUnit LayoutTableCell::paddingTop() const
 {
-    int result = computedCSSPaddingTop();
-    if (!isHorizontalWritingMode())
-        return result;
-    return result + (style()->writingMode() == TopToBottomWritingMode ? intrinsicPaddingBefore() : intrinsicPaddingAfter());
+    LayoutUnit result = computedCSSPaddingTop();
+    if (isHorizontalWritingMode())
+        result += (style()->writingMode() == TopToBottomWritingMode ? intrinsicPaddingBefore() : intrinsicPaddingAfter());
+    // TODO(leviw): The floor call should be removed when Table is sub-pixel aware. crbug.com/377847
+    return LayoutUnit(result.floor());
 }
 
 LayoutUnit LayoutTableCell::paddingBottom() const
 {
-    int result = computedCSSPaddingBottom();
-    if (!isHorizontalWritingMode())
-        return result;
-    return result + (style()->writingMode() == TopToBottomWritingMode ? intrinsicPaddingAfter() : intrinsicPaddingBefore());
+    LayoutUnit result = computedCSSPaddingBottom();
+    if (isHorizontalWritingMode())
+        result += (style()->writingMode() == TopToBottomWritingMode ? intrinsicPaddingAfter() : intrinsicPaddingBefore());
+    // TODO(leviw): The floor call should be removed when Table is sub-pixel aware. crbug.com/377847
+    return LayoutUnit(result.floor());
 }
 
 LayoutUnit LayoutTableCell::paddingLeft() const
 {
-    int result = computedCSSPaddingLeft();
-    if (isHorizontalWritingMode())
-        return result;
-    return result + (style()->writingMode() == LeftToRightWritingMode ? intrinsicPaddingBefore() : intrinsicPaddingAfter());
+    LayoutUnit result = computedCSSPaddingLeft();
+    if (!isHorizontalWritingMode())
+        result += (style()->writingMode() == LeftToRightWritingMode ? intrinsicPaddingBefore() : intrinsicPaddingAfter());
+    // TODO(leviw): The floor call should be removed when Table is sub-pixel aware. crbug.com/377847
+    return LayoutUnit(result.floor());
 }
 
 LayoutUnit LayoutTableCell::paddingRight() const
 {
-    int result = computedCSSPaddingRight();
-    if (isHorizontalWritingMode())
-        return result;
-    return result + (style()->writingMode() == LeftToRightWritingMode ? intrinsicPaddingAfter() : intrinsicPaddingBefore());
+    LayoutUnit result = computedCSSPaddingRight();
+    if (!isHorizontalWritingMode())
+        result += (style()->writingMode() == LeftToRightWritingMode ? intrinsicPaddingAfter() : intrinsicPaddingBefore());
+    // TODO(leviw): The floor call should be removed when Table is sub-pixel aware. crbug.com/377847
+    return LayoutUnit(result.floor());
 }
 
 LayoutUnit LayoutTableCell::paddingBefore() const
 {
-    return static_cast<int>(computedCSSPaddingBefore()) + intrinsicPaddingBefore();
+    return LayoutUnit(computedCSSPaddingBefore().floor() + intrinsicPaddingBefore());
 }
 
 LayoutUnit LayoutTableCell::paddingAfter() const
 {
-    return static_cast<int>(computedCSSPaddingAfter()) + intrinsicPaddingAfter();
+    return LayoutUnit(computedCSSPaddingAfter().floor() + intrinsicPaddingAfter());
 }
 
 void LayoutTableCell::setOverrideLogicalContentHeightFromRowHeight(LayoutUnit rowHeight)
 {
     clearIntrinsicPadding();
-    setOverrideLogicalContentHeight(std::max<LayoutUnit>(0, rowHeight - borderAndPaddingLogicalHeight()));
+    setOverrideLogicalContentHeight((rowHeight - borderAndPaddingLogicalHeight()).clampNegativeToZero());
 }
 
 LayoutSize LayoutTableCell::offsetFromContainer(const LayoutObject* o, const LayoutPoint& point, bool* offsetDependsOnPoint) const
@@ -350,7 +354,7 @@ LayoutRect LayoutTableCell::clippedOverflowRectForPaintInvalidation(const Layout
             right = std::max(right, below->borderHalfRight(true));
         }
     }
-    LayoutPoint location(std::max<LayoutUnit>(left, -visualOverflowRect().x()), std::max<LayoutUnit>(top, -visualOverflowRect().y()));
+    LayoutPoint location(std::max(LayoutUnit(left), -visualOverflowRect().x()), std::max(LayoutUnit(top), -visualOverflowRect().y()));
     LayoutRect r(-location.x(), -location.y(), location.x() + std::max(size().width() + right, visualOverflowRect().maxX()), location.y() + std::max(size().height() + bottom, visualOverflowRect().maxY()));
 
     mapToVisibleRectInAncestorSpace(paintInvalidationContainer, r, paintInvalidationState);
@@ -367,12 +371,12 @@ void LayoutTableCell::mapToVisibleRectInAncestorSpace(const LayoutBoxModelObject
     LayoutBlockFlow::mapToVisibleRectInAncestorSpace(ancestor, r, paintInvalidationState);
 }
 
-LayoutUnit LayoutTableCell::cellBaselinePosition() const
+int LayoutTableCell::cellBaselinePosition() const
 {
     // <http://www.w3.org/TR/2007/CR-CSS21-20070719/tables.html#height-layout>: The baseline of a cell is the baseline of
     // the first in-flow line box in the cell, or the first in-flow table-row in the cell, whichever comes first. If there
     // is no such line box or table-row, the baseline is the bottom of content edge of the cell box.
-    LayoutUnit firstLineBaseline = firstLineBoxBaseline();
+    int firstLineBaseline = firstLineBoxBaseline();
     if (firstLineBaseline != -1)
         return firstLineBaseline;
     return borderBefore() + paddingBefore() + contentLogicalHeight();
@@ -459,14 +463,13 @@ static int compareBorders(const CollapsedBorderValue& border1, const CollapsedBo
 
 static CollapsedBorderValue chooseBorder(const CollapsedBorderValue& border1, const CollapsedBorderValue& border2)
 {
-    const CollapsedBorderValue& border = compareBorders(border1, border2) < 0 ? border2 : border1;
-    return border.style() == BHIDDEN ? CollapsedBorderValue() : border;
+    return compareBorders(border1, border2) < 0 ? border2 : border1;
 }
 
 bool LayoutTableCell::hasStartBorderAdjoiningTable() const
 {
-    bool isStartColumn = !col();
-    bool isEndColumn = table()->colToEffCol(col() + colSpan() - 1) == table()->numEffCols() - 1;
+    bool isStartColumn = !absoluteColumnIndex();
+    bool isEndColumn = table()->absoluteColumnToEffectiveColumn(absoluteColumnIndex() + colSpan() - 1) == table()->numEffectiveColumns() - 1;
     bool hasSameDirectionAsTable = hasSameDirectionAs(table());
 
     // The table direction determines the row direction. In mixed directionality, we cannot guarantee that
@@ -476,8 +479,8 @@ bool LayoutTableCell::hasStartBorderAdjoiningTable() const
 
 bool LayoutTableCell::hasEndBorderAdjoiningTable() const
 {
-    bool isStartColumn = !col();
-    bool isEndColumn = table()->colToEffCol(col() + colSpan() - 1) == table()->numEffCols() - 1;
+    bool isStartColumn = !absoluteColumnIndex();
+    bool isEndColumn = table()->absoluteColumnToEffectiveColumn(absoluteColumnIndex() + colSpan() - 1) == table()->numEffectiveColumns() - 1;
     bool hasSameDirectionAsTable = hasSameDirectionAs(table());
 
     // The table direction determines the row direction. In mixed directionality, we cannot guarantee that
@@ -519,7 +522,7 @@ CollapsedBorderValue LayoutTableCell::computeCollapsedStartBorder(IncludeBorderC
     }
 
     // (5) Our column and column group's start borders.
-    LayoutTable::ColAndColGroup colAndColGroup = table->colElement(col());
+    LayoutTable::ColAndColGroup colAndColGroup = table->colElementAtAbsoluteColumn(absoluteColumnIndex());
     if (colAndColGroup.colgroup && colAndColGroup.adjoinsStartBorderOfColGroup) {
         // Only apply the colgroup's border if this cell touches the colgroup edge.
         result = chooseBorder(result, CollapsedBorderValue(colAndColGroup.colgroup->borderAdjoiningCellStartBorder(this), includeColor ? colAndColGroup.colgroup->resolveColor(startColorProperty) : Color(), BCOLGROUP));
@@ -537,7 +540,7 @@ CollapsedBorderValue LayoutTableCell::computeCollapsedStartBorder(IncludeBorderC
 
     // (6) The end border of the preceding column.
     if (cellBefore) {
-        LayoutTable::ColAndColGroup colAndColGroup = table->colElement(col() - 1);
+        LayoutTable::ColAndColGroup colAndColGroup = table->colElementAtAbsoluteColumn(absoluteColumnIndex() - 1);
         // Only apply the colgroup's border if this cell touches the colgroup edge.
         if (colAndColGroup.colgroup && colAndColGroup.adjoinsEndBorderOfColGroup) {
             result = chooseBorder(CollapsedBorderValue(colAndColGroup.colgroup->borderAdjoiningCellEndBorder(this), includeColor ? colAndColGroup.colgroup->resolveColor(endColorProperty) : Color(), BCOLGROUP), result);
@@ -569,7 +572,7 @@ CollapsedBorderValue LayoutTableCell::computeCollapsedEndBorder(IncludeBorderCol
     LayoutTable* table = this->table();
     // Note: We have to use the effective column information instead of whether we have a cell after as a table doesn't
     // have to be regular (any row can have less cells than the total cell count).
-    bool isEndColumn = table->colToEffCol(col() + colSpan() - 1) == table->numEffCols() - 1;
+    bool isEndColumn = table->absoluteColumnToEffectiveColumn(absoluteColumnIndex() + colSpan() - 1) == table->numEffectiveColumns() - 1;
 
     // For end border, we need to check, in order of precedence:
     // (1) Our end border.
@@ -601,7 +604,7 @@ CollapsedBorderValue LayoutTableCell::computeCollapsedEndBorder(IncludeBorderCol
     }
 
     // (5) Our column and column group's end borders.
-    LayoutTable::ColAndColGroup colAndColGroup = table->colElement(col() + colSpan() - 1);
+    LayoutTable::ColAndColGroup colAndColGroup = table->colElementAtAbsoluteColumn(absoluteColumnIndex() + colSpan() - 1);
     if (colAndColGroup.colgroup && colAndColGroup.adjoinsEndBorderOfColGroup) {
         // Only apply the colgroup's border if this cell touches the colgroup edge.
         result = chooseBorder(result, CollapsedBorderValue(colAndColGroup.colgroup->borderAdjoiningCellEndBorder(this), includeColor ? colAndColGroup.colgroup->resolveColor(endColorProperty) : Color(), BCOLGROUP));
@@ -619,7 +622,7 @@ CollapsedBorderValue LayoutTableCell::computeCollapsedEndBorder(IncludeBorderCol
 
     // (6) The start border of the next column.
     if (!isEndColumn) {
-        LayoutTable::ColAndColGroup colAndColGroup = table->colElement(col() + colSpan());
+        LayoutTable::ColAndColGroup colAndColGroup = table->colElementAtAbsoluteColumn(absoluteColumnIndex() + colSpan());
         if (colAndColGroup.colgroup && colAndColGroup.adjoinsStartBorderOfColGroup) {
             // Only apply the colgroup's border if this cell touches the colgroup edge.
             result = chooseBorder(result, CollapsedBorderValue(colAndColGroup.colgroup->borderAdjoiningCellStartBorder(this), includeColor ? colAndColGroup.colgroup->resolveColor(startColorProperty) : Color(), BCOLGROUP));
@@ -703,7 +706,7 @@ CollapsedBorderValue LayoutTableCell::computeCollapsedBeforeBorder(IncludeBorder
 
     if (!currSection) {
         // (8) Our column and column group's before borders.
-        LayoutTableCol* colElt = table->colElement(col()).innermostColOrColGroup();
+        LayoutTableCol* colElt = table->colElementAtAbsoluteColumn(absoluteColumnIndex()).innermostColOrColGroup();
         if (colElt) {
             result = chooseBorder(result, CollapsedBorderValue(colElt->style()->borderBefore(), includeColor ? colElt->resolveColor(beforeColorProperty) : Color(), BCOL));
             if (!result.exists())
@@ -773,7 +776,7 @@ CollapsedBorderValue LayoutTableCell::computeCollapsedAfterBorder(IncludeBorderC
 
     if (!currSection) {
         // (8) Our column and column group's after borders.
-        LayoutTableCol* colElt = table->colElement(col()).innermostColOrColGroup();
+        LayoutTableCol* colElt = table->colElementAtAbsoluteColumn(absoluteColumnIndex()).innermostColOrColGroup();
         if (colElt) {
             result = chooseBorder(result, CollapsedBorderValue(colElt->style()->borderAfter(), includeColor ? colElt->resolveColor(afterColorProperty) : Color(), BCOL));
             if (!result.exists())
@@ -908,7 +911,7 @@ void LayoutTableCell::paint(const PaintInfo& paintInfo, const LayoutPoint& paint
 static void addBorderStyle(LayoutTable::CollapsedBorderValues& borderValues,
     CollapsedBorderValue borderValue)
 {
-    if (!borderValue.exists())
+    if (!borderValue.isVisible())
         return;
     size_t count = borderValues.size();
     for (size_t i = 0; i < count; ++i) {
@@ -973,7 +976,8 @@ bool LayoutTableCell::boxShadowShouldBeAppliedToBackground(BackgroundBleedAvoida
 
 void LayoutTableCell::scrollbarsChanged(bool horizontalScrollbarChanged, bool verticalScrollbarChanged)
 {
-    LayoutUnit scrollbarHeight = scrollbarLogicalHeight();
+    LayoutBlock::scrollbarsChanged(horizontalScrollbarChanged, verticalScrollbarChanged);
+    int scrollbarHeight = scrollbarLogicalHeight();
     if (!scrollbarHeight)
         return; // Not sure if we should be doing something when a scrollbar goes away or not.
 

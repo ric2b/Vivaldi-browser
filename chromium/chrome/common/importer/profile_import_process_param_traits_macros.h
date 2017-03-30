@@ -26,6 +26,7 @@
 #include "ipc/ipc_message_macros.h"
 
 #include "importer/imported_notes_entry.h"
+#include "importer/imported_speeddial_entry.h"
 
 #if defined(OS_WIN)
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(importer::ImporterType,

@@ -33,7 +33,6 @@
 // VivaldiBrowserWindow --------------------------------------------------------
 
 VivaldiBrowserWindow::VivaldiBrowserWindow() :
-  is_active_(false),
   bounds_(gfx::Rect()){
 #if defined(OS_WIN)
   jumplist_ = NULL;
@@ -79,6 +78,20 @@ VivaldiBrowserWindow* VivaldiBrowserWindow::CreateVivaldiBrowserWindow(
   return vview;
 }
 
+void VivaldiBrowserWindow::Show() {
+#if !defined(OS_WIN)
+  // The Browser associated with this browser window must become the active
+  // browser at the time |Show()| is called. This is the natural behavior under
+  // Windows and Ash, but other platforms will not trigger
+  // OnWidgetActivationChanged() until we return to the runloop. Therefore any
+  // calls to Browser::GetLastActive() will return the wrong result if we do not
+  // explicitly set it here.
+  // A similar block also appears in BrowserWindowCocoa::Show().
+  if (browser()->host_desktop_type() != chrome::HOST_DESKTOP_TYPE_ASH)
+    BrowserList::SetLastActive(browser());
+#endif
+}
+
 void VivaldiBrowserWindow::SetBounds(const gfx::Rect& bounds) {
   bounds_ = bounds;
   return;
@@ -116,29 +129,19 @@ void VivaldiBrowserWindow::Close() {
 }
 
 void VivaldiBrowserWindow::Activate() {
-#if defined(OS_LINUX)
-  // Never activate an active window. It triggers problems in focus follows
-  // mouse window manager mode. See VB-11947
-  if (is_active_)
-    return;
-#endif
-
   extensions::AppWindow* app_window = GetAppWindow();
   if (app_window) {
     app_window->GetBaseWindow()->Activate();
   }
-
-  is_active_ = true;
-
   BrowserList::SetLastActive(browser_.get());
 }
 
 void VivaldiBrowserWindow::Deactivate() {
-  is_active_ = false;
 }
 
 bool VivaldiBrowserWindow::IsActive() const {
-  return is_active_;
+  Browser* active = BrowserList::GetInstance()->GetLastActive();
+  return (active && active->window() == this);
 }
 
 bool VivaldiBrowserWindow::IsAlwaysOnTop() const {
@@ -221,14 +224,6 @@ bool VivaldiBrowserWindow::ShouldHideUIForFullscreen() const {
 }
 
 bool VivaldiBrowserWindow::IsFullscreen() const {
-  return false;
-}
-
-bool VivaldiBrowserWindow::SupportsFullscreenWithToolbar() const {
-  return false;
-}
-
-bool VivaldiBrowserWindow::IsFullscreenWithToolbar() const {
   return false;
 }
 
@@ -361,6 +356,6 @@ void VivaldiBrowserWindow::DestroyBrowser() {
   delete this;
 }
 
-bool VivaldiBrowserWindow::ShouldHideFullscreenToolbar() const {
-  return false;
+gfx::Size VivaldiBrowserWindow::GetContentsSize() const {
+  return gfx::Size();
 }

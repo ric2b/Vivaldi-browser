@@ -9,9 +9,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ssl/chrome_security_state_model_client.h"
 #include "chrome/browser/ui/android/view_android_helper.h"
+#include "chrome/common/url_constants.h"
 #include "content/public/browser/android/content_view_core.h"
+#include "content/public/browser/render_frame_host.h"
 #include "jni/BluetoothChooserDialog_jni.h"
 #include "ui/android/window_android.h"
+#include "url/origin.h"
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertUTF8ToJavaString;
@@ -19,22 +22,26 @@ using base::android::ConvertUTF16ToJavaString;
 using base::android::ScopedJavaLocalRef;
 
 BluetoothChooserAndroid::BluetoothChooserAndroid(
-    content::WebContents* web_contents,
-    const EventHandler& event_handler,
-    const GURL& origin)
-    : event_handler_(event_handler) {
+    content::RenderFrameHost* frame,
+    const EventHandler& event_handler)
+    : web_contents_(content::WebContents::FromRenderFrameHost(frame)),
+      event_handler_(event_handler) {
+  const url::Origin origin = frame->GetLastCommittedOrigin();
+  DCHECK(!origin.unique());
+
   base::android::ScopedJavaLocalRef<jobject> window_android =
-      content::ContentViewCore::FromWebContents(
-          web_contents)->GetWindowAndroid()->GetJavaObject();
+      content::ContentViewCore::FromWebContents(web_contents_)
+          ->GetWindowAndroid()
+          ->GetJavaObject();
 
   ChromeSecurityStateModelClient* security_model_client =
-      ChromeSecurityStateModelClient::FromWebContents(web_contents);
+      ChromeSecurityStateModelClient::FromWebContents(web_contents_);
   DCHECK(security_model_client);
 
   // Create (and show) the BluetoothChooser dialog.
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jstring> origin_string =
-      ConvertUTF8ToJavaString(env, origin.spec());
+      ConvertUTF8ToJavaString(env, origin.Serialize());
   java_dialog_.Reset(Java_BluetoothChooserDialog_create(
       env, window_android.obj(), origin_string.obj(),
       security_model_client->GetSecurityInfo().security_level,
@@ -55,9 +62,12 @@ bool BluetoothChooserAndroid::CanAskForScanningPermission() {
 }
 
 void BluetoothChooserAndroid::SetAdapterPresence(AdapterPresence presence) {
+  JNIEnv* env = AttachCurrentThread();
   if (presence != AdapterPresence::POWERED_ON) {
-    Java_BluetoothChooserDialog_notifyAdapterTurnedOff(AttachCurrentThread(),
-                                                       java_dialog_.obj());
+    Java_BluetoothChooserDialog_notifyAdapterTurnedOff(env, java_dialog_.obj());
+  } else {
+    Java_BluetoothChooserDialog_notifyAdapterTurnedOn(env, java_dialog_.obj());
+    RestartSearch();
   }
 }
 
@@ -120,36 +130,43 @@ void BluetoothChooserAndroid::OnDialogFinished(
   NOTREACHED();
 }
 
-void BluetoothChooserAndroid::RestartSearch(JNIEnv* env,
-                                            const JavaParamRef<jobject>& obj) {
+void BluetoothChooserAndroid::RestartSearch() {
   event_handler_.Run(Event::RESCAN, "");
+}
+
+void BluetoothChooserAndroid::RestartSearch(JNIEnv*,
+                                            const JavaParamRef<jobject>&) {
+  RestartSearch();
 }
 
 void BluetoothChooserAndroid::ShowBluetoothOverviewLink(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
+  OpenURL(chrome::kChooserBluetoothOverviewURL);
   event_handler_.Run(Event::SHOW_OVERVIEW_HELP, "");
-}
-
-void BluetoothChooserAndroid::ShowBluetoothPairingLink(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj) {
-  event_handler_.Run(Event::SHOW_PAIRING_HELP, "");
 }
 
 void BluetoothChooserAndroid::ShowBluetoothAdapterOffLink(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
+  OpenURL(chrome::kChooserBluetoothOverviewURL);
   event_handler_.Run(Event::SHOW_ADAPTER_OFF_HELP, "");
 }
 
 void BluetoothChooserAndroid::ShowNeedLocationPermissionLink(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
+  OpenURL(chrome::kChooserBluetoothOverviewURL);
   event_handler_.Run(Event::SHOW_NEED_LOCATION_HELP, "");
 }
 
 // static
 bool BluetoothChooserAndroid::Register(JNIEnv* env) {
   return RegisterNativesImpl(env);
+}
+
+void BluetoothChooserAndroid::OpenURL(const char* url) {
+  web_contents_->OpenURL(content::OpenURLParams(
+      GURL(url), content::Referrer(), NEW_FOREGROUND_TAB,
+      ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false /* is_renderer_initiated */));
 }

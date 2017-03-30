@@ -21,21 +21,22 @@
 #include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/statistics_recorder.h"
-#include "base/prefs/pref_filter.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/pref_service_factory.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/cronet/histogram_manager.h"
 #include "components/cronet/url_request_context_config.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "components/prefs/pref_filter.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/pref_service_factory.h"
 #include "jni/CronetUrlRequestContext_jni.h"
 #include "net/base/external_estimate_provider.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
 #include "net/base/network_delegate_impl.h"
+#include "net/base/url_util.h"
 #include "net/cert/cert_verifier.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_server_properties_manager.h"
@@ -54,6 +55,143 @@
 namespace {
 
 const char kHttpServerProperties[] = "net.http_server_properties";
+
+// Connects the HttpServerPropertiesManager's storage to the prefs.
+class PrefServiceAdapter
+    : public net::HttpServerPropertiesManager::PrefDelegate {
+ public:
+  explicit PrefServiceAdapter(PrefService* pref_service)
+      : pref_service_(pref_service), path_(kHttpServerProperties) {
+    pref_change_registrar_.Init(pref_service_);
+  }
+
+  ~PrefServiceAdapter() override {}
+
+  // PrefDelegate implementation.
+  bool HasServerProperties() override {
+    return pref_service_->HasPrefPath(path_);
+  }
+  const base::DictionaryValue& GetServerProperties() const override {
+    // Guaranteed not to return null when the pref is registered
+    // (RegisterProfilePrefs was called).
+    return *pref_service_->GetDictionary(path_);
+  }
+  void SetServerProperties(const base::DictionaryValue& value) override {
+    return pref_service_->Set(path_, value);
+  }
+  void StartListeningForUpdates(const base::Closure& callback) override {
+    pref_change_registrar_.Add(path_, callback);
+  }
+  void StopListeningForUpdates() override {
+    pref_change_registrar_.RemoveAll();
+  }
+
+ private:
+  PrefService* pref_service_;
+  std::string path_;
+  PrefChangeRegistrar pref_change_registrar_;
+
+  DISALLOW_COPY_AND_ASSIGN(PrefServiceAdapter);
+};
+
+// Connects the SdchOwner's storage to the prefs.
+class SdchOwnerPrefStorage : public net::SdchOwner::PrefStorage,
+                             public PrefStore::Observer {
+ public:
+  explicit SdchOwnerPrefStorage(PersistentPrefStore* storage)
+      : storage_(storage), storage_key_("SDCH"), init_observer_(nullptr) {}
+  ~SdchOwnerPrefStorage() override {
+    if (init_observer_)
+      storage_->RemoveObserver(this);
+  }
+
+  ReadError GetReadError() const override {
+    PersistentPrefStore::PrefReadError error = storage_->GetReadError();
+
+    DCHECK_NE(
+        error,
+        PersistentPrefStore::PREF_READ_ERROR_ASYNCHRONOUS_TASK_INCOMPLETE);
+    DCHECK_NE(error, PersistentPrefStore::PREF_READ_ERROR_MAX_ENUM);
+
+    switch (error) {
+      case PersistentPrefStore::PREF_READ_ERROR_NONE:
+        return PERSISTENCE_FAILURE_NONE;
+
+      case PersistentPrefStore::PREF_READ_ERROR_NO_FILE:
+        return PERSISTENCE_FAILURE_REASON_NO_FILE;
+
+      case PersistentPrefStore::PREF_READ_ERROR_JSON_PARSE:
+      case PersistentPrefStore::PREF_READ_ERROR_JSON_TYPE:
+      case PersistentPrefStore::PREF_READ_ERROR_FILE_OTHER:
+      case PersistentPrefStore::PREF_READ_ERROR_FILE_LOCKED:
+      case PersistentPrefStore::PREF_READ_ERROR_JSON_REPEAT:
+        return PERSISTENCE_FAILURE_REASON_READ_FAILED;
+
+      case PersistentPrefStore::PREF_READ_ERROR_ACCESS_DENIED:
+      case PersistentPrefStore::PREF_READ_ERROR_FILE_NOT_SPECIFIED:
+      case PersistentPrefStore::PREF_READ_ERROR_ASYNCHRONOUS_TASK_INCOMPLETE:
+      case PersistentPrefStore::PREF_READ_ERROR_MAX_ENUM:
+      default:
+        // We don't expect these other failures given our usage of prefs.
+        NOTREACHED();
+        return PERSISTENCE_FAILURE_REASON_OTHER;
+    }
+  }
+
+  bool GetValue(const base::DictionaryValue** result) const override {
+    const base::Value* result_value = nullptr;
+    if (!storage_->GetValue(storage_key_, &result_value))
+      return false;
+    return result_value->GetAsDictionary(result);
+  }
+
+  bool GetMutableValue(base::DictionaryValue** result) override {
+    base::Value* result_value = nullptr;
+    if (!storage_->GetMutableValue(storage_key_, &result_value))
+      return false;
+    return result_value->GetAsDictionary(result);
+  }
+
+  void SetValue(scoped_ptr<base::DictionaryValue> value) override {
+    storage_->SetValue(storage_key_, std::move(value),
+                       WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
+  }
+
+  void ReportValueChanged() override {
+    storage_->ReportValueChanged(storage_key_,
+                                 WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
+  }
+
+  bool IsInitializationComplete() override {
+    return storage_->IsInitializationComplete();
+  }
+
+  void StartObservingInit(net::SdchOwner* observer) override {
+    DCHECK(!init_observer_);
+    init_observer_ = observer;
+    storage_->AddObserver(this);
+  }
+
+  void StopObservingInit() override {
+    DCHECK(init_observer_);
+    init_observer_ = nullptr;
+    storage_->RemoveObserver(this);
+  }
+
+ private:
+  // PrefStore::Observer implementation.
+  void OnPrefValueChanged(const std::string& key) override {}
+  void OnInitializationCompleted(bool succeeded) override {
+    init_observer_->OnPrefStorageInitializationComplete(succeeded);
+  }
+
+  PersistentPrefStore* storage_;  // Non-owning.
+  const std::string storage_key_;
+
+  net::SdchOwner* init_observer_;  // Non-owning.
+
+  DISALLOW_COPY_AND_ASSIGN(SdchOwnerPrefStorage);
+};
 
 class BasicNetworkDelegate : public net::NetworkDelegateImpl {
  public:
@@ -262,7 +400,7 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
   // TODO(mef): Remove this work around for crbug.com/543366 once it is fixed.
   net::URLRequestContextBuilder::HttpNetworkSessionParams
       custom_http_network_session_params;
-  custom_http_network_session_params.use_alternative_services = false;
+  custom_http_network_session_params.parse_alternative_services = false;
   context_builder.set_http_network_session_params(
       custom_http_network_session_params);
 
@@ -305,7 +443,7 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
     context_builder.SetFileTaskRunner(GetFileThread()->task_runner());
 
     // Set up HttpServerPropertiesManager.
-    base::PrefServiceFactory factory;
+    PrefServiceFactory factory;
     factory.set_user_prefs(json_pref_store_);
     scoped_refptr<PrefRegistrySimple> registry(new PrefRegistrySimple());
     registry->RegisterDictionaryPref(kHttpServerProperties,
@@ -313,9 +451,9 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
     pref_service_ = factory.Create(registry.get());
 
     scoped_ptr<net::HttpServerPropertiesManager> http_server_properties_manager(
-        new net::HttpServerPropertiesManager(pref_service_.get(),
-                                             kHttpServerProperties,
-                                             GetNetworkTaskRunner()));
+        new net::HttpServerPropertiesManager(
+            new PrefServiceAdapter(pref_service_.get()),
+            GetNetworkTaskRunner()));
     http_server_properties_manager->InitializeOnNetworkThread();
     http_server_properties_manager_ = http_server_properties_manager.get();
     context_builder.SetHttpServerProperties(
@@ -338,8 +476,10 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
     DCHECK(context_->sdch_manager());
     sdch_owner_.reset(
         new net::SdchOwner(context_->sdch_manager(), context_.get()));
-    if (json_pref_store_)
-      sdch_owner_->EnablePersistentStorage(json_pref_store_.get());
+    if (json_pref_store_) {
+      sdch_owner_->EnablePersistentStorage(
+          make_scoped_ptr(new SdchOwnerPrefStorage(json_pref_store_.get())));
+    }
   }
 
   // Currently (circa M39) enabling QUIC requires setting probability threshold.
@@ -547,6 +687,7 @@ static jlong CreateRequestContextConfig(
     const JavaParamRef<jstring>& juser_agent,
     const JavaParamRef<jstring>& jstorage_path,
     jboolean jquic_enabled,
+    const JavaParamRef<jstring>& jquic_default_user_agent_id,
     jboolean jhttp2_enabled,
     jboolean jsdch_enabled,
     const JavaParamRef<jstring>& jdata_reduction_proxy_key,
@@ -559,7 +700,9 @@ static jlong CreateRequestContextConfig(
     const JavaParamRef<jstring>& jexperimental_quic_connection_options,
     jlong jmock_cert_verifier) {
   return reinterpret_cast<jlong>(new URLRequestContextConfig(
-      jquic_enabled, jhttp2_enabled, jsdch_enabled,
+      jquic_enabled,
+      base::android::ConvertJavaStringToUTF8(env, jquic_default_user_agent_id),
+      jhttp2_enabled, jsdch_enabled,
       static_cast<URLRequestContextConfig::HttpCacheType>(jhttp_cache_mode),
       jhttp_cache_max_size, jdisable_cache,
       base::android::ConvertJavaStringToUTF8(env, jstorage_path),

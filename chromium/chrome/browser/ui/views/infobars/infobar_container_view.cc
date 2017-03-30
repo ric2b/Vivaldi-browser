@@ -9,6 +9,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/views/view_targeter.h"
 
 // static
 const char InfoBarContainerView::kViewClassName[] = "InfoBarContainerView";
@@ -16,6 +17,7 @@ const char InfoBarContainerView::kViewClassName[] = "InfoBarContainerView";
 InfoBarContainerView::InfoBarContainerView(Delegate* delegate)
     : infobars::InfoBarContainer(delegate) {
   set_id(VIEW_ID_INFO_BAR_CONTAINER);
+  SetEventTargeter(make_scoped_ptr(new views::ViewTargeter(this)));
 }
 
 InfoBarContainerView::~InfoBarContainerView() {
@@ -62,4 +64,13 @@ void InfoBarContainerView::PlatformSpecificAddInfoBar(
 void InfoBarContainerView::PlatformSpecificRemoveInfoBar(
     infobars::InfoBar* infobar) {
   RemoveChildView(static_cast<InfoBarView*>(infobar));
+}
+
+bool InfoBarContainerView::DoesIntersectRect(const View* target,
+                                             const gfx::Rect& rect) const {
+  DCHECK_EQ(this, target);
+  // Only events that intersect the portion below the arrow are interesting.
+  gfx::Rect non_arrow_bounds = GetLocalBounds();
+  non_arrow_bounds.Inset(0, GetVerticalOverlap(nullptr), 0, 0);
+  return rect.Intersects(non_arrow_bounds);
 }

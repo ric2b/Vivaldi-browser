@@ -361,14 +361,14 @@ turtle_comparison:
     /*
      * compute depth to root
      */
-    for (depth2 = 0, cur = node2;cur->parent != NULL;cur = cur->parent) {
-	if (cur == node1)
+    for (depth2 = 0, cur = node2; cur->parent != NULL; cur = cur->parent) {
+	if (cur->parent == node1)
 	    return(1);
 	depth2++;
     }
     root = cur;
-    for (depth1 = 0, cur = node1;cur->parent != NULL;cur = cur->parent) {
-	if (cur == node2)
+    for (depth1 = 0, cur = node1; cur->parent != NULL; cur = cur->parent) {
+	if (cur->parent == node2)
 	    return(-1);
 	depth1++;
     }
@@ -1132,6 +1132,7 @@ xmlXPathCompExprAdd(xmlXPathCompExprPtr comp, int ch1, int ch2,
 	comp->steps[comp->nbStep].value5 = value5;
     }
     comp->steps[comp->nbStep].cache = NULL;
+    comp->steps[comp->nbStep].cacheURI = NULL;
     return(comp->nbStep++);
 }
 
@@ -7933,14 +7934,14 @@ xmlXPathNextDescendant(xmlXPathParserContextPtr ctxt, xmlNodePtr cur) {
 xmlNodePtr
 xmlXPathNextDescendantOrSelf(xmlXPathParserContextPtr ctxt, xmlNodePtr cur) {
     if ((ctxt == NULL) || (ctxt->context == NULL)) return(NULL);
-    if (cur == NULL) {
-	if (ctxt->context->node == NULL)
-	    return(NULL);
-	if ((ctxt->context->node->type == XML_ATTRIBUTE_NODE) ||
-	    (ctxt->context->node->type == XML_NAMESPACE_DECL))
-	    return(NULL);
+    if (cur == NULL)
         return(ctxt->context->node);
-    }
+
+    if (ctxt->context->node == NULL)
+        return(NULL);
+    if ((ctxt->context->node->type == XML_ATTRIBUTE_NODE) ||
+        (ctxt->context->node->type == XML_NAMESPACE_DECL))
+        return(NULL);
 
     return(xmlXPathNextDescendant(ctxt, cur));
 }
@@ -14732,8 +14733,12 @@ xmlXPathTryStreamCompile(xmlXPathContextPtr ctxt, const xmlChar *str) {
 #endif /* XPATH_STREAMING */
 
 static void
-xmlXPathOptimizeExpression(xmlXPathCompExprPtr comp, xmlXPathStepOpPtr op)
+xmlXPathOptimizeExpressionInternal(xmlXPathCompExprPtr comp, xmlXPathStepOpPtr op)
 {
+    /* Already optimized? */
+    if (op->cacheURI != NULL)
+        return;
+
     /*
     * Try to rewrite "descendant-or-self::node()/foo" to an optimized
     * internal representation.
@@ -14784,11 +14789,28 @@ xmlXPathOptimizeExpression(xmlXPathCompExprPtr comp, xmlXPathStepOpPtr op)
 	}
     }
 
+    /* Mark the node. */
+    op->cacheURI = (void*)(~0);
+
     /* Recurse */
     if (op->ch1 != -1)
-        xmlXPathOptimizeExpression(comp, &comp->steps[op->ch1]);
+        xmlXPathOptimizeExpressionInternal(comp, &comp->steps[op->ch1]);
     if (op->ch2 != -1)
-	xmlXPathOptimizeExpression(comp, &comp->steps[op->ch2]);
+	xmlXPathOptimizeExpressionInternal(comp, &comp->steps[op->ch2]);
+}
+
+static void
+xmlXPathOptimizeExpression(xmlXPathCompExprPtr comp, int root)
+{
+    int i;
+    /* The expression tree/graph traversal is linear, visiting
+     * each node at most once. Mark each xmlXPathStepOp node
+     * upon visiting, taking care of clearing out the marks
+     * afterwards.
+     */
+    xmlXPathOptimizeExpressionInternal(comp, &comp->steps[root]);
+    for (i = 0; i <= root; ++i)
+        comp->steps[i].cacheURI = NULL;
 }
 
 /**
@@ -14847,7 +14869,7 @@ xmlXPathCtxtCompile(xmlXPathContextPtr ctxt, const xmlChar *str) {
 	comp->nb = 0;
 #endif
 	if ((comp->nbStep > 1) && (comp->last >= 0)) {
-	    xmlXPathOptimizeExpression(comp, &comp->steps[comp->last]);
+	    xmlXPathOptimizeExpression(comp, comp->last);
 	}
     }
     return(comp);
@@ -15029,8 +15051,7 @@ xmlXPathEvalExpr(xmlXPathParserContextPtr ctxt) {
 	    (ctxt->comp->nbStep > 1) &&
 	    (ctxt->comp->last >= 0))
 	{
-	    xmlXPathOptimizeExpression(ctxt->comp,
-		&ctxt->comp->steps[ctxt->comp->last]);
+	    xmlXPathOptimizeExpression(ctxt->comp, ctxt->comp->last);
 	}
     }
     CHECK_ERROR;

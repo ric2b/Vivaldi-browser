@@ -9,7 +9,6 @@
 #include "base/logging.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "net/base/net_util.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_server_properties.h"
 #include "net/http/http_stream_factory_impl_job.h"
@@ -221,7 +220,7 @@ AlternativeService HttpStreamFactoryImpl::GetAlternativeServiceFor(
   bool quic_all_broken = true;
 
   const bool enable_different_host =
-      session_->params().use_alternative_services;
+      session_->params().enable_alternative_service_with_different_host;
 
   // First Alt-Svc that is not marked as broken.
   AlternativeService first_alternative_service;
@@ -256,9 +255,6 @@ AlternativeService HttpStreamFactoryImpl::GetAlternativeServiceFor(
     if (alternative_service.protocol >= NPN_SPDY_MINIMUM_VERSION &&
         alternative_service.protocol <= NPN_SPDY_MAXIMUM_VERSION) {
       if (!HttpStreamFactory::spdy_enabled())
-        continue;
-
-      if (session_->HasSpdyExclusion(origin))
         continue;
 
       // Cache this entry if we don't have a non-broken Alt-Svc yet.
@@ -375,12 +371,8 @@ bool HttpStreamFactoryImpl::IsQuicWhitelistedForHost(const std::string& host) {
   if (session_->params().transport_security_state->IsGooglePinnedHost(host))
     return true;
 
-  std::string lower_host = base::ToLowerASCII(host);
-  if (ContainsKey(session_->params().quic_host_whitelist, lower_host))
-    return true;
-
-  return base::EndsWith(lower_host, ".snapchat.com",
-                        base::CompareCase::SENSITIVE);
+  return ContainsKey(session_->params().quic_host_whitelist,
+                     base::ToLowerASCII(host));
 }
 
 }  // namespace net

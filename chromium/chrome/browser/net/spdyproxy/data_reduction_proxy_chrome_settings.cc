@@ -11,8 +11,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -28,6 +26,8 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 #include "components/data_reduction_proxy/core/browser/data_store.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
 #include "components/proxy_config/proxy_prefs.h"
 #include "net/base/host_port_pair.h"
@@ -189,7 +189,7 @@ void DataReductionProxyChromeSettings::InitDataReductionProxySettings(
     scoped_ptr<data_reduction_proxy::DataStore> store,
     const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner,
     const scoped_refptr<base::SequencedTaskRunner>& db_task_runner) {
-#if defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_ANDROID)
   // On mobile we write Data Reduction Proxy prefs directly to the pref service.
   // On desktop we store Data Reduction Proxy prefs in memory, writing to disk
   // every 60 minutes and on termination. Shutdown hooks must be added for
@@ -224,8 +224,6 @@ void DataReductionProxyChromeSettings::InitDataReductionProxySettings(
 data_reduction_proxy::Client DataReductionProxyChromeSettings::GetClient() {
 #if defined(OS_ANDROID)
   return data_reduction_proxy::Client::CHROME_ANDROID;
-#elif defined(OS_IOS)
-  return data_reduction_proxy::Client::CHROME_IOS;
 #elif defined(OS_MACOSX)
   return data_reduction_proxy::Client::CHROME_MAC;
 #elif defined(OS_CHROMEOS)

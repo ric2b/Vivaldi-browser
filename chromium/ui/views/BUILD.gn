@@ -114,7 +114,7 @@ component("views") {
       "//ui/touch_selection",
       "//ui/wm",
     ]
-    if (!is_chromeos && !is_android) {
+    if (!is_chromeos) {
       sources += gypi_values.views_desktop_aura_sources
       if (use_x11) {
         sources += gypi_values.views_desktop_aura_x11_sources
@@ -127,9 +127,6 @@ component("views") {
       if (is_linux) {
         sources += gypi_values.views_desktop_aura_linux_sources
       }
-    }
-    if (is_android) {
-      sources += gypi_values.views_android_sources
     }
   }
 
@@ -212,7 +209,6 @@ test("views_unittests") {
     ":test_support",
     "//base",
     "//base:i18n",
-    "//base/allocator",
     "//base/test:test_support",
     "//cc",
     "//skia",
@@ -230,13 +226,16 @@ test("views_unittests") {
     "//ui/gfx:test_support",
     "//ui/gfx/geometry",
     "//ui/gl:test_support",
+    "//ui/native_theme",
     "//ui/resources",
     "//ui/strings",
     "//url",
   ]
 
-  data_deps = [
-    "//ui/resources:ui_test_pak",
+  # TODO(thakis): This should be a data_deps on //ui/resources:ui_test_pak, but
+  # that has no effect.  (See similar TODOs elsewhere ui_test.pak is listed)
+  data = [
+    "$root_out_dir/ui_test.pak",
   ]
 
   if (is_win) {

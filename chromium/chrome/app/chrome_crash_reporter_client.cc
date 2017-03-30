@@ -33,7 +33,7 @@
 #include "policy/policy_constants.h"
 #endif
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_POSIX) && !defined(OS_MACOSX)
 #include "components/upload_list/crash_upload_list.h"
 #include "components/version_info/version_info_values.h"
 #endif
@@ -66,7 +66,7 @@ ChromeCrashReporterClient::ChromeCrashReporterClient() {}
 
 ChromeCrashReporterClient::~ChromeCrashReporterClient() {}
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MACOSX) && !defined(OS_WIN)
 void ChromeCrashReporterClient::SetCrashReporterClientIdFromGUID(
     const std::string& client_guid) {
   crash_keys::SetMetricsClientIdFromGUID(client_guid);
@@ -162,7 +162,7 @@ bool ChromeCrashReporterClient::GetDeferredUploadsSupported(
   Version update_version = GoogleUpdateSettings::GetGoogleUpdateVersion(
       !is_per_user_install);
   if (!update_version.IsValid() ||
-      update_version.IsOlderThan(std::string(kMinUpdateVersion)))
+      update_version < base::Version(kMinUpdateVersion))
     return false;
 
   return true;
@@ -252,7 +252,7 @@ bool ChromeCrashReporterClient::ReportingIsEnforcedByPolicy(
 }
 #endif  // defined(OS_WIN)
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_POSIX) && !defined(OS_MACOSX)
 void ChromeCrashReporterClient::GetProductNameAndVersion(
     const char** product_name,
     const char** version) {

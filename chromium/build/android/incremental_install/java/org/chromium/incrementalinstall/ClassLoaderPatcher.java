@@ -94,8 +94,8 @@ final class ClassLoaderPatcher {
         Object dexPathList = Reflect.getField(mClassLoader, "pathList");
         Object[] dexElements = (Object[]) Reflect.getField(dexPathList, "dexElements");
         Object[] additionalElements = makeDexElements(dexFilesArr, optimizedDir);
-        Reflect.setField(
-                dexPathList, "dexElements", Reflect.concatArrays(dexElements, additionalElements));
+        Reflect.setField(dexPathList, "dexElements",
+                Reflect.concatArrays(dexElements, dexElements, additionalElements));
     }
 
     /**
@@ -103,6 +103,10 @@ final class ClassLoaderPatcher {
      */
     void importNativeLibs(File libDir) throws ReflectiveOperationException, IOException {
         Log.i(TAG, "Importing native libraries from: " + libDir);
+        if (!libDir.exists()) {
+            Log.i(TAG, "No native libs exist.");
+            return;
+        }
         // The library copying is not necessary on older devices, but we do it anyways to
         // simplify things (it's fast compared to dexing).
         // https://code.google.com/p/android/issues/detail?id=79480
@@ -146,11 +150,11 @@ final class ClassLoaderPatcher {
         // Switched from an array to an ArrayList in Lollipop.
         if (currentDirs instanceof List) {
             List<File> dirsAsList = (List<File>) currentDirs;
-            dirsAsList.add(nativeLibDir);
+            dirsAsList.add(0, nativeLibDir);
         } else {
             File[] dirsAsArray = (File[]) currentDirs;
             Reflect.setField(dexPathList, "nativeLibraryDirectories",
-                    Reflect.concatArrays(dirsAsArray, newDirs));
+                    Reflect.concatArrays(newDirs, newDirs, dirsAsArray));
         }
 
         Object[] nativeLibraryPathElements;
@@ -162,35 +166,41 @@ final class ClassLoaderPatcher {
             return;
         }
         Object[] additionalElements = makeNativePathElements(newDirs);
-        Reflect.setField(
-                dexPathList, "nativeLibraryPathElements",
-                Reflect.concatArrays(nativeLibraryPathElements, additionalElements));
+        Reflect.setField(dexPathList, "nativeLibraryPathElements",
+                Reflect.concatArrays(nativeLibraryPathElements, additionalElements,
+                        nativeLibraryPathElements));
     }
 
     private static void copyChangedFiles(File srcDir, File dstDir) throws IOException {
         // No need to delete stale libs since libraries are loaded explicitly.
+        int numNotChanged = 0;
         for (File f : srcDir.listFiles()) {
             // Note: Tried using hardlinks, but resulted in EACCES exceptions.
             File dest = new File(dstDir, f.getName());
-            copyIfModified(f, dest);
+            if (!copyIfModified(f, dest)) {
+                numNotChanged++;
+            }
+        }
+        if (numNotChanged > 0) {
+            Log.i(TAG, numNotChanged + " libs already up-to-date.");
         }
     }
 
-    private static void copyIfModified(File src, File dest) throws IOException {
+    private static boolean copyIfModified(File src, File dest) throws IOException {
         long lastModified = src.lastModified();
-        if (!dest.exists() || dest.lastModified() != lastModified) {
-            Log.i(TAG, "Copying " + src + " -> " + dest);
-            FileInputStream istream = new FileInputStream(src);
-            FileOutputStream ostream = new FileOutputStream(dest);
-            ostream.getChannel().transferFrom(istream.getChannel(), 0, istream.getChannel().size());
-            istream.close();
-            ostream.close();
-            dest.setReadable(true, false);
-            dest.setExecutable(true,  false);
-            dest.setLastModified(lastModified);
-        } else {
-            Log.i(TAG, "Up-to-date: " + dest);
+        if (dest.exists() && dest.lastModified() == lastModified) {
+            return false;
         }
+        Log.i(TAG, "Copying " + src + " -> " + dest);
+        FileInputStream istream = new FileInputStream(src);
+        FileOutputStream ostream = new FileOutputStream(dest);
+        ostream.getChannel().transferFrom(istream.getChannel(), 0, istream.getChannel().size());
+        istream.close();
+        ostream.close();
+        dest.setReadable(true, false);
+        dest.setExecutable(true,  false);
+        dest.setLastModified(lastModified);
+        return true;
     }
 
     private void ensureAppFilesSubDirExists() {

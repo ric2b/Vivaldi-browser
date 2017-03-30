@@ -49,7 +49,7 @@ public:
     FloatPoint pos() const { return m_pos; }
     FloatSize radius() const { return m_radius; }
     float rotationAngle() const { return m_rotationAngle; }
-    float force() const { return pointerProperties().force; }
+    float force() const { ASSERT(!std::isnan(pointerProperties().force)); return pointerProperties().force; }
 
 protected:
     WebPointerProperties m_pointerProperties;
@@ -61,6 +61,6 @@ protected:
     float m_rotationAngle;
 };
 
-}
+} // namespace blink
 
 #endif // PlatformTouchPoint_h

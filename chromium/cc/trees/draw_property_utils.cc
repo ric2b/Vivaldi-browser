@@ -226,60 +226,46 @@ void CalculateVisibleRects(const std::vector<LayerType*>& visible_layer_list,
   }
 }
 
-template <typename LayerType>
-static bool IsRootLayerOfNewRenderingContext(LayerType* layer) {
-  if (layer->parent())
-    return !layer->parent()->Is3dSorted() && layer->Is3dSorted();
-  return layer->Is3dSorted();
-}
-
-template <typename LayerType>
-static inline bool LayerIsInExisting3DRenderingContext(LayerType* layer) {
-  return layer->Is3dSorted() && layer->parent() &&
-         layer->parent()->Is3dSorted() &&
-         layer->parent()->sorting_context_id() == layer->sorting_context_id();
-}
-
-template <typename LayerType>
-static bool TransformToScreenIsKnown(LayerType* layer,
-                                     const TransformTree& tree) {
-  const TransformNode* node = tree.Node(layer->transform_tree_index());
-  return !node->data.to_screen_is_animated;
-}
-
-template <typename LayerType>
-static bool HasSingularTransform(LayerType* layer, const TransformTree& tree) {
-  const TransformNode* node = tree.Node(layer->transform_tree_index());
+static bool HasSingularTransform(int transform_tree_index,
+                                 const TransformTree& tree) {
+  const TransformNode* node = tree.Node(transform_tree_index);
   return !node->data.is_invertible || !node->data.ancestors_are_invertible;
 }
 
 template <typename LayerType>
+static int TransformTreeIndexForBackfaceVisibility(LayerType* layer,
+                                                   const TransformTree& tree) {
+  if (!layer->use_parent_backface_visibility())
+    return layer->transform_tree_index();
+  const TransformNode* node = tree.Node(layer->transform_tree_index());
+  return layer->id() == node->owner_id ? tree.parent(node)->id : node->id;
+}
+
+template <typename LayerType>
 static bool IsLayerBackFaceVisible(LayerType* layer,
+                                   int transform_tree_index,
                                    const TransformTree& tree) {
-  // A layer with singular transform is not drawn. So, we can assume that its
-  // backface is not visible.
-  if (HasSingularTransform(layer, tree))
-    return false;
-  // The current W3C spec on CSS transforms says that backface visibility should
-  // be determined differently depending on whether the layer is in a "3d
-  // rendering context" or not. For Chromium code, we can determine whether we
-  // are in a 3d rendering context by checking if the parent preserves 3d.
-
-  if (LayerIsInExisting3DRenderingContext(layer))
-    return DrawTransformFromPropertyTrees(layer, tree).IsBackFaceVisible();
-
-  // In this case, either the layer establishes a new 3d rendering context, or
-  // is not in a 3d rendering context at all.
-  return layer->transform().IsBackFaceVisible();
+  const TransformNode* node = tree.Node(transform_tree_index);
+  return layer->use_local_transform_for_backface_visibility()
+             ? node->data.local.IsBackFaceVisible()
+             : node->data.to_target.IsBackFaceVisible();
 }
 
 template <typename LayerType>
 static bool IsSurfaceBackFaceVisible(LayerType* layer,
                                      const TransformTree& tree) {
-  if (HasSingularTransform(layer, tree))
+  if (HasSingularTransform(layer->transform_tree_index(), tree))
     return false;
-  if (LayerIsInExisting3DRenderingContext(layer)) {
-    const TransformNode* node = tree.Node(layer->transform_tree_index());
+  const TransformNode* node = tree.Node(layer->transform_tree_index());
+  // If the render_surface is not part of a new or existing rendering context,
+  // then the layers that contribute to this surface will decide back-face
+  // visibility for themselves.
+  if (!node->data.sorting_context_id)
+    return false;
+
+  const TransformNode* parent_node = tree.parent(node);
+  if (parent_node &&
+      parent_node->data.sorting_context_id == node->data.sorting_context_id) {
     // Draw transform as a contributing render surface.
     // TODO(enne): we shouldn't walk the tree during a tree walk.
     gfx::Transform surface_draw_transform;
@@ -288,28 +274,20 @@ static bool IsSurfaceBackFaceVisible(LayerType* layer,
     return surface_draw_transform.IsBackFaceVisible();
   }
 
-  if (IsRootLayerOfNewRenderingContext(layer))
-    return layer->transform().IsBackFaceVisible();
-
-  // If the render_surface is not part of a new or existing rendering context,
-  // then the layers that contribute to this surface will decide back-face
-  // visibility for themselves.
-  return false;
-}
-
-template <typename LayerType>
-static bool IsAnimatingTransformToScreen(LayerType* layer,
-                                         const TransformTree& tree) {
-  const TransformNode* node = tree.Node(layer->transform_tree_index());
-  return node->data.to_screen_is_animated;
+  // We use layer's transform to determine back face visibility when its the
+  // root of a new rendering context.
+  return layer->transform().IsBackFaceVisible();
 }
 
 static inline bool TransformToScreenIsKnown(Layer* layer,
+                                            int transform_tree_index,
                                             const TransformTree& tree) {
-  return !IsAnimatingTransformToScreen(layer, tree);
+  const TransformNode* node = tree.Node(transform_tree_index);
+  return !node->data.to_screen_is_animated;
 }
 
 static inline bool TransformToScreenIsKnown(LayerImpl* layer,
+                                            int transform_tree_index,
                                             const TransformTree& tree) {
   return true;
 }
@@ -335,13 +313,13 @@ static inline bool SubtreeShouldBeSkipped(LayerImpl* layer,
   if (layer->num_copy_requests_in_target_subtree() > 0)
     return false;
 
-  // We cannot skip the the subtree if a descendant has a wheel or touch handler
+  // We cannot skip the the subtree if a descendant has a touch handler
   // or the hit testing code will break (it requires fresh transforms, etc).
   // Though we don't need visible rect for hit testing, we need render surface's
   // drawable content rect which depends on layer's drawable content rect which
   // in turn depends on layer's clip rect that is computed while computing
   // visible rects.
-  if (layer->layer_or_descendant_has_input_handler())
+  if (layer->layer_or_descendant_has_touch_handler())
     return false;
 
   // If the layer is not drawn, then skip it and its subtree.
@@ -367,7 +345,7 @@ static inline bool SubtreeShouldBeSkipped(LayerImpl* layer,
   // The opacity of a layer always applies to its children (either implicitly
   // via a render surface or explicitly if the parent preserves 3D), so the
   // entire subtree can be skipped if this layer is fully transparent.
-  return !layer->opacity();
+  return !layer->EffectiveOpacity();
 }
 
 static inline bool SubtreeShouldBeSkipped(Layer* layer,
@@ -403,7 +381,8 @@ static inline bool SubtreeShouldBeSkipped(Layer* layer,
   // In particular, it should not cause the subtree to be skipped.
   // Similarly, for layers that might animate opacity using an impl-only
   // animation, their subtree should also not be skipped.
-  return !layer->opacity() && !layer->HasPotentiallyRunningOpacityAnimation() &&
+  return !layer->EffectiveOpacity() &&
+         !layer->HasPotentiallyRunningOpacityAnimation() &&
          !layer->OpacityCanAnimateOnImplThread();
 }
 
@@ -433,19 +412,18 @@ static bool LayerShouldBeSkipped(LayerType* layer,
   if (!layer->DrawsContent() || layer->bounds().IsEmpty())
     return true;
 
-  LayerType* backface_test_layer = layer;
-  if (layer->use_parent_backface_visibility()) {
-    DCHECK(layer->parent());
-    DCHECK(!layer->parent()->use_parent_backface_visibility());
-    backface_test_layer = layer->parent();
-  }
-
   // The layer should not be drawn if (1) it is not double-sided and (2) the
   // back of the layer is known to be facing the screen.
-  if (!backface_test_layer->double_sided() &&
-      TransformToScreenIsKnown(backface_test_layer, tree) &&
-      IsLayerBackFaceVisible(backface_test_layer, tree))
-    return true;
+  if (layer->should_check_backface_visibility()) {
+    int backface_transform_id =
+        TransformTreeIndexForBackfaceVisibility(layer, tree);
+    // A layer with singular transform is not drawn. So, we can assume that its
+    // backface is not visible.
+    if (TransformToScreenIsKnown(layer, backface_transform_id, tree) &&
+        !HasSingularTransform(backface_transform_id, tree) &&
+        IsLayerBackFaceVisible(layer, backface_transform_id, tree))
+      return true;
+  }
 
   return false;
 }
@@ -453,18 +431,19 @@ static bool LayerShouldBeSkipped(LayerType* layer,
 template <typename LayerType>
 void FindLayersThatNeedUpdates(
     LayerType* layer,
-    const TransformTree& tree,
-    bool subtree_is_visible_from_ancestor,
+    const TransformTree& transform_tree,
+    const EffectTree& effect_tree,
     typename LayerType::LayerListType* update_layer_list,
     std::vector<LayerType*>* visible_layer_list) {
+  DCHECK_GE(layer->effect_tree_index(), 0);
   bool layer_is_drawn =
-      layer->HasCopyRequest() ||
-      (subtree_is_visible_from_ancestor && !layer->hide_layer_and_subtree());
+      effect_tree.Node(layer->effect_tree_index())->data.is_drawn;
 
-  if (layer->parent() && SubtreeShouldBeSkipped(layer, layer_is_drawn, tree))
+  if (layer->parent() &&
+      SubtreeShouldBeSkipped(layer, layer_is_drawn, transform_tree))
     return;
 
-  if (!LayerShouldBeSkipped(layer, layer_is_drawn, tree)) {
+  if (!LayerShouldBeSkipped(layer, layer_is_drawn, transform_tree)) {
     visible_layer_list->push_back(layer);
     update_layer_list->push_back(layer);
   }
@@ -480,7 +459,7 @@ void FindLayersThatNeedUpdates(
   }
 
   for (size_t i = 0; i < layer->children().size(); ++i) {
-    FindLayersThatNeedUpdates(layer->child_at(i), tree, layer_is_drawn,
+    FindLayersThatNeedUpdates(layer->child_at(i), transform_tree, effect_tree,
                               update_layer_list, visible_layer_list);
   }
 }
@@ -702,9 +681,8 @@ static void ComputeVisibleRectsUsingPropertyTreesInternal(
                can_render_to_separate_surface);
   ComputeEffects(&property_trees->effect_tree);
 
-  const bool subtree_is_visible_from_ancestor = true;
   FindLayersThatNeedUpdates(root_layer, property_trees->transform_tree,
-                            subtree_is_visible_from_ancestor, update_layer_list,
+                            property_trees->effect_tree, update_layer_list,
                             visible_layer_list);
   CalculateVisibleRects<LayerType>(
       *visible_layer_list, property_trees->clip_tree,
@@ -938,15 +916,13 @@ static float LayerDrawOpacity(const LayerImpl* layer, const EffectTree& tree) {
 
 static float SurfaceDrawOpacity(RenderSurfaceImpl* render_surface,
                                 const EffectTree& tree) {
+  // Draw opacity of a surface is the product of opacities between the surface
+  // (included) and its target surface (excluded).
   const EffectNode* node = tree.Node(render_surface->EffectTreeIndex());
-  float target_opacity_tree_index = render_surface->TargetEffectTreeIndex();
-  if (target_opacity_tree_index < 0)
-    return node->data.screen_space_opacity;
-  const EffectNode* target_node = tree.Node(target_opacity_tree_index);
-  float draw_opacity = 1.f;
-  while (node != target_node) {
+  float draw_opacity = node->data.opacity;
+  for (node = tree.parent(node); node && !node->data.has_render_surface;
+       node = tree.parent(node)) {
     draw_opacity *= node->data.opacity;
-    node = tree.parent(node);
   }
   return draw_opacity;
 }

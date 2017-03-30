@@ -11,6 +11,7 @@
       'dependencies': [
         '../base/base.gyp:base',
         '../net/net.gyp:net_test_support',
+        '../skia/skia.gyp:skia',
         '../testing/gmock.gyp:gmock',
         '../testing/gtest.gyp:gtest',
         'remoting_base',
@@ -65,6 +66,8 @@
         'test/connection_setup_info.h',
         'test/connection_time_observer.cc',
         'test/connection_time_observer.h',
+        'test/cyclic_frame_generator.cc',
+        'test/cyclic_frame_generator.h',
         'test/fake_access_token_fetcher.cc',
         'test/fake_access_token_fetcher.h',
         'test/fake_app_remoting_report_issue_request.cc',
@@ -260,7 +263,6 @@
         'host/desktop_shape_tracker_unittest.cc',
         'host/gcd_rest_client_unittest.cc',
         'host/gcd_state_updater_unittest.cc',
-        'host/gnubby_auth_handler_posix_unittest.cc',
         'host/heartbeat_sender_unittest.cc',
         'host/host_change_notification_listener_unittest.cc',
         'host/host_config_unittest.cc',
@@ -274,6 +276,7 @@
         'host/linux/unicode_to_keysym_unittest.cc',
         'host/linux/x_server_clipboard_unittest.cc',
         'host/local_input_monitor_unittest.cc',
+        'host/mouse_cursor_monitor_proxy_unittest.cc',
         'host/mouse_shape_pump_unittest.cc',
         'host/native_messaging/native_messaging_reader_unittest.cc',
         'host/native_messaging/native_messaging_writer_unittest.cc',
@@ -286,6 +289,8 @@
         'host/resizing_host_observer_unittest.cc',
         'host/resources_unittest.cc',
         'host/screen_resolution_unittest.cc',
+        'host/security_key/gnubby_auth_handler_linux_unittest.cc',
+        'host/security_key/gnubby_extension_session_unittest.cc',
         'host/server_log_entry_host_unittest.cc',
         'host/setup/me2me_native_messaging_host.cc',
         'host/setup/me2me_native_messaging_host.h',
@@ -316,6 +321,7 @@
         'protocol/connection_tester.h',
         'protocol/connection_unittest.cc',
         'protocol/content_description_unittest.cc',
+        'protocol/http_ice_config_request_unittest.cc',
         'protocol/ice_transport_unittest.cc',
         'protocol/input_event_tracker_unittest.cc',
         'protocol/input_filter_unittest.cc',
@@ -402,11 +408,6 @@
             ['exclude', '^codec/'],
             ['exclude', '^host/'],
           ]
-        }],
-        [ 'OS == "linux" and use_allocator!="none"', {
-          'dependencies': [
-            '../base/allocator/allocator.gyp:allocator',
-          ],
         }],
         ['configuration_policy == 1', {
           'dependencies': [
@@ -557,9 +558,7 @@
           ],
           'sources': [
             'base/run_all_unittests.cc',
-            'codec/codec_test.cc',
-            'codec/codec_test.h',
-            'codec/video_encoder_vpx_perftest.cc',
+            'test/codec_perftest.cc',
             'test/protocol_perftest.cc',
           ],
           'conditions': [
@@ -573,11 +572,6 @@
             [ 'OS=="android"', {
               'dependencies': [
                 '../testing/android/native_test.gyp:native_test_native_code',
-              ],
-            }],
-            [ 'OS == "linux" and use_allocator!="none"', {
-              'dependencies': [
-                '../base/allocator/allocator.gyp:allocator',
               ],
             }],
           ],  # end of 'conditions'

@@ -347,8 +347,9 @@ message AllowRedeemChromeOsRegistrationOffersProto {
 }
 
 message StartUpFlagsProto {
-  // The list of flags to be applied to chrome on start-up (back up store for
-  // owner set flags in about:flags).
+  // Specifies the flags that should be applied to Google Chrome when it starts.
+  // The specified flags are applied on the login screen only. Flags set via
+  // this policy do not propagate into user sessions.
   repeated string flags = 1;
 }
 
@@ -648,6 +649,12 @@ message DisplayRotationDefaultProto {
   optional Rotation display_rotation_default = 1;
 }
 
+// Settings that control whether to allow Chrome to be pinned to a specific
+// version according to the auto-launched kiosk app’s requirement.
+message AllowKioskAppControlChromeVersionProto {
+  optional bool allow_kiosk_app_control_chrome_version = 1 [default = false];
+}
+
 message ChromeDeviceSettingsProto {
   optional DevicePolicyRefreshRateProto device_policy_refresh_rate = 1;
   optional UserWhitelistProto user_whitelist = 2;
@@ -692,4 +699,6 @@ message ChromeDeviceSettingsProto {
       login_screen_domain_auto_complete = 37;
   optional DeviceLogUploadSettingsProto device_log_upload_settings = 38;
   optional DisplayRotationDefaultProto display_rotation_default = 39;
+  optional AllowKioskAppControlChromeVersionProto
+      allow_kiosk_app_control_chrome_version = 40;
 }

@@ -18,23 +18,23 @@ namespace {
 
 PermissionType PermissionNameToPermissionType(PermissionName name) {
   switch(name) {
-    case PERMISSION_NAME_GEOLOCATION:
+    case PermissionName::GEOLOCATION:
       return PermissionType::GEOLOCATION;
-    case PERMISSION_NAME_NOTIFICATIONS:
+    case PermissionName::NOTIFICATIONS:
       return PermissionType::NOTIFICATIONS;
-    case PERMISSION_NAME_PUSH_NOTIFICATIONS:
+    case PermissionName::PUSH_NOTIFICATIONS:
       return PermissionType::PUSH_MESSAGING;
-    case PERMISSION_NAME_MIDI:
+    case PermissionName::MIDI:
       return PermissionType::MIDI;
-    case PERMISSION_NAME_MIDI_SYSEX:
+    case PermissionName::MIDI_SYSEX:
       return PermissionType::MIDI_SYSEX;
-    case PERMISSION_NAME_PROTECTED_MEDIA_IDENTIFIER:
+    case PermissionName::PROTECTED_MEDIA_IDENTIFIER:
       return PermissionType::PROTECTED_MEDIA_IDENTIFIER;
-    case PERMISSION_NAME_DURABLE_STORAGE:
+    case PermissionName::DURABLE_STORAGE:
       return PermissionType::DURABLE_STORAGE;
-    case PERMISSION_NAME_AUDIO_CAPTURE:
+    case PermissionName::AUDIO_CAPTURE:
       return PermissionType::AUDIO_CAPTURE;
-    case PERMISSION_NAME_VIDEO_CAPTURE:
+    case PermissionName::VIDEO_CAPTURE:
       return PermissionType::VIDEO_CAPTURE;
   }
 
@@ -67,7 +67,7 @@ PermissionServiceImpl::PendingRequest::~PendingRequest() {
   mojo::Array<PermissionStatus> result =
       mojo::Array<PermissionStatus>::New(request_count);
   for (int i = 0; i < request_count; ++i)
-    result[i] = PERMISSION_STATUS_DENIED;
+    result[i] = PermissionStatus::DENIED;
   callback.Run(std::move(result));
 }
 
@@ -83,7 +83,7 @@ PermissionServiceImpl::PendingSubscription::PendingSubscription(
 
 PermissionServiceImpl::PendingSubscription::~PendingSubscription() {
   if (!callback.is_null())
-    callback.Run(PERMISSION_STATUS_ASK);
+    callback.Run(PermissionStatus::ASK);
 }
 
 PermissionServiceImpl::PermissionServiceImpl(
@@ -109,7 +109,6 @@ void PermissionServiceImpl::OnConnectionError() {
 void PermissionServiceImpl::RequestPermission(
     PermissionName permission,
     const mojo::String& origin,
-    bool user_gesture,
     const PermissionStatusCallback& callback) {
   // This condition is valid if the call is coming from a ChildThread instead of
   // a RenderFrame. Some consumers of the service run in Workers and some in
@@ -122,7 +121,7 @@ void PermissionServiceImpl::RequestPermission(
   DCHECK(browser_context);
   if (!context_->render_frame_host() ||
       !browser_context->GetPermissionManager()) {
-    callback.Run(GetPermissionStatusFromName(permission, GURL(origin)));
+    callback.Run(GetPermissionStatusFromName(permission, GURL(origin.get())));
     return;
   }
 
@@ -131,8 +130,7 @@ void PermissionServiceImpl::RequestPermission(
   int id = browser_context->GetPermissionManager()->RequestPermission(
       PermissionNameToPermissionType(permission),
       context_->render_frame_host(),
-      GURL(origin),
-      user_gesture, // TODO(mlamouri): should be removed (crbug.com/423770)
+      GURL(origin.get()),
       base::Bind(&PermissionServiceImpl::OnRequestPermissionResponse,
                  weak_factory_.GetWeakPtr(),
                  pending_request_id));
@@ -156,7 +154,6 @@ void PermissionServiceImpl::OnRequestPermissionResponse(
 void PermissionServiceImpl::RequestPermissions(
     mojo::Array<PermissionName> permissions,
     const mojo::String& origin,
-    bool user_gesture,
     const PermissionsStatusCallback& callback) {
   if (permissions.is_null()) {
     callback.Run(mojo::Array<PermissionStatus>());
@@ -175,8 +172,10 @@ void PermissionServiceImpl::RequestPermissions(
   if (!context_->render_frame_host() ||
       !browser_context->GetPermissionManager()) {
     mojo::Array<PermissionStatus> result(permissions.size());
-    for (size_t i = 0; i < permissions.size(); ++i)
-      result[i] = GetPermissionStatusFromName(permissions[i], GURL(origin));
+    for (size_t i = 0; i < permissions.size(); ++i) {
+      result[i] =
+          GetPermissionStatusFromName(permissions[i], GURL(origin.get()));
+    }
     callback.Run(std::move(result));
     return;
   }
@@ -190,8 +189,7 @@ void PermissionServiceImpl::RequestPermissions(
   int id = browser_context->GetPermissionManager()->RequestPermissions(
       types,
       context_->render_frame_host(),
-      GURL(origin),
-      user_gesture, // TODO(mlamouri): should be removed (crbug.com/423770)
+      GURL(origin.get()),
       base::Bind(&PermissionServiceImpl::OnRequestPermissionsResponse,
                  weak_factory_.GetWeakPtr(),
                  pending_request_id));
@@ -247,21 +245,21 @@ void PermissionServiceImpl::HasPermission(
     PermissionName permission,
     const mojo::String& origin,
     const PermissionStatusCallback& callback) {
-  callback.Run(GetPermissionStatusFromName(permission, GURL(origin)));
+  callback.Run(GetPermissionStatusFromName(permission, GURL(origin.get())));
 }
 
 void PermissionServiceImpl::RevokePermission(
     PermissionName permission,
     const mojo::String& origin,
     const PermissionStatusCallback& callback) {
-  GURL origin_url(origin);
+  GURL origin_url(origin.get());
   PermissionType permission_type = PermissionNameToPermissionType(permission);
   PermissionStatus status = GetPermissionStatusFromType(permission_type,
                                                         origin_url);
 
   // Resetting the permission should only be possible if the permission is
   // already granted.
-  if (status != PERMISSION_STATUS_GRANTED) {
+  if (status != PermissionStatus::GRANTED) {
     callback.Run(status);
     return;
   }
@@ -276,7 +274,7 @@ void PermissionServiceImpl::GetNextPermissionChange(
     const mojo::String& mojo_origin,
     PermissionStatus last_known_status,
     const PermissionStatusCallback& callback) {
-  GURL origin(mojo_origin);
+  GURL origin(mojo_origin.get());
   PermissionStatus current_status =
       GetPermissionStatusFromName(permission, origin);
   if (current_status != last_known_status) {
@@ -323,7 +321,7 @@ PermissionStatus PermissionServiceImpl::GetPermissionStatusFromType(
   BrowserContext* browser_context = context_->GetBrowserContext();
   DCHECK(browser_context);
   if (!browser_context->GetPermissionManager())
-    return PERMISSION_STATUS_DENIED;
+    return PermissionStatus::DENIED;
 
   // If the embedding_origin is empty we'll use |origin| instead.
   GURL embedding_origin = context_->GetEmbeddingOrigin();

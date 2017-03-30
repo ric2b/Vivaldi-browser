@@ -15,8 +15,6 @@ component("aura") {
     "../wm/public/activation_delegate.h",
     "../wm/public/animation_host.cc",
     "../wm/public/animation_host.h",
-    "../wm/public/dispatcher_client.cc",
-    "../wm/public/dispatcher_client.h",
     "../wm/public/drag_drop_client.cc",
     "../wm/public/drag_drop_client.h",
     "../wm/public/drag_drop_delegate.cc",
@@ -68,8 +66,6 @@ component("aura") {
     "layout_manager.h",
     "mus/mus_util.cc",
     "mus/mus_util.h",
-    "remote_window_tree_host_win.cc",
-    "remote_window_tree_host_win.h",
     "scoped_window_targeter.cc",
     "scoped_window_targeter.h",
     "window.cc",
@@ -283,15 +279,6 @@ executable("bench") {
   }
 }
 
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("aura_unittests_run") {
-  testonly = true
-  deps = [
-    ":aura_unittests",
-  ]
-}
-
 test("aura_unittests") {
   sources = [
     "gestures/gesture_recognizer_unittest.cc",
@@ -303,7 +290,6 @@ test("aura_unittests") {
 
   deps = [
     ":test_support",
-    "//base/allocator",
     "//base/test:test_support",
     "//skia",
     "//testing/gtest",

@@ -48,7 +48,7 @@ protected:
     CSSPropertyID m_id;
 
     StyleInterpolation(PassOwnPtr<InterpolableValue> start, PassOwnPtr<InterpolableValue> end, CSSPropertyID id)
-        : Interpolation(start, end)
+        : Interpolation(std::move(start), std::move(end))
         , m_id(id)
     {
     }
@@ -56,6 +56,6 @@ protected:
 
 DEFINE_TYPE_CASTS(StyleInterpolation, Interpolation, value, value->isStyleInterpolation(), value.isStyleInterpolation());
 
-}
+} // namespace blink
 
 #endif

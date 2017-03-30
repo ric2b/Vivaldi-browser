@@ -13,11 +13,11 @@
 #include "base/logging.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
-#include "media/base/android/media_codec_audio_decoder.h"
-#include "media/base/android/media_codec_video_decoder.h"
+#include "media/base/android/audio_media_codec_decoder.h"
 #include "media/base/android/media_drm_bridge.h"
 #include "media/base/android/media_player_manager.h"
 #include "media/base/android/media_task_runner.h"
+#include "media/base/android/video_media_codec_decoder.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/timestamp_constants.h"
 
@@ -102,6 +102,10 @@ MediaCodecPlayer::~MediaCodecPlayer()
     audio_decoder_->ReleaseDecoderResources();
 
   if (cdm_) {
+    // Cancel previously registered callback (if any).
+    static_cast<MediaDrmBridge*>(cdm_.get())
+        ->SetMediaCryptoReadyCB(MediaDrmBridge::MediaCryptoReadyCB());
+
     DCHECK(cdm_registration_id_);
     static_cast<MediaDrmBridge*>(cdm_.get())
         ->UnregisterPlayer(cdm_registration_id_);
@@ -359,11 +363,11 @@ void MediaCodecPlayer::Release() {
   }
 }
 
-void MediaCodecPlayer::SetVolume(double volume) {
-  RUN_ON_MEDIA_THREAD(SetVolume, volume);
+void MediaCodecPlayer::UpdateEffectiveVolumeInternal(double effective_volume) {
+  RUN_ON_MEDIA_THREAD(UpdateEffectiveVolumeInternal, effective_volume);
 
-  DVLOG(1) << __FUNCTION__ << " " << volume;
-  audio_decoder_->SetVolume(volume);
+  DVLOG(1) << __FUNCTION__ << " " << effective_volume;
+  audio_decoder_->SetVolume(effective_volume);
 }
 
 bool MediaCodecPlayer::HasAudio() const {
@@ -1347,7 +1351,7 @@ void MediaCodecPlayer::CreateDecoders() {
 
   media_stat_.reset(new MediaStatistics());
 
-  audio_decoder_.reset(new MediaCodecAudioDecoder(
+  audio_decoder_.reset(new AudioMediaCodecDecoder(
       GetMediaTaskRunner(), &media_stat_->audio_frame_stats(),
       base::Bind(&MediaCodecPlayer::RequestDemuxerData, media_weak_this_,
                  DemuxerStream::AUDIO),
@@ -1359,11 +1363,10 @@ void MediaCodecPlayer::CreateDecoders() {
                  DemuxerStream::AUDIO),
       base::Bind(&MediaCodecPlayer::OnMissingKeyReported, media_weak_this_,
                  DemuxerStream::AUDIO),
-      internal_error_cb_,
-      base::Bind(&MediaCodecPlayer::OnTimeIntervalUpdate, media_weak_this_,
-                 DemuxerStream::AUDIO)));
+      internal_error_cb_, base::Bind(&MediaCodecPlayer::OnTimeIntervalUpdate,
+                                     media_weak_this_, DemuxerStream::AUDIO)));
 
-  video_decoder_.reset(new MediaCodecVideoDecoder(
+  video_decoder_.reset(new VideoMediaCodecDecoder(
       GetMediaTaskRunner(), &media_stat_->video_frame_stats(),
       base::Bind(&MediaCodecPlayer::RequestDemuxerData, media_weak_this_,
                  DemuxerStream::VIDEO),
@@ -1375,9 +1378,8 @@ void MediaCodecPlayer::CreateDecoders() {
                  DemuxerStream::VIDEO),
       base::Bind(&MediaCodecPlayer::OnMissingKeyReported, media_weak_this_,
                  DemuxerStream::VIDEO),
-      internal_error_cb_,
-      base::Bind(&MediaCodecPlayer::OnTimeIntervalUpdate, media_weak_this_,
-                 DemuxerStream::VIDEO),
+      internal_error_cb_, base::Bind(&MediaCodecPlayer::OnTimeIntervalUpdate,
+                                     media_weak_this_, DemuxerStream::VIDEO),
       base::Bind(&MediaCodecPlayer::OnVideoResolutionChanged,
                  media_weak_this_)));
 }

@@ -8,8 +8,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -24,6 +22,8 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/simple_menu_model.h"
@@ -156,7 +156,7 @@ class TaskManagerView : public views::ButtonListener,
                         public views::ContextMenuController,
                         public ui::SimpleMenuModel::Delegate {
  public:
-  explicit TaskManagerView(chrome::HostDesktopType desktop_type);
+  TaskManagerView();
   ~TaskManagerView() override;
 
   // Shows the Task Manager window, or re-activates an existing one.
@@ -236,9 +236,6 @@ class TaskManagerView : public views::ButtonListener,
   // True when the Task Manager window should be shown on top of other windows.
   bool is_always_on_top_;
 
-  // The host desktop type this task manager belongs to.
-  const chrome::HostDesktopType desktop_type_;
-
   // We need to own the text of the menu, the Windows API does not copy it.
   base::string16 always_on_top_menu_text_;
 
@@ -254,16 +251,14 @@ class TaskManagerView : public views::ButtonListener,
 // static
 TaskManagerView* TaskManagerView::instance_ = NULL;
 
-
-TaskManagerView::TaskManagerView(chrome::HostDesktopType desktop_type)
+TaskManagerView::TaskManagerView()
     : kill_button_(NULL),
       about_memory_link_(NULL),
       tab_table_(NULL),
       tab_table_parent_(NULL),
       task_manager_(TaskManager::GetInstance()),
       model_(TaskManager::GetInstance()->model()),
-      is_always_on_top_(false),
-      desktop_type_(desktop_type) {
+      is_always_on_top_(false) {
   Init();
 }
 
@@ -453,17 +448,12 @@ bool TaskManagerView::AcceleratorPressed(const ui::Accelerator& accelerator) {
 
 // static
 void TaskManagerView::Show(Browser* browser) {
-  // In ash we can come here through the ChromeShellDelegate. If there is no
-  // browser window at that time of the call, browser could be passed as NULL.
-  const chrome::HostDesktopType desktop_type =
-      browser ? browser->host_desktop_type() : chrome::HOST_DESKTOP_TYPE_ASH;
-
   if (instance_) {
     // If there's a Task manager window open already, just activate it.
     instance_->GetWidget()->Activate();
     return;
   }
-  instance_ = new TaskManagerView(desktop_type);
+  instance_ = new TaskManagerView();
   gfx::NativeWindow window =
       browser ? browser->window()->GetNativeWindow() : NULL;
 #if defined(USE_ASH)
@@ -483,10 +473,9 @@ void TaskManagerView::Show(Browser* browser) {
   // no parent is specified, the app id will default to that of the initial
   // process.
   if (browser) {
-    ui::win::SetAppIdForWindow(
-        ShellIntegration::GetChromiumModelIdForProfile(
-            browser->profile()->GetPath()),
-        views::HWNDForWidget(instance_->GetWidget()));
+    ui::win::SetAppIdForWindow(shell_integration::GetChromiumModelIdForProfile(
+                                   browser->profile()->GetPath()),
+                               views::HWNDForWidget(instance_->GetWidget()));
   }
 #endif
   instance_->GetWidget()->Show();
@@ -590,7 +579,7 @@ void TaskManagerView::OnKeyDown(ui::KeyboardCode keycode) {
 
 void TaskManagerView::LinkClicked(views::Link* source, int event_flags) {
   DCHECK_EQ(about_memory_link_, source);
-  task_manager_->OpenAboutMemory(desktop_type_);
+  task_manager_->OpenAboutMemory();
 }
 
 void TaskManagerView::ShowContextMenuForView(views::View* source,

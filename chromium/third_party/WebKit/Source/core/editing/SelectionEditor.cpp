@@ -27,6 +27,7 @@
 
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
+#include "core/editing/SelectionAdjuster.h"
 #include "core/events/Event.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
@@ -62,6 +63,15 @@ SelectionEditor::~SelectionEditor()
 #endif
 }
 
+void SelectionEditor::dispose()
+{
+    stopObservingVisibleSelectionChangeIfNecessary();
+    if (m_logicalRange) {
+        m_logicalRange->dispose();
+        m_logicalRange = nullptr;
+    }
+}
+
 LocalFrame* SelectionEditor::frame() const
 {
     return m_frameSelection->frame();
@@ -74,84 +84,27 @@ const VisibleSelection& SelectionEditor::visibleSelection<EditingStrategy>() con
 }
 
 template <>
-const VisibleSelectionInComposedTree& SelectionEditor::visibleSelection<EditingInComposedTreeStrategy>() const
+const VisibleSelectionInFlatTree& SelectionEditor::visibleSelection<EditingInFlatTreeStrategy>() const
 {
-    return m_selectionInComposedTree;
+    return m_selectionInFlatTree;
 }
 
 void SelectionEditor::setVisibleSelection(const VisibleSelection& newSelection, FrameSelection::SetSelectionOptions options)
 {
     m_selection = newSelection;
-    if (options & FrameSelection::DoNotAdjustInComposedTree) {
-        m_selectionInComposedTree.setWithoutValidation(toPositionInComposedTree(m_selection.base()), toPositionInComposedTree(m_selection.extent()));
+    if (options & FrameSelection::DoNotAdjustInFlatTree) {
+        m_selectionInFlatTree.setWithoutValidation(toPositionInFlatTree(m_selection.base()), toPositionInFlatTree(m_selection.extent()));
         return;
     }
 
-    adjustVisibleSelectionInComposedTree();
+    SelectionAdjuster::adjustSelectionInFlatTree(&m_selectionInFlatTree, m_selection);
 }
 
-void SelectionEditor::setVisibleSelection(const VisibleSelectionInComposedTree& newSelection, FrameSelection::SetSelectionOptions options)
+void SelectionEditor::setVisibleSelection(const VisibleSelectionInFlatTree& newSelection, FrameSelection::SetSelectionOptions options)
 {
-    ASSERT(!(options & FrameSelection::DoNotAdjustInComposedTree));
-    m_selectionInComposedTree = newSelection;
-    adjustVisibleSelectionInDOMTree();
-}
-
-// Updates |m_selectionInComposedTree| to match with |m_selection|.
-void SelectionEditor::adjustVisibleSelectionInComposedTree()
-{
-    if (m_selection.isNone()) {
-        m_selectionInComposedTree = VisibleSelectionInComposedTree();
-        return;
-    }
-
-    const PositionInComposedTree base = toPositionInComposedTree(m_selection.base());
-    const PositionInComposedTree extent = toPositionInComposedTree(m_selection.extent());
-    const PositionInComposedTree position1 = toPositionInComposedTree(m_selection.start());
-    const PositionInComposedTree position2 = toPositionInComposedTree(m_selection.end());
-    position1.anchorNode()->updateDistribution();
-    position2.anchorNode()->updateDistribution();
-    if (position1.compareTo(position2) <= 0) {
-        m_selectionInComposedTree = VisibleSelectionInComposedTree::createWithoutValidation(base, extent, position1, position2, m_selection.affinity(), m_selection.isDirectional());
-        return;
-    }
-    m_selectionInComposedTree = VisibleSelectionInComposedTree::createWithoutValidation(base, extent, position2, position1, m_selection.affinity(), m_selection.isDirectional());
-}
-
-static bool isCrossingShadowBoundaries(const VisibleSelectionInComposedTree& selection)
-{
-    if (!selection.isRange())
-        return false;
-    TreeScope& treeScope = selection.base().anchorNode()->treeScope();
-    return selection.extent().anchorNode()->treeScope() != treeScope
-        || selection.start().anchorNode()->treeScope() != treeScope
-        || selection.end().anchorNode()->treeScope() != treeScope;
-}
-
-void SelectionEditor::adjustVisibleSelectionInDOMTree()
-{
-    if (m_selectionInComposedTree.isNone()) {
-        m_selection = VisibleSelection();
-        return;
-    }
-
-    const Position base = toPositionInDOMTree(m_selectionInComposedTree.base());
-    const Position extent = toPositionInDOMTree(m_selectionInComposedTree.extent());
-
-    if (isCrossingShadowBoundaries(m_selectionInComposedTree)) {
-        m_selection = VisibleSelection(base, extent);
-        return;
-    }
-
-    const Position start = toPositionInDOMTree(m_selectionInComposedTree.start());
-    const Position end = toPositionInDOMTree(m_selectionInComposedTree.end());
-    const TextAffinity affinity = m_selectionInComposedTree.affinity();
-    const bool isDirectional = m_selectionInComposedTree.isDirectional();
-    if (start.compareTo(end) <= 0) {
-        m_selection = VisibleSelection::createWithoutValidation(base, extent, start, end, affinity, isDirectional);
-        return;
-    }
-    m_selection = VisibleSelection::createWithoutValidation(base, extent, end, start, affinity, isDirectional);
+    ASSERT(!(options & FrameSelection::DoNotAdjustInFlatTree));
+    m_selectionInFlatTree = newSelection;
+    SelectionAdjuster::adjustSelectionInDOMTree(&m_selection, m_selectionInFlatTree);
 }
 
 void SelectionEditor::resetXPosForVerticalArrowNavigation()
@@ -162,13 +115,13 @@ void SelectionEditor::resetXPosForVerticalArrowNavigation()
 void SelectionEditor::setIsDirectional(bool isDirectional)
 {
     m_selection.setIsDirectional(isDirectional);
-    m_selectionInComposedTree.setIsDirectional(isDirectional);
+    m_selectionInFlatTree.setIsDirectional(isDirectional);
 }
 
 void SelectionEditor::setWithoutValidation(const Position& base, const Position& extent)
 {
     m_selection.setWithoutValidation(base, extent);
-    m_selectionInComposedTree.setWithoutValidation(toPositionInComposedTree(base), toPositionInComposedTree(extent));
+    m_selectionInFlatTree.setWithoutValidation(toPositionInFlatTree(base), toPositionInFlatTree(extent));
 }
 
 TextDirection SelectionEditor::directionOfEnclosingBlock()
@@ -241,6 +194,7 @@ void SelectionEditor::willBeModified(EAlteration alter, SelectionDirection direc
         m_selection.setBase(end);
         m_selection.setExtent(start);
     }
+    SelectionAdjuster::adjustSelectionInFlatTree(&m_selectionInFlatTree, m_selection);
 }
 
 VisiblePosition SelectionEditor::positionForPlatform(bool isGetStart) const
@@ -632,7 +586,7 @@ bool SelectionEditor::modify(EAlteration alter, SelectionDirection direction, Te
         trialFrameSelection->setSelection(m_selection);
         trialFrameSelection->modify(alter, direction, granularity, NotUserTriggered);
 
-        if (trialFrameSelection->selection().isRange() && m_selection.isCaret() && !dispatchSelectStart())
+        if (trialFrameSelection->selection().isRange() && m_selection.isCaret() && dispatchSelectStart() != DispatchEventResult::NotCanceled)
             return false;
     }
 
@@ -749,7 +703,7 @@ bool SelectionEditor::modify(EAlteration alter, unsigned verticalDistance, Verti
     willBeModified(alter, direction == FrameSelection::DirectionUp ? DirectionBackward : DirectionForward);
 
     VisiblePosition pos;
-    LayoutUnit xPos = 0;
+    LayoutUnit xPos;
     switch (alter) {
     case FrameSelection::AlterationMove:
         pos = createVisiblePosition(direction == FrameSelection::DirectionUp ? m_selection.start() : m_selection.end(), m_selection.affinity());
@@ -812,15 +766,15 @@ bool SelectionEditor::modify(EAlteration alter, unsigned verticalDistance, Verti
 
 // Abs x/y position of the caret ignoring transforms.
 // TODO(yosin) navigation with transforms should be smarter.
-static int lineDirectionPointForBlockDirectionNavigationOf(const VisiblePosition& visiblePosition)
+static LayoutUnit lineDirectionPointForBlockDirectionNavigationOf(const VisiblePosition& visiblePosition)
 {
     if (visiblePosition.isNull())
-        return 0;
+        return LayoutUnit();
 
     LayoutObject* layoutObject;
     LayoutRect localRect = localCaretRectOfPosition(visiblePosition.toPositionWithAffinity(), layoutObject);
     if (localRect.isEmpty() || !layoutObject)
-        return 0;
+        return LayoutUnit();
 
     // This ignores transforms on purpose, for now. Vertical navigation is done
     // without consulting transforms, so that 'up' in transformed text is 'up'
@@ -829,12 +783,12 @@ static int lineDirectionPointForBlockDirectionNavigationOf(const VisiblePosition
     LayoutObject* containingBlock = layoutObject->containingBlock();
     if (!containingBlock)
         containingBlock = layoutObject; // Just use ourselves to determine the writing mode if we have no containing block.
-    return containingBlock->isHorizontalWritingMode() ? caretPoint.x() : caretPoint.y();
+    return LayoutUnit(containingBlock->isHorizontalWritingMode() ? caretPoint.x() : caretPoint.y());
 }
 
 LayoutUnit SelectionEditor::lineDirectionPointForBlockDirectionNavigation(EPositionType type)
 {
-    LayoutUnit x = 0;
+    LayoutUnit x;
 
     if (m_selection.isNone())
         return x;
@@ -879,7 +833,10 @@ bool SelectionEditor::setSelectedRange(const EphemeralRange& range, TextAffinity
 
     // Non-collapsed ranges are not allowed to start at the end of a line that is wrapped,
     // they start at the beginning of the next line instead
-    m_logicalRange = nullptr;
+    if (m_logicalRange) {
+        m_logicalRange->dispose();
+        m_logicalRange = nullptr;
+    }
     stopObservingVisibleSelectionChangeIfNecessary();
 
     // Since |FrameSeleciton::setSelection()| dispatches events and DOM tree
@@ -900,11 +857,11 @@ PassRefPtrWillBeRawPtr<Range> SelectionEditor::firstRange() const
     return firstRangeOf(m_selection);
 }
 
-bool SelectionEditor::dispatchSelectStart()
+DispatchEventResult SelectionEditor::dispatchSelectStart()
 {
     Node* selectStartTarget = m_selection.extent().computeContainerNode();
     if (!selectStartTarget)
-        return true;
+        return DispatchEventResult::NotCanceled;
 
     return selectStartTarget->dispatchEvent(Event::createCancelableBubble(EventTypeNames::selectstart));
 }
@@ -913,7 +870,10 @@ void SelectionEditor::didChangeVisibleSelection()
 {
     ASSERT(m_observingVisibleSelection);
     // Invalidate the logical range when the underlying VisibleSelection has changed.
-    m_logicalRange = nullptr;
+    if (m_logicalRange) {
+        m_logicalRange->dispose();
+        m_logicalRange = nullptr;
+    }
     m_selection.clearChangeObserver();
     m_observingVisibleSelection = false;
 }
@@ -933,11 +893,17 @@ void SelectionEditor::stopObservingVisibleSelectionChangeIfNecessary()
     m_observingVisibleSelection = false;
 }
 
+void SelectionEditor::updateIfNeeded()
+{
+    m_selection.updateIfNeeded();
+    m_selectionInFlatTree.updateIfNeeded();
+}
+
 DEFINE_TRACE(SelectionEditor)
 {
     visitor->trace(m_frameSelection);
     visitor->trace(m_selection);
-    visitor->trace(m_selectionInComposedTree);
+    visitor->trace(m_selectionInFlatTree);
     visitor->trace(m_logicalRange);
     VisibleSelectionChangeObserver::trace(visitor);
 }

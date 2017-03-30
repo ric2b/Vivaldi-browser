@@ -59,8 +59,8 @@
 #include "core/dom/StyleEngine.h"
 #include "core/dom/TreeScope.h"
 #include "core/dom/ViewportDescription.h"
-#include "core/dom/shadow/ComposedTreeTraversal.h"
 #include "core/dom/shadow/ElementShadow.h"
+#include "core/dom/shadow/FlatTreeTraversal.h"
 #include "core/dom/shadow/SelectRuleFeatureSet.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/editing/Editor.h"
@@ -95,7 +95,6 @@
 #include "core/input/EventHandler.h"
 #include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/InspectorConsoleAgent.h"
-#include "core/inspector/InspectorFrontendChannel.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InstanceCounters.h"
 #include "core/inspector/InstrumentingAgents.h"
@@ -135,6 +134,7 @@
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/heap/Handle.h"
+#include "platform/inspector_protocol/FrontendChannel.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebConnectionType.h"
@@ -196,7 +196,7 @@ static ScrollableArea* scrollableAreaForNode(Node* node)
     if (node->isDocumentNode()) {
         // This can be removed after root layer scrolling is enabled.
         if (FrameView* frameView = toDocument(node)->view())
-            return frameView->scrollableArea();
+            return frameView->layoutViewportScrollableArea();
     }
 
     LayoutObject* layoutObject = node->layoutObject();
@@ -309,9 +309,9 @@ unsigned Internals::updateStyleAndReturnAffectedElementCount(ExceptionState& exc
         return 0;
     }
 
-    unsigned beforeCount = document->styleEngine().resolverAccessCount();
-    document->updateLayoutTreeIfNeeded();
-    return document->styleEngine().resolverAccessCount() - beforeCount;
+    unsigned beforeCount = document->styleEngine().styleForElementCount();
+    document->updateLayoutTree();
+    return document->styleEngine().styleForElementCount() - beforeCount;
 }
 
 unsigned Internals::needsLayoutCount(ExceptionState& exceptionState) const
@@ -401,7 +401,7 @@ bool Internals::isLoadingFromMemoryCache(const String& url)
         return false;
     const String cacheIdentifier = contextDocument()->fetcher()->getCacheIdentifier();
     Resource* resource = memoryCache()->resourceForURL(contextDocument()->completeURL(url), cacheIdentifier);
-    return resource && resource->status() == Resource::Cached;
+    return resource && resource->getStatus() == Resource::Cached;
 }
 
 bool Internals::isSharingStyle(Element* element1, Element* element2) const
@@ -592,54 +592,54 @@ size_t Internals::countElementShadow(const Node* root, ExceptionState& exception
     return toShadowRoot(root)->childShadowRootCount();
 }
 
-Node* Internals::nextSiblingInComposedTree(Node* node, ExceptionState& exceptionState)
+Node* Internals::nextSiblingInFlatTree(Node* node, ExceptionState& exceptionState)
 {
     ASSERT(node);
-    if (!node->canParticipateInComposedTree()) {
-        exceptionState.throwDOMException(InvalidAccessError, "The node argument doesn't particite in the composed tree.");
+    if (!node->canParticipateInFlatTree()) {
+        exceptionState.throwDOMException(InvalidAccessError, "The node argument doesn't particite in the flat tree.");
         return 0;
     }
-    return ComposedTreeTraversal::nextSibling(*node);
+    return FlatTreeTraversal::nextSibling(*node);
 }
 
-Node* Internals::firstChildInComposedTree(Node* node, ExceptionState& exceptionState)
+Node* Internals::firstChildInFlatTree(Node* node, ExceptionState& exceptionState)
 {
     ASSERT(node);
-    if (!node->canParticipateInComposedTree()) {
-        exceptionState.throwDOMException(InvalidAccessError, "The node argument doesn't particite in the composed tree");
+    if (!node->canParticipateInFlatTree()) {
+        exceptionState.throwDOMException(InvalidAccessError, "The node argument doesn't particite in the flat tree");
         return 0;
     }
-    return ComposedTreeTraversal::firstChild(*node);
+    return FlatTreeTraversal::firstChild(*node);
 }
 
-Node* Internals::lastChildInComposedTree(Node* node, ExceptionState& exceptionState)
+Node* Internals::lastChildInFlatTree(Node* node, ExceptionState& exceptionState)
 {
     ASSERT(node);
-    if (!node->canParticipateInComposedTree()) {
-        exceptionState.throwDOMException(InvalidAccessError, "The node argument doesn't particite in the composed tree.");
+    if (!node->canParticipateInFlatTree()) {
+        exceptionState.throwDOMException(InvalidAccessError, "The node argument doesn't particite in the flat tree.");
         return 0;
     }
-    return ComposedTreeTraversal::lastChild(*node);
+    return FlatTreeTraversal::lastChild(*node);
 }
 
-Node* Internals::nextInComposedTree(Node* node, ExceptionState& exceptionState)
+Node* Internals::nextInFlatTree(Node* node, ExceptionState& exceptionState)
 {
     ASSERT(node);
-    if (!node->canParticipateInComposedTree()) {
-        exceptionState.throwDOMException(InvalidAccessError, "The node argument doesn't particite in the composed tree.");
+    if (!node->canParticipateInFlatTree()) {
+        exceptionState.throwDOMException(InvalidAccessError, "The node argument doesn't particite in the flat tree.");
         return 0;
     }
-    return ComposedTreeTraversal::next(*node);
+    return FlatTreeTraversal::next(*node);
 }
 
-Node* Internals::previousInComposedTree(Node* node, ExceptionState& exceptionState)
+Node* Internals::previousInFlatTree(Node* node, ExceptionState& exceptionState)
 {
     ASSERT(node);
-    if (!node->canParticipateInComposedTree()) {
-        exceptionState.throwDOMException(InvalidAccessError, "The node argument doesn't particite in the composed tree.");
+    if (!node->canParticipateInFlatTree()) {
+        exceptionState.throwDOMException(InvalidAccessError, "The node argument doesn't particite in the flat tree.");
         return 0;
     }
-    return ComposedTreeTraversal::previous(*node);
+    return FlatTreeTraversal::previous(*node);
 }
 
 String Internals::elementLayoutTreeAsText(Element* element, ExceptionState& exceptionState)
@@ -1259,7 +1259,7 @@ static unsigned eventHandlerCount(Document& document, EventHandlerRegistry::Even
 unsigned Internals::wheelEventHandlerCount(Document* document)
 {
     ASSERT(document);
-    return eventHandlerCount(*document, EventHandlerRegistry::WheelEvent);
+    return eventHandlerCount(*document, EventHandlerRegistry::WheelEventBlocking);
 }
 
 unsigned Internals::scrollEventHandlerCount(Document* document)
@@ -1271,7 +1271,7 @@ unsigned Internals::scrollEventHandlerCount(Document* document)
 unsigned Internals::touchEventHandlerCount(Document* document)
 {
     ASSERT(document);
-    return eventHandlerCount(*document, EventHandlerRegistry::TouchEvent);
+    return eventHandlerCount(*document, EventHandlerRegistry::TouchEventBlocking);
 }
 
 static PaintLayer* findLayerForGraphicsLayer(PaintLayer* searchRoot, GraphicsLayer* graphicsLayer, IntSize* layerOffset, String* layerType)
@@ -1820,17 +1820,6 @@ String Internals::pageSizeAndMarginsInPixels(int pageNumber, int width, int heig
     }
 
     return PrintContext::pageSizeAndMarginsInPixels(frame(), pageNumber, width, height, marginTop, marginRight, marginBottom, marginLeft);
-}
-
-void Internals::setDeviceScaleFactor(float scaleFactor, ExceptionState& exceptionState)
-{
-    Document* document = contextDocument();
-    if (!document || !document->page()) {
-        exceptionState.throwDOMException(InvalidAccessError, document ? "The document's page cannot be retrieved." : "No context document can be obtained.");
-        return;
-    }
-    Page* page = document->page();
-    page->setDeviceScaleFactor(scaleFactor);
 }
 
 void Internals::setPageScaleFactor(float scaleFactor, ExceptionState& exceptionState)
@@ -2501,6 +2490,11 @@ bool Internals::isUseCounted(Document* document, int useCounterId)
     return UseCounter::isCounted(*document, static_cast<UseCounter::Feature>(useCounterId));
 }
 
+bool Internals::isCSSPropertyUseCounted(Document* document, const String& propertyName)
+{
+    return UseCounter::isCounted(*document, propertyName);
+}
+
 String Internals::unscopeableAttribute()
 {
     return "unscopeableAttribute";
@@ -2533,11 +2527,6 @@ void Internals::setCapsLockState(bool enabled)
         PlatformKeyboardEvent::OverrideCapsLockState::On : PlatformKeyboardEvent::OverrideCapsLockState::Off);
 }
 
-void Internals::setSelectionPaintingWithoutSelectionGapsEnabled(bool enabled)
-{
-    RuntimeEnabledFeatures::setSelectionPaintingWithoutSelectionGapsEnabled(enabled);
-}
-
 bool Internals::setScrollbarVisibilityInScrollableArea(Node* node, bool visible)
 {
     if (ScrollableArea* scrollableArea = scrollableAreaForNode(node))
@@ -2564,8 +2553,8 @@ double Internals::monotonicTimeToZeroBasedDocumentTime(double platformTime, Exce
 void Internals::setMediaElementNetworkState(HTMLMediaElement* mediaElement, int state)
 {
     ASSERT(mediaElement);
-    ASSERT(state >= HTMLMediaElement::NetworkState::NETWORK_EMPTY);
-    ASSERT(state <= HTMLMediaElement::NetworkState::NETWORK_NO_SOURCE);
+    ASSERT(state >= WebMediaPlayer::NetworkState::NetworkStateEmpty);
+    ASSERT(state <= WebMediaPlayer::NetworkState::NetworkStateDecodeError);
     mediaElement->setNetworkState(static_cast<WebMediaPlayer::NetworkState>(state));
 }
 

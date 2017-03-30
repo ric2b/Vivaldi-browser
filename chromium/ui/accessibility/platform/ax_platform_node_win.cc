@@ -106,7 +106,30 @@ void UnregisterNegativeUniqueId(LONG unique_id) {
   g_unique_id_win_map.Get().erase(unique_id);
 }
 
+base::LazyInstance<base::ObserverList<IAccessible2UsageObserver>>
+    g_iaccessible2_usage_observer_list = LAZY_INSTANCE_INITIALIZER;
+
 }  // namespace
+
+//
+// IAccessible2UsageObserver
+//
+
+IAccessible2UsageObserver::IAccessible2UsageObserver() {
+}
+
+IAccessible2UsageObserver::~IAccessible2UsageObserver() {
+}
+
+// static
+base::ObserverList<IAccessible2UsageObserver>&
+    GetIAccessible2UsageObserverList() {
+  return g_iaccessible2_usage_observer_list.Get();
+}
+
+//
+// AXPlatformNode::Create
+//
 
 // static
 AXPlatformNode* AXPlatformNode::Create(AXPlatformNodeDelegate* delegate) {
@@ -128,6 +151,10 @@ AXPlatformNode* AXPlatformNode::FromNativeViewAccessible(
   accessible->QueryInterface(ax_platform_node.Receive());
   return ax_platform_node.get();
 }
+
+//
+// AXPlatformNodeWin
+//
 
 AXPlatformNodeWin::AXPlatformNodeWin()
     : unique_id_win_(GetNextNegativeUniqueIdForWinAccessibility(this)) {
@@ -156,6 +183,12 @@ void AXPlatformNodeWin::NotifyAccessibilityEvent(ui::AXEvent event_type) {
   HWND hwnd = delegate_->GetTargetForNativeAccessibilityEvent();
   if (!hwnd)
     return;
+
+  // Menu items fire selection events but Windows screen readers work reliably
+  // with focus events. Remap here.
+  if (event_type == ui::AX_EVENT_SELECTION &&
+      GetData().role == ui::AX_ROLE_MENU_ITEM)
+    event_type = ui::AX_EVENT_FOCUS;
 
   int native_event = MSAAEvent(event_type);
   if (native_event < EVENT_MIN)
@@ -876,6 +909,13 @@ STDMETHODIMP AXPlatformNodeWin::scrollSubstringToPoint(
 STDMETHODIMP AXPlatformNodeWin::QueryService(
     REFGUID guidService, REFIID riid, void** object) {
   COM_OBJECT_VALIDATE_1_ARG(object);
+
+  if (riid == IID_IAccessible2) {
+    FOR_EACH_OBSERVER(IAccessible2UsageObserver,
+                      GetIAccessible2UsageObserverList(),
+                      OnIAccessible2Used());
+  }
+
   if (guidService == IID_IAccessible ||
       guidService == IID_IAccessible2 ||
       guidService == IID_IAccessible2_2 ||
@@ -982,8 +1022,6 @@ int AXPlatformNodeWin::MSAAState() {
     msaa_state |= STATE_SYSTEM_EXPANDED;
   if (state & (1 << ui::AX_STATE_FOCUSABLE))
     msaa_state |= STATE_SYSTEM_FOCUSABLE;
-  if (state & (1 << ui::AX_STATE_FOCUSED))
-    msaa_state |= STATE_SYSTEM_FOCUSED;
   if (state & (1 << ui::AX_STATE_HASPOPUP))
     msaa_state |= STATE_SYSTEM_HASPOPUP;
   if (state & (1 << ui::AX_STATE_HOVERED))
@@ -1006,6 +1044,21 @@ int AXPlatformNodeWin::MSAAState() {
     msaa_state |= STATE_SYSTEM_SELECTED;
   if (state & (1 << ui::AX_STATE_DISABLED))
     msaa_state |= STATE_SYSTEM_UNAVAILABLE;
+
+  gfx::NativeViewAccessible focus = delegate_->GetFocus();
+  if (focus == GetNativeViewAccessible())
+    msaa_state |= STATE_SYSTEM_FOCUSED;
+
+  // On Windows, the "focus" bit should be set on certain containers, like
+  // menu bars, when visible.
+  //
+  // TODO(dmazzoni): this should probably check if focus is actually inside
+  // the menu bar, but we don't currently track focus inside menu pop-ups,
+  // and Chrome only has one menu visible at a time so this works for now.
+  if (GetData().role == ui::AX_ROLE_MENU_BAR &&
+      !(state & (1 << ui::AX_STATE_INVISIBLE))) {
+    msaa_state |= STATE_SYSTEM_FOCUSED;
+  }
 
   return msaa_state;
 }

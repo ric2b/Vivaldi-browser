@@ -20,6 +20,10 @@ DOMException* CacheStorageError::createException(WebServiceWorkerCacheError webE
         return DOMException::create(NotFoundError, "Entry was not found.");
     case WebServiceWorkerCacheErrorExists:
         return DOMException::create(InvalidAccessError, "Entry already exists.");
+    case WebServiceWorkerCacheErrorQuotaExceeded:
+        return DOMException::create(QuotaExceededError, "Quota exceeded.");
+    case WebServiceWorkerCacheErrorCacheNameNotFound:
+        return DOMException::create(NotFoundError, "Cache name was not found.");
     default:
         ASSERT_NOT_REACHED();
         return DOMException::create(NotSupportedError, "Unknown error.");

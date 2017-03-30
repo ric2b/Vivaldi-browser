@@ -41,15 +41,15 @@
 
 namespace blink {
 
-ResourcePtr<ImageResource> ImageResource::fetch(FetchRequest& request, ResourceFetcher* fetcher)
+PassRefPtrWillBeRawPtr<ImageResource> ImageResource::fetch(FetchRequest& request, ResourceFetcher* fetcher)
 {
     if (request.resourceRequest().requestContext() == WebURLRequest::RequestContextUnspecified)
         request.mutableResourceRequest().setRequestContext(WebURLRequest::RequestContextImage);
     if (fetcher->context().pageDismissalEventBeingDispatched()) {
         KURL requestURL = request.resourceRequest().url();
-        if (requestURL.isValid() && fetcher->context().canRequest(Resource::Image, request.resourceRequest(), requestURL, request.options(), request.forPreload(), request.originRestriction()))
+        if (requestURL.isValid() && fetcher->context().canRequest(Resource::Image, request.resourceRequest(), requestURL, request.options(), request.forPreload(), request.getOriginRestriction()))
             fetcher->context().sendImagePing(requestURL);
-        return 0;
+        return nullptr;
     }
 
     if (fetcher->clientDefersImage(request.resourceRequest().url()))
@@ -97,6 +97,12 @@ ImageResource::~ImageResource()
     clearImage();
 }
 
+DEFINE_TRACE(ImageResource)
+{
+    Resource::trace(visitor);
+    ImageObserver::trace(visitor);
+}
+
 void ImageResource::load(ResourceFetcher* fetcher, const ResourceLoaderOptions& options)
 {
     if (!fetcher || fetcher->autoLoadImages())
@@ -112,7 +118,7 @@ void ImageResource::didAddClient(ResourceClient* c)
         m_image->setData(m_data, true);
     }
 
-    ASSERT(c->resourceClientType() == ImageResourceClient::expectedType());
+    ASSERT(ImageResourceClient::isExpectedType(c));
     if (m_image && !m_image->isNull())
         static_cast<ImageResourceClient*>(c)->imageChanged(this);
 
@@ -122,7 +128,7 @@ void ImageResource::didAddClient(ResourceClient* c)
 void ImageResource::didRemoveClient(ResourceClient* c)
 {
     ASSERT(c);
-    ASSERT(c->resourceClientType() == ImageResourceClient::expectedType());
+    ASSERT(ImageResourceClient::isExpectedType(c));
 
     Resource::didRemoveClient(c);
 }
@@ -197,18 +203,10 @@ bool ImageResource::usesImageContainerSize() const
     return false;
 }
 
-bool ImageResource::imageHasRelativeWidth() const
+bool ImageResource::imageHasRelativeSize() const
 {
     if (m_image)
-        return m_image->hasRelativeWidth();
-
-    return false;
-}
-
-bool ImageResource::imageHasRelativeHeight() const
-{
-    if (m_image)
-        return m_image->hasRelativeHeight();
+        return m_image->hasRelativeSize();
 
     return false;
 }
@@ -228,25 +226,23 @@ LayoutSize ImageResource::imageSize(RespectImageOrientationEnum shouldRespectIma
         size = LayoutSize(m_image->size());
 
     if (sizeType == IntrinsicCorrectedToDPR && m_hasDevicePixelRatioHeaderValue && m_devicePixelRatioHeaderValue > 0)
-        multiplier = 1.0 / m_devicePixelRatioHeaderValue;
+        multiplier = 1 / m_devicePixelRatioHeaderValue;
 
-    if (multiplier == 1.0f)
+    if (multiplier == 1 || m_image->hasRelativeSize())
         return size;
 
     // Don't let images that have a width/height >= 1 shrink below 1 when zoomed.
-    float widthScale = m_image->hasRelativeWidth() ? 1.0f : multiplier;
-    float heightScale = m_image->hasRelativeHeight() ? 1.0f : multiplier;
-    LayoutSize minimumSize(size.width() > 0 ? 1 : 0, size.height() > 0 ? 1 : 0);
-    size.scale(widthScale, heightScale);
+    LayoutSize minimumSize(size.width() > LayoutUnit() ? LayoutUnit(1) : LayoutUnit(),
+        LayoutUnit(size.height() > LayoutUnit() ? LayoutUnit(1) : LayoutUnit()));
+    size.scale(multiplier);
     size.clampToMinimumSize(minimumSize);
-    ASSERT(multiplier != 1.0f || (size.width().fraction() == 0.0f && size.height().fraction() == 0.0f));
     return size;
 }
 
-void ImageResource::computeIntrinsicDimensions(Length& intrinsicWidth, Length& intrinsicHeight, FloatSize& intrinsicRatio)
+void ImageResource::computeIntrinsicDimensions(FloatSize& intrinsicSize, FloatSize& intrinsicRatio)
 {
     if (m_image)
-        m_image->computeIntrinsicDimensions(intrinsicWidth, intrinsicHeight, intrinsicRatio);
+        m_image->computeIntrinsicDimensions(intrinsicSize, intrinsicRatio);
 }
 
 void ImageResource::notifyObservers(const IntRect* changeRect)
@@ -288,10 +284,12 @@ inline void ImageResource::createImage()
 
 inline void ImageResource::clearImage()
 {
+    if (!m_image)
+        return;
+
     // If our Image has an observer, it's always us so we need to clear the back pointer
     // before dropping our reference.
-    if (m_image)
-        m_image->setImageObserver(nullptr);
+    m_image->setImageObserver(nullptr);
     m_image.clear();
 }
 
@@ -323,7 +321,7 @@ void ImageResource::updateImage(bool allDataReceived)
     // to decode.
     if (sizeAvailable || allDataReceived) {
         if (!m_image || m_image->isNull()) {
-            error(errorOccurred() ? status() : DecodeError);
+            error(errorOccurred() ? getStatus() : DecodeError);
             if (memoryCache()->contains(this))
                 memoryCache()->remove(this);
             return;
@@ -372,6 +370,8 @@ void ImageResource::decodedSizeChanged(const blink::Image* image, int delta)
     if (!image || image != m_image)
         return;
 
+    // TODO(bsep): Crash on underflow, which is possible if an error causes
+    // decodedSize to be 0.
     setDecodedSize(decodedSize() + delta);
 }
 
@@ -435,6 +435,16 @@ void ImageResource::updateImageAnimationPolicy()
         m_image->resetAnimation();
         m_image->setAnimationPolicy(newPolicy);
     }
+}
+
+void ImageResource::reloadIfLoFi(ResourceFetcher* fetcher)
+{
+    if (!m_response.httpHeaderField("chrome-proxy").contains("q=low"))
+        return;
+    m_resourceRequest.setCachePolicy(ResourceRequestCachePolicy::ReloadBypassingCache);
+    m_resourceRequest.setLoFiState(WebURLRequest::LoFiOff);
+    error(Resource::LoadError);
+    load(fetcher, fetcher->defaultResourceOptions());
 }
 
 void ImageResource::changedInRect(const blink::Image* image, const IntRect& rect)

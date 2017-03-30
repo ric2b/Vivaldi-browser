@@ -11,7 +11,7 @@
 #include "base/strings/string16.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/views/controls/image_view.h"
+#include "ui/views/animation/ink_drop_host_view.h"
 #include "ui/views/controls/label.h"
 
 namespace gfx {
@@ -21,6 +21,7 @@ class ImageSkia;
 }
 
 namespace views {
+class ImageView;
 class Label;
 class Painter;
 }
@@ -28,7 +29,7 @@ class Painter;
 // View used to draw a bubble, containing an icon and a label. We use this as a
 // base for the classes that handle the location icon (including the EV bubble),
 // tab-to-search UI, and content settings.
-class IconLabelBubbleView : public views::View {
+class IconLabelBubbleView : public views::InkDropHostView {
  public:
   IconLabelBubbleView(int contained_image,
                       const gfx::FontList& font_list,
@@ -48,6 +49,7 @@ class IconLabelBubbleView : public views::View {
   }
 
   const views::ImageView* GetImageView() const { return image_; }
+  views::ImageView* GetImageView() { return image_; }
 
  protected:
   views::ImageView* image() { return image_; }
@@ -76,6 +78,10 @@ class IconLabelBubbleView : public views::View {
   gfx::Size GetPreferredSize() const override;
   void Layout() override;
   void OnNativeThemeChanged(const ui::NativeTheme* native_theme) override;
+  void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
+  void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
+  scoped_ptr<views::InkDropHover> CreateInkDropHover() const override;
+  SkColor GetInkDropBaseColor() const override;
 
   const gfx::FontList& font_list() const { return label_->font_list(); }
 

@@ -9,8 +9,6 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/path_service.h"
-#include "base/prefs/json_pref_store.h"
-#include "base/prefs/pref_service.h"
 #include "base/time/default_tick_clock.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
@@ -21,12 +19,16 @@
 #include "components/metrics/profiler/tracking_synchronizer.h"
 #include "components/metrics_services_manager/metrics_services_manager.h"
 #include "components/open_from_clipboard/clipboard_recent_content.h"
+#include "components/prefs/json_pref_store.h"
+#include "components/prefs/pref_service.h"
 #include "components/rappor/rappor_service.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/variations/service/variations_service.h"
 #include "components/variations/variations_http_header_provider.h"
 #include "ios/chrome/browser/about_flags.h"
 #include "ios/chrome/browser/application_context_impl.h"
+#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/browser_state/chrome_browser_state_manager.h"
 #include "ios/chrome/browser/chrome_paths.h"
 #include "ios/chrome/browser/chrome_switches.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
@@ -37,8 +39,6 @@
 #include "ios/chrome/browser/open_from_clipboard/create_clipboard_recent_content.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/translate/translate_service_ios.h"
-#include "ios/public/provider/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/public/provider/chrome/browser/browser_state/chrome_browser_state_manager.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/web/public/web_thread.h"
 #include "net/base/network_change_notifier.h"
@@ -207,7 +207,7 @@ void IOSChromeMainParts::SetUpMetricsAndFieldTrials() {
     // consistent manner with field trials created from the server.
     bool result = base::FieldTrialList::CreateTrialsFromString(
         command_line->GetSwitchValueASCII(switches::kForceFieldTrials),
-        base::FieldTrialList::DONT_ACTIVATE_TRIALS, std::set<std::string>());
+        std::set<std::string>());
     CHECK(result) << "Invalid --" << switches::kForceFieldTrials
                   << " list specified.";
   }

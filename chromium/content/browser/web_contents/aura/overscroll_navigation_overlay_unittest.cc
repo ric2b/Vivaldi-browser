@@ -112,7 +112,7 @@ class OverscrollNavigationOverlayTest : public RenderViewHostImplTestHarness {
     // offset -1 on layer_delegate_.
     scoped_ptr<aura::Window> window(
         GetOverlay()->CreateBackWindow(GetBackSlideWindowBounds()));
-    bool window_created = window;
+    bool window_created = !!window;
     // Performs BACK navigation, sets image from layer_delegate_ on
     // image_delegate_.
     GetOverlay()->OnOverscrollCompleting();
@@ -307,7 +307,6 @@ TEST_F(OverscrollNavigationOverlayTest, Navigation_LoadingUpdate) {
   // this is a "safety net" in case we mis-identify the destination webpage
   // (which can happen if a new navigation is performed while while a GestureNav
   // navigation is in progress).
-  contents()->TestSetIsLoading(true);
   contents()->TestSetIsLoading(false);
   EXPECT_FALSE(GetOverlay()->web_contents());
   NavigationEntry* pending = contents()->GetController().GetPendingEntry();

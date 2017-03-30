@@ -23,6 +23,7 @@
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
+#include "chrome/common/safe_browsing/csd.pb.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/google/core/browser/google_util.h"
@@ -210,8 +211,7 @@ bool DownloadCommands::IsCommandChecked(Command command) const {
       return download_item_->GetOpenWhenComplete() ||
              download_crx_util::IsExtensionDownload(*download_item_);
     case ALWAYS_OPEN_TYPE:
-#if defined(OS_WIN) || defined(OS_LINUX) || \
-    (defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MACOSX)
       if (CanOpenPdfInSystemViewer()) {
         DownloadPrefs* prefs = DownloadPrefs::FromBrowserContext(
             download_item_->GetBrowserContext());
@@ -254,8 +254,7 @@ void DownloadCommands::ExecuteCommand(Command command) {
       bool is_checked = IsCommandChecked(ALWAYS_OPEN_TYPE);
       DownloadPrefs* prefs = DownloadPrefs::FromBrowserContext(
           download_item_->GetBrowserContext());
-#if defined(OS_WIN) || defined(OS_LINUX) || \
-    (defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MACOSX)
       if (CanOpenPdfInSystemViewer()) {
         prefs->SetShouldOpenPdfInSystemReader(!is_checked);
         DownloadItemModel(download_item_)
@@ -280,6 +279,35 @@ void DownloadCommands::ExecuteCommand(Command command) {
       download_item_->Remove();
       break;
     case KEEP:
+    // Only sends uncommon download accept report if :
+    // 1. FULL_SAFE_BROWSING is enabled, and
+    // 2. Download verdict is uncommon, and
+    // 3. Download URL is not empty, and
+    // 4. User is not in incognito mode.
+#if defined(FULL_SAFE_BROWSING)
+      if (download_item_->GetDangerType() ==
+              content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT &&
+          !download_item_->GetURL().is_empty() &&
+          !download_item_->GetBrowserContext()->IsOffTheRecord()) {
+        safe_browsing::SafeBrowsingService* sb_service =
+            g_browser_process->safe_browsing_service();
+        // Compiles the uncommon download warning report.
+        safe_browsing::ClientSafeBrowsingReportRequest report;
+        report.set_type(safe_browsing::ClientSafeBrowsingReportRequest::
+                            DANGEROUS_DOWNLOAD_WARNING);
+        report.set_download_verdict(
+            safe_browsing::ClientDownloadResponse::UNCOMMON);
+        report.set_url(download_item_->GetURL().spec());
+        report.set_did_proceed(true);
+        std::string serialized_report;
+        if (report.SerializeToString(&serialized_report)) {
+          sb_service->SendSerializedDownloadReport(serialized_report);
+        } else {
+          DCHECK(false)
+              << "Unable to serialize the uncommon download warning report.";
+        }
+      }
+#endif
       download_item_->ValidateDangerousDownload();
       break;
     case LEARN_MORE_SCANNING: {
@@ -319,8 +347,7 @@ void DownloadCommands::ExecuteCommand(Command command) {
 Browser* DownloadCommands::GetBrowser() const {
   Profile* profile =
       Profile::FromBrowserContext(download_item_->GetBrowserContext());
-  chrome::ScopedTabbedBrowserDisplayer browser_displayer(
-      profile, chrome::GetActiveDesktop());
+  chrome::ScopedTabbedBrowserDisplayer browser_displayer(profile);
   DCHECK(browser_displayer.browser());
   return browser_displayer.browser();
 }

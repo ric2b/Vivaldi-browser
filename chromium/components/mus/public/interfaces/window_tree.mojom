@@ -9,6 +9,7 @@ import "components/mus/public/interfaces/cursor.mojom";
 import "components/mus/public/interfaces/input_events.mojom";
 import "components/mus/public/interfaces/mus_constants.mojom";
 import "components/mus/public/interfaces/surface_id.mojom";
+import "components/mus/public/interfaces/window_manager.mojom";
 import "components/mus/public/interfaces/window_manager_constants.mojom";
 import "ui/mojo/geometry/geometry.mojom";
 import "ui/mojo/ime/text_input_state.mojom";
@@ -68,18 +69,16 @@ enum SurfaceType {
 // change id in anyway, it is up to the client to assign a value and use it.
 // Generally the change id is an ever increasing integer.
 interface WindowTree {
-  enum AccessPolicy {
-    DEFAULT = 0,
+  const int32 kAccessPolicyDefault = 0;
 
-    // An embed root has the following abilities:
-    // . The app sees all the descendants of the window the app is ebmedded at,
-    //   even those from separate connections.
-    // . The app is able to Embed() in all the descendants of the window the app
-    //   is embedded at, even those from separate connections.
-    // Only connections originating from the WindowTreeHostFactory can grant
-    // this policy.
-    EMBED_ROOT = 1,
-  };
+  // An embed root has the following abilities:
+  // . The app sees all the descendants of the window the app is ebmedded at,
+  //   even those from separate connections.
+  // . The app is able to Embed() in all the descendants of the window the app
+  //   is embedded at, even those from separate connections.
+  // Only connections originating from the WindowTreeHostFactory can grant
+  // this policy.
+  const int32 kAccessPolicyEmbedRoot = 1;
 
   // Creates a new window with the specified id. It is up to the client to
   // ensure the id is unique to the connection (the id need not be globally
@@ -105,6 +104,18 @@ interface WindowTree {
   // are sent as a result of this. Only the connection that created the window
   // can delete it.
   DeleteWindow(uint32 change_id, uint32 window_id);
+
+  // Requests input event capture for the given |window_id|. Capture is only
+  // allowed if the window is processing an event. When a window gains capture,
+  // current input events are canceled. The given window will receive all
+  // subsequent input until an alternate window is set via SetCapture, or
+  // ReleaseCapture is called for |window_id|. OnLostCapture is called to notify
+  // of capture ending.
+  SetCapture(uint32 change_id, uint32 window_id);
+
+  // Releases input event capture for the given |window_id|. This does nothing
+  // if |window_id| does not currently have capture.
+  ReleaseCapture(uint32 change_id, uint32 window_id);
 
   // Sets the specified bounds of the specified window.
   SetWindowBounds(uint32 change_id, uint32 window_id, mojo.Rect bounds);
@@ -195,7 +206,7 @@ interface WindowTree {
   // longer has privileges to access or see any of the children of the window.
   // If the window had existing children the children are removed. The one
   // exception is the root connection and any connections with the policy
-  // ACCESS_POLICY_EMBED_ROOT.
+  // kAccessPolicyEmbedRoot.
   //
   // A window may only have one embedding in it at a time. Subsequent calls to
   // Embed() for the same window result in the currently embedded
@@ -237,9 +248,8 @@ interface WindowTree {
   // See documentation for WindowTreeClient::OnWindowInputEvent().
   OnWindowInputEventAck(uint32 event_id);
 
-  // See description of WindowManagerInternal for details.
-  GetWindowManagerInternalClient(
-      associated WindowManagerInternalClient& internal);
+  // See description of WindowManager for details.
+  GetWindowManagerClient(associated WindowManagerClient& internal);
 };
 
 // Changes to windows are not sent to the connection that originated the
@@ -266,6 +276,9 @@ interface WindowTreeClient {
   // Sent when another connection is embedded in the Window this connection was
   // previously embedded in. See Embed() for more information.
   OnUnembed(uint32 window);
+
+  // Sent when a window loses capture.
+  OnLostCapture(uint32 window);
 
   // Called in response to NewTopLevelWindow() successfully completing.
   OnTopLevelCreated(uint32 change_id, WindowData data);
@@ -353,46 +366,13 @@ interface WindowTreeClient {
   // client allows the change it should delete the window.
   RequestClose(uint32 window_id);
 
-  // See description of WindowManagerInternal for details.
-  GetWindowManagerInternal(associated WindowManagerInternal& internal);
+  // See description of WindowManager for details.
+  GetWindowManager(associated WindowManager& internal);
 };
 
-// WindowManagerInternal is used when a WindowTreeClient attempts to modify
-// a property of the embed root. When this happens WindowTree calls the
-// appropriate function on WindowManagerInternal. For example, if a
-// WindowTreeClient calls SetWindowBounds() on its embed root, WindowTree
-// calls WmSetBounds(). WindowManagerInternal can then decide if it wants to
-// change the bounds or not.
-//
-// WindowManagerInternal may only be installed from the connection that created
-// a new window tree (see WindowTreeHostFactory).
-//
-// This interface is only used as an associated interface and is associated
-// with WindowTreeClient.
-interface WindowManagerInternal {
-  // When the WindowManagerInternal completes a request it must call back to
-  // WindowManagerInternalClient::WmResponse().
-  WmSetBounds(uint32 change_id, uint32 window_id, mojo.Rect bounds);
-  WmSetProperty(uint32 change_id,
-                uint32 window_id,
-                string name,
-                array<uint8>? value);
-  // Asks the WindowManager to create a new window.
-  WmCreateTopLevelWindow(uint32 change_id,
-                         map<string, array<uint8>> properties);
-};
-
-// This interface is only used as an associated interface and is associated
-// with WindowTree.
-interface WindowManagerInternalClient {
-  // The window manager has completed a request with the specific change id.
-  WmResponse(uint32 change_id, bool response);
-
-  // Calls WindowTreeClient::RequestClose() on the embedded app at the
-  // specified window.
-  WmRequestClose(uint32 window_id);
-
-  // Response from WmCreateTopLevelWindow() informing the client of the id for
-  // the new window.
-  OnWmCreatedTopLevelWindow(uint32 change_id, uint32 window_id);
+// Mus provides this interface as a way for clients to connect and obtain a
+// WindowTree handle with a supplied WindowTreeClient handle. The
+// WindowTreeClient has no roots, use NewTopLevelWindow() to create one.
+interface WindowTreeFactory {
+  CreateWindowTree(WindowTree& tree_request, WindowTreeClient client);
 };

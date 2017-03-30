@@ -16,7 +16,7 @@
 #include "ui/ozone/public/gpu_platform_support.h"
 #include "ui/ozone/public/gpu_platform_support_host.h"
 #include "ui/ozone/public/input_controller.h"
-#include "ui/ozone/public/ozone_platform.h"  // nogncheck
+#include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/system_input_injector.h"
 
 namespace ui {
@@ -57,7 +57,7 @@ class OzonePlatformCaca : public OzonePlatform {
         delegate, window_manager_.get(), event_source_.get(), bounds));
     if (!caca_window->Initialize())
       return nullptr;
-    return caca_window;
+    return std::move(caca_window);
   }
   scoped_ptr<NativeDisplayDelegate> CreateNativeDisplayDelegate() override {
     return make_scoped_ptr(new NativeDisplayDelegateOzone());

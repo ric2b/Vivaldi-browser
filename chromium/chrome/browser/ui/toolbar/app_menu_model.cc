@@ -9,9 +9,9 @@
 
 #include "base/command_line.h"
 #include "base/debug/debugging_flags.h"
+#include "base/debug/profiler.h"
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -49,6 +49,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/dom_distiller/core/dom_distiller_switches.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/ui/zoom/zoom_controller.h"
@@ -285,10 +286,10 @@ void ToolsMenuModel::Build(Browser* browser) {
   AddSeparator(ui::NORMAL_SEPARATOR);
   AddItemWithStringId(IDC_DEV_TOOLS, IDS_DEV_TOOLS);
 
-#if BUILDFLAG(ENABLE_PROFILING) && !defined(NO_TCMALLOC)
-  AddSeparator(ui::NORMAL_SEPARATOR);
-  AddCheckItemWithStringId(IDC_PROFILING_ENABLED, IDS_PROFILING_ENABLED);
-#endif
+  if (base::debug::IsProfilingSupported()) {
+    AddSeparator(ui::NORMAL_SEPARATOR);
+    AddCheckItemWithStringId(IDC_PROFILING_ENABLED, IDS_PROFILING_ENABLED);
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -360,18 +361,10 @@ base::string16 AppMenuModel::GetLabelForCommandId(int command_id) const {
 }
 
 bool AppMenuModel::GetIconForCommandId(int command_id, gfx::Image* icon) const {
-  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  switch (command_id) {
-    case IDC_UPGRADE_DIALOG: {
-      if (UpgradeDetector::GetInstance()->notify_upgrade()) {
-        *icon = rb.GetNativeImageNamed(
-            UpgradeDetector::GetInstance()->GetIconResourceID());
-        return true;
-      }
-      return false;
-    }
-    default:
-      break;
+  if (command_id == IDC_UPGRADE_DIALOG &&
+      UpgradeDetector::GetInstance()->notify_upgrade()) {
+    *icon = UpgradeDetector::GetInstance()->GetIcon();
+    return true;
   }
   return false;
 }
@@ -392,6 +385,9 @@ void AppMenuModel::LogMenuMetrics(int command_id) {
   base::TimeDelta delta = timer_.Elapsed();
 
   switch (command_id) {
+    case IDC_UPGRADE_DIALOG:
+      LogMenuAction(MENU_ACTION_UPGRADE_DIALOG);
+      break;
     case IDC_NEW_TAB:
       if (!uma_action_recorded_)
         UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.NewTab", delta);
@@ -872,8 +868,10 @@ bool AppMenuModel::AddGlobalErrorMenuItems() {
       SetIcon(GetIndexOfCommandId(error->MenuItemCommandID()),
               error->MenuItemIcon());
       menu_items_added = true;
-      content::RecordAction(
-          base::UserMetricsAction("Signin_Impression_FromMenu"));
+      if (IDC_SHOW_SIGNIN_ERROR == error->MenuItemCommandID()) {
+        content::RecordAction(
+            base::UserMetricsAction("Signin_Impression_FromMenu"));
+      }
     }
   }
   return menu_items_added;

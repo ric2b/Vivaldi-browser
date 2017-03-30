@@ -16,15 +16,6 @@ if (is_mac) {
 is_linux_without_udev = is_linux && !use_udev
 is_linux_without_dbus = is_linux && !use_dbus
 
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("device_unittests_run") {
-  testonly = true
-  deps = [
-    ":device_unittests",
-  ]
-}
-
 test("device_unittests") {
   sources = [
     "battery/battery_status_manager_win_unittest.cc",
@@ -49,6 +40,8 @@ test("device_unittests") {
     "bluetooth/test/bluetooth_test_android.h",
     "bluetooth/test/bluetooth_test_mac.h",
     "bluetooth/test/bluetooth_test_mac.mm",
+    "bluetooth/test/bluetooth_test_win.cc",
+    "bluetooth/test/bluetooth_test_win.h",
     "bluetooth/test/test_bluetooth_adapter_observer.cc",
     "bluetooth/test/test_bluetooth_adapter_observer.h",
     "nfc/nfc_chromeos_unittest.cc",
@@ -64,12 +57,13 @@ test("device_unittests") {
     "//device/bluetooth:mocks",
     "//device/nfc",
     "//mojo/common",
+    "//mojo/edk/system",
     "//mojo/environment:chromium",
     "//mojo/public/cpp/bindings",
     "//net",
     "//testing/gmock",
     "//testing/gtest",
-    "//third_party/mojo/src/mojo/edk/system",
+    "//tools/usb_gadget",
     "//url",
   ]
 
@@ -109,13 +103,13 @@ test("device_unittests") {
   # USB does not compile on iOS.
   if (!is_ios) {
     sources += [
-      "devices_app/usb/device_impl_unittest.cc",
-      "devices_app/usb/device_manager_impl_unittest.cc",
-      "devices_app/usb/fake_permission_provider.cc",
-      "devices_app/usb/fake_permission_provider.h",
       "test/test_device_client.cc",
       "test/test_device_client.h",
       "test/usb_test_gadget_impl.cc",
+      "usb/mojo/device_impl_unittest.cc",
+      "usb/mojo/device_manager_impl_unittest.cc",
+      "usb/mojo/fake_permission_provider.cc",
+      "usb/mojo/fake_permission_provider.h",
       "usb/usb_descriptors_unittest.cc",
       "usb/usb_device_filter_unittest.cc",
       "usb/usb_device_handle_unittest.cc",
@@ -126,10 +120,10 @@ test("device_unittests") {
     deps += [
       "//device/core",
       "//device/core:mocks",
-      "//device/devices_app:lib",
-      "//device/devices_app/usb/public/interfaces",
       "//device/usb",
       "//device/usb:mocks",
+      "//device/usb/mojo",
+      "//device/usb/public/interfaces",
     ]
   }
 
@@ -186,6 +180,15 @@ test("device_unittests") {
         "CoreBluetooth",
       ]
     }
+  }
+
+  if (is_win) {
+    sources += [
+      "bluetooth/bluetooth_classic_win_fake.cc",
+      "bluetooth/bluetooth_classic_win_fake.h",
+      "bluetooth/bluetooth_low_energy_win_fake.cc",
+      "bluetooth/bluetooth_low_energy_win_fake.h",
+    ]
   }
 }
 

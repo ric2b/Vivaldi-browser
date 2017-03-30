@@ -77,7 +77,7 @@ class LayerTreeHostTestHasImplThreadTest : public LayerTreeHostTest {
   LayerTreeHostTestHasImplThreadTest() : threaded_(false) {}
 
   void RunTest(CompositorMode mode, bool delegating_renderer) override {
-    threaded_ = mode == CompositorMode::Threaded;
+    threaded_ = mode == CompositorMode::THREADED;
     LayerTreeHostTest::RunTest(mode, delegating_renderer);
   }
 
@@ -1333,6 +1333,11 @@ class LayerTreeHostTestCommit : public LayerTreeHostTest {
   void BeginTest() override {
     layer_tree_host()->SetViewportSize(gfx::Size(20, 20));
     layer_tree_host()->set_background_color(SK_ColorGRAY);
+    layer_tree_host()->SetEventListenerProperties(
+        EventListenerClass::kMouseWheel, EventListenerProperties::kPassive);
+    layer_tree_host()->SetEventListenerProperties(
+        EventListenerClass::kTouch, EventListenerProperties::kBlocking);
+    layer_tree_host()->SetHaveScrollEventHandlers(true);
 
     PostSetNeedsCommitToMainThread();
   }
@@ -1340,6 +1345,13 @@ class LayerTreeHostTestCommit : public LayerTreeHostTest {
   void DidActivateTreeOnThread(LayerTreeHostImpl* impl) override {
     EXPECT_EQ(gfx::Size(20, 20), impl->DrawViewportSize());
     EXPECT_EQ(SK_ColorGRAY, impl->active_tree()->background_color());
+    EXPECT_EQ(EventListenerProperties::kPassive,
+              impl->active_tree()->event_listener_properties(
+                  EventListenerClass::kMouseWheel));
+    EXPECT_EQ(EventListenerProperties::kBlocking,
+              impl->active_tree()->event_listener_properties(
+                  EventListenerClass::kTouch));
+    EXPECT_TRUE(impl->active_tree()->have_scroll_event_handlers());
 
     EndTest();
   }
@@ -2848,6 +2860,7 @@ class LayerTreeHostTestLayersPushProperties : public LayerTreeHostTest {
         child_->MakePushProperties();
         // The modified layer needs commit
         ++expected_push_properties_child_;
+        ++expected_push_properties_grandchild_;
         break;
       case 13:
         child2_->MakePushProperties();
@@ -3007,8 +3020,10 @@ class LayerTreeHostTestImplLayersPushProperties
         // The leaf that always pushes is pushed.
         ++expected_push_properties_grandchild_impl_;
 
-        // This child position was changed.
+        // This child position was changed. So the subtree needs to push
+        // properties.
         ++expected_push_properties_child2_impl_;
+        ++expected_push_properties_grandchild2_impl_;
         break;
       case 13:
         // The position of this child was changed.
@@ -3263,20 +3278,9 @@ class LayerTreeHostTestPushPropertiesAddingToTreeRequiresPush
     int last_source_frame_number = layer_tree_host()->source_frame_number() - 1;
     switch (last_source_frame_number) {
       case 0:
+        // All layers except root will need push properties as they are added
+        // as a child to some other layer which changes their stacking order.
         EXPECT_FALSE(root_->needs_push_properties());
-        EXPECT_FALSE(root_->descendant_needs_push_properties());
-        EXPECT_FALSE(child_->needs_push_properties());
-        EXPECT_FALSE(child_->descendant_needs_push_properties());
-        EXPECT_FALSE(grandchild1_->needs_push_properties());
-        EXPECT_FALSE(grandchild1_->descendant_needs_push_properties());
-        EXPECT_FALSE(grandchild2_->needs_push_properties());
-        EXPECT_FALSE(grandchild2_->descendant_needs_push_properties());
-        EXPECT_FALSE(grandchild3_->needs_push_properties());
-        EXPECT_FALSE(grandchild3_->descendant_needs_push_properties());
-
-        layer_tree_host()->SetRootLayer(root_);
-
-        EXPECT_TRUE(root_->needs_push_properties());
         EXPECT_TRUE(root_->descendant_needs_push_properties());
         EXPECT_TRUE(child_->needs_push_properties());
         EXPECT_TRUE(child_->descendant_needs_push_properties());
@@ -3286,6 +3290,12 @@ class LayerTreeHostTestPushPropertiesAddingToTreeRequiresPush
         EXPECT_FALSE(grandchild2_->descendant_needs_push_properties());
         EXPECT_TRUE(grandchild3_->needs_push_properties());
         EXPECT_FALSE(grandchild3_->descendant_needs_push_properties());
+
+        layer_tree_host()->SetRootLayer(root_);
+
+        // Now, even the root will need to push properties.
+        EXPECT_TRUE(root_->needs_push_properties());
+        EXPECT_TRUE(root_->descendant_needs_push_properties());
         break;
       case 1:
         EndTest();
@@ -6019,7 +6029,7 @@ class LayerTreeTestMaskLayerForSurfaceWithClippedLayer : public LayerTreeTest {
     EXPECT_EQ(gfx::ScaleRect(gfx::RectF(20.f, 10.f, 10.f, 20.f), 1.f / 50.f)
                   .ToString(),
               render_pass_quad->MaskUVRect().ToString());
-    EXPECT_EQ(gfx::Vector2dF(10.f / 50.f, 20.f / 50.f).ToString(),
+    EXPECT_EQ(gfx::Vector2dF(1.f / 50.f, 1.f / 50.f).ToString(),
               render_pass_quad->mask_uv_scale.ToString());
     EndTest();
     return draw_result;
@@ -6102,7 +6112,7 @@ class LayerTreeTestMaskLayerWithScaling : public LayerTreeTest {
                   render_pass_quad->rect.ToString());
         EXPECT_EQ(gfx::RectF(0.f, 0.f, 1.f, 1.f).ToString(),
                   render_pass_quad->MaskUVRect().ToString());
-        EXPECT_EQ(gfx::Vector2dF(1.f, 1.f).ToString(),
+        EXPECT_EQ(gfx::Vector2dF(0.01f, 0.01f).ToString(),
                   render_pass_quad->mask_uv_scale.ToString());
         break;
       case 1:
@@ -6112,7 +6122,7 @@ class LayerTreeTestMaskLayerWithScaling : public LayerTreeTest {
                   render_pass_quad->rect.ToString());
         EXPECT_EQ(gfx::RectF(0.f, 0.f, 1.f, 1.f).ToString(),
                   render_pass_quad->MaskUVRect().ToString());
-        EXPECT_EQ(gfx::Vector2dF(1.f, 1.f).ToString(),
+        EXPECT_EQ(gfx::Vector2dF(0.005f, 0.005f).ToString(),
                   render_pass_quad->mask_uv_scale.ToString());
         EndTest();
         break;
@@ -6190,7 +6200,7 @@ class LayerTreeTestMaskLayerWithDifferentBounds : public LayerTreeTest {
                   render_pass_quad->rect.ToString());
         EXPECT_EQ(gfx::RectF(0.f, 0.f, 1.f, 1.f).ToString(),
                   render_pass_quad->MaskUVRect().ToString());
-        EXPECT_EQ(gfx::Vector2dF(1.f, 1.f).ToString(),
+        EXPECT_EQ(gfx::Vector2dF(0.02f, 0.02f).ToString(),
                   render_pass_quad->mask_uv_scale.ToString());
         break;
       case 1:
@@ -6200,7 +6210,7 @@ class LayerTreeTestMaskLayerWithDifferentBounds : public LayerTreeTest {
                   render_pass_quad->rect.ToString());
         EXPECT_EQ(gfx::RectF(0.f, 0.f, 1.f, 1.f).ToString(),
                   render_pass_quad->MaskUVRect().ToString());
-        EXPECT_EQ(gfx::Vector2dF(1.f, 1.f).ToString(),
+        EXPECT_EQ(gfx::Vector2dF(0.01f, 0.01f).ToString(),
                   render_pass_quad->mask_uv_scale.ToString());
         EndTest();
         break;
@@ -6283,7 +6293,7 @@ class LayerTreeTestReflectionMaskLayerWithDifferentBounds
                   render_pass_quad->rect.ToString());
         EXPECT_EQ(gfx::RectF(0.f, 0.f, 1.f, 1.f).ToString(),
                   render_pass_quad->MaskUVRect().ToString());
-        EXPECT_EQ(gfx::Vector2dF(1.f, 1.f).ToString(),
+        EXPECT_EQ(gfx::Vector2dF(0.02f, 0.02f).ToString(),
                   render_pass_quad->mask_uv_scale.ToString());
         break;
       case 1:
@@ -6293,7 +6303,7 @@ class LayerTreeTestReflectionMaskLayerWithDifferentBounds
                   render_pass_quad->rect.ToString());
         EXPECT_EQ(gfx::RectF(0.f, 0.f, 1.f, 1.f).ToString(),
                   render_pass_quad->MaskUVRect().ToString());
-        EXPECT_EQ(gfx::Vector2dF(1.f, 1.f).ToString(),
+        EXPECT_EQ(gfx::Vector2dF(0.01f, 0.01f).ToString(),
                   render_pass_quad->mask_uv_scale.ToString());
         EndTest();
         break;
@@ -6383,7 +6393,7 @@ class LayerTreeTestReflectionMaskLayerForSurfaceWithUnclippedChild
                   replica_quad->rect.ToString());
         EXPECT_EQ(gfx::RectF(0.f, 0.f, 2.f, 1.f).ToString(),
                   replica_quad->MaskUVRect().ToString());
-        EXPECT_EQ(gfx::Vector2dF(2.f, 1.f).ToString(),
+        EXPECT_EQ(gfx::Vector2dF(0.02f, 0.02f).ToString(),
                   replica_quad->mask_uv_scale.ToString());
         break;
       case 1:
@@ -6393,7 +6403,7 @@ class LayerTreeTestReflectionMaskLayerForSurfaceWithUnclippedChild
                   replica_quad->rect.ToString());
         EXPECT_EQ(gfx::RectF(-1.f, 0.f, 2.f, 1.f).ToString(),
                   replica_quad->MaskUVRect().ToString());
-        EXPECT_EQ(gfx::Vector2dF(2.f, 1.f).ToString(),
+        EXPECT_EQ(gfx::Vector2dF(0.02f, 0.02f).ToString(),
                   replica_quad->mask_uv_scale.ToString());
         EndTest();
         break;

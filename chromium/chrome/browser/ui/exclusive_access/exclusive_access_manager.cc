@@ -18,6 +18,15 @@
 
 using content::WebContents;
 
+const base::Feature ExclusiveAccessManager::kSimplifiedUIFeature = {
+    "ViewsSimplifiedFullscreenUI",
+#if defined(USE_AURA)
+    base::FEATURE_ENABLED_BY_DEFAULT,
+#else
+    base::FEATURE_DISABLED_BY_DEFAULT,
+#endif
+};
+
 ExclusiveAccessManager::ExclusiveAccessManager(
     ExclusiveAccessContext* exclusive_access_context)
     : exclusive_access_context_(exclusive_access_context),
@@ -91,22 +100,7 @@ GURL ExclusiveAccessManager::GetExclusiveAccessBubbleURL() const {
 
 // static
 bool ExclusiveAccessManager::IsSimplifiedFullscreenUIEnabled() {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableSimplifiedFullscreenUI)) {
-    return true;
-  }
-
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableSimplifiedFullscreenUI)) {
-    return false;
-  }
-
-  // Enabled by default on Aura platforms only.
-#if defined(USE_AURA)
-  return true;
-#else
-  return false;
-#endif  // defined(USE_AURA)
+  return base::FeatureList::IsEnabled(kSimplifiedUIFeature);
 }
 
 void ExclusiveAccessManager::OnTabDeactivated(WebContents* web_contents) {
@@ -127,7 +121,7 @@ void ExclusiveAccessManager::OnTabClosing(WebContents* web_contents) {
 bool ExclusiveAccessManager::HandleUserKeyPress(
     const content::NativeWebKeyboardEvent& event) {
   if (event.windowsKeyCode != ui::VKEY_ESCAPE) {
-    exclusive_access_context_->OnExclusiveAccessUserInput();
+    OnUserInput();
     return false;
   }
 
@@ -135,6 +129,10 @@ bool ExclusiveAccessManager::HandleUserKeyPress(
   handled = fullscreen_controller_.HandleUserPressedEscape();
   handled |= mouse_lock_controller_.HandleUserPressedEscape();
   return handled;
+}
+
+void ExclusiveAccessManager::OnUserInput() {
+  exclusive_access_context_->OnExclusiveAccessUserInput();
 }
 
 void ExclusiveAccessManager::OnAcceptExclusiveAccessPermission() {
@@ -155,4 +153,39 @@ void ExclusiveAccessManager::OnDenyExclusiveAccessPermission() {
 void ExclusiveAccessManager::ExitExclusiveAccess() {
   fullscreen_controller_.ExitExclusiveAccessToPreviousState();
   mouse_lock_controller_.LostMouseLock();
+}
+
+void ExclusiveAccessManager::RecordBubbleReshownUMA(
+    ExclusiveAccessBubbleType type) {
+  // Figure out whether each of fullscreen, mouselock is in effect.
+  bool fullscreen = false;
+  bool mouselock = false;
+  switch (type) {
+    case EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE:
+    case EXCLUSIVE_ACCESS_BUBBLE_TYPE_MOUSELOCK_BUTTONS:
+      // None in effect.
+      break;
+    case EXCLUSIVE_ACCESS_BUBBLE_TYPE_FULLSCREEN_BUTTONS:
+    case EXCLUSIVE_ACCESS_BUBBLE_TYPE_FULLSCREEN_EXIT_INSTRUCTION:
+    case EXCLUSIVE_ACCESS_BUBBLE_TYPE_BROWSER_FULLSCREEN_EXIT_INSTRUCTION:
+    case EXCLUSIVE_ACCESS_BUBBLE_TYPE_EXTENSION_FULLSCREEN_EXIT_INSTRUCTION:
+      // Only fullscreen in effect.
+      fullscreen = true;
+      break;
+    case EXCLUSIVE_ACCESS_BUBBLE_TYPE_MOUSELOCK_EXIT_INSTRUCTION:
+      // Only mouselock in effect.
+      mouselock = true;
+      break;
+    case EXCLUSIVE_ACCESS_BUBBLE_TYPE_FULLSCREEN_MOUSELOCK_BUTTONS:
+    case EXCLUSIVE_ACCESS_BUBBLE_TYPE_FULLSCREEN_MOUSELOCK_EXIT_INSTRUCTION:
+      // Both in effect.
+      fullscreen = true;
+      mouselock = true;
+      break;
+  }
+
+  if (fullscreen)
+    fullscreen_controller_.RecordBubbleReshownUMA();
+  if (mouselock)
+    mouse_lock_controller_.RecordBubbleReshownUMA();
 }

@@ -31,7 +31,6 @@
 #include "platform/heap/HeapPage.h"
 
 #include "platform/ScriptForbiddenScope.h"
-#include "platform/Task.h"
 #include "platform/TraceEvent.h"
 #include "platform/heap/BlinkGCMemoryDumpProvider.h"
 #include "platform/heap/CallbackStack.h"
@@ -46,6 +45,7 @@
 #include "public/platform/WebProcessMemoryDump.h"
 #include "wtf/Assertions.h"
 #include "wtf/ContainerAnnotations.h"
+#include "wtf/CurrentTime.h"
 #include "wtf/LeakAnnotations.h"
 #include "wtf/MainThread.h"
 #include "wtf/PageAllocator.h"
@@ -98,6 +98,7 @@ void HeapObjectHeader::zapMagic()
 
 void HeapObjectHeader::finalize(Address object, size_t objectSize)
 {
+    HeapAllocHooks::freeHookIfEnabled(object);
     const GCInfo* gcInfo = Heap::gcInfo(gcInfoIndex());
     if (gcInfo->hasFinalizer())
         gcInfo->m_finalize(object);
@@ -136,25 +137,22 @@ void BaseHeap::takeSnapshot(const String& dumpBaseName, ThreadState::GCSnapshotI
 {
     // |dumpBaseName| at this point is "blink_gc/thread_X/heaps/HeapName"
     WebMemoryAllocatorDump* allocatorDump = BlinkGCMemoryDumpProvider::instance()->createMemoryAllocatorDumpForCurrentGC(dumpBaseName);
-    size_t pageIndex = 0;
-    size_t heapTotalFreeSize = 0;
-    size_t heapTotalFreeCount = 0;
+    size_t pageCount = 0;
+    BasePage::HeapSnapshotInfo heapInfo;
     for (BasePage* page = m_firstUnsweptPage; page; page = page->next()) {
-        size_t heapPageFreeSize = 0;
-        size_t heapPageFreeCount = 0;
-        page->takeSnapshot(dumpBaseName, pageIndex, info, &heapPageFreeSize, &heapPageFreeCount);
-        heapTotalFreeSize += heapPageFreeSize;
-        heapTotalFreeCount += heapPageFreeCount;
-        pageIndex++;
+        String dumpName = dumpBaseName + String::format("/pages/page_%lu", static_cast<unsigned long>(pageCount++));
+        WebMemoryAllocatorDump* pageDump = BlinkGCMemoryDumpProvider::instance()->createMemoryAllocatorDumpForCurrentGC(dumpName);
+
+        page->takeSnapshot(pageDump, info, heapInfo);
     }
-    allocatorDump->addScalar("blink_page_count", "objects", pageIndex);
+    allocatorDump->addScalar("blink_page_count", "objects", pageCount);
 
     // When taking a full dump (w/ freelist), both the /buckets and /pages
     // report their free size but they are not meant to be added together.
     // Therefore, here we override the free_size of the parent heap to be
     // equal to the free_size of the sum of its heap pages.
-    allocatorDump->addScalar("free_size", "bytes", heapTotalFreeSize);
-    allocatorDump->addScalar("free_count", "objects", heapTotalFreeCount);
+    allocatorDump->addScalar("free_size", "bytes", heapInfo.freeSize);
+    allocatorDump->addScalar("free_count", "objects", heapInfo.freeCount);
 }
 
 #if ENABLE(ASSERT)
@@ -339,7 +337,7 @@ bool BaseHeap::lazySweepWithDeadline(double deadlineSeconds)
     while (m_firstUnsweptPage) {
         sweepUnsweptPage();
         if (pageCount % deadlineCheckInterval == 0) {
-            if (deadlineSeconds <= Platform::current()->monotonicallyIncreasingTimeSeconds()) {
+            if (deadlineSeconds <= monotonicallyIncreasingTime()) {
                 // Deadline has come.
                 Heap::reportMemoryUsageForTracing();
                 return !m_firstUnsweptPage;
@@ -545,7 +543,7 @@ bool NormalPageHeap::coalesce()
         if (startOfGap != page->payloadEnd())
             addToFreeList(startOfGap, page->payloadEnd() - startOfGap);
     }
-    Heap::decreaseAllocatedObjectSize(freedSize);
+    threadState()->decreaseAllocatedObjectSize(freedSize);
     ASSERT(m_promptlyFreedSize == freedSize);
     m_promptlyFreedSize = 0;
     return true;
@@ -663,16 +661,16 @@ void NormalPageHeap::setRemainingAllocationSize(size_t newRemainingAllocationSiz
     //  - if previous alloc checkpoint is larger, allocation size has increased.
     //  - if smaller, a net reduction in size since last call to updateRemainingAllocationSize().
     if (m_lastRemainingAllocationSize > m_remainingAllocationSize)
-        Heap::increaseAllocatedObjectSize(m_lastRemainingAllocationSize - m_remainingAllocationSize);
+        threadState()->increaseAllocatedObjectSize(m_lastRemainingAllocationSize - m_remainingAllocationSize);
     else if (m_lastRemainingAllocationSize != m_remainingAllocationSize)
-        Heap::decreaseAllocatedObjectSize(m_remainingAllocationSize - m_lastRemainingAllocationSize);
+        threadState()->decreaseAllocatedObjectSize(m_remainingAllocationSize - m_lastRemainingAllocationSize);
     m_lastRemainingAllocationSize = m_remainingAllocationSize;
 }
 
 void NormalPageHeap::updateRemainingAllocationSize()
 {
     if (m_lastRemainingAllocationSize > remainingAllocationSize()) {
-        Heap::increaseAllocatedObjectSize(m_lastRemainingAllocationSize - remainingAllocationSize());
+        threadState()->increaseAllocatedObjectSize(m_lastRemainingAllocationSize - remainingAllocationSize());
         m_lastRemainingAllocationSize = remainingAllocationSize();
     }
     ASSERT(m_lastRemainingAllocationSize == remainingAllocationSize());
@@ -839,7 +837,7 @@ Address LargeObjectHeap::doAllocateLargeObjectPage(size_t allocationSize, size_t
     largeObject->link(&m_firstPage);
 
     Heap::increaseAllocatedSpace(largeObject->size());
-    Heap::increaseAllocatedObjectSize(largeObject->size());
+    threadState()->increaseAllocatedObjectSize(largeObject->size());
     return result;
 }
 
@@ -1104,19 +1102,30 @@ void NormalPage::removeFromHeap()
     heapForNormalPage()->freePage(this);
 }
 
+#if !ENABLE(ASSERT) && !defined(LEAK_SANITIZER) && !defined(ADDRESS_SANITIZER)
+static void discardPages(Address begin, Address end)
+{
+    uintptr_t beginAddress = WTF::roundUpToSystemPage(reinterpret_cast<uintptr_t>(begin));
+    uintptr_t endAddress = WTF::roundDownToSystemPage(reinterpret_cast<uintptr_t>(end));
+    if (beginAddress < endAddress)
+        WTF::discardSystemPages(reinterpret_cast<void*>(beginAddress), endAddress - beginAddress);
+}
+#endif
+
 void NormalPage::sweep()
 {
     size_t markedObjectSize = 0;
     Address startOfGap = payload();
+    NormalPageHeap* pageHeap = heapForNormalPage();
     for (Address headerAddress = startOfGap; headerAddress < payloadEnd(); ) {
         HeapObjectHeader* header = reinterpret_cast<HeapObjectHeader*>(headerAddress);
-        ASSERT(header->size() > 0);
-        ASSERT(header->size() < blinkPagePayloadSize());
+        size_t size = header->size();
+        ASSERT(size > 0);
+        ASSERT(size < blinkPagePayloadSize());
 
         if (header->isPromptlyFreed())
-            heapForNormalPage()->decreasePromptlyFreedSize(header->size());
+            pageHeap->decreasePromptlyFreedSize(size);
         if (header->isFree()) {
-            size_t size = header->size();
             // Zero the memory in the free list header to maintain the
             // invariant that memory on the free list is zero filled.
             // The rest of the memory is already on the free list and is
@@ -1129,7 +1138,6 @@ void NormalPage::sweep()
         ASSERT(header->checkHeader());
 
         if (!header->isMarked()) {
-            size_t size = header->size();
             // This is a fast version of header->payloadSize().
             size_t payloadSize = size - sizeof(HeapObjectHeader);
             Address payload = header->payload();
@@ -1146,18 +1154,30 @@ void NormalPage::sweep()
             headerAddress += size;
             continue;
         }
-        if (startOfGap != headerAddress)
-            heapForNormalPage()->addToFreeList(startOfGap, headerAddress - startOfGap);
+        if (startOfGap != headerAddress) {
+            pageHeap->addToFreeList(startOfGap, headerAddress - startOfGap);
+#if !ENABLE(ASSERT) && !defined(LEAK_SANITIZER) && !defined(ADDRESS_SANITIZER)
+            // Discarding pages increases page faults and may regress performance.
+            // So we enable this only on low-RAM devices.
+            if (Heap::isLowEndDevice())
+                discardPages(startOfGap + sizeof(FreeListEntry), headerAddress);
+#endif
+        }
         header->unmark();
-        headerAddress += header->size();
-        markedObjectSize += header->size();
+        headerAddress += size;
+        markedObjectSize += size;
         startOfGap = headerAddress;
     }
-    if (startOfGap != payloadEnd())
-        heapForNormalPage()->addToFreeList(startOfGap, payloadEnd() - startOfGap);
+    if (startOfGap != payloadEnd()) {
+        pageHeap->addToFreeList(startOfGap, payloadEnd() - startOfGap);
+#if !ENABLE(ASSERT) && !defined(LEAK_SANITIZER) && !defined(ADDRESS_SANITIZER)
+        if (Heap::isLowEndDevice())
+            discardPages(startOfGap + sizeof(FreeListEntry), payloadEnd());
+#endif
+    }
 
     if (markedObjectSize)
-        Heap::increaseMarkedObjectSize(markedObjectSize);
+        pageHeap->threadState()->increaseMarkedObjectSize(markedObjectSize);
 }
 
 void NormalPage::makeConsistentForGC()
@@ -1182,7 +1202,7 @@ void NormalPage::makeConsistentForGC()
         headerAddress += header->size();
     }
     if (markedObjectSize)
-        Heap::increaseMarkedObjectSize(markedObjectSize);
+        heapForNormalPage()->threadState()->increaseMarkedObjectSize(markedObjectSize);
 }
 
 void NormalPage::makeConsistentForMutator()
@@ -1363,11 +1383,8 @@ void NormalPage::markOrphaned()
     BasePage::markOrphaned();
 }
 
-void NormalPage::takeSnapshot(String dumpName, size_t pageIndex, ThreadState::GCSnapshotInfo& info, size_t* outFreeSize, size_t* outFreeCount)
+void NormalPage::takeSnapshot(WebMemoryAllocatorDump* pageDump, ThreadState::GCSnapshotInfo& info, HeapSnapshotInfo& heapInfo)
 {
-    dumpName.append(String::format("/pages/page_%lu", static_cast<unsigned long>(pageIndex)));
-    WebMemoryAllocatorDump* pageDump = BlinkGCMemoryDumpProvider::instance()->createMemoryAllocatorDumpForCurrentGC(dumpName);
-
     HeapObjectHeader* header = nullptr;
     size_t liveCount = 0;
     size_t deadCount = 0;
@@ -1403,8 +1420,8 @@ void NormalPage::takeSnapshot(String dumpName, size_t pageIndex, ThreadState::GC
     pageDump->addScalar("live_size", "bytes", liveSize);
     pageDump->addScalar("dead_size", "bytes", deadSize);
     pageDump->addScalar("free_size", "bytes", freeSize);
-    *outFreeSize = freeSize;
-    *outFreeCount = freeCount;
+    heapInfo.freeSize += freeSize;
+    heapInfo.freeCount += freeCount;
 }
 
 #if ENABLE(ASSERT)
@@ -1449,7 +1466,7 @@ void LargeObjectPage::removeFromHeap()
 void LargeObjectPage::sweep()
 {
     heapObjectHeader()->unmark();
-    Heap::increaseMarkedObjectSize(size());
+    heap()->threadState()->increaseMarkedObjectSize(size());
 }
 
 void LargeObjectPage::makeConsistentForGC()
@@ -1457,7 +1474,7 @@ void LargeObjectPage::makeConsistentForGC()
     HeapObjectHeader* header = heapObjectHeader();
     if (header->isMarked()) {
         header->unmark();
-        Heap::increaseMarkedObjectSize(size());
+        heap()->threadState()->increaseMarkedObjectSize(size());
     } else {
         header->markDead();
     }
@@ -1499,27 +1516,25 @@ void LargeObjectPage::markOrphaned()
     BasePage::markOrphaned();
 }
 
-void LargeObjectPage::takeSnapshot(String dumpName, size_t pageIndex, ThreadState::GCSnapshotInfo& info, size_t* outFreeSize, size_t* outFreeCount)
+void LargeObjectPage::takeSnapshot(WebMemoryAllocatorDump* pageDump, ThreadState::GCSnapshotInfo& info, HeapSnapshotInfo&)
 {
-    dumpName.append(String::format("/pages/page_%lu", static_cast<unsigned long>(pageIndex)));
-    WebMemoryAllocatorDump* pageDump = BlinkGCMemoryDumpProvider::instance()->createMemoryAllocatorDumpForCurrentGC(dumpName);
-
     size_t liveSize = 0;
     size_t deadSize = 0;
     size_t liveCount = 0;
     size_t deadCount = 0;
     HeapObjectHeader* header = heapObjectHeader();
     size_t gcInfoIndex = header->gcInfoIndex();
+    size_t payloadSize = header->payloadSize();
     if (header->isMarked()) {
         liveCount = 1;
-        liveSize += header->payloadSize();
+        liveSize += payloadSize;
         info.liveCount[gcInfoIndex]++;
-        info.liveSize[gcInfoIndex] += header->size();
+        info.liveSize[gcInfoIndex] += payloadSize;
     } else {
         deadCount = 1;
-        deadSize += header->payloadSize();
+        deadSize += payloadSize;
         info.deadCount[gcInfoIndex]++;
-        info.deadSize[gcInfoIndex] += header->size();
+        info.deadSize[gcInfoIndex] += payloadSize;
     }
 
     pageDump->addScalar("live_count", "objects", liveCount);

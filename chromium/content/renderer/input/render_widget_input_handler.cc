@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event_synthetic_delay.h"
 #include "build/build_config.h"
@@ -17,6 +18,7 @@
 #include "content/common/input/input_event_ack.h"
 #include "content/common/input/input_event_ack_state.h"
 #include "content/common/input/web_input_event_traits.h"
+#include "content/public/common/content_switches.h"
 #include "content/renderer/gpu/render_widget_compositor.h"
 #include "content/renderer/ime_event_guard.h"
 #include "content/renderer/input/render_widget_input_handler_delegate.h"
@@ -131,7 +133,7 @@ void LogPassiveLatency(int64_t latency) {
 }
 
 void LogPassiveEventListenersUma(WebInputEventResult result,
-                                 bool passive,
+                                 bool non_blocking,
                                  bool cancelable,
                                  double event_timestamp,
                                  const ui::LatencyInfo& latency_info) {
@@ -145,7 +147,7 @@ void LogPassiveEventListenersUma(WebInputEventResult result,
   };
 
   int enum_value;
-  if (passive)
+  if (non_blocking)
     enum_value = PASSIVE_LISTENER_UMA_ENUM_PASSIVE;
   else if (!cancelable)
     enum_value = PASSIVE_LISTENER_UMA_ENUM_UNCANCELABLE;
@@ -191,9 +193,8 @@ RenderWidgetInputHandler::~RenderWidgetInputHandler() {}
 
 void RenderWidgetInputHandler::HandleInputEvent(
     const WebInputEvent& input_event,
-    const ui::LatencyInfo& latency_info) {
-  // TODO(dtapuska): Passive support not implemented yet crbug.com/489802
-  bool passive = false;
+    const ui::LatencyInfo& latency_info,
+    InputEventDispatchType dispatch_type) {
   base::AutoReset<bool> handling_input_event_resetter(&handling_input_event_,
                                                       true);
   base::AutoReset<WebInputEvent::Type> handling_event_type_resetter(
@@ -210,27 +211,30 @@ void RenderWidgetInputHandler::HandleInputEvent(
   bool from_ime = false;
 
   // For most keyboard events, we want the change source to be FROM_IME because
-  // we don't need to update IME states in AdapterInputConnection.
-  if (WebInputEvent::isKeyboardEventType(input_event.type)) {
+  // we don't need to update IME states in ReplicaInputConnection.
+  if (!widget_->IsUsingImeThread() &&
+      WebInputEvent::isKeyboardEventType(input_event.type)) {
     const WebKeyboardEvent& key_event =
         *static_cast<const WebKeyboardEvent*>(&input_event);
     // TODO(changwan): this if-condition is a stop-gap solution to update IME
-    // states in AdapterInputConnection when using DPAD navigation. This is not
+    // states in ReplicaInputConnection when using DPAD navigation. This is not
     // a correct solution because InputConnection#getTextBeforeCursor()
     // immediately after InputConnection#sendKeyEvent() will not return the
     // correct value. The correct solution is either redesign the architecture
-    // or emulate the DPAD behavior in AdapterInputConnection, either is
+    // or emulate the DPAD behavior in ReplicaInputConnection, either is
     // non-trivial.
     if (key_event.nativeKeyCode != AKEYCODE_TAB &&
         key_event.nativeKeyCode != AKEYCODE_DPAD_CENTER &&
         key_event.nativeKeyCode != AKEYCODE_DPAD_LEFT &&
         key_event.nativeKeyCode != AKEYCODE_DPAD_RIGHT &&
         key_event.nativeKeyCode != AKEYCODE_DPAD_UP &&
-        key_event.nativeKeyCode != AKEYCODE_DPAD_DOWN)
+        key_event.nativeKeyCode != AKEYCODE_DPAD_DOWN) {
       from_ime = true;
+    }
   }
 
-  ImeEventGuard guard(widget_, false, from_ime);
+  ImeEventGuard guard(widget_);
+  guard.set_from_ime(from_ime);
 #endif
 
   base::TimeTicks start_time;
@@ -294,7 +298,13 @@ void RenderWidgetInputHandler::HandleInputEvent(
   if (WebInputEvent::isGestureEventType(input_event.type)) {
     const WebGestureEvent& gesture_event =
         static_cast<const WebGestureEvent&>(input_event);
-    context_menu_source_type_ = ui::MENU_SOURCE_TOUCH;
+    if (input_event.type == WebInputEvent::GestureLongPress) {
+      context_menu_source_type_ = ui::MENU_SOURCE_LONG_PRESS;
+    } else if (input_event.type == WebInputEvent::GestureLongTap) {
+      context_menu_source_type_ = ui::MENU_SOURCE_LONG_TAP;
+    } else {
+      context_menu_source_type_ = ui::MENU_SOURCE_TOUCH;
+    }
     prevent_default =
         prevent_default || delegate_->WillHandleGestureEvent(gesture_event);
   }
@@ -308,6 +318,8 @@ void RenderWidgetInputHandler::HandleInputEvent(
       processed = widget_->webwidget()->handleInputEvent(input_event);
   }
 
+  bool non_blocking =
+      dispatch_type == InputEventDispatchType::DISPATCH_TYPE_NON_BLOCKING;
   // TODO(dtapuska): Use the input_event.timeStampSeconds as the start
   // ideally this should be when the event was sent by the compositor to the
   // renderer. crbug.com/565348
@@ -315,11 +327,11 @@ void RenderWidgetInputHandler::HandleInputEvent(
       input_event.type == WebInputEvent::TouchMove ||
       input_event.type == WebInputEvent::TouchEnd) {
     LogPassiveEventListenersUma(
-        processed, passive,
+        processed, non_blocking,
         static_cast<const WebTouchEvent&>(input_event).cancelable,
         input_event.timeStampSeconds, latency_info);
   } else if (input_event.type == WebInputEvent::MouseWheel) {
-    LogPassiveEventListenersUma(processed, passive, !passive,
+    LogPassiveEventListenersUma(processed, non_blocking, !non_blocking,
                                 input_event.timeStampSeconds, latency_info);
   }
 
@@ -356,11 +368,15 @@ void RenderWidgetInputHandler::HandleInputEvent(
   // Send mouse wheel events and their disposition to the compositor thread, so
   // that they can be used to produce the elastic overscroll effect on Mac.
   if (input_event.type == WebInputEvent::MouseWheel) {
-    delegate_->ObserveWheelEventAndResult(
-        static_cast<const WebMouseWheelEvent&>(input_event),
-        event_overscroll ? event_overscroll->latest_overscroll_delta
-                         : gfx::Vector2dF(),
-        processed != WebInputEventResult::NotHandled);
+    const WebMouseWheelEvent& wheel_event =
+        static_cast<const WebMouseWheelEvent&>(input_event);
+    if (wheel_event.canScroll) {
+      delegate_->ObserveWheelEventAndResult(
+          wheel_event,
+          event_overscroll ? event_overscroll->latest_overscroll_delta
+                           : gfx::Vector2dF(),
+          processed != WebInputEventResult::NotHandled);
+    }
   }
 
   bool frame_pending =
@@ -384,7 +400,12 @@ void RenderWidgetInputHandler::HandleInputEvent(
   // by reentrant calls for events after the paused one.
   bool no_ack = ignore_ack_for_mouse_move_from_debugger_ &&
                 input_event.type == WebInputEvent::MouseMove;
-  if (WebInputEventTraits::WillReceiveAckFromRenderer(input_event) && !no_ack) {
+  if (non_blocking) {
+    // |non_blocking| means it was ack'd already by the InputHandlerProxy
+    // so let the delegate know the event has been handled.
+    delegate_->NonBlockingInputEventHandled(input_event.type);
+  } else if (WebInputEventTraits::WillReceiveAckFromRenderer(input_event) &&
+             !no_ack) {
     scoped_ptr<InputEventAck> response(new InputEventAck(
         input_event.type, ack_result, swap_latency_info,
         std::move(event_overscroll),

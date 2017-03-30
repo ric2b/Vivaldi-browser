@@ -2,14 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#define PNG_INTERNAL
 #include "third_party/libpng/png.h"
 
 struct BufState {
-  const unsigned char *data;
+  const uint8_t* data;
   size_t bytes_left;
 };
 
@@ -27,7 +31,7 @@ static const int kPngHeaderSize = 8;
 // Entry point for LibFuzzer.
 // Roughly follows the libpng book example:
 // http://www.libpng.org/pub/png/book/chapter13.html
-extern "C" int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   if (size < kPngHeaderSize) {
     return 0;
   }
@@ -42,16 +46,17 @@ extern "C" int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
     (PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
   assert(png_ptr);
 
+  png_ptr->flags &= ~PNG_FLAG_CRC_CRITICAL_MASK;
+  png_ptr->flags |= PNG_FLAG_CRC_CRITICAL_IGNORE;
+
+  png_ptr->flags &= ~PNG_FLAG_CRC_ANCILLARY_MASK;
+  png_ptr->flags |= PNG_FLAG_CRC_ANCILLARY_NOWARN;
+
   png_infop info_ptr = png_create_info_struct(png_ptr);
   assert(info_ptr);
 
   base::ScopedClosureRunner struct_deleter(base::Bind(
         &png_destroy_read_struct, &png_ptr, &info_ptr, nullptr));
-
-  if (setjmp(png_ptr->jmpbuf)) {
-    // error handling for libpng
-    return 0;
-  }
 
   // Setting up reading from buffer.
   std::unique_ptr<BufState> buf_state(new BufState());
@@ -60,11 +65,21 @@ extern "C" int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
   png_set_read_fn(png_ptr, buf_state.get(), user_read_data);
   png_set_sig_bytes(png_ptr, kPngHeaderSize);
 
+  // libpng error handling.
+  if (setjmp(png_ptr->jmpbuf)) {
+    return 0;
+  }
+
   // Reading
   png_read_info(png_ptr, info_ptr);
   png_voidp row = png_malloc(png_ptr, png_get_rowbytes(png_ptr, info_ptr));
   base::ScopedClosureRunner png_deleter(base::Bind(
         &png_free, png_ptr, row));
+
+  // reset error handler to put png_deleter into scope.
+  if (setjmp(png_ptr->jmpbuf)) {
+    return 0;
+  }
 
   png_uint_32 width, height;
   int bit_depth, color_type, interlace_type, compression_type;

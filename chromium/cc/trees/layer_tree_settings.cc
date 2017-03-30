@@ -98,15 +98,16 @@ LayerTreeSettings::LayerTreeSettings()
       ignore_root_layer_flings(false),
       scheduled_raster_task_limit(32),
       use_occlusion_for_tile_prioritization(false),
-      verify_property_trees(false),
-      use_property_trees(true),
       image_decode_tasks_enabled(false),
       use_compositor_animation_timelines(true),
       wait_for_beginframe_interval(true),
+      use_mouse_wheel_gestures(false),
       max_staging_buffer_usage_in_bytes(32 * 1024 * 1024),
       memory_policy_(64 * 1024 * 1024,
                      gpu::MemoryAllocation::CUTOFF_ALLOW_EVERYTHING,
                      ManagedMemoryPolicy::kDefaultNumResourcesLimit) {}
+
+LayerTreeSettings::LayerTreeSettings(const LayerTreeSettings& other) = default;
 
 LayerTreeSettings::~LayerTreeSettings() {}
 
@@ -165,12 +166,11 @@ bool LayerTreeSettings::operator==(const LayerTreeSettings& other) const {
          scheduled_raster_task_limit == other.scheduled_raster_task_limit &&
          use_occlusion_for_tile_prioritization ==
              other.use_occlusion_for_tile_prioritization &&
-         verify_property_trees == other.verify_property_trees &&
-         use_property_trees == other.use_property_trees &&
          image_decode_tasks_enabled == other.image_decode_tasks_enabled &&
          use_compositor_animation_timelines ==
              other.use_compositor_animation_timelines &&
          wait_for_beginframe_interval == other.wait_for_beginframe_interval &&
+         use_mouse_wheel_gestures == other.use_mouse_wheel_gestures &&
          max_staging_buffer_usage_in_bytes ==
              other.max_staging_buffer_usage_in_bytes &&
          memory_policy_ == other.memory_policy_ &&
@@ -229,12 +229,11 @@ void LayerTreeSettings::ToProtobuf(proto::LayerTreeSettings* proto) const {
   proto->set_scheduled_raster_task_limit(scheduled_raster_task_limit);
   proto->set_use_occlusion_for_tile_prioritization(
       use_occlusion_for_tile_prioritization);
-  proto->set_verify_property_trees(verify_property_trees);
-  proto->set_use_property_trees(use_property_trees);
   proto->set_image_decode_tasks_enabled(image_decode_tasks_enabled);
   proto->set_use_compositor_animation_timelines(
       use_compositor_animation_timelines);
   proto->set_wait_for_beginframe_interval(wait_for_beginframe_interval);
+  proto->set_use_mouse_wheel_gestures(use_mouse_wheel_gestures);
   proto->set_max_staging_buffer_usage_in_bytes(
       max_staging_buffer_usage_in_bytes);
   memory_policy_.ToProtobuf(proto->mutable_memory_policy());
@@ -297,12 +296,11 @@ void LayerTreeSettings::FromProtobuf(const proto::LayerTreeSettings& proto) {
   scheduled_raster_task_limit = proto.scheduled_raster_task_limit();
   use_occlusion_for_tile_prioritization =
       proto.use_occlusion_for_tile_prioritization();
-  verify_property_trees = proto.verify_property_trees();
-  use_property_trees = proto.use_property_trees();
   image_decode_tasks_enabled = proto.image_decode_tasks_enabled();
   use_compositor_animation_timelines =
       proto.use_compositor_animation_timelines();
   wait_for_beginframe_interval = proto.wait_for_beginframe_interval();
+  use_mouse_wheel_gestures = proto.use_mouse_wheel_gestures();
   max_staging_buffer_usage_in_bytes = proto.max_staging_buffer_usage_in_bytes();
   memory_policy_.FromProtobuf(proto.memory_policy());
   initial_debug_state.FromProtobuf(proto.initial_debug_state());

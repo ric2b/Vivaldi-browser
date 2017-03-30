@@ -14,8 +14,6 @@
 #import "base/mac/scoped_nsobject.h"
 #import "base/mac/sdk_forward_declarations.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/fullscreen.h"
 #include "chrome/browser/profiles/profile.h"
@@ -25,6 +23,7 @@
 #include "chrome/browser/ui/browser_window_state.h"
 #import "chrome/browser/ui/cocoa/browser_window_fullscreen_transition.h"
 #import "chrome/browser/ui/cocoa/browser_window_layout.h"
+#import "chrome/browser/ui/cocoa/browser/exclusive_access_controller_views.h"
 #import "chrome/browser/ui/cocoa/constrained_window/constrained_window_sheet_controller.h"
 #import "chrome/browser/ui/cocoa/custom_frame_view.h"
 #import "chrome/browser/ui/cocoa/dev_tools_controller.h"
@@ -48,6 +47,8 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/website_settings/permission_bubble_manager.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #import "ui/base/cocoa/focus_tracker.h"
@@ -631,27 +632,16 @@ willPositionSheet:(NSWindow*)sheet
 
   [self hideOverlayIfPossibleWithAnimation:NO delay:NO];
 
-  if (exclusiveAccessBubbleType_ == EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE ||
-      exclusiveAccessBubbleType_ ==
-          EXCLUSIVE_ACCESS_BUBBLE_TYPE_BROWSER_FULLSCREEN_EXIT_INSTRUCTION) {
-    // Show no exit instruction bubble on Mac when in Browser Fullscreen.
-    [self destroyFullscreenExitBubbleIfNecessary];
-  } else {
-    [exclusiveAccessBubbleWindowController_ closeImmediately];
-    exclusiveAccessBubbleWindowController_.reset(
-        [[ExclusiveAccessBubbleWindowController alloc]
-                       initWithOwner:self
-            exclusive_access_manager:browser_.get()->exclusive_access_manager()
-                             profile:browser_.get()->profile()
-                                 url:fullscreenUrl_
-                          bubbleType:exclusiveAccessBubbleType_]);
-    [exclusiveAccessBubbleWindowController_ showWindow];
-  }
-}
+  switch (exclusiveAccessController_->bubble_type()) {
+    case EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE:
+    case EXCLUSIVE_ACCESS_BUBBLE_TYPE_BROWSER_FULLSCREEN_EXIT_INSTRUCTION:
+      // Show no exit instruction bubble on Mac when in Browser Fullscreen.
+      exclusiveAccessController_->Destroy();
+      break;
 
-- (void)destroyFullscreenExitBubbleIfNecessary {
-  [exclusiveAccessBubbleWindowController_ closeImmediately];
-  exclusiveAccessBubbleWindowController_.reset();
+    default:
+      exclusiveAccessController_->Show();
+  }
 }
 
 - (void)contentViewDidResize:(NSNotification*)notification {
@@ -788,6 +778,15 @@ willPositionSheet:(NSWindow*)sheet
 - (void)windowDidExitFullScreen:(NSNotification*)notification {
   DCHECK(exitingAppKitFullscreen_);
 
+  // If the custom transition isn't complete, then just set the flag and
+  // return. Once the transition is completed, windowDidExitFullscreen will
+  // be called again.
+  if (isUsingCustomAnimation_ &&
+      ![fullscreenTransition_ isTransitionCompleted]) {
+    appKitDidExitFullscreen_ = YES;
+    return;
+  }
+
   if (notification)  // For System Fullscreen when non-nil.
     [self deregisterForContentViewResizeNotifications];
 
@@ -836,7 +835,7 @@ willPositionSheet:(NSWindow*)sheet
 }
 
 - (void)adjustUIForExitingFullscreen {
-  [self destroyFullscreenExitBubbleIfNecessary];
+  exclusiveAccessController_->Destroy();
   [self adjustUIForExitingFullscreenAndStopOmniboxSliding];
 }
 
@@ -1031,9 +1030,7 @@ willPositionSheet:(NSWindow*)sheet
       positionFindBarViewAtMaxY:output.findBarMaxY
                        maxWidth:NSWidth(output.contentAreaFrame)];
 
-  [exclusiveAccessBubbleWindowController_
-      positionInWindowAtTop:output.fullscreenExitButtonMaxY
-                      width:NSWidth(output.contentAreaFrame)];
+  exclusiveAccessController_->Layout(output.fullscreenExitButtonMaxY);
 }
 
 - (void)updateSubviewZOrder {
@@ -1143,17 +1140,13 @@ willPositionSheet:(NSWindow*)sheet
 }
 
 - (BOOL)shouldUseCustomAppKitFullscreenTransition:(BOOL)enterFullScreen {
-  // Custom fullscreen transitions should only be available in OSX 10.9+.
+  // Custom fullscreen transitions should only be available in OSX 10.10+.
   if (base::mac::IsOSMountainLionOrEarlier())
     return NO;
 
-  // Disable the custom exit animation in OSX 10.9: http://crbug.com/526327#c3.
+  // Disable the custom exit animation in OSX 10.9:
+  // https://code.google.com/p/chromium/issues/detail?id=526327#c3.
   if (base::mac::IsOSMavericks() && !enterFullScreen)
-    return NO;
-
-  // TODO(spqchan): Fix Flash fullscreen animation in popups.
-  // See http://crbug.com/566588.
-  if ([self isFullscreenForTabContent] && browser_->is_type_popup())
     return NO;
 
   NSView* root = [[self.window contentView] superview];
@@ -1192,10 +1185,8 @@ willPositionSheet:(NSWindow*)sheet
   if (![self shouldUseCustomAppKitFullscreenTransition:YES])
     return nil;
 
-  FramedBrowserWindow* framedBrowserWindow =
-      base::mac::ObjCCast<FramedBrowserWindow>([self window]);
-  fullscreenTransition_.reset([[BrowserWindowFullscreenTransition alloc]
-      initEnterWithWindow:framedBrowserWindow]);
+  fullscreenTransition_.reset(
+      [[BrowserWindowFullscreenTransition alloc] initEnterWithController:self]);
 
   NSArray* customWindows =
       [fullscreenTransition_ customWindowsForFullScreenTransition];
@@ -1209,12 +1200,8 @@ willPositionSheet:(NSWindow*)sheet
   if (![self shouldUseCustomAppKitFullscreenTransition:NO])
     return nil;
 
-  FramedBrowserWindow* framedBrowserWindow =
-      base::mac::ObjCCast<FramedBrowserWindow>([self window]);
-  fullscreenTransition_.reset([[BrowserWindowFullscreenTransition alloc]
-          initExitWithWindow:framedBrowserWindow
-                       frame:savedRegularWindowFrame_
-      tabStripBackgroundView:[self tabStripBackgroundView]]);
+  fullscreenTransition_.reset(
+      [[BrowserWindowFullscreenTransition alloc] initExitWithController:self]);
 
   NSArray* customWindows =
       [fullscreenTransition_ customWindowsForFullScreenTransition];

@@ -21,6 +21,20 @@ group("blink") {
     ":blink_minimal",
     "//third_party/WebKit/Source/platform",
     "//third_party/WebKit/Source/web",
+
+    # public/platform/Platform.h in ':blink_headers' depends on Mojo APIs, and
+    # the dependent of this target needs to link Mojo.
+    "//mojo/public/c/system:for_component",
+  ]
+}
+
+group("blink_for_unittests") {
+  public_deps = [
+    ":blink",
+
+    # Since public/platform/Platform.h depends on Mojo APIs, unittests depending
+    # on :blink needs to link mojo/edk/system.
+    "//mojo/edk/system",
   ]
 }
 
@@ -70,6 +84,9 @@ group("all_blink") {
 
 config("blink_headers_config") {
   include_dirs = [ ".." ]
+
+  # Allow :blink_headers to include v8.h without linking to it.
+  configs = [ "//v8:external_config" ]
 }
 
 config("debug_devtools") {

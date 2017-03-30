@@ -24,10 +24,12 @@ body {
 
 div.audio-player {
   border-top: 4px solid white;
+  box-sizing: border-box;
   color: #3d3d3d;
   cursor: default;
   flex: 1 1 auto;
   font-size: 10pt;
+  height: 100%;
   position: relative;
 }
 

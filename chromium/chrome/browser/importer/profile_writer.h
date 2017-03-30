@@ -19,6 +19,7 @@
 
 struct ImportedBookmarkEntry;
 struct ImportedNotesEntry;
+struct ImportedSpeedDialEntry;
 class Profile;
 class TemplateURL;
 
@@ -81,6 +82,9 @@ class ProfileWriter : public base::RefCountedThreadSafe<ProfileWriter> {
   virtual void AddNotes(
       const std::vector<ImportedNotesEntry>& notes,
       const base::string16& top_level_folder_name);
+
+  virtual void AddSpeedDial(
+      const std::vector<ImportedSpeedDialEntry>& speeddial);
 
   virtual void AddFavicons(const favicon_base::FaviconUsageDataList& favicons);
 

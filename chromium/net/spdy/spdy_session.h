@@ -19,6 +19,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
+#include "net/base/host_port_pair.h"
 #include "net/base/io_buffer.h"
 #include "net/base/load_states.h"
 #include "net/base/net_errors.h"
@@ -73,6 +74,7 @@ const SpdyStreamId kLastStreamId = 0x7fffffff;
 
 class BoundNetLog;
 struct LoadTimingInfo;
+class ProxyDelegate;
 class SpdyStream;
 class SSLInfo;
 class TransportSecurityState;
@@ -238,14 +240,12 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
               TransportSecurityState* transport_security_state,
               bool verify_domain_authentication,
               bool enable_sending_initial_data,
-              bool enable_compression,
               bool enable_ping_based_connection_checking,
               NextProto default_protocol,
               size_t session_max_recv_window_size,
               size_t stream_max_recv_window_size,
-              size_t initial_max_concurrent_streams,
               TimeFunc time_func,
-              const HostPortPair& trusted_spdy_proxy,
+              ProxyDelegate* proxy_delegate,
               NetLog* net_log);
 
   ~SpdySession() override;
@@ -356,6 +356,11 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   bool GetSSLInfo(SSLInfo* ssl_info,
                   bool* was_npn_negotiated,
                   NextProto* protocol_negotiated);
+
+  // Signs the EKM value for Token Binding from the TLS layer using |*key| and
+  // puts the result in |*out|. Returns OK or ERR_FAILED.
+  Error GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
+                                    std::vector<uint8_t>* out);
 
   // Send a WINDOW_UPDATE frame for a stream. Called by a stream
   // whenever receive window size is increased.
@@ -535,6 +540,7 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, SessionFlowControlNoSendLeaks);
   FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, SessionFlowControlEndToEnd);
   FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, StreamIdSpaceExhausted);
+  FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, MaxConcurrentStreamsZero);
   FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, UnstallRacesWithStreamCreation);
   FRIEND_TEST_ALL_PREFIXES(SpdySessionTest, GoAwayOnSessionFlowControlError);
   FRIEND_TEST_ALL_PREFIXES(SpdySessionTest,
@@ -953,8 +959,6 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
 
   bool check_ping_status_pending() const { return check_ping_status_pending_; }
 
-  size_t max_concurrent_streams() const { return max_concurrent_streams_; }
-
   // Set whether priority->dependency conversion is enabled
   // by default for all future SpdySessions.
   static void SetPriorityDependencyDefaultForTesting(bool enable);
@@ -1069,7 +1073,7 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   Error error_on_close_;
 
   // Limits
-  size_t max_concurrent_streams_;  // 0 if no limit
+  size_t max_concurrent_streams_;
   size_t max_concurrent_pushed_streams_;
 
   // Some statistics counters for the session.
@@ -1153,7 +1157,6 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   // Outside of tests, these should always be true.
   bool verify_domain_authentication_;
   bool enable_sending_initial_data_;
-  bool enable_compression_;
   bool enable_ping_based_connection_checking_;
 
   // The SPDY protocol used. Always between kProtoSPDYMinimumVersion and
@@ -1182,9 +1185,10 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   // get a PING response (http://crbug.com/127812).
   base::TimeDelta hung_interval_;
 
-  // This SPDY proxy is allowed to push resources from origins that are
-  // different from those of their associated streams.
-  HostPortPair trusted_spdy_proxy_;
+  // The |proxy_delegate_| verifies that a given proxy is a trusted SPDY proxy,
+  // which is allowed to push resources from origins that are different from
+  // those of their associated streams. May be nullptr.
+  ProxyDelegate* proxy_delegate_;
 
   TimeFunc time_func_;
 

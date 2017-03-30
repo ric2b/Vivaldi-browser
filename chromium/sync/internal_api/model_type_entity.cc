@@ -34,18 +34,30 @@ scoped_ptr<ModelTypeEntity> ModelTypeEntity::CreateNew(
       new ModelTypeEntity(client_tag, &metadata));
 }
 
-ModelTypeEntity::ModelTypeEntity(const std::string& client_key,
+scoped_ptr<ModelTypeEntity> ModelTypeEntity::CreateFromMetadata(
+    const std::string& client_tag,
+    sync_pb::EntityMetadata* metadata) {
+  return scoped_ptr<ModelTypeEntity>(new ModelTypeEntity(client_tag, metadata));
+}
+
+ModelTypeEntity::ModelTypeEntity(const std::string& client_tag,
                                  sync_pb::EntityMetadata* metadata)
-    : client_key_(client_key), commit_requested_sequence_number_(0) {
-  DCHECK(metadata);
+    : client_tag_(client_tag),
+      commit_requested_sequence_number_(metadata->acked_sequence_number()) {
   DCHECK(metadata->has_client_tag_hash());
+  DCHECK(metadata->has_creation_time());
   metadata_.Swap(metadata);
 }
 
 ModelTypeEntity::~ModelTypeEntity() {}
 
 void ModelTypeEntity::CacheCommitData(EntityData* data) {
-  commit_data_ = data->Pass();
+  DCHECK(RequiresCommitRequest());
+  if (data->client_tag_hash.empty()) {
+    data->client_tag_hash = metadata_.client_tag_hash();
+  }
+  commit_data_ = data->PassToPtr();
+  DCHECK(HasCommitData());
 }
 
 bool ModelTypeEntity::HasCommitData() const {
@@ -60,6 +72,10 @@ bool ModelTypeEntity::RequiresCommitRequest() const {
   return metadata_.sequence_number() > commit_requested_sequence_number_;
 }
 
+bool ModelTypeEntity::RequiresCommitData() const {
+  return RequiresCommitRequest() && !HasCommitData() && !metadata_.is_deleted();
+}
+
 bool ModelTypeEntity::UpdateIsReflection(int64_t update_version) const {
   return metadata_.server_version() >= update_version;
 }
@@ -72,7 +88,6 @@ void ModelTypeEntity::ApplyUpdateFromServer(
     const UpdateResponseData& response_data) {
   DCHECK(metadata_.has_client_tag_hash());
   DCHECK(!metadata_.client_tag_hash().empty());
-  DCHECK(metadata_.has_creation_time());
   DCHECK(metadata_.has_sequence_number());
 
   // TODO(stanisc): crbug/561829: Filter out update if specifics hash hasn't
@@ -94,24 +109,20 @@ void ModelTypeEntity::ApplyUpdateFromServer(
   encryption_key_name_ = response_data.encryption_key_name;
 }
 
-void ModelTypeEntity::MakeLocalChange(scoped_ptr<EntityData> entity_data,
-                                      base::Time modification_time) {
-  DCHECK(metadata_.has_client_tag_hash());
+void ModelTypeEntity::MakeLocalChange(scoped_ptr<EntityData> data) {
   DCHECK(!metadata_.client_tag_hash().empty());
-  DCHECK(metadata_.has_creation_time());
+  DCHECK_EQ(metadata_.client_tag_hash(), data->client_tag_hash);
+  DCHECK(!data->modification_time.is_null());
 
-  metadata_.set_modification_time(syncer::TimeToProtoTime(modification_time));
+  metadata_.set_modification_time(
+      syncer::TimeToProtoTime(data->modification_time));
   metadata_.set_is_deleted(false);
   IncrementSequenceNumber();
-  UpdateSpecificsHash(entity_data->specifics);
+  UpdateSpecificsHash(data->specifics);
 
-  entity_data->client_tag_hash = metadata_.client_tag_hash();
-  entity_data->id = metadata_.server_id();
-  entity_data->creation_time =
-      syncer::ProtoTimeToTime(metadata_.creation_time());
-  entity_data->modification_time = modification_time;
-
-  CacheCommitData(entity_data.get());
+  data->id = metadata_.server_id();
+  data->creation_time = syncer::ProtoTimeToTime(metadata_.creation_time());
+  CacheCommitData(data.get());
 }
 
 void ModelTypeEntity::UpdateDesiredEncryptionKey(const std::string& name) {
@@ -131,26 +142,27 @@ void ModelTypeEntity::Delete() {
   IncrementSequenceNumber();
   metadata_.set_is_deleted(true);
   metadata_.clear_specifics_hash();
-
-  EntityData data;
-  data.client_tag_hash = metadata_.client_tag_hash();
-  data.id = metadata_.server_id();
-  data.creation_time = syncer::ProtoTimeToTime(metadata_.creation_time());
-
-  CacheCommitData(&data);
+  // Clear any cached pending commit data.
+  if (HasCommitData()) commit_data_.reset();
 }
 
-void ModelTypeEntity::InitializeCommitRequestData(
-    CommitRequestData* request) const {
-  DCHECK(HasCommitData());
-  DCHECK_EQ(commit_data_->client_tag_hash, metadata_.client_tag_hash());
+void ModelTypeEntity::InitializeCommitRequestData(CommitRequestData* request) {
+  if (!metadata_.is_deleted()) {
+    DCHECK(HasCommitData());
+    DCHECK_EQ(commit_data_->client_tag_hash, metadata_.client_tag_hash());
+    request->entity = commit_data_;
+  } else {
+    // Make an EntityData with empty specifics to indicate deletion. This is
+    // done lazily here to simplify loading a pending deletion on startup.
+    EntityData data;
+    data.client_tag_hash = metadata_.client_tag_hash();
+    data.id = metadata_.server_id();
+    data.creation_time = syncer::ProtoTimeToTime(metadata_.creation_time());
+    request->entity = data.PassToPtr();
+  }
 
   request->sequence_number = metadata_.sequence_number();
   request->base_version = metadata_.server_version();
-  request->entity = commit_data_;
-}
-
-void ModelTypeEntity::SetCommitRequestInProgress() {
   commit_requested_sequence_number_ = metadata_.sequence_number();
 }
 
@@ -170,19 +182,6 @@ void ModelTypeEntity::ClearTransientSyncState() {
   // If we have any unacknowledged commit requests outstanding, they've been
   // dropped and we should forget about them.
   commit_requested_sequence_number_ = metadata_.acked_sequence_number();
-}
-
-void ModelTypeEntity::ClearSyncState() {
-  // TODO(stanisc): crbug/561830: Need to review this entire method. It looks
-  // like the tests expect this to reset some metadata state but not the data.
-  // We should be able to reimplement this once we have the code fore
-  // fetching the data from the service.
-  metadata_.set_server_version(kUncommittedVersion);
-  // TODO(stanisc): Why is this 1 and not 0? This leaves the item unsynced.
-  metadata_.set_sequence_number(1);
-  metadata_.set_acked_sequence_number(0);
-  metadata_.clear_server_id();
-  commit_requested_sequence_number_ = 0;
 }
 
 void ModelTypeEntity::IncrementSequenceNumber() {

@@ -159,6 +159,7 @@ public:
     // an exception, ContentSecurityPolicy does not log a violation
     // message to the console because it would be redundant.
     bool allowEval(ScriptState* = nullptr, ReportingStatus = SendReport, ExceptionStatus = WillNotThrowException) const;
+    bool allowDynamic() const;
     bool allowPluginType(const String& type, const String& typeAttribute, const KURL&, ReportingStatus = SendReport) const;
     // Checks whether the plugin type should be allowed in the given
     // document; enforces the CSP rule that PluginDocuments inherit
@@ -202,7 +203,7 @@ public:
     void usesScriptHashAlgorithms(uint8_t ContentSecurityPolicyHashAlgorithm);
     void usesStyleHashAlgorithms(uint8_t ContentSecurityPolicyHashAlgorithm);
 
-    ReflectedXSSDisposition reflectedXSSDisposition() const;
+    ReflectedXSSDisposition getReflectedXSSDisposition() const;
 
     bool didSetReferrerPolicy() const;
 
@@ -247,7 +248,7 @@ public:
     String evalDisabledErrorMessage() const;
 
     void setInsecureRequestsPolicy(SecurityContext::InsecureRequestsPolicy);
-    SecurityContext::InsecureRequestsPolicy insecureRequestsPolicy() const { return m_insecureRequestsPolicy; }
+    SecurityContext::InsecureRequestsPolicy getInsecureRequestsPolicy() const { return m_insecureRequestsPolicy; }
 
     bool urlMatchesSelf(const KURL&) const;
     bool protocolMatchesSelf(const KURL&) const;
@@ -311,6 +312,6 @@ private:
     String m_selfProtocol;
 };
 
-}
+} // namespace blink
 
 #endif

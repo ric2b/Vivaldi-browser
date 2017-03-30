@@ -74,6 +74,9 @@ public:
     bool isOfType(LayoutObjectType type) const override { return type == LayoutObjectLayoutScrollbarPart || LayoutBlock::isOfType(type); }
     LayoutObject* layoutObjectOwningScrollbar() const;
 
+    // Must call setStyleWithWritingModeOfParent() instead.
+    void setStyle(PassRefPtr<ComputedStyle>) = delete;
+
 protected:
     void styleWillChange(StyleDifference, const ComputedStyle& newStyle) override;
     void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) override;

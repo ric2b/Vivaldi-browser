@@ -13,13 +13,13 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
-#include "base/prefs/testing_pref_service.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/test/histogram_tester.h"
 #include "base/version.h"
+#include "components/prefs/testing_pref_service.h"
 #include "components/variations/pref_names.h"
 #include "components/variations/proto/study.pb.h"
 #include "components/variations/proto/variations_seed.pb.h"
@@ -276,6 +276,7 @@ TEST_F(VariationsServiceTest, CreateTrialsFromSeed) {
   TestVariationsService service(
       make_scoped_ptr(new web_resource::TestRequestAllowedNotifier(&prefs)),
       &prefs);
+  service.SetCreateTrialsFromSeedCalledForTesting(false);
 
   // Store a seed.
   service.StoreSeed(SerializeSeed(CreateTestSeed()), std::string(),
@@ -306,6 +307,7 @@ TEST_F(VariationsServiceTest, CreateTrialsFromSeedNoLastFetchTime) {
   TestVariationsService service(
       make_scoped_ptr(new web_resource::TestRequestAllowedNotifier(&prefs)),
       &prefs);
+  service.SetCreateTrialsFromSeedCalledForTesting(false);
 
   // Store a seed. To simulate a first run, |prefs::kVariationsLastFetchTime|
   // is left empty.
@@ -336,6 +338,7 @@ TEST_F(VariationsServiceTest, CreateTrialsFromOutdatedSeed) {
   TestVariationsService service(
       make_scoped_ptr(new web_resource::TestRequestAllowedNotifier(&prefs)),
       &prefs);
+  service.SetCreateTrialsFromSeedCalledForTesting(false);
 
   // Store a seed, with a fetch time 31 days in the past.
   const base::Time seed_date =

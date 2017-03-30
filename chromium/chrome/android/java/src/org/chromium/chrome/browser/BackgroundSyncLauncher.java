@@ -30,6 +30,8 @@ import org.chromium.chrome.browser.externalauth.UserRecoverableErrorHandler;
 public class BackgroundSyncLauncher {
     private static final String TAG = "BgSyncLauncher";
 
+    public static final String TASK_TAG = "BackgroundSync Event";
+
     static final String PREF_BACKGROUND_SYNC_LAUNCH_NEXT_ONLINE = "bgsync_launch_next_online";
     // The instance of BackgroundSyncLauncher currently owned by a C++
     // BackgroundSyncLauncherAndroid, if any. If it is non-null then the browser is running.
@@ -46,11 +48,6 @@ public class BackgroundSyncLauncher {
      * creation that the installed Play Services library is out of date.
      */
     private static boolean sGCMEnabled = true;
-
-    /**
-     * Disables automatic reporting of GCM success / failure statistics.
-     */
-    private static boolean sReportingDisabledForTests = false;
 
     /**
      * Create a BackgroundSyncLauncher object, which is owned by C++.
@@ -133,14 +130,13 @@ public class BackgroundSyncLauncher {
             protected void onPostExecute(Void params) {
                 if (sGCMEnabled) {
                     if (shouldLaunch) {
-                        boolean scheduleSuccess =
-                                scheduleLaunchTask(context, mScheduler, minDelayMs);
-                        recordBooleanHistogram(
-                                "BackgroundSync.LaunchTask.ScheduleSuccess", scheduleSuccess);
+                        RecordHistogram.recordBooleanHistogram(
+                                "BackgroundSync.LaunchTask.ScheduleSuccess",
+                                scheduleLaunchTask(context, mScheduler, minDelayMs));
                     } else {
-                        boolean cancelSuccess = removeScheduledTasks(mScheduler);
-                        recordBooleanHistogram(
-                                "BackgroundSync.LaunchTask.CancelSuccess", cancelSuccess);
+                        RecordHistogram.recordBooleanHistogram(
+                                "BackgroundSync.LaunchTask.CancelSuccess",
+                                removeScheduledTasks(mScheduler));
                     }
                 }
             }
@@ -179,13 +175,14 @@ public class BackgroundSyncLauncher {
         // This will not automatically set {@link sGCMEnabled} to true, in case it has been
         // disabled in tests.
         if (sGCMEnabled) {
+            boolean isAvailable = true;
             if (!canUseGooglePlayServices(context)) {
                 setGCMEnabled(false);
                 Log.i(TAG, "Disabling Background Sync because Play Services is not up to date.");
-                recordBooleanHistogram("BackgroundSync.LaunchTask.PlayServicesAvailable", false);
-            } else {
-                recordBooleanHistogram("BackgroundSync.LaunchTask.PlayServicesAvailable", true);
+                isAvailable = false;
             }
+            RecordHistogram.recordBooleanHistogram(
+                    "BackgroundSync.LaunchTask.PlayServicesAvailable", isAvailable);
         }
         return !sGCMEnabled;
     }
@@ -196,8 +193,8 @@ public class BackgroundSyncLauncher {
         // the Play Store. In this case, scheduling the task will fail silently.
         final long minDelaySecs = minDelayMs / 1000;
         OneoffTask oneoff = new OneoffTask.Builder()
-                                    .setService(BackgroundSyncLauncherService.class)
-                                    .setTag("BackgroundSync Event")
+                                    .setService(ChromeBackgroundService.class)
+                                    .setTag(TASK_TAG)
                                     // We have to set a non-zero execution window here
                                     .setExecutionWindow(minDelaySecs, minDelaySecs + 1)
                                     .setRequiredNetwork(Task.NETWORK_STATE_CONNECTED)
@@ -217,7 +214,7 @@ public class BackgroundSyncLauncher {
 
     private static boolean removeScheduledTasks(GcmNetworkManager scheduler) {
         try {
-            scheduler.cancelAllTasks(BackgroundSyncLauncherService.class);
+            scheduler.cancelTask(TASK_TAG, ChromeBackgroundService.class);
         } catch (IllegalArgumentException e) {
             // This occurs when BackgroundSyncLauncherService is not found in the application
             // manifest. This should not happen in code that reaches here, but has been seen in
@@ -260,17 +257,5 @@ public class BackgroundSyncLauncher {
     @VisibleForTesting
     static void setGCMEnabled(boolean enabled) {
         sGCMEnabled = enabled;
-    }
-
-    @VisibleForTesting
-    static void setReportingDisabledForTests(boolean disabled) {
-        sReportingDisabledForTests = disabled;
-    }
-
-    private static void recordBooleanHistogram(String name, boolean value) {
-        if (!sReportingDisabledForTests) {
-            // recordBooleanHistogram must only be called when the browser is running.
-            RecordHistogram.recordBooleanHistogram(name, value);
-        }
     }
 }

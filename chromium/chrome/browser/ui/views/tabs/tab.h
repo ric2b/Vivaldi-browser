@@ -52,10 +52,7 @@ class Tab : public gfx::AnimationDelegate,
   // The Tab's class name.
   static const char kViewClassName[];
 
-  // The color of an inactive tab.
-  static const SkColor kInactiveTabColor;
-
-  explicit Tab(TabController* controller);
+  Tab(TabController* controller, gfx::AnimationContainer* container);
   ~Tab() override;
 
   TabController* controller() const { return controller_; }
@@ -75,15 +72,15 @@ class Tab : public gfx::AnimationDelegate,
 
   SkColor button_color() const { return button_color_; }
 
-  // Sets the container all animations run from.
-  void SetAnimationContainer(gfx::AnimationContainer* container);
-
   // Returns true if this tab is the active tab.
   bool IsActive() const;
 
   // Notifies the MediaIndicatorButton that the active state of this tab has
   // changed.
   void ActiveStateChanged();
+
+  // Called when the media indicator has changed states.
+  void MediaStateChanged();
 
   // Returns true if the tab is selected.
   bool IsSelected() const;
@@ -176,6 +173,7 @@ class Tab : public gfx::AnimationDelegate,
   static float GetInverseDiagonalSlope();
 
  private:
+  friend class MediaIndicatorButtonTest;
   friend class TabTest;
   friend class TabStripTest;
   FRIEND_TEST_ALL_PREFIXES(TabStripTest, TabHitTestMaskWhenStacked);
@@ -187,21 +185,11 @@ class Tab : public gfx::AnimationDelegate,
   class TabCloseButton;
   class ThrobberView;
 
-  // Contains a cached image and the values used to generate it.
-  struct ImageCacheEntry {
-    ImageCacheEntry();
-    ~ImageCacheEntry();
+  // All metadata necessary to uniquely identify a cached image.
+  struct ImageCacheEntryMetadata;
 
-    // ID of the resource used.
-    int resource_id;
-
-    // Scale factor we're drawing it.
-    ui::ScaleFactor scale_factor;
-
-    // The image.
-    gfx::ImageSkia image;
-  };
-
+  // A cached image and the metadata used to generate it.
+  struct ImageCacheEntry;
   typedef std::list<ImageCacheEntry> ImageCache;
 
   // gfx::AnimationDelegate:
@@ -256,7 +244,7 @@ class Tab : public gfx::AnimationDelegate,
   // Paint with the "immersive mode" light-bar style.
   void PaintImmersiveTab(gfx::Canvas* canvas);
 
-  // Paint various portions of the Tab
+  // Paint various portions of the Tab.
   void PaintTabBackground(gfx::Canvas* canvas);
   void PaintInactiveTabBackgroundWithTitleChange(gfx::Canvas* canvas);
   void PaintInactiveTabBackground(gfx::Canvas* canvas);
@@ -333,17 +321,6 @@ class Tab : public gfx::AnimationDelegate,
 
   // Loads the images to be used for the tab background.
   static void LoadTabImages();
-
-  // Returns the cached image for the specified arguments, or an empty image if
-  // there isn't one cached.
-  static gfx::ImageSkia GetCachedImage(int resource_id,
-                                       const gfx::Size& size,
-                                       ui::ScaleFactor scale_factor);
-
-  // Caches the specified image.
-  static void SetCachedImage(int resource_id,
-                             ui::ScaleFactor scale_factor,
-                             const gfx::ImageSkia& image);
 
   // The controller, never NULL.
   TabController* const controller_;

@@ -13,19 +13,13 @@
 #include "chrome/common/extensions/api/input_ime/input_components_handler.h"
 #include "extensions/browser/extension_function.h"
 
+namespace chromeos {
+
+class InputMethodEngine;
+
+}  // namespace chromeos
+
 namespace extensions {
-
-class InputImeSetCompositionFunction : public SyncExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("input.ime.setComposition",
-                             INPUT_IME_SETCOMPOSITION)
-
- protected:
-  ~InputImeSetCompositionFunction() override {}
-
-  // ExtensionFunction:
-  bool RunSync() override;
-};
 
 class InputImeClearCompositionFunction : public SyncExtensionFunction {
  public:
@@ -34,17 +28,6 @@ class InputImeClearCompositionFunction : public SyncExtensionFunction {
 
  protected:
   ~InputImeClearCompositionFunction() override {}
-
-  // ExtensionFunction:
-  bool RunSync() override;
-};
-
-class InputImeCommitTextFunction : public SyncExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("input.ime.commitText", INPUT_IME_COMMITTEXT)
-
- protected:
-  ~InputImeCommitTextFunction() override {}
 
   // ExtensionFunction:
   bool RunSync() override;
@@ -154,14 +137,14 @@ class InputImeEventRouter : public InputImeEventRouterBase {
       const std::vector<extensions::InputComponentInfo>& input_components);
   void UnregisterAllImes(const std::string& extension_id);
 
-  ui::IMEEngineHandlerInterface* GetEngine(const std::string& extension_id,
-                                           const std::string& component_id);
-  ui::IMEEngineHandlerInterface* GetActiveEngine(
-      const std::string& extension_id);
+  chromeos::InputMethodEngine* GetEngine(const std::string& extension_id,
+                                         const std::string& component_id);
+  input_method::InputMethodEngineBase* GetActiveEngine(
+      const std::string& extension_id) override;
 
  private:
   // The engine map from extension_id to an engine.
-  std::map<std::string, ui::IMEEngineHandlerInterface*> engine_map_;
+  std::map<std::string, chromeos::InputMethodEngine*> engine_map_;
 
   DISALLOW_COPY_AND_ASSIGN(InputImeEventRouter);
 };

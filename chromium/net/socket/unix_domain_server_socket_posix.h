@@ -52,12 +52,16 @@ class NET_EXPORT UnixDomainServerSocket : public ServerSocket {
 
   // ServerSocket implementation.
   int Listen(const IPEndPoint& address, int backlog) override;
-  int ListenWithAddressAndPort(const std::string& unix_domain_path,
-                               uint16_t port_unused,
+  int ListenWithAddressAndPort(const std::string& address_string,
+                               uint16_t port,
                                int backlog) override;
   int GetLocalAddress(IPEndPoint* address) const override;
   int Accept(scoped_ptr<StreamSocket>* socket,
              const CompletionCallback& callback) override;
+
+  // Creates a server socket, binds it to the specified |socket_path| and
+  // starts listening for incoming connections with the specified |backlog|.
+  int BindAndListen(const std::string& socket_path, int backlog);
 
   // Accepts an incoming connection on |listen_socket_|, but passes back
   // a raw SocketDescriptor instead of a StreamSocket.

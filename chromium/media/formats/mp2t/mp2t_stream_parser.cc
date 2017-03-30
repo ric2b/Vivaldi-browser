@@ -172,7 +172,7 @@ void Mp2tStreamParser::Init(
     bool /* ignore_text_tracks */,
     const EncryptedMediaInitDataCB& encrypted_media_init_data_cb,
     const NewMediaSegmentCB& new_segment_cb,
-    const base::Closure& end_of_segment_cb,
+    const EndMediaSegmentCB& end_of_segment_cb,
     const scoped_refptr<MediaLog>& media_log) {
   DCHECK(!is_initialized_);
   DCHECK(init_cb_.is_null());
@@ -180,6 +180,7 @@ void Mp2tStreamParser::Init(
   DCHECK(!config_cb.is_null());
   DCHECK(!new_buffers_cb.is_null());
   DCHECK(!encrypted_media_init_data_cb.is_null());
+  DCHECK(!new_segment_cb.is_null());
   DCHECK(!end_of_segment_cb.is_null());
 
   init_cb_ = init_cb;

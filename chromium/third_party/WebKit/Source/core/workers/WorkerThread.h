@@ -35,6 +35,7 @@
 #include "platform/WebThreadSupportingGC.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/Forward.h"
+#include "wtf/Functional.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
@@ -42,7 +43,7 @@
 
 namespace blink {
 
-class WebWaitableEvent;
+class WaitableEvent;
 class WorkerGlobalScope;
 class WorkerInspectorController;
 class WorkerMicrotaskRunner;
@@ -77,7 +78,7 @@ public:
     // Can be used to wait for this worker thread to shut down.
     // (This is signaled on the main thread, so it's assumed to be waited on
     // the worker context thread)
-    WebWaitableEvent* shutdownEvent() { return m_shutdownEvent.get(); }
+    WaitableEvent* shutdownEvent() { return m_shutdownEvent.get(); }
 
     // Called in shutdown sequence. Internally calls terminate() (or
     // terminateInternal) and wait (by *blocking* the calling thread) until the
@@ -95,7 +96,7 @@ public:
     WorkerReportingProxy& workerReportingProxy() const { return m_workerReportingProxy; }
 
     void postTask(const WebTraceLocation&, PassOwnPtr<ExecutionContextTask>);
-    void appendDebuggerTask(PassOwnPtr<WebTaskRunner::Task>);
+    void appendDebuggerTask(PassOwnPtr<Closure>);
 
     enum WaitMode { WaitForTask, DontWaitForTask };
     enum TaskQueueResult {
@@ -145,12 +146,15 @@ private:
     class DebuggerTaskQueue;
     friend class WorkerMicrotaskRunner;
 
+    PassOwnPtr<Closure> createWorkerThreadTask(PassOwnPtr<ExecutionContextTask>, bool isInstrumented);
+
     // Called on the main thread.
     void terminateInternal();
 
     // Called on the worker thread.
     void initialize(PassOwnPtr<WorkerThreadStartupData>);
     void shutdown();
+    void performTask(PassOwnPtr<ExecutionContextTask>, bool isInstrumented);
     void performShutdownTask();
     void postDelayedTask(const WebTraceLocation&, PassOwnPtr<ExecutionContextTask>, long long delayMs);
 
@@ -175,10 +179,10 @@ private:
     v8::Isolate* m_isolate;
 
     // Used to signal thread shutdown.
-    OwnPtr<WebWaitableEvent> m_shutdownEvent;
+    OwnPtr<WaitableEvent> m_shutdownEvent;
 
     // Used to signal thread termination.
-    OwnPtr<WebWaitableEvent> m_terminationEvent;
+    OwnPtr<WaitableEvent> m_terminationEvent;
 };
 
 } // namespace blink

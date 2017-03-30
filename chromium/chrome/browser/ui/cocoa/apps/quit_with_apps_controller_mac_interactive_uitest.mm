@@ -20,7 +20,7 @@
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/browser_iterator.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/browser/notification_service.h"
@@ -82,7 +82,7 @@ IN_PROC_BROWSER_TEST_P(QuitWithAppsControllerInteractiveTest, QuitBehavior) {
   ASSERT_TRUE(listener.WaitUntilSatisfied());
 
   // One browser and one app window at this point.
-  EXPECT_FALSE(chrome::BrowserIterator().done());
+  EXPECT_FALSE(BrowserList::GetInstance()->empty());
   EXPECT_TRUE(AppWindowRegistryUtil::IsAppWindowVisibleInAnyProfile(0));
 
   // On the first quit, show notification.
@@ -95,7 +95,8 @@ IN_PROC_BROWSER_TEST_P(QuitWithAppsControllerInteractiveTest, QuitBehavior) {
 
   // If notification was dismissed by click, show again on next quit.
   notification->delegate()->Click();
-  message_center->RemoveAllNotifications(false);
+  message_center->RemoveAllNotifications(
+      false /* by_user */, message_center::MessageCenter::RemoveType::ALL);
   EXPECT_FALSE(controller->ShouldQuit());
   EXPECT_TRUE(AppWindowRegistryUtil::IsAppWindowVisibleInAnyProfile(0));
   notification = g_browser_process->notification_ui_manager()->FindById(
@@ -103,12 +104,13 @@ IN_PROC_BROWSER_TEST_P(QuitWithAppsControllerInteractiveTest, QuitBehavior) {
       NotificationUIManager::GetProfileID(profiles[0]));
   ASSERT_TRUE(notification);
 
-  EXPECT_FALSE(chrome::BrowserIterator().done());
+  EXPECT_FALSE(BrowserList::GetInstance()->empty());
   EXPECT_TRUE(AppWindowRegistryUtil::IsAppWindowVisibleInAnyProfile(0));
 
   // If notification is closed by user, don't show it next time.
   notification->delegate()->Close(true);
-  message_center->RemoveAllNotifications(false);
+  message_center->RemoveAllNotifications(
+      false /* by_user */, message_center::MessageCenter::RemoveType::ALL);
   EXPECT_FALSE(controller->ShouldQuit());
   EXPECT_TRUE(AppWindowRegistryUtil::IsAppWindowVisibleInAnyProfile(0));
   notification = g_browser_process->notification_ui_manager()->FindById(
@@ -116,7 +118,7 @@ IN_PROC_BROWSER_TEST_P(QuitWithAppsControllerInteractiveTest, QuitBehavior) {
       NotificationUIManager::GetProfileID(profiles[0]));
   EXPECT_EQ(NULL, notification);
 
-  EXPECT_FALSE(chrome::BrowserIterator().done());
+  EXPECT_FALSE(BrowserList::GetInstance()->empty());
   EXPECT_TRUE(AppWindowRegistryUtil::IsAppWindowVisibleInAnyProfile(0));
 
   // Get a reference to the open app window before the browser closes.
@@ -129,7 +131,7 @@ IN_PROC_BROWSER_TEST_P(QuitWithAppsControllerInteractiveTest, QuitBehavior) {
   chrome_browser_application_mac::Terminate();
   observer.Wait();
 
-  EXPECT_TRUE(chrome::BrowserIterator().done());
+  EXPECT_TRUE(BrowserList::GetInstance()->empty());
   EXPECT_TRUE(AppWindowRegistryUtil::IsAppWindowVisibleInAnyProfile(0));
 
   // Trying to quit while there are no browsers always shows notification.
@@ -150,7 +152,8 @@ IN_PROC_BROWSER_TEST_P(QuitWithAppsControllerInteractiveTest, QuitBehavior) {
       app_window->web_contents());
   notification->delegate()->ButtonClick(0);
   destroyed_watcher.Wait();
-  message_center->RemoveAllNotifications(false);
+  message_center->RemoveAllNotifications(
+      false /* by_user */, message_center::MessageCenter::RemoveType::ALL);
   EXPECT_FALSE(AppWindowRegistryUtil::IsAppWindowVisibleInAnyProfile(0));
   quit_observer.Wait();
 }

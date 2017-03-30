@@ -35,9 +35,7 @@ public:
     ~LayoutSearchField() override;
 
 private:
-    void centerContainerIfNeeded(LayoutBox*) const override;
     LayoutUnit computeControlLogicalHeight(LayoutUnit lineHeight, LayoutUnit nonContentHeight) const override;
-    LayoutUnit computeLogicalHeightLimit() const override;
 
     Element* searchDecorationElement() const;
     Element* cancelButtonElement() const;
@@ -45,6 +43,6 @@ private:
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutSearchField, isTextField());
 
-}
+} // namespace blink
 
 #endif // LayoutSearchField_h

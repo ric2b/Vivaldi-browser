@@ -14,7 +14,6 @@
 #include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/user_metrics.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_piece.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -36,6 +35,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/ui/zoom/zoom_controller.h"
@@ -180,8 +180,7 @@ class StartPageService::StartPageWebContentsDelegate
                       const gfx::Rect& initial_pos,
                       bool user_gesture,
                       bool* was_blocked) override {
-    chrome::ScopedTabbedBrowserDisplayer displayer(
-        profile_, chrome::GetActiveDesktop());
+    chrome::ScopedTabbedBrowserDisplayer displayer(profile_);
     // Force all links to open in a new tab, even if they were trying to open a
     // new window.
     disposition =

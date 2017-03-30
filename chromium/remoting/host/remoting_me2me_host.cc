@@ -30,14 +30,15 @@
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_listener.h"
 #include "jingle/glue/thread_wrapper.h"
-#include "net/base/net_util.h"
 #include "net/base/network_change_notifier.h"
+#include "net/base/url_util.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/socket/ssl_server_socket.h"
 #include "net/url_request/url_fetcher.h"
 #include "policy/policy_constants.h"
 #include "remoting/base/auto_thread_task_runner.h"
 #include "remoting/base/breakpad.h"
+#include "remoting/base/chromium_url_request.h"
 #include "remoting/base/constants.h"
 #include "remoting/base/logging.h"
 #include "remoting/base/rsa_key_pair.h"
@@ -69,6 +70,8 @@
 #include "remoting/host/oauth_token_getter_impl.h"
 #include "remoting/host/pairing_registry_delegate.h"
 #include "remoting/host/policy_watcher.h"
+#include "remoting/host/security_key/gnubby_auth_handler.h"
+#include "remoting/host/security_key/gnubby_extension.h"
 #include "remoting/host/shutdown_watchdog.h"
 #include "remoting/host/signaling_connector.h"
 #include "remoting/host/single_window_desktop_environment.h"
@@ -80,7 +83,7 @@
 #include "remoting/host/video_frame_recorder_host_extension.h"
 #include "remoting/protocol/authenticator.h"
 #include "remoting/protocol/channel_authenticator.h"
-#include "remoting/protocol/chromium_port_allocator.h"
+#include "remoting/protocol/chromium_port_allocator_factory.h"
 #include "remoting/protocol/jingle_session_manager.h"
 #include "remoting/protocol/me2me_host_authenticator_factory.h"
 #include "remoting/protocol/network_settings.h"
@@ -338,6 +341,7 @@ class HostProcess : public ConfigWatcher::Delegate,
   void ReportPolicyErrorAndRestartHost();
   void ApplyHostDomainPolicy();
   void ApplyUsernamePolicy();
+  bool OnClientDomainPolicyUpdate(base::DictionaryValue* policies);
   bool OnHostDomainPolicyUpdate(base::DictionaryValue* policies);
   bool OnUsernamePolicyUpdate(base::DictionaryValue* policies);
   bool OnNatPolicyUpdate(base::DictionaryValue* policies);
@@ -385,11 +389,6 @@ class HostProcess : public ConfigWatcher::Delegate,
 
   scoped_ptr<ChromotingHostContext> context_;
 
-  scoped_ptr<IPC::AttachmentBrokerUnprivileged> attachment_broker_;
-
-  // Accessed on the UI thread.
-  scoped_ptr<IPC::ChannelProxy> daemon_channel_;
-
   // XMPP server/remoting bot configuration (initialized from the command line).
   XmppSignalStrategy::XmppServerConfig xmpp_server_config_;
   std::string directory_bot_jid_;
@@ -417,6 +416,7 @@ class HostProcess : public ConfigWatcher::Delegate,
 
   scoped_ptr<PolicyWatcher> policy_watcher_;
   PolicyState policy_state_;
+  std::string client_domain_;
   std::string host_domain_;
   bool host_username_match_required_;
   bool allow_nat_traversal_;
@@ -427,7 +427,8 @@ class HostProcess : public ConfigWatcher::Delegate,
 
   bool curtain_required_;
   ThirdPartyAuthConfig third_party_auth_config_;
-  bool enable_gnubby_auth_;
+  bool gnubby_auth_policy_enabled_;
+  bool gnubby_extension_supported_;
 
   // Boolean to change flow, where necessary, if we're
   // capturing a window instead of the entire desktop.
@@ -460,7 +461,11 @@ class HostProcess : public ConfigWatcher::Delegate,
   scoped_refptr<HostProcess> self_;
 
 #if defined(REMOTING_MULTI_PROCESS)
-  DesktopSessionConnector* desktop_session_connector_;
+  // Accessed on the UI thread.
+  scoped_ptr<IPC::ChannelProxy> daemon_channel_;
+
+  // Owned as |desktop_environment_factory_|.
+  DesktopSessionConnector* desktop_session_connector_ = nullptr;
 #endif  // defined(REMOTING_MULTI_PROCESS)
 
   int* exit_code_out_;
@@ -477,7 +482,6 @@ HostProcess::HostProcess(scoped_ptr<ChromotingHostContext> context,
                          int* exit_code_out,
                          ShutdownWatchdog* shutdown_watchdog)
     : context_(std::move(context)),
-      attachment_broker_(IPC::AttachmentBrokerUnprivileged::CreateBroker()),
       state_(HOST_STARTING),
       use_service_account_(false),
       enable_vp9_(false),
@@ -488,13 +492,11 @@ HostProcess::HostProcess(scoped_ptr<ChromotingHostContext> context,
       allow_relay_(true),
       allow_pairing_(true),
       curtain_required_(false),
-      enable_gnubby_auth_(false),
+      gnubby_auth_policy_enabled_(false),
+      gnubby_extension_supported_(false),
       enable_window_capture_(false),
       window_id_(0),
       self_(this),
-#if defined(REMOTING_MULTI_PROCESS)
-      desktop_session_connector_(nullptr),
-#endif  // defined(REMOTING_MULTI_PROCESS)
       exit_code_out_(exit_code_out),
       signal_parent_(false),
       shutdown_watchdog_(shutdown_watchdog) {
@@ -504,7 +506,6 @@ HostProcess::HostProcess(scoped_ptr<ChromotingHostContext> context,
 HostProcess::~HostProcess() {
   // Verify that UI components have been torn down.
   DCHECK(!config_watcher_);
-  DCHECK(!daemon_channel_);
   DCHECK(!desktop_environment_factory_);
 
   // We might be getting deleted on one of the threads the |host_context| owns,
@@ -544,25 +545,13 @@ bool HostProcess::InitWithCommandLine(const base::CommandLine* cmd_line) {
                                               IPC::Channel::MODE_CLIENT,
                                               this,
                                               context_->network_task_runner());
-  if (attachment_broker_) {
-    attachment_broker_->DesignateBrokerCommunicationChannel(
-        daemon_channel_.get());
-  }
+
+  IPC::AttachmentBrokerUnprivileged::CreateBrokerIfNeeded();
+  IPC::AttachmentBroker* broker = IPC::AttachmentBroker::GetGlobal();
+  if (broker && !broker->IsPrivilegedBroker())
+    broker->RegisterBrokerCommunicationChannel(daemon_channel_.get());
 
 #else  // !defined(REMOTING_MULTI_PROCESS)
-  // Connect to the daemon process.
-  std::string channel_name =
-      cmd_line->GetSwitchValueASCII(kDaemonPipeSwitchName);
-  if (!channel_name.empty()) {
-    daemon_channel_ =
-        IPC::ChannelProxy::Create(channel_name, IPC::Channel::MODE_CLIENT, this,
-                                  context_->network_task_runner().get());
-    if (attachment_broker_) {
-      attachment_broker_->DesignateBrokerCommunicationChannel(
-          daemon_channel_.get());
-    }
-  }
-
   if (cmd_line->HasSwitch(kHostConfigSwitchName)) {
     host_config_path_ = cmd_line->GetSwitchValuePath(kHostConfigSwitchName);
 
@@ -808,7 +797,7 @@ void HostProcess::CreateAuthenticatorFactory() {
 
     factory = protocol::Me2MeHostAuthenticatorFactory::CreateWithSharedSecret(
         use_service_account_, host_owner_, local_certificate, key_pair_,
-        host_secret_hash_, pairing_registry);
+        client_domain_, host_secret_hash_, pairing_registry);
 
     host_->set_pairing_registry(pairing_registry);
   } else {
@@ -821,7 +810,7 @@ void HostProcess::CreateAuthenticatorFactory() {
             key_pair_, context_->url_request_context_getter()));
     factory = protocol::Me2MeHostAuthenticatorFactory::CreateWithThirdPartyAuth(
         use_service_account_, host_owner_, local_certificate, key_pair_,
-        std::move(token_validator_factory));
+        client_domain_, std::move(token_validator_factory));
   }
 
 #if defined(OS_POSIX)
@@ -875,9 +864,7 @@ void HostProcess::StartOnUiThread() {
 
   if (!InitWithCommandLine(base::CommandLine::ForCurrentProcess())) {
     // Shutdown the host if the command line is invalid.
-    context_->network_task_runner()->PostTask(
-        FROM_HERE, base::Bind(&HostProcess::ShutdownHost, this,
-                              kUsageExitCode));
+    ShutdownOnUiThread();
     return;
   }
 
@@ -899,43 +886,36 @@ void HostProcess::StartOnUiThread() {
 
   base::FilePath gnubby_socket_name = base::CommandLine::ForCurrentProcess()->
       GetSwitchValuePath(kAuthSocknameSwitchName);
-  if (!gnubby_socket_name.empty())
+  if (!gnubby_socket_name.empty()) {
     remoting::GnubbyAuthHandler::SetGnubbySocketName(gnubby_socket_name);
+    gnubby_extension_supported_ = true;
+  }
 #endif  // defined(OS_LINUX)
 
   // Create a desktop environment factory appropriate to the build type &
   // platform.
-#if defined(OS_WIN)
+#if defined(REMOTING_MULTI_PROCESS)
   IpcDesktopEnvironmentFactory* desktop_environment_factory =
       new IpcDesktopEnvironmentFactory(
-          context_->audio_task_runner(),
-          context_->network_task_runner(),
-          context_->video_capture_task_runner(),
-          context_->network_task_runner(),
-          daemon_channel_.get());
+          context_->audio_task_runner(), context_->network_task_runner(),
+          context_->network_task_runner(), daemon_channel_.get());
   desktop_session_connector_ = desktop_environment_factory;
-#else  // !defined(OS_WIN)
+#else  // !defined(REMOTING_MULTI_PROCESS)
   BasicDesktopEnvironmentFactory* desktop_environment_factory;
   if (enable_window_capture_) {
-    desktop_environment_factory =
-      new SingleWindowDesktopEnvironmentFactory(
-          context_->network_task_runner(),
-          context_->input_task_runner(),
-          context_->ui_task_runner(),
-          window_id_);
+    desktop_environment_factory = new SingleWindowDesktopEnvironmentFactory(
+        context_->network_task_runner(), context_->video_capture_task_runner(),
+        context_->input_task_runner(), context_->ui_task_runner(), window_id_);
   } else {
-    desktop_environment_factory =
-      new Me2MeDesktopEnvironmentFactory(
-          context_->network_task_runner(),
-          context_->input_task_runner(),
-          context_->ui_task_runner());
+    desktop_environment_factory = new Me2MeDesktopEnvironmentFactory(
+        context_->network_task_runner(), context_->video_capture_task_runner(),
+        context_->input_task_runner(), context_->ui_task_runner());
   }
-#endif  // !defined(OS_WIN)
+#endif  // !defined(REMOTING_MULTI_PROCESS)
   desktop_environment_factory->set_supports_touch_events(
       InputInjector::SupportsTouchEvents());
 
   desktop_environment_factory_.reset(desktop_environment_factory);
-  desktop_environment_factory_->SetEnableGnubbyAuth(enable_gnubby_auth_);
 
   context_->network_task_runner()->PostTask(
       FROM_HERE,
@@ -946,9 +926,15 @@ void HostProcess::ShutdownOnUiThread() {
   DCHECK(context_->ui_task_runner()->BelongsToCurrentThread());
 
   // Tear down resources that need to be torn down on the UI thread.
-  daemon_channel_.reset();
   desktop_environment_factory_.reset();
   policy_watcher_.reset();
+
+#if defined(REMOTING_MULTI_PROCESS)
+  IPC::AttachmentBroker* broker = IPC::AttachmentBroker::GetGlobal();
+  if (broker && !broker->IsPrivilegedBroker())
+    broker->DeregisterBrokerCommunicationChannel(daemon_channel_.get());
+  daemon_channel_.reset();
+#endif  // defined(REMOTING_MULTI_PROCESS)
 
   // It is now safe for the HostProcess to be deleted.
   self_ = nullptr;
@@ -1114,6 +1100,7 @@ void HostProcess::OnPolicyUpdate(scoped_ptr<base::DictionaryValue> policies) {
   }
 
   bool restart_required = false;
+  restart_required |= OnClientDomainPolicyUpdate(policies.get());
   restart_required |= OnHostDomainPolicyUpdate(policies.get());
   restart_required |= OnCurtainPolicyUpdate(policies.get());
   // Note: UsernamePolicyUpdate must run after OnCurtainPolicyUpdate.
@@ -1199,6 +1186,13 @@ bool HostProcess::OnHostDomainPolicyUpdate(base::DictionaryValue* policies) {
 
   ApplyHostDomainPolicy();
   return false;
+}
+
+bool HostProcess::OnClientDomainPolicyUpdate(base::DictionaryValue* policies) {
+  // Returns true if the host has to be restarted after this policy update.
+  DCHECK(context_->network_task_runner()->BelongsToCurrentThread());
+  return policies->GetString(policy::key::kRemoteAccessHostClientDomain,
+                             &client_domain_);
 }
 
 void HostProcess::ApplyUsernamePolicy() {
@@ -1403,18 +1397,15 @@ bool HostProcess::OnGnubbyAuthPolicyUpdate(base::DictionaryValue* policies) {
   DCHECK(context_->network_task_runner()->BelongsToCurrentThread());
 
   if (!policies->GetBoolean(policy::key::kRemoteAccessHostAllowGnubbyAuth,
-                            &enable_gnubby_auth_)) {
+                            &gnubby_auth_policy_enabled_)) {
     return false;
   }
 
-  if (enable_gnubby_auth_) {
+  if (gnubby_auth_policy_enabled_) {
     HOST_LOG << "Policy enables gnubby auth.";
   } else {
     HOST_LOG << "Policy disables gnubby auth.";
   }
-
-  if (desktop_environment_factory_)
-    desktop_environment_factory_->SetEnableGnubbyAuth(enable_gnubby_auth_);
 
   return true;
 }
@@ -1522,7 +1513,8 @@ void HostProcess::StartHost() {
   scoped_refptr<protocol::TransportContext> transport_context =
       new protocol::TransportContext(
           signal_strategy_.get(),
-          make_scoped_ptr(new protocol::ChromiumPortAllocatorFactory(
+          make_scoped_ptr(new protocol::ChromiumPortAllocatorFactory()),
+          make_scoped_ptr(new ChromiumUrlRequestFactory(
               context_->url_request_context_getter())),
           network_settings, protocol::TransportRole::SERVER);
 
@@ -1541,12 +1533,14 @@ void HostProcess::StartHost() {
   }
   session_manager->set_protocol_config(std::move(protocol_config));
 
-  host_.reset(new ChromotingHost(
-      desktop_environment_factory_.get(), std::move(session_manager),
-      transport_context, context_->audio_task_runner(),
-      context_->input_task_runner(), context_->video_capture_task_runner(),
-      context_->video_encode_task_runner(), context_->network_task_runner(),
-      context_->ui_task_runner()));
+  host_.reset(new ChromotingHost(desktop_environment_factory_.get(),
+                                 std::move(session_manager), transport_context,
+                                 context_->audio_task_runner(),
+                                 context_->video_encode_task_runner()));
+
+  if (gnubby_auth_policy_enabled_ && gnubby_extension_supported_) {
+    host_->AddExtension(make_scoped_ptr(new GnubbyExtension()));
+  }
 
   if (frame_recorder_buffer_size_ > 0) {
     scoped_ptr<VideoFrameRecorderHostExtension> frame_recorder_extension(

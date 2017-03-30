@@ -143,9 +143,8 @@ class Shell : public WebContentsDelegate,
   JavaScriptDialogManager* GetJavaScriptDialogManager(
       WebContents* source) override;
   scoped_ptr<BluetoothChooser> RunBluetoothChooser(
-      WebContents* web_contents,
-      const BluetoothChooser::EventHandler& event_handler,
-      const GURL& origin) override;
+      RenderFrameHost* frame,
+      const BluetoothChooser::EventHandler& event_handler) override;
 #if defined(OS_MACOSX)
   void HandleKeyboardEvent(WebContents* source,
                            const NativeWebKeyboardEvent& event) override;
@@ -223,6 +222,7 @@ class Shell : public WebContentsDelegate,
   void ToggleFullscreenModeForTab(WebContents* web_contents,
                                   bool enter_fullscreen);
   // WebContentsObserver
+  void RenderViewCreated(RenderViewHost* render_view_host) override;
   void TitleWasSet(NavigationEntry* entry, bool explicit_set) override;
 
   void InnerShowDevTools();

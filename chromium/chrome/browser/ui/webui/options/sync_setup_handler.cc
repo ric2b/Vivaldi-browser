@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/options/sync_setup_handler.h"
 
+#include <string>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
@@ -13,7 +15,6 @@
 #include "base/json/json_writer.h"
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -21,7 +22,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/signin/chrome_signin_helper.h"
 #include "chrome/browser/signin/signin_error_controller_factory.h"
@@ -43,6 +43,7 @@
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/google/core/browser/google_util.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/signin/core/browser/signin_metrics.h"
@@ -297,7 +298,7 @@ void SyncSetupHandler::ConfigureSyncDone() {
 
   ProfileSyncService* service = GetSyncService();
   DCHECK(service);
-  if (!service->HasSyncSetupCompleted()) {
+  if (!service->IsFirstSetupComplete()) {
     // This is the first time configuring sync, so log it.
     base::FilePath profile_file_path = GetProfile()->GetPath();
     ProfileMetrics::LogProfileSyncSignIn(profile_file_path);
@@ -305,7 +306,7 @@ void SyncSetupHandler::ConfigureSyncDone() {
     // We're done configuring, so notify ProfileSyncService that it is OK to
     // start syncing.
     service->SetSetupInProgress(false);
-    service->SetSyncSetupCompleted();
+    service->SetFirstSetupComplete();
   }
 }
 
@@ -365,8 +366,8 @@ void SyncSetupHandler::DisplayGaiaLoginInNewTabOrWindow(
   bool force_new_tab = false;
   if (!browser) {
     // Settings is not displayed in a browser window. Open a new window.
-    browser = new Browser(Browser::CreateParams(
-        Browser::TYPE_TABBED, GetProfile(), chrome::GetActiveDesktop()));
+    browser =
+        new Browser(Browser::CreateParams(Browser::TYPE_TABBED, GetProfile()));
     force_new_tab = true;
   }
 
@@ -649,7 +650,7 @@ void SyncSetupHandler::HandleShowSetupUI(const base::ListValue* args) {
   // If a setup wizard is present on this page or another, bring it to focus.
   // Otherwise, display a new one on this page.
   if (!FocusExistingWizardIfPresent())
-    OpenSyncSetup(args);
+    OpenSyncSetup(false /* creating_supervised_user */);
 }
 
 #if defined(OS_CHROMEOS)
@@ -664,19 +665,25 @@ void SyncSetupHandler::HandleDoSignOutOnAuthError(const base::ListValue* args) {
 #if !defined(OS_CHROMEOS)
 void SyncSetupHandler::HandleStartSignin(const base::ListValue* args) {
   // Should only be called if the user is not already signed in.
-  DCHECK(!SigninManagerFactory::GetForProfile(GetProfile())->
-      IsAuthenticated());
-  OpenSyncSetup(args);
+  DCHECK(!SigninManagerFactory::GetForProfile(GetProfile())->IsAuthenticated());
+  bool creating_supervised_user = false;
+  args->GetBoolean(0, &creating_supervised_user);
+  OpenSyncSetup(creating_supervised_user);
 }
 
 void SyncSetupHandler::HandleStopSyncing(const base::ListValue* args) {
   if (GetSyncService())
     ProfileSyncService::SyncEvent(ProfileSyncService::STOP_FROM_OPTIONS);
-  SigninManagerFactory::GetForProfile(GetProfile())->SignOut(
-      signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS);
 
   bool delete_profile = false;
-  if (args->GetBoolean(0, &delete_profile) && delete_profile) {
+  args->GetBoolean(0, &delete_profile);
+  signin_metrics::SignoutDelete delete_metric =
+      delete_profile ? signin_metrics::SignoutDelete::DELETED
+                     : signin_metrics::SignoutDelete::KEEPING;
+  SigninManagerFactory::GetForProfile(GetProfile())
+      ->SignOut(signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS, delete_metric);
+
+  if (delete_profile) {
     // Do as BrowserOptionsHandler::DeleteProfile().
     options::helper::DeleteProfileAtPath(GetProfile()->GetPath(), web_ui());
   }
@@ -698,8 +705,9 @@ void SyncSetupHandler::CloseSyncSetup() {
   if (IsActiveLogin()) {
     // Don't log a cancel event if the sync setup dialog is being
     // automatically closed due to an auth error.
-    if (!sync_service || (!sync_service->HasSyncSetupCompleted() &&
-        sync_service->GetAuthError().state() == GoogleServiceAuthError::NONE)) {
+    if (!sync_service || (!sync_service->IsFirstSetupComplete() &&
+                          sync_service->GetAuthError().state() ==
+                              GoogleServiceAuthError::NONE)) {
       if (configuring_sync_) {
         ProfileSyncService::SyncEvent(
             ProfileSyncService::CANCEL_DURING_CONFIGURE);
@@ -718,8 +726,9 @@ void SyncSetupHandler::CloseSyncSetup() {
           // initial setup.
           // TODO(rsimha): Revisit this for M30. See http://crbug.com/252049.
           if (sync_service->IsFirstSetupInProgress()) {
-            SigninManagerFactory::GetForProfile(GetProfile())->SignOut(
-                signin_metrics::ABORT_SIGNIN);
+            SigninManagerFactory::GetForProfile(GetProfile())
+                ->SignOut(signin_metrics::ABORT_SIGNIN,
+                          signin_metrics::SignoutDelete::IGNORE_METRIC);
           }
   #endif
         }
@@ -738,7 +747,7 @@ void SyncSetupHandler::CloseSyncSetup() {
   configuring_sync_ = false;
 }
 
-void SyncSetupHandler::OpenSyncSetup(const base::ListValue* args) {
+void SyncSetupHandler::OpenSyncSetup(bool creating_supervised_user) {
   if (!PrepareSyncSetup())
     return;
 
@@ -764,15 +773,10 @@ void SyncSetupHandler::OpenSyncSetup(const base::ListValue* args) {
     // setup including any visible overlays, and display the gaia auth page.
     // Control will be returned to the sync settings page once auth is complete.
     CloseUI();
-    if (args) {
-      std::string access_point = base::UTF16ToUTF8(ExtractStringValue(args));
-      if (access_point == "access-point-supervised-user") {
-        DisplayGaiaLogin(
-            signin_metrics::AccessPoint::ACCESS_POINT_SUPERVISED_USER);
-        return;
-      }
-    }
-    DisplayGaiaLogin(signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS);
+    DisplayGaiaLogin(
+        creating_supervised_user ?
+            signin_metrics::AccessPoint::ACCESS_POINT_SUPERVISED_USER :
+            signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS);
     return;
   }
 #endif

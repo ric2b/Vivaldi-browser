@@ -1,7 +1,7 @@
 include_rules = [
   # Allow inclusion of specific components that we depend on. We may only
   # depend on components which we share with the mojo html_viewer.
-  "+components/arc",
+  "+components/leveldb/public/interfaces",
   "+components/mime_util",
   "+components/mus/public/interfaces",
   "+components/mus/public",
@@ -16,11 +16,12 @@ include_rules = [
   "+gin/v8_initializer.h",
   "+media/media_features.h",
   "+media/audio",  # For audio input for speech input feature.
+  "+media/capture",  # For Video Device monitoring in Mac.
   "+media/base",  # For Android JNI registration.
+  "+media/capture",  # For Device Monitoring
   "+media/filters",  # For reporting GPU decoding UMA.
   "+media/midi",  # For Web MIDI API
   "+media/mojo",  # For mojo media services.
-  "+media/capture/video",  # For Video Device monitoring in Mac.
   "+mojo",
   "+sql",
   "+ui/aura_extra",

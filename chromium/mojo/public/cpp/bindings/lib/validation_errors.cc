@@ -4,8 +4,6 @@
 
 #include "mojo/public/cpp/bindings/lib/validation_errors.h"
 
-#include "mojo/public/cpp/environment/logging.h"
-
 namespace mojo {
 namespace internal {
 namespace {
@@ -50,6 +48,8 @@ const char* ValidationErrorToString(ValidationError error) {
       return "VALIDATION_ERROR_DIFFERENT_SIZED_ARRAYS_IN_MAP";
     case VALIDATION_ERROR_UNKNOWN_UNION_TAG:
       return "VALIDATION_ERROR_UNKNOWN_UNION_TAG";
+    case VALIDATION_ERROR_UNKNOWN_ENUM_VALUE:
+      return "VALIDATION_ERROR_UNKNOWN_ENUM_VALUE";
   }
 
   return "Unknown error";
@@ -59,22 +59,22 @@ void ReportValidationError(ValidationError error, const char* description) {
   if (g_validation_error_observer) {
     g_validation_error_observer->set_last_error(error);
   } else if (description) {
-    MOJO_LOG(ERROR) << "Invalid message: " << ValidationErrorToString(error)
-                    << " (" << description << ")";
+    LOG(ERROR) << "Invalid message: " << ValidationErrorToString(error) << " ("
+               << description << ")";
   } else {
-    MOJO_LOG(ERROR) << "Invalid message: " << ValidationErrorToString(error);
+    LOG(ERROR) << "Invalid message: " << ValidationErrorToString(error);
   }
 }
 
 ValidationErrorObserverForTesting::ValidationErrorObserverForTesting(
     const Callback<void()>& callback)
     : last_error_(VALIDATION_ERROR_NONE), callback_(callback) {
-  MOJO_DCHECK(!g_validation_error_observer);
+  DCHECK(!g_validation_error_observer);
   g_validation_error_observer = this;
 }
 
 ValidationErrorObserverForTesting::~ValidationErrorObserverForTesting() {
-  MOJO_DCHECK(g_validation_error_observer == this);
+  DCHECK(g_validation_error_observer == this);
   g_validation_error_observer = nullptr;
 }
 
@@ -89,13 +89,13 @@ bool ReportSerializationWarning(ValidationError error) {
 
 SerializationWarningObserverForTesting::SerializationWarningObserverForTesting()
     : last_warning_(VALIDATION_ERROR_NONE) {
-  MOJO_DCHECK(!g_serialization_warning_observer);
+  DCHECK(!g_serialization_warning_observer);
   g_serialization_warning_observer = this;
 }
 
 SerializationWarningObserverForTesting::
     ~SerializationWarningObserverForTesting() {
-  MOJO_DCHECK(g_serialization_warning_observer == this);
+  DCHECK(g_serialization_warning_observer == this);
   g_serialization_warning_observer = nullptr;
 }
 

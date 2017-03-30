@@ -22,6 +22,7 @@
 #include "base/observer_list.h"
 #include "gpu/command_buffer/client/gpu_control.h"
 #include "gpu/command_buffer/common/command_buffer.h"
+#include "gpu/command_buffer/common/command_buffer_id.h"
 #include "gpu/command_buffer/common/command_buffer_shared.h"
 #include "gpu/command_buffer/common/gpu_memory_allocation.h"
 #include "ipc/ipc_listener.h"
@@ -116,17 +117,12 @@ class CommandBufferProxyImpl
                                      size_t height,
                                      unsigned internal_format,
                                      unsigned usage) override;
-  uint32_t InsertSyncPoint() override;
-  uint32_t InsertFutureSyncPoint() override;
-  void RetireSyncPoint(uint32_t sync_point) override;
-  void SignalSyncPoint(uint32_t sync_point,
-                       const base::Closure& callback) override;
   void SignalQuery(uint32_t query, const base::Closure& callback) override;
   void SetLock(base::Lock* lock) override;
   bool IsGpuChannelLost() override;
   void EnsureWorkVisible() override;
   gpu::CommandBufferNamespace GetNamespaceID() const override;
-  uint64_t GetCommandBufferID() const override;
+  gpu::CommandBufferId GetCommandBufferID() const override;
   int32_t GetExtraCommandBufferData() const override;
   uint64_t GenerateFenceSyncRelease() override;
   bool IsFenceSyncRelease(uint64_t release) override;
@@ -234,7 +230,7 @@ class CommandBufferProxyImpl
   // |*this| is owned by |*channel_| and so is always outlived by it, so using a
   // raw pointer is ok.
   GpuChannelHost* channel_;
-  const uint64_t command_buffer_id_;
+  const gpu::CommandBufferId command_buffer_id_;
   const int32_t route_id_;
   const int32_t stream_id_;
   uint32_t flush_count_;

@@ -3,11 +3,19 @@
 # found in the LICENSE file.
 
 import("//chromecast/chromecast.gni")
-import("//media/media_options.gni")
 import("//testing/test.gni")
+import("//build/config/ui.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
 
 source_set("browser") {
   sources = [
+    "android/cast_window_android.cc",
+    "android/cast_window_android.h",
+    "android/cast_window_manager.cc",
+    "android/cast_window_manager.h",
     "cast_browser_context.cc",
     "cast_browser_context.h",
     "cast_browser_main_parts.cc",
@@ -60,18 +68,21 @@ source_set("browser") {
     ]
   }
 
+  public_deps = [
+    "//chromecast/browser/media",
+  ]
+
   deps = [
     "//base",
     "//base:i18n",
-    "//base:prefs",
     "//cc",
+    "//chromecast/app:cast_crash_client",
     "//chromecast/app:chromecast_settings",
     "//chromecast/app:resources",
     "//chromecast/base",
     "//chromecast/base:cast_sys_info",
     "//chromecast/base:cast_version",
     "//chromecast/common",
-    "//chromecast/graphics",
     "//chromecast/media",
     "//chromecast/net",
     "//chromecast/service",
@@ -87,6 +98,7 @@ source_set("browser") {
     # isn't needed. crbug.com/541577
     "//components/metrics:ui",
     "//components/network_hints/browser",
+    "//components/prefs",
     "//content",
     "//content/public/browser",
     "//content/public/common",
@@ -95,34 +107,32 @@ source_set("browser") {
     "//ipc",
     "//media",
     "//net",
-    "//ui/aura",
     "//ui/base",
     "//ui/compositor",
     "//ui/gl",
   ]
 
-  if (!is_android) {
+  if (is_linux) {
     sources += [
       "metrics/external_metrics.cc",
       "metrics/external_metrics.h",
     ]
 
-    public_deps = [
-      "//chromecast/browser/media",
-    ]
-
     deps += [
       "//build/linux:fontconfig",
+      "//chromecast/graphics",
       "//components/metrics:serialization",
+      "//ui/aura",
+    ]
+  } else if (is_android) {
+    deps += [
+      ":jni_headers",
+      "//components/external_video_surface",
     ]
   }
 
-  if (enable_mojo_media != "none") {
-    configs += [ "//media/mojo/services:enable_mojo_media_config" ]
-  }
-
-  if (enable_mojo_media == "utility") {
-    deps += [ "//media/mojo/services:application" ]
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
   }
 }
 
@@ -138,6 +148,7 @@ source_set("test_support") {
   public_deps = [
     ":browser",
     "//chromecast:cast_shell_common",
+    "//content/test:browsertest_base",
   ]
 
   deps = [
@@ -165,6 +176,7 @@ test("cast_shell_browser_test") {
   deps = [
     ":test_support",
     "//base",
+    "//content/test:browsertest_base",
     "//content/test:test_support",
     "//media/base:test_support",
     "//testing/gtest",
@@ -174,5 +186,25 @@ test("cast_shell_browser_test") {
   # TODO(slan): Find a better way to do this.
   if (chromecast_branding != "public") {
     deps += [ "//chromecast/internal:cast_shell_internal" ]
+  }
+
+  if (chromecast_branding == "public") {
+    # Link default libcast_media_1.0 statically not to link dummy one
+    # dynamically for public unittests.
+    deps += [ "//chromecast/media/base:libcast_media_1.0_default_core" ]
+  }
+}
+
+if (is_android) {
+  generate_jni("jni_headers") {
+    sources = [
+      "android/apk/src/org/chromium/chromecast/shell/CastCrashHandler.java",
+      "android/apk/src/org/chromium/chromecast/shell/CastMetricsHelper.java",
+      "android/apk/src/org/chromium/chromecast/shell/CastSysInfoAndroid.java",
+      "android/apk/src/org/chromium/chromecast/shell/CastWindowAndroid.java",
+      "android/apk/src/org/chromium/chromecast/shell/CastWindowManager.java",
+    ]
+
+    jni_package = "chromecast"
   }
 }

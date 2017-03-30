@@ -381,6 +381,8 @@ void GetShaderSource(GLuint shader,
 
 const GLubyte* GetString(GLenum name) override;
 
+const GLubyte* GetStringi(GLenum name, GLuint index) override;
+
 void GetSynciv(GLsync sync,
                GLenum pname,
                GLsizei bufsize,
@@ -1010,10 +1012,6 @@ void DiscardFramebufferEXT(GLenum target,
 
 void LoseContextCHROMIUM(GLenum current, GLenum other) override;
 
-GLuint InsertSyncPointCHROMIUM() override;
-
-void WaitSyncPointCHROMIUM(GLuint sync_point) override;
-
 GLuint64 InsertFenceSyncCHROMIUM() override;
 
 void GenSyncTokenCHROMIUM(GLuint64 fence_sync, GLbyte* sync_token) override;
@@ -1188,5 +1186,10 @@ void BindFragDataLocationEXT(GLuint program,
                              const char* name) override;
 
 GLint GetFragDataIndexEXT(GLuint program, const char* name) override;
+
+void UniformMatrix4fvStreamTextureMatrixCHROMIUM(
+    GLint location,
+    GLboolean transpose,
+    const GLfloat* default_value) override;
 
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_IMPLEMENTATION_AUTOGEN_H_

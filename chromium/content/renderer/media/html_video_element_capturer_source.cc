@@ -8,6 +8,7 @@
 #include "base/trace_event/trace_event.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/renderer/media/media_stream_video_source.h"
+#include "content/renderer/media/webrtc_uma_histograms.h"
 #include "media/base/limits.h"
 #include "media/blink/webmediaplayer_impl.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayer.h"
@@ -28,6 +29,10 @@ scoped_ptr<HtmlVideoElementCapturerSource>
 HtmlVideoElementCapturerSource::CreateFromWebMediaPlayerImpl(
     blink::WebMediaPlayer* player,
     const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner) {
+  // Save histogram data so we can see how much HTML Video capture is used.
+  // The histogram counts the number of calls to the JS API.
+  UpdateWebRTCMethodCount(WEBKIT_VIDEO_CAPTURE_STREAM);
+
   return make_scoped_ptr(new HtmlVideoElementCapturerSource(
       static_cast<media::WebMediaPlayerImpl*>(player)->AsWeakPtr(),
       io_task_runner));
@@ -85,8 +90,9 @@ void HtmlVideoElementCapturerSource::StartCapture(
     return;
   }
   const blink::WebSize resolution = web_media_player_->naturalSize();
-  canvas_.reset(skia::CreatePlatformCanvas(resolution.width, resolution.height,
-                                           true /* is_opaque */));
+  canvas_ = skia::AdoptRef(skia::CreatePlatformCanvas(resolution.width,
+                               resolution.height,
+                               true /* is_opaque */));
 
   new_frame_callback_ = new_frame_callback;
   // Force |capture_frame_rate_| to be in between k{Min,Max}FramesPerSecond.

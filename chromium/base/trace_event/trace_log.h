@@ -39,16 +39,15 @@ class TraceSamplingThread;
 struct BASE_EXPORT TraceLogStatus {
   TraceLogStatus();
   ~TraceLogStatus();
-  size_t event_capacity;
-  size_t event_count;
+  uint32_t event_capacity;
+  uint32_t event_count;
 };
 
 class BASE_EXPORT TraceLog : public MemoryDumpProvider {
  public:
   enum Mode {
     DISABLED = 0,
-    RECORDING_MODE,
-    MONITORING_MODE,
+    RECORDING_MODE
   };
 
   // The pointer returned from GetCategoryGroupEnabledInternal() points to a
@@ -58,8 +57,6 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
   enum CategoryGroupEnabledFlags {
     // Category group enabled for the recording mode.
     ENABLED_FOR_RECORDING = 1 << 0,
-    // Category group enabled for the monitoring mode.
-    ENABLED_FOR_MONITORING = 1 << 1,
     // Category group enabled by SetEventCallbackEnabled().
     ENABLED_FOR_EVENT_CALLBACK = 1 << 2,
     // Category group enabled to export events to ETW.
@@ -142,6 +139,7 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
                                 char phase,
                                 const unsigned char* category_group_enabled,
                                 const char* name,
+                                const char* scope,
                                 unsigned long long id,
                                 int num_args,
                                 const char* const arg_names[],
@@ -169,7 +167,6 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
   typedef base::Callback<void(const scoped_refptr<base::RefCountedString>&,
                               bool has_more_events)> OutputCallback;
   void Flush(const OutputCallback& cb, bool use_worker_thread = false);
-  void FlushButLeaveBufferIntact(const OutputCallback& flush_output_callback);
 
   // Cancels tracing and discards collected data.
   void CancelTracing(const OutputCallback& cb);
@@ -188,6 +185,7 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
       char phase,
       const unsigned char* category_group_enabled,
       const char* name,
+      const char* scope,
       unsigned long long id,
       int num_args,
       const char** arg_names,
@@ -199,6 +197,7 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
       char phase,
       const unsigned char* category_group_enabled,
       const char* name,
+      const char* scope,
       unsigned long long id,
       unsigned long long bind_id,
       int num_args,
@@ -211,6 +210,7 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
       char phase,
       const unsigned char* category_group_enabled,
       const char* name,
+      const char* scope,
       unsigned long long id,
       int process_id,
       int num_args,
@@ -223,6 +223,7 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
       char phase,
       const unsigned char* category_group_enabled,
       const char* name,
+      const char* scope,
       unsigned long long id,
       int thread_id,
       const TimeTicks& timestamp,
@@ -236,6 +237,7 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
       char phase,
       const unsigned char* category_group_enabled,
       const char* name,
+      const char* scope,
       unsigned long long id,
       unsigned long long bind_id,
       int thread_id,
@@ -249,6 +251,7 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
 
   // Adds a metadata event that will be written when the trace log is flushed.
   void AddMetadataEvent(
+      const unsigned char* category_group_enabled,
       const char* name,
       int num_args,
       const char** arg_names,

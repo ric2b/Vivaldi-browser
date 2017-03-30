@@ -11,7 +11,6 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchSelectionController.SelectionType;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
-import org.chromium.chrome.browser.preferences.NetworkPredictionOptions;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.content.browser.ContentViewCore;
 
@@ -31,37 +30,22 @@ class ContextualSearchPolicy {
     private static final int REMAINING_NOT_APPLICABLE = -1;
     private static final int ONE_DAY_IN_MILLIS = 24 * 60 * 60 * 1000;
     private static final int TAP_TRIGGERED_PROMO_LIMIT = 50;
-    private static final int TAP_RESOLVE_LIMIT_FOR_DECIDED = 50;
-    private static final int TAP_PREFETCH_LIMIT_FOR_DECIDED = 50;
-    private static final int TAP_RESOLVE_LIMIT_FOR_UNDECIDED = 20;
-    private static final int TAP_PREFETCH_LIMIT_FOR_UNDECIDED = 20;
-
-    private static ContextualSearchPolicy sInstance;
+    private static final int TAP_RESOLVE_PREFETCH_LIMIT_FOR_DECIDED = 50;
+    private static final int TAP_RESOLVE_PREFETCH_LIMIT_FOR_UNDECIDED = 20;
 
     private final ChromePreferenceManager mPreferenceManager;
 
     // Members used only for testing purposes.
     private boolean mDidOverrideDecidedStateForTesting;
     private boolean mDecidedStateForTesting;
-    private boolean mDidResetCounters;
     private Integer mTapTriggeredPromoLimitForTesting;
-    private Integer mTapResolveLimitForDecided;
-    private Integer mTapPrefetchLimitForDecided;
-    private Integer mTapResolveLimitForUndecided;
-    private Integer mTapPrefetchLimitForUndecided;
-
-    public static ContextualSearchPolicy getInstance(Context context) {
-        if (sInstance == null) {
-            sInstance = new ContextualSearchPolicy(context);
-        }
-        return sInstance;
-    }
+    private Integer mTapLimitForDecided;
+    private Integer mTapLimitForUndecided;
 
     /**
-     * Private constructor -- use {@link #getInstance} to get the singleton instance.
      * @param context The Android Context.
      */
-    private ContextualSearchPolicy(Context context) {
+    public ContextualSearchPolicy(Context context) {
         mPreferenceManager = ChromePreferenceManager.getInstance(context);
     }
 
@@ -114,15 +98,12 @@ class ContextualSearchPolicy {
      *         explicitly interacts with the feature.
      */
     boolean shouldPrefetchSearchResult(boolean isTapTriggered) {
-        if (PrefServiceBridge.getInstance().getNetworkPredictionOptions()
-                == NetworkPredictionOptions.NETWORK_PREDICTION_NEVER) {
+        if (!PrefServiceBridge.getInstance().getNetworkPredictionEnabled()) {
             return false;
         }
 
-        if (isTapPrefetchBeyondTheLimit()) return false;
-
-        // If we're not resolving the tap due to the tap limit, we should not preload either.
-        if (isTapResolveBeyondTheLimit()) return false;
+        // We may not be prefetching due to the resolve/prefetch limit.
+        if (isTapBeyondTheLimit()) return false;
 
         // We never preload on long-press so users can cut & paste without hitting the servers.
         return isTapTriggered;
@@ -137,13 +118,10 @@ class ContextualSearchPolicy {
             return false;
         }
 
-        if (isTapResolveBeyondTheLimit()) {
-            return false;
-        }
+        // We may not be resolving the tap due to the resolve/prefetch limit.
+        if (isTapBeyondTheLimit()) return false;
 
-        if (isPromoAvailable()) {
-            return isBasePageHTTP(url);
-        }
+        if (isPromoAvailable()) return isBasePageHTTP(url);
 
         return true;
     }
@@ -398,17 +376,6 @@ class ContextualSearchPolicy {
     // --------------------------------------------------------------------------------------------
 
     /**
-     * Resets all policy counters.
-     */
-    @VisibleForTesting
-    void resetCounters() {
-        updateCountersForOpen();
-
-        mPreferenceManager.setContextualSearchPromoOpenCount(0);
-        mDidResetCounters = true;
-    }
-
-    /**
      * Overrides the decided/undecided state for the user preference.
      * @param decidedState Whether the user has decided or not.
      */
@@ -416,14 +383,6 @@ class ContextualSearchPolicy {
     void overrideDecidedStateForTesting(boolean decidedState) {
         mDidOverrideDecidedStateForTesting = true;
         mDecidedStateForTesting = decidedState;
-    }
-
-    /**
-     * @return Whether counters have been reset yet (by resetCounters) or not.
-     */
-    @VisibleForTesting
-    boolean didResetCounters() {
-        return mDidResetCounters;
     }
 
     /**
@@ -441,6 +400,10 @@ class ContextualSearchPolicy {
     int getTapCount() {
         return mPreferenceManager.getContextualSearchTapCount();
     }
+
+    // --------------------------------------------------------------------------------------------
+    // Translation support.
+    // --------------------------------------------------------------------------------------------
 
     /**
      * Determines whether translation is needed between the given languages.
@@ -513,23 +476,13 @@ class ContextualSearchPolicy {
     }
 
     @VisibleForTesting
-    void setTapResolveLimitForDecidedForTesting(int limit) {
-        mTapResolveLimitForDecided = limit;
+    void setTapLimitForDecidedForTesting(int limit) {
+        mTapLimitForDecided = limit;
     }
 
     @VisibleForTesting
-    void setTapPrefetchLimitForDecidedForTesting(int limit) {
-        mTapPrefetchLimitForDecided = limit;
-    }
-
-    @VisibleForTesting
-    void setTapPrefetchLimitForUndecidedForTesting(int limit) {
-        mTapPrefetchLimitForUndecided = limit;
-    }
-
-    @VisibleForTesting
-    void setTapResolveLimitForUndecidedForTesting(int limit) {
-        mTapResolveLimitForUndecided = limit;
+    void setTapLimitForUndecidedForTesting(int limit) {
+        mTapLimitForUndecided = limit;
     }
 
     // --------------------------------------------------------------------------------------------
@@ -556,54 +509,32 @@ class ContextualSearchPolicy {
     }
 
     /**
-     * @return Whether the tap resolve limit has been exceeded.
+     * @return Whether the tap resolve/prefetch limit has been exceeded.
      */
-    private boolean isTapResolveBeyondTheLimit() {
-        return getTapCount() > getTapResolveLimit();
+    private boolean isTapBeyondTheLimit() {
+        return getTapCount() > getTapLimit();
     }
 
     /**
-     * @return Whether the tap resolve limit has been exceeded.
+     * @return The limit of the number of taps to resolve or prefetch.
      */
-    private boolean isTapPrefetchBeyondTheLimit() {
-        return getTapCount() > getTapPrefetchLimit();
+    private int getTapLimit() {
+        return isUserUndecided() ? getTapLimitForUndecided() : getTapLimitForDecided();
     }
 
-    /**
-     * @return The limit of the number of taps to prefetch.
-     */
-    private int getTapPrefetchLimit() {
-        return isUserUndecided()
-                ? getTapPrefetchLimitForUndecided()
-                : getTapPrefetchLimitForDecided();
+    private int getTapLimitForDecided() {
+        if (mTapLimitForDecided != null) {
+            return mTapLimitForDecided.intValue();
+        } else {
+            return TAP_RESOLVE_PREFETCH_LIMIT_FOR_DECIDED;
+        }
     }
 
-    /**
-     * @return The limit of the number of taps to resolve using search term resolution.
-     */
-    private int getTapResolveLimit() {
-        return isUserUndecided()
-                ? getTapResolveLimitForUndecided()
-                : getTapResolveLimitForDecided();
-    }
-
-    private int getTapPrefetchLimitForDecided() {
-        if (mTapPrefetchLimitForDecided != null) return mTapPrefetchLimitForDecided.intValue();
-        return TAP_PREFETCH_LIMIT_FOR_DECIDED;
-    }
-
-    private int getTapResolveLimitForDecided() {
-        if (mTapResolveLimitForDecided != null) return mTapResolveLimitForDecided.intValue();
-        return TAP_RESOLVE_LIMIT_FOR_DECIDED;
-    }
-
-    private int getTapPrefetchLimitForUndecided() {
-        if (mTapPrefetchLimitForUndecided != null) return mTapPrefetchLimitForUndecided.intValue();
-        return TAP_PREFETCH_LIMIT_FOR_UNDECIDED;
-    }
-
-    private int getTapResolveLimitForUndecided() {
-        if (mTapResolveLimitForUndecided != null) return mTapResolveLimitForUndecided.intValue();
-        return TAP_RESOLVE_LIMIT_FOR_UNDECIDED;
+    private int getTapLimitForUndecided() {
+        if (mTapLimitForUndecided != null) {
+            return mTapLimitForUndecided.intValue();
+        } else {
+            return TAP_RESOLVE_PREFETCH_LIMIT_FOR_UNDECIDED;
+        }
     }
 }

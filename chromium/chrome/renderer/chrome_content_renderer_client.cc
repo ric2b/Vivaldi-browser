@@ -16,6 +16,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/common/channel_info.h"
@@ -23,7 +24,6 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
-#include "chrome/common/localized_error.h"
 #include "chrome/common/pepper_permission_util.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/common/secure_origin_whitelist.h"
@@ -66,19 +66,20 @@
 #include "components/dom_distiller/content/renderer/distillability_agent.h"
 #include "components/dom_distiller/content/renderer/distiller_js_render_frame_observer.h"
 #include "components/dom_distiller/core/url_constants.h"
-#include "components/nacl/renderer/ppb_nacl_private.h"
-#include "components/nacl/renderer/ppb_nacl_private_impl.h"
+#include "components/error_page/common/localized_error.h"
 #include "components/network_hints/renderer/prescient_networking_dispatcher.h"
 #include "components/page_load_metrics/renderer/metrics_render_frame_observer.h"
 #include "components/password_manager/content/renderer/credential_manager_client.h"
 #include "components/pdf/renderer/pepper_pdf_host.h"
 #include "components/plugins/renderer/mobile_youtube_plugin.h"
 #include "components/signin/core/common/profile_management_switches.h"
+#include "components/startup_metric_utils/common/startup_metric_messages.h"
 #include "components/version_info/version_info.h"
 #include "components/visitedlink/renderer/visitedlink_slave.h"
 #include "components/web_cache/renderer/web_cache_render_process_observer.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/url_constants.h"
 #include "content/public/renderer/plugin_instance_throttler.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
@@ -89,6 +90,8 @@
 #include "net/base/net_errors.h"
 #include "ppapi/c/private/ppb_pdf.h"
 #include "ppapi/shared_impl/ppapi_switches.h"
+#include "third_party/WebKit/public/platform/URLConversion.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
@@ -100,7 +103,6 @@
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebPluginContainer.h"
 #include "third_party/WebKit/public/web/WebPluginParams.h"
-#include "third_party/WebKit/public/web/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/web/WebSecurityPolicy.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
@@ -296,7 +298,8 @@ class MediaLoadDeferrer : public content::RenderFrameObserver {
 
 }  // namespace
 
-ChromeContentRendererClient::ChromeContentRendererClient() {
+ChromeContentRendererClient::ChromeContentRendererClient()
+    : main_entry_time_(base::TimeTicks::Now()) {
 #if defined(ENABLE_EXTENSIONS)
   extensions::ExtensionsClient::Set(
       extensions::ChromeExtensionsClient::GetInstance());
@@ -320,6 +323,9 @@ ChromeContentRendererClient::~ChromeContentRendererClient() {
 
 void ChromeContentRendererClient::RenderThreadStarted() {
   RenderThread* thread = RenderThread::Get();
+
+  thread->Send(new StartupMetricHostMsg_RecordRendererMainEntryTime(
+      main_entry_time_));
 
   chrome_observer_.reset(new ChromeRenderProcessObserver());
   web_cache_observer_.reset(new web_cache::WebCacheRenderProcessObserver());
@@ -388,8 +394,13 @@ void ChromeContentRendererClient::RenderThreadStarted() {
   WebSecurityPolicy::registerURLSchemeAsDisplayIsolated(dom_distiller_scheme);
 
 #if defined(OS_CHROMEOS)
-  WebString external_file_scheme(ASCIIToUTF16(content::kExternalFileScheme));
-  WebSecurityPolicy::registerURLSchemeAsLocal(external_file_scheme);
+  WebSecurityPolicy::registerURLSchemeAsLocal(
+      WebString::fromUTF8(content::kExternalFileScheme));
+#endif
+
+#if defined(OS_ANDROID)
+  WebSecurityPolicy::registerURLSchemeAsAllowedForReferrer(
+      WebString::fromUTF8(chrome::kAndroidAppScheme));
 #endif
 
 #if defined(ENABLE_IPC_FUZZER)
@@ -557,8 +568,8 @@ bool ChromeContentRendererClient::OverrideCreatePlugin(
   ChromeViewHostMsg_GetPluginInfo_Output output;
   WebString top_origin = frame->top()->securityOrigin().toString();
   render_frame->Send(new ChromeViewHostMsg_GetPluginInfo(
-      render_frame->GetRoutingID(), url, GURL(top_origin), orig_mime_type,
-      &output));
+      render_frame->GetRoutingID(), url, blink::WebStringToGURL(top_origin),
+      orig_mime_type, &output));
   *plugin = CreatePlugin(render_frame, frame, params, output);
 #else  // !defined(ENABLE_PLUGINS)
 
@@ -1011,12 +1022,12 @@ bool ChromeContentRendererClient::IsNaClAllowed(
 bool ChromeContentRendererClient::HasErrorPage(int http_status_code,
                                                std::string* error_domain) {
   // Use an internal error page, if we have one for the status code.
-  if (!LocalizedError::HasStrings(LocalizedError::kHttpErrorDomain,
-                                  http_status_code)) {
+  if (!error_page::LocalizedError::HasStrings(
+          error_page::LocalizedError::kHttpErrorDomain, http_status_code)) {
     return false;
   }
 
-  *error_domain = LocalizedError::kHttpErrorDomain;
+  *error_domain = error_page::LocalizedError::kHttpErrorDomain;
   return true;
 }
 
@@ -1044,16 +1055,17 @@ void ChromeContentRendererClient::GetNavigationErrorStrings(
 
   bool is_post = base::EqualsASCII(
       base::StringPiece16(failed_request.httpMethod()), "POST");
-  bool is_ignoring_cache = failed_request.cachePolicy() ==
+  bool is_ignoring_cache = failed_request.getCachePolicy() ==
                            blink::WebURLRequest::ReloadBypassingCache;
   if (error_html) {
     NetErrorHelper::Get(render_frame)
         ->GetErrorHTML(error, is_post, is_ignoring_cache, error_html);
   }
 
-  if (error_description)
-    *error_description = LocalizedError::GetErrorDetails(error.domain.utf8(),
-                                                         error.reason, is_post);
+  if (error_description) {
+    *error_description = error_page::LocalizedError::GetErrorDetails(
+        error.domain.utf8(), error.reason, is_post);
+  }
 }
 
 bool ChromeContentRendererClient::RunIdleHandlerWhenWidgetsHidden() {
@@ -1200,15 +1212,6 @@ void ChromeContentRendererClient::SetSpellcheck(SpellCheck* spellcheck) {
     thread->AddObserver(spellcheck_.get());
 }
 #endif
-
-const void* ChromeContentRendererClient::CreatePPAPIInterface(
-    const std::string& interface_name) {
-#if defined(ENABLE_PLUGINS) && !defined(DISABLE_NACL)
-  if (interface_name == PPB_NACL_PRIVATE_INTERFACE)
-    return nacl::GetNaClPrivateInterface();
-#endif
-  return NULL;
-}
 
 bool ChromeContentRendererClient::IsExternalPepperPlugin(
     const std::string& module_name) {
@@ -1389,6 +1392,24 @@ void ChromeContentRendererClient::AddImageContextMenuProperties(
   }
 }
 
+void ChromeContentRendererClient::RunScriptsAtDocumentStart(
+    content::RenderFrame* render_frame) {
+#if defined(ENABLE_EXTENSIONS)
+  ChromeExtensionsRendererClient::GetInstance()->RunScriptsAtDocumentStart(
+      render_frame);
+  // |render_frame| might be dead by now.
+#endif
+}
+
+void ChromeContentRendererClient::RunScriptsAtDocumentEnd(
+    content::RenderFrame* render_frame) {
+#if defined(ENABLE_EXTENSIONS)
+  ChromeExtensionsRendererClient::GetInstance()->RunScriptsAtDocumentEnd(
+      render_frame);
+  // |render_frame| might be dead by now.
+#endif
+}
+
 void
 ChromeContentRendererClient::DidInitializeServiceWorkerContextOnWorkerThread(
     v8::Local<v8::Context> context,
@@ -1418,4 +1439,8 @@ bool ChromeContentRendererClient::ShouldEnforceWebRTCRoutingPreferences() {
 #else
   return true;
 #endif
+}
+
+base::StringPiece ChromeContentRendererClient::GetOriginTrialPublicKey() {
+  return origin_trial_key_manager_.GetPublicKey();
 }

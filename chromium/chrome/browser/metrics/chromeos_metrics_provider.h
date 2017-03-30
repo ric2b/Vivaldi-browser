@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "chrome/browser/metrics/leak_detector_controller.h"
 #include "chrome/browser/metrics/perf/perf_provider_chromeos.h"
 #include "components/metrics/metrics_provider.h"
 
@@ -51,7 +52,12 @@ class ChromeOSMetricsProvider : public metrics::MetricsProvider {
   // is run.
   void InitTaskGetHardwareClass(const base::Closure& callback);
 
+  // Creates the Bluetooth adapter. When this task is complete, |callback| is
+  // run.
+  void InitTaskGetBluetoothAdapter(const base::Closure& callback);
+
   // metrics::MetricsProvider:
+  void Init() override;
   void OnDidCreateMetricsLog() override;
   void ProvideSystemProfileMetrics(
       metrics::SystemProfileProto* system_profile_proto) override;
@@ -71,8 +77,9 @@ class ChromeOSMetricsProvider : public metrics::MetricsProvider {
       metrics::SystemProfileProto* system_profile_proto);
 
   // Sets the Bluetooth Adapter instance used for the WriteBluetoothProto()
-  // call.
-  void SetBluetoothAdapter(scoped_refptr<device::BluetoothAdapter> adapter);
+  // call and calls callback.
+  void SetBluetoothAdapter(base::Closure callback,
+                           scoped_refptr<device::BluetoothAdapter> adapter);
 
   // Writes info about paired Bluetooth devices on this system.
   void WriteBluetoothProto(metrics::SystemProfileProto* system_profile_proto);
@@ -80,7 +87,11 @@ class ChromeOSMetricsProvider : public metrics::MetricsProvider {
   // Record the device enrollment status.
   void RecordEnrollmentStatus();
 
+  // For collecting systemwide perf data.
   metrics::PerfProvider perf_provider_;
+
+  // Enables runtime memory leak detection and gets notified of leak reports.
+  scoped_ptr<metrics::LeakDetectorController> leak_detector_controller_;
 
   // Bluetooth Adapter instance for collecting information about paired devices.
   scoped_refptr<device::BluetoothAdapter> adapter_;

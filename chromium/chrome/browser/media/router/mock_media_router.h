@@ -23,26 +23,31 @@ namespace media_router {
 class MockMediaRouter : public MediaRouter {
  public:
   MockMediaRouter();
-  virtual ~MockMediaRouter();
+  ~MockMediaRouter() override;
 
-  MOCK_METHOD5(CreateRoute,
+  MOCK_METHOD7(CreateRoute,
                void(const MediaSource::Id& source,
                     const MediaSink::Id& sink_id,
                     const GURL& origin,
                     content::WebContents* web_contents,
-                    const std::vector<MediaRouteResponseCallback>& callbacks));
-  MOCK_METHOD5(JoinRoute,
+                    const std::vector<MediaRouteResponseCallback>& callbacks,
+                    base::TimeDelta timeout,
+                    bool off_the_record));
+  MOCK_METHOD7(JoinRoute,
                void(const MediaSource::Id& source,
                     const std::string& presentation_id,
                     const GURL& origin,
                     content::WebContents* web_contents,
-                    const std::vector<MediaRouteResponseCallback>& callbacks));
-  MOCK_METHOD5(ConnectRouteByRouteId,
+                    const std::vector<MediaRouteResponseCallback>& callbacks,
+                    base::TimeDelta timeout,
+                    bool off_the_record));
+  MOCK_METHOD6(ConnectRouteByRouteId,
                void(const MediaSource::Id& source,
                     const MediaRoute::Id& route_id,
                     const GURL& origin,
                     content::WebContents* web_contents,
-                    const std::vector<MediaRouteResponseCallback>& callbacks));
+                    const std::vector<MediaRouteResponseCallback>& callbacks,
+                    base::TimeDelta timeout));
   MOCK_METHOD1(DetachRoute, void(const MediaRoute::Id& route_id));
   MOCK_METHOD1(TerminateRoute, void(const MediaRoute::Id& route_id));
   MOCK_METHOD3(SendRouteMessage,
@@ -61,10 +66,9 @@ class MockMediaRouter : public MediaRouter {
                     const SendRouteMessageCallback& callback));
   MOCK_METHOD1(AddIssue, void(const Issue& issue));
   MOCK_METHOD1(ClearIssue, void(const Issue::Id& issue_id));
+  MOCK_METHOD0(OnUserGesture, void());
   MOCK_METHOD1(OnPresentationSessionDetached,
                void(const MediaRoute::Id& route_id));
-  MOCK_CONST_METHOD0(HasLocalDisplayRoute, bool());
-  MOCK_CONST_METHOD0(HasLocalRoute, bool());
   scoped_ptr<PresentationConnectionStateSubscription>
   AddPresentationConnectionStateChangedCallback(
       const MediaRoute::Id& route_id,
@@ -89,13 +93,10 @@ class MockMediaRouter : public MediaRouter {
                void(PresentationSessionMessagesObserver* observer));
   MOCK_METHOD1(UnregisterPresentationSessionMessagesObserver,
                void(PresentationSessionMessagesObserver* observer));
-  MOCK_METHOD1(RegisterLocalMediaRoutesObserver,
-               void(LocalMediaRoutesObserver* observer));
-  MOCK_METHOD1(UnregisterLocalMediaRoutesObserver,
-               void(LocalMediaRoutesObserver* observer));
 
  private:
-  base::CallbackList<void(content::PresentationConnectionState)>
+  base::CallbackList<void(
+      const content::PresentationConnectionStateChangeInfo&)>
       connection_state_callbacks_;
 };
 

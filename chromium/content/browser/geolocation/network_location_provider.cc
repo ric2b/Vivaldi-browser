@@ -81,12 +81,9 @@ bool NetworkLocationProvider::PositionCache::MakeKey(
   const size_t kCharsPerMacAddress = 6 * 3 + 1;  // e.g. "11:22:33:44:55:66|"
   key->reserve(wifi_data.access_point_data.size() * kCharsPerMacAddress);
   const base::string16 separator(base::ASCIIToUTF16("|"));
-  for (WifiData::AccessPointDataSet::const_iterator iter =
-       wifi_data.access_point_data.begin();
-       iter != wifi_data.access_point_data.end();
-       iter++) {
+  for (const auto& access_point_data : wifi_data.access_point_data) {
     *key += separator;
-    *key += iter->mac_address;
+    *key += access_point_data.mac_address;
     *key += separator;
   }
   // If the key is the empty string, return false, as we don't want to cache a
@@ -215,7 +212,7 @@ bool NetworkLocationProvider::StartProvider(bool high_accuracy) {
 
 void NetworkLocationProvider::OnWifiDataUpdated() {
   DCHECK(CalledOnValidThread());
-  wifi_data_updated_timestamp_ = base::Time::Now();
+  wifi_timestamp_ = base::Time::Now();
 
   is_new_data_available_ = is_wifi_data_complete_;
   RequestRefresh();
@@ -238,8 +235,8 @@ void NetworkLocationProvider::RequestPosition() {
 
   const Geoposition* cached_position =
       position_cache_->FindPosition(wifi_data_);
-  DCHECK(!wifi_data_updated_timestamp_.is_null()) <<
-      "Timestamp must be set before looking up position";
+  DCHECK(!wifi_timestamp_.is_null())
+      << "Timestamp must be set before looking up position";
   if (cached_position) {
     DCHECK(cached_position->Validate());
     // Record the position and update its timestamp.
@@ -247,7 +244,7 @@ void NetworkLocationProvider::RequestPosition() {
     // The timestamp of a position fix is determined by the timestamp
     // of the source data update. (The value of position_.timestamp from
     // the cache could be from weeks ago!)
-    position_.timestamp = wifi_data_updated_timestamp_;
+    position_.timestamp = wifi_timestamp_;
     is_new_data_available_ = false;
     // Let listeners know that we now have a position available.
     NotifyCallback(position_);
@@ -267,8 +264,7 @@ void NetworkLocationProvider::RequestPosition() {
                 "with new data. Wifi APs: "
              << wifi_data_.access_point_data.size();
   }
-  request_->MakeRequest(access_token_, wifi_data_,
-                        wifi_data_updated_timestamp_);
+  request_->MakeRequest(access_token_, wifi_data_, wifi_timestamp_);
 }
 
 bool NetworkLocationProvider::IsStarted() const {

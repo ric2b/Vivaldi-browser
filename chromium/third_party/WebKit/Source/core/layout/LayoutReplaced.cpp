@@ -27,7 +27,9 @@
 #include "core/layout/LayoutAnalyzer.h"
 #include "core/layout/LayoutBlock.h"
 #include "core/layout/LayoutImage.h"
+#include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutView.h"
+#include "core/layout/api/LineLayoutBlockFlow.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/ReplacedPainter.h"
@@ -114,29 +116,6 @@ void LayoutReplaced::paint(const PaintInfo& paintInfo, const LayoutPoint& paintO
     ReplacedPainter(*this).paint(paintInfo, paintOffset);
 }
 
-bool LayoutReplaced::shouldPaint(const PaintInfo& paintInfo, const LayoutPoint& paintOffset) const
-{
-    if (paintInfo.phase != PaintPhaseForeground && !shouldPaintSelfOutline(paintInfo.phase)
-        && paintInfo.phase != PaintPhaseSelection && paintInfo.phase != PaintPhaseMask && paintInfo.phase != PaintPhaseClippingMask)
-        return false;
-
-    if (!paintInfo.shouldPaintWithinRoot(this))
-        return false;
-
-    // if we're invisible or haven't received a layout yet, then just bail.
-    if (style()->visibility() != VISIBLE)
-        return false;
-
-    LayoutRect paintRect(visualOverflowRect());
-    paintRect.unite(localSelectionRect());
-    paintRect.moveBy(paintOffset + location());
-
-    if (!paintInfo.cullRect().intersectsCullRect(paintRect))
-        return false;
-
-    return true;
-}
-
 bool LayoutReplaced::hasReplacedLogicalHeight() const
 {
     if (style()->logicalHeight().isAuto())
@@ -167,47 +146,344 @@ static inline bool layoutObjectHasAspectRatio(const LayoutObject* layoutObject)
     return layoutObject->isImage() || layoutObject->isCanvas() || layoutObject->isVideo();
 }
 
-void LayoutReplaced::computeAspectRatioInformationForLayoutBox(LayoutBox* contentLayoutObject, FloatSize& constrainedSize, double& intrinsicRatio) const
+void LayoutReplaced::computeIntrinsicSizingInfoForLayoutBox(LayoutBox* contentLayoutObject, IntrinsicSizingInfo& intrinsicSizingInfo) const
 {
-    FloatSize intrinsicSize;
     if (contentLayoutObject) {
-        contentLayoutObject->computeIntrinsicRatioInformation(intrinsicSize, intrinsicRatio);
+        contentLayoutObject->computeIntrinsicSizingInfo(intrinsicSizingInfo);
 
         // Handle zoom & vertical writing modes here, as the embedded document doesn't know about them.
-        intrinsicSize.scale(style()->effectiveZoom());
+        intrinsicSizingInfo.size.scale(style()->effectiveZoom());
         if (isLayoutImage())
-            intrinsicSize.scale(toLayoutImage(this)->imageDevicePixelRatio());
+            intrinsicSizingInfo.size.scale(toLayoutImage(this)->imageDevicePixelRatio());
 
         // Update our intrinsic size to match what the content layoutObject has computed, so that when we
         // constrain the size below, the correct intrinsic size will be obtained for comparison against
         // min and max widths.
-        if (intrinsicRatio && !intrinsicSize.isEmpty())
-            m_intrinsicSize = LayoutSize(intrinsicSize);
+        if (!intrinsicSizingInfo.aspectRatio.isEmpty() && !intrinsicSizingInfo.size.isEmpty())
+            m_intrinsicSize = LayoutSize(intrinsicSizingInfo.size);
 
-        if (!isHorizontalWritingMode()) {
-            if (intrinsicRatio)
-                intrinsicRatio = 1 / intrinsicRatio;
-            intrinsicSize = intrinsicSize.transposedSize();
-        }
+        if (!isHorizontalWritingMode())
+            intrinsicSizingInfo.transpose();
     } else {
-        computeIntrinsicRatioInformation(intrinsicSize, intrinsicRatio);
-        if (intrinsicRatio && !intrinsicSize.isEmpty())
-            m_intrinsicSize = LayoutSize(isHorizontalWritingMode() ? intrinsicSize : intrinsicSize.transposedSize());
+        computeIntrinsicSizingInfo(intrinsicSizingInfo);
+        if (!intrinsicSizingInfo.aspectRatio.isEmpty() && !intrinsicSizingInfo.size.isEmpty())
+            m_intrinsicSize = LayoutSize(isHorizontalWritingMode() ? intrinsicSizingInfo.size : intrinsicSizingInfo.size.transposedSize());
+    }
+}
+
+FloatSize LayoutReplaced::constrainIntrinsicSizeToMinMax(const IntrinsicSizingInfo& intrinsicSizingInfo) const
+{
+    // Constrain the intrinsic size along each axis according to minimum and maximum width/heights along the opposite
+    // axis. So for example a maximum width that shrinks our width will result in the height we compute here having
+    // to shrink in order to preserve the aspect ratio. Because we compute these values independently along each
+    // axis, the final returned size may in fact not preserve the aspect ratio.
+    // TODO(davve): Investigate using only the intrinsic aspect ratio here.
+    FloatSize constrainedSize = intrinsicSizingInfo.size;
+    if (!intrinsicSizingInfo.aspectRatio.isEmpty() && !intrinsicSizingInfo.size.isEmpty() && style()->logicalWidth().isAuto() && style()->logicalHeight().isAuto()) {
+        // We can't multiply or divide by 'intrinsicSizingInfo.aspectRatio' here, it breaks tests, like fast/images/zoomed-img-size.html, which
+        // can only be fixed once subpixel precision is available for things like intrinsicWidth/Height - which include zoom!
+        constrainedSize.setWidth(LayoutBox::computeReplacedLogicalHeight() * intrinsicSizingInfo.size.width() / intrinsicSizingInfo.size.height());
+        constrainedSize.setHeight(LayoutBox::computeReplacedLogicalWidth() * intrinsicSizingInfo.size.height() / intrinsicSizingInfo.size.width());
+    }
+    return constrainedSize;
+}
+
+void LayoutReplaced::computePositionedLogicalWidth(LogicalExtentComputedValues& computedValues) const
+{
+    // The following is based off of the W3C Working Draft from April 11, 2006 of
+    // CSS 2.1: Section 10.3.8 "Absolutely positioned, replaced elements"
+    // <http://www.w3.org/TR/2005/WD-CSS21-20050613/visudet.html#abs-replaced-width>
+    // (block-style-comments in this function correspond to text from the spec and
+    // the numbers correspond to numbers in spec)
+
+    // We don't use containingBlock(), since we may be positioned by an enclosing
+    // relative positioned inline.
+    const LayoutBoxModelObject* containerBlock = toLayoutBoxModelObject(container());
+
+    const LayoutUnit containerLogicalWidth = containingBlockLogicalWidthForPositioned(containerBlock);
+    const LayoutUnit containerRelativeLogicalWidth = containingBlockLogicalWidthForPositioned(containerBlock, false);
+
+    // To match WinIE, in quirks mode use the parent's 'direction' property
+    // instead of the the container block's.
+    TextDirection containerDirection = containerBlock->style()->direction();
+
+    // Variables to solve.
+    bool isHorizontal = isHorizontalWritingMode();
+    Length logicalLeft = style()->logicalLeft();
+    Length logicalRight = style()->logicalRight();
+    Length marginLogicalLeft = isHorizontal ? style()->marginLeft() : style()->marginTop();
+    Length marginLogicalRight = isHorizontal ? style()->marginRight() : style()->marginBottom();
+    LayoutUnit& marginLogicalLeftAlias = style()->isLeftToRightDirection() ? computedValues.m_margins.m_start : computedValues.m_margins.m_end;
+    LayoutUnit& marginLogicalRightAlias = style()->isLeftToRightDirection() ? computedValues.m_margins.m_end : computedValues.m_margins.m_start;
+
+    /*-----------------------------------------------------------------------*\
+     * 1. The used value of 'width' is determined as for inline replaced
+     *    elements.
+    \*-----------------------------------------------------------------------*/
+    // NOTE: This value of width is final in that the min/max width calculations
+    // are dealt with in computeReplacedWidth().  This means that the steps to produce
+    // correct max/min in the non-replaced version, are not necessary.
+    computedValues.m_extent = computeReplacedLogicalWidth() + borderAndPaddingLogicalWidth();
+
+    const LayoutUnit availableSpace = containerLogicalWidth - computedValues.m_extent;
+
+    /*-----------------------------------------------------------------------*\
+     * 2. If both 'left' and 'right' have the value 'auto', then if 'direction'
+     *    of the containing block is 'ltr', set 'left' to the static position;
+     *    else if 'direction' is 'rtl', set 'right' to the static position.
+    \*-----------------------------------------------------------------------*/
+    // see FIXME 1
+    computeInlineStaticDistance(logicalLeft, logicalRight, this, containerBlock, containerLogicalWidth);
+
+    /*-----------------------------------------------------------------------*\
+     * 3. If 'left' or 'right' are 'auto', replace any 'auto' on 'margin-left'
+     *    or 'margin-right' with '0'.
+    \*-----------------------------------------------------------------------*/
+    if (logicalLeft.isAuto() || logicalRight.isAuto()) {
+        if (marginLogicalLeft.isAuto())
+            marginLogicalLeft.setValue(Fixed, 0);
+        if (marginLogicalRight.isAuto())
+            marginLogicalRight.setValue(Fixed, 0);
     }
 
-    // Now constrain the intrinsic size along each axis according to minimum and maximum width/heights along the
-    // opposite axis. So for example a maximum width that shrinks our width will result in the height we compute here
-    // having to shrink in order to preserve the aspect ratio. Because we compute these values independently along
-    // each axis, the final returned size may in fact not preserve the aspect ratio.
-    // FIXME: In the long term, it might be better to just return this code more to the way it used to be before this
-    // function was added, since all it has done is make the code more unclear.
-    constrainedSize = intrinsicSize;
-    if (intrinsicRatio && !intrinsicSize.isEmpty() && style()->logicalWidth().isAuto() && style()->logicalHeight().isAuto()) {
-        // We can't multiply or divide by 'intrinsicRatio' here, it breaks tests, like fast/images/zoomed-img-size.html, which
-        // can only be fixed once subpixel precision is available for things like intrinsicWidth/Height - which include zoom!
-        constrainedSize.setWidth(LayoutBox::computeReplacedLogicalHeight() * intrinsicSize.width() / intrinsicSize.height());
-        constrainedSize.setHeight(LayoutBox::computeReplacedLogicalWidth() * intrinsicSize.height() / intrinsicSize.width());
+    /*-----------------------------------------------------------------------*\
+     * 4. If at this point both 'margin-left' and 'margin-right' are still
+     *    'auto', solve the equation under the extra constraint that the two
+     *    margins must get equal values, unless this would make them negative,
+     *    in which case when the direction of the containing block is 'ltr'
+     *    ('rtl'), set 'margin-left' ('margin-right') to zero and solve for
+     *    'margin-right' ('margin-left').
+    \*-----------------------------------------------------------------------*/
+    LayoutUnit logicalLeftValue;
+    LayoutUnit logicalRightValue;
+
+    if (marginLogicalLeft.isAuto() && marginLogicalRight.isAuto()) {
+        // 'left' and 'right' cannot be 'auto' due to step 3
+        ASSERT(!(logicalLeft.isAuto() && logicalRight.isAuto()));
+
+        logicalLeftValue = valueForLength(logicalLeft, containerLogicalWidth);
+        logicalRightValue = valueForLength(logicalRight, containerLogicalWidth);
+
+        LayoutUnit difference = availableSpace - (logicalLeftValue + logicalRightValue);
+        if (difference > LayoutUnit()) {
+            marginLogicalLeftAlias = difference / 2; // split the difference
+            marginLogicalRightAlias = difference - marginLogicalLeftAlias; // account for odd valued differences
+        } else {
+            // Use the containing block's direction rather than the parent block's
+            // per CSS 2.1 reference test abspos-replaced-width-margin-000.
+            if (containerDirection == LTR) {
+                marginLogicalLeftAlias = LayoutUnit();
+                marginLogicalRightAlias = difference; // will be negative
+            } else {
+                marginLogicalLeftAlias = difference; // will be negative
+                marginLogicalRightAlias = LayoutUnit();
+            }
+        }
+
+    /*-----------------------------------------------------------------------*\
+     * 5. If at this point there is an 'auto' left, solve the equation for
+     *    that value.
+    \*-----------------------------------------------------------------------*/
+    } else if (logicalLeft.isAuto()) {
+        marginLogicalLeftAlias = valueForLength(marginLogicalLeft, containerRelativeLogicalWidth);
+        marginLogicalRightAlias = valueForLength(marginLogicalRight, containerRelativeLogicalWidth);
+        logicalRightValue = valueForLength(logicalRight, containerLogicalWidth);
+
+        // Solve for 'left'
+        logicalLeftValue = availableSpace - (logicalRightValue + marginLogicalLeftAlias + marginLogicalRightAlias);
+    } else if (logicalRight.isAuto()) {
+        marginLogicalLeftAlias = valueForLength(marginLogicalLeft, containerRelativeLogicalWidth);
+        marginLogicalRightAlias = valueForLength(marginLogicalRight, containerRelativeLogicalWidth);
+        logicalLeftValue = valueForLength(logicalLeft, containerLogicalWidth);
+
+        // Solve for 'right'
+        logicalRightValue = availableSpace - (logicalLeftValue + marginLogicalLeftAlias + marginLogicalRightAlias);
+    } else if (marginLogicalLeft.isAuto()) {
+        marginLogicalRightAlias = valueForLength(marginLogicalRight, containerRelativeLogicalWidth);
+        logicalLeftValue = valueForLength(logicalLeft, containerLogicalWidth);
+        logicalRightValue = valueForLength(logicalRight, containerLogicalWidth);
+
+        // Solve for 'margin-left'
+        marginLogicalLeftAlias = availableSpace - (logicalLeftValue + logicalRightValue + marginLogicalRightAlias);
+    } else if (marginLogicalRight.isAuto()) {
+        marginLogicalLeftAlias = valueForLength(marginLogicalLeft, containerRelativeLogicalWidth);
+        logicalLeftValue = valueForLength(logicalLeft, containerLogicalWidth);
+        logicalRightValue = valueForLength(logicalRight, containerLogicalWidth);
+
+        // Solve for 'margin-right'
+        marginLogicalRightAlias = availableSpace - (logicalLeftValue + logicalRightValue + marginLogicalLeftAlias);
+    } else {
+        // Nothing is 'auto', just calculate the values.
+        marginLogicalLeftAlias = valueForLength(marginLogicalLeft, containerRelativeLogicalWidth);
+        marginLogicalRightAlias = valueForLength(marginLogicalRight, containerRelativeLogicalWidth);
+        logicalRightValue = valueForLength(logicalRight, containerLogicalWidth);
+        logicalLeftValue = valueForLength(logicalLeft, containerLogicalWidth);
+        // If the containing block is right-to-left, then push the left position as far to the right as possible
+        if (containerDirection == RTL) {
+            int totalLogicalWidth = computedValues.m_extent + logicalLeftValue + logicalRightValue +  marginLogicalLeftAlias + marginLogicalRightAlias;
+            logicalLeftValue = containerLogicalWidth - (totalLogicalWidth - logicalLeftValue);
+        }
     }
+
+    /*-----------------------------------------------------------------------*\
+     * 6. If at this point the values are over-constrained, ignore the value
+     *    for either 'left' (in case the 'direction' property of the
+     *    containing block is 'rtl') or 'right' (in case 'direction' is
+     *    'ltr') and solve for that value.
+    \*-----------------------------------------------------------------------*/
+    // NOTE: Constraints imposed by the width of the containing block and its content have already been accounted for above.
+
+    // FIXME: Deal with differing writing modes here.  Our offset needs to be in the containing block's coordinate space, so that
+    // can make the result here rather complicated to compute.
+
+    // Use computed values to calculate the horizontal position.
+
+    // FIXME: This hack is needed to calculate the logical left position for a 'rtl' relatively
+    // positioned, inline containing block because right now, it is using the logical left position
+    // of the first line box when really it should use the last line box.  When
+    // this is fixed elsewhere, this block should be removed.
+    if (containerBlock->isLayoutInline() && !containerBlock->style()->isLeftToRightDirection()) {
+        const LayoutInline* flow = toLayoutInline(containerBlock);
+        InlineFlowBox* firstLine = flow->firstLineBox();
+        InlineFlowBox* lastLine = flow->lastLineBox();
+        if (firstLine && lastLine && firstLine != lastLine) {
+            computedValues.m_position = logicalLeftValue + marginLogicalLeftAlias + lastLine->borderLogicalLeft() + (lastLine->logicalLeft() - firstLine->logicalLeft());
+            return;
+        }
+    }
+
+    LayoutUnit logicalLeftPos = logicalLeftValue + marginLogicalLeftAlias;
+    computeLogicalLeftPositionedOffset(logicalLeftPos, this, computedValues.m_extent, containerBlock, containerLogicalWidth);
+    computedValues.m_position = logicalLeftPos;
+}
+
+void LayoutReplaced::computePositionedLogicalHeight(LogicalExtentComputedValues& computedValues) const
+{
+    // The following is based off of the W3C Working Draft from April 11, 2006 of
+    // CSS 2.1: Section 10.6.5 "Absolutely positioned, replaced elements"
+    // <http://www.w3.org/TR/2005/WD-CSS21-20050613/visudet.html#abs-replaced-height>
+    // (block-style-comments in this function correspond to text from the spec and
+    // the numbers correspond to numbers in spec)
+
+    // We don't use containingBlock(), since we may be positioned by an enclosing relpositioned inline.
+    const LayoutBoxModelObject* containerBlock = toLayoutBoxModelObject(container());
+
+    const LayoutUnit containerLogicalHeight = containingBlockLogicalHeightForPositioned(containerBlock);
+    const LayoutUnit containerRelativeLogicalWidth = containingBlockLogicalWidthForPositioned(containerBlock, false);
+
+    // Variables to solve.
+    Length marginBefore = style()->marginBefore();
+    Length marginAfter = style()->marginAfter();
+    LayoutUnit& marginBeforeAlias = computedValues.m_margins.m_before;
+    LayoutUnit& marginAfterAlias = computedValues.m_margins.m_after;
+
+    Length logicalTop = style()->logicalTop();
+    Length logicalBottom = style()->logicalBottom();
+
+    /*-----------------------------------------------------------------------*\
+     * 1. The used value of 'height' is determined as for inline replaced
+     *    elements.
+    \*-----------------------------------------------------------------------*/
+    // NOTE: This value of height is final in that the min/max height calculations
+    // are dealt with in computeReplacedHeight().  This means that the steps to produce
+    // correct max/min in the non-replaced version, are not necessary.
+    computedValues.m_extent = computeReplacedLogicalHeight() + borderAndPaddingLogicalHeight();
+    const LayoutUnit availableSpace = containerLogicalHeight - computedValues.m_extent;
+
+    /*-----------------------------------------------------------------------*\
+     * 2. If both 'top' and 'bottom' have the value 'auto', replace 'top'
+     *    with the element's static position.
+    \*-----------------------------------------------------------------------*/
+    // see FIXME 1
+    computeBlockStaticDistance(logicalTop, logicalBottom, this, containerBlock);
+
+    /*-----------------------------------------------------------------------*\
+     * 3. If 'bottom' is 'auto', replace any 'auto' on 'margin-top' or
+     *    'margin-bottom' with '0'.
+    \*-----------------------------------------------------------------------*/
+    // FIXME: The spec. says that this step should only be taken when bottom is
+    // auto, but if only top is auto, this makes step 4 impossible.
+    if (logicalTop.isAuto() || logicalBottom.isAuto()) {
+        if (marginBefore.isAuto())
+            marginBefore.setValue(Fixed, 0);
+        if (marginAfter.isAuto())
+            marginAfter.setValue(Fixed, 0);
+    }
+
+    /*-----------------------------------------------------------------------*\
+     * 4. If at this point both 'margin-top' and 'margin-bottom' are still
+     *    'auto', solve the equation under the extra constraint that the two
+     *    margins must get equal values.
+    \*-----------------------------------------------------------------------*/
+    LayoutUnit logicalTopValue;
+    LayoutUnit logicalBottomValue;
+
+    if (marginBefore.isAuto() && marginAfter.isAuto()) {
+        // 'top' and 'bottom' cannot be 'auto' due to step 2 and 3 combined.
+        ASSERT(!(logicalTop.isAuto() || logicalBottom.isAuto()));
+
+        logicalTopValue = valueForLength(logicalTop, containerLogicalHeight);
+        logicalBottomValue = valueForLength(logicalBottom, containerLogicalHeight);
+
+        LayoutUnit difference = availableSpace - (logicalTopValue + logicalBottomValue);
+        // NOTE: This may result in negative values.
+        marginBeforeAlias =  difference / 2; // split the difference
+        marginAfterAlias = difference - marginBeforeAlias; // account for odd valued differences
+
+    /*-----------------------------------------------------------------------*\
+     * 5. If at this point there is only one 'auto' left, solve the equation
+     *    for that value.
+    \*-----------------------------------------------------------------------*/
+    } else if (logicalTop.isAuto()) {
+        marginBeforeAlias = valueForLength(marginBefore, containerRelativeLogicalWidth);
+        marginAfterAlias = valueForLength(marginAfter, containerRelativeLogicalWidth);
+        logicalBottomValue = valueForLength(logicalBottom, containerLogicalHeight);
+
+        // Solve for 'top'
+        logicalTopValue = availableSpace - (logicalBottomValue + marginBeforeAlias + marginAfterAlias);
+    } else if (logicalBottom.isAuto()) {
+        marginBeforeAlias = valueForLength(marginBefore, containerRelativeLogicalWidth);
+        marginAfterAlias = valueForLength(marginAfter, containerRelativeLogicalWidth);
+        logicalTopValue = valueForLength(logicalTop, containerLogicalHeight);
+
+        // Solve for 'bottom'
+        // NOTE: It is not necessary to solve for 'bottom' because we don't ever
+        // use the value.
+    } else if (marginBefore.isAuto()) {
+        marginAfterAlias = valueForLength(marginAfter, containerRelativeLogicalWidth);
+        logicalTopValue = valueForLength(logicalTop, containerLogicalHeight);
+        logicalBottomValue = valueForLength(logicalBottom, containerLogicalHeight);
+
+        // Solve for 'margin-top'
+        marginBeforeAlias = availableSpace - (logicalTopValue + logicalBottomValue + marginAfterAlias);
+    } else if (marginAfter.isAuto()) {
+        marginBeforeAlias = valueForLength(marginBefore, containerRelativeLogicalWidth);
+        logicalTopValue = valueForLength(logicalTop, containerLogicalHeight);
+        logicalBottomValue = valueForLength(logicalBottom, containerLogicalHeight);
+
+        // Solve for 'margin-bottom'
+        marginAfterAlias = availableSpace - (logicalTopValue + logicalBottomValue + marginBeforeAlias);
+    } else {
+        // Nothing is 'auto', just calculate the values.
+        marginBeforeAlias = valueForLength(marginBefore, containerRelativeLogicalWidth);
+        marginAfterAlias = valueForLength(marginAfter, containerRelativeLogicalWidth);
+        logicalTopValue = valueForLength(logicalTop, containerLogicalHeight);
+        // NOTE: It is not necessary to solve for 'bottom' because we don't ever
+        // use the value.
+    }
+
+    /*-----------------------------------------------------------------------*\
+     * 6. If at this point the values are over-constrained, ignore the value
+     *    for 'bottom' and solve for that value.
+    \*-----------------------------------------------------------------------*/
+    // NOTE: It is not necessary to do this step because we don't end up using
+    // the value of 'bottom' regardless of whether the values are over-constrained
+    // or not.
+
+    // Use computed values to calculate the vertical position.
+    LayoutUnit logicalTopPos = logicalTopValue + marginBeforeAlias;
+    computeLogicalTopPositionedOffset(logicalTopPos, this, computedValues.m_extent, containerBlock, containerLogicalHeight);
+    computedValues.m_position = logicalTopPos;
 }
 
 LayoutRect LayoutReplaced::replacedContentRect(const LayoutSize* overriddenIntrinsicSize) const
@@ -252,17 +528,27 @@ LayoutRect LayoutReplaced::replacedContentRect(const LayoutSize* overriddenIntri
     return finalRect;
 }
 
-void LayoutReplaced::computeIntrinsicRatioInformation(FloatSize& intrinsicSize, double& intrinsicRatio) const
+void LayoutReplaced::computeIntrinsicSizingInfo(IntrinsicSizingInfo& intrinsicSizingInfo) const
 {
     // If there's an embeddedContentBox() of a remote, referenced document available, this code-path should never be used.
     ASSERT(!embeddedContentBox());
-    intrinsicSize = FloatSize(intrinsicLogicalWidth().toFloat(), intrinsicLogicalHeight().toFloat());
+    intrinsicSizingInfo.size = FloatSize(intrinsicLogicalWidth().toFloat(), intrinsicLogicalHeight().toFloat());
 
     // Figure out if we need to compute an intrinsic ratio.
-    if (intrinsicSize.isEmpty() || !layoutObjectHasAspectRatio(this))
+    if (intrinsicSizingInfo.size.isEmpty() || !layoutObjectHasAspectRatio(this))
         return;
 
-    intrinsicRatio = intrinsicSize.width() / intrinsicSize.height();
+    intrinsicSizingInfo.aspectRatio = intrinsicSizingInfo.size;
+}
+
+static inline LayoutUnit resolveWidthForRatio(LayoutUnit height, const FloatSize& aspectRatio)
+{
+    return LayoutUnit(height * aspectRatio.width() / aspectRatio.height());
+}
+
+static inline LayoutUnit resolveHeightForRatio(LayoutUnit width, const FloatSize& aspectRatio)
+{
+    return LayoutUnit(width * aspectRatio.height() / aspectRatio.width());
 }
 
 LayoutUnit LayoutReplaced::computeReplacedLogicalWidth(ShouldComputePreferred shouldComputePreferred) const
@@ -273,34 +559,32 @@ LayoutUnit LayoutReplaced::computeReplacedLogicalWidth(ShouldComputePreferred sh
     LayoutBox* contentLayoutObject = embeddedContentBox();
 
     // 10.3.2 Inline, replaced elements: http://www.w3.org/TR/CSS21/visudet.html#inline-replaced-width
-    double intrinsicRatio = 0;
-    FloatSize constrainedSize;
-    computeAspectRatioInformationForLayoutBox(contentLayoutObject, constrainedSize, intrinsicRatio);
+    IntrinsicSizingInfo intrinsicSizingInfo;
+    computeIntrinsicSizingInfoForLayoutBox(contentLayoutObject, intrinsicSizingInfo);
+    FloatSize constrainedSize = constrainIntrinsicSizeToMinMax(intrinsicSizingInfo);
 
     if (style()->logicalWidth().isAuto()) {
         bool computedHeightIsAuto = hasAutoHeightOrContainingBlockWithAutoHeight();
-        bool hasIntrinsicWidth = constrainedSize.width() > 0;
 
         // If 'height' and 'width' both have computed values of 'auto' and the element also has an intrinsic width, then that intrinsic width is the used value of 'width'.
-        if (computedHeightIsAuto && hasIntrinsicWidth)
-            return computeReplacedLogicalWidthRespectingMinMaxWidth(constrainedSize.width(), shouldComputePreferred);
+        if (computedHeightIsAuto && intrinsicSizingInfo.hasWidth)
+            return computeReplacedLogicalWidthRespectingMinMaxWidth(LayoutUnit(constrainedSize.width()), shouldComputePreferred);
 
-        bool hasIntrinsicHeight = constrainedSize.height() > 0;
-        if (intrinsicRatio) {
+        if (!intrinsicSizingInfo.aspectRatio.isEmpty()) {
             // If 'height' and 'width' both have computed values of 'auto' and the element has no intrinsic width, but does have an intrinsic height and intrinsic ratio;
             // or if 'width' has a computed value of 'auto', 'height' has some other computed value, and the element does have an intrinsic ratio; then the used value
             // of 'width' is: (used height) * (intrinsic ratio)
-            if (intrinsicRatio && ((computedHeightIsAuto && !hasIntrinsicWidth && hasIntrinsicHeight) || !computedHeightIsAuto)) {
+            if ((computedHeightIsAuto && !intrinsicSizingInfo.hasWidth && intrinsicSizingInfo.hasHeight) || !computedHeightIsAuto) {
                 LayoutUnit logicalHeight = computeReplacedLogicalHeight();
-                return computeReplacedLogicalWidthRespectingMinMaxWidth(logicalHeight * intrinsicRatio, shouldComputePreferred);
+                return computeReplacedLogicalWidthRespectingMinMaxWidth(resolveWidthForRatio(logicalHeight, intrinsicSizingInfo.aspectRatio), shouldComputePreferred);
             }
 
             // If 'height' and 'width' both have computed values of 'auto' and the element has an intrinsic ratio but no intrinsic height or width, then the used value of
             // 'width' is undefined in CSS 2.1. However, it is suggested that, if the containing block's width does not itself depend on the replaced element's width, then
             // the used value of 'width' is calculated from the constraint equation used for block-level, non-replaced elements in normal flow.
-            if (computedHeightIsAuto && !hasIntrinsicWidth && !hasIntrinsicHeight) {
+            if (computedHeightIsAuto && !intrinsicSizingInfo.hasWidth && !intrinsicSizingInfo.hasHeight) {
                 if (shouldComputePreferred == ComputePreferred)
-                    return 0;
+                    return computeReplacedLogicalWidthRespectingMinMaxWidth(LayoutUnit(), ComputePreferred);
                 // The aforementioned 'constraint equation' used for block-level, non-replaced elements in normal flow:
                 // 'margin-left' + 'border-left-width' + 'padding-left' + 'width' + 'padding-right' + 'border-right-width' + 'margin-right' = width of containing block
                 LayoutUnit logicalWidth = containingBlock()->availableLogicalWidth();
@@ -308,14 +592,14 @@ LayoutUnit LayoutReplaced::computeReplacedLogicalWidth(ShouldComputePreferred sh
                 // This solves above equation for 'width' (== logicalWidth).
                 LayoutUnit marginStart = minimumValueForLength(style()->marginStart(), logicalWidth);
                 LayoutUnit marginEnd = minimumValueForLength(style()->marginEnd(), logicalWidth);
-                logicalWidth = std::max<LayoutUnit>(0, logicalWidth - (marginStart + marginEnd + (size().width() - clientWidth())));
+                logicalWidth = (logicalWidth - (marginStart + marginEnd + (size().width() - clientWidth()))).clampNegativeToZero();
                 return computeReplacedLogicalWidthRespectingMinMaxWidth(logicalWidth, shouldComputePreferred);
             }
         }
 
         // Otherwise, if 'width' has a computed value of 'auto', and the element has an intrinsic width, then that intrinsic width is the used value of 'width'.
-        if (hasIntrinsicWidth)
-            return computeReplacedLogicalWidthRespectingMinMaxWidth(constrainedSize.width(), shouldComputePreferred);
+        if (intrinsicSizingInfo.hasWidth)
+            return computeReplacedLogicalWidthRespectingMinMaxWidth(LayoutUnit(constrainedSize.width()), shouldComputePreferred);
 
         // Otherwise, if 'width' has a computed value of 'auto', but none of the conditions above are met, then the used value of 'width' becomes 300px. If 300px is too
         // wide to fit the device, UAs should use the width of the largest rectangle that has a 2:1 ratio and fits the device instead.
@@ -336,25 +620,24 @@ LayoutUnit LayoutReplaced::computeReplacedLogicalHeight() const
     LayoutBox* contentLayoutObject = embeddedContentBox();
 
     // 10.6.2 Inline, replaced elements: http://www.w3.org/TR/CSS21/visudet.html#inline-replaced-height
-    double intrinsicRatio = 0;
-    FloatSize constrainedSize;
-    computeAspectRatioInformationForLayoutBox(contentLayoutObject, constrainedSize, intrinsicRatio);
+    IntrinsicSizingInfo intrinsicSizingInfo;
+    computeIntrinsicSizingInfoForLayoutBox(contentLayoutObject, intrinsicSizingInfo);
+    FloatSize constrainedSize = constrainIntrinsicSizeToMinMax(intrinsicSizingInfo);
 
     bool widthIsAuto = style()->logicalWidth().isAuto();
-    bool hasIntrinsicHeight = constrainedSize.height() > 0;
 
     // If 'height' and 'width' both have computed values of 'auto' and the element also has an intrinsic height, then that intrinsic height is the used value of 'height'.
-    if (widthIsAuto && hasIntrinsicHeight)
-        return computeReplacedLogicalHeightRespectingMinMaxHeight(constrainedSize.height());
+    if (widthIsAuto && intrinsicSizingInfo.hasHeight)
+        return computeReplacedLogicalHeightRespectingMinMaxHeight(LayoutUnit(constrainedSize.height()));
 
     // Otherwise, if 'height' has a computed value of 'auto', and the element has an intrinsic ratio then the used value of 'height' is:
     // (used width) / (intrinsic ratio)
-    if (intrinsicRatio)
-        return computeReplacedLogicalHeightRespectingMinMaxHeight(availableLogicalWidth() / intrinsicRatio);
+    if (!intrinsicSizingInfo.aspectRatio.isEmpty())
+        return computeReplacedLogicalHeightRespectingMinMaxHeight(resolveHeightForRatio(availableLogicalWidth(), intrinsicSizingInfo.aspectRatio));
 
     // Otherwise, if 'height' has a computed value of 'auto', and the element has an intrinsic height, then that intrinsic height is the used value of 'height'.
-    if (hasIntrinsicHeight)
-        return computeReplacedLogicalHeightRespectingMinMaxHeight(constrainedSize.height());
+    if (intrinsicSizingInfo.hasHeight)
+        return computeReplacedLogicalHeightRespectingMinMaxHeight(LayoutUnit(constrainedSize.height()));
 
     // Otherwise, if 'height' has a computed value of 'auto', but none of the conditions above are met, then the used value of 'height' must be set to the height
     // of the largest rectangle that has a 2:1 ratio, has a height not greater than 150px, and has a width not greater than the device width.
@@ -380,7 +663,7 @@ void LayoutReplaced::computePreferredLogicalWidths()
 
     const ComputedStyle& styleToUse = styleRef();
     if (styleToUse.logicalWidth().hasPercent() || styleToUse.logicalMaxWidth().hasPercent())
-        m_minPreferredLogicalWidth = 0;
+        m_minPreferredLogicalWidth = LayoutUnit();
 
     if (styleToUse.logicalMinWidth().isFixed() && styleToUse.logicalMinWidth().value() > 0) {
         m_maxPreferredLogicalWidth = std::max(m_maxPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse.logicalMinWidth().value()));
@@ -443,7 +726,7 @@ LayoutRect LayoutReplaced::selectionRectForPaintInvalidation(const LayoutBoxMode
 
 LayoutRect LayoutReplaced::localSelectionRect() const
 {
-    if (selectionState() == SelectionNone)
+    if (getSelectionState() == SelectionNone)
         return LayoutRect();
 
     if (!inlineBoxWrapper()) {
@@ -454,8 +737,8 @@ LayoutRect LayoutReplaced::localSelectionRect() const
     RootInlineBox& root = inlineBoxWrapper()->root();
     LayoutUnit newLogicalTop = root.block().style()->isFlippedBlocksWritingMode() ? inlineBoxWrapper()->logicalBottom() - root.selectionBottom() : root.selectionTop() - inlineBoxWrapper()->logicalTop();
     if (root.block().style()->isHorizontalWritingMode())
-        return LayoutRect(0, newLogicalTop, size().width(), root.selectionHeight());
-    return LayoutRect(newLogicalTop, 0, root.selectionHeight(), size().height());
+        return LayoutRect(LayoutUnit(), newLogicalTop, size().width(), root.selectionHeight());
+    return LayoutRect(newLogicalTop, LayoutUnit(), root.selectionHeight(), size().height());
 }
 
 void LayoutReplaced::setSelectionState(SelectionState state)
@@ -475,4 +758,4 @@ void LayoutReplaced::setSelectionState(SelectionState state)
         inlineBoxWrapper()->root().setHasSelectedChildren(state != SelectionNone);
 }
 
-}
+} // namespace blink

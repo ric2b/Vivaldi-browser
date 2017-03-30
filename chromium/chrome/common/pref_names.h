@@ -17,6 +17,7 @@ namespace prefs {
 // Profile prefs. Please add Local State prefs below instead.
 #if defined(OS_CHROMEOS) && defined(ENABLE_APP_LIST)
 extern const char kArcApps[];
+extern const char kArcEnabled[];
 #endif
 extern const char kChildAccountStatusKnown[];
 extern const char kDefaultApps[];
@@ -162,7 +163,7 @@ extern const char kDnsPrefetchingStartupList[];
 extern const char kDnsPrefetchingHostReferralList[];
 extern const char kDisableSpdy[];
 extern const char kHttpServerProperties[];
-#if defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_ANDROID)
 extern const char kLastPolicyCheckTime[];
 #endif
 extern const char kInstantUIZeroSuggestUrlPrefix[];
@@ -191,7 +192,7 @@ extern const char kLanguagePreloadEngines[];
 extern const char kLanguagePreloadEnginesSyncable[];
 extern const char kLanguageEnabledExtensionImes[];
 extern const char kLanguageEnabledExtensionImesSyncable[];
-extern const char kLangugaeImeMenuActivated[];
+extern const char kLanguageImeMenuActivated[];
 extern const char kLanguageShouldMergeInputMethods[];
 extern const char kLanguageRemapCapsLockKeyTo[];
 extern const char kLanguageRemapSearchKeyTo[];
@@ -463,8 +464,7 @@ extern const char kAppWindowPlacement[];
 extern const char kDownloadDefaultDirectory[];
 extern const char kDownloadExtensionsToOpen[];
 extern const char kDownloadDirUpgraded[];
-#if defined(OS_WIN) || defined(OS_LINUX) || \
-    (defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MACOSX)
 extern const char kOpenPdfDownloadInSystemReader[];
 #endif
 
@@ -496,7 +496,7 @@ extern const char kShutdownNumProcesses[];
 extern const char kShutdownNumProcessesSlow[];
 
 extern const char kRestartLastSessionOnShutdown[];
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 extern const char kWasRestarted[];
 #endif
 
@@ -538,14 +538,14 @@ extern const char kDevToolsRemoteEnabled[];
 
 extern const char kGoogleServicesPasswordHash[];
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 extern const char kSignInPromoStartupCount[];
 extern const char kSignInPromoUserSkipped[];
 extern const char kSignInPromoShowOnFirstRunAllowed[];
 extern const char kSignInPromoShowNTPBubble[];
 #endif
 
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
 extern const char kCrossDevicePromoOptedOut[];
 extern const char kCrossDevicePromoShouldBeShown[];
 extern const char kCrossDevicePromoObservedSingleAccountCookie[];
@@ -623,6 +623,7 @@ extern const char kCachedMultiProfileUserBehavior[];
 extern const char kInitialLocale[];
 extern const char kOobeComplete[];
 extern const char kOobeScreenPending[];
+extern const char kOobeControllerDetected[];
 extern const char kCanShowOobeGoodiesPage[];
 extern const char kDeviceRegistered[];
 extern const char kEnrollmentRecoveryRequired[];
@@ -689,13 +690,13 @@ extern const char kDebuggingFeaturesRequested[];
 extern const char kResolveDeviceTimezoneByGeolocation[];
 #endif  // defined(OS_CHROMEOS)
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 extern const char kAttemptedToEnableAutoupdate[];
 
 extern const char kMediaGalleriesUniqueId[];
 extern const char kMediaGalleriesRememberedGalleries[];
 extern const char kMediaGalleriesLastScanTime[];
-#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
+#endif  // !defined(OS_ANDROID)
 
 #if defined(USE_ASH)
 extern const char kShelfAlignment[];
@@ -797,6 +798,10 @@ extern const char kClickedUpdateMenuItem[];
 #endif
 
 #if defined(ENABLE_MEDIA_ROUTER)
+#if defined(GOOGLE_CHROME_BUILD)
+extern const char kMediaRouterCloudServicesPrefSet[];
+extern const char kMediaRouterEnableCloudServices[];
+#endif  // defined(GOOGLE_CHROME_BUILD)
 extern const char kMediaRouterFirstRunFlowAcknowledged[];
 #endif
 

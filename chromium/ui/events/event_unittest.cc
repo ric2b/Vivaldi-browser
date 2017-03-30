@@ -60,6 +60,13 @@ TEST(EventTest, GetCharacter) {
   KeyEvent keyev4(event);
   EXPECT_EQ(13, keyev4.GetCharacter());
 #endif
+
+  // Check if expected Unicode character was returned for a key combination
+  // contains Control.
+  // e.g. Control+Shift+2 produces U+200C on "Persian" keyboard.
+  // http://crbug.com/582453
+  KeyEvent keyev5(0x200C, VKEY_UNKNOWN, EF_CONTROL_DOWN | EF_SHIFT_DOWN);
+  EXPECT_EQ(0x200C, keyev5.GetCharacter());
 }
 
 TEST(EventTest, ClickCount) {
@@ -201,60 +208,60 @@ TEST(EventTest, KeyEvent) {
     { VKEY_Z, EF_CONTROL_DOWN, '\x1A' },
     { VKEY_Z, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1A' },
 
-    { VKEY_2, EF_CONTROL_DOWN, '\0' },
+    { VKEY_2, EF_CONTROL_DOWN, '\x12' },
     { VKEY_2, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\0' },
-    { VKEY_6, EF_CONTROL_DOWN, '\0' },
+    { VKEY_6, EF_CONTROL_DOWN, '\x16' },
     { VKEY_6, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1E' },
-    { VKEY_OEM_MINUS, EF_CONTROL_DOWN, '\0' },
+    { VKEY_OEM_MINUS, EF_CONTROL_DOWN, '\x0D' },
     { VKEY_OEM_MINUS, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1F' },
     { VKEY_OEM_4, EF_CONTROL_DOWN, '\x1B' },
-    { VKEY_OEM_4, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\0' },
+    { VKEY_OEM_4, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1B' },
     { VKEY_OEM_5, EF_CONTROL_DOWN, '\x1C' },
-    { VKEY_OEM_5, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\0' },
+    { VKEY_OEM_5, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1C' },
     { VKEY_OEM_6, EF_CONTROL_DOWN, '\x1D' },
-    { VKEY_OEM_6, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\0' },
+    { VKEY_OEM_6, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1D' },
     { VKEY_RETURN, EF_CONTROL_DOWN, '\x0A' },
 
     { VKEY_0, 0, '0' },
     { VKEY_0, EF_SHIFT_DOWN, ')' },
     { VKEY_0, EF_SHIFT_DOWN | EF_CAPS_LOCK_ON, ')' },
-    { VKEY_0, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\0' },
+    { VKEY_0, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x09' },
 
     { VKEY_9, 0, '9' },
     { VKEY_9, EF_SHIFT_DOWN, '(' },
     { VKEY_9, EF_SHIFT_DOWN | EF_CAPS_LOCK_ON, '(' },
-    { VKEY_9, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\0' },
+    { VKEY_9, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x08' },
 
-    { VKEY_NUMPAD0, EF_CONTROL_DOWN, '\0' },
+    { VKEY_NUMPAD0, EF_CONTROL_DOWN, '\x10' },
     { VKEY_NUMPAD0, EF_SHIFT_DOWN, '0' },
 
-    { VKEY_NUMPAD9, EF_CONTROL_DOWN, '\0' },
+    { VKEY_NUMPAD9, EF_CONTROL_DOWN, '\x19' },
     { VKEY_NUMPAD9, EF_SHIFT_DOWN, '9' },
 
     { VKEY_TAB, EF_NONE, '\t' },
     { VKEY_TAB, EF_CONTROL_DOWN, '\t' },
     { VKEY_TAB, EF_SHIFT_DOWN, '\t' },
 
-    { VKEY_MULTIPLY, EF_CONTROL_DOWN, '\0' },
+    { VKEY_MULTIPLY, EF_CONTROL_DOWN, '\x0A' },
     { VKEY_MULTIPLY, EF_SHIFT_DOWN, '*' },
-    { VKEY_ADD, EF_CONTROL_DOWN, '\0' },
+    { VKEY_ADD, EF_CONTROL_DOWN, '\x0B' },
     { VKEY_ADD, EF_SHIFT_DOWN, '+' },
-    { VKEY_SUBTRACT, EF_CONTROL_DOWN, '\0' },
+    { VKEY_SUBTRACT, EF_CONTROL_DOWN, '\x0D' },
     { VKEY_SUBTRACT, EF_SHIFT_DOWN, '-' },
-    { VKEY_DECIMAL, EF_CONTROL_DOWN, '\0' },
+    { VKEY_DECIMAL, EF_CONTROL_DOWN, '\x0E' },
     { VKEY_DECIMAL, EF_SHIFT_DOWN, '.' },
-    { VKEY_DIVIDE, EF_CONTROL_DOWN, '\0' },
+    { VKEY_DIVIDE, EF_CONTROL_DOWN, '\x0F' },
     { VKEY_DIVIDE, EF_SHIFT_DOWN, '/' },
 
-    { VKEY_OEM_1, EF_CONTROL_DOWN, '\0' },
+    { VKEY_OEM_1, EF_CONTROL_DOWN, '\x1B' },
     { VKEY_OEM_1, EF_SHIFT_DOWN, ':' },
-    { VKEY_OEM_PLUS, EF_CONTROL_DOWN, '\0' },
+    { VKEY_OEM_PLUS, EF_CONTROL_DOWN, '\x1D' },
     { VKEY_OEM_PLUS, EF_SHIFT_DOWN, '+' },
-    { VKEY_OEM_COMMA, EF_CONTROL_DOWN, '\0' },
+    { VKEY_OEM_COMMA, EF_CONTROL_DOWN, '\x0C' },
     { VKEY_OEM_COMMA, EF_SHIFT_DOWN, '<' },
-    { VKEY_OEM_PERIOD, EF_CONTROL_DOWN, '\0' },
+    { VKEY_OEM_PERIOD, EF_CONTROL_DOWN, '\x0E' },
     { VKEY_OEM_PERIOD, EF_SHIFT_DOWN, '>' },
-    { VKEY_OEM_3, EF_CONTROL_DOWN, '\0' },
+    { VKEY_OEM_3, EF_CONTROL_DOWN, '\x0' },
     { VKEY_OEM_3, EF_SHIFT_DOWN, '~' },
   };
 
@@ -560,13 +567,13 @@ TEST(EventTest, TouchEventRadiusDefaultsToOtherAxis) {
 
   TouchEvent event1(ui::ET_TOUCH_PRESSED, gfx::Point(0, 0), 0, 0, time,
                     non_zero_length1, 0, 0, 0);
-  EXPECT_EQ(non_zero_length1, event1.pointer_details().radius_x());
-  EXPECT_EQ(non_zero_length1, event1.pointer_details().radius_y());
+  EXPECT_EQ(non_zero_length1, event1.pointer_details().radius_x);
+  EXPECT_EQ(non_zero_length1, event1.pointer_details().radius_y);
 
   TouchEvent event2(ui::ET_TOUCH_PRESSED, gfx::Point(0, 0), 0, 0, time,
                     0, non_zero_length2, 0, 0);
-  EXPECT_EQ(non_zero_length2, event2.pointer_details().radius_x());
-  EXPECT_EQ(non_zero_length2, event2.pointer_details().radius_y());
+  EXPECT_EQ(non_zero_length2, event2.pointer_details().radius_x);
+  EXPECT_EQ(non_zero_length2, event2.pointer_details().radius_y);
 }
 
 TEST(EventTest, TouchEventRotationAngleFixing) {
@@ -617,63 +624,52 @@ TEST(EventTest, TouchEventRotationAngleFixing) {
   }
 }
 
-TEST(EventTest, PointerEventDetailsTouch) {
+TEST(EventTest, PointerDetailsTouch) {
   ui::TouchEvent touch_event_plain(ET_TOUCH_PRESSED, gfx::Point(0, 0), 0,
                                    ui::EventTimeForNow());
 
   EXPECT_EQ(EventPointerType::POINTER_TYPE_TOUCH,
-            touch_event_plain.pointer_details().pointer_type());
-  EXPECT_EQ(0.0f, touch_event_plain.pointer_details().radius_x());
-  EXPECT_EQ(0.0f, touch_event_plain.pointer_details().radius_y());
-  EXPECT_EQ(0.0f, touch_event_plain.pointer_details().force());
-  EXPECT_EQ(0.0f, touch_event_plain.pointer_details().tilt_x());
-  EXPECT_EQ(0.0f, touch_event_plain.pointer_details().tilt_y());
+            touch_event_plain.pointer_details().pointer_type);
+  EXPECT_EQ(0.0f, touch_event_plain.pointer_details().radius_x);
+  EXPECT_EQ(0.0f, touch_event_plain.pointer_details().radius_y);
+  EXPECT_TRUE(std::isnan(touch_event_plain.pointer_details().force));
+  EXPECT_EQ(0.0f, touch_event_plain.pointer_details().tilt_x);
+  EXPECT_EQ(0.0f, touch_event_plain.pointer_details().tilt_y);
 
   ui::TouchEvent touch_event_with_details(ET_TOUCH_PRESSED, gfx::Point(0, 0), 0,
                                           0, ui::EventTimeForNow(), 10.0f, 5.0f,
                                           0.0f, 15.0f);
 
   EXPECT_EQ(EventPointerType::POINTER_TYPE_TOUCH,
-            touch_event_with_details.pointer_details().pointer_type());
-  EXPECT_EQ(10.0f, touch_event_with_details.pointer_details().radius_x());
-  EXPECT_EQ(5.0f, touch_event_with_details.pointer_details().radius_y());
-  EXPECT_EQ(15.0f, touch_event_with_details.pointer_details().force());
-  EXPECT_EQ(0.0f, touch_event_with_details.pointer_details().tilt_x());
-  EXPECT_EQ(0.0f, touch_event_with_details.pointer_details().tilt_y());
+            touch_event_with_details.pointer_details().pointer_type);
+  EXPECT_EQ(10.0f, touch_event_with_details.pointer_details().radius_x);
+  EXPECT_EQ(5.0f, touch_event_with_details.pointer_details().radius_y);
+  EXPECT_EQ(15.0f, touch_event_with_details.pointer_details().force);
+  EXPECT_EQ(0.0f, touch_event_with_details.pointer_details().tilt_x);
+  EXPECT_EQ(0.0f, touch_event_with_details.pointer_details().tilt_y);
 
   ui::TouchEvent touch_event_copy(touch_event_with_details);
-  EXPECT_EQ(EventPointerType::POINTER_TYPE_TOUCH,
-            touch_event_copy.pointer_details().pointer_type());
-  EXPECT_EQ(10.0f, touch_event_copy.pointer_details().radius_x());
-  EXPECT_EQ(5.0f, touch_event_copy.pointer_details().radius_y());
-  EXPECT_EQ(15.0f, touch_event_copy.pointer_details().force());
-  EXPECT_EQ(0.0f, touch_event_copy.pointer_details().tilt_x());
-  EXPECT_EQ(0.0f, touch_event_copy.pointer_details().tilt_y());
+  EXPECT_EQ(touch_event_with_details.pointer_details(),
+            touch_event_copy.pointer_details());
 }
 
-TEST(EventTest, PointerEventDetailsMouse) {
+TEST(EventTest, PointerDetailsMouse) {
   ui::MouseEvent mouse_event(ET_MOUSE_PRESSED, gfx::Point(0, 0),
                              gfx::Point(0, 0), ui::EventTimeForNow(), 0, 0);
 
   EXPECT_EQ(EventPointerType::POINTER_TYPE_MOUSE,
-            mouse_event.pointer_details().pointer_type());
-  EXPECT_EQ(0.0f, mouse_event.pointer_details().radius_x());
-  EXPECT_EQ(0.0f, mouse_event.pointer_details().radius_y());
-  EXPECT_EQ(0.0f, mouse_event.pointer_details().force());
-  EXPECT_EQ(0.0f, mouse_event.pointer_details().tilt_x());
-  EXPECT_EQ(0.0f, mouse_event.pointer_details().tilt_y());
+            mouse_event.pointer_details().pointer_type);
+  EXPECT_EQ(0.0f, mouse_event.pointer_details().radius_x);
+  EXPECT_EQ(0.0f, mouse_event.pointer_details().radius_y);
+  EXPECT_TRUE(std::isnan(mouse_event.pointer_details().force));
+  EXPECT_EQ(0.0f, mouse_event.pointer_details().tilt_x);
+  EXPECT_EQ(0.0f, mouse_event.pointer_details().tilt_y);
 
   ui::MouseEvent mouse_event_copy(mouse_event);
-  EXPECT_EQ(EventPointerType::POINTER_TYPE_MOUSE,
-            mouse_event_copy.pointer_details().pointer_type());
-  EXPECT_EQ(0.0f, mouse_event_copy.pointer_details().radius_x());
-  EXPECT_EQ(0.0f, mouse_event_copy.pointer_details().radius_y());
-  EXPECT_EQ(0.0f, mouse_event_copy.pointer_details().force());
-  EXPECT_EQ(0.0f, mouse_event_copy.pointer_details().tilt_x());
-  EXPECT_EQ(0.0f, mouse_event_copy.pointer_details().tilt_y());
+  EXPECT_EQ(mouse_event.pointer_details(), mouse_event_copy.pointer_details());
 }
 
-TEST(EventTest, PointerEventDetailsStylus) {
+TEST(EventTest, PointerDetailsStylus) {
   ui::MouseEvent stylus_event(ET_MOUSE_PRESSED, gfx::Point(0, 0),
                               gfx::Point(0, 0), ui::EventTimeForNow(), 0, 0);
   ui::PointerDetails pointer_details(EventPointerType::POINTER_TYPE_PEN,
@@ -685,21 +681,157 @@ TEST(EventTest, PointerEventDetailsStylus) {
 
   stylus_event.set_pointer_details(pointer_details);
   EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
-            stylus_event.pointer_details().pointer_type());
-  EXPECT_EQ(21.0f, stylus_event.pointer_details().force());
-  EXPECT_EQ(45.0f, stylus_event.pointer_details().tilt_x());
-  EXPECT_EQ(-45.0f, stylus_event.pointer_details().tilt_y());
-  EXPECT_EQ(0.0f, stylus_event.pointer_details().radius_x());
-  EXPECT_EQ(0.0f, stylus_event.pointer_details().radius_y());
+            stylus_event.pointer_details().pointer_type);
+  EXPECT_EQ(21.0f, stylus_event.pointer_details().force);
+  EXPECT_EQ(45.0f, stylus_event.pointer_details().tilt_x);
+  EXPECT_EQ(-45.0f, stylus_event.pointer_details().tilt_y);
+  EXPECT_EQ(0.0f, stylus_event.pointer_details().radius_x);
+  EXPECT_EQ(0.0f, stylus_event.pointer_details().radius_y);
 
   ui::MouseEvent stylus_event_copy(stylus_event);
+  EXPECT_EQ(stylus_event.pointer_details(),
+            stylus_event_copy.pointer_details());
+}
+
+TEST(EventTest, PointerDetailsCustomTouch) {
+  ui::TouchEvent touch_event(ET_TOUCH_PRESSED, gfx::Point(0, 0), 0,
+                             ui::EventTimeForNow());
+
+  EXPECT_EQ(EventPointerType::POINTER_TYPE_TOUCH,
+            touch_event.pointer_details().pointer_type);
+  EXPECT_EQ(0.0f, touch_event.pointer_details().radius_x);
+  EXPECT_EQ(0.0f, touch_event.pointer_details().radius_y);
+  EXPECT_TRUE(std::isnan(touch_event.pointer_details().force));
+  EXPECT_EQ(0.0f, touch_event.pointer_details().tilt_x);
+  EXPECT_EQ(0.0f, touch_event.pointer_details().tilt_y);
+
+  ui::PointerDetails pointer_details(EventPointerType::POINTER_TYPE_PEN,
+                                     /* radius_x */ 5.0f,
+                                     /* radius_y */ 6.0f,
+                                     /* force */ 21.0f,
+                                     /* tilt_x */ 45.0f,
+                                     /* tilt_y */ -45.0f);
+  touch_event.set_pointer_details(pointer_details);
+
   EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
-            stylus_event_copy.pointer_details().pointer_type());
-  EXPECT_EQ(21.0f, stylus_event_copy.pointer_details().force());
-  EXPECT_EQ(45.0f, stylus_event_copy.pointer_details().tilt_x());
-  EXPECT_EQ(-45.0f, stylus_event_copy.pointer_details().tilt_y());
-  EXPECT_EQ(0.0f, stylus_event_copy.pointer_details().radius_x());
-  EXPECT_EQ(0.0f, stylus_event_copy.pointer_details().radius_y());
+            touch_event.pointer_details().pointer_type);
+  EXPECT_EQ(21.0f, touch_event.pointer_details().force);
+  EXPECT_EQ(45.0f, touch_event.pointer_details().tilt_x);
+  EXPECT_EQ(-45.0f, touch_event.pointer_details().tilt_y);
+  EXPECT_EQ(5.0f, touch_event.pointer_details().radius_x);
+  EXPECT_EQ(6.0f, touch_event.pointer_details().radius_y);
+
+  ui::TouchEvent touch_event_copy(touch_event);
+  EXPECT_EQ(touch_event.pointer_details(), touch_event_copy.pointer_details());
+}
+
+TEST(EventTest, PointerEventType) {
+  const ui::EventType kMouseTypeMap[][2] = {
+      {ui::ET_MOUSE_PRESSED, ui::ET_POINTER_DOWN},
+      {ui::ET_MOUSE_DRAGGED, ui::ET_POINTER_MOVED},
+      {ui::ET_MOUSE_MOVED, ui::ET_POINTER_MOVED},
+      {ui::ET_MOUSE_ENTERED, ui::ET_POINTER_ENTERED},
+      {ui::ET_MOUSE_EXITED, ui::ET_POINTER_EXITED},
+      {ui::ET_MOUSE_RELEASED, ui::ET_POINTER_UP},
+  };
+  const ui::EventType kTouchTypeMap[][2] = {
+      {ui::ET_TOUCH_PRESSED, ui::ET_POINTER_DOWN},
+      {ui::ET_TOUCH_MOVED, ui::ET_POINTER_MOVED},
+      {ui::ET_TOUCH_RELEASED, ui::ET_POINTER_UP},
+      {ui::ET_TOUCH_CANCELLED, ui::ET_POINTER_CANCELLED},
+  };
+
+  for (size_t i = 0; i < arraysize(kMouseTypeMap); i++) {
+    ui::MouseEvent mouse_event(kMouseTypeMap[i][0], gfx::Point(0, 0),
+                               gfx::Point(0, 0), base::TimeDelta(), 0, 0);
+    ui::PointerEvent pointer_event(mouse_event);
+    EXPECT_EQ(kMouseTypeMap[i][1], pointer_event.type());
+    EXPECT_FALSE(pointer_event.IsMouseEvent());
+    EXPECT_FALSE(pointer_event.IsTouchEvent());
+    EXPECT_TRUE(pointer_event.IsPointerEvent());
+  }
+
+  for (size_t i = 0; i < arraysize(kTouchTypeMap); i++) {
+    ui::TouchEvent touch_event(kTouchTypeMap[i][0], gfx::Point(0, 0), 0,
+                               base::TimeDelta());
+    ui::PointerEvent pointer_event(touch_event);
+    EXPECT_EQ(kTouchTypeMap[i][1], pointer_event.type());
+    EXPECT_FALSE(pointer_event.IsMouseEvent());
+    EXPECT_FALSE(pointer_event.IsTouchEvent());
+    EXPECT_TRUE(pointer_event.IsPointerEvent());
+  }
+}
+
+TEST(EventTest, PointerEventId) {
+  {
+    ui::MouseEvent mouse_event(ui::ET_MOUSE_PRESSED, gfx::Point(0, 0),
+                               gfx::Point(0, 0), base::TimeDelta(), 0, 0);
+    ui::PointerEvent pointer_event(mouse_event);
+    EXPECT_EQ(pointer_event.pointer_id(), ui::PointerEvent::kMousePointerId);
+  }
+
+  for (int touch_id = 0; touch_id < 8; touch_id++) {
+    ui::TouchEvent touch_event(ui::ET_TOUCH_PRESSED, gfx::Point(0, 0), touch_id,
+                               base::TimeDelta());
+    ui::PointerEvent pointer_event(touch_event);
+    EXPECT_EQ(pointer_event.pointer_id(), touch_id);
+  }
+}
+
+TEST(EventTest, PointerDetailsPointer) {
+  const float kRadiusX = 10.0f;
+  const float kRadiusY = 5.0f;
+  const float kForce = 15.0f;
+  ui::TouchEvent touch_event(ET_TOUCH_PRESSED, gfx::Point(0, 0), 0, 0,
+                             ui::EventTimeForNow(), kRadiusX, kRadiusY, 0.0f,
+                             kForce);
+  ui::PointerEvent pointer_event_from_touch(touch_event);
+  EXPECT_EQ(kRadiusX, pointer_event_from_touch.pointer_details().radius_x);
+  EXPECT_EQ(kRadiusY, pointer_event_from_touch.pointer_details().radius_y);
+  EXPECT_EQ(kForce, pointer_event_from_touch.pointer_details().force);
+  EXPECT_EQ(kRadiusX, pointer_event_from_touch.pointer_details().radius_x);
+  EXPECT_EQ(0.0f, pointer_event_from_touch.pointer_details().tilt_x);
+  EXPECT_EQ(0.0f, pointer_event_from_touch.pointer_details().tilt_y);
+  EXPECT_EQ(EventPointerType::POINTER_TYPE_TOUCH,
+            pointer_event_from_touch.pointer_details().pointer_type);
+
+  ui::MouseEvent mouse_event(ET_MOUSE_PRESSED, gfx::Point(0, 0),
+                             gfx::Point(0, 0), ui::EventTimeForNow(), 0, 0);
+  ui::PointerEvent pointer_event_from_mouse(mouse_event);
+  EXPECT_EQ(mouse_event.pointer_details(),
+            pointer_event_from_mouse.pointer_details());
+}
+
+TEST(EventTest, PointerEventClone) {
+  {
+    ui::PointerEvent ptr_event(
+        ui::TouchEvent(ET_TOUCH_PRESSED, gfx::Point(0, 0), 0, 0,
+                       ui::EventTimeForNow(), 10.0f, 5.0f, 0.0f, 15.0f));
+    scoped_ptr<ui::Event> clone(ui::Event::Clone(ptr_event));
+    EXPECT_TRUE(clone->IsPointerEvent());
+    ui::PointerEvent* clone_as_ptr = clone->AsPointerEvent();
+
+    EXPECT_EQ(ptr_event.type(), clone_as_ptr->type());
+    EXPECT_EQ(ptr_event.pointer_id(), clone_as_ptr->pointer_id());
+    EXPECT_EQ(ptr_event.pointer_details(), clone_as_ptr->pointer_details());
+    EXPECT_EQ(ptr_event.location(), clone_as_ptr->location());
+    EXPECT_EQ(ptr_event.root_location(), clone_as_ptr->root_location());
+  }
+
+  {
+    ui::PointerEvent ptr_event(
+        ui::MouseEvent(ET_MOUSE_PRESSED, gfx::Point(0, 0), gfx::Point(0, 0),
+                       ui::EventTimeForNow(), 0, 0));
+    scoped_ptr<ui::Event> clone(ui::Event::Clone(ptr_event));
+    EXPECT_TRUE(clone->IsPointerEvent());
+    ui::PointerEvent* clone_as_ptr = clone->AsPointerEvent();
+
+    EXPECT_EQ(ptr_event.type(), clone_as_ptr->type());
+    EXPECT_EQ(ptr_event.pointer_id(), clone_as_ptr->pointer_id());
+    EXPECT_EQ(ptr_event.pointer_details(), clone_as_ptr->pointer_details());
+    EXPECT_EQ(ptr_event.location(), clone_as_ptr->location());
+    EXPECT_EQ(ptr_event.root_location(), clone_as_ptr->root_location());
+  }
 }
 
 }  // namespace ui

@@ -64,7 +64,6 @@
 #endif
 
 #if defined(OS_CHROMEOS)
-#include "base/prefs/testing_pref_service.h"
 #include "base/strings/string16.h"
 #include "base/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
@@ -73,6 +72,7 @@
 #include "chrome/browser/extensions/api/file_system/request_file_system_dialog_view.h"
 #include "chrome/browser/extensions/api/file_system/request_file_system_notification.h"
 #include "chrome/browser/ui/simple_message_box.h"
+#include "components/prefs/testing_pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_registry.h"
@@ -508,13 +508,17 @@ FileSystemEntryFunction::FileSystemEntryFunction()
 void FileSystemEntryFunction::PrepareFilesForWritableApp(
     const std::vector<base::FilePath>& paths) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  // TODO(cmihail): Path directory set should be initialized only with the
+  // paths that are actually directories, but for now we will consider
+  // all paths directories in case is_directory_ is true, otherwise
+  // all paths files, as this was the previous logic.
+  std::set<base::FilePath> path_directory_set_ =
+      is_directory_ ? std::set<base::FilePath>(paths.begin(), paths.end())
+                    : std::set<base::FilePath>{};
   app_file_handler_util::PrepareFilesForWritableApp(
-      paths,
-      GetProfile(),
-      is_directory_,
+      paths, GetProfile(), path_directory_set_,
       base::Bind(&FileSystemEntryFunction::RegisterFileSystemsAndSendResponse,
-                 this,
-                 paths),
+                 this, paths),
       base::Bind(&FileSystemEntryFunction::HandleWritableFileError, this));
 }
 
@@ -726,7 +730,7 @@ class FileSystemChooseEntryFunction::FilePicker
     // not its cache. On other platforms than Chrome OS, they are the same.
     //
     // TODO(kinaba): remove this, once after the file picker implements proper
-    // switch of the path treatment depending on the |support_drive| flag.
+    // switch of the path treatment depending on the |allowed_paths|.
     FileSelected(file.file_path, index, params);
   }
 
@@ -1063,7 +1067,7 @@ bool FileSystemChooseEntryFunction::RunAsync() {
 
   file_system::ChooseEntryOptions* options = params->options.get();
   if (options) {
-    multiple_ = options->accepts_multiple;
+    multiple_ = !!options->accepts_multiple;
     if (multiple_)
       picker_type = ui::SelectFileDialog::SELECT_OPEN_MULTI_FILE;
 
@@ -1105,7 +1109,7 @@ bool FileSystemChooseEntryFunction::RunAsync() {
         options->accepts.get(), options->accepts_all_types.get());
   }
 
-  file_type_info.support_drive = true;
+  file_type_info.allowed_paths = ui::SelectFileDialog::FileTypeInfo::ANY_PATH;
 
   base::FilePath previous_path = file_system_api::GetLastChooseEntryDirectory(
       ExtensionPrefs::Get(GetProfile()), extension()->id());

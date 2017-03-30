@@ -96,18 +96,14 @@ void ActionUpdateCheck::Run(UpdateContext* update_context, Callback callback) {
 }
 
 void ActionUpdateCheck::UpdateCheckComplete(
-    const GURL& original_url,
     int error,
-    const std::string& error_message,
     const UpdateResponse::Results& results) {
   DCHECK(thread_checker_.CalledOnValidThread());
-
-  VLOG(1) << "Update check completed from: " << original_url.spec();
 
   if (!error)
     OnUpdateCheckSucceeded(results);
   else
-    OnUpdateCheckFailed(error, error_message);
+    OnUpdateCheckFailed(error);
 }
 
 void ActionUpdateCheck::OnUpdateCheckSucceeded(
@@ -175,6 +171,9 @@ void ActionUpdateCheck::OnUpdateCheckSucceeded(
         crx->crx_diffurls.push_back(url);
     }
 
+    crx->hash_sha256 = package.hash_sha256;
+    crx->hashdiff_sha256 = package.hashdiff_sha256;
+
     ChangeItemState(crx, CrxUpdateItem::State::kCanUpdate);
 
     update_context_->queue.push(crx->id);
@@ -195,8 +194,7 @@ void ActionUpdateCheck::OnUpdateCheckSucceeded(
   UpdateCrx();
 }
 
-void ActionUpdateCheck::OnUpdateCheckFailed(int error,
-                                            const std::string& error_message) {
+void ActionUpdateCheck::OnUpdateCheckFailed(int error) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(error);
 

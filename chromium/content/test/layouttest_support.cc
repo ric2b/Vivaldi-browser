@@ -31,7 +31,6 @@
 #include "content/renderer/renderer_blink_platform_impl.h"
 #include "content/shell/common/shell_switches.h"
 #include "device/bluetooth/bluetooth_adapter.h"
-#include "third_party/WebKit/public/platform/WebBatteryStatus.h"
 #include "third_party/WebKit/public/platform/WebGamepads.h"
 #include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceMotionData.h"
 #include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceOrientationData.h"
@@ -41,7 +40,7 @@
 #if defined(OS_MACOSX)
 #include "content/browser/frame_host/popup_menu_helper_mac.h"
 #elif defined(OS_WIN)
-#include "content/common/font_warmup_win.h"
+#include "content/child/font_warmup_win.h"
 #include "content/public/common/dwrite_font_platform_win.h"
 #include "third_party/WebKit/public/web/win/WebFontRendering.h"
 #include "third_party/skia/include/ports/SkFontMgr.h"
@@ -49,7 +48,6 @@
 #include "ui/gfx/win/direct_write.h"
 #endif
 
-using blink::WebBatteryStatus;
 using blink::WebDeviceMotionData;
 using blink::WebDeviceOrientationData;
 using blink::WebGamepad;
@@ -165,12 +163,6 @@ void SetMockDeviceMotionData(const WebDeviceMotionData& data) {
 
 void SetMockDeviceOrientationData(const WebDeviceOrientationData& data) {
   RendererBlinkPlatformImpl::SetMockDeviceOrientationDataForTesting(data);
-}
-
-void MockBatteryStatusChanged(const WebBatteryStatus& status) {
-  RenderThreadImpl::current()
-      ->blink_platform_impl()
-      ->MockBatteryStatusChangedForTesting(status);
 }
 
 void EnableRendererLayoutTestMode() {

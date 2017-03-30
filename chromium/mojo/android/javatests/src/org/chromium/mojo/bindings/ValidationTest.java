@@ -7,6 +7,7 @@ package org.chromium.mojo.bindings;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.util.Log;
 
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.mojo.HandleMock;
 import org.chromium.mojo.MojoTestCase;
@@ -57,6 +58,11 @@ public class ValidationTest extends MojoTestCase {
         public boolean accept(File pathname) {
             // TODO(yzshen, qsr): skip some interface versioning tests.
             if (pathname.getName().startsWith("conformance_mthd13_good_2")) {
+                return false;
+            }
+            // TODO(yzshen): skip enum validation tests because the feature is
+            // not supported in Java yet. crbug.com/581392
+            if (pathname.getName().indexOf("enum") != -1) {
                 return false;
             }
             return pathname.isFile() && pathname.getName().startsWith(mPrefix)
@@ -183,8 +189,11 @@ public class ValidationTest extends MojoTestCase {
 
     /**
      * Testing the conformance suite.
+     *
+     * https://crbug.com/536671
+     * @SmallTest
      */
-    @SmallTest
+    @DisabledTest
     public void testConformance() throws FileNotFoundException {
         runTest("conformance_", ConformanceTestInterface.MANAGER.buildStub(null,
                 ConformanceTestInterface.MANAGER.buildProxy(null, new SinkMessageReceiver())));
@@ -205,8 +214,11 @@ public class ValidationTest extends MojoTestCase {
 
     /**
      * Testing the integration suite for request messages.
+     *
+     * https://crbug.com/536671
+     * @SmallTest
      */
-    @SmallTest
+    @DisabledTest
     public void testIntegrationRequestMessage() throws FileNotFoundException {
         runTest("integration_intf_rqst_",
                 new RoutingMessageReceiver(IntegrationTestInterface.MANAGER.buildStub(null,
@@ -218,8 +230,11 @@ public class ValidationTest extends MojoTestCase {
 
     /**
      * Testing the integration suite for response messages.
+     *
+     * https://crbug.com/536671
+     * @SmallTest
      */
-    @SmallTest
+    @DisabledTest
     public void testIntegrationResponseMessage() throws FileNotFoundException {
         runTest("integration_intf_resp_",
                 new RoutingMessageReceiver(IntegrationTestInterface.MANAGER.buildStub(null,

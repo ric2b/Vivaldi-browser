@@ -13,10 +13,11 @@
       'type': '<(component)',
       'dependencies': [
         '../base/base.gyp:base',
-        '../base/base.gyp:base_prefs',
         '../components/components.gyp:data_use_measurement_core',
         '../components/components.gyp:keyed_service_core',
+        '../components/prefs/prefs.gyp:prefs',
         '../content/content.gyp:content_browser',
+        '../content/content.gyp:content_common',
         '../net/net.gyp:net',
         '../url/url.gyp:url_lib',
       ],
@@ -43,8 +44,12 @@
         'domain_reliability/domain_reliability_export.h',
         'domain_reliability/google_configs.cc',
         'domain_reliability/google_configs.h',
+        'domain_reliability/header.cc',
+        'domain_reliability/header.h',
         'domain_reliability/monitor.cc',
         'domain_reliability/monitor.h',
+        'domain_reliability/quic_error_mapping.cc',
+        'domain_reliability/quic_error_mapping.h',
         'domain_reliability/scheduler.cc',
         'domain_reliability/scheduler.h',
         'domain_reliability/service.cc',
@@ -65,6 +70,7 @@
           'inputs': [
             '<(bake_in_configs_script)',
             '<@(baked_in_configs)',
+            'domain_reliability/baked_in_configs.gypi',
           ],
           'outputs': [
             '<(baked_in_configs_cc)'

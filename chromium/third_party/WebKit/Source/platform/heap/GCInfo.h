@@ -6,6 +6,7 @@
 #define GCInfo_h
 
 #include "platform/heap/Visitor.h"
+#include "wtf/Allocator.h"
 #include "wtf/Assertions.h"
 #include "wtf/Atomics.h"
 #include "wtf/Deque.h"
@@ -29,6 +30,7 @@ struct FinalizerTraitImpl;
 
 template<typename T>
 struct FinalizerTraitImpl<T, true> {
+    STATIC_ONLY(FinalizerTraitImpl);
     static void finalize(void* obj)
     {
         static_assert(sizeof(T), "T must be fully defined");
@@ -38,6 +40,7 @@ struct FinalizerTraitImpl<T, true> {
 
 template<typename T>
 struct FinalizerTraitImpl<T, false> {
+    STATIC_ONLY(FinalizerTraitImpl);
     static void finalize(void* obj)
     {
         static_assert(sizeof(T), "T must be fully defined");
@@ -53,6 +56,7 @@ struct FinalizerTraitImpl<T, false> {
 // behavior is not desired.
 template<typename T>
 struct FinalizerTrait {
+    STATIC_ONLY(FinalizerTrait);
     static const bool nonTrivialFinalizer = WTF::IsSubclassOfTemplate<typename std::remove_const<T>::type, GarbageCollectedFinalized>::value;
     static void finalize(void* obj) { FinalizerTraitImpl<T, nonTrivialFinalizer>::finalize(obj); }
 };
@@ -64,36 +68,42 @@ template<typename Table> class HeapHashTableBacking;
 
 template<typename T, typename U, typename V>
 struct FinalizerTrait<LinkedHashSet<T, U, V, HeapAllocator>> {
+    STATIC_ONLY(FinalizerTrait);
     static const bool nonTrivialFinalizer = true;
     static void finalize(void* obj) { FinalizerTraitImpl<LinkedHashSet<T, U, V, HeapAllocator>, nonTrivialFinalizer>::finalize(obj); }
 };
 
 template<typename T, typename Allocator>
 struct FinalizerTrait<WTF::ListHashSetNode<T, Allocator>> {
+    STATIC_ONLY(FinalizerTrait);
     static const bool nonTrivialFinalizer = !WTF::IsTriviallyDestructible<T>::value;
     static void finalize(void* obj) { FinalizerTraitImpl<WTF::ListHashSetNode<T, Allocator>, nonTrivialFinalizer>::finalize(obj); }
 };
 
 template<typename T, size_t inlineCapacity>
 struct FinalizerTrait<Vector<T, inlineCapacity, HeapAllocator>> {
+    STATIC_ONLY(FinalizerTrait);
     static const bool nonTrivialFinalizer = inlineCapacity && VectorTraits<T>::needsDestruction;
     static void finalize(void* obj) { FinalizerTraitImpl<Vector<T, inlineCapacity, HeapAllocator>, nonTrivialFinalizer>::finalize(obj); }
 };
 
 template<typename T, size_t inlineCapacity>
 struct FinalizerTrait<Deque<T, inlineCapacity, HeapAllocator>> {
+    STATIC_ONLY(FinalizerTrait);
     static const bool nonTrivialFinalizer = inlineCapacity && VectorTraits<T>::needsDestruction;
     static void finalize(void* obj) { FinalizerTraitImpl<Deque<T, inlineCapacity, HeapAllocator>, nonTrivialFinalizer>::finalize(obj); }
 };
 
 template<typename Table>
 struct FinalizerTrait<HeapHashTableBacking<Table>> {
+    STATIC_ONLY(FinalizerTrait);
     static const bool nonTrivialFinalizer = !WTF::IsTriviallyDestructible<typename Table::ValueType>::value;
     static void finalize(void* obj) { FinalizerTraitImpl<HeapHashTableBacking<Table>, nonTrivialFinalizer>::finalize(obj); }
 };
 
 template<typename T, typename Traits>
 struct FinalizerTrait<HeapVectorBacking<T, Traits>> {
+    STATIC_ONLY(FinalizerTrait);
     static const bool nonTrivialFinalizer = Traits::needsDestruction;
     static void finalize(void* obj) { FinalizerTraitImpl<HeapVectorBacking<T, Traits>, nonTrivialFinalizer>::finalize(obj); }
 };
@@ -111,18 +121,12 @@ extern PLATFORM_EXPORT GCInfo const** s_gcInfoTable;
 // reachable. There is a GCInfo struct for each class that directly
 // inherits from GarbageCollected or GarbageCollectedFinalized.
 struct GCInfo {
-    using GetClassNameCallback = const String (*)();
-
     bool hasFinalizer() const { return m_nonTrivialFinalizer; }
     bool hasVTable() const { return m_hasVTable; }
     TraceCallback m_trace;
     FinalizationCallback m_finalize;
     bool m_nonTrivialFinalizer;
     bool m_hasVTable;
-#if ENABLE(DETAILED_MEMORY_INFRA)
-    const String className() const { return m_className(); }
-    GetClassNameCallback m_className;
-#endif
 };
 
 #if ENABLE(ASSERT)
@@ -130,6 +134,7 @@ PLATFORM_EXPORT void assertObjectHasGCInfo(const void*, size_t gcInfoIndex);
 #endif
 
 class GCInfoTable {
+    STATIC_ONLY(GCInfoTable);
 public:
     PLATFORM_EXPORT static void ensureGCInfoIndex(const GCInfo*, size_t*);
 
@@ -157,6 +162,7 @@ private:
 // for a given gcInfo.
 template<typename T>
 struct GCInfoAtBaseType {
+    STATIC_ONLY(GCInfoAtBaseType);
     static size_t index()
     {
         static_assert(sizeof(T), "T must be fully defined");
@@ -165,9 +171,6 @@ struct GCInfoAtBaseType {
             FinalizerTrait<T>::finalize,
             FinalizerTrait<T>::nonTrivialFinalizer,
             std::is_polymorphic<T>::value,
-#if ENABLE(DETAILED_MEMORY_INFRA)
-            TypenameStringTrait<T>::get
-#endif
         };
 
         static size_t gcInfoIndex = 0;
@@ -184,16 +187,19 @@ template<typename T, bool = WTF::IsSubclassOfTemplate<typename std::remove_const
 
 template<typename T>
 struct GetGarbageCollectedType<T, true> {
+    STATIC_ONLY(GetGarbageCollectedType);
     using type = typename T::GarbageCollectedType;
 };
 
 template<typename T>
 struct GetGarbageCollectedType<T, false> {
+    STATIC_ONLY(GetGarbageCollectedType);
     using type = T;
 };
 
 template<typename T>
 struct GCInfoTrait {
+    STATIC_ONLY(GCInfoTrait);
     static size_t index()
     {
         return GCInfoAtBaseType<typename GetGarbageCollectedType<T>::type>::index();

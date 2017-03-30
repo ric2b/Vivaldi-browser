@@ -50,12 +50,11 @@ public:
     void cancelAll();
     void setAllDefersLoading(bool);
     int size() const { return m_set.size(); }
-    const SetType& hashSet() const { return m_set; }
 
 private:
     SetType m_set;
 };
 
-}
+} // namespace blink
 
 #endif

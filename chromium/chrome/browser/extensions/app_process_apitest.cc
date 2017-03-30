@@ -121,8 +121,7 @@ class AppApiTest : public ExtensionApiTest {
 
     // Opening tabs with window.open should keep the page in the opener's
     // process.
-    ASSERT_EQ(1u, chrome::GetBrowserCount(browser()->profile(),
-                                          browser()->host_desktop_type()));
+    ASSERT_EQ(1u, chrome::GetBrowserCount(browser()->profile()));
     OpenWindow(tab1, base_url.Resolve("path1/empty.html"), true, NULL);
     LOG(INFO) << "WindowOpenHelper 1.";
     OpenWindow(tab2, base_url.Resolve("path2/empty.html"), true, NULL);
@@ -209,8 +208,7 @@ IN_PROC_BROWSER_TEST_F(AppApiTest, DISABLED_AppProcess) {
                 GetRenderProcessHost());
 
   // Now let's do the same using window.open. The same should happen.
-  ASSERT_EQ(1u, chrome::GetBrowserCount(browser()->profile(),
-                                        browser()->host_desktop_type()));
+  ASSERT_EQ(1u, chrome::GetBrowserCount(browser()->profile()));
   OpenWindow(tab, base_url.Resolve("path1/empty.html"), true, NULL);
   LOG(INFO) << "WindowOpenHelper 1.";
   OpenWindow(tab, base_url.Resolve("path2/empty.html"), true, NULL);
@@ -347,8 +345,7 @@ IN_PROC_BROWSER_TEST_F(AppApiTest, MAYBE_BookmarkAppGetsNormalProcess) {
                 GetRenderProcessHost());
 
   // Now let's do the same using window.open. The same should happen.
-  ASSERT_EQ(1u, chrome::GetBrowserCount(browser()->profile(),
-                                        browser()->host_desktop_type()));
+  ASSERT_EQ(1u, chrome::GetBrowserCount(browser()->profile()));
   OpenWindow(tab, base_url.Resolve("path1/empty.html"), true, NULL);
   OpenWindow(tab, base_url.Resolve("path2/empty.html"), true, NULL);
 
@@ -623,8 +620,7 @@ IN_PROC_BROWSER_TEST_F(AppApiTest, OpenAppFromIframe) {
       browser()->tab_strip_model()->GetWebContentsAt(0)->
           GetRenderProcessHost()->GetID()));
 
-  const BrowserList* active_browser_list =
-      BrowserList::GetInstance(chrome::GetActiveDesktop());
+  const BrowserList* active_browser_list = BrowserList::GetInstance();
   EXPECT_EQ(2U, active_browser_list->size());
   content::WebContents* popup_contents =
       active_browser_list->get(1)->tab_strip_model()->GetActiveWebContents();
@@ -769,8 +765,7 @@ IN_PROC_BROWSER_TEST_F(AppApiTest, OpenWebPopupFromWebIframe) {
 
   // Popup window should be in the app's process if site isolation is off;
   // otherwise they should be in different processes.
-  const BrowserList* active_browser_list =
-      BrowserList::GetInstance(chrome::GetActiveDesktop());
+  const BrowserList* active_browser_list = BrowserList::GetInstance();
   EXPECT_EQ(2U, active_browser_list->size());
   content::WebContents* popup_contents =
       active_browser_list->get(1)->tab_strip_model()->GetActiveWebContents();
@@ -853,8 +848,7 @@ IN_PROC_BROWSER_TEST_F(AppApiTest, SameBrowsingInstanceAfterSwap) {
   EXPECT_TRUE(process_map->Contains(app_instance->GetProcess()->GetID()));
 
   // Popup window should be in the app's process.
-  const BrowserList* active_browser_list =
-      BrowserList::GetInstance(chrome::GetActiveDesktop());
+  const BrowserList* active_browser_list = BrowserList::GetInstance();
   EXPECT_EQ(2U, active_browser_list->size());
   content::WebContents* popup_contents =
       active_browser_list->get(1)->tab_strip_model()->GetActiveWebContents();

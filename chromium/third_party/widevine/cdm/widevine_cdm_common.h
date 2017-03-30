@@ -17,6 +17,7 @@ const char kWidevineKeySystem[] = "com.widevine.alpha";
 const char kWidevineKeySystemNameForUMA[] = "Widevine";
 
 const char kWidevineCdmDisplayName[] = "Widevine Content Decryption Module";
+
 // Will be parsed as HTML.
 const char kWidevineCdmDescription[] =
     "Enables Widevine licenses for playback of HTML audio/video content.";
@@ -50,11 +51,9 @@ const char kWidevineCdmAdapterFileName[] =
 // component manifest) via WebPluginInfo::WebPluginMimeType's additional params.
 const char kCdmSupportedCodecsParamName[] = "codecs";
 const char kCdmSupportedCodecsValueDelimiter = ',';
-const char kCdmSupportedCodecVorbis[] = "vorbis";
 const char kCdmSupportedCodecVp8[] = "vp8";
 const char kCdmSupportedCodecVp9[] = "vp9.0";
 #if defined(USE_PROPRIETARY_CODECS)
-const char kCdmSupportedCodecAac[] = "aac";
 const char kCdmSupportedCodecAvc1[] = "avc1";
 #endif  // defined(USE_PROPRIETARY_CODECS)
 

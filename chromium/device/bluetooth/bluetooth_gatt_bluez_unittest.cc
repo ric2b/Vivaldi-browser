@@ -121,6 +121,7 @@ class BluetoothGattBlueZTest : public testing::Test {
   void GetAdapter() {
     device::BluetoothAdapterFactory::GetAdapter(base::Bind(
         &BluetoothGattBlueZTest::AdapterCallback, base::Unretained(this)));
+    base::MessageLoop::current()->Run();
     ASSERT_TRUE(adapter_.get() != NULL);
     ASSERT_TRUE(adapter_->IsInitialized());
     ASSERT_TRUE(adapter_->IsPresent());
@@ -128,6 +129,10 @@ class BluetoothGattBlueZTest : public testing::Test {
 
   void AdapterCallback(scoped_refptr<BluetoothAdapter> adapter) {
     adapter_ = adapter;
+    if (base::MessageLoop::current() &&
+        base::MessageLoop::current()->is_running()) {
+      base::MessageLoop::current()->QuitWhenIdle();
+    }
   }
 
   void SuccessCallback() { ++success_callback_count_; }
@@ -216,7 +221,7 @@ TEST_F(BluetoothGattBlueZTest, GattConnection) {
             gatt_conn_->GetDeviceAddress());
 
   gatt_conn_->Disconnect();
-  EXPECT_TRUE(device->IsConnected());
+  EXPECT_FALSE(device->IsConnected());
   EXPECT_FALSE(gatt_conn_->IsConnected());
 
   device->CreateGattConnection(
@@ -238,6 +243,7 @@ TEST_F(BluetoothGattBlueZTest, GattConnection) {
 
   EXPECT_EQ(3, success_callback_count_);
   EXPECT_EQ(0, error_callback_count_);
+  EXPECT_FALSE(device->IsConnected());
   ASSERT_TRUE(gatt_conn_.get());
   EXPECT_FALSE(gatt_conn_->IsConnected());
 
@@ -377,10 +383,41 @@ TEST_F(BluetoothGattBlueZTest, ServicesDiscovered) {
   properties->gatt_services.ReplaceValue(
       fake_bluetooth_gatt_service_client_->GetServices());
 
+  EXPECT_TRUE(device->IsGattServicesDiscoveryComplete());
+  EXPECT_EQ(1u, device->GetGattServices().size());
   EXPECT_EQ(1, observer.gatt_services_discovered_count());
   EXPECT_EQ(device, observer.last_device());
   EXPECT_EQ(bluez::FakeBluetoothDeviceClient::kLowEnergyAddress,
             observer.last_device_address());
+
+  // Disconnect from the device:
+  device->Disconnect(base::Bind(&BluetoothGattBlueZTest::SuccessCallback,
+                                base::Unretained(this)),
+                     base::Bind(&BluetoothGattBlueZTest::ErrorCallback,
+                                base::Unretained(this)));
+  fake_bluetooth_gatt_service_client_->HideHeartRateService();
+  properties->connected.ReplaceValue(false);
+
+  EXPECT_FALSE(device->IsConnected());
+  EXPECT_FALSE(device->IsGattServicesDiscoveryComplete());
+  EXPECT_EQ(0u, device->GetGattServices().size());
+
+  // Verify that the device can be connected to again:
+  device->CreateGattConnection(
+      base::Bind(&BluetoothGattBlueZTest::GattConnectionCallback,
+                 base::Unretained(this)),
+      base::Bind(&BluetoothGattBlueZTest::ConnectErrorCallback,
+                 base::Unretained(this)));
+  properties->connected.ReplaceValue(true);
+  EXPECT_TRUE(device->IsConnected());
+
+  // Verify that service discovery can be done again:
+  fake_bluetooth_gatt_service_client_->ExposeHeartRateService(
+      dbus::ObjectPath(bluez::FakeBluetoothDeviceClient::kLowEnergyPath));
+  properties->gatt_services.ReplaceValue(
+      fake_bluetooth_gatt_service_client_->GetServices());
+  EXPECT_TRUE(device->IsGattServicesDiscoveryComplete());
+  EXPECT_EQ(1u, device->GetGattServices().size());
 }
 
 TEST_F(BluetoothGattBlueZTest, GattCharacteristicAddedAndRemoved) {

@@ -16,7 +16,6 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/sparse_histogram.h"
-#include "base/prefs/pref_service.h"
 #include "base/sequenced_task_runner_helpers.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -46,6 +45,7 @@
 #include "chrome/common/url_constants.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_item.h"
 #include "content/public/browser/page_navigator.h"
@@ -334,7 +334,37 @@ class DownloadProtectionService::CheckClientDownloadRequest
       StartExtractZipFeatures();
 #if defined(OS_MACOSX)
     } else if (item_->GetTargetFilePath().MatchesExtension(
-                  FILE_PATH_LITERAL(".dmg"))) {
+                   FILE_PATH_LITERAL(".dmg")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".img")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".iso")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".smi")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".cdr")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".dart")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".dc42")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".diskcopy42")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".dmgpart")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".dvdr")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".imgpart")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".ndif")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".sparsebundle")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".sparseimage")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".toast")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".udif"))) {
       StartExtractDmgFeatures();
 #endif
     } else {
@@ -669,8 +699,17 @@ class DownloadProtectionService::CheckClientDownloadRequest
   }
 #endif  // defined(OS_MACOSX)
 
-  static void RecordCountOfSignedOrWhitelistedDownload() {
-    UMA_HISTOGRAM_COUNTS("SBClientDownload.SignedOrWhitelistedDownload", 1);
+  enum WhitelistType {
+    NO_WHITELIST_MATCH,
+    URL_WHITELIST,
+    SIGNATURE_WHITELIST,
+    WHITELIST_TYPE_MAX
+  };
+
+  static void RecordCountOfWhitelistedDownload(WhitelistType type) {
+    UMA_HISTOGRAM_ENUMERATION("SBClientDownload.CheckWhitelistResult",
+                              type,
+                              WHITELIST_TYPE_MAX);
   }
 
   void CheckWhitelists() {
@@ -685,7 +724,7 @@ class DownloadProtectionService::CheckClientDownloadRequest
     // TODO(asanka): This may acquire a lock on the SB DB on the IO thread.
     if (url.is_valid() && database_manager_->MatchDownloadWhitelistUrl(url)) {
       DVLOG(2) << url << " is on the download whitelist.";
-      RecordCountOfSignedOrWhitelistedDownload();
+      RecordCountOfWhitelistedDownload(URL_WHITELIST);
       // TODO(grt): Continue processing without uploading so that
       // ClientDownloadRequest callbacks can be run even for this type of safe
       // download.
@@ -694,10 +733,10 @@ class DownloadProtectionService::CheckClientDownloadRequest
     }
 
     if (signature_info_.trusted()) {
-      RecordCountOfSignedOrWhitelistedDownload();
       for (int i = 0; i < signature_info_.certificate_chain_size(); ++i) {
         if (CertificateChainIsWhitelisted(
                 signature_info_.certificate_chain(i))) {
+          RecordCountOfWhitelistedDownload(SIGNATURE_WHITELIST);
           // TODO(grt): Continue processing without uploading so that
           // ClientDownloadRequest callbacks can be run even for this type of
           // safe download.
@@ -707,17 +746,19 @@ class DownloadProtectionService::CheckClientDownloadRequest
       }
     }
 
+    RecordCountOfWhitelistedDownload(NO_WHITELIST_MATCH);
+
     if (!pingback_enabled_) {
       PostFinishTask(UNKNOWN, REASON_PING_DISABLED);
       return;
     }
 
-  // The URLFetcher is owned by the UI thread, so post a message to
-  // start the pingback.
-  BrowserThread::PostTask(
-      BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(&CheckClientDownloadRequest::GetTabRedirects, this));
+    // The URLFetcher is owned by the UI thread, so post a message to
+    // start the pingback.
+    BrowserThread::PostTask(
+        BrowserThread::UI,
+        FROM_HERE,
+        base::Bind(&CheckClientDownloadRequest::GetTabRedirects, this));
   }
 
   void GetTabRedirects() {

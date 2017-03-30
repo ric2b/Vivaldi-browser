@@ -450,8 +450,10 @@ FileTasks.prototype.executeDefaultInternal_ = function(opt_callback) {
   }.bind(this);
 
   var onViewFilesFailure = function() {
-    if (FileTasks.EXTENSIONS_TO_SKIP_SUGGEST_APPS_.indexOf(extension) !== -1
-        || FileTasks.EXECUTABLE_EXTENSIONS.indexOf(extension) !== -1) {
+    if (extension &&
+        (FileTasks.EXTENSIONS_TO_SKIP_SUGGEST_APPS_.indexOf(extension)
+             !== -1 ||
+         FileTasks.EXECUTABLE_EXTENSIONS.indexOf(assert(extension)) !== -1)) {
       showAlert();
       return;
     }
@@ -552,12 +554,16 @@ FileTasks.prototype.executeInternal_ = function(taskId) {
  * @private
  */
 FileTasks.prototype.checkAvailability_ = function(callback) {
-  var areAll = function(props, name) {
-    var isOne = function(e) {
+  var areAll = function(entries, props, name) {
+    // TODO(cmihail): Make files in directories available offline.
+    // See http://crbug.com/569767.
+    var okEntriesNum = 0;
+    for (var i = 0; i < entries.length; i++) {
       // If got no properties, we safely assume that item is available.
-      return !e || e[name];
-    };
-    return props.filter(isOne).length === props.length;
+      if (props[i] && (props[i][name] || entries[i].isDirectory))
+        okEntriesNum++;
+    }
+    return okEntriesNum === props.length;
   };
 
   var containsDriveEntries =
@@ -581,7 +587,7 @@ FileTasks.prototype.checkAvailability_ = function(callback) {
   if (isDriveOffline) {
     this.metadataModel_.get(this.entries_, ['availableOffline', 'hosted']).then(
         function(props) {
-          if (areAll(props, 'availableOffline')) {
+          if (areAll(this.entries_, props, 'availableOffline')) {
             callback();
             return;
           }
@@ -609,7 +615,7 @@ FileTasks.prototype.checkAvailability_ = function(callback) {
   if (isOnMetered) {
     this.metadataModel_.get(this.entries_, ['availableWhenMetered', 'size'])
         .then(function(props) {
-          if (areAll(props, 'availableWhenMetered')) {
+          if (areAll(this.entries_, props, 'availableWhenMetered')) {
             callback();
             return;
           }
@@ -821,7 +827,7 @@ FileTasks.prototype.createCombobuttonItem_ = function(task, opt_title,
 FileTasks.prototype.showTaskPicker = function(taskDialog, title, message,
                                               onSuccess,
                                               opt_hideGenericFileHandler) {
-  var items = !!opt_hideGenericFileHandler ? this.createItems_() :
+  var items = !opt_hideGenericFileHandler ? this.createItems_() :
       this.createItems_().filter(function(item) {
         return !item.isGenericFileHandler;
       });

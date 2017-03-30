@@ -6,15 +6,15 @@
 
 #include "base/bind.h"
 #include "base/memory/scoped_ptr.h"
+#include "content/common/mojo/static_application_loader.h"
 #include "content/public/test/test_mojo_app.h"
-#include "mojo/shell/static_application_loader.h"
 
 namespace content {
 
 namespace {
 
-scoped_ptr<mojo::ApplicationDelegate> CreateTestApp() {
-  return scoped_ptr<mojo::ApplicationDelegate>(new TestMojoApp);
+scoped_ptr<mojo::ShellClient> CreateTestApp() {
+  return scoped_ptr<mojo::ShellClient>(new TestMojoApp);
 }
 
 }  // namespace

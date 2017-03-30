@@ -48,6 +48,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "net/base/privacy_mode.h"
@@ -241,7 +242,7 @@ int main(int argc, char* argv[]) {
   base::MessageLoopForIO message_loop;
 
   // Determine IP address to connect to from supplied hostname.
-  net::IPAddressNumber ip_addr;
+  net::IPAddress ip_addr;
 
   // TODO(rtenneti): GURL's doesn't support default_protocol argument, thus
   // protocol is required in the URL.
@@ -254,9 +255,9 @@ int main(int argc, char* argv[]) {
   if (port == 0) {
     port = url.EffectiveIntPort();
   }
-  if (!net::ParseIPLiteralToNumber(host, &ip_addr)) {
+  if (!ip_addr.AssignFromIPLiteral(host)) {
     net::AddressList addresses;
-    int rv = net::tools::SynchronousHostResolver::Resolve(host, &addresses);
+    int rv = net::SynchronousHostResolver::Resolve(host, &addresses);
     if (rv != net::OK) {
       LOG(ERROR) << "Unable to resolve '" << host
                  << "' : " << net::ErrorToShortString(rv);
@@ -287,8 +288,8 @@ int main(int argc, char* argv[]) {
   ProofVerifierChromium* proof_verifier = new ProofVerifierChromium(
       cert_verifier.get(), nullptr, transport_security_state.get(),
       ct_verifier.get());
-  net::tools::QuicSimpleClient client(net::IPEndPoint(ip_addr, port), server_id,
-                                      versions, proof_verifier);
+  net::QuicSimpleClient client(net::IPEndPoint(ip_addr, port), server_id,
+                               versions, proof_verifier);
   client.set_initial_max_packet_length(
       FLAGS_initial_mtu != 0 ? FLAGS_initial_mtu : net::kDefaultMaxPacketSize);
   if (!client.Initialize()) {

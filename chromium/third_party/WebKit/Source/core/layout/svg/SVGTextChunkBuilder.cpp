@@ -113,7 +113,7 @@ void ChunkLengthAccumulator::processRange(BoxListConstIterator boxStart, BoxList
     }
 }
 
-}
+} // namespace
 
 SVGTextChunkBuilder::SVGTextChunkBuilder()
 {
@@ -158,7 +158,7 @@ SVGTextPathChunkBuilder::SVGTextPathChunkBuilder()
 
 void SVGTextPathChunkBuilder::handleTextChunk(BoxListConstIterator boxStart, BoxListConstIterator boxEnd)
 {
-    const ComputedStyle& style = (*boxStart)->lineLayoutItem().styleRef();
+    const ComputedStyle& style = (*boxStart)->getLineLayoutItem().styleRef();
 
     ChunkLengthAccumulator lengthAccumulator(!style.isHorizontalWritingMode());
     lengthAccumulator.processRange(boxStart, boxEnd);
@@ -180,13 +180,13 @@ void SVGTextChunkBuilder::handleTextChunk(BoxListConstIterator boxStart, BoxList
 {
     ASSERT(*boxStart);
 
-    const LineLayoutSVGInlineText textLineLayout = LineLayoutSVGInlineText((*boxStart)->lineLayoutItem());
+    const LineLayoutSVGInlineText textLineLayout = LineLayoutSVGInlineText((*boxStart)->getLineLayoutItem());
     const ComputedStyle& style = textLineLayout.styleRef();
 
     // Handle 'lengthAdjust' property.
     float desiredTextLength = 0;
     SVGLengthAdjustType lengthAdjust = SVGLengthAdjustUnknown;
-    if (SVGTextContentElement* textContentElement = SVGTextContentElement::elementFromLayoutObject(textLineLayout.parent())) {
+    if (SVGTextContentElement* textContentElement = SVGTextContentElement::elementFromLineLayoutItem(textLineLayout.parent())) {
         lengthAdjust = textContentElement->lengthAdjust()->currentValue()->enumValue();
 
         SVGLengthContext lengthContext(textContentElement);
@@ -290,4 +290,4 @@ void SVGTextChunkBuilder::processTextAnchorCorrection(bool isVerticalText, float
     }
 }
 
-}
+} // namespace blink

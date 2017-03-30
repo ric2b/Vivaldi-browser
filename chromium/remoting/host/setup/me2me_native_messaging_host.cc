@@ -22,7 +22,7 @@
 #include "google_apis/gaia/gaia_oauth_client.h"
 #include "google_apis/google_api_keys.h"
 #include "ipc/ipc_channel.h"
-#include "net/base/net_util.h"
+#include "net/base/network_interfaces.h"
 #include "remoting/base/rsa_key_pair.h"
 #include "remoting/host/native_messaging/pipe_messaging_channel.h"
 #include "remoting/host/pin_hash.h"
@@ -261,13 +261,13 @@ void Me2MeNativeMessagingHost::ProcessGetPinHash(
 
   std::string host_id;
   if (!message->GetString("hostId", &host_id)) {
-    LOG(ERROR) << "'hostId' not found: " << message;
+    LOG(ERROR) << "'hostId' not found: " << message.get();
     OnError();
     return;
   }
   std::string pin;
   if (!message->GetString("pin", &pin)) {
-    LOG(ERROR) << "'pin' not found: " << message;
+    LOG(ERROR) << "'pin' not found: " << message.get();
     OnError();
     return;
   }
@@ -504,9 +504,6 @@ void Me2MeNativeMessagingHost::SendAsyncResult(
       break;
     case DaemonController::RESULT_CANCELLED:
       response->SetString("result", "CANCELLED");
-      break;
-    case DaemonController::RESULT_FAILED_DIRECTORY:
-      response->SetString("result", "FAILED_DIRECTORY");
       break;
   }
   channel_->SendMessage(std::move(response));

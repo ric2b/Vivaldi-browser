@@ -25,9 +25,6 @@
 #include "content/public/common/url_constants.h"
 #include "content/public/common/web_preferences.h"
 #include "content/public/test/test_mojo_app.h"
-#include "content/shell/browser/blink_test_controller.h"
-#include "content/shell/browser/layout_test/layout_test_browser_main_parts.h"
-#include "content/shell/browser/layout_test/layout_test_resource_dispatcher_host_delegate.h"
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_access_token_store.h"
 #include "content/shell/browser/shell_browser_context.h"
@@ -60,6 +57,10 @@
 #if defined(OS_WIN)
 #include "content/common/sandbox_win.h"
 #include "sandbox/win/src/sandbox.h"
+#endif
+
+#if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+#include "media/mojo/services/mojo_media_application_factory.h"
 #endif
 
 namespace content {
@@ -146,10 +147,7 @@ ShellContentBrowserClient::~ShellContentBrowserClient() {
 
 BrowserMainParts* ShellContentBrowserClient::CreateBrowserMainParts(
     const MainFunctionParams& parameters) {
-  shell_browser_main_parts_ = base::CommandLine::ForCurrentProcess()->HasSwitch(
-                                  switches::kRunLayoutTest)
-                                  ? new LayoutTestBrowserMainParts(parameters)
-                                  : new ShellBrowserMainParts(parameters);
+  shell_browser_main_parts_ = new ShellBrowserMainParts(parameters);
   return shell_browser_main_parts_;
 }
 
@@ -218,6 +216,14 @@ bool ShellContentBrowserClient::IsNPAPIEnabled() {
 #endif
 }
 
+void ShellContentBrowserClient::RegisterInProcessMojoApplications(
+    StaticMojoApplicationMap* apps) {
+#if (ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+  apps->insert(std::make_pair(GURL("mojo:media"),
+                              base::Bind(&media::CreateMojoMediaApplication)));
+#endif
+}
+
 void ShellContentBrowserClient::RegisterOutOfProcessMojoApplications(
       OutOfProcessMojoApplicationMap* apps) {
   apps->insert(std::make_pair(GURL(kTestMojoAppUrl),
@@ -227,10 +233,6 @@ void ShellContentBrowserClient::RegisterOutOfProcessMojoApplications(
 void ShellContentBrowserClient::AppendExtraCommandLineSwitches(
     base::CommandLine* command_line,
     int child_process_id) {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kRunLayoutTest)) {
-    command_line->AppendSwitch(switches::kRunLayoutTest);
-  }
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDumpLineBoxTrees)) {
     command_line->AppendSwitch(switches::kDumpLineBoxTrees);
@@ -285,21 +287,9 @@ void ShellContentBrowserClient::AppendExtraCommandLineSwitches(
   }
 }
 
-void ShellContentBrowserClient::OverrideWebkitPrefs(
-    RenderViewHost* render_view_host,
-    WebPreferences* prefs) {
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kRunLayoutTest))
-    return;
-  BlinkTestController::Get()->OverrideWebkitPrefs(prefs);
-}
-
 void ShellContentBrowserClient::ResourceDispatcherHostCreated() {
   resource_dispatcher_host_delegate_.reset(
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kRunLayoutTest)
-          ? new LayoutTestResourceDispatcherHostDelegate
-          : new ShellResourceDispatcherHostDelegate);
+      new ShellResourceDispatcherHostDelegate);
   ResourceDispatcherHost::Get()->SetDelegate(
       resource_dispatcher_host_delegate_.get());
 }
@@ -348,7 +338,7 @@ bool ShellContentBrowserClient::ShouldSwapProcessesForRedirect(
 
 DevToolsManagerDelegate*
 ShellContentBrowserClient::GetDevToolsManagerDelegate() {
-  return new ShellDevToolsManagerDelegate(browser_context());
+  return new ShellDevToolsManagerDelegate();
 }
 
 void ShellContentBrowserClient::OpenURL(

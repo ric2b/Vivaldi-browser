@@ -29,15 +29,15 @@
 #ifndef InspectorOverlay_h
 #define InspectorOverlay_h
 
-#include "core/InspectorTypeBuilder.h"
 #include "core/inspector/InspectorDOMAgent.h"
 #include "core/inspector/InspectorOverlayHost.h"
-#include "core/inspector/InspectorPageAgent.h"
 #include "core/inspector/InspectorProfilerAgent.h"
+#include "platform/Timer.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/Color.h"
 #include "platform/heap/Handle.h"
+#include "platform/inspector_protocol/TypeBuilder.h"
 #include "public/web/WebInputEvent.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
@@ -53,17 +53,19 @@ class GraphicsContext;
 class GraphicsLayer;
 class InspectorCSSAgent;
 class InspectorDebuggerAgent;
-class JSONValue;
 class LayoutEditor;
 class Node;
 class Page;
 class PageOverlay;
 class WebViewImpl;
 
+namespace protocol {
+class Value;
+}
+
 class InspectorOverlay final
     : public NoBaseWillBeGarbageCollectedFinalized<InspectorOverlay>
     , public InspectorDOMAgent::Client
-    , public InspectorPageAgent::Client
     , public InspectorProfilerAgent::Client
     , public InspectorOverlayHost::Listener {
     USING_FAST_MALLOC_WILL_BE_REMOVED(InspectorOverlay);
@@ -81,6 +83,9 @@ public:
 
     void clear();
     bool handleInputEvent(const WebInputEvent&);
+    void pageLayoutInvalidated(bool resized);
+    void setShowViewportSizeOnResize(bool);
+    void setPausedInDebuggerMessage(const String&);
 
     // Does not yet include paint.
     void updateAllLifecyclePhases();
@@ -107,10 +112,6 @@ private:
     void profilingStarted() override;
     void profilingStopped() override;
 
-    // InspectorPageAgent::Client implementation.
-    void pageLayoutInvalidated() override;
-    void setPausedInDebuggerMessage(const String*) override;
-
     // InspectorDOMAgent::Client implementation.
     void hideHighlight() override;
     void highlightNode(Node*, const InspectorHighlightConfig&, bool omitTooltip) override;
@@ -123,12 +124,14 @@ private:
     void drawNodeHighlight();
     void drawQuadHighlight();
     void drawPausedInDebuggerMessage();
+    void drawViewSize();
 
     Page* overlayPage();
     LocalFrame* overlayMainFrame();
     void reset(const IntSize& viewportSize, const IntPoint& documentScrollOffset);
     void evaluateInOverlay(const String& method, const String& argument);
-    void evaluateInOverlay(const String& method, PassRefPtr<JSONValue> argument);
+    void evaluateInOverlay(const String& method, PassRefPtr<protocol::Value> argument);
+    void onTimer(Timer<InspectorOverlay>*);
     void rebuildOverlayPage();
     void invalidate();
     void scheduleUpdate();
@@ -151,7 +154,10 @@ private:
     OwnPtrWillBeMember<InspectorOverlayChromeClient> m_overlayChromeClient;
     RefPtrWillBeMember<InspectorOverlayHost> m_overlayHost;
     InspectorHighlightConfig m_quadHighlightConfig;
+    bool m_drawViewSize;
+    bool m_resizeTimerActive;
     bool m_omitTooltip;
+    Timer<InspectorOverlay> m_timer;
     int m_suspendCount;
     bool m_inLayout;
     bool m_needsUpdate;

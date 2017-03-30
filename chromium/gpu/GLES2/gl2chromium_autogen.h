@@ -118,6 +118,7 @@
 #define glGetShaderPrecisionFormat GLES2_GET_FUN(GetShaderPrecisionFormat)
 #define glGetShaderSource GLES2_GET_FUN(GetShaderSource)
 #define glGetString GLES2_GET_FUN(GetString)
+#define glGetStringi GLES2_GET_FUN(GetStringi)
 #define glGetSynciv GLES2_GET_FUN(GetSynciv)
 #define glGetTexParameterfv GLES2_GET_FUN(GetTexParameterfv)
 #define glGetTexParameteriv GLES2_GET_FUN(GetTexParameteriv)
@@ -322,8 +323,6 @@
 #define glTraceEndCHROMIUM GLES2_GET_FUN(TraceEndCHROMIUM)
 #define glDiscardFramebufferEXT GLES2_GET_FUN(DiscardFramebufferEXT)
 #define glLoseContextCHROMIUM GLES2_GET_FUN(LoseContextCHROMIUM)
-#define glInsertSyncPointCHROMIUM GLES2_GET_FUN(InsertSyncPointCHROMIUM)
-#define glWaitSyncPointCHROMIUM GLES2_GET_FUN(WaitSyncPointCHROMIUM)
 #define glInsertFenceSyncCHROMIUM GLES2_GET_FUN(InsertFenceSyncCHROMIUM)
 #define glGenSyncTokenCHROMIUM GLES2_GET_FUN(GenSyncTokenCHROMIUM)
 #define glGenUnverifiedSyncTokenCHROMIUM \
@@ -380,5 +379,7 @@
   GLES2_GET_FUN(BindFragDataLocationIndexedEXT)
 #define glBindFragDataLocationEXT GLES2_GET_FUN(BindFragDataLocationEXT)
 #define glGetFragDataIndexEXT GLES2_GET_FUN(GetFragDataIndexEXT)
+#define glUniformMatrix4fvStreamTextureMatrixCHROMIUM \
+  GLES2_GET_FUN(UniformMatrix4fvStreamTextureMatrixCHROMIUM)
 
 #endif  // GPU_GLES2_GL2CHROMIUM_AUTOGEN_H_

@@ -10,23 +10,20 @@ cr.define('media_router.ui', function() {
   // The media-router-container element.
   var container = null;
 
-  /**
-   * Handles timeout of previous create route attempt.
-   */
-  function onNotifyRouteCreationTimeout() {
-    container.onNotifyRouteCreationTimeout();
-  }
+  // The media-router-header element.
+  var header = null;
 
   /**
    * Handles response of previous create route attempt.
    *
    * @param {string} sinkId The ID of the sink to which the Media Route was
    *     creating a route.
-   * @param {string} routeId The ID of the newly created route that corresponds
-   *     to the sink if route creation succeeded; empty otherwise.
+   * @param {?media_router.Route} route The newly created route that
+   *     corresponds to the sink if route creation succeeded; null otherwise.
+   * @param {boolean} isForDisplay Whether or not |route| is for display.
    */
-  function onCreateRouteResponseReceived(sinkId, routeId) {
-    container.onCreateRouteResponseReceived(sinkId, routeId);
+  function onCreateRouteResponseReceived(sinkId, route, isForDisplay) {
+    container.onCreateRouteResponseReceived(sinkId, route, isForDisplay);
   }
 
   /**
@@ -39,41 +36,71 @@ cr.define('media_router.ui', function() {
   }
 
   /**
-   * Sets |container|.
+   * Sets |container| and |header|.
    *
    * @param {!MediaRouterContainerElement} mediaRouterContainer
+   * @param {!MediaRouterHeaderElement} mediaRouterHeader
    */
-  function setContainer(mediaRouterContainer) {
+  function setElements(mediaRouterContainer, mediaRouterHeader) {
     container = mediaRouterContainer;
+    header = mediaRouterHeader;
+  }
+
+  /**
+   * Populates the WebUI with data obtained about the first run flow.
+   *
+   * @param {{firstRunFlowCloudPrefLearnMoreUrl: string,
+   *          firstRunFlowLearnMoreUrl: string,
+   *          wasFirstRunFlowAcknowledged: boolean,
+   *          showFirstRunFlowCloudPref: boolean}} data
+   * Parameters in data:
+   *   firstRunFlowCloudPrefLearnMoreUrl - url to open when the cloud services
+   *       pref learn more link is clicked.
+   *   firstRunFlowLearnMoreUrl - url to open when the first run flow learn
+   *       more link is clicked.
+   *   wasFirstRunFlowAcknowledged - true if first run flow was previously
+   *       acknowledged by user.
+   *   showFirstRunFlowCloudPref - true if the cloud pref option should be
+   *       shown.
+   */
+  function setFirstRunFlowData(data) {
+    container.firstRunFlowCloudPrefLearnMoreUrl =
+        data['firstRunFlowCloudPrefLearnMoreUrl'];
+    container.firstRunFlowLearnMoreUrl =
+        data['firstRunFlowLearnMoreUrl'];
+    container.showFirstRunFlowCloudPref =
+        data['showFirstRunFlowCloudPref'];
+    // Some users acknowledged the first run flow before the cloud prefs
+    // setting was implemented. These users will see the first run flow
+    // again.
+    container.showFirstRunFlow = !data['wasFirstRunFlowAcknowledged'] ||
+        container.showFirstRunFlowCloudPref;
   }
 
   /**
    * Populates the WebUI with data obtained from Media Router.
    *
-   * @param {{firstRunFlowLearnMoreUrl: string,
-   *          deviceMissingUrl: string,
-   *          sinks: !Array<!media_router.Sink>,
+   * @param {{deviceMissingUrl: string,
+   *          sinksAndIdentity: {
+   *            sinks: !Array<!media_router.Sink>,
+   *            showEmail: boolean,
+   *            userEmail: string,
+   *            showDomain: boolean,
+   *            userDomain: string
+   *          },
    *          routes: !Array<!media_router.Route>,
-   *          castModes: !Array<!media_router.CastMode>,
-   *          wasFirstRunFlowAcknowledged: boolean}} data
+   *          castModes: !Array<!media_router.CastMode>}} data
    * Parameters in data:
-   *   firstRunFlowLearnMoreUrl - url to open when the first run flow learn
-   *       more link is clicked.
    *   deviceMissingUrl - url to be opened on "Device missing?" clicked.
-   *   sinks - list of sinks to be displayed.
+   *   sinksAndIdentity - list of sinks to be displayed and user identity.
    *   routes - list of routes that are associated with the sinks.
    *   castModes - list of available cast modes.
-   *   wasFirstRunFlowAcknowledged - true if first run flow was previously
-   *       acknowledged by user.
    */
   function setInitialData(data) {
-    container.firstRunFlowLearnMoreUrl =
-        data['firstRunFlowLearnMoreUrl'];
     container.deviceMissingUrl = data['deviceMissingUrl'];
     container.castModeList = data['castModes'];
-    container.allSinks = data['sinks'];
+    this.setSinkListAndIdentity(data['sinksAndIdentity']);
     container.routeList = data['routes'];
-    container.showFirstRunFlow = !data['wasFirstRunFlowAcknowledged'];
     container.maybeShowRouteDetailsOnOpen();
     media_router.browserApi.onInitialDataReceived();
   }
@@ -98,12 +125,27 @@ cr.define('media_router.ui', function() {
   }
 
   /**
-   * Sets the list of discovered sinks.
+   * Sets the list of discovered sinks along with properties of whether to hide
+   * identity of the user email and domain.
    *
-   * @param {!Array<!media_router.Sink>} sinkList
+   * @param {{sinks: !Array<!media_router.Sink>,
+   *          showEmail: boolean,
+   *          userEmail: string,
+   *          showDomain: boolean,
+   *          userDomain: string,}} data
+   * Parameters in data:
+   *   sinks - list of sinks to be displayed.
+   *   showEmail - true if the user email should be shown.
+   *   userEmail - email of the user if the user is signed in.
+   *   showDomain - true if the user domain should be shown.
+   *   userDomain - domain of the user if the user is signed in.
    */
-  function setSinkList(sinkList) {
-    container.allSinks = sinkList;
+  function setSinkListAndIdentity(data) {
+    container.allSinks = data['sinks'];
+    container.showDomain = data['showDomain'];
+    container.userDomain = data['userDomain'];
+    header.showEmail = data['showEmail'];
+    header.userEmail = data['userEmail'];
   }
 
   /**
@@ -116,14 +158,14 @@ cr.define('media_router.ui', function() {
   }
 
   return {
-    onNotifyRouteCreationTimeout: onNotifyRouteCreationTimeout,
     onCreateRouteResponseReceived: onCreateRouteResponseReceived,
     setCastModeList: setCastModeList,
-    setContainer: setContainer,
+    setElements: setElements,
+    setFirstRunFlowData: setFirstRunFlowData,
     setInitialData: setInitialData,
     setIssue: setIssue,
     setRouteList: setRouteList,
-    setSinkList: setSinkList,
+    setSinkListAndIdentity: setSinkListAndIdentity,
     updateMaxHeight: updateMaxHeight,
   };
 });
@@ -134,9 +176,12 @@ cr.define('media_router.browserApi', function() {
 
   /**
    * Indicates that the user has acknowledged the first run flow.
+   *
+   * @param {boolean} optedIntoCloudServices Whether or not the user opted into
+   *                  cloud services.
    */
-  function acknowledgeFirstRunFlow() {
-    chrome.send('acknowledgeFirstRunFlow');
+  function acknowledgeFirstRunFlow(optedIntoCloudServices) {
+    chrome.send('acknowledgeFirstRunFlow', [optedIntoCloudServices]);
   }
 
   /**
@@ -153,9 +198,12 @@ cr.define('media_router.browserApi', function() {
 
   /**
    * Closes the dialog.
+   *
+   * @param {boolean} pressEscToClose Whether the user pressed ESC to close the
+   *                  dialog.
    */
-  function closeDialog() {
-    chrome.send('closeDialog');
+  function closeDialog(pressEscToClose) {
+    chrome.send('closeDialog', [pressEscToClose]);
   }
 
   /**
@@ -181,6 +229,13 @@ cr.define('media_router.browserApi', function() {
    */
   function onInitialDataReceived() {
     chrome.send('onInitialDataReceived');
+  }
+
+  /**
+   * Reports when the user clicks outside the dialog.
+   */
+  function reportBlur() {
+    chrome.send('reportBlur');
   }
 
   /**
@@ -293,6 +348,7 @@ cr.define('media_router.browserApi', function() {
     closeRoute: closeRoute,
     joinRoute: joinRoute,
     onInitialDataReceived: onInitialDataReceived,
+    reportBlur: reportBlur,
     reportClickedSinkIndex: reportClickedSinkIndex,
     reportInitialAction: reportInitialAction,
     reportInitialState: reportInitialState,

@@ -21,9 +21,10 @@
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/shared_worker/embedded_shared_worker_content_settings_client_proxy.h"
 #include "ipc/ipc_message_macros.h"
+#include "third_party/WebKit/public/platform/URLConversion.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebDataSource.h"
-#include "third_party/WebKit/public/web/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/web/WebSharedWorker.h"
 #include "third_party/WebKit/public/web/WebSharedWorkerClient.h"
 #include "third_party/WebKit/public/web/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
@@ -229,7 +230,7 @@ blink::WebWorkerContentSettingsClientProxy*
     EmbeddedSharedWorkerStub::createWorkerContentSettingsClientProxy(
     const blink::WebSecurityOrigin& origin) {
   return new EmbeddedSharedWorkerContentSettingsClientProxy(
-      GURL(origin.toString()),
+      blink::WebStringToGURL(origin.toString()),
       origin.isUnique(),
       route_id_,
       ChildThreadImpl::current()->thread_safe_sender());

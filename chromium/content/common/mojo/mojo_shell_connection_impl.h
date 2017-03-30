@@ -11,10 +11,12 @@
 #include "base/memory/scoped_ptr.h"
 #include "content/public/common/mojo_shell_connection.h"
 #include "mojo/public/cpp/system/message_pipe.h"
-#include "mojo/shell/public/cpp/application_delegate.h"
+#include "mojo/shell/public/cpp/shell.h"
+#include "mojo/shell/public/cpp/shell_client.h"
+#include "mojo/shell/public/cpp/shell_connection.h"
 
 namespace mojo {
-namespace runner {
+namespace shell {
 class RunnerConnection;
 }
 }
@@ -25,11 +27,15 @@ namespace content {
 bool IsRunningInMojoShell();
 
 class MojoShellConnectionImpl : public MojoShellConnection,
-                                public mojo::ApplicationDelegate {
+                                public mojo::ShellClient {
  public:
   // Creates an instance of this class and stuffs it in TLS on the calling
   // thread. Retrieve it using MojoShellConnection::Get().
   static void Create();
+
+  // Like above but for initializing a connection to an embedded in-process
+  // shell implementation. Binds to |request|.
+  static void Create(mojo::shell::mojom::ShellClientRequest request);
 
   // Will return null if no connection has been established (either because it
   // hasn't happened yet or the application was not spawned from the external
@@ -46,16 +52,17 @@ class MojoShellConnectionImpl : public MojoShellConnection,
   void BindToMessagePipe(mojo::ScopedMessagePipeHandle handle);
 
  private:
-  MojoShellConnectionImpl();
+  explicit MojoShellConnectionImpl(bool external);
   ~MojoShellConnectionImpl() override;
 
-  // mojo::ApplicationDelegate:
-  void Initialize(mojo::ApplicationImpl* application) override;
-  bool ConfigureIncomingConnection(
-      mojo::ApplicationConnection* connection) override;
+  // mojo::ShellClient:
+  void Initialize(mojo::Connector* connector, const std::string& url,
+                  uint32_t id, uint32_t user_id) override;
+  bool AcceptConnection(mojo::Connection* connection) override;
 
   // MojoShellConnection:
-  mojo::ApplicationImpl* GetApplication() override;
+  mojo::Connector* GetConnector() override;
+  bool UsingExternalShell() const override;
   void AddListener(Listener* listener) override;
   void RemoveListener(Listener* listener) override;
 
@@ -64,9 +71,10 @@ class MojoShellConnectionImpl : public MojoShellConnection,
   // method on that application is called.
   void WaitForShell(mojo::ScopedMessagePipeHandle handle);
 
+  bool external_;
   bool initialized_;
-  scoped_ptr<mojo::runner::RunnerConnection> runner_connection_;
-  scoped_ptr<mojo::ApplicationImpl> application_impl_;
+  scoped_ptr<mojo::shell::RunnerConnection> runner_connection_;
+  scoped_ptr<mojo::ShellConnection> shell_connection_;
   std::vector<Listener*> listeners_;
 
   DISALLOW_COPY_AND_ASSIGN(MojoShellConnectionImpl);

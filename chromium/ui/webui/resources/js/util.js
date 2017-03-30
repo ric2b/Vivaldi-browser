@@ -5,12 +5,25 @@
 // <include src="assert.js">
 
 /**
- * Alias for document.getElementById.
+ * Alias for document.getElementById. Found elements must be HTMLElements.
  * @param {string} id The ID of the element to find.
  * @return {HTMLElement} The found element or null if not found.
  */
 function $(id) {
-  return document.getElementById(id);
+  var el = document.getElementById(id);
+  return el ? assertInstanceof(el, HTMLElement) : null;
+}
+
+// TODO(devlin): This should return SVGElement, but closure compiler is missing
+// those externs.
+/**
+ * Alias for document.getElementById. Found elements must be SVGElements.
+ * @param {string} id The ID of the element to find.
+ * @return {Element} The found element or null if not found.
+ */
+function getSVGElement(id) {
+  var el = document.getElementById(id);
+  return el ? assertInstanceof(el, Element) : null;
 }
 
 /**
@@ -30,25 +43,6 @@ function announceAccessibleMessage(msg) {
   window.setTimeout(function() {
     document.body.removeChild(element);
   }, 0);
-}
-
-/**
- * Calls chrome.send with a callback and restores the original afterwards.
- * @param {string} name The name of the message to send.
- * @param {!Array} params The parameters to send.
- * @param {string} callbackName The name of the function that the backend calls.
- * @param {!Function} callback The function to call.
- */
-function chromeSend(name, params, callbackName, callback) {
-  var old = global[callbackName];
-  global[callbackName] = function() {
-    // restore
-    global[callbackName] = old;
-
-    var args = Array.prototype.slice.call(arguments);
-    return callback.apply(global, args);
-  };
-  chrome.send(name, params);
 }
 
 /**

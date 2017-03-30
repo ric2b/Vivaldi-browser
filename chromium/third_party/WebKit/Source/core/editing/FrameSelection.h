@@ -83,18 +83,13 @@ public:
         DoNotSetFocus = 1 << 4,
         DoNotUpdateAppearance = 1 << 5,
         DoNotClearStrategy = 1 << 6,
-        DoNotAdjustInComposedTree = 1 << 7,
+        DoNotAdjustInFlatTree = 1 << 7,
     };
     typedef unsigned SetSelectionOptions; // Union of values in SetSelectionOption and EUserTriggered
     static inline EUserTriggered selectionOptionsToUserTriggered(SetSelectionOptions options)
     {
         return static_cast<EUserTriggered>(options & UserTriggered);
     }
-
-    enum ResetCaretBlinkOption {
-        None,
-        ResetCaretBlink
-    };
 
     LocalFrame* frame() const { return m_frame; }
     Element* rootEditableElement() const { return selection().rootEditableElement(); }
@@ -114,11 +109,11 @@ public:
 
     const VisibleSelection& selection() const;
     void setSelection(const VisibleSelection&, SetSelectionOptions = CloseTyping | ClearTypingStyle, CursorAlignOnScroll = CursorAlignOnScroll::IfNeeded, TextGranularity = CharacterGranularity);
-    void setSelection(const VisibleSelectionInComposedTree&, SetSelectionOptions = CloseTyping | ClearTypingStyle, CursorAlignOnScroll = CursorAlignOnScroll::IfNeeded, TextGranularity = CharacterGranularity);
+    void setSelection(const VisibleSelectionInFlatTree&, SetSelectionOptions = CloseTyping | ClearTypingStyle, CursorAlignOnScroll = CursorAlignOnScroll::IfNeeded, TextGranularity = CharacterGranularity);
     // TODO(yosin) We should get rid of two parameters version of
     // |setSelection()| to avoid conflict of four parameters version.
     void setSelection(const VisibleSelection& selection, TextGranularity granularity) { setSelection(selection, CloseTyping | ClearTypingStyle, CursorAlignOnScroll::IfNeeded, granularity); }
-    void setSelection(const VisibleSelectionInComposedTree& selection, TextGranularity granularity) { setSelection(selection, CloseTyping | ClearTypingStyle, CursorAlignOnScroll::IfNeeded, granularity); }
+    void setSelection(const VisibleSelectionInFlatTree& selection, TextGranularity granularity) { setSelection(selection, CloseTyping | ClearTypingStyle, CursorAlignOnScroll::IfNeeded, granularity); }
     // TODO(yosin) We should get rid of |Range| version of |setSelectedRagne()|
     // for Oilpan.
     bool setSelectedRange(Range*, TextAffinity, SelectionDirectionalMode = SelectionDirectionalMode::NonDirectional, SetSelectionOptions = CloseTyping | ClearTypingStyle);
@@ -132,7 +127,7 @@ public:
 
     bool contains(const LayoutPoint&);
 
-    SelectionType selectionType() const { return selection().selectionType(); }
+    SelectionType getSelectionType() const { return selection().getSelectionType(); }
 
     TextAffinity affinity() const { return selection().affinity(); }
 
@@ -186,14 +181,13 @@ public:
 
     bool isAppearanceDirty() const;
     void commitAppearanceIfNeeded(LayoutView&);
-    void updateAppearance(ResetCaretBlinkOption = None);
+    void updateAppearance();
     void setCaretVisible(bool caretIsVisible) { setCaretVisibility(caretIsVisible ? Visible : Hidden); }
     bool isCaretBoundsDirty() const { return m_caretRectDirty; }
     void setCaretRectNeedsUpdate();
     void scheduleVisualUpdate() const;
     void invalidateCaretRect();
     void paintCaret(GraphicsContext&, const LayoutPoint&);
-    bool ShouldPaintCaretForTesting() const { return m_shouldPaintCaret; }
 
     // Used to suspend caret blinking while the mouse is down.
     void setCaretBlinkingSuspended(bool suspended) { m_isCaretBlinkingSuspended = suspended; }
@@ -217,7 +211,7 @@ public:
 
     enum EndPointsAdjustmentMode { AdjustEndpointsAtBidiBoundary, DoNotAdjsutEndpoints };
     void setNonDirectionalSelectionIfNeeded(const VisibleSelection&, TextGranularity, EndPointsAdjustmentMode = DoNotAdjsutEndpoints);
-    void setNonDirectionalSelectionIfNeeded(const VisibleSelectionInComposedTree&, TextGranularity, EndPointsAdjustmentMode = DoNotAdjsutEndpoints);
+    void setNonDirectionalSelectionIfNeeded(const VisibleSelectionInFlatTree&, TextGranularity, EndPointsAdjustmentMode = DoNotAdjsutEndpoints);
     void setFocusedNodeIfNeeded();
     void notifyLayoutObjectOfSelectionChange(EUserTriggered);
 
@@ -241,6 +235,12 @@ public:
     bool shouldShowBlockCursor() const { return m_shouldShowBlockCursor; }
     void setShouldShowBlockCursor(bool);
 
+    // TODO(yosin): We should check DOM tree version and style version in
+    // |FrameSelection::selection()| to make sure we use updated selection,
+    // rather than having |updateIfNeeded()|. Once, we update all layout tests
+    // to use updated selection, we should make |updateIfNeeded()| private.
+    void updateIfNeeded();
+
     DECLARE_VIRTUAL_TRACE();
 
 private:
@@ -248,17 +248,14 @@ private:
 
     explicit FrameSelection(LocalFrame*);
 
-    // Note: We have |selectionInComposedTree()| for unit tests, we should
-    // use |visibleSelection<EditingInComposedTreeStrategy>()|.
-    const VisibleSelectionInComposedTree& selectionInComposedTree() const;
+    // Note: We have |selectionInFlatTree()| for unit tests, we should
+    // use |visibleSelection<EditingInFlatTreeStrategy>()|.
+    const VisibleSelectionInFlatTree& selectionInFlatTree() const;
 
     template <typename Strategy>
     VisiblePositionTemplate<Strategy> originalBase() const;
     void setOriginalBase(const VisiblePosition& newBase) { m_originalBase = newBase; }
-    void setOriginalBase(const VisiblePositionInComposedTree& newBase) { m_originalBaseInComposedTree = newBase; }
-
-    template <typename Strategy>
-    bool containsAlgorithm(const LayoutPoint&);
+    void setOriginalBase(const VisiblePositionInFlatTree& newBase) { m_originalBaseInFlatTree = newBase; }
 
     template <typename Strategy>
     void setNonDirectionalSelectionIfNeededAlgorithm(const VisibleSelectionTemplate<Strategy>&, TextGranularity, EndPointsAdjustmentMode);
@@ -275,6 +272,7 @@ private:
     void focusedOrActiveStateChanged();
 
     void caretBlinkTimerFired(Timer<FrameSelection>*);
+    void stopCaretBlinkTimer();
 
     void setUseSecureKeyboardEntry(bool);
 
@@ -288,13 +286,17 @@ private:
 
     GranularityStrategy* granularityStrategy();
 
+    // For unittests
+    bool shouldPaintCaretForTesting() const { return m_shouldPaintCaret; }
+    bool isPreviousCaretDirtyForTesting() const { return m_previousCaretNode; }
+
     RawPtrWillBeMember<LocalFrame> m_frame;
     const OwnPtrWillBeMember<PendingSelection> m_pendingSelection;
     const OwnPtrWillBeMember<SelectionEditor> m_selectionEditor;
 
     // Used to store base before the adjustment at bidi boundary
     VisiblePosition m_originalBase;
-    VisiblePositionInComposedTree m_originalBaseInComposedTree;
+    VisiblePositionInFlatTree m_originalBaseInFlatTree;
     TextGranularity m_granularity;
 
     RefPtrWillBeMember<Node> m_previousCaretNode; // The last node which painted the caret. Retained for clearing the old caret when it moves.

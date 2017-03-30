@@ -87,25 +87,14 @@ VisiblePosition createVisiblePosition(const PositionWithAffinity& positionWithAf
     return VisiblePosition::create(positionWithAffinity);
 }
 
-VisiblePositionInComposedTree createVisiblePosition(const PositionInComposedTree& position, TextAffinity affinity)
+VisiblePositionInFlatTree createVisiblePosition(const PositionInFlatTree& position, TextAffinity affinity)
 {
-    return VisiblePositionInComposedTree::create(PositionInComposedTreeWithAffinity(position, affinity));
+    return VisiblePositionInFlatTree::create(PositionInFlatTreeWithAffinity(position, affinity));
 }
 
-VisiblePositionInComposedTree createVisiblePosition(const PositionInComposedTreeWithAffinity& positionWithAffinity)
+VisiblePositionInFlatTree createVisiblePosition(const PositionInFlatTreeWithAffinity& positionWithAffinity)
 {
-    return VisiblePositionInComposedTree::create(positionWithAffinity);
-}
-
-VisiblePosition createVisiblePositionInDOMTree(const Position& position, TextAffinity affinity)
-{
-    return createVisiblePosition(position, affinity);
-}
-
-VisiblePosition createVisiblePositionInDOMTree(const PositionInComposedTree& position, TextAffinity affinity)
-{
-    const VisiblePositionInComposedTree visiblePosition = createVisiblePosition(position);
-    return createVisiblePosition(toPositionInDOMTree(visiblePosition.deepEquivalent()), affinity);
+    return VisiblePositionInFlatTree::create(positionWithAffinity);
 }
 
 #ifndef NDEBUG
@@ -135,7 +124,7 @@ void VisiblePositionTemplate<Strategy>::showTreeForThis() const
 #endif
 
 template class CORE_TEMPLATE_EXPORT VisiblePositionTemplate<EditingStrategy>;
-template class CORE_TEMPLATE_EXPORT VisiblePositionTemplate<EditingInComposedTreeStrategy>;
+template class CORE_TEMPLATE_EXPORT VisiblePositionTemplate<EditingInFlatTreeStrategy>;
 
 } // namespace blink
 

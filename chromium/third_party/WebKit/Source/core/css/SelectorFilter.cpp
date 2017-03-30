@@ -133,8 +133,12 @@ void SelectorFilter::collectIdentifierHashes(const CSSSelector& selector, unsign
 {
     unsigned* hash = identifierHashes;
     unsigned* end = identifierHashes + maximumIdentifierCount;
-    CSSSelector::Relation relation = selector.relation();
-    bool relationIsAffectedByPseudoContent = selector.relationIsAffectedByPseudoContent();
+    CSSSelector::RelationType relation = selector.relation();
+    if (selector.relationIsAffectedByPseudoContent()) {
+        // Disable fastRejectSelector.
+        *identifierHashes = 0;
+        return;
+    }
 
     // Skip the topmost selector. It is handled quickly by the rule hashes.
     bool skipOverSubselectors = true;
@@ -149,13 +153,12 @@ void SelectorFilter::collectIdentifierHashes(const CSSSelector& selector, unsign
         case CSSSelector::IndirectAdjacent:
             skipOverSubselectors = true;
             break;
+        case CSSSelector::ShadowSlot:
+            // Disable fastRejectSelector.
+            *identifierHashes = 0;
+            return;
         case CSSSelector::Descendant:
         case CSSSelector::Child:
-            if (relationIsAffectedByPseudoContent) {
-                // Disable fastRejectSelector.
-                *identifierHashes = 0;
-                return;
-            }
             // Fall through.
         case CSSSelector::ShadowPseudo:
         case CSSSelector::ShadowDeep:
@@ -166,7 +169,11 @@ void SelectorFilter::collectIdentifierHashes(const CSSSelector& selector, unsign
         if (hash == end)
             return;
         relation = current->relation();
-        relationIsAffectedByPseudoContent = current->relationIsAffectedByPseudoContent();
+        if (current->relationIsAffectedByPseudoContent()) {
+            // Disable fastRejectSelector.
+            *identifierHashes = 0;
+            return;
+        }
     }
     *hash = 0;
 }
@@ -183,4 +190,4 @@ DEFINE_TRACE(SelectorFilter)
 #endif
 }
 
-}
+} // namespace blink

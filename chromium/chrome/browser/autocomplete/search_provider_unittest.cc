@@ -11,7 +11,6 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
-#include "base/prefs/pref_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -44,6 +43,7 @@
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_switches.h"
 #include "components/omnibox/browser/suggestion_answer.h"
+#include "components/prefs/pref_service.h"
 #include "components/search_engines/search_engine_type.h"
 #include "components/search_engines/search_engines_switches.h"
 #include "components/search_engines/search_terms_data.h"
@@ -549,10 +549,8 @@ void SearchProviderTest::ResetFieldTrialList() {
   field_trial_list_.reset(new base::FieldTrialList(
       new metrics::SHA1EntropyProvider("foo")));
   variations::testing::ClearAllVariationParams();
-  base::FieldTrial* trial = base::FieldTrialList::CreateFieldTrial(
-      "AutocompleteDynamicTrial_0", "DefaultGroup");
-  trial->group();
 }
+
 base::FieldTrial* SearchProviderTest::CreateFieldTrial(
     const char* field_trial_rule,
     bool enabled) {
@@ -2550,6 +2548,10 @@ TEST_F(SearchProviderTest, DefaultProviderSuggestRelevanceScoringUrlInput) {
 
 // A basic test that verifies the field trial triggered parsing logic.
 TEST_F(SearchProviderTest, FieldTrialTriggeredParsing) {
+  base::FieldTrial* trial = base::FieldTrialList::CreateFieldTrial(
+      OmniboxFieldTrial::kBundledExperimentFieldTrialName, "DefaultGroup");
+  trial->group();
+
   QueryForInputAndWaitForFetcherResponses(
       ASCIIToUTF16("foo"), false,
       "[\"foo\",[\"foo bar\"],[\"\"],[],"

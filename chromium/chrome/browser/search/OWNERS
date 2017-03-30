@@ -1,6 +1,4 @@
-kmadhusu@chromium.org
-jered@chromium.org
-samarth@chromium.org
+file://components/search/OWNERS
 
 per-file hotword*=mgiuca@chromium.org
 per-file hotword*=kcarattini@chromium.org

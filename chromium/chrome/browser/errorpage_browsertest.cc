@@ -13,7 +13,6 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
@@ -35,6 +34,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/error_page/common/error_page_switches.h"
 #include "components/google/core/browser/google_util.h"
+#include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -47,7 +47,6 @@
 #include "content/public/test/test_navigation_observer.h"
 #include "net/base/filename_util.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
 #include "net/http/failing_http_transaction_factory.h"
 #include "net/http/http_cache.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -127,21 +126,11 @@ bool WARN_UNUSED_RESULT IsDisplayingDiagnosticsButton(Browser* browser) {
 void ExpectDisplayingLocalErrorPage(Browser* browser, net::Error error_code) {
   EXPECT_TRUE(IsDisplayingNetError(browser, error_code));
 
-  // Expand the help box so innerText will include text below the fold.
-  ToggleHelpBox(browser);
-
   // Locally generated error pages should not have navigation corrections.
-  EXPECT_FALSE(IsDisplayingText(browser, "http://correction1/"));
-  EXPECT_FALSE(IsDisplayingText(browser, "http://correction2/"));
+  EXPECT_FALSE(IsDisplayingText(browser, "http://mock.http/title2.html"));
 
-  // Locally generated error pages should not have a populated search box.
-  bool search_box_populated = false;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-      browser->tab_strip_model()->GetActiveWebContents(),
-      "var searchText = document.getElementById('search-box').value;"
-          "domAutomationController.send(searchText == 'search query');",
-      &search_box_populated));
-  EXPECT_FALSE(search_box_populated);
+  // Locally generated error pages should not have a link with search terms.
+  EXPECT_FALSE(IsDisplayingText(browser, "search query"));
 }
 
 // Checks that an error page with information retrieved from the navigation
@@ -151,28 +140,15 @@ void ExpectDisplayingNavigationCorrections(Browser* browser,
                                            net::Error error_code) {
   EXPECT_TRUE(IsDisplayingNetError(browser, error_code));
 
-  // Expand the help box so innerText will include text below the fold.
-  ToggleHelpBox(browser);
-
   // Check that the mock navigation corrections are displayed.
-  EXPECT_TRUE(IsDisplayingText(browser, "http://correction1/"));
-  EXPECT_TRUE(IsDisplayingText(browser, "http://correction2/"));
+  EXPECT_TRUE(IsDisplayingText(browser, "http://mock.http/title2.html"));
 
-  // Check that the search box is populated correctly.
-  bool search_box_populated = false;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-      browser->tab_strip_model()->GetActiveWebContents(),
-      "var searchText = document.getElementById('search-box').value;"
-          "domAutomationController.send(searchText == 'search query');",
-      &search_box_populated));
-  EXPECT_TRUE(search_box_populated);
+  // Check that the search terms are displayed as a link.
+  EXPECT_TRUE(IsDisplayingText(browser, "search query"));
 
   // The diagnostics button isn't displayed when corrections were
   // retrieved from a remote server.
   EXPECT_FALSE(IsDisplayingDiagnosticsButton(browser));
-
-  // Close help box again, to return page to original state.
-  ToggleHelpBox(browser);
 }
 
 std::string GetShowSavedButtonLabel() {
@@ -673,7 +649,7 @@ IN_PROC_BROWSER_TEST_F(ErrorPageTest, DNSError_GoBack2Forward2) {
   EXPECT_EQ(3, link_doctor_interceptor()->num_requests());
 }
 
-// Test that the search button on a DNS error page works.
+// Test that the search link on a DNS error page works.
 IN_PROC_BROWSER_TEST_F(ErrorPageTest, DNSError_DoSearch) {
   // The first navigation should fail, and the second one should be the error
   // page.
@@ -694,7 +670,7 @@ IN_PROC_BROWSER_TEST_F(ErrorPageTest, DNSError_DoSearch) {
   // notification that they've run, and scripts that trigger a navigation may
   // not send that notification.
   web_contents->GetMainFrame()->ExecuteJavaScriptForTests(
-      base::ASCIIToUTF16("document.getElementById('search-button').click();"));
+      base::ASCIIToUTF16("document.getElementById('search-link').click();"));
   nav_observer.Wait();
   EXPECT_EQ(base::ASCIIToUTF16("Title Of More Awesomeness"),
             title_watcher.WaitAndGetTitle());

@@ -9,7 +9,6 @@
 #include "core/CoreExport.h"
 #include "core/frame/ConsoleTypes.h"
 #include "core/inspector/ConsoleAPITypes.h"
-#include "core/inspector/ScriptCallStack.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/PassRefPtr.h"
@@ -39,8 +38,8 @@ public:
     void setURL(const String&);
     unsigned lineNumber() const;
     void setLineNumber(unsigned);
-    PassRefPtrWillBeRawPtr<ScriptCallStack> callStack() const;
-    void setCallStack(PassRefPtrWillBeRawPtr<ScriptCallStack>);
+    PassRefPtr<ScriptCallStack> callStack() const;
+    void setCallStack(PassRefPtr<ScriptCallStack>);
     ScriptState* scriptState() const;
     void setScriptState(ScriptState*);
     PassRefPtrWillBeRawPtr<ScriptArguments> scriptArguments() const;
@@ -79,7 +78,7 @@ private:
     String m_url;
     unsigned m_lineNumber;
     unsigned m_columnNumber;
-    RefPtrWillBeMember<ScriptCallStack> m_callStack;
+    RefPtr<ScriptCallStack> m_callStack;
     OwnPtr<ScriptStateProtectingContext> m_scriptState;
     RefPtrWillBeMember<ScriptArguments> m_scriptArguments;
     unsigned long m_requestIdentifier;

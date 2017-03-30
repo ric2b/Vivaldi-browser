@@ -15,8 +15,10 @@
 #include "extensions/common/permissions/permissions_data.h"
 #include "net/url_request/url_request.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 using content::ResourceRequestInfo;
+using extensions::PermissionsData;
 
 namespace {
 
@@ -103,42 +105,48 @@ bool WebRequestPermissions::HideRequest(
 }
 
 // static
-bool WebRequestPermissions::CanExtensionAccessURL(
+PermissionsData::AccessType WebRequestPermissions::CanExtensionAccessURL(
     const extensions::InfoMap* extension_info_map,
     const std::string& extension_id,
     const GURL& url,
+    int tab_id,
     bool crosses_incognito,
     HostPermissionsCheck host_permissions_check) {
   // extension_info_map can be NULL in testing.
   if (!extension_info_map)
-    return true;
+    return PermissionsData::ACCESS_ALLOWED;
 
   const extensions::Extension* extension =
       extension_info_map->extensions().GetByID(extension_id);
   if (!extension)
-    return false;
+    return PermissionsData::ACCESS_DENIED;
 
   // Check if this event crosses incognito boundaries when it shouldn't.
   if (crosses_incognito && !extension_info_map->CanCrossIncognito(extension))
-    return false;
+    return PermissionsData::ACCESS_DENIED;
 
+  PermissionsData::AccessType access = PermissionsData::ACCESS_DENIED;
   switch (host_permissions_check) {
     case DO_NOT_CHECK_HOST:
+      access = PermissionsData::ACCESS_ALLOWED;
       break;
     case REQUIRE_HOST_PERMISSION:
       // about: URLs are not covered in host permissions, but are allowed
       // anyway.
-      if (!((url.SchemeIs(url::kAboutScheme) ||
-             extension->permissions_data()->HasHostPermission(url) ||
-             url.GetOrigin() == extension->url()))) {
-        return false;
+      if (url.SchemeIs(url::kAboutScheme) ||
+          url::IsSameOriginWith(url, extension->url())) {
+        access = PermissionsData::ACCESS_ALLOWED;
+        break;
       }
+      access = extension->permissions_data()->GetPageAccess(extension, url,
+                                                            tab_id, nullptr);
       break;
     case REQUIRE_ALL_URLS:
-      if (!extension->permissions_data()->HasEffectiveAccessToAllHosts())
-        return false;
+      if (extension->permissions_data()->HasEffectiveAccessToAllHosts())
+        access = PermissionsData::ACCESS_ALLOWED;
+      // else ACCESS_DENIED
       break;
   }
 
-  return true;
+  return access;
 }

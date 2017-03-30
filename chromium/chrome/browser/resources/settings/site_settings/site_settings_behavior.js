@@ -13,25 +13,7 @@ var SiteSettingsBehaviorImpl = {
      * The ID of the category this element is displaying data for.
      * See site_settings/constants.js for possible values.
      */
-    category: {
-      type: Number,
-    },
-  },
-
-  /**
-   * Returns whether the category default is set to enabled or not.
-   * @param {number} category The category to check.
-   * @return {boolean} True if the category default is set to enabled.
-   * @protected
-   */
-  isCategoryAllowed: function(category) {
-    var pref = this.getPref(this.computeCategoryPrefName(category));
-
-    // FullScreen is Allow vs. Ask.
-    if (category == settings.ContentSettingsTypes.FULLSCREEN)
-      return pref.value != settings.PermissionValues.ASK;
-
-    return pref.value != settings.PermissionValues.BLOCK;
+    category: Number,
   },
 
   /**
@@ -293,23 +275,6 @@ var SiteSettingsBehaviorImpl = {
         assertNotReached();
         return '';
     }
-  },
-
-  /**
-   * A utility function to compute the category given the description.
-   * @param {string} description The category description to look up.
-   * @return {number} category The category id to return.
-   * @protected
-   */
-  computeCategoryFromDesc: function(description) {
-    for (var type in settings.ContentSettingsTypes) {
-      if (description == this.computeTitleForContentCategory(
-          settings.ContentSettingsTypes[type])) {
-        return settings.ContentSettingsTypes[type];
-      }
-    }
-    assertNotReached();
-    return 0;
   },
 };
 

@@ -24,6 +24,7 @@
 #include "content/browser/quota/mock_quota_manager_proxy.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cache_storage_usage_info.h"
+#include "content/public/test/mock_special_storage_policy.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/url_request/url_request_context.h"
@@ -75,19 +76,25 @@ class CacheStorageManagerTest : public testing::Test {
 
     url_request_context->set_job_factory(url_request_job_factory_.get());
 
-    quota_manager_proxy_ = new MockQuotaManagerProxy(
-        nullptr, base::ThreadTaskRunnerHandle::Get().get());
-
-    if (MemoryOnly()) {
-      cache_manager_ = CacheStorageManager::Create(
-          base::FilePath(), base::ThreadTaskRunnerHandle::Get(),
-          quota_manager_proxy_);
-    } else {
+    if (!MemoryOnly())
       ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
-      cache_manager_ = CacheStorageManager::Create(
-          temp_dir_.path(), base::ThreadTaskRunnerHandle::Get(),
-          quota_manager_proxy_);
-    }
+
+    quota_policy_ = new MockSpecialStoragePolicy;
+    mock_quota_manager_ = new MockQuotaManager(
+        MemoryOnly() /* is incognito */, temp_dir_.path(),
+        base::ThreadTaskRunnerHandle::Get().get(),
+        base::ThreadTaskRunnerHandle::Get().get(), quota_policy_.get());
+    mock_quota_manager_->SetQuota(
+        GURL(origin1_), storage::kStorageTypeTemporary, 1024 * 1024 * 100);
+    mock_quota_manager_->SetQuota(
+        GURL(origin2_), storage::kStorageTypeTemporary, 1024 * 1024 * 100);
+
+    quota_manager_proxy_ = new MockQuotaManagerProxy(
+        mock_quota_manager_.get(), base::ThreadTaskRunnerHandle::Get().get());
+
+    cache_manager_ = CacheStorageManager::Create(
+        temp_dir_.path(), base::ThreadTaskRunnerHandle::Get(),
+        quota_manager_proxy_);
 
     cache_manager_->SetBlobParametersForCache(
         browser_context_.GetRequestContext(),
@@ -307,6 +314,8 @@ class CacheStorageManagerTest : public testing::Test {
   scoped_ptr<net::URLRequestJobFactoryImpl> url_request_job_factory_;
   storage::BlobStorageContext* blob_storage_context_;
 
+  scoped_refptr<MockSpecialStoragePolicy> quota_policy_;
+  scoped_refptr<MockQuotaManager> mock_quota_manager_;
   scoped_refptr<MockQuotaManagerProxy> quota_manager_proxy_;
   scoped_ptr<CacheStorageManager> cache_manager_;
 
@@ -395,6 +404,18 @@ TEST_P(CacheStorageManagerTestP, DeleteTwice) {
   EXPECT_EQ(CACHE_STORAGE_ERROR_NOT_FOUND, callback_error_);
 }
 
+TEST_P(CacheStorageManagerTestP, DeleteCacheReducesOriginSize) {
+  EXPECT_TRUE(Open(origin1_, "foo"));
+  EXPECT_TRUE(CachePut(callback_cache_, GURL("http://example.com/foo")));
+  // The quota manager gets updated after the put operation runs its callback so
+  // run the event loop.
+  base::RunLoop().RunUntilIdle();
+  int64_t put_delta = quota_manager_proxy_->last_notified_delta();
+  EXPECT_LT(0, put_delta);
+  EXPECT_TRUE(Delete(origin1_, "foo"));
+  EXPECT_EQ(put_delta, -1 * quota_manager_proxy_->last_notified_delta());
+}
+
 TEST_P(CacheStorageManagerTestP, EmptyKeys) {
   EXPECT_TRUE(Keys(origin1_));
   EXPECT_TRUE(callback_strings_.empty());
@@ -442,7 +463,7 @@ TEST_P(CacheStorageManagerTestP, StorageMatchNoCache) {
   EXPECT_TRUE(Open(origin1_, "foo"));
   EXPECT_TRUE(CachePut(callback_cache_, GURL("http://example.com/foo")));
   EXPECT_FALSE(StorageMatch(origin1_, "bar", GURL("http://example.com/foo")));
-  EXPECT_EQ(CACHE_STORAGE_ERROR_NOT_FOUND, callback_error_);
+  EXPECT_EQ(CACHE_STORAGE_ERROR_CACHE_NAME_NOT_FOUND, callback_error_);
 }
 
 TEST_P(CacheStorageManagerTestP, StorageMatchAllEntryExists) {
@@ -595,50 +616,47 @@ TEST_P(CacheStorageManagerTestP, OpenRunsSerially) {
 TEST_P(CacheStorageManagerTestP, GetOriginUsage) {
   EXPECT_EQ(0, GetOriginUsage(origin1_));
   EXPECT_TRUE(Open(origin1_, "foo"));
+  EXPECT_EQ(0, GetOriginUsage(origin1_));
   EXPECT_TRUE(CachePut(callback_cache_, GURL("http://example.com/foo")));
+  int64_t foo_size = GetOriginUsage(origin1_);
   EXPECT_LT(0, GetOriginUsage(origin1_));
   EXPECT_EQ(0, GetOriginUsage(origin2_));
+
+  // Add the same entry into a second cache, the size should double.
+  EXPECT_TRUE(Open(origin1_, "bar"));
+  EXPECT_TRUE(CachePut(callback_cache_, GURL("http://example.com/foo")));
+  EXPECT_EQ(2 * foo_size, GetOriginUsage(origin1_));
 }
 
 TEST_P(CacheStorageManagerTestP, GetAllOriginsUsage) {
   EXPECT_EQ(0ULL, GetAllOriginsUsage().size());
+  // Put one entry in a cache on origin 1.
   EXPECT_TRUE(Open(origin1_, "foo"));
   EXPECT_TRUE(CachePut(callback_cache_, GURL("http://example.com/foo")));
+
+  // Put two entries (of identical size) in a cache on origin 2.
+  EXPECT_TRUE(Open(origin2_, "foo"));
+  EXPECT_TRUE(CachePut(callback_cache_, GURL("http://example.com/foo")));
+  EXPECT_TRUE(CachePut(callback_cache_, GURL("http://example.com/bar")));
+
   std::vector<CacheStorageUsageInfo> usage = GetAllOriginsUsage();
-  EXPECT_EQ(1ULL, usage.size());
-  const CacheStorageUsageInfo& info = usage[0];
-  EXPECT_EQ(origin1_, info.origin);
-  EXPECT_LT(0, info.total_size_bytes);
-  if (MemoryOnly())
-    EXPECT_TRUE(info.last_modified.is_null());
-  else
-    EXPECT_FALSE(info.last_modified.is_null());
-}
+  EXPECT_EQ(2ULL, usage.size());
 
-TEST_F(CacheStorageManagerMemoryOnlyTest, MemoryBackedSize) {
-  CacheStorage* cache_storage = CacheStorageForOrigin(origin1_);
-  EXPECT_EQ(0, cache_storage->MemoryBackedSize());
+  int origin1_index = usage[0].origin == origin1_ ? 0 : 1;
+  int origin2_index = usage[1].origin == origin2_ ? 1 : 0;
+  EXPECT_NE(origin1_index, origin2_index);
 
-  EXPECT_TRUE(Open(origin1_, "foo"));
-  scoped_refptr<CacheStorageCache> foo_cache = callback_cache_;
-  EXPECT_TRUE(Open(origin1_, "bar"));
-  scoped_refptr<CacheStorageCache> bar_cache = callback_cache_;
-  EXPECT_EQ(0, cache_storage->MemoryBackedSize());
+  int64_t origin1_size = usage[origin1_index].total_size_bytes;
+  int64_t origin2_size = usage[origin2_index].total_size_bytes;
+  EXPECT_EQ(2 * origin1_size, origin2_size);
 
-  EXPECT_TRUE(CachePut(foo_cache, GURL("http://example.com/foo")));
-  EXPECT_LT(0, cache_storage->MemoryBackedSize());
-  int64_t foo_size = cache_storage->MemoryBackedSize();
-
-  EXPECT_TRUE(CachePut(bar_cache, GURL("http://example.com/foo")));
-  EXPECT_EQ(foo_size * 2, cache_storage->MemoryBackedSize());
-}
-
-TEST_F(CacheStorageManagerTest, MemoryBackedSizePersistent) {
-  CacheStorage* cache_storage = CacheStorageForOrigin(origin1_);
-  EXPECT_EQ(0, cache_storage->MemoryBackedSize());
-  EXPECT_TRUE(Open(origin1_, "foo"));
-  EXPECT_TRUE(CachePut(callback_cache_, GURL("http://example.com/foo")));
-  EXPECT_EQ(0, cache_storage->MemoryBackedSize());
+  if (MemoryOnly()) {
+    EXPECT_TRUE(usage[origin1_index].last_modified.is_null());
+    EXPECT_TRUE(usage[origin2_index].last_modified.is_null());
+  } else {
+    EXPECT_FALSE(usage[origin1_index].last_modified.is_null());
+    EXPECT_FALSE(usage[origin2_index].last_modified.is_null());
+  }
 }
 
 TEST_F(CacheStorageManagerTest, DeleteUnreferencedCacheDirectories) {
@@ -729,7 +747,7 @@ TEST_F(CacheStorageMigrationTest, DeleteCache) {
 }
 
 TEST_F(CacheStorageMigrationTest, GetOriginUsage) {
-  EXPECT_GT(GetOriginUsage(origin1_), 0);
+  EXPECT_EQ(0, GetOriginUsage(origin1_));
   EXPECT_FALSE(base::DirectoryExists(legacy_path_));
   EXPECT_TRUE(base::DirectoryExists(new_path_));
 }
@@ -929,6 +947,11 @@ class CacheStorageQuotaClientTest : public CacheStorageManagerTest {
   DISALLOW_COPY_AND_ASSIGN(CacheStorageQuotaClientTest);
 };
 
+class CacheStorageQuotaClientDiskOnlyTest : public CacheStorageQuotaClientTest {
+ public:
+  bool MemoryOnly() override { return false; }
+};
+
 class CacheStorageQuotaClientTestP : public CacheStorageQuotaClientTest,
                                      public testing::WithParamInterface<bool> {
   bool MemoryOnly() override { return !GetParam(); }
@@ -983,6 +1006,25 @@ TEST_P(CacheStorageQuotaClientTestP, QuotaDeleteOriginData) {
 
 TEST_P(CacheStorageQuotaClientTestP, QuotaDeleteEmptyOrigin) {
   EXPECT_TRUE(QuotaDeleteOriginData(origin1_));
+}
+
+TEST_F(CacheStorageQuotaClientDiskOnlyTest, QuotaDeleteUnloadedOriginData) {
+  EXPECT_TRUE(Open(origin1_, "foo"));
+  // Call put to test that initialized caches are properly deleted too.
+  EXPECT_TRUE(CachePut(callback_cache_, GURL("http://example.com/foo")));
+
+  // Close the cache backend so that it writes out its index to disk.
+  base::RunLoop run_loop;
+  callback_cache_->Close(run_loop.QuitClosure());
+  run_loop.Run();
+
+  // Create a new CacheStorageManager that hasn't yet loaded the origin.
+  quota_manager_proxy_->SimulateQuotaManagerDestroyed();
+  cache_manager_ = CacheStorageManager::Create(cache_manager_.get());
+  quota_client_.reset(new CacheStorageQuotaClient(cache_manager_->AsWeakPtr()));
+
+  EXPECT_TRUE(QuotaDeleteOriginData(origin1_));
+  EXPECT_EQ(0, QuotaGetOriginUsage(origin1_));
 }
 
 TEST_P(CacheStorageQuotaClientTestP, QuotaDoesSupport) {

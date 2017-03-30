@@ -133,6 +133,13 @@ Bármely érték, amely nem ebben a tartományban van, a közelebbi határhoz le
 <translation id="1522425503138261032">Engedélyezi a webhelyek számára a felhasználók fizikai helyének követését</translation>
 <translation id="152657506688053119">Az alapértelmezett keresési szolgáltató alternatív URL-jeinek listája.</translation>
 <translation id="1530812829012954197">Mindig jelenítse meg a következő URL-mintákat a gazdagép böngészőjében</translation>
+<translation id="1553684822621013552">Ha a házirend értéke igaz, akkor az ARC engedélyezve lesz a felhasználó
+      számára (további házirend-ellenőrzések alapján – az ARC továbbra sem
+      áll rendelkezésre, ha engedélyezve van az átmeneti mód vagy a többfiókos
+      bejelentkezés az aktuális felhasználói munkamenetnél).
+
+      Ha ez a beállítás le van tiltva, illetve nincs konfigurálva, akkor a vállalati
+      felhasználók nem használhatják az ARC szolgáltatást.</translation>
 <translation id="1561424797596341174">A házirend felülírja a távoli elérésű gazdagép hibakeresés végzésére szolgáló buildjeit</translation>
 <translation id="1583248206450240930">A <ph name="PRODUCT_FRAME_NAME" /> használata alapértelmezés szerint</translation>
 <translation id="1608755754295374538">Azon URL-ek, amelyek rákérdezés nélkül hozzáférést kapnak a hangrögzítő eszközökhöz</translation>
@@ -185,6 +192,13 @@ Ha a házirend konfigurálatlanul marad, a felhasználó döntheti el, hogy kív
 
           A házirend csak akkor érvényesül, ha a „DefaultSearchProviderEnabled” házirend engedélyezve van.</translation>
 <translation id="1859633270756049523">Munkamenet hosszának korlátozása</translation>
+<translation id="1859859319036806634">Figyelmeztetés: A TLS-tartalékverziót eltávolítjuk a <ph name="PRODUCT_NAME" /> böngészőből az 52-es verzió után (körülbelül 2016 szeptemberében), és onnantól kezdve ez a házirend nem fog működni.
+
+      Amikor a TLS-kapcsolatfelvétel sikertelen, a <ph name="PRODUCT_NAME" /> korábban újrapróbálta a kapcsolódást a TLS egy korábbi verziójával a HTTPS-szerverek hibáinak kiküszöbölése érdekében. Ez a beállítás azt a verziót konfigurálja, amelynél a tartalékfolyamat leáll. Ha a szerver helyesen (azaz a kapcsolat megszakítása nélkül) hajtja végre a verzióegyeztetést, akkor a böngésző nem alkalmazza ezt a beállítást. Mindettől függetlenül az ennek eredményeként létrejövő kapcsolatnak meg kell felelnie az SSLVersionMin paraméternek.
+
+      Ha ez a házirend nincs beállítva, illetve a beállítása „tls1.2”, akkor a <ph name="PRODUCT_NAME" /> a továbbiakban nem hajtja végre ezt a tartalékfolyamatot. Lényeges, hogy ez nem kapcsolja ki a TLS korábbi verzióinak támogatását, hanem csupán azt, hogy a <ph name="PRODUCT_NAME" /> keressen-e megoldást azoknál a hibásan működő szervereknél, amelyek nem tudják helyesen egyeztetni a verziókat.
+
+      Ha fenn kell tartani a kompatibilitást a hibásan működő szerverrel, akkor a házirend a „tls1.1” értékre állítható. Ez átmeneti intézkedés, és a szervert mielőbb meg kell javítani.</translation>
 <translation id="1861037019115362154">Megadja a(z) <ph name="PRODUCT_NAME" /> számára tiltott bővítmények listáját, és megakadályozza, hogy a felhasználók megváltoztassák ezt a beállítást.
 
       A „*” és a „?” helyettesítő karakterek használata megengedett tetszőleges karaktersorozatok helyettesítésére. A „*” tetszőleges számú karaktert helyettesít, míg a „?” egyetlen opcionális karaktert határoz meg, azaz nullát vagy egy karaktert. Az escape-karakter a „\”, így a tényleges „*”, „?” vagy „\” karakterek beírásához azok elé „\” karaktert kell tenni.
@@ -223,6 +237,7 @@ Ha a házirend konfigurálatlanul marad, a felhasználó döntheti el, hogy kív
       Ha a házirend értéke igaz, akkor a <ph name="PRODUCT_OS_NAME" /> az automatikusan frissülő hasznos tartalmakat HTTP-kapcsolaton keresztül kísérli meg letölteni. Ha a házirend értéke hamis, vagy ha nincs beállítva, akkor a rendszer mindig HTTPS-kapcsolatot használ az automatikusan frissülő hasznos tartalmak letöltésére.</translation>
 <translation id="2006530844219044261">Energiagazdálkodás</translation>
 <translation id="201557587962247231">Az eszköz állapotával kapcsolatos jelentések feltöltési gyakorisága</translation>
+<translation id="2024476116966025075">A kötelező domainnév konfigurálása a távoli hozzáférésű ügyfeleknél</translation>
 <translation id="2030905906517501646">Alapértelmezett keresési szolgáltató kulcsszava</translation>
 <translation id="206623763829450685">Meghatározza, hogy a <ph name="PRODUCT_NAME" /> milyen HTTP-hitelesítési sémákat támogat.
 
@@ -436,21 +451,13 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
       Ha a szabály nincs beállítva, a felhasználó eldöntheti, hogy használja-e a rendelkezésre álló adattömörítő proxyfunkciót.</translation>
 <translation id="2587719089023392205">A <ph name="PRODUCT_NAME" /> legyen az alapértelmezett böngészőm</translation>
 <translation id="2592091433672667839">Inaktivitás időtartama, mielőtt megjelenne a képernyőkímélő a bejelentkezési képernyőn kiállító módban</translation>
+<translation id="260705825237536216">ARC-alkalmazások konfigurálása</translation>
 <translation id="2623014935069176671">Várakozás a kezdeti felhasználói tevékenységre</translation>
 <translation id="262740370354162807">A dokumentumok <ph name="CLOUD_PRINT_NAME" /> szolgáltatás részére való benyújtásának engedélyezése</translation>
 <translation id="2633084400146331575">Hangos visszajelzések engedélyezése</translation>
 <translation id="2646290749315461919">Lehetővé teszi, hogy megadja azon weboldalak listáját, amelyek követhetik a felhasználók tartózkodási helyét. A felhasználók tartózkodási helyének követése lehet alapértelmezetten engedélyezett, alapértelmezetten tiltott, vagy megkérdezheti a felhasználót minden alkalommal, amikor egy webhely a tartózkodási helyét szeretné tudni. Ha a házirend konfigurálatlanul marad, a rendszer az "AskGeolocation" értéket használja, amelyet a felhasználó módosíthat.</translation>
 <translation id="2650049181907741121">Az a művelet, amelyet akkor végez a rendszer, ha a felhasználó lezárja a fedelet</translation>
 <translation id="2660846099862559570">Soha ne használjon proxyt</translation>
-<translation id="2665596266623707739">Figyelem: A 47. verzió után (körülbelül 2016 januárjában) eltávolítjuk a TLS 1.0-ás verziót a <ph name="PRODUCT_NAME" /> termékből, és onnantól a „tls1” lehetőség nem működik.
-
-      Ha a TLS-kézfogás sikertelen, a <ph name="PRODUCT_NAME" /> újból megpróbálja a csatlakozást a TLS egy alacsonyabb verziójával, hogy kiküszöbölje a HTTPS-szerverek programhibáit. Ez a beállítás azt a verziót konfigurálja, amelynél a tartalékfolyamat leáll. Ha a szerver helyesen hajtja végre a verzióegyeztetést (azaz a kapcsolat megszakítása nélkül), akkor a rendszer nem alkalmazza ezt a beállítást. Mindettől függetlenül az ennek eredményeként létrejövő kapcsolatnak meg kell felelnie az SSLVersionMin paraméternek.
-
-      Ha ez a házirend nincs beállítva, akkor a <ph name="PRODUCT_NAME" /> egy alapértelmezett minimumverziót használ, ami a TLS 1.0 a <ph name="PRODUCT_NAME" /> 44. és a TLS 1.1 az újabb verzióiban. Lényeges, hogy ez nem kapcsolja ki a TLS 1.0 támogatását, hanem csupán azt, hogy a <ph name="PRODUCT_NAME" /> kiküszöbölje-e azokat a hibásan működő szervereket, amelyek nem tudják helyesen egyeztetni a verziókat.
-
-      Egyébként a következő értékek valamelyikére lehet állítani: „tls1”, „tls1.1” vagy „tls1.2”. Ha fenn kell tartani a kompatibilitást a hibásan működő szerverrel, akkor „tls1” értékre állítható. Ez átmeneti intézkedés, és a szervert mielőbb meg kell javítani.
-
-      A „tls1.2” beállítás kikapcsolja valamennyi tartalékot, de a kompatibilitást érintő jelentős hatása lehet.</translation>
 <translation id="267596348720209223">Meghatározza a keresési szolgáltató által támogatott karakterkódolásokat. A kódolások kódtáblanevek, például UTF-8, GB2312 vagy ISO-8859-1. A szolgáltató a megadott sorrendben próbálja őket használni. A házirend nem kötelező. Ha nincs beállítva, akkor a rendszer az alapértelmezés szerinti UTF-8-at használja. A házirend csak akkor teljesül, ha a "DefaultSearchProviderEnabled" házirend engedélyezve van.</translation>
 <translation id="2682225790874070339">Letiltja a Google Drive szolgáltatást a <ph name="PRODUCT_OS_NAME" /> Fájlok alkalmazásában</translation>
 <translation id="268577405881275241">Az adattömörítő proxyfunkció engedélyezése</translation>
@@ -467,11 +474,6 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
       Ha ez a beállítás ki van kapcsolva, akkor a weboldalak nem használhatnak JavaScriptet, és a felhasználó nem módosíthatja a beállítást.
 
       Ha be van kapcsolva vagy nincs beállítva, akkor a weboldalak használhatnak JavaScriptet, ám a felhasználó módosíthatja a beállítást.</translation>
-<translation id="2747783890942882652">Beállítja a gazdagép szükséges domainnevét, amely a távoli hozzáférésű gazdagépekre lesz alkalmazva, és megakadályozza, hogy a felhasználók megváltoztassák azt.
-
-          Ha a beállítás engedélyezve van, a gazdagépeket csak a megadott domainnévvel regisztrált fiókokkal lehet megosztani.
-
-          Ha a beállítás le van tiltva vagy nincs megadva, a gazdagépeket bármely fiókkal meg lehet osztani.</translation>
 <translation id="2757054304033424106">Telepíthető bővítmény-/alkalmazástípusok</translation>
 <translation id="2759224876420453487">A felhasználói viselkedés szabályozása többprofilos munkamenetben</translation>
 <translation id="2761483219396643566">Tétlenségi figyelmeztetés késleltetése akkumulátorról való működés során</translation>
@@ -536,6 +538,7 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
       Azt adja meg, hogy a TLS-domainhez kötött tanúsítványbővítmények engedélyezve legyenek-e.
 
       Ez a beállítás arra szolgál, hogy tesztelési célból engedélyezze a TLS-domainhez kötött tanúsítványbővítményeket. Ezt a kísérleti beállítást a jövőben eltávolítjuk.</translation>
+<translation id="2957506574938329824">Nem engedélyezi, hogy a webhelyek hozzáférést kérjenek a Bluetooth-eszközökhöz a Web Bluetooth API-n keresztül</translation>
 <translation id="2957513448235202597">Fióktípus a <ph name="HTTP_NEGOTIATE" /> hitelesítés egyeztetéséhez</translation>
 <translation id="2959898425599642200">Proxy figyelmen kívül hagyásának szabályai</translation>
 <translation id="2960691910306063964">A PIN-kód nélküli hitelesítés engedélyezése vagy kikapcsolása a távoli elérésű gazdagépek számára</translation>
@@ -548,6 +551,8 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
           Ha a házirend nincs beállítva, a rendszer egy alapértelmezett időtartamot használ.
 
           A házirend értékét ezredmásodpercben kell megadni. Az értéknek kisebbnek kell lennie a képernyő kikapcsolásának késleltetésénél (ha be van állítva) és a tétlenségi késleltetésnél.</translation>
+<translation id="2987155890997901449">ARC engedélyezése</translation>
+<translation id="2987227569419001736">A Web Bluetooth API használatának irányítása</translation>
 <translation id="2998881342848488968">Lehetővé teszi a <ph name="PRODUCT_OS_NAME" /> számára, hogy megkerülje a proxyt a hitelesítési portálokon történő hitelesítéskor.
 
       Ez a házirend csak akkor lép érvénybe, ha be van állítva proxy (például házirend vagy bővítmény révén, illetve a felhasználó által a chrome://settings oldalon).
@@ -830,6 +835,7 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 
           Ez a házirend csak akkor érvényesül, ha a „DefaultSearchProviderEnabled” házirend engedélyezve van.</translation>
 <translation id="4320376026953250541">Microsoft Windows XP SP2 vagy újabb</translation>
+<translation id="4322842393287974810">Annak engedélyezése, hogy a <ph name="PRODUCT_OS_NAME" /> verziójának ellenőrzését a késés nélkül, automatikusan indított kioszkalkalmazás végezze.</translation>
 <translation id="4325690621216251241">Kijelentkezés gomb elhelyezése a tálcán</translation>
 <translation id="4347908978527632940">Ha a felhasználó felügyelt felhasználó, akkor tartalomszolgáltatón keresztül az egyéb Android-alkalmazások lekérdezhetik a felhasználó webkorlátozásait.
 
@@ -1076,6 +1082,11 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 <translation id="5307432759655324440">Inkognitómód elérhetősége</translation>
 <translation id="5318185076587284965">Relay szerverek használatának engedélyezése a távoli gazdagép számára</translation>
 <translation id="5330684698007383292">A következő tartalomtípusok kezelésének engedélyezése a(z) <ph name="PRODUCT_FRAME_NAME" /> számára</translation>
+<translation id="5345267406698765263">Az ARC-házirendet JSON-karakterláncként adja meg, amely változtatás
+      nélkül hozzáadható az ARC-futáshoz. A beállítás pillanatnyilag csak az
+      alkalmazások kényszerített telepítésére szolgál.
+
+      Ha nincs beállítva ez a házirend, akkor egyik alkalmazás telepítése sem történik meg automatikusan.</translation>
 <translation id="5365946944967967336">Kezdőoldal gomb megjelenítése az eszköztáron</translation>
 <translation id="5366977351895725771">Ha „hamis” értékre van állítva, a felhasználó nem hozhat létre felügyelt felhasználókat. Az összes meglévő felügyelt felhasználó továbbra is elérhető lesz.
 
@@ -1139,6 +1150,13 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
       Ha az irányelvet beállítatlanul hagyja, akkor a felhasználók választhatnak, hogy a polc automatikusan el legyen-e rejtve vagy sem.</translation>
 <translation id="557658534286111200">Engedélyezi vagy letiltja a könyvjelzők szerkesztését</translation>
 <translation id="5586942249556966598">Ne tegyen semmit</translation>
+<translation id="5613179474872285001">Beállítja a távoli hozzáférésű ügyfelek számára kötelező domainnevet, és megakadályozza, hogy a felhasználók megváltoztassák azt.
+
+          Ha a beállítás engedélyezve van, akkor csak a megadott domainhez tartozó ügyfelek csatlakozhatnak a gazdagéphez.
+
+          Ha a beállítás le van tiltva vagy nincs megadva, akkor a rendszer a kapcsolódási típusnak megfelelő alapértelmezett házirendet alkalmazza. A házirend távoli segítség esetén az összes domainhez tartozó ügyfél számára engedélyezi a gazdagéphez való csatlakozást; a bármikor történő távoli hozzáférés esetén azonban csak a gazdagép tulajdonosa csatlakozhat.
+
+          Lásd még a RemoteAccessHostDomain házirendet.</translation>
 <translation id="5630352020869108293">Utolsó munkamenet visszaállítása</translation>
 <translation id="5645779841392247734">Cookie-k engedélyezése ezeken a webhelyeken</translation>
 <translation id="5677038592630896441">Megköveteli a helyi felhasználó nevének és a távoli elérésű gazdagép tulajdonosának egyezését.
@@ -1408,6 +1426,9 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 
           Ha nem állítja be ezt a házirendet, akkor a képernyő-billentyűzet le lesz tiltva a bejelentkezési képernyő első megjelenítésekor. A felhasználók bármikor engedélyezhetik vagy letilthatják a képernyő-billentyűzetet, és annak állapota a bejelentkezési képernyőn megmarad a felhasználók között.</translation>
 <translation id="6598235178374410284">Felhasználó avatarképe</translation>
+<translation id="6628646143828354685">Lehetővé teszi annak beállítását, hogy a webhelyek hozzáférhetnek-e a közeli Bluetooth-eszközökhöz. A hozzáférés teljes mértékben letiltható, vagy a rendszer minden olyan alkalommal rákérdezhet a felhasználónál az engedélyezésre, amikor egy webhely közeli Bluetooth-eszközökhöz szeretne hozzáférni.
+
+          Ha nincs beállítva a házirend, akkor az érték „3” lesz, amit a felhasználó bármikor módosíthat.</translation>
 <translation id="6636268606788232221">Az energiagazdálkodási beállítások konfigurálása olyankor, amikor a felhasználó tétlen.
 
           Ez a házirend többféle, az energiagazdálkodási stratégiára vonatkozó beállítást vezérel arra vonatkozóan, amikor a felhasználó tétlenné válik.
@@ -1483,6 +1504,7 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
           Ha beállítja ezt a házirendet, a felhasználók nem módosíthatják vagy bírálhatják felül.
 
           Ha nem állítja be ezt a házirendet, a kisegítő lehetőségek nem jelennek meg a tálca menüjében, de a felhasználó a Beállítások oldalon beállíthatja azok megjelenítését.</translation>
+<translation id="6766216162565713893">Engedélyezi azt, hogy a felhasználótól hozzáférést kérjenek a webhelyek egy közeli Bluetooth-eszköz használatára</translation>
 <translation id="6770454900105963262">Az aktív kioszkmunkamenetekkel kapcsolatos információk jelentése</translation>
 <translation id="6774533686631353488">Felhasználói szintű (rendszergazdai engedély nélkül telepített) natív üzenetváltási szerverek használatának engedélyezése.</translation>
 <translation id="6786747875388722282">Bővítmények</translation>
@@ -1524,6 +1546,13 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 <translation id="6943577887654905793">Mac/Linux preferencia neve:</translation>
 <translation id="69525503251220566">Paraméter az alapértelmezett keresési szolgáltatóval végezhető képalapú keresési funkció biztosításához</translation>
 <translation id="6956272732789158625">A kulcsgenerálás használatának letiltása minden webhelyen</translation>
+<translation id="695891079107014261">Beállítja a távoli hozzáférésű gazdagépek számára kötelező domainnevet, és megakadályozza, hogy a felhasználók megváltoztassák azt.
+
+          Ha a beállítás engedélyezve van, a gazdagépeket csak a megadott domainnévvel regisztrált fiókokkal lehet megosztani.
+
+          Ha a beállítás le van tiltva vagy nincs megadva, a gazdagépeket bármely fiókkal meg lehet osztani.
+
+          Lásd még a RemoteAccessHostClientDomain házirendet.</translation>
 <translation id="6997592395211691850">Szükség van-e online OCSP- vagy CRL-ellenőrzésekre a helyi megbízhatósági kapcsolatok alapjainál</translation>
 <translation id="7003334574344702284">Ez a házirend engedélyezése esetén kikényszeríti a mentett jelszavak importálását a jelenlegi alapértelmezett böngészőből. Bekapcsolása esetén a házirend az importálás párbeszédpanelére is hatással van. Letiltása esetén a mentett jelszavak importálása nem történik meg. Ha nincs beállítva, akkor előfordulhat, hogy a rendszer a felhasználótól kérdezi meg, hogy megtörténjen-e az importálás, vagy hogy lehet-e automatikus az importálás.</translation>
 <translation id="7003746348783715221">A <ph name="PRODUCT_NAME" /> beállításai</translation>
@@ -1651,6 +1680,13 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 <translation id="7340034977315324840">Az eszköz aktív idejének jelentése</translation>
 <translation id="7381326101471547614">Letiltja az SPDY protokoll használatát a(z) <ph name="PRODUCT_NAME" /> termékben. Ha ez a házirend engedélyezve van, akkor az SPDY protokoll nem lesz elérhető a(z) <ph name="PRODUCT_NAME" /> termékben. E házirend kikapcsolása lehetővé teszi az SPDY használatát. Ha ez a házirend beállítatlanul marad, az SPDY elérhető lesz.</translation>
 <translation id="7384999953864505698">Engedélyezi a QUIC-protokollt</translation>
+<translation id="7406651467768226499">Annak meghatározása, hogy a késés nélkül, automatikusan elindított kioszkalkalmazás irányítsa-e a <ph name="PRODUCT_OS_NAME" /> verzióját.
+
+      Ez a házirend határozza meg, hogy Ön engedélyezi-e a késés nélkül, automatikusan elindított kioszkalkalmazás számára a <ph name="PRODUCT_OS_NAME" /> verziójának irányítását a required_platform_version kulcs jegyzékben való meghatározásával annak érdekében, hogy ez a kulcs adja a célverzió előtagját az automatikus frissítéseknél.
+
+      Ha a házirend értéke „true” (igaz), akkor a késés nélkül, automatikusan elindított kioszkalkalmazás required_platform_version jegyzékkulcsát használja a rendszer a célverzió automatikus frissítésének előtagjaként.
+
+      Ha a házirend nincs konfigurálva, vagy értéke „false” (hamis), akkor a rendszer figyelmen kívül hagyja a required_platform_version jegyzékkulcsot, és az automatikus frissítés a megszokottak szerint megy végbe.</translation>
 <translation id="7417972229667085380">Az a százalék, amelynek alapján a tétlenségi késleltetés skálázódik prezentációs módban (megszűnt)</translation>
 <translation id="7421483919690710988">A médialemez gyorsítótárméretének beállítása bájtban</translation>
 <translation id="7424751532654212117">A tiltott bővítmények listájának kivétellistája</translation>
@@ -1751,6 +1787,7 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
       Ha a házirend nincs beállítva, a(z) <ph name="PRODUCT_NAME" /> az alapértelmezett 5000 ezredmásodperces értéket használja.</translation>
 <translation id="7841880500990419427">Minimális TLS-verzió, amelyre vissza lehet térni</translation>
 <translation id="7842869978353666042">A Google Drive beállításainak konfigurálása</translation>
+<translation id="7843525027689416831">Azokat a jelölőket adja meg, amelyeket a(z) <ph name="PRODUCT_NAME" />-ra kell alkalmazni az elindításakor. A megadott jelölők alkalmazása csak a bejelentkezési képernyőn történik. A jelen irányelven keresztül megadott jelölők nem terjednek ki a felhasználói munkamenetekre.</translation>
 <translation id="7848840259379156480">Lehetővé teszi, hogy beállítsa az alapértelmezett HTML-megjelenítőt, ha a <ph name="PRODUCT_FRAME_NAME" /> telepítve van. Az alapértelmezett beállítás az, hogy a gazdagép böngészője végzi a megjelenítést, de opcionálisan ezt felülbírálhatja, és megjelenítheti a HTML oldalakat alapértelmezés szerint a <ph name="PRODUCT_FRAME_NAME" /> segítségével.</translation>
 <translation id="7882585827992171421">Ez a házirend csak kiállító módban aktív.
 
@@ -2046,7 +2083,6 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
           A házirend értékét ezredmásodpercben kell megadni. Az értéknek kisebbnek kell lennie a tétlenségi késleltetésnél.</translation>
 <translation id="891435090623616439">JSON-karakterláncként kódolva; a részletekért lásd: <ph name="COMPLEX_POLICIES_URL" /></translation>
 <translation id="8947415621777543415">Eszköz helyének jelentése</translation>
-<translation id="89493502583189945">Azokat a jelölőket adja meg, amelyeket a <ph name="PRODUCT_NAME" />-ra kell alkalmazni annak elindításakor. A megadott jelölők alkalmazása már az előtt megtörténik, hogy a <ph name="PRODUCT_NAME" /> elindulna (már a bejelentkezési képernyőn is).</translation>
 <translation id="8951350807133946005">A lemez gyorsítótár-könyvtárának beállítása</translation>
 <translation id="8955719471735800169">Vissza az oldal tetejére</translation>
 <translation id="8960850473856121830">A listában szereplő mintákat a böngésző egyezteti a kérelmező URL

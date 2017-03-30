@@ -16,8 +16,8 @@
 #include "chrome/grit/generated_resources.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/models/simple_menu_model.h"
-#include "ui/base/resource/material_design/material_design_controller.h"
 #include "ui/base/theme_provider.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -244,6 +244,7 @@ void ReloadButton::ChangeModeInternal(Mode mode) {
                gfx::CreateVectorIcon(icon_id, kButtonSize, normal_color));
       SetImage(views::Button::STATE_DISABLED,
                gfx::CreateVectorIcon(icon_id, kButtonSize, disabled_color));
+      set_ink_drop_base_color(normal_color);
     } else {
       SetImage(views::Button::STATE_NORMAL,
                *(tp->GetImageSkiaNamed((mode == MODE_RELOAD) ? IDR_RELOAD

@@ -6,21 +6,24 @@ package org.chromium.chrome.browser.signin;
 
 import android.accounts.Account;
 import android.app.Activity;
+import android.app.DialogFragment;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.os.Handler;
-import android.support.v7.app.AlertDialog;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.Callback;
 import org.chromium.base.FieldTrialList;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.externalauth.UserRecoverableErrorHandler;
+import org.chromium.sync.signin.AccountManagerHelper;
 import org.chromium.sync.signin.ChromeSigninController;
 
 import javax.annotation.Nullable;
@@ -36,20 +39,13 @@ import javax.annotation.Nullable;
  * See chrome/browser/signin/signin_manager_android.h for more details.
  */
 public class SigninManager implements AccountTrackerService.OnSystemAccountsSeededListener {
+    private static final String TAG = "SigninManager";
+
+    private static final String CONFIRM_ACCOUNT_CHANGED_DIALOG_TAG =
+            "confirm_account_changed_dialog_tag";
+    @VisibleForTesting
     public static final String CONFIRM_MANAGED_SIGNIN_DIALOG_TAG =
             "confirm_managed_signin_dialog_tag";
-
-    // The type of signin flow.
-    /** Regular (interactive) signin. */
-    public static final int SIGNIN_TYPE_INTERACTIVE = 0;
-
-    /** Forced signin for education-enrolled devices. */
-    public static final int SIGNIN_TYPE_FORCED_EDU = 1;
-
-    /** Forced signin for child accounts. */
-    public static final int SIGNIN_TYPE_FORCED_CHILD_ACCOUNT = 2;
-
-    private static final String TAG = "SigninManager";
 
     private static SigninManager sSigninManager;
     private static int sSignInAccessPoint = SigninAccessPoint.UNKNOWN;
@@ -63,21 +59,21 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
      * pending check from eventually starting a 2nd sign-in.
      */
     private boolean mFirstRunCheckIsPending = true;
+
     private final ObserverList<SignInStateObserver> mSignInStateObservers =
             new ObserverList<SignInStateObserver>();
+
     private final ObserverList<SignInAllowedObserver> mSignInAllowedObservers =
             new ObserverList<SignInAllowedObserver>();
 
-    private Activity mSignInActivity;
-    private Account mSignInAccount;
-    private SignInFlowObserver mSignInFlowObserver;
-    private boolean mPassive = false;
+    /**
+    * Will be set during the sign in process, and nulled out when there is not a pending sign in.
+    * Needs to be null checked after ever async entry point because it can be nulled out at any time
+    * by system accounts changing.
+    */
+    private SignInState mSignInState;
 
     private Runnable mSignOutCallback;
-
-    private ConfirmManagedSigninFragment mPolicyConfirmationDialog;
-
-    private boolean mHasPendingSignin = false;
 
     private boolean mSigninAllowedByPolicy;
 
@@ -107,21 +103,18 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
     }
 
     /**
-     * Pass this observer to startSignIn() to be notified when sign-in completes or is canceled.
+     * Callbacks for the sign-in flow.
      */
-    public interface SignInFlowObserver {
+    public interface SignInCallback {
         /**
-         * Invoked after sign-in completed successfully.
+         * Invoked after sign-in is completed successfully.
          */
-        void onSigninComplete();
+        void onSignInComplete();
 
         /**
-         * Invoked when the sign-in process was cancelled by the user.
-         *
-         * The user should have the option of going back and starting the process again,
-         * if possible.
+         * Invoked if the sign-in processes does not complete for any reason.
          */
-        void onSigninCancelled();
+        void onSignInAborted();
     }
 
     /**
@@ -137,6 +130,56 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
          * Called after data is wiped.
          */
         public void postWipeData();
+    }
+
+    /**
+     * Contains all the state needed for signin. This forces signin flow state to be
+     * cleared atomically, and all final fields to be set upon initialization.
+     */
+    private static class SignInState {
+        public final Account account;
+        public final Activity activity;
+        public final SignInCallback callback;
+
+        /**
+         * The dialog currently being displayed to the user, if any.
+         */
+        public DialogFragment displayedDialog = null;
+
+        /**
+         * If the system accounts need to be seeded, the sign in flow will block for that to occur.
+         * This boolean should be set to true during that time and then reset back to false
+         * afterwards. This allows the manager to know if it should progress the flow when the
+         * account tracker broadcasts updates.
+         */
+        public boolean blockedOnAccountSeeding = false;
+
+        /**
+         * @param account The account to sign in to.
+         * @param activity Reference to the UI to use for dialogs. Null means forced signin.
+         * @param callback Called when the sign-in process finishes or is cancelled. Can be null.
+         */
+        public SignInState(
+                Account account, @Nullable Activity activity, @Nullable SignInCallback callback) {
+            this.account = account;
+            this.activity = activity;
+            this.callback = callback;
+        }
+
+        /**
+         * Returns whether this is an interactive sign-in flow.
+         */
+        public boolean isInteractive() {
+            return activity != null;
+        }
+
+        /**
+         * Returns whether the sign-in flow activity was set but is no longer valid.
+         */
+        private boolean isActivityDestroyed() {
+            return activity != null
+                    && ApplicationStatus.getStateForActivity(activity) == ActivityState.DESTROYED;
+        }
     }
 
     /**
@@ -197,9 +240,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
      * Returns true if signin can be started now.
      */
     public boolean isSignInAllowed() {
-        return mSigninAllowedByPolicy
-                && !mFirstRunCheckIsPending
-                && mSignInAccount == null
+        return mSigninAllowedByPolicy && !mFirstRunCheckIsPending && mSignInState == null
                 && ChromeSigninController.get(mContext).getSignedInUser() == null;
     }
 
@@ -248,9 +289,9 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
     */
     @Override
     public void onSystemAccountsSeedingComplete() {
-        if (mHasPendingSignin) {
-            mHasPendingSignin = false;
-            doSignIn();
+        if (mSignInState != null && mSignInState.blockedOnAccountSeeding) {
+            mSignInState.blockedOnAccountSeeding = false;
+            progressSignInFlowCheckPolicy();
         }
     }
 
@@ -259,62 +300,100 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
     */
     @Override
     public void onSystemAccountsChanged() {
-        if (mHasPendingSignin) {
-            mHasPendingSignin = false;
-            cancelSignIn();
+        if (mSignInState != null) {
+            abortSignIn();
         }
     }
 
     /**
-     * Starts the sign-in flow, and executes the callback when ready to proceed.
-     * <p/>
-     * This method checks with the native side whether the account has management enabled, and may
-     * present a dialog to the user to confirm sign-in. The callback is invoked once these processes
-     * and the common sign-in initialization complete.
+     * Starts the sign-in flow, and executes the callback when finished.
      *
-     * @param activity The context to use for the operation.
+     * If an activity is provided, it is considered an "interactive" sign-in and the user can be
+     * prompted to confirm various aspects of sign-in using dialogs inside the activity.
+     * The sign-in flow goes through the following steps:
+     *
+     *   - Wait for AccountTrackerService to be seeded.
+     *   - If interactive, confirm the account change with the user.
+     *   - Wait for policy to be checked for the account.
+     *   - If interactive and the account is managed, warn the user.
+     *   - If managed, wait for the policy to be fetched.
+     *   - Complete sign-in with the native SigninManager and kick off token requests.
+     *   - Call the callback if provided.
+     *
      * @param account The account to sign in to.
-     * @param passive If passive is true then this operation should not interact with the user.
-     * @param observer The Observer to notify when the sign-in process is finished.
+     * @param activity The activity used to launch UI prompts, or null for a forced signin.
+     * @param callback Optional callback for when the sign-in process is finished.
      */
-    public void startSignIn(@Nullable Activity activity, final Account account, boolean passive,
-            final SignInFlowObserver observer) {
-        if (mSignInAccount != null) {
+    public void signIn(
+            Account account, @Nullable Activity activity, @Nullable SignInCallback callback) {
+        if (account == null) {
+            Log.w(TAG, "Ignoring sign-in request due to null account.");
+            if (callback != null) callback.onSignInAborted();
+            return;
+        }
+
+        if (mSignInState != null) {
             Log.w(TAG, "Ignoring sign-in request as another sign-in request is pending.");
+            if (callback != null) callback.onSignInAborted();
             return;
         }
 
         if (mFirstRunCheckIsPending) {
             Log.w(TAG, "Ignoring sign-in request until the First Run check completes.");
+            if (callback != null) callback.onSignInAborted();
             return;
         }
 
-        mSignInActivity = activity;
-        mSignInAccount = account;
-        mSignInFlowObserver = observer;
-        mPassive = passive;
-
+        mSignInState = new SignInState(account, activity, callback);
         notifySignInAllowedChanged();
 
-        if (!AccountTrackerService.get(mContext).checkAndSeedSystemAccounts()) {
-            if (AccountIdProvider.getInstance().canBeUsed(mContext)) {
-                mHasPendingSignin = true;
-            } else {
-                UserRecoverableErrorHandler errorHandler = activity != null
-                        ? new UserRecoverableErrorHandler.ModalDialog(activity)
-                        : new UserRecoverableErrorHandler.SystemNotification();
-                ExternalAuthUtils.getInstance().canUseGooglePlayServices(mContext, errorHandler);
-                Log.w(TAG, "Cancelling the sign-in process as Google Play services is unavailable");
-                cancelSignIn();
+        progressSignInFlowSeedSystemAccounts();
+    }
+
+    /**
+     * Same as above but retrieves the Account object for the given accountName.
+     */
+    public void signIn(String accountName, @Nullable final Activity activity,
+            @Nullable final SignInCallback callback) {
+        AccountManagerHelper.get(mContext).getAccountFromName(accountName, new Callback<Account>() {
+            @Override
+            public void onResult(Account account) {
+                signIn(account, activity, callback);
             }
+        });
+    }
+
+    private void progressSignInFlowSeedSystemAccounts() {
+        if (AccountTrackerService.get(mContext).checkAndSeedSystemAccounts()) {
+            progressSignInFlowCheckPolicy();
+        } else if (AccountIdProvider.getInstance().canBeUsed(mContext)) {
+            mSignInState.blockedOnAccountSeeding = true;
+        } else {
+            Activity activity = mSignInState.activity;
+            UserRecoverableErrorHandler errorHandler = activity != null
+                    ? new UserRecoverableErrorHandler.ModalDialog(activity)
+                    : new UserRecoverableErrorHandler.SystemNotification();
+            ExternalAuthUtils.getInstance().canUseGooglePlayServices(mContext, errorHandler);
+            Log.w(TAG, "Cancelling the sign-in process as Google Play services is unavailable");
+            abortSignIn();
+        }
+    }
+
+    /**
+     * Continues the signin flow by checking if there is a policy that the account is subject to.
+     */
+    private void progressSignInFlowCheckPolicy() {
+        if (mSignInState == null) {
+            Log.w(TAG, "Ignoring sign in progress request as no pending sign in.");
             return;
         }
 
-        doSignIn();
-    }
+        if (mSignInState.isActivityDestroyed()) {
+            abortSignIn();
+            return;
+        }
 
-    private void doSignIn() {
-        if (!nativeShouldLoadPolicyForUser(mSignInAccount.name)) {
+        if (!nativeShouldLoadPolicyForUser(mSignInState.account.name)) {
             // Proceed with the sign-in flow without checking for policy if it can be determined
             // that this account can't have management enabled based on the username.
             finishSignIn();
@@ -323,57 +402,52 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
 
         Log.d(TAG, "Checking if account has policy management enabled");
         // This will call back to onPolicyCheckedBeforeSignIn.
-        nativeCheckPolicyBeforeSignIn(mNativeSigninManagerAndroid, mSignInAccount.name);
+        nativeCheckPolicyBeforeSignIn(mNativeSigninManagerAndroid, mSignInState.account.name);
     }
 
     @CalledByNative
     private void onPolicyCheckedBeforeSignIn(String managementDomain) {
+        if (mSignInState == null) {
+            Log.w(TAG, "Sign in request was canceled; aborting onPolicyCheckedBeforeSignIn().");
+        }
+
         if (managementDomain == null) {
             Log.d(TAG, "Account doesn't have policy");
             finishSignIn();
             return;
         }
 
-        if (mSignInActivity != null
-                && ApplicationStatus.getStateForActivity(mSignInActivity)
-                        == ActivityState.DESTROYED) {
-            // The activity is no longer running, cancel sign in.
-            cancelSignIn();
+        if (mSignInState.isActivityDestroyed()) {
+            abortSignIn();
             return;
         }
 
-        if (mPassive) {
-            // If this is a passive interaction (e.g. auto signin) then don't show the confirmation
-            // dialog.
+        if (!mSignInState.isInteractive()) {
+            // If this is a forced sign-in then don't show the confirmation dialog.
+            // This will call back to onPolicyFetchedBeforeSignIn.
             nativeFetchPolicyBeforeSignIn(mNativeSigninManagerAndroid);
             return;
         }
 
+        // TODO(peconn): Move this and other UI interactions into AccountSigninView.
         Log.d(TAG, "Account has policy management");
-        mPolicyConfirmationDialog = new ConfirmManagedSigninFragment(
-                managementDomain,
-                new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int id) {
-                        if (mPolicyConfirmationDialog == null) return;
-                        mPolicyConfirmationDialog = null;
+        mSignInState.displayedDialog = ConfirmManagedSigninFragment.newInstance(managementDomain);
+        mSignInState.displayedDialog.show(
+                mSignInState.activity.getFragmentManager(), CONFIRM_MANAGED_SIGNIN_DIALOG_TAG);
+    }
 
-                        switch (id) {
-                            case AlertDialog.BUTTON_POSITIVE:
-                                Log.d(TAG, "Accepted policy management, proceeding with sign-in");
-                                // This will call back to onPolicyFetchedBeforeSignIn.
-                                nativeFetchPolicyBeforeSignIn(mNativeSigninManagerAndroid);
-                                break;
+    /**
+     * Called from ConfirmManagedSigninFragment if the managed account was confirmed.
+     */
+    void progressInteractiveSignInFlowManagedConfirmed() {
+        if (mSignInState == null || mSignInState.displayedDialog == null) {
+            // Stop if sign-in was cancelled or this is a duplicate click event.
+            return;
+        }
+        mSignInState.displayedDialog = null;
 
-                            default:
-                                Log.d(TAG, "Cancelled sign-in");
-                                cancelSignIn();
-                                break;
-                        }
-                    }
-                });
-        mPolicyConfirmationDialog.show(mSignInActivity.getFragmentManager(),
-                                       CONFIRM_MANAGED_SIGNIN_DIALOG_TAG);
+        // This will call back to onPolicyFetchedBeforeSignIn.
+        nativeFetchPolicyBeforeSignIn(mNativeSigninManagerAndroid);
     }
 
     @CalledByNative
@@ -384,27 +458,39 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
     }
 
     private void finishSignIn() {
-        if (mSignInAccount == null) {
+        if (mSignInState == null) {
             Log.w(TAG, "Sign in request was canceled; aborting finishSignIn().");
             return;
         }
 
         // Tell the native side that sign-in has completed.
-        nativeOnSignInCompleted(mNativeSigninManagerAndroid, mSignInAccount.name);
+        nativeOnSignInCompleted(mNativeSigninManagerAndroid, mSignInState.account.name);
 
         // Cache the signed-in account name. This must be done after the native call, otherwise
         // sync tries to start without being signed in natively and crashes.
-        ChromeSigninController.get(mContext).setSignedInAccountName(mSignInAccount.name);
+        ChromeSigninController.get(mContext).setSignedInAccountName(mSignInState.account.name);
 
-        if (mSignInFlowObserver != null) mSignInFlowObserver.onSigninComplete();
+        if (mSignInState.callback != null) {
+            mSignInState.callback.onSignInComplete();
+        }
 
-        // All done, cleanup.
-        Log.d(TAG, "Signin done");
-        mSignInActivity = null;
-        mSignInAccount = null;
-        mSignInFlowObserver = null;
+        // Trigger token requests via native.
+        logInSignedInUser();
 
+        if (mSignInState.isInteractive()) {
+            // If signin was a user action, record that it succeeded.
+            RecordUserAction.record("Signin_Signin_Succeed");
+            logSigninCompleteAccessPoint();
+            // Log signin in reason as defined in signin_metrics.h. Right now only
+            // SIGNIN_PRIMARY_ACCOUNT available on Android.
+            RecordHistogram.recordEnumeratedHistogram("Signin.SigninReason",
+                    SigninReason.SIGNIN_PRIMARY_ACCOUNT, SigninReason.MAX);
+        }
+
+        Log.d(TAG, "Signin completed.");
+        mSignInState = null;
         notifySignInAllowedChanged();
+
         for (SignInStateObserver observer : mSignInStateObservers) {
             observer.onSignedIn();
         }
@@ -468,11 +554,30 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         nativeClearLastSignedInUser(mNativeSigninManagerAndroid);
     }
 
-    private void cancelSignIn() {
-        if (mSignInFlowObserver != null) mSignInFlowObserver.onSigninCancelled();
-        mSignInActivity = null;
-        mSignInFlowObserver = null;
-        mSignInAccount = null;
+    /**
+     * Aborts the current sign in.
+     *
+     * Package protected to allow dialog fragments to abort the signin flow.
+     */
+    void abortSignIn() {
+        if (mSignInState == null) {
+            Log.w(TAG, "Ignoring signin abort request as no pending sign in.");
+            return;
+        }
+
+        // Ensure this function can only run once per signin flow.
+        SignInState signInState = mSignInState;
+        mSignInState = null;
+
+        if (signInState.displayedDialog != null) {
+            signInState.displayedDialog.dismiss();
+        }
+
+        if (signInState.callback != null) {
+            signInState.callback.onSignInAborted();
+        }
+
+        Log.d(TAG, "Signin flow aborted.");
         notifySignInAllowedChanged();
     }
 
@@ -480,45 +585,6 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         if (hooks != null) hooks.preWipeData();
         // This will call back to onProfileDataWiped().
         nativeWipeProfileData(mNativeSigninManagerAndroid, hooks);
-    }
-
-    /**
-     * Signs in to the specified account.
-     * The operation will be performed in the background.
-     *
-     * @param activity   The activity to use to show UI (confirmation dialogs), or null for forced
-     *                   signin.
-     * @param account    The account to sign into.
-     * @param signInType The type of the sign-in (one of SIGNIN_TYPE constants).
-     * @param observer   The observer to invoke when done, or null.
-     */
-    public void signInToSelectedAccount(@Nullable Activity activity, final Account account,
-            final int signInType, @Nullable final SignInFlowObserver observer) {
-        // The SigninManager handles most of the sign-in flow, and onSigninComplete handles the
-        // Chrome-specific details.
-        final boolean passive = signInType != SIGNIN_TYPE_INTERACTIVE;
-
-        startSignIn(activity, account, passive, new SignInFlowObserver() {
-            @Override
-            public void onSigninComplete() {
-                if (observer != null) observer.onSigninComplete();
-
-                if (signInType != SIGNIN_TYPE_INTERACTIVE) {
-                    AccountManagementFragment.setSignOutAllowedPreferenceValue(mContext, false);
-                }
-
-                SigninManager.get(mContext).logInSignedInUser();
-                logSigninCompleteAccessPoint();
-                // Log signin in reason as defined in signin_metrics.h. Right now only
-                // SIGNIN_PRIMARY_ACCOUNT available on Android.
-                RecordHistogram.recordEnumeratedHistogram("Signin.SigninReason",
-                        SigninReason.SIGNIN_PRIMARY_ACCOUNT, SigninReason.MAX);
-            }
-            @Override
-            public void onSigninCancelled() {
-                if (observer != null) observer.onSigninCancelled();
-            }
-        });
     }
 
     @CalledByNative
@@ -552,8 +618,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
      * the variations.
      */
     public static int getAndroidSigninPromoExperimentGroup() {
-        String fieldTrialValue =
-                FieldTrialList.findFullName("AndroidSigninPromo");
+        String fieldTrialValue = FieldTrialList.findFullName("AndroidSigninPromo");
         try {
             return Integer.parseInt(fieldTrialValue);
         } catch (NumberFormatException ex) {

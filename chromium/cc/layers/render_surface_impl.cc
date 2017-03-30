@@ -12,7 +12,6 @@
 #include "base/strings/stringprintf.h"
 #include "cc/base/math_util.h"
 #include "cc/debug/debug_colors.h"
-#include "cc/layers/delegated_renderer_layer_impl.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/render_pass_sink.h"
 #include "cc/quads/debug_border_draw_quad.h"
@@ -49,6 +48,11 @@ gfx::RectF RenderSurfaceImpl::DrawableContentRect() const {
   if (owning_layer_->has_replica()) {
     drawable_content_rect.Union(MathUtil::MapClippedRect(
         replica_draw_transform_, gfx::RectF(content_rect_)));
+  }
+  if (!owning_layer_->filters().IsEmpty()) {
+    int left, top, right, bottom;
+    owning_layer_->filters().GetOutsets(&top, &right, &bottom, &left);
+    drawable_content_rect.Inset(-left, -top, -right, -bottom);
   }
 
   // If the rect has a NaN coordinate, we return empty rect to avoid crashes in
@@ -103,12 +107,6 @@ int RenderSurfaceImpl::EffectTreeIndex() const {
   return owning_layer_->effect_tree_index();
 }
 
-int RenderSurfaceImpl::TargetEffectTreeIndex() const {
-  if (!owning_layer_->parent() || !owning_layer_->parent()->render_target())
-    return -1;
-  return owning_layer_->parent()->render_target()->effect_tree_index();
-}
-
 void RenderSurfaceImpl::SetClipRect(const gfx::Rect& clip_rect) {
   if (clip_rect_ == clip_rect)
     return;
@@ -123,15 +121,6 @@ void RenderSurfaceImpl::SetContentRect(const gfx::Rect& content_rect) {
 
   surface_property_changed_ = true;
   content_rect_ = content_rect;
-}
-
-void RenderSurfaceImpl::SetContentRectFromPropertyTrees(
-    const gfx::Rect& content_rect) {
-  if (content_rect_from_property_trees_ == content_rect)
-    return;
-
-  surface_property_changed_ = true;
-  content_rect_from_property_trees_ = content_rect;
 }
 
 void RenderSurfaceImpl::SetAccumulatedContentRect(
@@ -157,19 +146,8 @@ bool RenderSurfaceImpl::SurfacePropertyChangedOnlyFromDescendant() const {
   return surface_property_changed_ && !owning_layer_->LayerPropertyChanged();
 }
 
-void RenderSurfaceImpl::AddContributingDelegatedRenderPassLayer(
-    LayerImpl* layer) {
-  DCHECK(std::find(layer_list_.begin(), layer_list_.end(), layer) !=
-         layer_list_.end());
-  DelegatedRendererLayerImpl* delegated_renderer_layer =
-      static_cast<DelegatedRendererLayerImpl*>(layer);
-  contributing_delegated_render_pass_layer_list_.push_back(
-      delegated_renderer_layer);
-}
-
 void RenderSurfaceImpl::ClearLayerLists() {
   layer_list_.clear();
-  contributing_delegated_render_pass_layer_list_.clear();
 }
 
 RenderPassId RenderSurfaceImpl::GetRenderPassId() {
@@ -180,14 +158,6 @@ RenderPassId RenderSurfaceImpl::GetRenderPassId() {
 }
 
 void RenderSurfaceImpl::AppendRenderPasses(RenderPassSink* pass_sink) {
-  for (size_t i = 0;
-       i < contributing_delegated_render_pass_layer_list_.size();
-       ++i) {
-    DelegatedRendererLayerImpl* delegated_renderer_layer =
-        contributing_delegated_render_pass_layer_list_[i];
-    delegated_renderer_layer->AppendContributingRenderPasses(pass_sink);
-  }
-
   scoped_ptr<RenderPass> pass = RenderPass::Create(layer_list_.size());
   pass->SetNew(GetRenderPassId(),
                content_rect_,
@@ -238,9 +208,8 @@ void RenderSurfaceImpl::AppendQuads(RenderPass* render_pass,
     gfx::SizeF unclipped_mask_target_size = gfx::ScaleSize(
         gfx::SizeF(owning_layer_->bounds()), owning_layer_draw_scale.x(),
         owning_layer_draw_scale.y());
-    mask_uv_scale = gfx::Vector2dF(
-        content_rect_.width() / unclipped_mask_target_size.width(),
-        content_rect_.height() / unclipped_mask_target_size.height());
+    mask_uv_scale = gfx::Vector2dF(1.0f / unclipped_mask_target_size.width(),
+                                   1.0f / unclipped_mask_target_size.height());
   }
 
   DCHECK(owning_layer_draw_transform.IsScale2d());

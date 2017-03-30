@@ -51,7 +51,6 @@
 #if defined(OS_CHROMEOS)
 #include "base/files/file_util_proxy.h"
 #include "base/i18n/time_formatting.h"
-#include "base/prefs/pref_service.h"
 #include "base/sys_info.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
@@ -66,6 +65,7 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/system/statistics_provider.h"
+#include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #endif
 
@@ -527,7 +527,8 @@ void HelpHandler::SetChannel(const base::ListValue* args) {
   if (user_manager::UserManager::Get()->IsCurrentUserOwner()) {
     // Check for update after switching release channel.
     version_updater_->CheckForUpdate(base::Bind(&HelpHandler::SetUpdateStatus,
-                                                base::Unretained(this)));
+                                                base::Unretained(this)),
+                                     VersionUpdater::PromoteCallback());
   }
 }
 
@@ -549,12 +550,14 @@ void HelpHandler::RelaunchAndPowerwash(const base::ListValue* args) {
 #endif  // defined(OS_CHROMEOS)
 
 void HelpHandler::RequestUpdate(const base::ListValue* args) {
+  VersionUpdater::PromoteCallback promote_callback;
   version_updater_->CheckForUpdate(
-      base::Bind(&HelpHandler::SetUpdateStatus, base::Unretained(this))
+      base::Bind(&HelpHandler::SetUpdateStatus, base::Unretained(this)),
 #if defined(OS_MACOSX)
-      , base::Bind(&HelpHandler::SetPromotionState, base::Unretained(this))
-#endif
-      );
+      base::Bind(&HelpHandler::SetPromotionState, base::Unretained(this)));
+#else
+      VersionUpdater::PromoteCallback());
+#endif  // OS_MACOSX
 }
 
 void HelpHandler::SetUpdateStatus(VersionUpdater::Status status,

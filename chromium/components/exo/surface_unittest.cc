@@ -8,7 +8,6 @@
 #include "components/exo/test/exo_test_base.h"
 #include "components/exo/test/exo_test_helper.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/khronos/GLES2/gl2.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 
 namespace exo {
@@ -22,8 +21,8 @@ void ReleaseBuffer(int* release_buffer_call_count) {
 
 TEST_F(SurfaceTest, Attach) {
   gfx::Size buffer_size(256, 256);
-  scoped_ptr<Buffer> buffer(new Buffer(
-      exo_test_helper()->CreateGpuMemoryBuffer(buffer_size), GL_TEXTURE_2D));
+  scoped_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
 
   // Set the release callback that will be run when buffer is no longer in use.
   int release_buffer_call_count = 0;
@@ -49,18 +48,21 @@ TEST_F(SurfaceTest, Attach) {
 
 TEST_F(SurfaceTest, Damage) {
   gfx::Size buffer_size(256, 256);
-  scoped_ptr<Buffer> buffer(new Buffer(
-      exo_test_helper()->CreateGpuMemoryBuffer(buffer_size), GL_TEXTURE_2D));
+  scoped_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
   scoped_ptr<Surface> surface(new Surface);
 
   // Attach the buffer to the surface. This will update the pending bounds of
   // the surface to the buffer size.
   surface->Attach(buffer.get());
 
-  // Mark area inside the bounds of the surface as damaged. This should result
+  // Mark areas inside the bounds of the surface as damaged. This should result
   // in pending damage.
   surface->Damage(gfx::Rect(0, 0, 10, 10));
-  EXPECT_TRUE(surface->HasPendingDamageForTesting());
+  surface->Damage(gfx::Rect(10, 10, 10, 10));
+  EXPECT_TRUE(surface->HasPendingDamageForTesting(gfx::Rect(0, 0, 10, 10)));
+  EXPECT_TRUE(surface->HasPendingDamageForTesting(gfx::Rect(10, 10, 10, 10)));
+  EXPECT_FALSE(surface->HasPendingDamageForTesting(gfx::Rect(5, 5, 10, 10)));
 }
 
 void SetFrameTime(base::TimeTicks* result, base::TimeTicks frame_time) {
@@ -89,24 +91,46 @@ TEST_F(SurfaceTest, SetOpaqueRegion) {
   surface->SetOpaqueRegion(SkRegion(SkIRect::MakeEmpty()));
 }
 
-TEST_F(SurfaceTest, SetBufferScale) {
-  gfx::Size buffer_size(512, 512);
-  scoped_ptr<Buffer> buffer(new Buffer(
-      exo_test_helper()->CreateGpuMemoryBuffer(buffer_size), GL_TEXTURE_2D));
+TEST_F(SurfaceTest, SetInputRegion) {
   scoped_ptr<Surface> surface(new Surface);
 
-  // Attach the buffer to the surface. This will update the pending bounds of
-  // the surface to the buffer size.
-  surface->Attach(buffer.get());
-  EXPECT_EQ(buffer_size.ToString(), surface->GetPreferredSize().ToString());
+  // Setting a non-empty input region should succeed.
+  surface->SetInputRegion(SkRegion(SkIRect::MakeWH(256, 256)));
 
-  // This will update the pending bounds of the surface and take the buffer
-  // scale into account.
+  // Setting an empty input region should succeed.
+  surface->SetInputRegion(SkRegion(SkIRect::MakeEmpty()));
+}
+
+TEST_F(SurfaceTest, SetBufferScale) {
+  gfx::Size buffer_size(512, 512);
+  scoped_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+  scoped_ptr<Surface> surface(new Surface);
+
+  // This will update the bounds of the surface and take the buffer scale into
+  // account.
   const float kBufferScale = 2.0f;
+  surface->Attach(buffer.get());
   surface->SetBufferScale(kBufferScale);
+  surface->Commit();
   EXPECT_EQ(
       gfx::ScaleToFlooredSize(buffer_size, 1.0f / kBufferScale).ToString(),
-      surface->GetPreferredSize().ToString());
+      surface->bounds().size().ToString());
+}
+
+TEST_F(SurfaceTest, SetViewport) {
+  gfx::Size buffer_size(1, 1);
+  scoped_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+  scoped_ptr<Surface> surface(new Surface);
+
+  // This will update the bounds of the surface and take the viewport into
+  // account.
+  surface->Attach(buffer.get());
+  gfx::Size viewport(256, 256);
+  surface->SetViewport(viewport);
+  surface->Commit();
+  EXPECT_EQ(viewport.ToString(), surface->bounds().size().ToString());
 }
 
 TEST_F(SurfaceTest, Commit) {

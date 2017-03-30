@@ -1,17 +1,4 @@
 {
-  "Android Aura Tester (dbg)": {
-    "gtest_tests": [
-      {
-        "test": "base_unittests"
-      },
-      {
-        "test": "compositor_unittests"
-      },
-      {
-        "test": "content_unittests"
-      }
-    ]
-  },
   "Android GN Builder (dbg)": {
     "additional_compile_targets": [
       "blimp_tests",
@@ -19,7 +6,6 @@
       "chrome_public_test_apk",
       "content_shell_apk",
       "content_shell_test_apk",
-      "mandoline:all",
       "system_webview_apk"
     ]
   },
@@ -27,103 +13,265 @@
     "gtest_tests": [
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
+        },
+        "test": "android_webview_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
         },
         "test": "base_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
         },
         "test": "breakpad_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
+        },
+        "test": "cc_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
+        },
+        "test": "components_browsertests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
         },
         "test": "components_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
+        },
+        "test": "content_browsertests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
         },
         "test": "content_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
         },
         "test": "device_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
         },
         "test": "events_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
         },
         "test": "gl_tests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
         },
         "test": "gl_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
         },
         "test": "gpu_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
         },
         "test": "ipc_tests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
         },
         "test": "media_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
         },
         "test": "net_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
         },
         "test": "sql_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
+        },
+        "test": "sync_unit_tests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
         },
         "test": "ui_android_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
         },
         "test": "ui_base_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
         },
         "test": "ui_touch_selection_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "build.id": "KTU84P",
+              "product.board": "hammerhead"
+            }
+          ]
         },
         "test": "unit_tests"
       }
@@ -135,7 +283,49 @@
         "test": "android_webview_unittests"
       },
       {
+        "args": [
+          "--isolate_file_path=src/base/base_unittests.isolate"
+        ],
+        "test": "base_unittests"
+      },
+      {
+        "test": "blimp_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/breakpad/breakpad_unittests.isolate"
+        ],
+        "override_compile_targets": [
+          "breakpad_unittests_deps"
+        ],
+        "test": "breakpad_unittests"
+      },
+      {
         "test": "cc_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/components/components_browsertests.isolate"
+        ],
+        "test": "components_browsertests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/components/components_unittests.isolate"
+        ],
+        "test": "components_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/content/content_browsertests.isolate"
+        ],
+        "test": "content_browsertests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/content/content_unittests.isolate"
+        ],
+        "test": "content_unittests"
       },
       {
         "test": "device_unittests"
@@ -154,6 +344,64 @@
       },
       {
         "test": "ipc_tests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/media/media_unittests.isolate"
+        ],
+        "test": "media_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/net/net_unittests.isolate"
+        ],
+        "test": "net_unittests"
+      },
+      {
+        "override_compile_targets": [
+          "sandbox_linux_unittests_deps"
+        ],
+        "test": "sandbox_linux_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/sql/sql_unittests.isolate"
+        ],
+        "test": "sql_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/sync/sync_unit_tests.isolate"
+        ],
+        "test": "sync_unit_tests"
+      },
+      {
+        "test": "ui_android_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/ui/base/ui_base_tests.isolate"
+        ],
+        "test": "ui_base_unittests"
+      },
+      {
+        "test": "ui_touch_selection_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/chrome/unit_tests.isolate"
+        ],
+        "test": "unit_tests"
+      }
+    ],
+    "instrumentation_tests": [
+      {
+        "apk_under_test": "Blimp.apk",
+        "override_compile_targets": [
+          "blimp_test_apk"
+        ],
+        "test": "blimp_test_apk",
+        "test_apk": "BlimpTest.apk"
       }
     ]
   },
@@ -163,7 +411,49 @@
         "test": "android_webview_unittests"
       },
       {
+        "args": [
+          "--isolate_file_path=src/base/base_unittests.isolate"
+        ],
+        "test": "base_unittests"
+      },
+      {
+        "test": "blimp_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/breakpad/breakpad_unittests.isolate"
+        ],
+        "override_compile_targets": [
+          "breakpad_unittests_deps"
+        ],
+        "test": "breakpad_unittests"
+      },
+      {
         "test": "cc_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/components/components_browsertests.isolate"
+        ],
+        "test": "components_browsertests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/components/components_unittests.isolate"
+        ],
+        "test": "components_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/content/content_browsertests.isolate"
+        ],
+        "test": "content_browsertests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/content/content_unittests.isolate"
+        ],
+        "test": "content_unittests"
       },
       {
         "test": "device_unittests"
@@ -182,6 +472,64 @@
       },
       {
         "test": "ipc_tests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/media/media_unittests.isolate"
+        ],
+        "test": "media_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/net/net_unittests.isolate"
+        ],
+        "test": "net_unittests"
+      },
+      {
+        "override_compile_targets": [
+          "sandbox_linux_unittests_deps"
+        ],
+        "test": "sandbox_linux_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/sql/sql_unittests.isolate"
+        ],
+        "test": "sql_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/sync/sync_unit_tests.isolate"
+        ],
+        "test": "sync_unit_tests"
+      },
+      {
+        "test": "ui_android_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/ui/base/ui_base_tests.isolate"
+        ],
+        "test": "ui_base_unittests"
+      },
+      {
+        "test": "ui_touch_selection_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/chrome/unit_tests.isolate"
+        ],
+        "test": "unit_tests"
+      }
+    ],
+    "instrumentation_tests": [
+      {
+        "apk_under_test": "Blimp.apk",
+        "override_compile_targets": [
+          "blimp_test_apk"
+        ],
+        "test": "blimp_test_apk",
+        "test_apk": "BlimpTest.apk"
       }
     ]
   },
@@ -191,7 +539,49 @@
         "test": "android_webview_unittests"
       },
       {
+        "args": [
+          "--isolate_file_path=src/base/base_unittests.isolate"
+        ],
+        "test": "base_unittests"
+      },
+      {
+        "test": "blimp_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/breakpad/breakpad_unittests.isolate"
+        ],
+        "override_compile_targets": [
+          "breakpad_unittests_deps"
+        ],
+        "test": "breakpad_unittests"
+      },
+      {
         "test": "cc_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/components/components_browsertests.isolate"
+        ],
+        "test": "components_browsertests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/components/components_unittests.isolate"
+        ],
+        "test": "components_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/content/content_browsertests.isolate"
+        ],
+        "test": "content_browsertests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/content/content_unittests.isolate"
+        ],
+        "test": "content_unittests"
       },
       {
         "test": "device_unittests"
@@ -210,6 +600,64 @@
       },
       {
         "test": "ipc_tests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/media/media_unittests.isolate"
+        ],
+        "test": "media_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/net/net_unittests.isolate"
+        ],
+        "test": "net_unittests"
+      },
+      {
+        "override_compile_targets": [
+          "sandbox_linux_unittests_deps"
+        ],
+        "test": "sandbox_linux_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/sql/sql_unittests.isolate"
+        ],
+        "test": "sql_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/sync/sync_unit_tests.isolate"
+        ],
+        "test": "sync_unit_tests"
+      },
+      {
+        "test": "ui_android_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/ui/base/ui_base_tests.isolate"
+        ],
+        "test": "ui_base_unittests"
+      },
+      {
+        "test": "ui_touch_selection_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/chrome/unit_tests.isolate"
+        ],
+        "test": "unit_tests"
+      }
+    ],
+    "instrumentation_tests": [
+      {
+        "apk_under_test": "Blimp.apk",
+        "override_compile_targets": [
+          "blimp_test_apk"
+        ],
+        "test": "blimp_test_apk",
+        "test_apk": "BlimpTest.apk"
       }
     ]
   },
@@ -219,7 +667,49 @@
         "test": "android_webview_unittests"
       },
       {
+        "args": [
+          "--isolate_file_path=src/base/base_unittests.isolate"
+        ],
+        "test": "base_unittests"
+      },
+      {
+        "test": "blimp_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/breakpad/breakpad_unittests.isolate"
+        ],
+        "override_compile_targets": [
+          "breakpad_unittests_deps"
+        ],
+        "test": "breakpad_unittests"
+      },
+      {
         "test": "cc_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/components/components_browsertests.isolate"
+        ],
+        "test": "components_browsertests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/components/components_unittests.isolate"
+        ],
+        "test": "components_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/content/content_browsertests.isolate"
+        ],
+        "test": "content_browsertests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/content/content_unittests.isolate"
+        ],
+        "test": "content_unittests"
       },
       {
         "test": "device_unittests"
@@ -238,6 +728,64 @@
       },
       {
         "test": "ipc_tests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/media/media_unittests.isolate"
+        ],
+        "test": "media_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/net/net_unittests.isolate"
+        ],
+        "test": "net_unittests"
+      },
+      {
+        "override_compile_targets": [
+          "sandbox_linux_unittests_deps"
+        ],
+        "test": "sandbox_linux_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/sql/sql_unittests.isolate"
+        ],
+        "test": "sql_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/sync/sync_unit_tests.isolate"
+        ],
+        "test": "sync_unit_tests"
+      },
+      {
+        "test": "ui_android_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/ui/base/ui_base_tests.isolate"
+        ],
+        "test": "ui_base_unittests"
+      },
+      {
+        "test": "ui_touch_selection_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/chrome/unit_tests.isolate"
+        ],
+        "test": "unit_tests"
+      }
+    ],
+    "instrumentation_tests": [
+      {
+        "apk_under_test": "Blimp.apk",
+        "override_compile_targets": [
+          "blimp_test_apk"
+        ],
+        "test": "blimp_test_apk",
+        "test_apk": "BlimpTest.apk"
       }
     ]
   },
@@ -247,7 +795,49 @@
         "test": "android_webview_unittests"
       },
       {
+        "args": [
+          "--isolate_file_path=src/base/base_unittests.isolate"
+        ],
+        "test": "base_unittests"
+      },
+      {
+        "test": "blimp_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/breakpad/breakpad_unittests.isolate"
+        ],
+        "override_compile_targets": [
+          "breakpad_unittests_deps"
+        ],
+        "test": "breakpad_unittests"
+      },
+      {
         "test": "cc_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/components/components_browsertests.isolate"
+        ],
+        "test": "components_browsertests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/components/components_unittests.isolate"
+        ],
+        "test": "components_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/content/content_browsertests.isolate"
+        ],
+        "test": "content_browsertests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/content/content_unittests.isolate"
+        ],
+        "test": "content_unittests"
       },
       {
         "test": "device_unittests"
@@ -266,6 +856,64 @@
       },
       {
         "test": "ipc_tests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/media/media_unittests.isolate"
+        ],
+        "test": "media_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/net/net_unittests.isolate"
+        ],
+        "test": "net_unittests"
+      },
+      {
+        "override_compile_targets": [
+          "sandbox_linux_unittests_deps"
+        ],
+        "test": "sandbox_linux_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/sql/sql_unittests.isolate"
+        ],
+        "test": "sql_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/sync/sync_unit_tests.isolate"
+        ],
+        "test": "sync_unit_tests"
+      },
+      {
+        "test": "ui_android_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/ui/base/ui_base_tests.isolate"
+        ],
+        "test": "ui_base_unittests"
+      },
+      {
+        "test": "ui_touch_selection_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/chrome/unit_tests.isolate"
+        ],
+        "test": "unit_tests"
+      }
+    ],
+    "instrumentation_tests": [
+      {
+        "apk_under_test": "Blimp.apk",
+        "override_compile_targets": [
+          "blimp_test_apk"
+        ],
+        "test": "blimp_test_apk",
+        "test_apk": "BlimpTest.apk"
       }
     ]
   },
@@ -275,7 +923,49 @@
         "test": "android_webview_unittests"
       },
       {
+        "args": [
+          "--isolate_file_path=src/base/base_unittests.isolate"
+        ],
+        "test": "base_unittests"
+      },
+      {
+        "test": "blimp_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/breakpad/breakpad_unittests.isolate"
+        ],
+        "override_compile_targets": [
+          "breakpad_unittests_deps"
+        ],
+        "test": "breakpad_unittests"
+      },
+      {
         "test": "cc_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/components/components_browsertests.isolate"
+        ],
+        "test": "components_browsertests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/components/components_unittests.isolate"
+        ],
+        "test": "components_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/content/content_browsertests.isolate"
+        ],
+        "test": "content_browsertests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/content/content_unittests.isolate"
+        ],
+        "test": "content_unittests"
       },
       {
         "test": "device_unittests"
@@ -294,6 +984,64 @@
       },
       {
         "test": "ipc_tests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/media/media_unittests.isolate"
+        ],
+        "test": "media_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/net/net_unittests.isolate"
+        ],
+        "test": "net_unittests"
+      },
+      {
+        "override_compile_targets": [
+          "sandbox_linux_unittests_deps"
+        ],
+        "test": "sandbox_linux_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/sql/sql_unittests.isolate"
+        ],
+        "test": "sql_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/sync/sync_unit_tests.isolate"
+        ],
+        "test": "sync_unit_tests"
+      },
+      {
+        "test": "ui_android_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/ui/base/ui_base_tests.isolate"
+        ],
+        "test": "ui_base_unittests"
+      },
+      {
+        "test": "ui_touch_selection_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/chrome/unit_tests.isolate"
+        ],
+        "test": "unit_tests"
+      }
+    ],
+    "instrumentation_tests": [
+      {
+        "apk_under_test": "Blimp.apk",
+        "override_compile_targets": [
+          "blimp_test_apk"
+        ],
+        "test": "blimp_test_apk",
+        "test_apk": "BlimpTest.apk"
       }
     ]
   },
@@ -303,7 +1051,58 @@
         "test": "android_webview_unittests"
       },
       {
+        "args": [
+          "--isolate_file_path=src/base/base_unittests.isolate"
+        ],
+        "test": "base_unittests"
+      },
+      {
+        "test": "blimp_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/third_party/WebKit/Source/platform/heap/BlinkHeapUnitTests.isolate"
+        ],
+        "test": "blink_heap_unittests"
+      },
+      {
+        "test": "blink_platform_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/breakpad/breakpad_unittests.isolate"
+        ],
+        "override_compile_targets": [
+          "breakpad_unittests_deps"
+        ],
+        "test": "breakpad_unittests"
+      },
+      {
         "test": "cc_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/components/components_browsertests.isolate"
+        ],
+        "test": "components_browsertests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/components/components_unittests.isolate"
+        ],
+        "test": "components_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/content/content_browsertests.isolate"
+        ],
+        "test": "content_browsertests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/content/content_unittests.isolate"
+        ],
+        "test": "content_unittests"
       },
       {
         "test": "device_unittests"
@@ -322,6 +1121,64 @@
       },
       {
         "test": "ipc_tests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/media/media_unittests.isolate"
+        ],
+        "test": "media_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/net/net_unittests.isolate"
+        ],
+        "test": "net_unittests"
+      },
+      {
+        "override_compile_targets": [
+          "sandbox_linux_unittests_deps"
+        ],
+        "test": "sandbox_linux_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/sql/sql_unittests.isolate"
+        ],
+        "test": "sql_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/sync/sync_unit_tests.isolate"
+        ],
+        "test": "sync_unit_tests"
+      },
+      {
+        "test": "ui_android_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/ui/base/ui_base_tests.isolate"
+        ],
+        "test": "ui_base_unittests"
+      },
+      {
+        "test": "ui_touch_selection_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/chrome/unit_tests.isolate"
+        ],
+        "test": "unit_tests"
+      }
+    ],
+    "instrumentation_tests": [
+      {
+        "apk_under_test": "Blimp.apk",
+        "override_compile_targets": [
+          "blimp_test_apk"
+        ],
+        "test": "blimp_test_apk",
+        "test_apk": "BlimpTest.apk"
       }
     ]
   },
@@ -331,7 +1188,49 @@
         "test": "android_webview_unittests"
       },
       {
+        "args": [
+          "--isolate_file_path=src/base/base_unittests.isolate"
+        ],
+        "test": "base_unittests"
+      },
+      {
+        "test": "blimp_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/breakpad/breakpad_unittests.isolate"
+        ],
+        "override_compile_targets": [
+          "breakpad_unittests_deps"
+        ],
+        "test": "breakpad_unittests"
+      },
+      {
         "test": "cc_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/components/components_browsertests.isolate"
+        ],
+        "test": "components_browsertests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/components/components_unittests.isolate"
+        ],
+        "test": "components_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/content/content_browsertests.isolate"
+        ],
+        "test": "content_browsertests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/content/content_unittests.isolate"
+        ],
+        "test": "content_unittests"
       },
       {
         "test": "device_unittests"
@@ -350,6 +1249,64 @@
       },
       {
         "test": "ipc_tests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/media/media_unittests.isolate"
+        ],
+        "test": "media_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/net/net_unittests.isolate"
+        ],
+        "test": "net_unittests"
+      },
+      {
+        "override_compile_targets": [
+          "sandbox_linux_unittests_deps"
+        ],
+        "test": "sandbox_linux_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/sql/sql_unittests.isolate"
+        ],
+        "test": "sql_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/sync/sync_unit_tests.isolate"
+        ],
+        "test": "sync_unit_tests"
+      },
+      {
+        "test": "ui_android_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/ui/base/ui_base_tests.isolate"
+        ],
+        "test": "ui_base_unittests"
+      },
+      {
+        "test": "ui_touch_selection_unittests"
+      },
+      {
+        "args": [
+          "--isolate_file_path=src/chrome/unit_tests.isolate"
+        ],
+        "test": "unit_tests"
+      }
+    ],
+    "instrumentation_tests": [
+      {
+        "apk_under_test": "Blimp.apk",
+        "override_compile_targets": [
+          "blimp_test_apk"
+        ],
+        "test": "blimp_test_apk",
+        "test_apk": "BlimpTest.apk"
       }
     ]
   }

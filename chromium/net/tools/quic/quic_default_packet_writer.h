@@ -15,7 +15,6 @@ namespace net {
 
 struct WriteResult;
 
-namespace tools {
 
 // Default packet writer which wraps QuicSocketUtils WritePacket.
 class QuicDefaultPacketWriter : public QuicPacketWriter {
@@ -26,8 +25,9 @@ class QuicDefaultPacketWriter : public QuicPacketWriter {
   // QuicPacketWriter
   WriteResult WritePacket(const char* buffer,
                           size_t buf_len,
-                          const IPAddressNumber& self_address,
-                          const IPEndPoint& peer_address) override;
+                          const IPAddress& self_address,
+                          const IPEndPoint& peer_address,
+                          PerPacketOptions* options) override;
   bool IsWriteBlockedDataBuffered() const override;
   bool IsWriteBlocked() const override;
   void SetWritable() override;
@@ -46,7 +46,6 @@ class QuicDefaultPacketWriter : public QuicPacketWriter {
   DISALLOW_COPY_AND_ASSIGN(QuicDefaultPacketWriter);
 };
 
-}  // namespace tools
 }  // namespace net
 
 #endif  // NET_TOOLS_QUIC_QUIC_DEFAULT_PACKET_WRITER_H_

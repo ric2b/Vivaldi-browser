@@ -28,6 +28,7 @@
         '../strings/ui_strings.gyp:ui_strings',
         'ime/ui_base_ime.gyp:ui_base_ime',
         'ui_base.gyp:ui_base',
+        'ui_base.gyp:ui_data_pack',
         'ui_base.gyp:ui_base_test_support',
       ],
       # iOS uses a small subset of ui. common_sources are the only files that
@@ -43,8 +44,9 @@
         'models/tree_node_iterator_unittest.cc',
         'resource/data_pack_literal.cc',
         'resource/data_pack_unittest.cc',
-        'resource/resource_bundle_unittest.cc',
         'resource/resource_bundle_mac_unittest.mm',
+        'resource/resource_bundle_unittest.cc',
+        'resource/scale_factor_unittest.cc',
         'template_expressions_unittest.cc',
         'test/run_all_unittests.cc',
       ],
@@ -72,21 +74,20 @@
         'cocoa/tracking_area_unittest.mm',
         'dragdrop/os_exchange_data_provider_aurax11_unittest.cc',
         'ime/candidate_window_unittest.cc',
-        'ime/composition_text_unittest.cc',
         'ime/chromeos/character_composer_unittest.cc',
+        'ime/composition_text_unittest.cc',
         'ime/composition_text_util_pango_unittest.cc',
         'ime/input_method_base_unittest.cc',
         'ime/input_method_chromeos_unittest.cc',
-        'ime/remote_input_method_win_unittest.cc',
         'ime/win/imm32_manager_unittest.cc',
         'ime/win/tsf_input_scope_unittest.cc',
+        'material_design/material_design_controller_unittest.cc',
         'models/list_model_unittest.cc',
         'models/list_selection_model_unittest.cc',
         'models/tree_node_model_unittest.cc',
-        'resource/material_design/material_design_controller_unittest.cc',
         'test/data/resource.h',
-        'test/test_clipboard_unittest.cc',
         'test/scoped_fake_nswindow_fullscreen_unittest.mm',
+        'test/test_clipboard_unittest.cc',
         'text/bytes_formatting_unittest.cc',
         'touch/selection_bound_unittest.cc',
         'user_activity/user_activity_detector_unittest.cc',
@@ -165,13 +166,6 @@
         ['use_pango == 1', {
           'dependencies': [
             '../../build/linux/system.gyp:pangocairo',
-          ],
-          'conditions': [
-            ['use_allocator!="none"', {
-              'dependencies': [
-                '../../base/allocator/allocator.gyp:allocator',
-              ],
-            }],
           ],
         }],
         ['use_x11==1', {

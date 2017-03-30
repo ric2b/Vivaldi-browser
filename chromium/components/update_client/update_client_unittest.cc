@@ -226,8 +226,8 @@ TEST_F(UpdateClientTest, OneCrxNoUpdate) {
         const std::string& additional_attributes,
         const UpdateCheckCallback& update_check_callback) override {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(update_check_callback, GURL(), 0, "",
-                                UpdateResponse::Results()));
+          FROM_HERE,
+          base::Bind(update_check_callback, 0, UpdateResponse::Results()));
       return true;
     }
   };
@@ -237,13 +237,13 @@ TEST_F(UpdateClientTest, OneCrxNoUpdate) {
     static scoped_ptr<CrxDownloader> Create(
         bool is_background_download,
         net::URLRequestContextGetter* context_getter,
-        const scoped_refptr<base::SequencedTaskRunner>&
-            url_fetcher_task_runner) {
+        const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
       return scoped_ptr<CrxDownloader>(new FakeCrxDownloader());
     }
 
    private:
-    FakeCrxDownloader() : CrxDownloader(scoped_ptr<CrxDownloader>()) {}
+    FakeCrxDownloader()
+        : CrxDownloader(base::ThreadTaskRunnerHandle::Get(), nullptr) {}
     ~FakeCrxDownloader() override {}
 
     void DoStartDownload(const GURL& url) override { EXPECT_TRUE(false); }
@@ -343,7 +343,9 @@ TEST_F(UpdateClientTest, TwoCrxUpdateNoUpdate) {
             </urls>
             <manifest version='1.0' prodversionmin='11.0.1.0'>
               <packages>
-                <package name='jebgalgnebhfojomionfpkfelancnnkf.crx'/>
+                <package name='jebgalgnebhfojomionfpkfelancnnkf.crx'
+                         hash_sha256='6fc4b93fd11134de1300c2c0bb88c12b644a4ec0fd
+                                      7c9b12cb7cc067667bde87'/>
               </packages>
             </manifest>
           </updatecheck>
@@ -352,6 +354,8 @@ TEST_F(UpdateClientTest, TwoCrxUpdateNoUpdate) {
       */
       UpdateResponse::Result::Manifest::Package package;
       package.name = "jebgalgnebhfojomionfpkfelancnnkf.crx";
+      package.hash_sha256 =
+          "6fc4b93fd11134de1300c2c0bb88c12b644a4ec0fd7c9b12cb7cc067667bde87";
 
       UpdateResponse::Result result;
       result.extension_id = "jebgalgnebhfojomionfpkfelancnnkf";
@@ -364,7 +368,7 @@ TEST_F(UpdateClientTest, TwoCrxUpdateNoUpdate) {
       results.list.push_back(result);
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(update_check_callback, GURL(), 0, "", results));
+          FROM_HERE, base::Bind(update_check_callback, 0, results));
       return true;
     }
   };
@@ -374,13 +378,13 @@ TEST_F(UpdateClientTest, TwoCrxUpdateNoUpdate) {
     static scoped_ptr<CrxDownloader> Create(
         bool is_background_download,
         net::URLRequestContextGetter* context_getter,
-        const scoped_refptr<base::SequencedTaskRunner>&
-            url_fetcher_task_runner) {
+        const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
       return scoped_ptr<CrxDownloader>(new FakeCrxDownloader());
     }
 
    private:
-    FakeCrxDownloader() : CrxDownloader(scoped_ptr<CrxDownloader>()) {}
+    FakeCrxDownloader()
+        : CrxDownloader(base::ThreadTaskRunnerHandle::Get(), nullptr) {}
     ~FakeCrxDownloader() override {}
 
     void DoStartDownload(const GURL& url) override {
@@ -421,8 +425,8 @@ TEST_F(UpdateClientTest, TwoCrxUpdateNoUpdate) {
       const auto& ping_items = items();
       EXPECT_EQ(1U, ping_items.size());
       EXPECT_EQ("jebgalgnebhfojomionfpkfelancnnkf", ping_items[0].id);
-      EXPECT_TRUE(base::Version("0.9").Equals(ping_items[0].previous_version));
-      EXPECT_TRUE(base::Version("1.0").Equals(ping_items[0].next_version));
+      EXPECT_EQ(base::Version("0.9"), ping_items[0].previous_version);
+      EXPECT_EQ(base::Version("1.0"), ping_items[0].next_version);
       EXPECT_EQ(0, ping_items[0].error_category);
       EXPECT_EQ(0, ping_items[0].error_code);
     }
@@ -524,7 +528,9 @@ TEST_F(UpdateClientTest, TwoCrxUpdate) {
             </urls>
             <manifest version='1.0' prodversionmin='11.0.1.0'>
               <packages>
-                <package name='jebgalgnebhfojomionfpkfelancnnkf.crx'/>
+                <package name='jebgalgnebhfojomionfpkfelancnnkf.crx'
+                         hash_sha256='6fc4b93fd11134de1300c2c0bb88c12b644a4ec0fd
+                                      7c9b12cb7cc067667bde87'/>
               </packages>
             </manifest>
           </updatecheck>
@@ -536,7 +542,9 @@ TEST_F(UpdateClientTest, TwoCrxUpdate) {
             </urls>
             <manifest version='1.0' prodversionmin='11.0.1.0'>
               <packages>
-                <package name='ihfokbkgjpifnbbojhneepfflplebdkc_1.crx'/>
+                <package name='ihfokbkgjpifnbbojhneepfflplebdkc_1.crx'
+                         hash_sha256='813c59747e139a608b3b5fc49633affc6db574373f
+                                      309f156ea6d27229c0b3f9'/>
               </packages>
             </manifest>
           </updatecheck>
@@ -545,6 +553,8 @@ TEST_F(UpdateClientTest, TwoCrxUpdate) {
       */
       UpdateResponse::Result::Manifest::Package package1;
       package1.name = "jebgalgnebhfojomionfpkfelancnnkf.crx";
+      package1.hash_sha256 =
+          "6fc4b93fd11134de1300c2c0bb88c12b644a4ec0fd7c9b12cb7cc067667bde87";
 
       UpdateResponse::Result result1;
       result1.extension_id = "jebgalgnebhfojomionfpkfelancnnkf";
@@ -555,6 +565,8 @@ TEST_F(UpdateClientTest, TwoCrxUpdate) {
 
       UpdateResponse::Result::Manifest::Package package2;
       package2.name = "ihfokbkgjpifnbbojhneepfflplebdkc_1.crx";
+      package2.hash_sha256 =
+          "813c59747e139a608b3b5fc49633affc6db574373f309f156ea6d27229c0b3f9";
 
       UpdateResponse::Result result2;
       result2.extension_id = "ihfokbkgjpifnbbojhneepfflplebdkc";
@@ -568,7 +580,7 @@ TEST_F(UpdateClientTest, TwoCrxUpdate) {
       results.list.push_back(result2);
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(update_check_callback, GURL(), 0, "", results));
+          FROM_HERE, base::Bind(update_check_callback, 0, results));
       return true;
     }
   };
@@ -578,13 +590,13 @@ TEST_F(UpdateClientTest, TwoCrxUpdate) {
     static scoped_ptr<CrxDownloader> Create(
         bool is_background_download,
         net::URLRequestContextGetter* context_getter,
-        const scoped_refptr<base::SequencedTaskRunner>&
-            url_fetcher_task_runner) {
+        const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
       return scoped_ptr<CrxDownloader>(new FakeCrxDownloader());
     }
 
    private:
-    FakeCrxDownloader() : CrxDownloader(scoped_ptr<CrxDownloader>()) {}
+    FakeCrxDownloader()
+        : CrxDownloader(base::ThreadTaskRunnerHandle::Get(), nullptr) {}
     ~FakeCrxDownloader() override {}
 
     void DoStartDownload(const GURL& url) override {
@@ -645,13 +657,13 @@ TEST_F(UpdateClientTest, TwoCrxUpdate) {
       const auto& ping_items = items();
       EXPECT_EQ(2U, ping_items.size());
       EXPECT_EQ("jebgalgnebhfojomionfpkfelancnnkf", ping_items[0].id);
-      EXPECT_TRUE(base::Version("0.9").Equals(ping_items[0].previous_version));
-      EXPECT_TRUE(base::Version("1.0").Equals(ping_items[0].next_version));
+      EXPECT_EQ(base::Version("0.9"), ping_items[0].previous_version);
+      EXPECT_EQ(base::Version("1.0"), ping_items[0].next_version);
       EXPECT_EQ(0, ping_items[0].error_category);
       EXPECT_EQ(0, ping_items[0].error_code);
       EXPECT_EQ("ihfokbkgjpifnbbojhneepfflplebdkc", ping_items[1].id);
-      EXPECT_TRUE(base::Version("0.8").Equals(ping_items[1].previous_version));
-      EXPECT_TRUE(base::Version("1.0").Equals(ping_items[1].next_version));
+      EXPECT_EQ(base::Version("0.8"), ping_items[1].previous_version);
+      EXPECT_EQ(base::Version("1.0"), ping_items[1].next_version);
       EXPECT_EQ(0, ping_items[1].error_category);
       EXPECT_EQ(0, ping_items[1].error_code);
     }
@@ -763,7 +775,9 @@ TEST_F(UpdateClientTest, TwoCrxUpdateDownloadTimeout) {
             </urls>
             <manifest version='1.0' prodversionmin='11.0.1.0'>
               <packages>
-                <package name='jebgalgnebhfojomionfpkfelancnnkf.crx'/>
+                <package name='jebgalgnebhfojomionfpkfelancnnkf.crx'
+                         hash_sha256='6fc4b93fd11134de1300c2c0bb88c12b644a4ec0fd
+                                      7c9b12cb7cc067667bde87'/>
               </packages>
             </manifest>
           </updatecheck>
@@ -775,7 +789,9 @@ TEST_F(UpdateClientTest, TwoCrxUpdateDownloadTimeout) {
             </urls>
             <manifest version='1.0' prodversionmin='11.0.1.0'>
               <packages>
-                <package name='ihfokbkgjpifnbbojhneepfflplebdkc_1.crx'/>
+                <package name='ihfokbkgjpifnbbojhneepfflplebdkc_1.crx'
+                         hash_sha256='813c59747e139a608b3b5fc49633affc6db574373f
+                                      309f156ea6d27229c0b3f9'/>
               </packages>
             </manifest>
           </updatecheck>
@@ -784,6 +800,8 @@ TEST_F(UpdateClientTest, TwoCrxUpdateDownloadTimeout) {
       */
       UpdateResponse::Result::Manifest::Package package1;
       package1.name = "jebgalgnebhfojomionfpkfelancnnkf.crx";
+      package1.hash_sha256 =
+          "6fc4b93fd11134de1300c2c0bb88c12b644a4ec0fd7c9b12cb7cc067667bde87";
 
       UpdateResponse::Result result1;
       result1.extension_id = "jebgalgnebhfojomionfpkfelancnnkf";
@@ -794,6 +812,8 @@ TEST_F(UpdateClientTest, TwoCrxUpdateDownloadTimeout) {
 
       UpdateResponse::Result::Manifest::Package package2;
       package2.name = "ihfokbkgjpifnbbojhneepfflplebdkc_1.crx";
+      package2.hash_sha256 =
+          "813c59747e139a608b3b5fc49633affc6db574373f309f156ea6d27229c0b3f9";
 
       UpdateResponse::Result result2;
       result2.extension_id = "ihfokbkgjpifnbbojhneepfflplebdkc";
@@ -807,7 +827,7 @@ TEST_F(UpdateClientTest, TwoCrxUpdateDownloadTimeout) {
       results.list.push_back(result2);
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(update_check_callback, GURL(), 0, "", results));
+          FROM_HERE, base::Bind(update_check_callback, 0, results));
       return true;
     }
   };
@@ -817,13 +837,13 @@ TEST_F(UpdateClientTest, TwoCrxUpdateDownloadTimeout) {
     static scoped_ptr<CrxDownloader> Create(
         bool is_background_download,
         net::URLRequestContextGetter* context_getter,
-        const scoped_refptr<base::SequencedTaskRunner>&
-            url_fetcher_task_runner) {
+        const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
       return scoped_ptr<CrxDownloader>(new FakeCrxDownloader());
     }
 
    private:
-    FakeCrxDownloader() : CrxDownloader(scoped_ptr<CrxDownloader>()) {}
+    FakeCrxDownloader()
+        : CrxDownloader(base::ThreadTaskRunnerHandle::Get(), nullptr) {}
     ~FakeCrxDownloader() override {}
 
     void DoStartDownload(const GURL& url) override {
@@ -884,13 +904,13 @@ TEST_F(UpdateClientTest, TwoCrxUpdateDownloadTimeout) {
       const auto& ping_items = items();
       EXPECT_EQ(2U, ping_items.size());
       EXPECT_EQ("jebgalgnebhfojomionfpkfelancnnkf", ping_items[0].id);
-      EXPECT_TRUE(base::Version("0.9").Equals(ping_items[0].previous_version));
-      EXPECT_TRUE(base::Version("1.0").Equals(ping_items[0].next_version));
+      EXPECT_EQ(base::Version("0.9"), ping_items[0].previous_version);
+      EXPECT_EQ(base::Version("1.0"), ping_items[0].next_version);
       EXPECT_EQ(1, ping_items[0].error_category);  // Network error.
       EXPECT_EQ(-118, ping_items[0].error_code);
       EXPECT_EQ("ihfokbkgjpifnbbojhneepfflplebdkc", ping_items[1].id);
-      EXPECT_TRUE(base::Version("0.8").Equals(ping_items[1].previous_version));
-      EXPECT_TRUE(base::Version("1.0").Equals(ping_items[1].next_version));
+      EXPECT_EQ(base::Version("0.8"), ping_items[1].previous_version);
+      EXPECT_EQ(base::Version("1.0"), ping_items[1].next_version);
       EXPECT_EQ(0, ping_items[1].error_category);
       EXPECT_EQ(0, ping_items[1].error_code);
     }
@@ -1010,7 +1030,9 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdate) {
               </urls>
               <manifest version='1.0' prodversionmin='11.0.1.0'>
                 <packages>
-                  <package name='ihfokbkgjpifnbbojhneepfflplebdkc_1.crx'/>
+                  <package name='ihfokbkgjpifnbbojhneepfflplebdkc_1.crx'
+                           hash_sha256='813c59747e139a608b3b5fc49633affc6db57437
+                                        3f309f156ea6d27229c0b3f9'/>
                 </packages>
               </manifest>
             </updatecheck>
@@ -1019,6 +1041,8 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdate) {
         */
         UpdateResponse::Result::Manifest::Package package;
         package.name = "ihfokbkgjpifnbbojhneepfflplebdkc_1.crx";
+        package.hash_sha256 =
+            "813c59747e139a608b3b5fc49633affc6db574373f309f156ea6d27229c0b3f9";
         package.fingerprint = "1";
         UpdateResponse::Result result;
         result.extension_id = "ihfokbkgjpifnbbojhneepfflplebdkc";
@@ -1042,7 +1066,12 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdate) {
                 <packages>
                   <package name='ihfokbkgjpifnbbojhneepfflplebdkc_2.crx'
                            namediff='ihfokbkgjpifnbbojhneepfflplebdkc_1to2.crx'
-                           fp='22'/>
+                           hash_sha256='1af337fbd19c72db0f870753bcd7711c3ae9dcaa
+                                        0ecde26c262bad942b112990'
+                           fp='22'
+                           hashdiff_sha256='73c6e2d4f783fc4ca5481e89e0b8bfce7aec
+                                            8ead3686290c94792658ec06f2f2'
+                           />
                 </packages>
               </manifest>
             </updatecheck>
@@ -1052,6 +1081,10 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdate) {
         UpdateResponse::Result::Manifest::Package package;
         package.name = "ihfokbkgjpifnbbojhneepfflplebdkc_2.crx";
         package.namediff = "ihfokbkgjpifnbbojhneepfflplebdkc_1to2.crx";
+        package.hash_sha256 =
+            "1af337fbd19c72db0f870753bcd7711c3ae9dcaa0ecde26c262bad942b112990";
+        package.hashdiff_sha256 =
+            "73c6e2d4f783fc4ca5481e89e0b8bfce7aec8ead3686290c94792658ec06f2f2";
         package.fingerprint = "22";
         UpdateResponse::Result result;
         result.extension_id = "ihfokbkgjpifnbbojhneepfflplebdkc";
@@ -1066,7 +1099,7 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdate) {
       }
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(update_check_callback, GURL(), 0, "", results));
+          FROM_HERE, base::Bind(update_check_callback, 0, results));
       return true;
     }
   };
@@ -1076,13 +1109,13 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdate) {
     static scoped_ptr<CrxDownloader> Create(
         bool is_background_download,
         net::URLRequestContextGetter* context_getter,
-        const scoped_refptr<base::SequencedTaskRunner>&
-            url_fetcher_task_runner) {
+        const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
       return scoped_ptr<CrxDownloader>(new FakeCrxDownloader());
     }
 
    private:
-    FakeCrxDownloader() : CrxDownloader(scoped_ptr<CrxDownloader>()) {}
+    FakeCrxDownloader()
+        : CrxDownloader(base::ThreadTaskRunnerHandle::Get(), nullptr) {}
     ~FakeCrxDownloader() override {}
 
     void DoStartDownload(const GURL& url) override {
@@ -1143,13 +1176,13 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdate) {
       const auto& ping_items = items();
       EXPECT_EQ(2U, ping_items.size());
       EXPECT_EQ("ihfokbkgjpifnbbojhneepfflplebdkc", ping_items[0].id);
-      EXPECT_TRUE(base::Version("0.8").Equals(ping_items[0].previous_version));
-      EXPECT_TRUE(base::Version("1.0").Equals(ping_items[0].next_version));
+      EXPECT_EQ(base::Version("0.8"), ping_items[0].previous_version);
+      EXPECT_EQ(base::Version("1.0"), ping_items[0].next_version);
       EXPECT_EQ(0, ping_items[0].error_category);
       EXPECT_EQ(0, ping_items[0].error_code);
       EXPECT_EQ("ihfokbkgjpifnbbojhneepfflplebdkc", ping_items[1].id);
-      EXPECT_TRUE(base::Version("1.0").Equals(ping_items[1].previous_version));
-      EXPECT_TRUE(base::Version("2.0").Equals(ping_items[1].next_version));
+      EXPECT_EQ(base::Version("1.0"), ping_items[1].previous_version);
+      EXPECT_EQ(base::Version("2.0"), ping_items[1].next_version);
       EXPECT_EQ(0, ping_items[1].diff_error_category);
       EXPECT_EQ(0, ping_items[1].diff_error_code);
     }
@@ -1283,7 +1316,9 @@ TEST_F(UpdateClientTest, OneCrxInstallError) {
             </urls>
             <manifest version='1.0' prodversionmin='11.0.1.0'>
               <packages>
-                <package name='jebgalgnebhfojomionfpkfelancnnkf.crx'/>
+                <package name='jebgalgnebhfojomionfpkfelancnnkf.crx'
+                         hash_sha256='6fc4b93fd11134de1300c2c0bb88c12b644a4ec0fd
+                                      7c9b12cb7cc067667bde87'/>
               </packages>
             </manifest>
           </updatecheck>
@@ -1292,7 +1327,8 @@ TEST_F(UpdateClientTest, OneCrxInstallError) {
       */
       UpdateResponse::Result::Manifest::Package package;
       package.name = "jebgalgnebhfojomionfpkfelancnnkf.crx";
-
+      package.hash_sha256 =
+          "6fc4b93fd11134de1300c2c0bb88c12b644a4ec0fd7c9b12cb7cc067667bde87";
       UpdateResponse::Result result;
       result.extension_id = "jebgalgnebhfojomionfpkfelancnnkf";
       result.crx_urls.push_back(GURL("http://localhost/download/"));
@@ -1304,7 +1340,7 @@ TEST_F(UpdateClientTest, OneCrxInstallError) {
       results.list.push_back(result);
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(update_check_callback, GURL(), 0, "", results));
+          FROM_HERE, base::Bind(update_check_callback, 0, results));
       return true;
     }
   };
@@ -1314,13 +1350,13 @@ TEST_F(UpdateClientTest, OneCrxInstallError) {
     static scoped_ptr<CrxDownloader> Create(
         bool is_background_download,
         net::URLRequestContextGetter* context_getter,
-        const scoped_refptr<base::SequencedTaskRunner>&
-            url_fetcher_task_runner) {
+        const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
       return scoped_ptr<CrxDownloader>(new FakeCrxDownloader());
     }
 
    private:
-    FakeCrxDownloader() : CrxDownloader(scoped_ptr<CrxDownloader>()) {}
+    FakeCrxDownloader()
+        : CrxDownloader(base::ThreadTaskRunnerHandle::Get(), nullptr) {}
     ~FakeCrxDownloader() override {}
 
     void DoStartDownload(const GURL& url) override {
@@ -1361,8 +1397,8 @@ TEST_F(UpdateClientTest, OneCrxInstallError) {
       const auto& ping_items = items();
       EXPECT_EQ(1U, ping_items.size());
       EXPECT_EQ("jebgalgnebhfojomionfpkfelancnnkf", ping_items[0].id);
-      EXPECT_TRUE(base::Version("0.9").Equals(ping_items[0].previous_version));
-      EXPECT_TRUE(base::Version("1.0").Equals(ping_items[0].next_version));
+      EXPECT_EQ(base::Version("0.9"), ping_items[0].previous_version);
+      EXPECT_EQ(base::Version("1.0"), ping_items[0].next_version);
       EXPECT_EQ(3, ping_items[0].error_category);  // kInstallError.
       EXPECT_EQ(9, ping_items[0].error_code);      // kInstallerError.
     }
@@ -1468,7 +1504,9 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdateFailsFullUpdateSucceeds) {
               </urls>
               <manifest version='1.0' prodversionmin='11.0.1.0'>
                 <packages>
-                  <package name='ihfokbkgjpifnbbojhneepfflplebdkc_1.crx'/>
+                  <package name='ihfokbkgjpifnbbojhneepfflplebdkc_1.crx'
+                           hash_sha256='813c59747e139a608b3b5fc49633affc6db57437
+                                        3f309f156ea6d27229c0b3f9'/>
                 </packages>
               </manifest>
             </updatecheck>
@@ -1477,6 +1515,8 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdateFailsFullUpdateSucceeds) {
         */
         UpdateResponse::Result::Manifest::Package package;
         package.name = "ihfokbkgjpifnbbojhneepfflplebdkc_1.crx";
+        package.hash_sha256 =
+            "813c59747e139a608b3b5fc49633affc6db574373f309f156ea6d27229c0b3f9";
         package.fingerprint = "1";
         UpdateResponse::Result result;
         result.extension_id = "ihfokbkgjpifnbbojhneepfflplebdkc";
@@ -1500,7 +1540,12 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdateFailsFullUpdateSucceeds) {
                 <packages>
                   <package name='ihfokbkgjpifnbbojhneepfflplebdkc_2.crx'
                            namediff='ihfokbkgjpifnbbojhneepfflplebdkc_1to2.crx'
-                           fp='22'/>
+                           hash_sha256='1af337fbd19c72db0f870753bcd7711c3ae9dcaa
+                                        0ecde26c262bad942b112990'
+                           fp='22'
+                           hashdiff_sha256='73c6e2d4f783fc4ca5481e89e0b8bfce7aec
+                                            8ead3686290c94792658ec06f2f2'
+                           />
                 </packages>
               </manifest>
             </updatecheck>
@@ -1510,6 +1555,10 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdateFailsFullUpdateSucceeds) {
         UpdateResponse::Result::Manifest::Package package;
         package.name = "ihfokbkgjpifnbbojhneepfflplebdkc_2.crx";
         package.namediff = "ihfokbkgjpifnbbojhneepfflplebdkc_1to2.crx";
+        package.hash_sha256 =
+            "1af337fbd19c72db0f870753bcd7711c3ae9dcaa0ecde26c262bad942b112990";
+        package.hashdiff_sha256 =
+            "73c6e2d4f783fc4ca5481e89e0b8bfce7aec8ead3686290c94792658ec06f2f2";
         package.fingerprint = "22";
         UpdateResponse::Result result;
         result.extension_id = "ihfokbkgjpifnbbojhneepfflplebdkc";
@@ -1524,7 +1573,7 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdateFailsFullUpdateSucceeds) {
       }
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(update_check_callback, GURL(), 0, "", results));
+          FROM_HERE, base::Bind(update_check_callback, 0, results));
       return true;
     }
   };
@@ -1534,13 +1583,13 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdateFailsFullUpdateSucceeds) {
     static scoped_ptr<CrxDownloader> Create(
         bool is_background_download,
         net::URLRequestContextGetter* context_getter,
-        const scoped_refptr<base::SequencedTaskRunner>&
-            url_fetcher_task_runner) {
+        const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
       return scoped_ptr<CrxDownloader>(new FakeCrxDownloader());
     }
 
    private:
-    FakeCrxDownloader() : CrxDownloader(scoped_ptr<CrxDownloader>()) {}
+    FakeCrxDownloader()
+        : CrxDownloader(base::ThreadTaskRunnerHandle::Get(), nullptr) {}
     ~FakeCrxDownloader() override {}
 
     void DoStartDownload(const GURL& url) override {
@@ -1616,13 +1665,13 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdateFailsFullUpdateSucceeds) {
       const auto& ping_items = items();
       EXPECT_EQ(2U, ping_items.size());
       EXPECT_EQ("ihfokbkgjpifnbbojhneepfflplebdkc", ping_items[0].id);
-      EXPECT_TRUE(base::Version("0.8").Equals(ping_items[0].previous_version));
-      EXPECT_TRUE(base::Version("1.0").Equals(ping_items[0].next_version));
+      EXPECT_EQ(base::Version("0.8"), ping_items[0].previous_version);
+      EXPECT_EQ(base::Version("1.0"), ping_items[0].next_version);
       EXPECT_EQ(0, ping_items[0].error_category);
       EXPECT_EQ(0, ping_items[0].error_code);
       EXPECT_EQ("ihfokbkgjpifnbbojhneepfflplebdkc", ping_items[1].id);
-      EXPECT_TRUE(base::Version("1.0").Equals(ping_items[1].previous_version));
-      EXPECT_TRUE(base::Version("2.0").Equals(ping_items[1].next_version));
+      EXPECT_EQ(base::Version("1.0"), ping_items[1].previous_version);
+      EXPECT_EQ(base::Version("2.0"), ping_items[1].next_version);
       EXPECT_TRUE(ping_items[1].diff_update_failed);
       EXPECT_EQ(1, ping_items[1].diff_error_category);  // kNetworkError.
       EXPECT_EQ(-1, ping_items[1].diff_error_code);
@@ -1728,8 +1777,8 @@ TEST_F(UpdateClientTest, OneCrxNoUpdateQueuedCall) {
         const std::string& additional_attributes,
         const UpdateCheckCallback& update_check_callback) override {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(update_check_callback, GURL(), 0, "",
-                                UpdateResponse::Results()));
+          FROM_HERE,
+          base::Bind(update_check_callback, 0, UpdateResponse::Results()));
       return true;
     }
   };
@@ -1739,13 +1788,13 @@ TEST_F(UpdateClientTest, OneCrxNoUpdateQueuedCall) {
     static scoped_ptr<CrxDownloader> Create(
         bool is_background_download,
         net::URLRequestContextGetter* context_getter,
-        const scoped_refptr<base::SequencedTaskRunner>&
-            url_fetcher_task_runner) {
+        const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
       return scoped_ptr<CrxDownloader>(new FakeCrxDownloader());
     }
 
    private:
-    FakeCrxDownloader() : CrxDownloader(scoped_ptr<CrxDownloader>()) {}
+    FakeCrxDownloader()
+        : CrxDownloader(base::ThreadTaskRunnerHandle::Get(), nullptr) {}
     ~FakeCrxDownloader() override {}
 
     void DoStartDownload(const GURL& url) override { EXPECT_TRUE(false); }
@@ -1838,7 +1887,9 @@ TEST_F(UpdateClientTest, OneCrxInstall) {
             </urls>
             <manifest version='1.0' prodversionmin='11.0.1.0'>
               <packages>
-                <package name='jebgalgnebhfojomionfpkfelancnnkf.crx'/>
+                <package name='jebgalgnebhfojomionfpkfelancnnkf.crx'
+                         hash_sha256='6fc4b93fd11134de1300c2c0bb88c12b644a4ec0fd
+                                      7c9b12cb7cc067667bde87'/>
               </packages>
             </manifest>
           </updatecheck>
@@ -1847,7 +1898,8 @@ TEST_F(UpdateClientTest, OneCrxInstall) {
       */
       UpdateResponse::Result::Manifest::Package package;
       package.name = "jebgalgnebhfojomionfpkfelancnnkf.crx";
-
+      package.hash_sha256 =
+          "6fc4b93fd11134de1300c2c0bb88c12b644a4ec0fd7c9b12cb7cc067667bde87";
       UpdateResponse::Result result;
       result.extension_id = "jebgalgnebhfojomionfpkfelancnnkf";
       result.crx_urls.push_back(GURL("http://localhost/download/"));
@@ -1859,7 +1911,7 @@ TEST_F(UpdateClientTest, OneCrxInstall) {
       results.list.push_back(result);
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(update_check_callback, GURL(), 0, "", results));
+          FROM_HERE, base::Bind(update_check_callback, 0, results));
       return true;
     }
   };
@@ -1869,13 +1921,13 @@ TEST_F(UpdateClientTest, OneCrxInstall) {
     static scoped_ptr<CrxDownloader> Create(
         bool is_background_download,
         net::URLRequestContextGetter* context_getter,
-        const scoped_refptr<base::SequencedTaskRunner>&
-            url_fetcher_task_runner) {
+        const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
       return scoped_ptr<CrxDownloader>(new FakeCrxDownloader());
     }
 
    private:
-    FakeCrxDownloader() : CrxDownloader(scoped_ptr<CrxDownloader>()) {}
+    FakeCrxDownloader()
+        : CrxDownloader(base::ThreadTaskRunnerHandle::Get(), nullptr) {}
     ~FakeCrxDownloader() override {}
 
     void DoStartDownload(const GURL& url) override {
@@ -1920,8 +1972,8 @@ TEST_F(UpdateClientTest, OneCrxInstall) {
       const auto& ping_items = items();
       EXPECT_EQ(1U, ping_items.size());
       EXPECT_EQ("jebgalgnebhfojomionfpkfelancnnkf", ping_items[0].id);
-      EXPECT_TRUE(base::Version("0.0").Equals(ping_items[0].previous_version));
-      EXPECT_TRUE(base::Version("1.0").Equals(ping_items[0].next_version));
+      EXPECT_EQ(base::Version("0.0"), ping_items[0].previous_version);
+      EXPECT_EQ(base::Version("1.0"), ping_items[0].next_version);
       EXPECT_EQ(0, ping_items[0].error_category);
       EXPECT_EQ(0, ping_items[0].error_code);
     }
@@ -2010,8 +2062,8 @@ TEST_F(UpdateClientTest, ConcurrentInstallSameCRX) {
         const std::string& additional_attributes,
         const UpdateCheckCallback& update_check_callback) override {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(update_check_callback, GURL(), 0, "",
-                                UpdateResponse::Results()));
+          FROM_HERE,
+          base::Bind(update_check_callback, 0, UpdateResponse::Results()));
       return true;
     }
   };
@@ -2021,13 +2073,13 @@ TEST_F(UpdateClientTest, ConcurrentInstallSameCRX) {
     static scoped_ptr<CrxDownloader> Create(
         bool is_background_download,
         net::URLRequestContextGetter* context_getter,
-        const scoped_refptr<base::SequencedTaskRunner>&
-            url_fetcher_task_runner) {
+        const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
       return scoped_ptr<CrxDownloader>(new FakeCrxDownloader());
     }
 
    private:
-    FakeCrxDownloader() : CrxDownloader(scoped_ptr<CrxDownloader>()) {}
+    FakeCrxDownloader()
+        : CrxDownloader(base::ThreadTaskRunnerHandle::Get(), nullptr) {}
     ~FakeCrxDownloader() override {}
 
     void DoStartDownload(const GURL& url) override { EXPECT_TRUE(false); }
@@ -2111,13 +2163,13 @@ TEST_F(UpdateClientTest, EmptyIdList) {
     static scoped_ptr<CrxDownloader> Create(
         bool is_background_download,
         net::URLRequestContextGetter* context_getter,
-        const scoped_refptr<base::SequencedTaskRunner>&
-            url_fetcher_task_runner) {
+        const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
       return scoped_ptr<CrxDownloader>(new FakeCrxDownloader());
     }
 
    private:
-    FakeCrxDownloader() : CrxDownloader(scoped_ptr<CrxDownloader>()) {}
+    FakeCrxDownloader()
+        : CrxDownloader(base::ThreadTaskRunnerHandle::Get(), nullptr) {}
     ~FakeCrxDownloader() override {}
 
     void DoStartDownload(const GURL& url) override { EXPECT_TRUE(false); }
@@ -2156,13 +2208,13 @@ TEST_F(UpdateClientTest, SendUninstallPing) {
     static scoped_ptr<CrxDownloader> Create(
         bool is_background_download,
         net::URLRequestContextGetter* context_getter,
-        const scoped_refptr<base::SequencedTaskRunner>&
-            url_fetcher_task_runner) {
+        const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
       return nullptr;
     }
 
    private:
-    FakeCrxDownloader() : CrxDownloader(scoped_ptr<CrxDownloader>()) {}
+    FakeCrxDownloader()
+        : CrxDownloader(base::ThreadTaskRunnerHandle::Get(), nullptr) {}
     ~FakeCrxDownloader() override {}
 
     void DoStartDownload(const GURL& url) override {}
@@ -2176,8 +2228,8 @@ TEST_F(UpdateClientTest, SendUninstallPing) {
       const auto& ping_items = items();
       EXPECT_EQ(1U, ping_items.size());
       EXPECT_EQ("jebgalgnebhfojomionfpkfelancnnkf", ping_items[0].id);
-      EXPECT_TRUE(base::Version("1.0").Equals(ping_items[0].previous_version));
-      EXPECT_TRUE(base::Version("0.0").Equals(ping_items[0].next_version));
+      EXPECT_EQ(base::Version("1.0"), ping_items[0].previous_version);
+      EXPECT_EQ(base::Version("0.0"), ping_items[0].next_version);
       EXPECT_EQ(10, ping_items[0].extra_code1);
     }
   };

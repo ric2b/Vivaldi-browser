@@ -5,16 +5,17 @@
 #include "chrome/browser/ui/webui/settings/settings_default_browser_handler.h"
 
 #include "base/bind.h"
-#include "base/prefs/pref_service.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui.h"
 
 namespace settings {
 
 DefaultBrowserHandler::DefaultBrowserHandler(content::WebUI* webui)
-    : default_browser_worker_(
-          new ShellIntegration::DefaultBrowserWorker(this)) {
+    : default_browser_worker_(new shell_integration::DefaultBrowserWorker(
+          this,
+          /*delete_observer=*/false)) {
   default_browser_policy_.Init(
       prefs::kDefaultBrowserSettingEnabled, g_browser_process->local_state(),
       base::Bind(&DefaultBrowserHandler::RequestDefaultBrowserState,
@@ -37,36 +38,27 @@ void DefaultBrowserHandler::RegisterMessages() {
 }
 
 void DefaultBrowserHandler::SetDefaultWebClientUIState(
-    ShellIntegration::DefaultWebClientUIState state) {
-  if (state == ShellIntegration::STATE_PROCESSING)
+    shell_integration::DefaultWebClientUIState state) {
+  if (state == shell_integration::STATE_PROCESSING)
     return;
 
-  if (state == ShellIntegration::STATE_IS_DEFAULT) {
+  if (state == shell_integration::STATE_IS_DEFAULT) {
     // Notify the user in the future if Chrome ceases to be the user's chosen
     // default browser.
     Profile::FromWebUI(web_ui())->GetPrefs()->SetBoolean(
         prefs::kCheckDefaultBrowser, true);
   }
 
-  base::FundamentalValue is_default(
-      state == ShellIntegration::STATE_IS_DEFAULT);
+  base::FundamentalValue is_default(state ==
+                                    shell_integration::STATE_IS_DEFAULT);
   base::FundamentalValue can_be_default(
-      state != ShellIntegration::STATE_UNKNOWN &&
+      state != shell_integration::STATE_UNKNOWN &&
       !default_browser_policy_.IsManaged() &&
-      ShellIntegration::CanSetAsDefaultBrowser() !=
-          ShellIntegration::SET_DEFAULT_NOT_ALLOWED);
+      shell_integration::CanSetAsDefaultBrowser() !=
+          shell_integration::SET_DEFAULT_NOT_ALLOWED);
 
   web_ui()->CallJavascriptFunction("Settings.updateDefaultBrowserState",
                                    is_default, can_be_default);
-}
-
-bool DefaultBrowserHandler::IsInteractiveSetDefaultPermitted() {
-  return true;
-}
-
-void DefaultBrowserHandler::OnSetAsDefaultConcluded(bool succeeded) {
-  base::FundamentalValue success(succeeded);
-  web_ui()->CallJavascriptFunction("Settings.setAsDefaultConcluded", success);
 }
 
 void DefaultBrowserHandler::RequestDefaultBrowserState(

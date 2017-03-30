@@ -71,6 +71,7 @@ public:
     DECLARE_TRACE();
 
     bool perform(PassRefPtrWillBeRawPtr<Action>, ExceptionState&);
+    void appendPerformedAction(PassRefPtrWillBeRawPtr<Action>);
     void markUndoableState();
 
     bool undo(ExceptionState&);
@@ -78,7 +79,7 @@ public:
     void reset();
 
 private:
-    WillBeHeapVector<RefPtrWillBeMember<Action> > m_history;
+    WillBeHeapVector<RefPtrWillBeMember<Action>> m_history;
     size_t m_afterLastActionIndex;
 };
 

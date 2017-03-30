@@ -14,8 +14,8 @@
         'battor_agent_lib',
         '../../device/serial/serial.gyp:device_serial',
         '../../device/serial/serial.gyp:device_serial_mojo',
-        '../../third_party/mojo/mojo_public.gyp:mojo_environment_standalone',
-        '../../third_party/mojo/mojo_public.gyp:mojo_public',
+        '../../mojo/mojo_public.gyp:mojo_environment_standalone',
+        '../../mojo/mojo_public.gyp:mojo_public',
       ],
       'sources': [
         'battor_agent_bin.cc',
@@ -35,6 +35,8 @@
         'battor_connection_impl.cc',
         'battor_connection_impl.h',
         'battor_error.h',
+        'battor_finder.cc',
+        'battor_finder.h',
         'battor_sample_converter.cc',
         'battor_sample_converter.h',
       ],
@@ -53,11 +55,11 @@
         '../../base/base.gyp:run_all_unittests',
         '../../base/base.gyp:test_support_base',
         '../../device/serial/serial.gyp:device_serial',
-        '../../device/serial/serial.gyp:device_serial_test_util',        
-	'../../testing/gmock.gyp:gmock',
+        '../../device/serial/serial.gyp:device_serial_test_util',
+        '../../mojo/mojo_public.gyp:mojo_environment_standalone',
+        '../../mojo/mojo_public.gyp:mojo_public',
+      	'../../testing/gmock.gyp:gmock',
         '../../testing/gtest.gyp:gtest',
-        '../../third_party/mojo/mojo_public.gyp:mojo_environment_standalone',
-        '../../third_party/mojo/mojo_public.gyp:mojo_public',
       ],
       'sources': [
 	'battor_agent_unittest.cc',
@@ -66,5 +68,24 @@
         'battor_sample_converter_unittest.cc',
       ],
     },
+  ],
+  'conditions': [
+    ['test_isolation_mode != "noop"', {
+      'targets': [
+        {
+          'target_name': 'battor_agent_unittests_run',
+          'type': 'none',
+          'dependencies': [
+            'battor_agent_unittests',
+          ],
+          'includes': [
+            '../../build/isolate.gypi',
+          ],
+          'sources': [
+            'battor_agent_unittests.isolate',
+          ],
+        },
+      ],
+    }],
   ],
 }

@@ -4,22 +4,21 @@
 
 module mus.mojom;
 
+import "components/mus/public/interfaces/input_event_matcher.mojom";
+import "components/mus/public/interfaces/input_events.mojom";
 import "components/mus/public/interfaces/window_manager_constants.mojom";
-import "components/mus/public/interfaces/window_tree.mojom";
 import "ui/mojo/geometry/geometry.mojom";
 
-struct WindowManagerConfig {
-  array<Display> displays;
-  mojo.Insets normal_client_area_insets;
-  mojo.Insets maximized_client_area_insets;
-  // Max width needed to display the buttons on the title bar. The buttons are
-  // aligned to the trailing edge of the titlebar.
-  // TODO(sky): this API is very narrow, and assumes a particular config.
-  uint32 max_title_bar_button_width;
-};
-
-// Represents a core interface that should be implemented by any window manager
-// built on top of Mus.
+// WindowManager is used when a WindowTreeClient attempts to modify
+// a property of the embed root. When this happens WindowTree calls the
+// appropriate function on WindowManager. For example, if a
+// WindowTreeClient calls SetWindowBounds() on its embed root, WindowTree
+// calls WmSetBounds(). WindowManager can then decide if it wants to
+// change the bounds or not.
+//
+// This interface is only used as an associated interface and is associated
+// with WindowTreeClient, further WindowTree requests this interface from
+// WindowTreeClient supplied at the time the WindowTreeHost is created.
 interface WindowManager {
   // The window's preferred size as defined by its content. Type: gfx::Size.
   const string kPreferredSize_Property = "prop:preferred-size";
@@ -37,7 +36,59 @@ interface WindowManager {
   // The window's title. Type: mojom::String
   const string kWindowTitle_Property = "prop:window-title";
 
-  OpenWindow(WindowTreeClient client, map<string, array<uint8>> properties);
+  // When the WindowManager completes a request it must call back to
+  // WindowManagerClient::WmResponse().
+  WmSetBounds(uint32 change_id, uint32 window_id, mojo.Rect bounds);
+  WmSetProperty(uint32 change_id,
+                uint32 window_id,
+                string name,
+                array<uint8>? value);
+  // Asks the WindowManager to create a new window.
+  WmCreateTopLevelWindow(uint32 change_id,
+                         map<string, array<uint8>> properties);
 
-  GetConfig() => (WindowManagerConfig config);
+  // An accelerator registered via AddAccelerator() has been triggered.
+  OnAccelerator(uint32 id, Event event);
+};
+
+// This interface is only used as an associated interface and is associated
+// with WindowTree.
+interface WindowManagerClient {
+  // Enables (or disables) child windows of |window_id| to be activated.
+  AddActivationParent(uint32 window_id);
+  RemoveActivationParent(uint32 window_id);
+
+  ActivateNextWindow();
+
+  // Sets the underlay surface offset for the specified window and additional
+  // hit area. The underlay surface is drawn at the bounds of the window minus
+  // the offset. The hit area is extended from the bounds of the window by
+  // |hit_area|.
+  SetUnderlaySurfaceOffsetAndExtendedHitArea(uint32 window_id,
+                                             int32 x_offset,
+                                             int32 y_offset,
+                                             mojo.Insets hit_area);
+
+  // Add and remove accelerators. When accelerators are registered the
+  // WindowManager receives the event via OnAccelerator() rather than the
+  // target window. The id is defined by the client and can be used to more
+  // easily identify the accelerator's action. If an accelerator with the same
+  // id or the same matcher already exists, then the accelerator is not added.
+  AddAccelerator(uint32 id, EventMatcher matcher) => (bool success);
+  RemoveAccelerator(uint32 id);
+
+  // The window manager has completed a request with the specific change id.
+  WmResponse(uint32 change_id, bool response);
+
+  // Calls WindowTreeClient::RequestClose() on the embedded app at the
+  // specified window.
+  WmRequestClose(uint32 window_id);
+
+  // Sets the frame decoration constants of the display the window manager is
+  // associated with.
+  WmSetFrameDecorationValues(FrameDecorationValues values);
+
+  // Response from WmCreateTopLevelWindow() informing the client of the id for
+  // the new window.
+  OnWmCreatedTopLevelWindow(uint32 change_id, uint32 window_id);
 };

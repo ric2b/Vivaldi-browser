@@ -15,12 +15,14 @@
           'common/background_sync_service.mojom',
           'common/geolocation_service.mojom',
           'common/image_downloader/image_downloader.mojom',
+          'common/leveldb_wrapper.mojom',
           'common/permission_service.mojom',
           'common/presentation/presentation_service.mojom',
           'common/process_control.mojom',
           'common/render_frame_setup.mojom',
           'common/service_port_service.mojom',
           'common/service_worker/embedded_worker_setup.mojom',
+          'common/storage_partition_service.mojom',
           'common/vr_service.mojom',
           'common/wake_lock_service.mojom',
 
@@ -32,20 +34,25 @@
           'public/common/service_worker_event_status.mojom',
         ],
       },
-      'includes': [ '../third_party/mojo/mojom_bindings_generator_explicit.gypi' ],
+      'dependencies': [
+        '../components/leveldb/leveldb.gyp:leveldb_bindings_mojom',
+        '../mojo/mojo_base.gyp:mojo_application_bindings',
+        '../mojo/mojo_base.gyp:mojo_environment_chromium',
+        '../mojo/mojo_public.gyp:mojo_cpp_bindings',
+        '../skia/skia.gyp:skia_mojo',
+        '../ui/mojo/geometry/mojo_bindings.gyp:mojo_geometry_bindings',
+      ],
+      'includes': [ '../mojo/mojom_bindings_generator_explicit.gypi' ], 
     },
     {
       'target_name': 'content_common_mojo_bindings',
       'type': 'static_library',
-      'variables': { 'enable_wexit_time_destructors': 1, },
+      'variables': {
+        'enable_wexit_time_destructors': 1,
+      },
       'dependencies': [
         'content_common_mojo_bindings_mojom',
-        '../mojo/mojo_base.gyp:mojo_application_bindings',
-        '../mojo/mojo_base.gyp:mojo_environment_chromium',
-        '../skia/skia.gyp:skia_mojo',
-        '../third_party/mojo/mojo_public.gyp:mojo_cpp_bindings',
-        '../ui/mojo/geometry/mojo_bindings.gyp:mojo_geometry_bindings',
-      ]
+      ],
     },
   ]
 }

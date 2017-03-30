@@ -71,7 +71,7 @@ String SVGLengthList::valueAsString() const
 template <typename CharType>
 SVGParsingError SVGLengthList::parseInternal(const CharType*& ptr, const CharType* end)
 {
-    clear();
+    const CharType* listStart = ptr;
     while (ptr < end) {
         const CharType* start = ptr;
         while (ptr < end && *ptr != ',' && !isHTMLSpace<CharType>(*ptr))
@@ -84,32 +84,29 @@ SVGParsingError SVGLengthList::parseInternal(const CharType*& ptr, const CharTyp
 
         RefPtrWillBeRawPtr<SVGLength> length = SVGLength::create(m_mode);
         SVGParsingError lengthParseStatus = length->setValueAsString(valueString);
-        if (lengthParseStatus != NoError)
-            return lengthParseStatus;
+        if (lengthParseStatus != SVGParseStatus::NoError)
+            return lengthParseStatus.offsetWith(start - listStart);
         append(length);
         skipOptionalSVGSpacesOrDelimiter(ptr, end);
     }
-    return NoError;
+    return SVGParseStatus::NoError;
 }
 
 SVGParsingError SVGLengthList::setValueAsString(const String& value)
 {
-    if (value.isEmpty()) {
-        clear();
-        return NoError;
-    }
+    clear();
 
-    SVGParsingError parseStatus;
+    if (value.isEmpty())
+        return SVGParseStatus::NoError;
+
     if (value.is8Bit()) {
         const LChar* ptr = value.characters8();
         const LChar* end = ptr + value.length();
-        parseStatus = parseInternal(ptr, end);
-    } else {
-        const UChar* ptr = value.characters16();
-        const UChar* end = ptr + value.length();
-        parseStatus = parseInternal(ptr, end);
+        return parseInternal(ptr, end);
     }
-    return parseStatus;
+    const UChar* ptr = value.characters16();
+    const UChar* end = ptr + value.length();
+    return parseInternal(ptr, end);
 }
 
 void SVGLengthList::add(PassRefPtrWillBeRawPtr<SVGPropertyBase> other, SVGElement* contextElement)
@@ -168,4 +165,4 @@ float SVGLengthList::calculateDistance(PassRefPtrWillBeRawPtr<SVGPropertyBase> t
     // FIXME: Distance calculation is not possible for SVGLengthList right now. We need the distance for every single value.
     return -1;
 }
-}
+} // namespace blink

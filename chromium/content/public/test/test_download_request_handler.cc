@@ -113,7 +113,7 @@ class TestDownloadRequestHandler::PartialResponseJob
                      net::NetworkDelegate* network_delegate);
 
   ~PartialResponseJob() override;
-  void ReportCompletedRequest(int64_t transferred_byte_count);
+  void ReportCompletedRequest();
   static void OnStartResponseCallbackOnPossiblyIncorrectThread(
       base::WeakPtr<PartialResponseJob> job,
       const std::string& headers,
@@ -149,6 +149,7 @@ class TestDownloadRequestHandler::PartialResponseJob
   int64_t offset_of_next_read_ = -1;
   int64_t requested_range_begin_ = -1;
   int64_t requested_range_end_ = -1;
+  int64_t read_byte_count_ = 0;
   base::WeakPtrFactory<PartialResponseJob> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(PartialResponseJob);
@@ -222,7 +223,9 @@ TestDownloadRequestHandler::PartialResponseJob::PartialResponseJob(
   DCHECK_NE(-1, parameters_->pattern_generator_seed);
 }
 
-TestDownloadRequestHandler::PartialResponseJob::~PartialResponseJob() {}
+TestDownloadRequestHandler::PartialResponseJob::~PartialResponseJob() {
+  ReportCompletedRequest();
+}
 
 void TestDownloadRequestHandler::PartialResponseJob::Start() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -272,7 +275,6 @@ int TestDownloadRequestHandler::PartialResponseJob::ReadRawData(
   // requested_range_begin_ == -1 implies that the body was empty.
   if (offset_of_next_read_ > requested_range_end_ ||
       requested_range_begin_ == -1) {
-    ReportCompletedRequest(requested_range_end_ - requested_range_begin_ + 1);
     DVLOG(1) << "Done reading.";
     return 0;
   }
@@ -285,9 +287,7 @@ int TestDownloadRequestHandler::PartialResponseJob::ReadRawData(
 
     if (offset_of_next_read_ == injected_error.offset) {
       int error = injected_error.error;
-      SetStatus(net::URLRequestStatus(net::URLRequestStatus::FAILED, error));
       DVLOG(1) << "Returning error " << net::ErrorToString(error);
-      ReportCompletedRequest(injected_error.offset - requested_range_begin_);
       parameters_->injected_errors.pop();
       return error;
     }
@@ -304,14 +304,14 @@ int TestDownloadRequestHandler::PartialResponseJob::ReadRawData(
   DVLOG(1) << "Read " << bytes_to_copy << " bytes at offset "
            << offset_of_next_read_;
   offset_of_next_read_ += bytes_to_copy;
+  read_byte_count_ += bytes_to_copy;
   return bytes_to_copy;
 }
 
-void TestDownloadRequestHandler::PartialResponseJob::ReportCompletedRequest(
-    int64_t transferred_byte_count) {
+void TestDownloadRequestHandler::PartialResponseJob::ReportCompletedRequest() {
   if (interceptor_.get()) {
     TestDownloadRequestHandler::CompletedRequest completed_request;
-    completed_request.transferred_byte_count = transferred_byte_count;
+    completed_request.transferred_byte_count = read_byte_count_;
     completed_request.request_headers = request()->extra_request_headers();
     interceptor_->AddCompletedRequest(completed_request);
   }
@@ -353,7 +353,6 @@ void TestDownloadRequestHandler::PartialResponseJob::OnStartResponseCallback(
 
 void TestDownloadRequestHandler::PartialResponseJob::HandleOnStartDefault() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  SetStatus(net::URLRequestStatus());
 
   const net::HttpRequestHeaders& extra_headers =
       request()->extra_request_headers();
@@ -367,8 +366,9 @@ void TestDownloadRequestHandler::PartialResponseJob::HandleOnStartDefault() {
   // ETag, then try to handle the range request.
   if (parameters_->support_byte_ranges &&
       extra_headers.GetHeader(net::HttpRequestHeaders::kIfRange, &value) &&
-      value == parameters_->etag && HandleRangeAssumingValidatorMatch())
+      value == parameters_->etag && HandleRangeAssumingValidatorMatch()) {
     return;
+  }
 
   if (parameters_->support_byte_ranges &&
       extra_headers.GetHeader("If-Match", &value)) {

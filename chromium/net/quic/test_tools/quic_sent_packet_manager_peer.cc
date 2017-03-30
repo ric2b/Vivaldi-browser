@@ -53,7 +53,7 @@ void QuicSentPacketManagerPeer::SetPerspective(
 }
 
 // static
-const SendAlgorithmInterface* QuicSentPacketManagerPeer::GetSendAlgorithm(
+SendAlgorithmInterface* QuicSentPacketManagerPeer::GetSendAlgorithm(
     const QuicSentPacketManager& sent_packet_manager) {
   return sent_packet_manager.send_algorithm_.get();
 }
@@ -106,21 +106,15 @@ bool QuicSentPacketManagerPeer::IsRetransmission(
     QuicSentPacketManager* sent_packet_manager,
     QuicPacketNumber packet_number) {
   DCHECK(sent_packet_manager->HasRetransmittableFrames(packet_number));
-  if (FLAGS_quic_track_single_retransmission) {
-    if (!sent_packet_manager->HasRetransmittableFrames(packet_number)) {
-      return false;
-    }
-    for (auto transmission_info : sent_packet_manager->unacked_packets_) {
-      if (transmission_info.retransmission == packet_number) {
-        return true;
-      }
-    }
+  if (!sent_packet_manager->HasRetransmittableFrames(packet_number)) {
     return false;
   }
-  return sent_packet_manager->HasRetransmittableFrames(packet_number) &&
-         sent_packet_manager->unacked_packets_.GetTransmissionInfo(
-                                                  packet_number)
-                 .all_transmissions != nullptr;
+  for (auto transmission_info : sent_packet_manager->unacked_packets_) {
+    if (transmission_info.retransmission == packet_number) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // static
@@ -150,7 +144,7 @@ size_t QuicSentPacketManagerPeer::GetNumRetransmittablePackets(
   for (QuicUnackedPacketMap::const_iterator it =
            sent_packet_manager->unacked_packets_.begin();
        it != sent_packet_manager->unacked_packets_.end(); ++it) {
-    if (it->retransmittable_frames != nullptr) {
+    if (!it->retransmittable_frames.empty()) {
       ++num_unacked_packets;
     }
   }
@@ -168,6 +162,20 @@ QuicSentPacketManager::NetworkChangeVisitor*
 QuicSentPacketManagerPeer::GetNetworkChangeVisitor(
     const QuicSentPacketManager* sent_packet_manager) {
   return sent_packet_manager->network_change_visitor_;
+}
+
+// static
+void QuicSentPacketManagerPeer::SetConsecutiveRtoCount(
+    QuicSentPacketManager* sent_packet_manager,
+    size_t count) {
+  sent_packet_manager->consecutive_rto_count_ = count;
+}
+
+// static
+void QuicSentPacketManagerPeer::SetConsecutiveTlpCount(
+    QuicSentPacketManager* sent_packet_manager,
+    size_t count) {
+  sent_packet_manager->consecutive_tlp_count_ = count;
 }
 
 // static

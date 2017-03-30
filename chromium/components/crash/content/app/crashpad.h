@@ -7,6 +7,7 @@
 
 #include <time.h>
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,7 @@
 #include "third_party/kasko/kasko_features.h"
 
 #if BUILDFLAG(ENABLE_KASKO)
+#include "base/process/process.h"
 #include "syzygy/kasko/api/crash_key.h"
 #endif  // BUILDFLAG(ENABLE_KASKO)
 
@@ -43,7 +45,21 @@ namespace crash_reporter {
 // an installation from a disk image, the relauncher process may unmount the
 // disk image that contains its inherited crashpad_handler. This is only
 // supported when initial_client is true and process_type is "relauncher".
+//
+// On Windows, use InitializeCrashpadWithEmbeddedHandler() when crashpad_handler
+// is embedded into this binary and can be started by launching the current
+// process with --type=crashpad-handler. Otherwise, this function should be used
+// and will launch an external crashpad_handler.exe which is generally used for
+// test situations.
 void InitializeCrashpad(bool initial_client, const std::string& process_type);
+
+#if defined(OS_WIN)
+// This is the same as InitializeCrashpad(), but rather than launching a
+// crashpad_handler executable, relaunches the current executable with a command
+// line argument of --type=crashpad-handler.
+void InitializeCrashpadWithEmbeddedHandler(bool initial_client,
+                                           const std::string& process_type);
+#endif  // OS_WIN
 
 // Enables or disables crash report upload. This is a property of the Crashpad
 // database. In a newly-created database, uploads will be disabled. This
@@ -78,14 +94,28 @@ void GetUploadedReports(std::vector<UploadedReport>* uploaded_reports);
 #if BUILDFLAG(ENABLE_KASKO)
 // Returns a copy of the current crash keys for Kasko.
 void GetCrashKeysForKasko(std::vector<kasko::api::CrashKey>* crash_keys);
+
+// Reads the annotations for the executable module for |process| and puts them
+// into |crash_keys|.
+void ReadMainModuleAnnotationsForKasko(
+    const base::Process& process,
+    std::vector<kasko::api::CrashKey>* crash_keys);
 #endif  // BUILDFLAG(ENABLE_KASKO)
 
 namespace internal {
 
+#if defined(OS_WIN)
+// Returns platform specific annotations. This is broken out on Windows only so
+// that it may be reused by GetCrashKeysForKasko.
+void GetPlatformCrashpadAnnotations(
+    std::map<std::string, std::string>* annotations);
+#endif  // defined(OS_WIN)
+
 // The platform-specific portion of InitializeCrashpad().
 // Returns the database path, if initializing in the browser process.
 base::FilePath PlatformCrashpadInitialization(bool initial_client,
-                                              bool browser_process);
+                                              bool browser_process,
+                                              bool embedded_handler);
 
 }  // namespace internal
 

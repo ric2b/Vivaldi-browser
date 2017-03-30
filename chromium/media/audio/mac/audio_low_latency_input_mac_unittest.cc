@@ -185,33 +185,6 @@ TEST_F(MacAudioInputTest, AUAudioInputStreamOpenStartStopAndClose) {
   ais->Close();
 }
 
-// Test some additional calling sequences.
-TEST_F(MacAudioInputTest, AUAudioInputStreamMiscCallingSequences) {
-  ABORT_AUDIO_TEST_IF_NOT(InputDevicesAvailable());
-  AudioInputStream* ais = CreateDefaultAudioInputStream();
-  AUAudioInputStream* auais = static_cast<AUAudioInputStream*>(ais);
-
-  // Open(), Open() should fail the second time.
-  EXPECT_TRUE(ais->Open());
-  EXPECT_FALSE(ais->Open());
-
-  MockAudioInputCallback sink;
-
-  // Start(), Start() is a valid calling sequence (second call does nothing).
-  ais->Start(&sink);
-  EXPECT_TRUE(auais->started());
-  ais->Start(&sink);
-  EXPECT_TRUE(auais->started());
-
-  // Stop(), Stop() is a valid calling sequence (second call does nothing).
-  ais->Stop();
-  EXPECT_FALSE(auais->started());
-  ais->Stop();
-  EXPECT_FALSE(auais->started());
-
-  ais->Close();
-}
-
 // Verify that recording starts and stops correctly in mono using mocked sink.
 TEST_F(MacAudioInputTest, AUAudioInputStreamVerifyMonoRecording) {
   ABORT_AUDIO_TEST_IF_NOT(InputDevicesAvailable());

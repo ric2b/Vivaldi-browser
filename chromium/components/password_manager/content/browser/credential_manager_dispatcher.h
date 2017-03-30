@@ -9,11 +9,11 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/prefs/pref_member.h"
 #include "components/password_manager/core/browser/credential_manager_password_form_manager.h"
 #include "components/password_manager/core/browser/credential_manager_pending_request_task.h"
 #include "components/password_manager/core/browser/credential_manager_pending_require_user_mediation_task.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
+#include "components/prefs/pref_member.h"
 #include "content/public/browser/web_contents_observer.h"
 
 class GURL;
@@ -58,13 +58,11 @@ class CredentialManagerDispatcher
   // while processing the request.
   virtual void OnRequestCredential(int request_id,
                                    bool zero_click_only,
+                                   bool include_passwords,
                                    const std::vector<GURL>& federations);
 
   // content::WebContentsObserver implementation.
   bool OnMessageReceived(const IPC::Message& message) override;
-
-  using CredentialCallback =
-      base::Callback<void(const autofill::PasswordForm&)>;
 
   // CredentialManagerPendingRequestTaskDelegate:
   bool IsZeroClickAllowed() const override;
@@ -90,6 +88,7 @@ class CredentialManagerDispatcher
   // grabs a list of realms related to the current web origin.
   void ScheduleRequestTask(int request_id,
                            bool zero_click_only,
+                           bool include_passwords,
                            const std::vector<GURL>& federations,
                            const std::vector<std::string>& android_realms);
 
@@ -99,6 +98,9 @@ class CredentialManagerDispatcher
   void ScheduleRequireMediationTask(
       int request_id,
       const std::vector<std::string>& android_realms);
+
+  // Returns true iff it's OK to update credentials in the password store.
+  bool IsUpdatingCredentialAllowed() const;
 
   PasswordManagerClient* client_;
   scoped_ptr<CredentialManagerPasswordFormManager> form_manager_;

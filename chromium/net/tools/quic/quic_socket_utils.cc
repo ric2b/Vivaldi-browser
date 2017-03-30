@@ -19,10 +19,9 @@
 #endif
 
 namespace net {
-namespace tools {
 
 // static
-IPAddressNumber QuicSocketUtils::GetAddressFromMsghdr(struct msghdr* hdr) {
+IPAddress QuicSocketUtils::GetAddressFromMsghdr(struct msghdr* hdr) {
   if (hdr->msg_controllen > 0) {
     for (cmsghdr* cmsg = CMSG_FIRSTHDR(hdr); cmsg != nullptr;
          cmsg = CMSG_NXTHDR(hdr, cmsg)) {
@@ -39,11 +38,11 @@ IPAddressNumber QuicSocketUtils::GetAddressFromMsghdr(struct msghdr* hdr) {
       } else {
         continue;
       }
-      return IPAddressNumber(addr_data, addr_data + len);
+      return IPAddress(addr_data, len);
     }
   }
   DCHECK(false) << "Unable to get address from msghdr";
-  return IPAddressNumber();
+  return IPAddress();
 }
 
 // static
@@ -97,7 +96,7 @@ int QuicSocketUtils::ReadPacket(int fd,
                                 char* buffer,
                                 size_t buf_len,
                                 QuicPacketCount* dropped_packets,
-                                IPAddressNumber* self_address,
+                                IPAddress* self_address,
                                 IPEndPoint* peer_address) {
   DCHECK(peer_address != nullptr);
   const int kSpaceForOverflowAndIp =
@@ -151,25 +150,30 @@ int QuicSocketUtils::ReadPacket(int fd,
   return bytes_read;
 }
 
-size_t QuicSocketUtils::SetIpInfoInCmsg(const IPAddressNumber& self_address,
+size_t QuicSocketUtils::SetIpInfoInCmsg(const IPAddress& self_address,
                                         cmsghdr* cmsg) {
-  if (GetAddressFamily(self_address) == ADDRESS_FAMILY_IPV4) {
+  if (self_address.IsIPv4()) {
     cmsg->cmsg_len = CMSG_LEN(sizeof(in_pktinfo));
     cmsg->cmsg_level = IPPROTO_IP;
     cmsg->cmsg_type = IP_PKTINFO;
     in_pktinfo* pktinfo = reinterpret_cast<in_pktinfo*>(CMSG_DATA(cmsg));
     memset(pktinfo, 0, sizeof(in_pktinfo));
     pktinfo->ipi_ifindex = 0;
-    memcpy(&pktinfo->ipi_spec_dst, &self_address[0], self_address.size());
+    memcpy(&pktinfo->ipi_spec_dst, self_address.bytes().data(),
+           self_address.size());
     return sizeof(in_pktinfo);
-  } else {
+  } else if (self_address.IsIPv6()) {
     cmsg->cmsg_len = CMSG_LEN(sizeof(in6_pktinfo));
     cmsg->cmsg_level = IPPROTO_IPV6;
     cmsg->cmsg_type = IPV6_PKTINFO;
     in6_pktinfo* pktinfo = reinterpret_cast<in6_pktinfo*>(CMSG_DATA(cmsg));
     memset(pktinfo, 0, sizeof(in6_pktinfo));
-    memcpy(&pktinfo->ipi6_addr, &self_address[0], self_address.size());
+    memcpy(&pktinfo->ipi6_addr, self_address.bytes().data(),
+           self_address.size());
     return sizeof(in6_pktinfo);
+  } else {
+    NOTREACHED() << "Unrecognized IPAddress";
+    return 0;
   }
 }
 
@@ -177,7 +181,7 @@ size_t QuicSocketUtils::SetIpInfoInCmsg(const IPAddressNumber& self_address,
 WriteResult QuicSocketUtils::WritePacket(int fd,
                                          const char* buffer,
                                          size_t buf_len,
-                                         const IPAddressNumber& self_address,
+                                         const IPAddress& self_address,
                                          const IPEndPoint& peer_address) {
   sockaddr_storage raw_address;
   socklen_t address_len = sizeof(raw_address);
@@ -219,5 +223,4 @@ WriteResult QuicSocketUtils::WritePacket(int fd,
                      errno);
 }
 
-}  // namespace tools
 }  // namespace net

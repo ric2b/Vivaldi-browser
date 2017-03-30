@@ -97,7 +97,7 @@ aura::Window* GetTooltipTarget(const ui::MouseEvent& event,
       gfx::Point screen_loc(event.location());
       aura::client::GetScreenPositionClient(event_target->GetRootWindow())->
           ConvertPointToScreen(event_target, &screen_loc);
-      gfx::Screen* screen = gfx::Screen::GetScreenFor(event_target);
+      gfx::Screen* screen = gfx::Screen::GetScreen();
       aura::Window* target = screen->GetWindowAtScreenPoint(screen_loc);
       if (!target)
         return NULL;
@@ -140,9 +140,8 @@ TooltipController::~TooltipController() {
     tooltip_window_->RemoveObserver(this);
 }
 
-int TooltipController::GetMaxWidth(const gfx::Point& location,
-                                   gfx::NativeView context) const {
-  return tooltip_->GetMaxWidth(location, context);
+int TooltipController::GetMaxWidth(const gfx::Point& location) const {
+  return tooltip_->GetMaxWidth(location);
 }
 
 void TooltipController::UpdateTooltip(aura::Window* target) {
@@ -233,6 +232,10 @@ void TooltipController::OnMouseEvent(ui::MouseEvent* event) {
       // Hide the tooltip for click, release, drag, wheel events.
       if (tooltip_->IsVisible())
         tooltip_->Hide();
+
+      // Don't reshow the tooltip during scroll.
+      if (tooltip_timer_.IsRunning())
+        tooltip_timer_.Reset();
       break;
     default:
       break;

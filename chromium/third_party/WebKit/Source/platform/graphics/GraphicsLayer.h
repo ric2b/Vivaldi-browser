@@ -50,7 +50,6 @@
 #include "public/platform/WebContentLayer.h"
 #include "public/platform/WebImageLayer.h"
 #include "public/platform/WebLayerScrollClient.h"
-#include "public/platform/WebScrollBlocksOn.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
@@ -66,7 +65,7 @@ class LinkHighlight;
 class JSONObject;
 class PaintController;
 class ScrollableArea;
-class WebCompositorAnimation;
+class CompositorAnimation;
 class WebLayer;
 
 typedef Vector<GraphicsLayer*, 64> GraphicsLayerVector;
@@ -87,6 +86,7 @@ public:
 
     void setCompositingReasons(CompositingReasons);
     CompositingReasons compositingReasons() const { return m_debugInfo.compositingReasons(); }
+    void setSquashingDisallowedReasons(SquashingDisallowedReasons);
     void setOwnerNodeId(int);
 
     GraphicsLayer* parent() const { return m_parent; }
@@ -124,6 +124,7 @@ public:
     // Offset is origin of the layoutObject minus origin of the graphics layer (so either zero or negative).
     IntSize offsetFromLayoutObject() const { return flooredIntSize(m_offsetFromLayoutObject); }
     void setOffsetFromLayoutObject(const IntSize&, ShouldSetNeedsDisplay = SetNeedsDisplay);
+    LayoutSize offsetFromLayoutObjectWithSubpixelAccumulation() const;
 
     // The double version is only used in |updateScrollingLayerGeometry()| for detecting
     // scroll offset change at floating point precision.
@@ -172,7 +173,6 @@ public:
     void setOpacity(float);
 
     void setBlendMode(WebBlendMode);
-    void setScrollBlocksOn(WebScrollBlocksOn);
     void setIsRootForIsolatedGroup(bool);
 
     void setFilters(const FilterOperations&);
@@ -197,7 +197,7 @@ public:
     // Return true if the animation is handled by the compositing system. If this returns
     // false, the animation will be run by AnimationController.
     // These methods handle both transitions and keyframe animations.
-    bool addAnimation(PassOwnPtr<WebCompositorAnimation>);
+    bool addAnimation(PassOwnPtr<CompositorAnimation>);
     void pauseAnimation(int animationId, double /*timeOffset*/);
     void removeAnimation(int animationId);
     void abortAnimation(int animationId);
@@ -266,7 +266,7 @@ public:
 
     // DisplayItemClient methods
     String debugName() const final { return m_client->debugName(this); }
-    IntRect visualRect() const override;
+    LayoutRect visualRect() const override;
 
 protected:
     String debugName(cc::Layer*) const;
@@ -324,8 +324,6 @@ private:
     float m_opacity;
 
     WebBlendMode m_blendMode;
-
-    WebScrollBlocksOn m_scrollBlocksOn;
 
     bool m_hasTransformOrigin : 1;
     bool m_contentsOpaque : 1;

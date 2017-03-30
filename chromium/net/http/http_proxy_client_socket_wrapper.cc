@@ -12,7 +12,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/values.h"
-#include "net/base/net_util.h"
 #include "net/base/proxy_delegate.h"
 #include "net/http/http_proxy_client_socket.h"
 #include "net/http/http_response_info.h"
@@ -29,6 +28,7 @@ namespace net {
 HttpProxyClientSocketWrapper::HttpProxyClientSocketWrapper(
     const std::string& group_name,
     RequestPriority priority,
+    ClientSocketPool::RespectLimits respect_limits,
     base::TimeDelta connect_timeout_duration,
     base::TimeDelta proxy_negotiation_timeout_duration,
     TransportClientSocketPool* transport_pool,
@@ -46,6 +46,7 @@ HttpProxyClientSocketWrapper::HttpProxyClientSocketWrapper(
     : next_state_(STATE_NONE),
       group_name_(group_name),
       priority_(priority),
+      respect_limits_(respect_limits),
       connect_timeout_duration_(connect_timeout_duration),
       proxy_negotiation_timeout_duration_(proxy_negotiation_timeout_duration),
       transport_pool_(transport_pool),
@@ -404,7 +405,7 @@ int HttpProxyClientSocketWrapper::DoTransportConnect() {
   next_state_ = STATE_TCP_CONNECT_COMPLETE;
   transport_socket_handle_.reset(new ClientSocketHandle());
   return transport_socket_handle_->Init(
-      group_name_, transport_params_, priority_,
+      group_name_, transport_params_, priority_, respect_limits_,
       base::Bind(&HttpProxyClientSocketWrapper::OnIOComplete,
                  base::Unretained(this)),
       transport_pool_, net_log_);
@@ -436,7 +437,7 @@ int HttpProxyClientSocketWrapper::DoSSLConnect() {
   next_state_ = STATE_SSL_CONNECT_COMPLETE;
   transport_socket_handle_.reset(new ClientSocketHandle());
   return transport_socket_handle_->Init(
-      group_name_, ssl_params_, priority_,
+      group_name_, ssl_params_, priority_, respect_limits_,
       base::Bind(&HttpProxyClientSocketWrapper::OnIOComplete,
                  base::Unretained(this)),
       ssl_pool_, net_log_);
@@ -587,7 +588,7 @@ int HttpProxyClientSocketWrapper::DoRestartWithAuthComplete(int result) {
     // TODO(mmenke): This may still result in waiting in line, if there are
     //               other HIGHEST priority requests. Consider a workaround for
     //               that. Starting the new request before releasing the old
-    //               socket and using LOAD_IGNORE_LIMITS would do the trick,
+    //               socket and using RespectLimits::Disabled would work,
     //               without exceding the the socket pool limits (Since the old
     //               socket would free up the extra socket slot when destroyed).
     priority_ = HIGHEST;

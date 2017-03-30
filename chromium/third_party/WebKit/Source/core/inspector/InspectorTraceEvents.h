@@ -9,6 +9,7 @@
 #include "core/css/CSSSelector.h"
 #include "platform/EventTracer.h"
 #include "platform/TraceEvent.h"
+#include "platform/TracedValue.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/Functional.h"
@@ -44,13 +45,12 @@ class ResourceRequest;
 class ResourceResponse;
 class StyleChangeReasonForTracing;
 class StyleImage;
-class TracedValue;
 class WorkerThread;
 class XMLHttpRequest;
 
 namespace InspectorLayoutEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> beginData(FrameView*);
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> endData(LayoutObject* rootForThisLayout);
+PassOwnPtr<TracedValue> beginData(FrameView*);
+PassOwnPtr<TracedValue> endData(LayoutObject* rootForThisLayout);
 }
 
 namespace InspectorScheduleStyleInvalidationTrackingEvent {
@@ -59,11 +59,11 @@ extern const char Class[];
 extern const char Id[];
 extern const char Pseudo[];
 
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> attributeChange(Element&, const InvalidationSet&, const QualifiedName&);
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> classChange(Element&, const InvalidationSet&, const AtomicString&);
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> idChange(Element&, const InvalidationSet&, const AtomicString&);
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> pseudoChange(Element&, const InvalidationSet&, CSSSelector::PseudoType);
-}
+PassOwnPtr<TracedValue> attributeChange(Element&, const InvalidationSet&, const QualifiedName&);
+PassOwnPtr<TracedValue> classChange(Element&, const InvalidationSet&, const AtomicString&);
+PassOwnPtr<TracedValue> idChange(Element&, const InvalidationSet&, const AtomicString&);
+PassOwnPtr<TracedValue> pseudoChange(Element&, const InvalidationSet&, CSSSelector::PseudoType);
+} // namespace InspectorScheduleStyleInvalidationTrackingEvent
 
 #define TRACE_SCHEDULE_STYLE_INVALIDATION(element, invalidationSet, changeType, ...) \
     TRACE_EVENT_INSTANT1( \
@@ -74,7 +74,7 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> pseudoChange(Element&, const In
         InspectorScheduleStyleInvalidationTrackingEvent::changeType((element), (invalidationSet), __VA_ARGS__));
 
 namespace InspectorStyleRecalcInvalidationTrackingEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(Node*, const StyleChangeReasonForTracing&);
+PassOwnPtr<TracedValue> data(Node*, const StyleChangeReasonForTracing&);
 }
 
 String descendantInvalidationSetToIdString(const InvalidationSet&);
@@ -88,10 +88,10 @@ extern const char InvalidationSetMatchedId[];
 extern const char InvalidationSetMatchedTagName[];
 extern const char PreventStyleSharingForParent[];
 
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(Element&, const char* reason);
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> selectorPart(Element&, const char* reason, const InvalidationSet&, const String&);
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> invalidationList(Element&, const Vector<RefPtr<InvalidationSet>>&);
-}
+PassOwnPtr<TracedValue> data(Element&, const char* reason);
+PassOwnPtr<TracedValue> selectorPart(Element&, const char* reason, const InvalidationSet&, const String&);
+PassOwnPtr<TracedValue> invalidationList(Element&, const Vector<RefPtr<InvalidationSet>>&);
+} // namespace InspectorStyleInvalidatorInvalidateEvent
 
 #define TRACE_STYLE_INVALIDATOR_INVALIDATION(element, reason) \
     TRACE_EVENT_INSTANT1( \
@@ -146,83 +146,83 @@ extern const char TextControlChanged[];
 // size related invalidations.
 extern const char SvgChanged[];
 extern const char ScrollbarChanged[];
-}
+} // namespace LayoutInvalidationReason
 
 // LayoutInvalidationReasonForTracing is strictly for tracing. Blink logic must
 // not depend on this value.
 typedef const char LayoutInvalidationReasonForTracing[];
 
 namespace InspectorLayoutInvalidationTrackingEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> CORE_EXPORT data(const LayoutObject*, LayoutInvalidationReasonForTracing);
+PassOwnPtr<TracedValue> CORE_EXPORT data(const LayoutObject*, LayoutInvalidationReasonForTracing);
 }
 
 namespace InspectorPaintInvalidationTrackingEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const LayoutObject*, const LayoutObject& paintContainer);
+PassOwnPtr<TracedValue> data(const LayoutObject*, const LayoutObject& paintContainer);
 }
 
 namespace InspectorScrollInvalidationTrackingEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const LayoutObject&);
+PassOwnPtr<TracedValue> data(const LayoutObject&);
 }
 
 namespace InspectorSendRequestEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(unsigned long identifier, LocalFrame*, const ResourceRequest&);
+PassOwnPtr<TracedValue> data(unsigned long identifier, LocalFrame*, const ResourceRequest&);
 }
 
 namespace InspectorReceiveResponseEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(unsigned long identifier, LocalFrame*, const ResourceResponse&);
+PassOwnPtr<TracedValue> data(unsigned long identifier, LocalFrame*, const ResourceResponse&);
 }
 
 namespace InspectorReceiveDataEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(unsigned long identifier, LocalFrame*, int encodedDataLength);
+PassOwnPtr<TracedValue> data(unsigned long identifier, LocalFrame*, int encodedDataLength);
 }
 
 namespace InspectorResourceFinishEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(unsigned long identifier, double finishTime, bool didFail);
+PassOwnPtr<TracedValue> data(unsigned long identifier, double finishTime, bool didFail);
 }
 
 namespace InspectorTimerInstallEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(ExecutionContext*, int timerId, int timeout, bool singleShot);
+PassOwnPtr<TracedValue> data(ExecutionContext*, int timerId, int timeout, bool singleShot);
 }
 
 namespace InspectorTimerRemoveEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(ExecutionContext*, int timerId);
+PassOwnPtr<TracedValue> data(ExecutionContext*, int timerId);
 }
 
 namespace InspectorTimerFireEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(ExecutionContext*, int timerId);
+PassOwnPtr<TracedValue> data(ExecutionContext*, int timerId);
 }
 
 namespace InspectorIdleCallbackRequestEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(ExecutionContext*, int id, double timeout);
+PassOwnPtr<TracedValue> data(ExecutionContext*, int id, double timeout);
 }
 
 namespace InspectorIdleCallbackCancelEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(ExecutionContext*, int id);
+PassOwnPtr<TracedValue> data(ExecutionContext*, int id);
 }
 
 namespace InspectorIdleCallbackFireEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(ExecutionContext*, int id, double allottedMilliseconds, bool timedOut);
+PassOwnPtr<TracedValue> data(ExecutionContext*, int id, double allottedMilliseconds, bool timedOut);
 }
 
 namespace InspectorAnimationFrameEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(ExecutionContext*, int callbackId);
+PassOwnPtr<TracedValue> data(ExecutionContext*, int callbackId);
 }
 
 namespace InspectorParseHtmlEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> beginData(Document*, unsigned startLine);
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> endData(unsigned endLine);
+PassOwnPtr<TracedValue> beginData(Document*, unsigned startLine);
+PassOwnPtr<TracedValue> endData(unsigned endLine);
 }
 
 namespace InspectorParseAuthorStyleSheetEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const CSSStyleSheetResource*);
+PassOwnPtr<TracedValue> data(const CSSStyleSheetResource*);
 }
 
 namespace InspectorXhrReadyStateChangeEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(ExecutionContext*, XMLHttpRequest*);
+PassOwnPtr<TracedValue> data(ExecutionContext*, XMLHttpRequest*);
 }
 
 namespace InspectorXhrLoadEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(ExecutionContext*, XMLHttpRequest*);
+PassOwnPtr<TracedValue> data(ExecutionContext*, XMLHttpRequest*);
 }
 
 namespace InspectorLayerInvalidationTrackingEvent {
@@ -232,7 +232,7 @@ extern const char RemovedFromSquashingLayer[];
 extern const char ReflectionLayerChanged[];
 extern const char NewCompositedLayer[];
 
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const PaintLayer*, const char* reason);
+PassOwnPtr<TracedValue> data(const PaintLayer*, const char* reason);
 }
 
 #define TRACE_LAYER_INVALIDATION(LAYER, REASON) \
@@ -244,85 +244,85 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const PaintLayer*, const c
         InspectorLayerInvalidationTrackingEvent::data((LAYER), (REASON)));
 
 namespace InspectorPaintEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(LayoutObject*, const LayoutRect& clipRect, const GraphicsLayer*);
+PassOwnPtr<TracedValue> data(LayoutObject*, const LayoutRect& clipRect, const GraphicsLayer*);
 }
 
 namespace InspectorPaintImageEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const LayoutImage&);
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const LayoutObject&, const StyleImage&);
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const LayoutObject*, const ImageResource&);
+PassOwnPtr<TracedValue> data(const LayoutImage&);
+PassOwnPtr<TracedValue> data(const LayoutObject&, const StyleImage&);
+PassOwnPtr<TracedValue> data(const LayoutObject*, const ImageResource&);
 }
 
 namespace InspectorCommitLoadEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(LocalFrame*);
+PassOwnPtr<TracedValue> data(LocalFrame*);
 }
 
 namespace InspectorMarkLoadEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(LocalFrame*);
+PassOwnPtr<TracedValue> data(LocalFrame*);
 }
 
 namespace InspectorScrollLayerEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(LayoutObject*);
+PassOwnPtr<TracedValue> data(LayoutObject*);
 }
 
 namespace InspectorUpdateLayerTreeEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(LocalFrame*);
+PassOwnPtr<TracedValue> data(LocalFrame*);
 }
 
 namespace InspectorEvaluateScriptEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(LocalFrame*, const String& url, const WTF::TextPosition&);
+PassOwnPtr<TracedValue> data(LocalFrame*, const String& url, const WTF::TextPosition&);
 }
 
 namespace InspectorCompileScriptEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const String& url, const WTF::TextPosition&);
+PassOwnPtr<TracedValue> data(const String& url, const WTF::TextPosition&);
 }
 
 namespace InspectorFunctionCallEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(ExecutionContext*, int scriptId, const String& scriptName, int scriptLine);
+PassOwnPtr<TracedValue> data(ExecutionContext*, int scriptId, const String& scriptName, int scriptLine);
 }
 
 namespace InspectorUpdateCountersEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data();
+PassOwnPtr<TracedValue> data();
 }
 
 namespace InspectorInvalidateLayoutEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(LocalFrame*);
+PassOwnPtr<TracedValue> data(LocalFrame*);
 }
 
 namespace InspectorRecalculateStylesEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(LocalFrame*);
+PassOwnPtr<TracedValue> data(LocalFrame*);
 }
 
 namespace InspectorEventDispatchEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const Event&);
+PassOwnPtr<TracedValue> data(const Event&);
 }
 
 namespace InspectorTimeStampEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(ExecutionContext*, const String& message);
+PassOwnPtr<TracedValue> data(ExecutionContext*, const String& message);
 }
 
 namespace InspectorTracingSessionIdForWorkerEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const String& sessionId, const String& workerId, WorkerThread*);
+PassOwnPtr<TracedValue> data(const String& sessionId, const String& workerId, WorkerThread*);
 }
 
 namespace InspectorTracingStartedInFrame {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const String& sessionId, LocalFrame*);
+PassOwnPtr<TracedValue> data(const String& sessionId, LocalFrame*);
 }
 
 namespace InspectorSetLayerTreeId {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const String& sessionId, int layerTreeId);
+PassOwnPtr<TracedValue> data(const String& sessionId, int layerTreeId);
 }
 
 namespace InspectorAnimationEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const Animation&);
+PassOwnPtr<TracedValue> data(const Animation&);
 }
 
 namespace InspectorAnimationStateEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const Animation&);
+PassOwnPtr<TracedValue> data(const Animation&);
 }
 
 namespace InspectorHitTestEvent {
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> endData(const HitTestRequest&, const HitTestLocation&, const HitTestResult&);
+PassOwnPtr<TracedValue> endData(const HitTestRequest&, const HitTestLocation&, const HitTestResult&);
 }
 
 CORE_EXPORT String toHexString(const void* p);

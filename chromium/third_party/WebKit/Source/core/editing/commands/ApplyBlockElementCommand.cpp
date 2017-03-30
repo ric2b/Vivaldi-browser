@@ -55,7 +55,7 @@ ApplyBlockElementCommand::ApplyBlockElementCommand(Document& document, const Qua
 {
 }
 
-void ApplyBlockElementCommand::doApply()
+void ApplyBlockElementCommand::doApply(EditingState* editingState)
 {
     if (!endingSelection().rootEditableElement())
         return;
@@ -90,7 +90,9 @@ void ApplyBlockElementCommand::doApply()
     RefPtrWillBeRawPtr<ContainerNode> endScope = nullptr;
     int endIndex = indexForVisiblePosition(endOfSelection, endScope);
 
-    formatSelection(startOfSelection, endOfSelection);
+    formatSelection(startOfSelection, endOfSelection, editingState);
+    if (editingState->isAborted())
+        return;
 
     document().updateLayoutIgnorePendingStylesheets();
 
@@ -105,16 +107,20 @@ void ApplyBlockElementCommand::doApply()
     }
 }
 
-void ApplyBlockElementCommand::formatSelection(const VisiblePosition& startOfSelection, const VisiblePosition& endOfSelection)
+void ApplyBlockElementCommand::formatSelection(const VisiblePosition& startOfSelection, const VisiblePosition& endOfSelection, EditingState* editingState)
 {
     // Special case empty unsplittable elements because there's nothing to split
     // and there's nothing to move.
     Position start = mostForwardCaretPosition(startOfSelection.deepEquivalent());
     if (isAtUnsplittableElement(start)) {
         RefPtrWillBeRawPtr<HTMLElement> blockquote = createBlockElement();
-        insertNodeAt(blockquote, start);
+        insertNodeAt(blockquote, start, editingState);
+        if (editingState->isAborted())
+            return;
         RefPtrWillBeRawPtr<HTMLBRElement> placeholder = HTMLBRElement::create(document());
-        appendNode(placeholder, blockquote);
+        appendNode(placeholder, blockquote, editingState);
+        if (editingState->isAborted())
+            return;
         setEndingSelection(VisibleSelection(positionBeforeNode(placeholder.get()), TextAffinity::Downstream, endingSelection().isDirectional()));
         return;
     }
@@ -137,7 +143,9 @@ void ApplyBlockElementCommand::formatSelection(const VisiblePosition& startOfSel
         Node* enclosingCell = enclosingNodeOfType(start, &isTableCell);
         VisiblePosition endOfNextParagraph = endOfNextParagrahSplittingTextNodesIfNeeded(endOfCurrentParagraph, start, end);
 
-        formatRange(start, end, m_endOfLastParagraph, blockquoteForNextIndent);
+        formatRange(start, end, m_endOfLastParagraph, blockquoteForNextIndent, editingState);
+        if (editingState->isAborted())
+            return;
 
         // Don't put the next paragraph in the blockquote we just created for this paragraph unless
         // the next paragraph is in the same cell.
@@ -184,7 +192,7 @@ void ApplyBlockElementCommand::rangeForParagraphSplittingTextNodesIfNeeded(const
     start = startOfParagraph(endOfCurrentParagraph).deepEquivalent();
     end = endOfCurrentParagraph.deepEquivalent();
 
-    document().updateLayoutTreeIfNeeded();
+    document().updateLayoutTree();
 
     bool isStartAndEndOnSameNode = false;
     if (const ComputedStyle* startStyle = computedStyleOfEnclosingTextNode(start)) {
@@ -214,7 +222,7 @@ void ApplyBlockElementCommand::rangeForParagraphSplittingTextNodesIfNeeded(const
         }
     }
 
-    document().updateLayoutTreeIfNeeded();
+    document().updateLayoutTree();
 
     if (const ComputedStyle* endStyle = computedStyleOfEnclosingTextNode(end)) {
         bool isEndAndEndOfLastParagraphOnSameNode = computedStyleOfEnclosingTextNode(m_endOfLastParagraph) && end.anchorNode() == m_endOfLastParagraph.anchorNode();
@@ -299,4 +307,4 @@ DEFINE_TRACE(ApplyBlockElementCommand)
     CompositeEditCommand::trace(visitor);
 }
 
-}
+} // namespace blink

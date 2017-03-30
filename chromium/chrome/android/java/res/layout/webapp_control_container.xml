@@ -12,6 +12,6 @@
         android:id="@+id/webapp_url_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:minHeight="@dimen/webapp_control_container_height"
+        android:minHeight="@dimen/webapp_control_container_height" 
         android:gravity="center" />
 </org.chromium.chrome.browser.webapps.WebappControlContainer>

@@ -58,14 +58,6 @@ static PassRefPtr<StringImpl> applySVGWhitespaceRules(PassRefPtr<StringImpl> str
     return newString.release();
 }
 
-static float squaredDistanceToClosestPoint(const FloatRect& rect, const FloatPoint& point)
-{
-    FloatPoint closestPoint;
-    closestPoint.setX(std::max(std::min(point.x(), rect.maxX()), rect.x()));
-    closestPoint.setY(std::max(std::min(point.y(), rect.maxY()), rect.y()));
-    return (point - closestPoint).diagonalLengthSquared();
-}
-
 LayoutSVGInlineText::LayoutSVGInlineText(Node* n, PassRefPtr<StringImpl> string)
     : LayoutText(n, applySVGWhitespaceRules(string, false))
     , m_scalingFactor(1)
@@ -189,7 +181,7 @@ PositionWithAffinity LayoutSVGInlineText::positionForPoint(const LayoutPoint& po
 
             float distance = 0;
             if (!fragmentRect.contains(absolutePoint))
-                distance = squaredDistanceToClosestPoint(fragmentRect, absolutePoint);
+                distance = fragmentRect.squaredDistanceTo(absolutePoint);
 
             if (distance <= closestDistance) {
                 closestDistance = distance;
@@ -203,7 +195,7 @@ PositionWithAffinity LayoutSVGInlineText::positionForPoint(const LayoutPoint& po
     if (!closestDistanceFragment)
         return createPositionWithAffinity(0);
 
-    int offset = closestDistanceBox->offsetForPositionInFragment(*closestDistanceFragment, absolutePoint.x() - closestDistancePosition, true);
+    int offset = closestDistanceBox->offsetForPositionInFragment(*closestDistanceFragment, LayoutUnit(absolutePoint.x() - closestDistancePosition), true);
     return createPositionWithAffinity(offset + closestDistanceBox->start(), offset > 0 ? VP_UPSTREAM_IF_POSSIBLE : TextAffinity::Downstream);
 }
 
@@ -255,4 +247,4 @@ PassRefPtr<StringImpl> LayoutSVGInlineText::originalText() const
     return applySVGWhitespaceRules(result, style() && style()->whiteSpace() == PRE);
 }
 
-}
+} // namespace blink

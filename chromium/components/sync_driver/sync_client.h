@@ -9,10 +9,10 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/time/time.h"
 #include "components/sync_driver/sync_api_component_factory.h"
 #include "sync/internal_api/public/base/model_type.h"
 #include "sync/internal_api/public/engine/model_safe_worker.h"
+#include "sync/internal_api/public/shared_model_type_processor.h"
 #include "sync/util/extensions_activity.h"
 
 class BookmarkUndoService;
@@ -51,8 +51,6 @@ namespace sync_driver {
 
 class SyncService;
 
-typedef base::Callback<void(base::Time, base::Time)> ClearBrowsingDataCallback;
-
 // Interface for clients of the Sync API to plumb through necessary dependent
 // components. This interface is purely for abstracting dependencies, and
 // should not contain any non-trivial functional logic.
@@ -78,10 +76,6 @@ class SyncClient {
   virtual favicon::FaviconService* GetFaviconService() = 0;
   virtual history::HistoryService* GetHistoryService() = 0;
 
-  // Returns a callback that will be invoked when the sync service wishes to
-  // have browsing data cleared.
-  virtual ClearBrowsingDataCallback GetClearBrowsingDataCallback() = 0;
-
   // Returns a callback that will register the types specific to the current
   // platform.
   virtual sync_driver::SyncApiComponentFactory::RegisterDataTypesMethod
@@ -101,6 +95,13 @@ class SyncClient {
   // Weak pointer may be unset if service is already destroyed.
   // Note: Should only be called from the model type thread.
   virtual base::WeakPtr<syncer::SyncableService> GetSyncableServiceForType(
+      syncer::ModelType type) = 0;
+
+  // Returns a weak pointer to the model type service specified by |type|.
+  // Weak pointer may be unset if service is already destroyed.
+  // Note: Should only be called from the model type thread.
+  // Note: should only be called by USS.
+  virtual base::WeakPtr<syncer_v2::ModelTypeService> GetModelTypeServiceForType(
       syncer::ModelType type) = 0;
 
   // Creates and returns a new ModelSafeWorker for the group, or null if one

@@ -60,6 +60,9 @@ PepperUDPSocketMessageFilter::PendingSend::PendingSend(
     : address(address), port(port), buffer(buffer), context(context) {
 }
 
+PepperUDPSocketMessageFilter::PendingSend::PendingSend(
+    const PendingSend& other) = default;
+
 PepperUDPSocketMessageFilter::PendingSend::~PendingSend() {
 }
 
@@ -492,7 +495,8 @@ void PepperUDPSocketMessageFilter::DoBind(
 
   PP_NetAddress_Private net_address = NetAddressPrivateImpl::kInvalidNetAddress;
   if (!NetAddressPrivateImpl::IPEndPointToNetAddress(
-          bound_address.address(), bound_address.port(), &net_address)) {
+          bound_address.address().bytes(), bound_address.port(),
+          &net_address)) {
     SendBindError(context, PP_ERROR_ADDRESS_INVALID);
     return;
   }
@@ -644,7 +648,8 @@ void PepperUDPSocketMessageFilter::OnRecvFromCompleted(int net_result) {
   PP_NetAddress_Private addr = NetAddressPrivateImpl::kInvalidNetAddress;
   if (pp_result >= 0 &&
       !NetAddressPrivateImpl::IPEndPointToNetAddress(
-          recvfrom_address_.address(), recvfrom_address_.port(), &addr)) {
+          recvfrom_address_.address().bytes(), recvfrom_address_.port(),
+          &addr)) {
     pp_result = PP_ERROR_ADDRESS_INVALID;
   }
 

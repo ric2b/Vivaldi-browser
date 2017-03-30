@@ -10,57 +10,63 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "components/mus/public/cpp/window_tree_delegate.h"
-#include "components/mus/public/interfaces/window_manager.mojom.h"
 #include "ui/views/mus/mus_export.h"
+#include "ui/views/mus/screen_mus_delegate.h"
 #include "ui/views/widget/widget.h"
 
 namespace mojo {
-class ApplicationImpl;
-}
-
-namespace ui {
-namespace mojo {
-class UIInit;
-}
+class Connector;
 }
 
 namespace views {
 class NativeWidget;
+class ScreenMus;
 namespace internal {
 class NativeWidgetDelegate;
 }
 
-// Establishes a connection to the window manager for use by views within an
-// application, and performs Aura initialization.
+// Provides configuration to mus in views. This consists of the following:
+// . Provides a Screen implementation backed by mus.
+// . Creates and owns a WindowTreeConnection.
+// . Registers itself as the factory for creating NativeWidgets so that a
+//   NativeWidgetMus is created.
+// WindowManagerConnection is a singleton and should be created early on.
+//
+// TODO(sky): this name is now totally confusing. Come up with a better one.
 class VIEWS_MUS_EXPORT WindowManagerConnection
-    : public NON_EXPORTED_BASE(mus::WindowTreeDelegate) {
+    : public NON_EXPORTED_BASE(mus::WindowTreeDelegate),
+      public ScreenMusDelegate {
  public:
-  static void Create(mojo::ApplicationImpl* app);
+  static void Create(mojo::Connector* connector);
   static WindowManagerConnection* Get();
 
-  mojo::ApplicationImpl* app() { return app_; }
+  // Destroys the singleton instance.
+  static void Reset();
+
+  mojo::Connector* connector() { return connector_; }
 
   mus::Window* NewWindow(const std::map<std::string,
                          std::vector<uint8_t>>& properties);
 
-  mus::mojom::WindowManager* window_manager() {
-    return window_manager_.get();
-  }
+  NativeWidget* CreateNativeWidgetMus(
+      const std::map<std::string, std::vector<uint8_t>>& properties,
+      const Widget::InitParams& init_params,
+      internal::NativeWidgetDelegate* delegate);
 
  private:
-  explicit WindowManagerConnection(mojo::ApplicationImpl* app);
+  explicit WindowManagerConnection(mojo::Connector* connector);
   ~WindowManagerConnection() override;
 
   // mus::WindowTreeDelegate:
   void OnEmbed(mus::Window* root) override;
   void OnConnectionLost(mus::WindowTreeConnection* connection) override;
 
-  NativeWidget* CreateNativeWidget(const Widget::InitParams& init_params,
-                                   internal::NativeWidgetDelegate* delegate);
+  // ScreenMusDelegate:
+  void OnWindowManagerFrameValuesChanged() override;
 
-  mojo::ApplicationImpl* app_;
-  mus::mojom::WindowManagerPtr window_manager_;
-  scoped_ptr<ui::mojo::UIInit> ui_init_;
+
+  mojo::Connector* connector_;
+  scoped_ptr<ScreenMus> screen_;
   scoped_ptr<mus::WindowTreeConnection> window_tree_connection_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowManagerConnection);

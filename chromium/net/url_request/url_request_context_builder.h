@@ -84,17 +84,23 @@ class NET_EXPORT URLRequestContextBuilder {
     HostMappingRules* host_mapping_rules;
     uint16_t testing_fixed_http_port;
     uint16_t testing_fixed_https_port;
-    NextProtoVector next_protos;
-    std::string trusted_spdy_proxy;
-    bool use_alternative_services;
+    bool enable_spdy31;
+    bool enable_http2;
+    bool parse_alternative_services;
+    bool enable_alternative_service_with_different_host;
     bool enable_quic;
+    std::string quic_user_agent_id;
     int quic_max_server_configs_stored_in_properties;
     bool quic_delay_tcp_race;
     int quic_max_number_of_lossy_connections;
     std::unordered_set<std::string> quic_host_whitelist;
+    bool quic_prefer_aes;
     float quic_packet_loss_threshold;
     int quic_idle_connection_timeout_seconds;
     QuicTagVector quic_connection_options;
+    bool quic_close_sessions_on_ip_change;
+    bool quic_migrate_sessions_on_network_change;
+    bool quic_migrate_sessions_early;
   };
 
   URLRequestContextBuilder();
@@ -188,7 +194,6 @@ class NET_EXPORT URLRequestContextBuilder {
     transport_security_persister_path_ = transport_security_persister_path;
   }
 
-  // Adjust |http_network_session_params_.next_protos| to enable SPDY and QUIC.
   void SetSpdyAndQuicEnabled(bool spdy_enabled,
                              bool quic_enabled);
 
@@ -196,6 +201,10 @@ class NET_EXPORT URLRequestContextBuilder {
       const QuicTagVector& quic_connection_options) {
     http_network_session_params_.quic_connection_options =
         quic_connection_options;
+  }
+
+  void set_quic_user_agent_id(const std::string& quic_user_agent_id) {
+    http_network_session_params_.quic_user_agent_id = quic_user_agent_id;
   }
 
   void set_quic_max_server_configs_stored_in_properties(
@@ -228,6 +237,27 @@ class NET_EXPORT URLRequestContextBuilder {
   void set_quic_host_whitelist(
       const std::unordered_set<std::string>& quic_host_whitelist) {
     http_network_session_params_.quic_host_whitelist = quic_host_whitelist;
+  }
+
+  void set_quic_close_sessions_on_ip_change(
+      bool quic_close_sessions_on_ip_change) {
+    http_network_session_params_.quic_close_sessions_on_ip_change =
+        quic_close_sessions_on_ip_change;
+  }
+
+  void set_quic_migrate_sessions_on_network_change(
+      bool quic_migrate_sessions_on_network_change) {
+    http_network_session_params_.quic_migrate_sessions_on_network_change =
+        quic_migrate_sessions_on_network_change;
+  }
+
+  void set_quic_prefer_aes(bool quic_prefer_aes) {
+    http_network_session_params_.quic_prefer_aes = quic_prefer_aes;
+  }
+
+  void set_quic_migrate_sessions_early(bool quic_migrate_sessions_early) {
+    http_network_session_params_.quic_migrate_sessions_early =
+        quic_migrate_sessions_early;
   }
 
   void set_throttling_enabled(bool throttling_enabled) {

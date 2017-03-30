@@ -78,7 +78,7 @@ StreamTexture::StreamTexture(GpuCommandBufferStub* owner_stub,
       weak_factory_(this) {
   owner_stub->AddDestructionObserver(this);
   memset(current_matrix_, 0, sizeof(current_matrix_));
-  owner_stub->channel()->AddRoute(route_id, this);
+  owner_stub->channel()->AddRoute(route_id, owner_stub->stream_id(), this);
   surface_texture_->SetFrameAvailableCallback(base::Bind(
       &StreamTexture::OnFrameAvailable, weak_factory_.GetWeakPtr()));
 }
@@ -125,14 +125,6 @@ scoped_ptr<ui::ScopedMakeCurrent> StreamTexture::MakeStubCurrent() {
   scoped_ptr<ui::ScopedMakeCurrent> scoped_make_current;
   bool needs_make_current =
       !owner_stub_->decoder()->GetGLContext()->IsCurrent(NULL);
-  // On Android we should not have to perform a real context switch here when
-  // using virtual contexts.
-  DCHECK(!needs_make_current ||
-         !owner_stub_->decoder()
-              ->GetContextGroup()
-              ->feature_info()
-              ->workarounds()
-              .use_virtualized_gl_contexts);
   if (needs_make_current) {
     scoped_make_current.reset(new ui::ScopedMakeCurrent(
         owner_stub_->decoder()->GetGLContext(), owner_stub_->surface()));
@@ -198,11 +190,13 @@ bool StreamTexture::CopyTexImage(unsigned target) {
 
   GLint texture_id;
   glGetIntegerv(GL_TEXTURE_BINDING_EXTERNAL_OES, &texture_id);
-  DCHECK(texture_id);
 
   // The following code only works if we're being asked to copy into
   // |texture_id_|. Copying into a different texture is not supported.
-  if (static_cast<unsigned>(texture_id) != texture_id_)
+  // On some devices GL_TEXTURE_BINDING_EXTERNAL_OES is not supported as
+  // glGetIntegerv() parameter. In this case the value of |texture_id| will be
+  // zero and we assume that it is properly bound to |texture_id_|.
+  if (texture_id > 0 && static_cast<unsigned>(texture_id) != texture_id_)
     return false;
 
   UpdateTexImage();

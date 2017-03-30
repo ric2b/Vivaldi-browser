@@ -17,7 +17,7 @@ PassThroughAudioDecoder::~PassThroughAudioDecoder() {
 }
 
 void PassThroughAudioDecoder::Initialize(const AudioDecoderConfig& config,
-                                         const SetCdmReadyCB& set_cdm_ready_cb,
+                                         CdmContext* cdm_context,
                                          const InitCB& init_cb,
                                          const OutputCB& output_cb) {
   impl_.Initialize(config, init_cb, output_cb);

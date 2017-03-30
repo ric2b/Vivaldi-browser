@@ -14,13 +14,10 @@ namespace {
 
 float GetDeviceScaleForNativeView(views::Widget* widget) {
   float device_scale = 1.0f;
-  // The following code should work on other platforms as well. But we do not
-  // yet care about device scale factor on other platforms. So to keep drag and
-  // drop behavior on other platforms un-touched, we wrap this in the #if guard.
   if (widget && widget->GetNativeView()) {
     gfx::NativeView view = widget->GetNativeView();
-    gfx::Display display = gfx::Screen::GetScreenFor(view)->
-        GetDisplayNearestWindow(view);
+    gfx::Display display =
+        gfx::Screen::GetScreen()->GetDisplayNearestWindow(view);
     device_scale = display.device_scale_factor();
   }
   return device_scale;

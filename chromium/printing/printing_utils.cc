@@ -31,7 +31,7 @@ base::string16 SimplifyDocumentTitleWithLength(const base::string16& title,
   base::ReplaceChars(no_controls, base::ASCIIToUTF16("\\"),
                      base::ASCIIToUTF16("_"), &no_controls);
   base::string16 result;
-  gfx::ElideString(no_controls, static_cast<int>(length), &result);
+  gfx::ElideString(no_controls, length, &result);
   return result;
 }
 

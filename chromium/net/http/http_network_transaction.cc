@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/base64url.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
@@ -30,8 +31,8 @@
 #include "net/base/load_flags.h"
 #include "net/base/load_timing_info.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
 #include "net/base/upload_data_stream.h"
+#include "net/base/url_util.h"
 #include "net/http/http_auth.h"
 #include "net/http/http_auth_handler.h"
 #include "net/http/http_auth_handler_factory.h"
@@ -62,6 +63,7 @@
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_connection_status_flags.h"
 #include "net/ssl/ssl_private_key.h"
+#include "net/ssl/token_binding.h"
 #include "url/gurl.h"
 #include "url/url_canon.h"
 
@@ -72,15 +74,16 @@ namespace {
 void ProcessAlternativeServices(HttpNetworkSession* session,
                                 const HttpResponseHeaders& headers,
                                 const HostPortPair& http_host_port_pair) {
-  if (session->params().use_alternative_services &&
-      headers.HasHeader(kAlternativeServiceHeader)) {
-    std::string alternative_service_str;
-    headers.GetNormalizedHeader(kAlternativeServiceHeader,
-                                &alternative_service_str);
-    session->http_stream_factory()->ProcessAlternativeService(
-        session->http_server_properties(), alternative_service_str,
-        http_host_port_pair, *session);
-    // If there is an "Alt-Svc" header, then ignore "Alternate-Protocol".
+  if (session->params().parse_alternative_services) {
+    if (headers.HasHeader(kAlternativeServiceHeader)) {
+      std::string alternative_service_str;
+      headers.GetNormalizedHeader(kAlternativeServiceHeader,
+                                  &alternative_service_str);
+      session->http_stream_factory()->ProcessAlternativeService(
+          session->http_server_properties(), alternative_service_str,
+          http_host_port_pair, *session);
+    }
+    // If "Alt-Svc" is enabled, then ignore "Alternate-Protocol".
     return;
   }
 
@@ -88,7 +91,7 @@ void ProcessAlternativeServices(HttpNetworkSession* session,
     return;
 
   std::vector<std::string> alternate_protocol_values;
-  void* iter = NULL;
+  size_t iter = 0;
   std::string alternate_protocol_str;
   while (headers.EnumerateHeader(&iter, kAlternateProtocolHeader,
                                  &alternate_protocol_str)) {
@@ -200,6 +203,11 @@ int HttpNetworkTransaction::Start(const HttpRequestInfo* request_info,
   // Channel ID is disabled if privacy mode is enabled for this request.
   if (request_->privacy_mode == PRIVACY_MODE_ENABLED)
     server_ssl_config_.channel_id_enabled = false;
+
+  if (session_->params().enable_token_binding &&
+      session_->params().channel_id_service) {
+    server_ssl_config_.token_binding_params.push_back(TB_PARAM_ECDSAP256);
+  }
 
   next_state_ = STATE_NOTIFY_BEFORE_CREATE_STREAM;
   int rv = DoLoop(OK);
@@ -639,6 +647,42 @@ bool HttpNetworkTransaction::IsSecureRequest() const {
   return request_->url.SchemeIsCryptographic();
 }
 
+bool HttpNetworkTransaction::IsTokenBindingEnabled() const {
+  if (!IsSecureRequest())
+    return false;
+  SSLInfo ssl_info;
+  stream_->GetSSLInfo(&ssl_info);
+  return ssl_info.token_binding_negotiated &&
+         ssl_info.token_binding_key_param == TB_PARAM_ECDSAP256 &&
+         session_->params().channel_id_service;
+}
+
+void HttpNetworkTransaction::RecordTokenBindingSupport() const {
+  // This enum is used for an UMA histogram - do not change or re-use values.
+  enum {
+    DISABLED = 0,
+    CLIENT_ONLY = 1,
+    CLIENT_AND_SERVER = 2,
+    CLIENT_NO_CHANNEL_ID_SERVICE = 3,
+    TOKEN_BINDING_SUPPORT_MAX
+  } supported;
+  if (!IsSecureRequest())
+    return;
+  SSLInfo ssl_info;
+  stream_->GetSSLInfo(&ssl_info);
+  if (!session_->params().enable_token_binding) {
+    supported = DISABLED;
+  } else if (!session_->params().channel_id_service) {
+    supported = CLIENT_NO_CHANNEL_ID_SERVICE;
+  } else if (ssl_info.token_binding_negotiated) {
+    supported = CLIENT_AND_SERVER;
+  } else {
+    supported = CLIENT_ONLY;
+  }
+  UMA_HISTOGRAM_ENUMERATION("Net.TokenBinding.Support", supported,
+                            TOKEN_BINDING_SUPPORT_MAX);
+}
+
 bool HttpNetworkTransaction::UsingHttpProxyWithoutTunnel() const {
   return (proxy_info_.is_http() || proxy_info_.is_https() ||
           proxy_info_.is_quic()) &&
@@ -700,6 +744,13 @@ int HttpNetworkTransaction::DoLoop(int result) {
         break;
       case STATE_GENERATE_SERVER_AUTH_TOKEN_COMPLETE:
         rv = DoGenerateServerAuthTokenComplete(rv);
+        break;
+      case STATE_GET_TOKEN_BINDING_KEY:
+        DCHECK_EQ(OK, rv);
+        rv = DoGetTokenBindingKey();
+        break;
+      case STATE_GET_TOKEN_BINDING_KEY_COMPLETE:
+        rv = DoGetTokenBindingKeyComplete(rv);
         break;
       case STATE_INIT_REQUEST_BODY:
         DCHECK_EQ(OK, rv);
@@ -916,11 +967,34 @@ int HttpNetworkTransaction::DoGenerateServerAuthToken() {
 int HttpNetworkTransaction::DoGenerateServerAuthTokenComplete(int rv) {
   DCHECK_NE(ERR_IO_PENDING, rv);
   if (rv == OK)
-    next_state_ = STATE_INIT_REQUEST_BODY;
+    next_state_ = STATE_GET_TOKEN_BINDING_KEY;
   return rv;
 }
 
-void HttpNetworkTransaction::BuildRequestHeaders(
+int HttpNetworkTransaction::DoGetTokenBindingKey() {
+  next_state_ = STATE_GET_TOKEN_BINDING_KEY_COMPLETE;
+  if (!IsTokenBindingEnabled())
+    return OK;
+
+  net_log_.BeginEvent(NetLog::TYPE_HTTP_TRANSACTION_GET_TOKEN_BINDING_KEY);
+  ChannelIDService* channel_id_service = session_->params().channel_id_service;
+  return channel_id_service->GetOrCreateChannelID(
+      request_->url.host(), &token_binding_key_, io_callback_,
+      &token_binding_request_);
+}
+
+int HttpNetworkTransaction::DoGetTokenBindingKeyComplete(int rv) {
+  DCHECK_NE(ERR_IO_PENDING, rv);
+  next_state_ = STATE_INIT_REQUEST_BODY;
+  if (!IsTokenBindingEnabled())
+    return OK;
+
+  net_log_.EndEventWithNetErrorCode(
+      NetLog::TYPE_HTTP_TRANSACTION_GET_TOKEN_BINDING_KEY, rv);
+  return rv;
+}
+
+int HttpNetworkTransaction::BuildRequestHeaders(
     bool using_http_proxy_without_tunnel) {
   request_headers_.SetHeader(HttpRequestHeaders::kHost,
                              GetHostAndOptionalPort(request_->url));
@@ -953,6 +1027,16 @@ void HttpNetworkTransaction::BuildRequestHeaders(
     request_headers_.SetHeader(HttpRequestHeaders::kContentLength, "0");
   }
 
+  RecordTokenBindingSupport();
+  if (token_binding_key_) {
+    std::string token_binding_header;
+    int rv = BuildTokenBindingHeader(&token_binding_header);
+    if (rv != OK)
+      return rv;
+    request_headers_.SetHeader(HttpRequestHeaders::kTokenBinding,
+                               token_binding_header);
+  }
+
   // Honor load flags that impact proxy caches.
   if (request_->load_flags & LOAD_BYPASS_CACHE) {
     request_headers_.SetHeader(HttpRequestHeaders::kPragma, "no-cache");
@@ -977,6 +1061,29 @@ void HttpNetworkTransaction::BuildRequestHeaders(
   response_.did_use_http_auth =
       request_headers_.HasHeader(HttpRequestHeaders::kAuthorization) ||
       request_headers_.HasHeader(HttpRequestHeaders::kProxyAuthorization);
+  return OK;
+}
+
+int HttpNetworkTransaction::BuildTokenBindingHeader(std::string* out) {
+  std::vector<uint8_t> signed_ekm;
+  int rv = stream_->GetSignedEKMForTokenBinding(token_binding_key_.get(),
+                                                &signed_ekm);
+  if (rv != OK)
+    return rv;
+  std::string provided_token_binding;
+  rv = BuildProvidedTokenBinding(token_binding_key_.get(), signed_ekm,
+                                 &provided_token_binding);
+  if (rv != OK)
+    return rv;
+  std::vector<base::StringPiece> token_bindings;
+  token_bindings.push_back(provided_token_binding);
+  std::string header;
+  rv = BuildTokenBindingMessageFromTokenBindings(token_bindings, &header);
+  if (rv != OK)
+    return rv;
+  base::Base64UrlEncode(header, base::Base64UrlEncodePolicy::INCLUDE_PADDING,
+                        out);
+  return OK;
 }
 
 int HttpNetworkTransaction::DoInitRequestBody() {
@@ -1001,7 +1108,7 @@ int HttpNetworkTransaction::DoBuildRequest() {
   // we have proxy info available.
   if (request_headers_.IsEmpty()) {
     bool using_http_proxy_without_tunnel = UsingHttpProxyWithoutTunnel();
-    BuildRequestHeaders(using_http_proxy_without_tunnel);
+    return BuildRequestHeaders(using_http_proxy_without_tunnel);
   }
 
   return OK;
@@ -1330,61 +1437,31 @@ int HttpNetworkTransaction::HandleSSLHandshakeError(int error) {
     return OK;
   }
 
+  // TODO(davidben): Remove this code once the dedicated error code is no
+  // longer needed and the flags to re-enable the fallback expire.
   bool should_fallback = false;
   uint16_t version_max = server_ssl_config_.version_max;
 
   switch (error) {
+    // This could be a TLS-intolerant server or a server that chose a
+    // cipher suite defined only for higher protocol versions (such as
+    // an TLS 1.1 server that chose a TLS-1.2-only cipher suite).  Fall
+    // back to the next lower version and retry.
     case ERR_CONNECTION_CLOSED:
     case ERR_SSL_PROTOCOL_ERROR:
     case ERR_SSL_VERSION_OR_CIPHER_MISMATCH:
-      if (version_max >= SSL_PROTOCOL_VERSION_TLS1 &&
-          version_max > server_ssl_config_.version_min) {
-        // This could be a TLS-intolerant server or a server that chose a
-        // cipher suite defined only for higher protocol versions (such as
-        // an SSL 3.0 server that chose a TLS-only cipher suite).  Fall
-        // back to the next lower version and retry.
-        // NOTE: if the SSLClientSocket class doesn't support TLS 1.1,
-        // specifying TLS 1.1 in version_max will result in a TLS 1.0
-        // handshake, so falling back from TLS 1.1 to TLS 1.0 will simply
-        // repeat the TLS 1.0 handshake. To avoid this problem, the default
-        // version_max should match the maximum protocol version supported
-        // by the SSLClientSocket class.
-        version_max--;
-
-        // Fallback to the lower SSL version.
-        // While SSL 3.0 fallback should be eliminated because of security
-        // reasons, there is a high risk of breaking the servers if this is
-        // done in general.
-        should_fallback = true;
-      }
-      break;
+    // Some servers trigger the TLS 1.1 fallback with ERR_CONNECTION_RESET
+    // (https://crbug.com/433406).
     case ERR_CONNECTION_RESET:
-      if (version_max >= SSL_PROTOCOL_VERSION_TLS1_1 &&
-          version_max > server_ssl_config_.version_min) {
-        // Some network devices that inspect application-layer packets seem to
-        // inject TCP reset packets to break the connections when they see TLS
-        // 1.1 in ClientHello or ServerHello. See http://crbug.com/130293.
-        //
-        // Only allow ERR_CONNECTION_RESET to trigger a fallback from TLS 1.1 or
-        // 1.2. We don't lose much in this fallback because the explicit IV for
-        // CBC mode in TLS 1.1 is approximated by record splitting in TLS
-        // 1.0. The fallback will be more painful for TLS 1.2 when we have GCM
-        // support.
-        //
-        // ERR_CONNECTION_RESET is a common network error, so we don't want it
-        // to trigger a version fallback in general, especially the TLS 1.0 ->
-        // SSL 3.0 fallback, which would drop TLS extensions.
-        version_max--;
-        should_fallback = true;
-      }
-      break;
+    // This was added for the TLS 1.0 fallback (https://crbug.com/260358) which
+    // has since been removed, but other servers may be relying on it for the
+    // TLS 1.1 fallback. It will be removed with the remainder of the fallback.
     case ERR_SSL_BAD_RECORD_MAC_ALERT:
-      if (version_max >= SSL_PROTOCOL_VERSION_TLS1_1 &&
+      // Fallback down to a TLS 1.1 ClientHello. By default, this is rejected
+      // but surfaces ERR_SSL_FALLBACK_BEYOND_MINIMUM_VERSION to help diagnose
+      // server bugs.
+      if (version_max >= SSL_PROTOCOL_VERSION_TLS1_2 &&
           version_max > server_ssl_config_.version_min) {
-        // Some broken SSL devices negotiate TLS 1.0 when sent a TLS 1.1 or
-        // 1.2 ClientHello, but then return a bad_record_mac alert. See
-        // crbug.com/260358. In order to make the fallback as minimal as
-        // possible, this fallback is only triggered for >= TLS 1.1.
         version_max--;
         should_fallback = true;
       }
@@ -1486,6 +1563,7 @@ void HttpNetworkTransaction::ResetStateForAuthRestart() {
   remote_endpoint_ = IPEndPoint();
   net_error_details_.quic_broken = false;
   net_error_details_.quic_connection_error = QUIC_NO_ERROR;
+  token_binding_key_.reset();
 }
 
 void HttpNetworkTransaction::CacheNetErrorDetailsAndResetStream() {

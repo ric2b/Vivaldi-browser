@@ -43,13 +43,13 @@ SVGParsingError SVGBoolean::setValueAsString(const String& value)
 {
     if (value == "true") {
         m_value = true;
-        return NoError;
+        return SVGParseStatus::NoError;
     }
     if (value == "false") {
         m_value = false;
-        return NoError;
+        return SVGParseStatus::NoError;
     }
-    return ParsingAttributeFailedError;
+    return SVGParseStatus::ExpectedBoolean;
 }
 
 void SVGBoolean::add(PassRefPtrWillBeRawPtr<SVGPropertyBase>, SVGElement*)
@@ -72,4 +72,4 @@ float SVGBoolean::calculateDistance(PassRefPtrWillBeRawPtr<SVGPropertyBase>, SVG
     return -1;
 }
 
-}
+} // namespace blink

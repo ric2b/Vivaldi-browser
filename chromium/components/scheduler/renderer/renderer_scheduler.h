@@ -31,8 +31,7 @@ class SCHEDULER_EXPORT RendererScheduler : public ChildScheduler {
   static scoped_ptr<RendererScheduler> Create();
 
   // Returns the compositor task runner.
-  virtual scoped_refptr<base::SingleThreadTaskRunner>
-  CompositorTaskRunner() = 0;
+  virtual scoped_refptr<TaskQueue> CompositorTaskRunner() = 0;
 
   // Keep RendererScheduler::UseCaseToString in sync with this enum.
   enum class UseCase {
@@ -53,7 +52,7 @@ class SCHEDULER_EXPORT RendererScheduler : public ChildScheduler {
 
   // Returns the loading task runner.  This queue is intended for tasks related
   // to resource dispatch, foreground HTML parsing, etc...
-  virtual scoped_refptr<base::SingleThreadTaskRunner> LoadingTaskRunner() = 0;
+  virtual scoped_refptr<TaskQueue> LoadingTaskRunner() = 0;
 
   // Returns the timer task runner.  This queue is intended for DOM Timers.
   // TODO(alexclarke): Get rid of this default timer queue.
@@ -151,12 +150,6 @@ class SCHEDULER_EXPORT RendererScheduler : public ChildScheduler {
   // Sets whether to allow suspension of timers after the backgrounded signal is
   // received via OnRendererBackgrounded. Defaults to disabled.
   virtual void SetTimerQueueSuspensionWhenBackgroundedEnabled(bool enabled) = 0;
-
-  // Returns a double which is the number of seconds since epoch (Jan 1, 1970).
-  virtual double CurrentTimeSeconds() const = 0;
-
-  // Returns a microsecond resolution platform dependant time source.
-  virtual double MonotonicallyIncreasingTimeSeconds() const = 0;
 
  protected:
   RendererScheduler();

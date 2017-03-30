@@ -264,10 +264,7 @@ public:
     const ViewportDescription& viewportDescription() const { return m_viewportDescription; }
     Length viewportDefaultMinWidth() const { return m_viewportDefaultMinWidth; }
 
-    bool hasLegacyViewportTag() const { return m_legacyViewportDescription.isLegacyViewportType(); }
-
     String outgoingReferrer() const;
-    String outgoingOrigin() const;
 
     void setDoctype(PassRefPtrWillBeRawPtr<DocumentType>);
     DocumentType* doctype() const { return m_docType.get(); }
@@ -302,8 +299,6 @@ public:
     Element* scrollingElement();
 
     String readyState() const;
-
-    String defaultCharset() const;
 
     AtomicString characterSet() const { return Document::encodingName(); }
 
@@ -387,16 +382,11 @@ public:
     bool gotoAnchorNeededAfterStylesheetsLoad() { return m_gotoAnchorNeededAfterStylesheetsLoad; }
     void setGotoAnchorNeededAfterStylesheetsLoad(bool b) { m_gotoAnchorNeededAfterStylesheetsLoad = b; }
 
-    // Called when one or more stylesheets in the document may have been added, removed, or changed.
-    void styleResolverChanged(StyleResolverUpdateMode = FullStyleUpdate);
-    void styleResolverMayHaveChanged();
-
-    // FIXME: Switch all callers of styleResolverChanged to these or better ones and then make them
+    // FIXME: Switch all callers of resolverChanged to these or better ones and then make them
     // do something smarter.
     void removedStyleSheet(StyleSheet*, StyleResolverUpdateMode = FullStyleUpdate);
-    void addedStyleSheet(StyleSheet*) { styleResolverChanged(); }
     void modifiedStyleSheet(StyleSheet*, StyleResolverUpdateMode = FullStyleUpdate);
-    void changedSelectorWatch() { styleResolverChanged(); }
+    void changedSelectorWatch();
 
     void scheduleUseShadowTreeUpdate(SVGUseElement&);
     void unscheduleUseShadowTreeUpdate(SVGUseElement&);
@@ -431,12 +421,13 @@ public:
     void setupFontBuilder(ComputedStyle& documentStyle);
 
     bool needsLayoutTreeUpdate() const;
+    bool needsLayoutTreeUpdateForNode(const Node&) const;
     // Update ComputedStyles and attach LayoutObjects if necessary, but don't
     // lay out.
-    void updateLayoutTreeIfNeeded() { updateLayoutTree(NoChange); }
-    // Same as updateLayoutTreeIfNeeded except ignoring pending stylesheets.
+    void updateLayoutTree();
+    // Same as updateLayoutTree() except ignoring pending stylesheets.
     void updateLayoutTreeIgnorePendingStylesheets();
-    void updateLayoutTreeForNodeIfNeeded(Node*);
+    void updateLayoutTreeForNode(Node*);
     void updateLayout();
     void layoutUpdated();
     enum RunPostLayoutTasks {
@@ -476,8 +467,9 @@ public:
 
     DocumentLoader* loader() const;
 
-    // This is the DOM API document.open()
-    void open(Document* ownerDocument, ExceptionState&);
+    // This is the DOM API document.open(). enteredDocument is the responsible
+    // document of the entry settings object.
+    void open(Document* enteredDocument, ExceptionState&);
     // This is used internally and does not handle exceptions.
     void open();
     PassRefPtrWillBeRawPtr<DocumentParser> implicitOpen(ParserSynchronizationPolicy);
@@ -502,9 +494,9 @@ public:
 
     void cancelParsing();
 
-    void write(const SegmentedString& text, Document* ownerDocument = nullptr, ExceptionState& = ASSERT_NO_EXCEPTION);
-    void write(const String& text, Document* ownerDocument = nullptr, ExceptionState& = ASSERT_NO_EXCEPTION);
-    void writeln(const String& text, Document* ownerDocument = nullptr, ExceptionState& = ASSERT_NO_EXCEPTION);
+    void write(const SegmentedString& text, Document* enteredDocument = nullptr, ExceptionState& = ASSERT_NO_EXCEPTION);
+    void write(const String& text, Document* enteredDocument = nullptr, ExceptionState& = ASSERT_NO_EXCEPTION);
+    void writeln(const String& text, Document* enteredDocument = nullptr, ExceptionState& = ASSERT_NO_EXCEPTION);
     void write(LocalDOMWindow*, const Vector<String>& text, ExceptionState&);
     void writeln(LocalDOMWindow*, const Vector<String>& text, ExceptionState&);
 
@@ -557,7 +549,7 @@ public:
     enum CompatibilityMode { QuirksMode, LimitedQuirksMode, NoQuirksMode };
 
     void setCompatibilityMode(CompatibilityMode);
-    CompatibilityMode compatibilityMode() const { return m_compatibilityMode; }
+    CompatibilityMode getCompatibilityMode() const { return m_compatibilityMode; }
 
     String compatMode() const;
 
@@ -607,6 +599,8 @@ public:
     void setNeedsFocusedElementCheck();
     void setAutofocusElement(Element*);
     Element* autofocusElement() const { return m_autofocusElement.get(); }
+    void setSequentialFocusNavigationStartingPoint(Node*);
+    Element* sequentialFocusNavigationStartingPoint(WebFocusType) const;
 
     void setActiveHoverElement(PassRefPtrWillBeRawPtr<Element>);
     Element* activeHoverElement() const { return m_activeHoverElement.get(); }
@@ -661,7 +655,7 @@ public:
     EventListener* getWindowAttributeEventListener(const AtomicString& eventType);
 
     static void registerEventFactory(PassOwnPtr<EventFactoryBase>);
-    static PassRefPtrWillBeRawPtr<Event> createEvent(const String& eventType, ExceptionState&);
+    static PassRefPtrWillBeRawPtr<Event> createEvent(ExecutionContext*, const String& eventType, ExceptionState&);
 
     // keep track of what types of event listeners are registered, so we don't
     // dispatch events unnecessarily
@@ -934,7 +928,7 @@ public:
     void cancelIdleCallback(int id);
 
     EventTarget* errorEventTarget() final;
-    void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtrWillBeRawPtr<ScriptCallStack>) final;
+    void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack>) final;
 
     void initDNSPrefetch();
 
@@ -978,7 +972,7 @@ public:
 
     AnimationClock& animationClock();
     AnimationTimeline& timeline() const { return *m_timeline; }
-    CompositorPendingAnimations& compositorPendingAnimations() { return m_compositorPendingAnimations; }
+    CompositorPendingAnimations& compositorPendingAnimations() { return *m_compositorPendingAnimations; }
 
     void addToTopLayer(Element*, const Element* before = nullptr);
     void removeFromTopLayer(Element*);
@@ -1023,13 +1017,9 @@ public:
 
     void updateStyleInvalidationIfNeeded();
 
-    bool attemptedToDetermineEncodingFromContentSniffing() const;
-    bool encodingWasDetectedFromContentSniffing() const;
-
     DECLARE_VIRTUAL_TRACE();
 
     bool hasSVGFilterElementsRequiringLayerUpdate() const { return m_layerUpdateSVGFilterElements.size(); }
-    void didRecalculateStyleForElement() { ++m_styleRecalcElementCounter; }
 
     AtomicString convertLocalName(const AtomicString&);
 
@@ -1087,7 +1077,7 @@ protected:
 
     bool importContainerNodeChildren(ContainerNode* oldContainerNode, PassRefPtrWillBeRawPtr<ContainerNode> newContainerNode, ExceptionState&);
     void lockCompatibilityMode() { m_compatibilityModeLocked = true; }
-    ParserSynchronizationPolicy parserSynchronizationPolicy() const { return m_parserSyncPolicy; }
+    ParserSynchronizationPolicy getParserSynchronizationPolicy() const { return m_parserSyncPolicy; }
 
 private:
     friend class IgnoreDestructiveWriteCountIncrementer;
@@ -1117,8 +1107,7 @@ private:
     void updateUseShadowTreesIfNeeded();
     void evaluateMediaQueryListIfNeeded();
 
-    void updateLayoutTree(StyleRecalcChange);
-    void updateStyle(StyleRecalcChange);
+    void updateStyle();
     void notifyLayoutTreeOfSubtreeChanges();
 
     void detachParser();
@@ -1128,7 +1117,7 @@ private:
     void childrenChanged(const ChildrenChange&) override;
 
     String nodeName() const final;
-    NodeType nodeType() const final;
+    NodeType getNodeType() const final;
     bool childTypeAllowed(NodeType) const final;
     PassRefPtrWillBeRawPtr<Node> cloneNode(bool deep) final;
     void cloneDataFromDocument(const Document&);
@@ -1162,6 +1151,7 @@ private:
     void clearFocusedElementTimerFired(Timer<Document>*);
 
     bool haveStylesheetsLoaded() const;
+    void styleResolverMayHaveChanged();
 
     void setHoverNode(PassRefPtrWillBeRawPtr<Node>);
 
@@ -1227,6 +1217,7 @@ private:
     Timer<Document> m_clearFocusedElementTimer;
     RefPtrWillBeMember<Element> m_autofocusElement;
     RefPtrWillBeMember<Element> m_focusedElement;
+    RefPtrWillBeMember<Range> m_sequentialFocusNavigationStartingPoint;
     RefPtrWillBeMember<Node> m_hoverNode;
     RefPtrWillBeMember<Element> m_activeHoverElement;
     RefPtrWillBeMember<Element> m_documentElement;
@@ -1379,7 +1370,7 @@ private:
     LocaleIdentifierToLocaleMap m_localeCache;
 
     PersistentWillBeMember<AnimationTimeline> m_timeline;
-    CompositorPendingAnimations m_compositorPendingAnimations;
+    PersistentWillBeMember<CompositorPendingAnimations> m_compositorPendingAnimations;
 
     RefPtrWillBeMember<Document> m_templateDocument;
     // With Oilpan the templateDocument and the templateDocumentHost
@@ -1399,8 +1390,6 @@ private:
 
     using DocumentVisibilityObserverSet = WillBeHeapHashSet<RawPtrWillBeWeakMember<DocumentVisibilityObserver>>;
     DocumentVisibilityObserverSet m_visibilityObservers;
-
-    int m_styleRecalcElementCounter;
 
     ParserSynchronizationPolicy m_parserSyncPolicy;
 

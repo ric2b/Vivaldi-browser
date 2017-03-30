@@ -8,6 +8,7 @@
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
 #include "content/common/gpu/media/avda_return_on_failure.h"
+#include "gpu/command_buffer/service/context_group.h"
 #include "gpu/command_buffer/service/gles2_cmd_copy_texture_chromium.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "media/base/limits.h"
@@ -21,20 +22,47 @@ const static GLfloat kIdentityMatrix[16] = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
                                             0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
                                             0.0f, 0.0f, 0.0f, 1.0f};
 
-AndroidCopyingBackingStrategy::AndroidCopyingBackingStrategy()
-    : state_provider_(nullptr), surface_texture_id_(0), media_codec_(nullptr) {}
+AndroidCopyingBackingStrategy::AndroidCopyingBackingStrategy(
+    AVDAStateProvider* state_provider)
+    : state_provider_(state_provider),
+      surface_texture_id_(0),
+      media_codec_(nullptr) {}
 
 AndroidCopyingBackingStrategy::~AndroidCopyingBackingStrategy() {}
 
-void AndroidCopyingBackingStrategy::Initialize(
-    AVDAStateProvider* state_provider) {
-  state_provider_ = state_provider;
+gfx::ScopedJavaSurface AndroidCopyingBackingStrategy::Initialize(
+    int surface_view_id) {
+  if (surface_view_id != media::VideoDecodeAccelerator::Config::kNoSurfaceID) {
+    LOG(ERROR) << "The copying strategy should not be initialized with a "
+                  "surface id.";
+    return gfx::ScopedJavaSurface();
+  }
+
+  // Create a texture and attach the SurfaceTexture to it.
+  glGenTextures(1, &surface_texture_id_);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_EXTERNAL_OES, surface_texture_id_);
+
+  // Note that the target will be correctly sized, so nearest filtering is all
+  // that's needed.
+  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+  state_provider_->GetGlDecoder()->RestoreTextureUnitBindings(0);
+  state_provider_->GetGlDecoder()->RestoreActiveTexture();
+
+  surface_texture_ = gfx::SurfaceTexture::Create(surface_texture_id_);
+
+  return gfx::ScopedJavaSurface(surface_texture_.get());
 }
 
 void AndroidCopyingBackingStrategy::Cleanup(
     bool have_context,
     const AndroidVideoDecodeAccelerator::OutputBufferMap&) {
   DCHECK(state_provider_->ThreadChecker().CalledOnValidThread());
+
   if (copier_)
     copier_->Destroy();
 
@@ -42,26 +70,13 @@ void AndroidCopyingBackingStrategy::Cleanup(
     glDeleteTextures(1, &surface_texture_id_);
 }
 
-uint32_t AndroidCopyingBackingStrategy::GetTextureTarget() const {
-  return GL_TEXTURE_2D;
+scoped_refptr<gfx::SurfaceTexture>
+AndroidCopyingBackingStrategy::GetSurfaceTexture() const {
+  return surface_texture_;
 }
 
-scoped_refptr<gfx::SurfaceTexture>
-AndroidCopyingBackingStrategy::CreateSurfaceTexture() {
-  glGenTextures(1, &surface_texture_id_);
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_EXTERNAL_OES, surface_texture_id_);
-
-  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  state_provider_->GetGlDecoder()->RestoreTextureUnitBindings(0);
-  state_provider_->GetGlDecoder()->RestoreActiveTexture();
-
-  surface_texture_ = gfx::SurfaceTexture::Create(surface_texture_id_);
-
-  return surface_texture_;
+uint32_t AndroidCopyingBackingStrategy::GetTextureTarget() const {
+  return GL_TEXTURE_2D;
 }
 
 void AndroidCopyingBackingStrategy::UseCodecBufferForPictureBuffer(
@@ -108,7 +123,9 @@ void AndroidCopyingBackingStrategy::UseCodecBufferForPictureBuffer(
   // needed because it takes 10s of milliseconds to initialize.
   if (!copier_) {
     copier_.reset(new gpu::CopyTextureCHROMIUMResourceManager());
-    copier_->Initialize(state_provider_->GetGlDecoder().get());
+    copier_->Initialize(state_provider_->GetGlDecoder().get(),
+                        state_provider_->GetGlDecoder()->GetContextGroup()->
+                            feature_info()->feature_flags());
   }
 
   // Here, we copy |surface_texture_id_| to the picture buffer instead of
@@ -138,6 +155,10 @@ void AndroidCopyingBackingStrategy::OnFrameAvailable() {
   // moved into AVDA, and we should wait for it before doing the copy.
   // Because there were some test failures, we don't do this now but
   // instead preserve the old behavior.
+}
+
+bool AndroidCopyingBackingStrategy::ArePicturesOverlayable() {
+  return false;
 }
 
 }  // namespace content

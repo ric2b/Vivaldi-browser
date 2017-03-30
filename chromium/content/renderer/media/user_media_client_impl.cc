@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <utility>
+#include <vector>
 
 #include "base/hash.h"
 #include "base/location.h"
@@ -29,6 +30,7 @@
 #include "content/renderer/media/webrtc_logging.h"
 #include "content/renderer/media/webrtc_uma_histograms.h"
 #include "content/renderer/render_thread_impl.h"
+#include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebMediaConstraints.h"
 #include "third_party/WebKit/public/platform/WebMediaDeviceInfo.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
@@ -39,60 +41,17 @@
 namespace content {
 namespace {
 
-bool GetMandatory(const blink::WebMediaConstraints& constraints,
-                  const std::string& name,
-                  std::string* value) {
-  if (constraints.isNull())
-    return false;
-  blink::WebString temp;
-  bool found =
-      constraints.getMandatoryConstraintValue(base::UTF8ToUTF16(name), temp);
-  if (found)
-    *value = temp.utf8();
-  return found;
-}
-
-void GetMandatoryList(const blink::WebMediaConstraints& constraints,
-                      const std::string& name,
-                      std::vector<std::string>* values) {
-  if (constraints.isNull()) {
-    return;
-  }
-  blink::WebString temp;
-  bool found =
-      constraints.getMandatoryConstraintValue(base::UTF8ToUTF16(name), temp);
-  if (found) {
-    values->push_back(temp.utf8());
+void CopyVector(const blink::WebVector<blink::WebString>& source,
+                std::vector<std::string>* destination) {
+  for (const auto& web_string : source) {
+    destination->push_back(web_string.utf8());
   }
 }
 
-bool GetOptional(const blink::WebMediaConstraints& constraints,
-                 const std::string& name,
-                 std::string* value) {
-  if (constraints.isNull())
-    return false;
-  blink::WebString temp;
-  bool found =
-      constraints.getOptionalConstraintValue(base::UTF8ToUTF16(name), temp);
-  if (found)
-    *value = temp.utf8();
-  return found;
-}
-
-void GetOptionalList(const blink::WebMediaConstraints constraints,
-                     const std::string& name,
-                     std::vector<std::string>* values) {
-  if (constraints.isNull()) {
-    return;
-  }
-  blink::WebVector<blink::WebMediaConstraint> constraint_list;
-  constraints.getOptionalConstraints(constraint_list);
-  blink::WebString web_name = base::UTF8ToUTF16(name);
-  for (const auto& pair : constraint_list) {
-    if (pair.m_name == web_name) {
-      values->push_back(pair.m_value.utf8());
-    }
-  }
+void CopyFirstString(const blink::WebVector<blink::WebString>& source,
+                     std::string* destination) {
+  if (!source.isEmpty())
+    *destination = source[0].utf8();
 }
 
 void CopyBlinkRequestToStreamControls(const blink::WebUserMediaRequest& request,
@@ -100,32 +59,47 @@ void CopyBlinkRequestToStreamControls(const blink::WebUserMediaRequest& request,
   if (request.isNull()) {
     return;
   }
-  GetMandatory(request.audioConstraints(), kMediaStreamSource,
-               &controls->audio.stream_source);
-  GetMandatory(request.videoConstraints(), kMediaStreamSource,
-               &controls->video.stream_source);
-  GetMandatoryList(request.audioConstraints(), kMediaStreamSourceInfoId,
-                   &controls->audio.device_ids);
-  GetMandatoryList(request.videoConstraints(), kMediaStreamSourceInfoId,
-                   &controls->video.device_ids);
-  GetOptionalList(request.audioConstraints(), kMediaStreamSourceInfoId,
-                  &controls->audio.alternate_device_ids);
-  GetOptionalList(request.videoConstraints(), kMediaStreamSourceInfoId,
-                  &controls->video.alternate_device_ids);
-  GetMandatoryList(request.audioConstraints(), kMediaStreamSourceId,
-                   &controls->audio.device_ids);
-  GetMandatoryList(request.videoConstraints(), kMediaStreamSourceId,
-                   &controls->video.device_ids);
-  std::string hotword_string;
-  GetOptional(request.audioConstraints(), kMediaStreamAudioHotword,
-              &hotword_string);
-  if (hotword_string == "true")
-    controls->hotword_enabled = true;
-  // DCHECK for some combinations that seem to be unusual/useless
-  // It should not be possible to have both MediaStreamSourceId
-  // and MediaStreamSourceInfoId on the same request.
-  DCHECK(controls->video.device_ids.size() <= 1);
-  DCHECK(controls->audio.device_ids.size() <= 1);
+  if (!request.audioConstraints().isNull()) {
+    const blink::WebMediaTrackConstraintSet& audio_basic =
+        request.audioConstraints().basic();
+    CopyFirstString(audio_basic.mediaStreamSource.exact(),
+                    &controls->audio.stream_source);
+    CopyVector(audio_basic.deviceId.exact(), &(controls->audio.device_ids));
+    // Optionals. They may be either in ideal or in advanced.exact.
+    CopyVector(audio_basic.deviceId.ideal(),
+               &controls->audio.alternate_device_ids);
+    for (const auto& constraint : request.audioConstraints().advanced()) {
+      CopyVector(constraint.deviceId.exact(),
+                 &controls->audio.alternate_device_ids);
+      CopyVector(constraint.deviceId.ideal(),
+                 &controls->audio.alternate_device_ids);
+    }
+    if (audio_basic.hotwordEnabled.hasExact()) {
+      controls->hotword_enabled = audio_basic.hotwordEnabled.exact();
+    } else {
+      for (const auto& audio_advanced : request.audioConstraints().advanced()) {
+        if (audio_advanced.hotwordEnabled.hasExact()) {
+          controls->hotword_enabled = audio_advanced.hotwordEnabled.exact();
+          break;
+        }
+      }
+    }
+  }
+  if (!request.videoConstraints().isNull()) {
+    const blink::WebMediaTrackConstraintSet& video_basic =
+        request.videoConstraints().basic();
+    CopyFirstString(video_basic.mediaStreamSource.exact(),
+                    &(controls->video.stream_source));
+    CopyVector(video_basic.deviceId.exact(), &(controls->video.device_ids));
+    CopyVector(video_basic.deviceId.ideal(),
+               &(controls->video.alternate_device_ids));
+    for (const auto& constraint : request.videoConstraints().advanced()) {
+      CopyVector(constraint.deviceId.exact(),
+                 &controls->video.alternate_device_ids);
+      CopyVector(constraint.deviceId.ideal(),
+                 &controls->video.alternate_device_ids);
+    }
+  }
 }
 
 static int g_next_request_id  = 0;
@@ -224,11 +198,14 @@ void UserMediaClientImpl::requestUserMedia(
       controls.audio.requested = true;
       // Check if this input device should be used to select a matching output
       // device for audio rendering.
-      std::string enable;
-      if (GetMandatory(user_media_request.audioConstraints(),
-                       kMediaStreamRenderToAssociatedSink, &enable) &&
-          base::LowerCaseEqualsASCII(enable, "true")) {
-        enable_automatic_output_device_selection = true;
+      enable_automatic_output_device_selection = true;  // On by default.
+      for (const auto& advanced_constraint :
+           user_media_request.audioConstraints().advanced()) {
+        if (advanced_constraint.renderToAssociatedSink.hasExact()) {
+          enable_automatic_output_device_selection =
+              advanced_constraint.renderToAssociatedSink.exact();
+          break;
+        }
       }
     }
     if (user_media_request.video()) {
@@ -236,7 +213,8 @@ void UserMediaClientImpl::requestUserMedia(
     }
     CopyBlinkRequestToStreamControls(user_media_request, &controls);
 
-    security_origin = GURL(user_media_request.securityOrigin().toString());
+    security_origin =
+        blink::WebStringToGURL(user_media_request.securityOrigin().toString());
     DCHECK(render_frame()->GetWebFrame() ==
                static_cast<blink::WebFrame*>(
                    user_media_request.ownerDocument().frame()));
@@ -315,8 +293,10 @@ void UserMediaClientImpl::requestMediaDevices(
   // underlying pointer is null). In order to use this function in a test we
   // need to check if it isNull.
   GURL security_origin;
-  if (!media_devices_request.isNull())
-    security_origin = GURL(media_devices_request.securityOrigin().toString());
+  if (!media_devices_request.isNull()) {
+    security_origin = blink::WebStringToGURL(
+        media_devices_request.securityOrigin().toString());
+  }
 
   DVLOG(1) << "UserMediaClientImpl::requestMediaDevices("
            << audio_input_request_id

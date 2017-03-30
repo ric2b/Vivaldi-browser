@@ -9,7 +9,6 @@
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/time_formatting.h"
 #include "base/metrics/field_trial.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -28,6 +27,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "google_apis/gaia/google_service_auth_error.h"
@@ -159,7 +159,7 @@ MessageType GetStatusInfo(Profile* profile,
   if (!signin.IsAuthenticated())
     return PRE_SYNCED;
 
-  if (!service || service->IsManaged() || service->HasSyncSetupCompleted() ||
+  if (!service || service->IsManaged() || service->IsFirstSetupComplete() ||
       !service->IsSyncRequested()) {
     // The order or priority is going to be: 1. Unrecoverable errors.
     // 2. Auth errors. 3. Protocol errors. 4. Passphrase errors.
@@ -303,8 +303,7 @@ MessageType GetStatusInfoForNewTabPage(Profile* profile,
   DCHECK(status_label);
   DCHECK(link_label);
 
-  if (service->HasSyncSetupCompleted() &&
-      service->IsPassphraseRequired()) {
+  if (service->IsFirstSetupComplete() && service->IsPassphraseRequired()) {
     if (service->passphrase_required_reason() == syncer::REASON_ENCRYPTION) {
       // First machine migrating to passwords.  Show as a promotion.
       if (status_label && link_label) {
@@ -371,7 +370,7 @@ void GetStatusLabelsForSyncGlobalError(const ProfileSyncService* service,
   *bubble_accept_label = base::string16();
 
   // Only display an error if we've completed sync setup.
-  if (!service->HasSyncSetupCompleted())
+  if (!service->IsFirstSetupComplete())
     return;
 
   // Display a passphrase error if we have one.

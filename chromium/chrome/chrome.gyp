@@ -22,7 +22,6 @@
       'common',
       '../sync/sync.gyp:sync',
     ],
-    'allocator_target': '../base/allocator/allocator.gyp:allocator',
     'grit_out_dir': '<(SHARED_INTERMEDIATE_DIR)/chrome',
     'protoc_out_dir': '<(SHARED_INTERMEDIATE_DIR)/protoc_out',
     'conditions': [
@@ -301,7 +300,7 @@
           'dependencies': [
             'chrome_resources.gyp:chrome_strings',
             '../base/base.gyp:base',
-            '../ui/base/ui_base.gyp:ui_base',
+            '../ui/base/ui_base.gyp:ui_data_pack',
             '../ui/gfx/gfx.gyp:gfx',
             '../ui/gfx/gfx.gyp:gfx_geometry',
           ],
@@ -508,6 +507,8 @@
           'type': 'none',
           'dependencies': [
             'activity_type_ids_java',
+            'browsing_data_time_period_java',
+            'browsing_data_type_java',
             'chrome_locale_paks',
             'chrome_resources.gyp:chrome_strings',
             'chrome_strings_grd',
@@ -515,6 +516,7 @@
             'content_setting_java',
             'content_settings_type_java',
             'connectivity_check_result_java',
+            'data_use_ui_message_enum_java',
             'document_tab_model_info_proto_java',
             'infobar_action_type_java',
             'most_visited_tile_type_java',
@@ -524,15 +526,19 @@
             'shortcut_source_java',
             'signin_metrics_enum_java',
             'tab_load_status_java',
+            'website_settings_action_java',
             '../base/base.gyp:base',
+            '../base/base.gyp:base_build_config_gen',
             '../build/android/java_google_api_keys.gyp:google_api_keys_java',
             '../chrome/android/chrome_apk.gyp:custom_tabs_service_aidl',
+            '../components/components.gyp:autocomplete_match_java',
             '../components/components.gyp:autocomplete_match_type_java',
             '../components/components.gyp:bookmarks_java',
             '../components/components.gyp:dom_distiller_core_java',
-            '../components/components.gyp:enhanced_bookmarks_java_enums_srcjar',
             '../components/components.gyp:gcm_driver_java',
+            '../components/components.gyp:infobar_delegate_java',
             '../components/components.gyp:invalidation_java',
+            '../components/components.gyp:investigated_scenario_java',
             '../components/components.gyp:navigation_interception_java',
             '../components/components.gyp:offline_page_feature_enums_java',
             '../components/components.gyp:offline_page_model_enums_java',
@@ -543,7 +549,7 @@
             '../components/components.gyp:signin_core_browser_java',
             '../components/components.gyp:variations_java',
             '../components/components.gyp:web_contents_delegate_android_java',
-            '../components/components.gyp:web_restriction_java',
+            '../components/components.gyp:web_restrictions_java',
             '../components/components_strings.gyp:components_strings',
             '../content/content.gyp:content_java',
             '../media/media.gyp:media_java',
@@ -561,12 +567,16 @@
             '../third_party/cacheinvalidation/cacheinvalidation.gyp:cacheinvalidation_javalib',
             '../third_party/gif_player/gif_player.gyp:gif_player_java',
             '../third_party/jsr-305/jsr-305.gyp:jsr_305_javalib',
+            '../third_party/leakcanary/leakcanary.gyp:leakcanary_java',
             '../ui/android/ui_android.gyp:ui_java',
           ],
           'variables': {
             'variables': {
               'android_branding_res_dirs%': ['<(java_in_dir)/res_chromium'],
             },
+            'jar_excluded_classes': [
+              '*/BuildConfig.class',
+            ],
             'java_in_dir': '../chrome/android/java',
             'has_java_resources': 1,
             'R_package': 'org.chromium.chrome',
@@ -652,6 +662,24 @@
           'type': 'none',
           'variables': {
             'source_file': '../components/signin/core/browser/signin_metrics.h',
+          },
+          'includes': [ '../build/android/java_cpp_enum.gypi' ],
+        },
+        {
+          # GN: //chrome:website_settings_action_javagen
+          'target_name': 'website_settings_action_java',
+          'type': 'none',
+          'variables': {
+            'source_file': 'browser/ui/website_settings/website_settings.h',
+          },
+          'includes': [ '../build/android/java_cpp_enum.gypi' ],
+        },
+        {
+          # GN: //chrome:data_use_ui_message_enum_javagen
+          'target_name': 'data_use_ui_message_enum_java',
+          'type': 'none',
+          'variables': {
+            'source_file': 'browser/android/data_usage/data_use_tab_ui_manager_android.cc',
           },
           'includes': [ '../build/android/java_cpp_enum.gypi' ],
         },

@@ -13,18 +13,18 @@
 #include "ui/events/platform/platform_event_dispatcher.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
-#include "ui/ozone/platform/drm/host/channel_observer.h"
+#include "ui/ozone/platform/drm/host/gpu_thread_observer.h"
 #include "ui/platform_window/platform_window.h"
 
 namespace ui {
 
 class DrmDisplayHostManager;
 class DrmCursor;
-class DrmGpuPlatformSupportHost;
-class DrmOverlayCandidatesHost;
 class DrmGpuWindow;
+class DrmOverlayManager;
 class DrmWindowHostManager;
 class EventFactoryEvdev;
+class GpuThreadAdapter;
 
 // Implementation of the platform window. This object and its handle |widget_|
 // uniquely identify a window. Since the DRI/GBM platform is split into 2
@@ -38,15 +38,16 @@ class EventFactoryEvdev;
 // associated with the window (the surface is created on the GPU process).
 class DrmWindowHost : public PlatformWindow,
                       public PlatformEventDispatcher,
-                      public ChannelObserver {
+                      public GpuThreadObserver {
  public:
   DrmWindowHost(PlatformWindowDelegate* delegate,
                 const gfx::Rect& bounds,
-                DrmGpuPlatformSupportHost* sender,
+                GpuThreadAdapter* sender,
                 EventFactoryEvdev* event_factory,
                 DrmCursor* cursor,
                 DrmWindowHostManager* window_manager,
-                DrmDisplayHostManager* display_manager);
+                DrmDisplayHostManager* display_manager,
+                DrmOverlayManager* overlay_manager);
   ~DrmWindowHost() override;
 
   void Initialize();
@@ -77,22 +78,20 @@ class DrmWindowHost : public PlatformWindow,
   bool CanDispatchEvent(const PlatformEvent& event) override;
   uint32_t DispatchEvent(const PlatformEvent& event) override;
 
-  // ChannelObserver:
-  void OnChannelEstablished() override;
-  void OnChannelDestroyed() override;
-
-  void SetOverlayCandidatesHost(DrmOverlayCandidatesHost* host);
+  // GpuThreadObserver:
+  void OnGpuThreadReady() override;
+  void OnGpuThreadRetired() override;
 
  private:
   void SendBoundsChange();
 
   PlatformWindowDelegate* delegate_;                   // Not owned.
-  DrmGpuPlatformSupportHost* sender_;                  // Not owned.
+  GpuThreadAdapter* sender_;                           // Not owned.
   EventFactoryEvdev* event_factory_;                   // Not owned.
   DrmCursor* cursor_;                                  // Not owned.
   DrmWindowHostManager* window_manager_;               // Not owned.
   DrmDisplayHostManager* display_manager_;             // Not owned.
-  DrmOverlayCandidatesHost* overlay_candidates_host_;  // Not owned.
+  DrmOverlayManager* overlay_manager_;                 // Not owned.
 
   gfx::Rect bounds_;
   gfx::AcceleratedWidget widget_;

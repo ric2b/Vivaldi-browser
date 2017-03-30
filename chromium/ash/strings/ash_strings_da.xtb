@@ -52,6 +52,7 @@ Tryk på Shift+Alt for at ændre den.</translation>
 <translation id="252373100621549798">Ukendt skærm</translation>
 <translation id="2532589005999780174">Tilstanden Høj kontrast</translation>
 <translation id="2562916301614567480">Privat netværk</translation>
+<translation id="2661637000095600270">Skærmene kunne ikke spejles, da der ikke blev fundet nogen understøttede opløsninger. Det udvidede skrivebord blev aktiveret i stedet. Klik for at sende en feedbackrapport.</translation>
 <translation id="2692809339924654275"><ph name="BLUETOOTH" />: Opretter forbindelse...</translation>
 <translation id="2700058918926273959">Sessionen slutter om <ph name="SESSION_TIME_REMAINING" />. Du vil blive logget af.</translation>
 <translation id="2727977024730340865">Tilsluttet en oplader med lav kraft. Batteriopladningen er muligvis ikke pålidelig.</translation>
@@ -113,7 +114,6 @@ Tryk på Søg eller Shift for at annullere.</translation>
 <translation id="4250680216510889253">Nej</translation>
 <translation id="4279490309300973883">Spejling</translation>
 <translation id="4321179778687042513">ctrl</translation>
-<translation id="4379753398862151997">Kære Skærm. Det fungerer ikke mellem os. (Denne skærm understøttes ikke)</translation>
 <translation id="4421231901400348175">Skærmdeling med <ph name="HELPER_NAME" /> via Fjernsupport.</translation>
 <translation id="4430019312045809116">Lydstyrke</translation>
 <translation id="4527045527269911712">Bluetooth-enheden "<ph name="DEVICE_NAME" />" vil gerne have parringstilladelse.</translation>
@@ -182,7 +182,6 @@ Tryk på Shift+Alt for at ændre den.</translation>
 <translation id="6650933572246256093">Bluetooth-enheden "<ph name="DEVICE_NAME" />" vil gerne have parringstilladelse. Indtast din adgangsnøgle på enheden: <ph name="PASSKEY" /></translation>
 <translation id="6713285437468012787">Bluetooth-enheden "<ph name="DEVICE_NAME" />" er blevet parret og er nu tilgængelig for alle brugere, Du kan fjerne denne parring i Indstillinger.</translation>
 <translation id="6785414152754474415">Batteriet er <ph name="PERCENTAGE" /> % opladet og oplades nu.</translation>
-<translation id="6803622936009808957">Skærmene kunne ikke spejles, da der ikke fandtes en understøttet opløsning. I stedet anvendes Udvidet skrivebord.</translation>
 <translation id="683971173229319003">Søg+L</translation>
 <translation id="68610848741840742">ChromeVox (talefeedback)</translation>
 <translation id="6911468394164995108">Vælg et andet...</translation>
@@ -237,6 +236,7 @@ Tryk på Alt+Søg eller Shift for at annullere.</translation>
 <translation id="8878886163241303700">Udvider skærm</translation>
 <translation id="8938800817013097409">USB-C-enhed (porten bagpå i højre side)</translation>
 <translation id="8940956008527784070">Batteriniveauet er lavt (<ph name="PERCENTAGE" /> %)</translation>
+<translation id="9008540565042607572">Kære Skærm. Det fungerer ikke mellem os. (Denne skærm understøttes ikke. Klik for at sende en feedbackrapport).</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9080206825613744995">Mikrofonen er i brug.</translation>
 <translation id="9089416786594320554">Indtastningsmetoder</translation>

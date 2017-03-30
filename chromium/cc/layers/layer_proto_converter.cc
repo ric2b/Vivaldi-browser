@@ -6,6 +6,7 @@
 
 #include "base/stl_util.h"
 #include "cc/layers/empty_content_layer_client.h"
+#include "cc/layers/heads_up_display_layer.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_settings.h"
 #include "cc/layers/picture_layer.h"
@@ -110,12 +111,14 @@ scoped_refptr<Layer> LayerProtoConverter::FindOrAllocateAndConstruct(
     // Fall through and build a base layer.  This won't have any special layer
     // properties but still maintains the layer hierarchy if we run into a
     // layer type we don't support.
-    case proto::UNKNOWN:
-    case proto::LAYER:
+    case proto::LayerNode::UNKNOWN:
+    case proto::LayerNode::LAYER:
       return Layer::Create(LayerSettings()).get();
-    case proto::PICTURE_LAYER:
+    case proto::LayerNode::PICTURE_LAYER:
       return PictureLayer::Create(LayerSettings(),
                                   EmptyContentLayerClient::GetInstance());
+    case proto::LayerNode::HEADS_UP_DISPLAY_LAYER:
+      return HeadsUpDisplayLayer::Create(LayerSettings());
   }
   // TODO(nyquist): Add the rest of the necessary LayerTypes. This function
   // should not return null.

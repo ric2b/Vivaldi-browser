@@ -33,10 +33,11 @@
 #include "platform/EventTracer.h"
 #include "platform/TraceEventCommon.h"
 
+#include "platform/TracedValue.h"
 #include "wtf/Allocator.h"
 #include "wtf/DynamicAnnotations.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/PassRefPtr.h"
+#include "wtf/PassOwnPtr.h"
 #include "wtf/text/CString.h"
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -57,6 +58,10 @@
 #define TRACE_ID_DONT_MANGLE(id) \
     blink::TraceEvent::TraceID::DontMangle(id)
 
+// By default, trace IDs are eventually converted to a single 64-bit number. Use
+// this macro to add a scope string.
+#define TRACE_ID_WITH_SCOPE(scope, id) \
+    blink::TraceEvent::TraceID::WithScope(scope, id)
 
 // Creates a scope of a sampling state with the given category and name (both must
 // be constant strings). These states are intended for a sampling profiler.
@@ -104,13 +109,14 @@
 // Add a trace event to the platform tracing system.
 // blink::TraceEvent::TraceEventHandle TRACE_EVENT_API_ADD_TRACE_EVENT(
 //                    const char* name,
+//                    const char* scope,
 //                    unsigned long long id,
 //                    double timestamp,
 //                    int num_args,
 //                    const char** arg_names,
 //                    const unsigned char* arg_types,
 //                    const unsigned long long* arg_values,
-//                    PassRefPtr<ConvertableToTraceFormat> convertableValues[],
+//                    PassOwnPtr<TracedValue> tracedValues[],
 //                    unsigned char flags)
 #define TRACE_EVENT_API_ADD_TRACE_EVENT \
     blink::EventTracer::addTraceEvent
@@ -153,7 +159,8 @@
         if (INTERNAL_TRACE_EVENT_CATEGORY_GROUP_ENABLED_FOR_RECORDING_MODE()) { \
             blink::TraceEvent::addTraceEvent( \
                 phase, INTERNALTRACEEVENTUID(categoryGroupEnabled), name, \
-                blink::TraceEvent::noEventId, flags, ##__VA_ARGS__); \
+                blink::TraceEvent::kGlobalScope, blink::TraceEvent::noEventId, \
+                flags, ##__VA_ARGS__); \
         } \
     } while (0)
 
@@ -167,8 +174,8 @@
         blink::TraceEvent::TraceEventHandle h = \
             blink::TraceEvent::addTraceEvent( \
                 TRACE_EVENT_PHASE_COMPLETE, \
-                INTERNALTRACEEVENTUID(categoryGroupEnabled), \
-                name, blink::TraceEvent::noEventId, \
+                INTERNALTRACEEVENTUID(categoryGroupEnabled), name, \
+                blink::TraceEvent::kGlobalScope, blink::TraceEvent::noEventId, \
                 TRACE_EVENT_FLAG_NONE, ##__VA_ARGS__); \
         INTERNALTRACEEVENTUID(scopedTracer).initialize( \
             INTERNALTRACEEVENTUID(categoryGroupEnabled), name, h); \
@@ -183,8 +190,9 @@
         blink::TraceEvent::TraceEventHandle h = \
             blink::TraceEvent::addTraceEvent( \
                 TRACE_EVENT_PHASE_COMPLETE, \
-                INTERNALTRACEEVENTUID(categoryGroupEnabled), \
-                name, blink::TraceEvent::noEventId, traceEventBindId.data(), \
+                INTERNALTRACEEVENTUID(categoryGroupEnabled), name, \
+                blink::TraceEvent::kGlobalScope, blink::TraceEvent::noEventId, \
+                traceEventBindId.data(), \
                 EventTracer::systemTraceTime(), traceEventFlags, ##__VA_ARGS__); \
         INTERNALTRACEEVENTUID(scopedTracer).initialize( \
             INTERNALTRACEEVENTUID(categoryGroupEnabled), name, h); \
@@ -200,8 +208,9 @@
             blink::TraceEvent::TraceID traceEventTraceID( \
                 id, &traceEventFlags); \
             blink::TraceEvent::addTraceEvent( \
-                phase, INTERNALTRACEEVENTUID(categoryGroupEnabled), \
-                name, traceEventTraceID.data(), traceEventFlags, ##__VA_ARGS__); \
+                phase, INTERNALTRACEEVENTUID(categoryGroupEnabled), name, \
+                traceEventTraceID.scope(), traceEventTraceID.data(), \
+                traceEventFlags, ##__VA_ARGS__); \
         } \
     } while (0)
 
@@ -216,8 +225,9 @@
             blink::TraceEvent::TraceID traceEventTraceID( \
                 id, &traceEventFlags); \
             blink::TraceEvent::addTraceEvent( \
-                phase, INTERNALTRACEEVENTUID(categoryGroupEnabled), \
-                name, traceEventTraceID.data(), blink::TraceEvent::noBindId, \
+                phase, INTERNALTRACEEVENTUID(categoryGroupEnabled), name, \
+                traceEventTraceID.scope(), traceEventTraceID.data(), \
+                blink::TraceEvent::noBindId, \
                 timestamp, traceEventFlags, ##__VA_ARGS__); \
         } \
     } while (0)
@@ -230,11 +240,31 @@
         if (INTERNAL_TRACE_EVENT_CATEGORY_GROUP_ENABLED_FOR_RECORDING_MODE()) { \
             blink::TraceEvent::addTraceEvent( \
                 phase, INTERNALTRACEEVENTUID(categoryGroupEnabled), name, \
-                blink::TraceEvent::noEventId, blink::TraceEvent::noBindId, \
+                blink::TraceEvent::kGlobalScope, blink::TraceEvent::noEventId, \
+                blink::TraceEvent::noBindId, \
                 timestamp, flags, ##__VA_ARGS__); \
         } \
     } while (0)
 
+// Implementation detail: internal macro to enter and leave a context based on
+// the current scope.
+#define INTERNAL_TRACE_EVENT_SCOPED_CONTEXT(categoryGroup, name, context) \
+    struct INTERNAL_TRACE_EVENT_UID(ScopedContext) { \
+    public: \
+        INTERNAL_TRACE_EVENT_UID(ScopedContext)(uint64_t cid) : m_cid(cid) { \
+            TRACE_EVENT_ENTER_CONTEXT(category_group, name, m_cid); \
+        } \
+        ~INTERNAL_TRACE_EVENT_UID(ScopedContext)() { \
+            TRACE_EVENT_LEAVE_CONTEXT(category_group, name, m_cid); \
+        } \
+    private: \
+        uint64_t m_cid; \
+        INTERNAL_TRACE_EVENT_UID(ScopedContext) \
+            (const INTERNAL_TRACE_EVENT_UID(ScopedContext)&) {}; \
+        void operator=(const INTERNAL_TRACE_EVENT_UID(ScopedContext)&) {}; \
+    }; \
+    INTERNAL_TRACE_EVENT_UID(ScopedContext) \
+    INTERNAL_TRACE_EVENT_UID(scoped_context)(context.data());
 
 // These values must be in sync with base::debug::TraceLog::CategoryGroupEnabledFlags.
 #define ENABLED_FOR_RECORDING (1 << 0)
@@ -252,22 +282,39 @@ namespace TraceEvent {
 // Specify these values when the corresponding argument of addTraceEvent is not
 // used.
 const int zeroNumArgs = 0;
+const std::nullptr_t kGlobalScope = nullptr;
 const unsigned long long noEventId = 0;
 const unsigned long long noBindId = 0;
 
-// TraceID encapsulates an ID that can either be an integer or pointer. Pointers
-// are mangled with the Process ID so that they are unlikely to collide when the
-// same pointer is used on different processes.
+// TraceID encapsulates an ID that can either be an integer or pointer;
+// optionally, it can be paired with a scope string, too. Pointers are mangled
+// with the Process ID so that they are unlikely to collide when the same
+// pointer is used on different processes.
 class TraceID final {
     STACK_ALLOCATED();
     WTF_MAKE_NONCOPYABLE(TraceID);
 public:
+    class WithScope final {
+        STACK_ALLOCATED();
+    public:
+        template<typename T> WithScope(const char* scope, T id)
+            : m_scope(scope), m_data(reinterpret_cast<unsigned long long>(id)) { }
+        const char* scope() const { return m_scope; }
+        unsigned long long data() const { return m_data; }
+    private:
+        const char* m_scope = kGlobalScope;
+        unsigned long long m_data;
+    };
+
     template<bool dummyMangle> class MangleBehavior final {
         STACK_ALLOCATED();
     public:
         template<typename T> explicit MangleBehavior(T id) : m_data(reinterpret_cast<unsigned long long>(id)) { }
+        explicit MangleBehavior(WithScope scopedID) : m_scope(scopedID.scope()), m_data(scopedID.data()) { }
+        const char* scope() const { return m_scope; }
         unsigned long long data() const { return m_data; }
     private:
+        const char* m_scope = kGlobalScope;
         unsigned long long m_data;
     };
     typedef MangleBehavior<false> DontMangle;
@@ -278,11 +325,12 @@ public:
     {
         *flags |= TRACE_EVENT_FLAG_MANGLE_ID;
     }
-    TraceID(ForceMangle id, unsigned* flags) : m_data(id.data())
+    TraceID(ForceMangle id, unsigned* flags)
+        : m_scope(id.scope()), m_data(id.data())
     {
         *flags |= TRACE_EVENT_FLAG_MANGLE_ID;
     }
-    TraceID(DontMangle id, unsigned*) : m_data(id.data()) { }
+    TraceID(DontMangle id, unsigned*) : m_scope(id.scope()), m_data(id.data()) { }
     TraceID(unsigned long long id, unsigned*) : m_data(id) { }
     TraceID(unsigned long id, unsigned*) : m_data(id) { }
     TraceID(unsigned id, unsigned*) : m_data(id) { }
@@ -298,10 +346,14 @@ public:
         m_data(static_cast<unsigned long long>(id)) { }
     TraceID(signed char id, unsigned*) :
         m_data(static_cast<unsigned long long>(id)) { }
+    TraceID(WithScope scopedID, unsigned*) :
+        m_scope(scopedID.scope()), m_data(scopedID.data()) { }
 
+    const char* scope() const { return m_scope; }
     unsigned long long data() const { return m_data; }
 
 private:
+    const char* m_scope = kGlobalScope;
     unsigned long long m_data;
 };
 
@@ -370,40 +422,40 @@ static inline void setTraceValue(const WTF::CString& arg, unsigned char* type, u
     *value = typeValue.m_uint;
 }
 
-static inline void setTraceValue(ConvertableToTraceFormat*, unsigned char* type, unsigned long long*)
+static inline void setTraceValue(TracedValue*, unsigned char* type, unsigned long long*)
 {
     *type = TRACE_VALUE_TYPE_CONVERTABLE;
 }
 
-template<typename T> static inline void setTraceValue(const PassRefPtr<T>& ptr, unsigned char* type, unsigned long long* value)
+template<typename T> static inline void setTraceValue(const PassOwnPtr<T>& ptr, unsigned char* type, unsigned long long* value)
 {
     setTraceValue(ptr.get(), type, value);
 }
 
-template<typename T> struct ConvertableToTraceFormatTraits {
-    static const bool isConvertable = false;
-    static PassRefPtr<ConvertableToTraceFormat> moveFromIfConvertable(const T&)
+template<typename T> struct TracedValueTraits {
+    static const bool isTracedValue = false;
+    static PassOwnPtr<TracedValue> moveFromIfTracedValue(const T&)
     {
         return nullptr;
     }
 };
 
-template<typename T> struct ConvertableToTraceFormatTraits<PassRefPtr<T>> {
-    static const bool isConvertable = std::is_convertible<T*, TraceEvent::ConvertableToTraceFormat*>::value;
-    static PassRefPtr<ConvertableToTraceFormat> moveFromIfConvertable(const PassRefPtr<T>& convertableToTraceFormat)
+template<typename T> struct TracedValueTraits<PassOwnPtr<T>> {
+    static const bool isTracedValue = std::is_convertible<T*, TracedValue*>::value;
+    static PassOwnPtr<TracedValue> moveFromIfTracedValue(const PassOwnPtr<T>& tracedValue)
     {
-        return convertableToTraceFormat;
+        return tracedValue;
     }
 };
 
-template<typename T> bool isConvertableToTraceFormat(const T&)
+template<typename T> bool isTracedValue(const T&)
 {
-    return ConvertableToTraceFormatTraits<T>::isConvertable;
+    return TracedValueTraits<T>::isTracedValue;
 }
 
-template<typename T> PassRefPtr<ConvertableToTraceFormat> moveFromIfConvertableToTraceFormat(const T& value)
+template<typename T> PassOwnPtr<TracedValue> moveFromIfTracedValue(const T& value)
 {
-    return ConvertableToTraceFormatTraits<T>::moveFromIfConvertable(value);
+    return TracedValueTraits<T>::moveFromIfTracedValue(value);
 }
 
 // These addTraceEvent template functions are defined here instead of in the
@@ -415,13 +467,14 @@ static inline TraceEventHandle addTraceEvent(
     char phase,
     const unsigned char* categoryEnabled,
     const char* name,
+    const char* scope,
     unsigned long long id,
     unsigned long long bindId,
     double timestamp,
     unsigned flags)
 {
     return TRACE_EVENT_API_ADD_TRACE_EVENT(
-        phase, categoryEnabled, name, id, bindId, timestamp,
+        phase, categoryEnabled, name, scope, id, bindId, timestamp,
         zeroNumArgs, 0, 0, 0,
         flags);
 }
@@ -431,6 +484,7 @@ static inline TraceEventHandle addTraceEvent(
     char phase,
     const unsigned char* categoryEnabled,
     const char* name,
+    const char* scope,
     unsigned long long id,
     unsigned long long bindId,
     double timestamp,
@@ -442,16 +496,16 @@ static inline TraceEventHandle addTraceEvent(
     unsigned char argTypes[1];
     unsigned long long argValues[1];
     setTraceValue(arg1Val, &argTypes[0], &argValues[0]);
-    if (isConvertableToTraceFormat(arg1Val)) {
+    if (isTracedValue(arg1Val)) {
         return TRACE_EVENT_API_ADD_TRACE_EVENT(
-            phase, categoryEnabled, name, id, bindId, timestamp,
+            phase, categoryEnabled, name, scope, id, bindId, timestamp,
             numArgs, &arg1Name, argTypes, argValues,
-            moveFromIfConvertableToTraceFormat(arg1Val),
+            moveFromIfTracedValue(arg1Val),
             nullptr,
             flags);
     }
     return TRACE_EVENT_API_ADD_TRACE_EVENT(
-        phase, categoryEnabled, name, id, bindId, timestamp,
+        phase, categoryEnabled, name, scope, id, bindId, timestamp,
         numArgs, &arg1Name, argTypes, argValues,
         flags);
 }
@@ -461,6 +515,7 @@ static inline TraceEventHandle addTraceEvent(
     char phase,
     const unsigned char* categoryEnabled,
     const char* name,
+    const char* scope,
     unsigned long long id,
     unsigned long long bindId,
     double timestamp,
@@ -476,16 +531,16 @@ static inline TraceEventHandle addTraceEvent(
     unsigned long long argValues[2];
     setTraceValue(arg1Val, &argTypes[0], &argValues[0]);
     setTraceValue(arg2Val, &argTypes[1], &argValues[1]);
-    if (isConvertableToTraceFormat(arg1Val) || isConvertableToTraceFormat(arg2Val)) {
+    if (isTracedValue(arg1Val) || isTracedValue(arg2Val)) {
         return TRACE_EVENT_API_ADD_TRACE_EVENT(
-            phase, categoryEnabled, name, id, bindId, timestamp,
+            phase, categoryEnabled, name, scope, id, bindId, timestamp,
             numArgs, argNames, argTypes, argValues,
-            moveFromIfConvertableToTraceFormat(arg1Val),
-            moveFromIfConvertableToTraceFormat(arg2Val),
+            moveFromIfTracedValue(arg1Val),
+            moveFromIfTracedValue(arg2Val),
             flags);
     }
     return TRACE_EVENT_API_ADD_TRACE_EVENT(
-        phase, categoryEnabled, name, id, bindId, timestamp,
+        phase, categoryEnabled, name, scope, id, bindId, timestamp,
         numArgs, argNames, argTypes, argValues,
         flags);
 }
@@ -494,11 +549,12 @@ static inline TraceEventHandle addTraceEvent(
     char phase,
     const unsigned char* categoryEnabled,
     const char* name,
+    const char* scope,
     unsigned long long id,
     unsigned flags)
 {
-    return addTraceEvent(phase, categoryEnabled, name, id, blink::TraceEvent::noBindId,
-        EventTracer::systemTraceTime(), flags);
+    return addTraceEvent(phase, categoryEnabled, name, scope, id,
+        blink::TraceEvent::noBindId, EventTracer::systemTraceTime(), flags);
 }
 
 template<typename ARG1_TYPE>
@@ -506,13 +562,15 @@ static inline TraceEventHandle addTraceEvent(
     char phase,
     const unsigned char* categoryEnabled,
     const char* name,
+    const char* scope,
     unsigned long long id,
     unsigned flags,
     const char* arg1Name,
     const ARG1_TYPE& arg1Val)
 {
-    return addTraceEvent(phase, categoryEnabled, name, id, blink::TraceEvent::noBindId,
-        EventTracer::systemTraceTime(), flags, arg1Name, arg1Val);
+    return addTraceEvent(phase, categoryEnabled, name, scope, id,
+        blink::TraceEvent::noBindId, EventTracer::systemTraceTime(), flags,
+        arg1Name, arg1Val);
 }
 
 
@@ -521,6 +579,7 @@ static inline TraceEventHandle addTraceEvent(
     char phase,
     const unsigned char* categoryEnabled,
     const char* name,
+    const char* scope,
     unsigned long long id,
     unsigned flags,
     const char* arg1Name,
@@ -528,8 +587,9 @@ static inline TraceEventHandle addTraceEvent(
     const char* arg2Name,
     const ARG2_TYPE& arg2Val)
 {
-    return addTraceEvent(phase, categoryEnabled, name, id, blink::TraceEvent::noBindId,
-        EventTracer::systemTraceTime(), flags, arg1Name, arg1Val, arg2Name, arg2Val);
+    return addTraceEvent(phase, categoryEnabled, name, scope, id,
+        blink::TraceEvent::noBindId, EventTracer::systemTraceTime(), flags,
+        arg1Name, arg1Val, arg2Name, arg2Val);
 }
 
 // Used by TRACE_EVENTx macro. Do not use directly.

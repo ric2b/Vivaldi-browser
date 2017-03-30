@@ -4,8 +4,10 @@
 
 #include "ash/system/chromeos/network/network_state_list_detailed_view.h"
 
+#include <algorithm>
 #include <vector>
 
+#include "ash/ash_constants.h"
 #include "ash/ash_switches.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/networking_config_delegate.h"
@@ -26,9 +28,9 @@
 #include "ash/system/tray/tray_popup_header_button.h"
 #include "ash/system/tray/tray_popup_label_button.h"
 #include "base/command_line.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/login/login_state.h"
@@ -58,6 +60,7 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/layout_manager.h"
+#include "ui/views/painter.h"
 #include "ui/views/widget/widget.h"
 
 using chromeos::DeviceState;
@@ -145,43 +148,17 @@ class NetworkStateListDetailedView::InfoBubble
 
 //------------------------------------------------------------------------------
 
-// A throbber button that can also be clicked on.
-class ThrobberButton : public ThrobberView {
- public:
-  explicit ThrobberButton(NetworkStateListDetailedView* owner)
-      : owner_(owner) {}
-  ~ThrobberButton() override {}
-
-  // views::View
-  bool OnMousePressed(const ui::MouseEvent& event) override {
-    return owner_->ThrobberPressed(this, event);
-  }
-
- private:
-  NetworkStateListDetailedView* owner_;
-
-  DISALLOW_COPY_AND_ASSIGN(ThrobberButton);
-};
-
-//------------------------------------------------------------------------------
-
 const int kFadeIconMs = 500;
 
-// A TrayPopupHeaderButton that fades in/out when shown/hidden.
-class InfoIcon : public TrayPopupHeaderButton {
+// A throbber view that fades in/out when shown/hidden.
+class ScanningThrobber : public ThrobberView {
  public:
-  explicit InfoIcon(views::ButtonListener* listener)
-      : TrayPopupHeaderButton(listener,
-                              IDR_AURA_UBER_TRAY_NETWORK_INFO,
-                              IDR_AURA_UBER_TRAY_NETWORK_INFO,
-                              IDR_AURA_UBER_TRAY_NETWORK_INFO_HOVER,
-                              IDR_AURA_UBER_TRAY_NETWORK_INFO_HOVER,
-                              IDS_ASH_STATUS_TRAY_NETWORK_INFO) {
+  ScanningThrobber() {
     SetPaintToLayer(true);
     layer()->SetFillsBoundsOpaquely(false);
     layer()->SetOpacity(1.0);
   }
-  ~InfoIcon() override {}
+  ~ScanningThrobber() override {}
 
   // views::View
   void SetVisible(bool visible) override {
@@ -190,6 +167,58 @@ class InfoIcon : public TrayPopupHeaderButton {
     animation.SetTransitionDuration(
         base::TimeDelta::FromMilliseconds(kFadeIconMs));
     layer()->SetOpacity(visible ? 1.0 : 0.0);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ScanningThrobber);
+};
+
+//------------------------------------------------------------------------------
+
+// An image button showing the info icon similar to TrayPopupHeaderButton,
+// but without the toggle properties, that fades in/out when shown/hidden.
+class InfoIcon : public views::ImageButton {
+ public:
+  explicit InfoIcon(views::ButtonListener* listener)
+      : views::ImageButton(listener) {
+    ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
+    SetImage(STATE_NORMAL, bundle.GetImageNamed(IDR_AURA_UBER_TRAY_NETWORK_INFO)
+                               .ToImageSkia());
+    SetImage(STATE_HOVERED,
+             bundle.GetImageNamed(IDR_AURA_UBER_TRAY_NETWORK_INFO_HOVER)
+                 .ToImageSkia());
+    SetImageAlignment(ALIGN_CENTER, ALIGN_MIDDLE);
+    SetAccessibleName(
+        bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_NETWORK_INFO));
+    SetPaintToLayer(true);
+    layer()->SetFillsBoundsOpaquely(false);
+    layer()->SetOpacity(1.0);
+  }
+
+  ~InfoIcon() override {}
+
+  // views::View
+  gfx::Size GetPreferredSize() const override {
+    return gfx::Size(ash::kTrayPopupItemHeight, ash::kTrayPopupItemHeight);
+  }
+
+  void SetVisible(bool visible) override {
+    layer()->GetAnimator()->StopAnimating();  // Stop any previous animation.
+    ui::ScopedLayerAnimationSettings animation(layer()->GetAnimator());
+    animation.SetTransitionDuration(
+        base::TimeDelta::FromMilliseconds(kFadeIconMs));
+    layer()->SetOpacity(visible ? 1.0 : 0.0);
+  }
+
+  // views::CustomButton
+  void StateChanged() override {
+    if (state() == STATE_HOVERED || state() == STATE_PRESSED) {
+      set_background(views::Background::CreateSolidBackground(
+          kTrayPopupHoverBackgroundColor));
+    } else {
+      set_background(nullptr);
+    }
+    SchedulePaint();
   }
 
  private:
@@ -309,7 +338,8 @@ void NetworkStateListDetailedView::Init() {
   network_list_view_->set_container(scroll_content());
   Update();
 
-  CallRequestScan();
+  if (list_type_ != LIST_TYPE_VPN)
+    CallRequestScan();
 }
 
 NetworkDetailedView::DetailedViewType
@@ -358,14 +388,6 @@ void NetworkStateListDetailedView::ButtonPressed(views::Button* sender,
   } else {
     NOTREACHED();
   }
-}
-
-bool NetworkStateListDetailedView::ThrobberPressed(views::View* sender,
-                                                   const ui::Event& event) {
-  if (sender != scanning_throbber_)
-    return false;
-  ToggleInfoBubble();
-  return true;
 }
 
 void NetworkStateListDetailedView::OnViewClicked(views::View* sender) {
@@ -451,15 +473,18 @@ void NetworkStateListDetailedView::CreateHeaderEntry() {
   info_throbber_container->SetLayoutManager(info_throbber_layout);
   footer()->AddView(info_throbber_container, true /* add_separator */);
 
-  info_icon_ = new InfoIcon(this);
-  info_throbber_container->AddChildView(info_icon_);
+  if (list_type_ != LIST_TYPE_VPN) {
+    // Place the throbber behind the info icon so that the icon receives
+    // click / touch events. The info icon is hidden when the throbber is
+    // active.
+    scanning_throbber_ = new ScanningThrobber();
+    info_throbber_container->AddChildView(scanning_throbber_);
+  }
 
-  scanning_throbber_ = new ThrobberButton(this);
-  // Since the throbber is added last, it will be "on top" of the info button,
-  // so it gets the info tooltip.
-  scanning_throbber_->SetTooltipText(
+  info_icon_ = new InfoIcon(this);
+  info_icon_->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NETWORK_INFO));
-  info_throbber_container->AddChildView(scanning_throbber_);
+  info_throbber_container->AddChildView(info_icon_);
 }
 
 void NetworkStateListDetailedView::CreateNetworkExtra() {
@@ -526,22 +551,26 @@ void NetworkStateListDetailedView::UpdateHeaderButtons() {
   if (proxy_settings_)
     proxy_settings_->SetEnabled(handler->DefaultNetwork() != nullptr);
 
-  // Update Wifi Scanning throbber.
-  bool scanning =
-      NetworkHandler::Get()->network_state_handler()->GetScanningByType(
-          NetworkTypePattern::WiFi());
-  if (scanning != wifi_scanning_) {
-    wifi_scanning_ = scanning;
-    if (scanning) {
-      info_icon_->SetVisible(false);
-      scanning_throbber_->Start();
-      scanning_throbber_->SetTooltipText(
-          l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_WIFI_SCANNING_MESSAGE));
-    } else {
-      scanning_throbber_->Stop();
-      scanning_throbber_->SetTooltipText(
-          l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NETWORK_INFO));
-      info_icon_->SetVisible(true);
+  if (list_type_ != LIST_TYPE_VPN) {
+    // Update Wifi Scanning throbber.
+    bool scanning =
+        NetworkHandler::Get()->network_state_handler()->GetScanningByType(
+            NetworkTypePattern::WiFi());
+    if (scanning != wifi_scanning_) {
+      wifi_scanning_ = scanning;
+      if (scanning && list_type_ != LIST_TYPE_VPN) {
+        info_icon_->SetVisible(false);
+        scanning_throbber_->SetVisible(true);
+        scanning_throbber_->Start();
+        scanning_throbber_->SetTooltipText(l10n_util::GetStringUTF16(
+            IDS_ASH_STATUS_TRAY_WIFI_SCANNING_MESSAGE));
+      } else {
+        scanning_throbber_->Stop();
+        scanning_throbber_->SetVisible(false);
+        scanning_throbber_->SetTooltipText(
+            l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NETWORK_INFO));
+        info_icon_->SetVisible(true);
+      }
     }
   }
 
@@ -790,7 +819,7 @@ void NetworkStateListDetailedView::CallRequestScan() {
   VLOG(1) << "Requesting Network Scan.";
   NetworkHandler::Get()->network_state_handler()->RequestScan();
   // Periodically request a scan while this UI is open.
-  base::MessageLoopForUI::current()->PostDelayedTask(
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
       base::Bind(&NetworkStateListDetailedView::CallRequestScan, AsWeakPtr()),
       base::TimeDelta::FromSeconds(kRequestScanDelaySeconds));

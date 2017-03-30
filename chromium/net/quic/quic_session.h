@@ -11,6 +11,8 @@
 
 #include <map>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "base/compiler_specific.h"
@@ -31,7 +33,6 @@ namespace net {
 class QuicCryptoStream;
 class QuicFlowController;
 class ReliableQuicStream;
-class VisitorShim;
 
 namespace test {
 class QuicSessionPeer;
@@ -69,15 +70,25 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   void OnGoAway(const QuicGoAwayFrame& frame) override;
   void OnWindowUpdateFrame(const QuicWindowUpdateFrame& frame) override;
   void OnBlockedFrame(const QuicBlockedFrame& frame) override;
-  void OnConnectionClosed(QuicErrorCode error, bool from_peer) override;
+  void OnConnectionClosed(QuicErrorCode error,
+                          ConnectionCloseSource source) override;
   void OnWriteBlocked() override {}
   void OnSuccessfulVersionNegotiation(const QuicVersion& version) override;
   void OnCanWrite() override;
   void OnCongestionWindowChange(QuicTime /*now*/) override {}
   void OnConnectionMigration() override {}
+  // Deletes streams that are safe to be deleted now that it's safe to do so (no
+  // other operations are being done on the streams at this time).
+  void PostProcessAfterData() override;
   bool WillingAndAbleToWrite() const override;
   bool HasPendingHandshake() const override;
   bool HasOpenDynamicStreams() const override;
+  void OnPathDegrading() override;
+
+  // Called on every incoming packet. Passes |packet| through to |connection_|.
+  virtual void ProcessUdpPacket(const IPEndPoint& self_address,
+                                const IPEndPoint& peer_address,
+                                const QuicEncryptedPacket& packet);
 
   // Called by streams when they want to write data to the peer.
   // Returns a pair with the number of bytes consumed from data, and a boolean
@@ -174,7 +185,7 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   // connection-level flow control but not by its own stream-level flow control.
   // The stream will be given a chance to write when a connection-level
   // WINDOW_UPDATE arrives.
-  void MarkConnectionLevelWriteBlocked(QuicStreamId id, SpdyPriority priority);
+  void MarkConnectionLevelWriteBlocked(QuicStreamId id);
 
   // Returns true if the session has data to be sent, either queued in the
   // connection, or in a write-blocked stream.
@@ -196,22 +207,26 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   // Returns true if any stream is flow controller blocked.
   bool IsStreamFlowControlBlocked();
 
-  size_t get_max_open_streams() const { return max_open_streams_; }
-
-  size_t get_max_available_streams() const {
-    return max_open_streams_ * kMaxAvailableStreamsMultiplier;
+  size_t max_open_incoming_streams() const {
+    return max_open_incoming_streams_;
   }
+
+  size_t max_open_outgoing_streams() const {
+    return max_open_outgoing_streams_;
+  }
+
+  size_t MaxAvailableStreams() const;
 
   ReliableQuicStream* GetStream(const QuicStreamId stream_id);
 
   // Mark a stream as draining.
   virtual void StreamDraining(QuicStreamId id);
 
-  // Close the connection, if it is not already closed.
-  void CloseConnectionWithDetails(QuicErrorCode error, const char* details);
+  // Returns true if this stream should yield writes to another blocked stream.
+  bool ShouldYield(QuicStreamId stream_id);
 
  protected:
-  typedef base::hash_map<QuicStreamId, ReliableQuicStream*> StreamMap;
+  typedef std::unordered_map<QuicStreamId, ReliableQuicStream*> StreamMap;
 
   // Creates a new stream, owned by the caller, to handle a peer-initiated
   // stream.  Returns nullptr and does error handling if the stream can not be
@@ -240,12 +255,6 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   // exists, the connection is closed.
   ReliableQuicStream* GetOrCreateDynamicStream(QuicStreamId stream_id);
 
-  // This is called after every call other than OnConnectionClose from the
-  // QuicConnectionVisitor to allow post-processing once the work has been done.
-  // In this case, it deletes streams given that it's safe to do so (no other
-  // operations are being done on the streams at this time)
-  virtual void PostProcessAfterData();
-
   // Performs the work required to close |stream_id|.  If |locally_reset|
   // then the stream has been reset by this endpoint, not by the peer.
   virtual void CloseStreamInner(QuicStreamId stream_id, bool locally_reset);
@@ -271,7 +280,8 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
     return &closed_streams_;
   }
 
-  void set_max_open_streams(size_t max_open_streams);
+  void set_max_open_incoming_streams(size_t max_open_incoming_streams);
+  void set_max_open_outgoing_streams(size_t max_open_outgoing_streams);
 
   void set_largest_peer_created_stream_id(
       QuicStreamId largest_peer_created_stream_id) {
@@ -292,6 +302,9 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
 
   size_t GetNumLocallyClosedOutgoingStreamsHighestOffset() const;
 
+  // Returns true if the stream is still active.
+  bool IsOpenStream(QuicStreamId id);
+
   QuicStreamId next_outgoing_stream_id() const {
     return next_outgoing_stream_id_;
   }
@@ -303,6 +316,10 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   // stream to be promised before creating an active stream.
   virtual void HandleFrameOnNonexistentOutgoingStream(QuicStreamId stream_id);
 
+  bool MaybeIncreaseLargestPeerStreamId(const QuicStreamId stream_id);
+
+  void InsertLocallyClosedStreamsHighestOffset(const QuicStreamId id,
+                                               QuicStreamOffset offset);
   // If stream is a locally closed stream, this RST will update FIN offset.
   // Otherwise stream is a preserved stream and the behavior of it depends on
   // derived class's own implementation.
@@ -311,7 +328,6 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
 
  private:
   friend class test::QuicSessionPeer;
-  friend class VisitorShim;
 
   // Called in OnConfigNegotiated when we receive a new stream level flow
   // control window in a negotiated config. Closes the connection if invalid.
@@ -336,16 +352,15 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
 
   scoped_ptr<QuicConnection> connection_;
 
-  // A shim to stand between the connection and the session, to handle stream
-  // deletions.
-  scoped_ptr<VisitorShim> visitor_shim_;
-
   std::vector<ReliableQuicStream*> closed_streams_;
 
   QuicConfig config_;
 
-  // Returns the maximum number of streams this connection can open.
-  size_t max_open_streams_;
+  // The maximum number of outgoing streams this connection can open.
+  size_t max_open_outgoing_streams_;
+
+  // The maximum number of incoming streams this connection will allow.
+  size_t max_open_incoming_streams_;
 
   // Static streams, such as crypto and header streams. Owned by child classes
   // that create these streams.
@@ -359,12 +374,12 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
 
   // Set of stream ids that are less than the largest stream id that has been
   // received, but are nonetheless available to be created.
-  base::hash_set<QuicStreamId> available_streams_;
+  std::unordered_set<QuicStreamId> available_streams_;
 
   // Set of stream ids that are "draining" -- a FIN has been sent and received,
   // but the stream object still exists because not all the received data has
   // been consumed.
-  base::hash_set<QuicStreamId> draining_streams_;
+  std::unordered_set<QuicStreamId> draining_streams_;
 
   // A list of streams which need to write more data.
   QuicWriteBlockedList write_blocked_streams_;
@@ -386,6 +401,10 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
 
   // Used for connection-level flow control.
   QuicFlowController flow_controller_;
+
+  // The stream id which was last popped in OnCanWrite, or 0, if not under the
+  // call stack of OnCanWrite.
+  QuicStreamId currently_writing_stream_id_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicSession);
 };

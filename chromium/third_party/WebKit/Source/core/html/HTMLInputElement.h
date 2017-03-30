@@ -67,6 +67,7 @@ public:
     bool typeMismatch() const final;
     bool valueMissing() const final;
     String validationMessage() const final;
+    String validationSubMessage() const final;
 
     // Returns the minimum value for type=date, number, or range.  Don't call this for other types.
     double minimum() const;
@@ -223,7 +224,7 @@ public:
     void selectColorInColorChooser(const Color&);
     void endColorChooser();
 
-    String defaultToolTip() const;
+    String defaultToolTip() const override;
 
     static const int maximumLength;
 

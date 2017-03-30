@@ -4,19 +4,18 @@
 
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_request_options.h"
 
-#include <algorithm>
-#include <map>
-#include <vector>
-
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "base/version.h"
 #include "build/build_config.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_client_config_parser.h"
@@ -42,6 +41,34 @@ std::string FormatOption(const std::string& name, const std::string& value) {
   return name + "=" + value;
 }
 
+// Returns the version of Chromium that is being used, e.g. "1.2.3.4".
+const char* ChromiumVersion() {
+  return PRODUCT_VERSION;
+}
+
+// Returns the build and patch numbers of |version_string|. |version_string|
+// must be a properly formed Chromium version number, e.g. "1.2.3.4".
+void GetChromiumBuildAndPatch(const std::string& version_string,
+                              std::string* build,
+                              std::string* patch) {
+  base::Version version(version_string);
+  DCHECK(version.IsValid());
+  DCHECK_EQ(4U, version.components().size());
+
+  *build = base::Uint64ToString(version.components()[2]);
+  *patch = base::Uint64ToString(version.components()[3]);
+}
+
+#define CLIENT_ENUM(name, str_value) \
+  case name:                         \
+    return str_value;
+const char* GetString(Client client) {
+  switch (client) { CLIENT_ENUMS_LIST }
+  NOTREACHED();
+  return "";
+}
+#undef CLIENT_ENUM
+
 }  // namespace
 
 const char kSessionHeaderOption[] = "ps";
@@ -58,17 +85,6 @@ const char kExperimentsOption[] = "exp";
 const char kAndroidWebViewProtocolVersion[] = "";
 #endif
 
-#define CLIENT_ENUM(name, str_value) \
-    case name: return str_value;
-const char* GetString(Client client) {
-  switch (client) {
-    CLIENT_ENUMS_LIST
-  }
-  NOTREACHED();
-  return "";
-}
-#undef CLIENT_ENUM
-
 // static
 bool DataReductionProxyRequestOptions::IsKeySetOnCommandLine() {
   const base::CommandLine& command_line =
@@ -80,14 +96,7 @@ bool DataReductionProxyRequestOptions::IsKeySetOnCommandLine() {
 DataReductionProxyRequestOptions::DataReductionProxyRequestOptions(
     Client client,
     DataReductionProxyConfig* config)
-    : client_(GetString(client)),
-      use_assigned_credentials_(false),
-      data_reduction_proxy_config_(config) {
-  DCHECK(data_reduction_proxy_config_);
-  GetChromiumBuildAndPatch(ChromiumVersion(), &build_, &patch_);
-  // Constructed on the UI thread, but should be checked on the IO thread.
-  thread_checker_.DetachFromThread();
-}
+    : DataReductionProxyRequestOptions(client, ChromiumVersion(), config) {}
 
 DataReductionProxyRequestOptions::DataReductionProxyRequestOptions(
     Client client,
@@ -108,33 +117,7 @@ DataReductionProxyRequestOptions::~DataReductionProxyRequestOptions() {
 void DataReductionProxyRequestOptions::Init() {
   key_ = GetDefaultKey(),
   UpdateCredentials();
-  UpdateVersion();
   UpdateExperiments();
-}
-
-std::string DataReductionProxyRequestOptions::ChromiumVersion() const {
-#if defined(PRODUCT_VERSION)
-  return PRODUCT_VERSION;
-#else
-  return std::string();
-#endif
-}
-
-void DataReductionProxyRequestOptions::GetChromiumBuildAndPatch(
-    const std::string& version,
-    std::string* build,
-    std::string* patch) const {
-  std::vector<base::StringPiece> version_parts = base::SplitStringPiece(
-      version, ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-  if (version_parts.size() != 4)
-    return;
-  version_parts[2].CopyToString(build);
-  version_parts[3].CopyToString(patch);
-}
-
-void DataReductionProxyRequestOptions::UpdateVersion() {
-  GetChromiumBuildAndPatch(version_, &build_, &patch_);
-  RegenerateRequestHeaderValue();
 }
 
 void DataReductionProxyRequestOptions::UpdateExperiments() {
@@ -320,14 +303,44 @@ void DataReductionProxyRequestOptions::RegenerateRequestHeaderValue() {
   }
   if (!client_.empty())
     headers.push_back(FormatOption(kClientHeaderOption, client_));
-  if (!build_.empty() && !patch_.empty()) {
-    headers.push_back(FormatOption(kBuildNumberHeaderOption, build_));
-    headers.push_back(FormatOption(kPatchNumberHeaderOption, patch_));
-  }
+
+  DCHECK(!build_.empty());
+  headers.push_back(FormatOption(kBuildNumberHeaderOption, build_));
+
+  DCHECK(!patch_.empty());
+  headers.push_back(FormatOption(kPatchNumberHeaderOption, patch_));
+
   for (const auto& experiment : experiments_)
     headers.push_back(FormatOption(kExperimentsOption, experiment));
 
   header_value_ = base::JoinString(headers, ", ");
+}
+
+std::string DataReductionProxyRequestOptions::GetSessionKeyFromRequestHeaders(
+    const net::HttpRequestHeaders& request_headers) const {
+  std::string chrome_proxy_header_value;
+  base::StringPairs kv_pairs;
+  // Return if the request does not have request headers or if they can't be
+  // parsed into key-value pairs.
+  if (!request_headers.GetHeader(chrome_proxy_header(),
+                                 &chrome_proxy_header_value) ||
+      !base::SplitStringIntoKeyValuePairs(chrome_proxy_header_value,
+                                          '=',  // Key-value delimiter
+                                          ',',  // Key-value pair delimiter
+                                          &kv_pairs)) {
+    return "";
+  }
+
+  for (const auto& kv_pair : kv_pairs) {
+    // Delete leading and trailing white space characters from the key before
+    // comparing.
+    if (base::TrimWhitespaceASCII(kv_pair.first, base::TRIM_ALL) ==
+        kSecureSessionHeaderOption) {
+      return base::TrimWhitespaceASCII(kv_pair.second, base::TRIM_ALL)
+          .as_string();
+    }
+  }
+  return "";
 }
 
 }  // namespace data_reduction_proxy

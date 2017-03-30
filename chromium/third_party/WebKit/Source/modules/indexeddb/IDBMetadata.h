@@ -83,22 +83,21 @@ struct IDBDatabaseMetadata {
     DISALLOW_NEW();
     // FIXME: These can probably be collapsed into 0.
     enum {
-        NoIntVersion = -1,
-        DefaultIntVersion = 0
+        NoVersion = -1,
+        DefaultVersion = 0
     };
 
     typedef HashMap<int64_t, IDBObjectStoreMetadata> ObjectStoreMap;
 
     IDBDatabaseMetadata()
-        : intVersion(NoIntVersion)
+        : version(NoVersion)
     {
     }
 
-    IDBDatabaseMetadata(const String& name, int64_t id, const String& version, int64_t intVersion, int64_t maxObjectStoreId)
+    IDBDatabaseMetadata(const String& name, int64_t id, int64_t version, int64_t maxObjectStoreId)
         : name(name)
         , id(id)
         , version(version)
-        , intVersion(intVersion)
         , maxObjectStoreId(maxObjectStoreId)
     {
     }
@@ -107,13 +106,12 @@ struct IDBDatabaseMetadata {
 
     String name;
     int64_t id;
-    String version;
-    int64_t intVersion;
+    int64_t version;
     int64_t maxObjectStoreId;
 
     ObjectStoreMap objectStores;
 };
 
-}
+} // namespace blink
 
 #endif // IDBMetadata_h

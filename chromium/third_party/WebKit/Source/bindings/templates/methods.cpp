@@ -1,4 +1,4 @@
-{% from 'utilities.cpp' import declare_enum_validation_variable, v8_value_to_local_cpp_value, check_api_experiment %}
+{% from 'utilities.cpp' import declare_enum_validation_variable, v8_value_to_local_cpp_value, check_origin_trial %}
 
 {##############################################################################}
 {% macro generate_method(method, world_suffix) %}
@@ -251,7 +251,7 @@ ExecutionContext* executionContext = currentExecutionContext(info.GetIsolate());
 {% endif %}
 {% if method.is_call_with_script_arguments %}
 {# [CallWith=ScriptArguments] #}
-RefPtrWillBeRawPtr<ScriptArguments> scriptArguments(createScriptArguments(scriptState, info, {{method.number_of_arguments}}));
+RefPtrWillBeRawPtr<ScriptArguments> scriptArguments(ScriptArguments::create(scriptState, info, {{method.number_of_arguments}}));
 {% endif %}
 {% if method.is_call_with_document %}
 {# [ConstructorCallWith=Document] #}
@@ -400,7 +400,7 @@ static void {{overloads.name}}Method{{world_suffix}}(const v8::FunctionCallbackI
     UseCounter::countIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{overloads.measure_all_as}});
     {% endif %}
     {% if overloads.deprecate_all_as %}
-    UseCounter::countDeprecationIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{overloads.deprecate_all_as}});
+    Deprecation::countDeprecationIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{overloads.deprecate_all_as}});
     {% endif %}
     {# First resolve by length #}
     {# 2. Initialize argcount to be min(maxarg, n). #}
@@ -419,7 +419,7 @@ static void {{overloads.name}}Method{{world_suffix}}(const v8::FunctionCallbackI
             UseCounter::countIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{method.measure_as('Method')}});
             {% endif %}
             {% if method.deprecate_as and not overloads.deprecate_all_as %}
-            UseCounter::countDeprecationIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{method.deprecate_as}});
+            Deprecation::countDeprecationIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{method.deprecate_as}});
             {% endif %}
             {{method.name}}{{method.overload_index}}Method{{world_suffix}}(info);
             return;
@@ -499,16 +499,15 @@ void postMessageImpl(const char* interfaceName, {{cpp_class}}* instance, const v
 {% macro method_callback(method, world_suffix) %}
 static void {{method.name}}MethodCallback{{world_suffix}}(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     {% if not method.overloads %}{# Overloaded methods are measured in overload_resolution_method() #}
     {% if method.measure_as %}
     UseCounter::countIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{method.measure_as('Method')}});
     {% endif %}
     {% if method.deprecate_as %}
-    UseCounter::countDeprecationIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{method.deprecate_as}});
+    Deprecation::countDeprecationIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{method.deprecate_as}});
     {% endif %}
-    {% if method.is_api_experiment_enabled %}
-    {{check_api_experiment(method) | indent}}
+    {% if method.is_origin_trial_enabled %}
+    {{check_origin_trial(method) | indent}}
     {% endif %}
     {% endif %}{# not method.overloads #}
     {% if world_suffix in method.activity_logging_world_list %}
@@ -531,7 +530,6 @@ static void {{method.name}}MethodCallback{{world_suffix}}(const v8::FunctionCall
     {% else %}
     {{cpp_class_or_partial}}V8Internal::{{method.name}}Method{{world_suffix}}(info);
     {% endif %}
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 {% endmacro %}
 
@@ -573,9 +571,7 @@ static void {{method.name}}OriginSafeMethodGetter{{world_suffix}}(const v8::Prop
 
 static void {{method.name}}OriginSafeMethodGetterCallback{{world_suffix}}(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMGetter");
     {{cpp_class}}V8Internal::{{method.name}}OriginSafeMethodGetter{{world_suffix}}(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 {% endmacro %}
 

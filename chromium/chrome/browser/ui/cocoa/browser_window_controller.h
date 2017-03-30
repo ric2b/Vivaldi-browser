@@ -14,8 +14,8 @@
 
 #include "base/mac/scoped_nsobject.h"
 #include "base/memory/scoped_ptr.h"
+#include "chrome/browser/extensions/browser_extension_window_controller.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
-#include "chrome/browser/ui/tabs/tab_utils.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bar_controller.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bubble_controller.h"
 #import "chrome/browser/ui/cocoa/exclusive_access_bubble_window_controller.h"
@@ -24,6 +24,7 @@
 #import "chrome/browser/ui/cocoa/themed_window.h"
 #import "chrome/browser/ui/cocoa/url_drop_target.h"
 #import "chrome/browser/ui/cocoa/view_resizer.h"
+#include "chrome/browser/ui/tabs/tab_utils.h"
 #include "components/translate/core/common/translate_errors.h"
 #include "ui/base/accelerators/accelerator_manager.h"
 #include "ui/gfx/geometry/rect.h"
@@ -37,6 +38,8 @@ class BrowserWindowCocoa;
 @class DevToolsController;
 @class DownloadShelfController;
 class ExtensionKeybindingRegistryCocoa;
+class ExclusiveAccessController;
+class ExclusiveAccessContext;
 @class FindBarCocoaController;
 @class FullscreenModeController;
 @class FullscreenWindow;
@@ -81,8 +84,7 @@ class Command;
   base::scoped_nsobject<OverlayableContentsController>
       overlayableContentsController_;
   base::scoped_nsobject<PresentationModeController> presentationModeController_;
-  base::scoped_nsobject<ExclusiveAccessBubbleWindowController>
-      exclusiveAccessBubbleWindowController_;
+  scoped_ptr<ExclusiveAccessController> exclusiveAccessController_;
   base::scoped_nsobject<BrowserWindowFullscreenTransition>
       fullscreenTransition_;
 
@@ -162,6 +164,11 @@ class Command;
   // True if the toolbar needs to be hidden in fullscreen.
   BOOL shouldHideFullscreenToolbar_;
 
+  // True if AppKit has finished exiting fullscreen before the exit animation
+  // is completed. This flag is used to ensure that |windowDidExitFullscreen|
+  // is called after the exit fullscreen animation is complete.
+  BOOL appKitDidExitFullscreen_;
+
   // The size of the original (non-fullscreen) window.  This is saved just
   // before entering fullscreen mode and is only valid when |-isFullscreen|
   // returns YES.
@@ -185,12 +192,6 @@ class Command;
   // used in fullscreen transition to prevent spurious resize messages from
   // being sent to the renderer, which causes the transition to be janky.
   BOOL blockLayoutSubviews_;
-
-  // When going fullscreen for a tab, we need to store the URL and the
-  // fullscreen type, since we can't show the bubble until
-  // -windowDidEnterFullScreen: gets called.
-  GURL fullscreenUrl_;
-  ExclusiveAccessBubbleType exclusiveAccessBubbleType_;
 
   // The Extension Command Registry used to determine which keyboard events to
   // handle.
@@ -428,6 +429,9 @@ class Command;
 // deprecated.
 - (BOOL)isTabbedWindow;
 
+// Returns the size of the original (non-fullscreen) window.
+- (NSRect)savedRegularWindowFrame;
+
 @end  // @interface BrowserWindowController(WindowType)
 
 // Fullscreen terminology:
@@ -530,10 +534,13 @@ class Command;
 // window must be in immersive or AppKit Fullscreen.
 - (void)updateFullscreenWithToolbar:(BOOL)withToolbar;
 
+// Exits extension fullscreen if we're currently in the mode. Returns YES
+// if we exited fullscreen.
+- (BOOL)exitExtensionFullscreenIfPossible;
+
 // Updates the contents of the fullscreen exit bubble with |url| and
 // |bubbleType|.
-- (void)updateFullscreenExitBubbleURL:(const GURL&)url
-                           bubbleType:(ExclusiveAccessBubbleType)bubbleType;
+- (void)updateFullscreenExitBubble;
 
 // Toggles and updates the toolbar's visibility in fullscreen mode. This
 // function toggles between the sliding styles: OMNIBOX_TABS_PRESENT and
@@ -552,12 +559,10 @@ class Command;
 - (BOOL)isInAppKitFullscreen;
 
 // Enter fullscreen for an extension.
-- (void)enterExtensionFullscreenForURL:(const GURL&)url
-                            bubbleType:(ExclusiveAccessBubbleType)bubbleType;
+- (void)enterExtensionFullscreen;
 
 // Enters Immersive Fullscreen for the given URL.
-- (void)enterWebContentFullscreenForURL:(const GURL&)url
-                             bubbleType:(ExclusiveAccessBubbleType)bubbleType;
+- (void)enterWebContentFullscreen;
 
 // Exits the current fullscreen mode.
 - (void)exitAnyFullscreen;
@@ -568,6 +573,10 @@ class Command;
 
 // Whether if the toolbar should be hidden in fullscreen.
 - (BOOL)shouldHideFullscreenToolbar;
+
+// Called by BrowserWindowFullscreenTransition when the exit animation is
+// finished.
+- (void)exitFullscreenAnimationFinished;
 
 // Resizes the fullscreen window to fit the screen it's currently on.  Called by
 // the PresentationModeController when there is a change in monitor placement or
@@ -594,6 +603,9 @@ class Command;
 
 // Returns YES if any of the views in the floating bar currently has focus.
 - (BOOL)floatingBarHasFocus;
+
+// Accessor for the controller managing fullscreen ExclusiveAccessContext.
+- (ExclusiveAccessController*)exclusiveAccessController;
 
 @end  // @interface BrowserWindowController(Fullscreen)
 
@@ -630,9 +642,6 @@ class Command;
 // |source| rect doesn't fit into |target|.
 - (NSSize)overflowFrom:(NSRect)source
                     to:(NSRect)target;
-
-// The fullscreen exit bubble controller, or nil if the bubble isn't showing.
-- (ExclusiveAccessBubbleWindowController*)exclusiveAccessBubbleWindowController;
 
 // Gets the rect, in window base coordinates, that the omnibox popup should be
 // positioned relative to.

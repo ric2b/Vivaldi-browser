@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 
+#include "base/compiler_specific.h"
+#include "base/containers/mru_cache.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -41,6 +43,8 @@ class CertVerifier;
 class CTVerifier;
 class SSLCertRequestInfo;
 class SSLInfo;
+
+using SignedEkmMap = base::MRUCache<std::string, std::vector<uint8_t>>;
 
 // An SSL client socket implemented with OpenSSL.
 class SSLClientSocketOpenSSL : public SSLClientSocket {
@@ -72,6 +76,9 @@ class SSLClientSocketOpenSSL : public SSLClientSocket {
   void GetSSLCertRequestInfo(SSLCertRequestInfo* cert_request_info) override;
   NextProtoStatus GetNextProto(std::string* proto) const override;
   ChannelIDService* GetChannelIDService() const override;
+  Error GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
+                                    std::vector<uint8_t>* out) override;
+  crypto::ECPrivateKey* GetChannelIDKey() const override;
   SSLFailureState GetSSLFailureState() const override;
 
   // SSLSocket implementation.
@@ -191,12 +198,13 @@ class SSLClientSocketOpenSSL : public SSLClientSocket {
   // Called from the SSL layer whenever a new session is established.
   int NewSessionCallback(SSL_SESSION* session);
 
-  // Adds the SignedCertificateTimestamps from ct_verify_result_ to |ssl_info|.
+  // Adds the Certificate Transparency info from ct_verify_result_ to
+  // |ssl_info|.
   // SCTs are held in three separate vectors in ct_verify_result, each
   // vetor representing a particular verification state, this method associates
   // each of the SCTs with the corresponding SCTVerifyStatus as it adds it to
   // the |ssl_info|.signed_certificate_timestamps list.
-  void AddSCTInfoToSSLInfo(SSLInfo* ssl_info) const;
+  void AddCTInfoToSSLInfo(SSLInfo* ssl_info) const;
 
   // Returns a unique key string for the SSL session cache for
   // this socket.
@@ -301,6 +309,7 @@ class SSLClientSocketOpenSSL : public SSLClientSocket {
   ChannelIDService* channel_id_service_;
   bool tb_was_negotiated_;
   TokenBindingParam tb_negotiated_param_;
+  SignedEkmMap tb_signed_ekm_map_;
 
   // OpenSSL stuff
   SSL* ssl_;

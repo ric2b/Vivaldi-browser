@@ -61,6 +61,8 @@ class NET_EXPORT_PRIVATE QuicHttpStream
   void GetSSLInfo(SSLInfo* ssl_info) override;
   void GetSSLCertRequestInfo(SSLCertRequestInfo* cert_request_info) override;
   bool GetRemoteEndpoint(IPEndPoint* endpoint) override;
+  Error GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
+                                    std::vector<uint8_t>* out) override;
   void Drain(HttpNetworkSession* session) override;
   void PopulateNetErrorDetails(NetErrorDetails* details) override;
   void SetPriority(RequestPriority priority) override;
@@ -172,6 +174,9 @@ class NET_EXPORT_PRIVATE QuicHttpStream
   BoundNetLog stream_net_log_;
 
   QuicErrorCode quic_connection_error_;
+
+  // SSLInfo from the underlying QuicSession.
+  SSLInfo ssl_info_;
 
   base::WeakPtrFactory<QuicHttpStream> weak_factory_;
 

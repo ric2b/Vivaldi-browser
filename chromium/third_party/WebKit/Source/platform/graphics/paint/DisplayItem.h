@@ -64,6 +64,7 @@ public:
         Caret,
         ColumnRules,
         DebugRedFill,
+        DocumentBackground,
         DragImage,
         SVGImage,
         LinkHighlight,
@@ -93,7 +94,6 @@ public:
         ScrollbarTickmarks,
         ScrollbarTrackBackground,
         ScrollbarVertical, // For ScrollbarThemeMacNonOverlayAPI only.
-        SelectionGap,
         SelectionTint,
         TableCellBackgroundFromColumnGroup,
         TableCellBackgroundFromColumn,
@@ -150,7 +150,8 @@ public:
         ScrollFirst,
         ScrollPaintPhaseFirst = ScrollFirst,
         ScrollPaintPhaseLast = ScrollPaintPhaseFirst + PaintPhaseMax,
-        ScrollLast = ScrollPaintPhaseLast,
+        ScrollOverflowControls,
+        ScrollLast = ScrollOverflowControls,
         EndScrollFirst,
         EndScrollLast = EndScrollFirst + ScrollLast - ScrollFirst,
 
@@ -168,10 +169,6 @@ public:
         EndTransform,
         BeginClipPath,
         EndClipPath,
-        BeginFixedPosition,
-        EndFixedPosition,
-        BeginFixedPositionContainer,
-        EndFixedPositionContainer,
 
         Subsequence,
         EndSubsequence,

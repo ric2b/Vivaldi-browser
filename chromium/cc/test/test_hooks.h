@@ -12,6 +12,10 @@
 
 namespace cc {
 
+namespace proto {
+class CompositorMessageToImpl;
+}
+
 // Used by test stubs to notify the test when something interesting happens.
 class TestHooks : public AnimationDelegate {
  public:
@@ -125,16 +129,29 @@ class TestHooks : public AnimationDelegate {
 
   // Implementation of AnimationDelegate:
   void NotifyAnimationStarted(base::TimeTicks monotonic_time,
-                              Animation::TargetProperty target_property,
+                              TargetProperty::Type target_property,
                               int group) override {}
   void NotifyAnimationFinished(base::TimeTicks monotonic_time,
-                               Animation::TargetProperty target_property,
+                               TargetProperty::Type target_property,
                                int group) override {}
   void NotifyAnimationAborted(base::TimeTicks monotonic_time,
-                              Animation::TargetProperty target_property,
+                              TargetProperty::Type target_property,
                               int group) override {}
+  void NotifyAnimationTakeover(base::TimeTicks monotonic_time,
+                               TargetProperty::Type target_property,
+                               double animation_start_time,
+                               scoped_ptr<AnimationCurve> curve) override {}
 
   virtual void RequestNewOutputSurface() = 0;
+
+  // Used to notify the test to create the Remote client LayerTreeHost on
+  // receiving a CompositorMessageToImpl of type INITIALIZE_IMPL.
+  virtual void CreateRemoteClientHost(
+      const proto::CompositorMessageToImpl& proto) {}
+
+  // Used to notify the test to destroy the Remote client LayerTreeHost on
+  // receiving a CompositorMessageToImpl of type CLOSE_IMPL.
+  virtual void DestroyRemoteClientHost() {}
 };
 
 }  // namespace cc

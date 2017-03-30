@@ -22,7 +22,7 @@ class File;
 }
 
 namespace mojo {
-class ApplicationImpl;
+class Connector;
 }
 
 namespace resource_provider {
@@ -33,7 +33,7 @@ namespace resource_provider {
 // have been obtained.
 class ResourceLoader {
  public:
-  ResourceLoader(mojo::ApplicationImpl* app,
+  ResourceLoader(mojo::Connector* connector,
                  const std::set<std::string>& paths);
   ~ResourceLoader();
 

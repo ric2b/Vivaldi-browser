@@ -38,6 +38,7 @@
 
 namespace blink {
 
+class ExecutionContext;
 class Node;
 
 class CORE_EXPORT V8GCController {
@@ -58,8 +59,9 @@ public:
     static void reportDOMMemoryUsageToV8(v8::Isolate*);
 
     static void traceDOMWrappers(v8::Isolate*, Visitor*);
+    static bool hasPendingActivity(ExecutionContext*);
 };
 
-}
+} // namespace blink
 
 #endif // V8GCController_h

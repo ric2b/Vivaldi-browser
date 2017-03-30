@@ -316,6 +316,7 @@ struct MostVisitedURL {
   MostVisitedURL(const GURL& url,
                  const base::string16& title,
                  const base::Time& last_forced_time);
+  MostVisitedURL(const MostVisitedURL& other);
   ~MostVisitedURL();
 
   GURL url;
@@ -379,6 +380,7 @@ struct HistoryAddPageArgs {
                      ui::PageTransition transition,
                      VisitSource source,
                      bool did_replace_entry);
+  HistoryAddPageArgs(const HistoryAddPageArgs& other);
   ~HistoryAddPageArgs();
 
   GURL url;
@@ -400,6 +402,7 @@ typedef std::vector<FilteredURL> FilteredURLList;
 // Used by TopSites to store the thumbnails.
 struct Images {
   Images();
+  Images(const Images& other);
   ~Images();
 
   scoped_refptr<base::RefCountedMemory> thumbnail;
@@ -418,6 +421,7 @@ typedef std::vector<MostVisitedURLWithRank> MostVisitedURLWithRankList;
 
 struct TopSitesDelta {
   TopSitesDelta();
+  TopSitesDelta(const TopSitesDelta& other);
   ~TopSitesDelta();
 
   MostVisitedURLList deleted;
@@ -508,6 +512,7 @@ struct FaviconBitmapIDSize {
 // Defines a favicon bitmap stored in the history backend.
 struct FaviconBitmap {
   FaviconBitmap();
+  FaviconBitmap(const FaviconBitmap& other);
   ~FaviconBitmap();
 
   // The unique id of the bitmap.
@@ -531,6 +536,7 @@ struct FaviconBitmap {
 
 struct ExpireHistoryArgs {
   ExpireHistoryArgs();
+  ExpireHistoryArgs(const ExpireHistoryArgs& other);
   ~ExpireHistoryArgs();
 
   // Sets |begin_time| and |end_time| to the beginning and end of the day (in

@@ -35,6 +35,14 @@ class WebGraphicsContext3DUploadCounter : public TestWebGraphicsContext3D {
     ++upload_count_;
   }
 
+  void texStorage2DEXT(GLenum target,
+                       GLint levels,
+                       GLuint internalformat,
+                       GLint width,
+                       GLint height) override {
+    immutable_texture_created_ = true;
+  }
+
   GLuint createTexture() override {
     ++created_texture_count_;
     return TestWebGraphicsContext3D::createTexture();
@@ -51,9 +59,13 @@ class WebGraphicsContext3DUploadCounter : public TestWebGraphicsContext3D {
   int TextureCreationCount() { return created_texture_count_; }
   void ResetTextureCreationCount() { created_texture_count_ = 0; }
 
+  bool WasImmutableTextureCreated() { return immutable_texture_created_; }
+  void ResetImmutableTextureCreated() { immutable_texture_created_ = false; }
+
  private:
   int upload_count_;
   int created_texture_count_;
+  bool immutable_texture_created_;
 };
 
 class SharedBitmapManagerAllocationCounter : public TestSharedBitmapManager {
@@ -78,9 +90,14 @@ class VideoResourceUpdaterTest : public testing::Test {
         new WebGraphicsContext3DUploadCounter());
 
     context3d_ = context3d.get();
+    context3d_->set_support_texture_storage(true);
 
     output_surface3d_ = FakeOutputSurface::Create3d(std::move(context3d));
     CHECK(output_surface3d_->BindToClient(&client_));
+  }
+
+  void SetUp() override {
+    testing::Test::SetUp();
 
     output_surface_software_ = FakeOutputSurface::CreateSoftware(
         make_scoped_ptr(new SoftwareOutputDevice));
@@ -118,6 +135,43 @@ class VideoResourceUpdaterTest : public testing::Test {
     return video_frame;
   }
 
+  scoped_refptr<media::VideoFrame> CreateWonkyTestYUVVideoFrame() {
+    const int kDimension = 10;
+    const int kYWidth = kDimension + 5;
+    const int kUWidth = (kYWidth + 1) / 2 + 200;
+    const int kVWidth = (kYWidth + 1) / 2 + 1;
+    static uint8_t y_data[kYWidth * kDimension] = {0};
+    static uint8_t u_data[kUWidth * kDimension] = {0};
+    static uint8_t v_data[kVWidth * kDimension] = {0};
+
+    scoped_refptr<media::VideoFrame> video_frame =
+        media::VideoFrame::WrapExternalYuvData(
+            media::PIXEL_FORMAT_YV16,                 // format
+            gfx::Size(kYWidth, kDimension),           // coded_size
+            gfx::Rect(2, 0, kDimension, kDimension),  // visible_rect
+            gfx::Size(kDimension, kDimension),        // natural_size
+            -kYWidth,                                 // y_stride (negative)
+            kUWidth,                                  // u_stride
+            kVWidth,                                  // v_stride
+            y_data + kYWidth * (kDimension - 1),      // y_data
+            u_data,                                   // u_data
+            v_data,                                   // v_data
+            base::TimeDelta());                       // timestamp
+    EXPECT_TRUE(video_frame);
+    return video_frame;
+  }
+
+  scoped_refptr<media::VideoFrame> CreateTestHighBitFrame() {
+    const int kDimension = 10;
+    gfx::Size size(kDimension, kDimension);
+
+    scoped_refptr<media::VideoFrame> video_frame(media::VideoFrame::CreateFrame(
+        media::PIXEL_FORMAT_YUV420P10, size, gfx::Rect(size), size,
+        base::TimeDelta()));
+    EXPECT_TRUE(video_frame);
+    return video_frame;
+  }
+
   static void ReleaseMailboxCB(const gpu::SyncToken& sync_token) {}
 
   scoped_refptr<media::VideoFrame> CreateTestHardwareVideoFrame(
@@ -128,7 +182,9 @@ class VideoResourceUpdaterTest : public testing::Test {
     gpu::Mailbox mailbox;
     mailbox.name[0] = 51;
 
-    const gpu::SyncToken sync_token(7);
+    const gpu::SyncToken sync_token(
+        gpu::CommandBufferNamespace::GPU_IO, 0,
+        gpu::CommandBufferId::FromUnsafeValue(0x123), 7);
     scoped_refptr<media::VideoFrame> video_frame =
         media::VideoFrame::WrapNativeTexture(
             media::PIXEL_FORMAT_ARGB,
@@ -155,7 +211,7 @@ class VideoResourceUpdaterTest : public testing::Test {
     return video_frame;
   }
 
-  scoped_refptr<media::VideoFrame> CreateTestYUVHardareVideoFrame() {
+  scoped_refptr<media::VideoFrame> CreateTestYuvHardwareVideoFrame() {
     const int kDimension = 10;
     gfx::Size size(kDimension, kDimension);
 
@@ -164,7 +220,9 @@ class VideoResourceUpdaterTest : public testing::Test {
     for (int i = 0; i < kPlanesNum; ++i) {
       mailbox[i].name[0] = 50 + 1;
     }
-    const gpu::SyncToken sync_token(7);
+    const gpu::SyncToken sync_token(
+        gpu::CommandBufferNamespace::GPU_IO, 0,
+        gpu::CommandBufferId::FromUnsafeValue(0x123), 7);
     const unsigned target = GL_TEXTURE_RECTANGLE_ARB;
     scoped_refptr<media::VideoFrame> video_frame =
         media::VideoFrame::WrapYUV420NativeTextures(
@@ -200,6 +258,61 @@ TEST_F(VideoResourceUpdaterTest, SoftwareFrame) {
   VideoFrameExternalResources resources =
       updater.CreateExternalResourcesFromVideoFrame(video_frame);
   EXPECT_EQ(VideoFrameExternalResources::YUV_RESOURCE, resources.type);
+}
+
+TEST_F(VideoResourceUpdaterTest, HighBitFrameNoF16) {
+  VideoResourceUpdater updater(output_surface3d_->context_provider(),
+                               resource_provider3d_.get());
+  scoped_refptr<media::VideoFrame> video_frame = CreateTestHighBitFrame();
+
+  VideoFrameExternalResources resources =
+      updater.CreateExternalResourcesFromVideoFrame(video_frame);
+  EXPECT_EQ(VideoFrameExternalResources::YUV_RESOURCE, resources.type);
+}
+
+class VideoResourceUpdaterTestWithF16 : public VideoResourceUpdaterTest {
+ public:
+  VideoResourceUpdaterTestWithF16() : VideoResourceUpdaterTest() {
+    context3d_->set_support_texture_half_float_linear(true);
+  }
+};
+
+TEST_F(VideoResourceUpdaterTestWithF16, HighBitFrame) {
+  VideoResourceUpdater updater(output_surface3d_->context_provider(),
+                               resource_provider3d_.get());
+  scoped_refptr<media::VideoFrame> video_frame = CreateTestHighBitFrame();
+
+  VideoFrameExternalResources resources =
+      updater.CreateExternalResourcesFromVideoFrame(video_frame);
+  EXPECT_EQ(VideoFrameExternalResources::YUV_RESOURCE, resources.type);
+}
+
+TEST_F(VideoResourceUpdaterTest, HighBitFrameSoftwareCompositor) {
+  VideoResourceUpdater updater(nullptr, resource_provider_software_.get());
+  scoped_refptr<media::VideoFrame> video_frame = CreateTestHighBitFrame();
+
+  VideoFrameExternalResources resources =
+      updater.CreateExternalResourcesFromVideoFrame(video_frame);
+  EXPECT_EQ(VideoFrameExternalResources::SOFTWARE_RESOURCE, resources.type);
+}
+
+TEST_F(VideoResourceUpdaterTest, WonkySoftwareFrame) {
+  VideoResourceUpdater updater(output_surface3d_->context_provider(),
+                               resource_provider3d_.get());
+  scoped_refptr<media::VideoFrame> video_frame = CreateWonkyTestYUVVideoFrame();
+
+  VideoFrameExternalResources resources =
+      updater.CreateExternalResourcesFromVideoFrame(video_frame);
+  EXPECT_EQ(VideoFrameExternalResources::YUV_RESOURCE, resources.type);
+}
+
+TEST_F(VideoResourceUpdaterTest, WonkySoftwareFrameSoftwareCompositor) {
+  VideoResourceUpdater updater(nullptr, resource_provider_software_.get());
+  scoped_refptr<media::VideoFrame> video_frame = CreateWonkyTestYUVVideoFrame();
+
+  VideoFrameExternalResources resources =
+      updater.CreateExternalResourcesFromVideoFrame(video_frame);
+  EXPECT_EQ(VideoFrameExternalResources::SOFTWARE_RESOURCE, resources.type);
 }
 
 TEST_F(VideoResourceUpdaterTest, ReuseResource) {
@@ -343,14 +456,21 @@ TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes) {
   EXPECT_EQ(1u, resources.release_callbacks.size());
   EXPECT_EQ(0u, resources.software_resources.size());
 
-  video_frame = CreateTestYUVHardareVideoFrame();
+  video_frame = CreateTestYuvHardwareVideoFrame();
 
   resources = updater.CreateExternalResourcesFromVideoFrame(video_frame);
   EXPECT_EQ(VideoFrameExternalResources::YUV_RESOURCE, resources.type);
-  EXPECT_TRUE(resources.read_lock_fences_enabled);
   EXPECT_EQ(3u, resources.mailboxes.size());
   EXPECT_EQ(3u, resources.release_callbacks.size());
   EXPECT_EQ(0u, resources.software_resources.size());
+  EXPECT_FALSE(resources.read_lock_fences_enabled);
+
+  video_frame = CreateTestYuvHardwareVideoFrame();
+  video_frame->metadata()->SetBoolean(
+      media::VideoFrameMetadata::READ_LOCK_FENCES_ENABLED, true);
+
+  resources = updater.CreateExternalResourcesFromVideoFrame(video_frame);
+  EXPECT_TRUE(resources.read_lock_fences_enabled);
 }
 
 TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes_StreamTexture) {
@@ -374,7 +494,7 @@ TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes_StreamTexture) {
   // GL_TEXTURE_2D texture.
   context3d_->ResetTextureCreationCount();
   video_frame = CreateTestStreamTextureHardwareVideoFrame(true);
-
+  context3d_->ResetImmutableTextureCreated();
   resources = updater.CreateExternalResourcesFromVideoFrame(video_frame);
   EXPECT_EQ(VideoFrameExternalResources::RGBA_RESOURCE, resources.type);
   EXPECT_EQ(1u, resources.mailboxes.size());
@@ -382,6 +502,14 @@ TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes_StreamTexture) {
   EXPECT_EQ(1u, resources.release_callbacks.size());
   EXPECT_EQ(0u, resources.software_resources.size());
   EXPECT_EQ(1, context3d_->TextureCreationCount());
+
+  // The texture copy path requires the use of CopyTextureCHROMIUM, which
+  // enforces that the target texture not be immutable, as it may need
+  // to alter the storage of the texture. Therefore, this test asserts
+  // that an immutable texture wasn't created by glTexStorage2DEXT, when
+  // that extension is supported.
+  EXPECT_FALSE(context3d_->WasImmutableTextureCreated());
 }
+
 }  // namespace
 }  // namespace cc

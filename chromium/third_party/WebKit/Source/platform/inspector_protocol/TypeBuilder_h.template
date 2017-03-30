@@ -1,0 +1,522 @@
+// This file is generated
+
+// Copyright (c) 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef {{class_name}}_h
+#define {{class_name}}_h
+
+#include "platform/PlatformExport.h"
+#include "platform/inspector_protocol/Values.h"
+#include "wtf/Assertions.h"
+#include "wtf/PassOwnPtr.h"
+#include "wtf/PassRefPtr.h"
+#include "wtf/text/StringBuilder.h"
+#include "wtf/text/WTFString.h"
+
+namespace blink {
+namespace protocol {
+
+template<typename T>
+class Maybe {
+public:
+    Maybe() { }
+    Maybe(PassOwnPtr<T> value) : m_value(value) { }
+    void operator=(PassOwnPtr<T> value) { m_value = value; }
+    T* fromJust() const { ASSERT(m_value); return m_value.get(); }
+    T* fromMaybe(T* defaultValue) const { return m_value ? m_value.get() : defaultValue; }
+    bool isJust() const { return !!m_value; }
+    PassOwnPtr<T> takeJust() { ASSERT(m_value); return m_value.release(); }
+private:
+    OwnPtr<T> m_value;
+};
+
+template<typename T>
+class MaybeBase {
+public:
+    MaybeBase() : m_isJust(false) { }
+    MaybeBase(T value) : m_isJust(true), m_value(value) { }
+    void operator=(T value) { m_value = value; m_isJust = true; }
+    T fromJust() const { ASSERT(m_isJust); return m_value; }
+    T fromMaybe(const T& defaultValue) const { return m_isJust ? m_value : defaultValue; }
+    bool isJust() const { return m_isJust; }
+    T takeJust() { ASSERT(m_isJust); return m_value; }
+
+protected:
+    bool m_isJust;
+    T m_value;
+};
+
+template<> class Maybe<bool> : public MaybeBase<bool> {
+public:
+    Maybe() { }
+    Maybe(bool value) : MaybeBase(value) { }
+    using MaybeBase::operator=;
+};
+
+template<> class Maybe<int> : public MaybeBase<int>
+{
+public:
+    Maybe() { }
+    Maybe(int value) : MaybeBase(value) { }
+    using MaybeBase::operator=;
+};  
+
+template<> class Maybe<double> : public MaybeBase<double>
+{
+public:
+    Maybe() { }
+    Maybe(double value) : MaybeBase(value) { }
+    using MaybeBase::operator=;
+};
+
+template<> class Maybe<String> : public MaybeBase<String>
+{
+public:
+    Maybe() { }
+    Maybe(const String& value) : MaybeBase(value) { }
+    Maybe(const AtomicString& value) : MaybeBase(value) { }
+    using MaybeBase::operator=;
+};
+
+template<typename T>
+class Maybe<RefPtr<T>> {
+public:
+    Maybe() { }
+    Maybe(RefPtr<T> value) : m_value(value) { }
+    Maybe(PassRefPtr<T> value) : m_value(value) { }
+    Maybe(T* value) : m_value(value) { }
+    void operator=(PassRefPtr<T> value) { m_value = value; }
+    PassRefPtr<T> fromJust() const { ASSERT(m_value); return m_value; }
+    PassRefPtr<T> fromMaybe(const PassRefPtr<T> defaultValue) const { return m_value || defaultValue; }
+    bool isJust() const { return !!m_value; }
+    PassRefPtr<T> takeJust() { return m_value; }
+
+protected:
+    RefPtr<T> m_value;
+};
+
+template<typename T> class Array;
+
+PLATFORM_EXPORT PassRefPtr<protocol::Value> toValue(int value);
+PLATFORM_EXPORT PassRefPtr<protocol::Value> toValue(double value);
+PLATFORM_EXPORT PassRefPtr<protocol::Value> toValue(bool value);
+PLATFORM_EXPORT PassRefPtr<protocol::Value> toValue(const String& param);
+template<typename T> PassRefPtr<protocol::Value> toValue(PassRefPtr<T> param) { return param; }
+template<typename T> PassRefPtr<protocol::Value> toValue(const RefPtr<T>& param) { return param; }
+template<typename T> PassRefPtr<protocol::Value> toValue(T* param) { return param->serialize(); }
+template<typename T> PassRefPtr<protocol::Value> toValue(PassOwnPtr<T> param) { return param->serialize(); }
+template<typename T> PassRefPtr<protocol::Value> toValue(const OwnPtr<T>& param) { return param->serialize(); }
+
+class PLATFORM_EXPORT ErrorSupport {
+public:
+    ErrorSupport();
+    ErrorSupport(String* errorString);
+    ~ErrorSupport();
+
+    void push();
+    void setName(const String& name);
+    void pop();
+    void addError(const String& error);
+    bool hasErrors();
+    String errors();
+
+private:
+    Vector<String> m_path;
+    Vector<String> m_errors;
+    String* m_errorString;
+};
+
+template<typename T>
+struct FromValue
+{
+    static PassOwnPtr<T> parse(PassRefPtr<protocol::Value> value, ErrorSupport* errors)
+    {
+        return T::parse(value, errors);
+    }
+};
+
+template<>
+struct FromValue<bool>
+{
+    static bool parse(PassRefPtr<protocol::Value> value, ErrorSupport* errors)
+    {
+        bool result = false;
+        bool success = value ? value->asBoolean(&result) : false;
+        if (!success)
+            errors->addError("boolean value expected");
+        return result;
+    }
+};
+
+template<>
+struct FromValue<int>
+{
+    static int parse(PassRefPtr<protocol::Value> value, ErrorSupport* errors)
+    {
+        int result = 0;
+        bool success = value ? value->asNumber(&result) : false;
+        if (!success)
+            errors->addError("integer value expected");
+        return result;
+    }
+};
+
+template<>
+struct FromValue<double>
+{
+    static double parse(PassRefPtr<protocol::Value> value, ErrorSupport* errors)
+    {
+        double result = 0;
+        bool success = value ? value->asNumber(&result) : false;
+        if (!success)
+            errors->addError("double value expected");
+        return result;
+    }
+};
+
+template<>
+struct FromValue<String>
+{
+    static String parse(PassRefPtr<protocol::Value> value, ErrorSupport* errors)
+    {
+        String result;
+        bool success = value ? value->asString(&result) : false;
+        if (!success)
+            errors->addError("string value expected");
+        return result;
+    }
+};
+
+template<typename T>
+struct FromValue<RefPtr<T>>
+{
+    static PassRefPtr<T> parse(PassRefPtr<protocol::Value> value, ErrorSupport* errors)
+    {
+        if (!value)
+            errors->addError("value expected");
+        return value;
+    }
+};
+
+template<>
+struct FromValue<RefPtr<protocol::DictionaryValue>>
+{
+    static PassRefPtr<protocol::DictionaryValue> parse(PassRefPtr<protocol::Value> value, ErrorSupport* errors)
+    {
+        if (value && value->type() == protocol::Value::TypeObject)
+            return DictionaryValue::cast(value);
+        errors->addError("object expected");
+        return nullptr;
+    }
+};
+
+template<typename T>
+struct FromValue<protocol::Array<T>>
+{
+    static PassOwnPtr<protocol::Array<T>> parse(PassRefPtr<protocol::Value> value, ErrorSupport* errors)
+    {
+        return protocol::Array<T>::parse(value, errors);
+    }
+};
+
+template<typename T>
+class ArrayBase {
+public:
+    static PassOwnPtr<Array<T>> create()
+    {
+        return adoptPtr(new Array<T>());
+    }
+
+    static PassOwnPtr<Array<T>> parse(PassRefPtr<protocol::Value> value, ErrorSupport* errors)
+    {
+        RefPtr<protocol::ListValue> array = ListValue::cast(value);
+        if (!array) {
+            errors->addError("array expected");
+            return nullptr;
+        }
+        errors->push();
+        OwnPtr<Array<T>> result = adoptPtr(new Array<T>());
+        for (size_t i = 0; i < array->length(); ++i) {
+            errors->setName("[" + String::number(i) + "]");
+            T item = FromValue<T>::parse(array->get(i), errors);
+            result->m_vector.append(item);
+        }
+        errors->pop();
+        if (errors->hasErrors())
+            return nullptr;
+        return result.release();
+    }
+
+    void addItem(const T& value)
+    {
+        m_vector.append(value);
+    }
+
+    size_t length()
+    {
+        return m_vector.size();
+    }
+
+    T get(size_t index)
+    {
+        return m_vector[index];
+    }
+
+    PassRefPtr<protocol::ListValue> serialize()
+    {
+        RefPtr<protocol::ListValue> result = ListValue::create();
+        for (auto& item : m_vector)
+            result->pushValue(toValue(item));
+        return result.release();
+    }
+
+private:
+    Vector<T> m_vector;
+};
+
+template<> class Array<String> : public ArrayBase<String> {};
+template<> class Array<int> : public ArrayBase<int> {};
+template<> class Array<double> : public ArrayBase<double> {};
+template<> class Array<bool> : public ArrayBase<bool> {};
+template<typename T> class Array<RefPtr<T>> : public ArrayBase<RefPtr<T>> {};
+
+template<typename T>
+class Array {
+public:
+    static PassOwnPtr<Array<T>> create()
+    {
+        return adoptPtr(new Array<T>());
+    }
+
+    static PassOwnPtr<Array<T>> parse(PassRefPtr<protocol::Value> value, ErrorSupport* errors)
+    {
+        RefPtr<protocol::ListValue> array = ListValue::cast(value);
+        if (!array) {
+            errors->addError("array expected");
+            return nullptr;
+        }
+        OwnPtr<Array<T>> result = adoptPtr(new Array<T>());
+        errors->push();
+        for (size_t i = 0; i < array->length(); ++i) {
+            errors->setName("[" + String::number(i) + "]");
+            OwnPtr<T> item = FromValue<T>::parse(array->get(i), errors);
+            result->m_vector.append(item.release());
+        }
+        errors->pop();
+        return result.release();
+    }
+
+    void addItem(PassOwnPtr<T> value)
+    {
+        m_vector.append(value);
+    }
+
+    size_t length()
+    {
+        return m_vector.size();
+    }
+
+    T* get(size_t index)
+    {
+        return m_vector[index].get();
+    }
+
+    PassRefPtr<protocol::ListValue> serialize()
+    {
+        RefPtr<protocol::ListValue> result = ListValue::create();
+        for (auto& item : m_vector)
+            result->pushValue(toValue(item));
+        return result.release();
+    }
+
+private:
+    Vector<OwnPtr<T>> m_vector;
+};
+
+class PLATFORM_EXPORT Object {
+public:
+    static PassOwnPtr<Object> parse(PassRefPtr<protocol::Value> value, ErrorSupport* errors);
+    ~Object();
+
+    PassRefPtr<protocol::DictionaryValue> serialize() const;
+    PassOwnPtr<Object> clone() const;
+private:
+    Object(PassRefPtr<protocol::DictionaryValue> object);
+    RefPtr<protocol::DictionaryValue> m_object;
+};
+
+{% for domain in api.domains %}
+
+// ------------- Forward declarations and typedefs.
+
+namespace {{domain.domain}} {
+  {% for type in domain.types %}
+    {% if type.type == "object" %}
+      {% if "properties" in type %}
+// {{type.description}}
+class {{type.id}};
+      {% else %}
+// {{type.description}}
+using {{type.id}} = Object;
+      {% endif %}
+    {% elif type.type != "array" %}
+// {{type.description}}
+using {{type.id}} = {{resolve_type(type).type}};
+    {% endif %}
+  {% endfor %}
+} // {{domain.domain}}
+{% endfor %}
+
+// ------------- Enum values from types.
+{% for domain in api.domains %}
+  {% for type in domain.types %}
+    {% if "enum" in type %}
+
+namespace {{domain.domain}} {
+namespace {{type.id}}Enum {
+      {% for literal in type.enum %}
+PLATFORM_EXPORT extern const char* {{ literal | dash_to_camelcase}};
+      {% endfor %}
+} // {{type.id}}Enum
+} // {{domain.domain}}
+    {% endif %}
+  {% endfor %}
+{% endfor %}
+
+// ------------- Enum values from params.
+{% for domain in api.domains %}
+  {% for command in join_arrays(domain, ["commands", "events"]) %}
+    {% for param in join_arrays(command, ["parameters", "returns"]) %}
+      {% if "enum" in param %}
+
+namespace {{domain.domain}} {
+namespace {{command.name | to_title_case}} {
+namespace {{param.name | to_title_case}}Enum {
+        {% for literal in param.enum %}
+PLATFORM_EXPORT extern const char* {{ literal | dash_to_camelcase}};
+        {% endfor %}
+} // {{param.name | to_title_case}}Enum
+} // {{command.name | to_title_case }}
+} // {{domain.domain}}
+      {% endif %}
+    {% endfor %}
+  {% endfor %}
+{% endfor %}
+
+// ------------- Type and builder declarations.
+{% for domain in api.domains %}
+
+namespace {{domain.domain}} {
+  {% for type in domain.types %}
+    {% if not (type.type == "object") or not ("properties" in type) %}{% continue %}{% endif %}
+    {% set type_def = type_definition(domain.domain + "." + type.id)%}
+
+// {{type.description}}
+class PLATFORM_EXPORT {{type.id}} {
+public:
+    static PassOwnPtr<{{type.id}}> parse(PassRefPtr<protocol::Value> value, ErrorSupport* errors);
+
+    ~{{type.id}}() { }
+    {% for property in type.properties %}
+      {% if "enum" in property %}
+
+    struct PLATFORM_EXPORT {{property.name | to_title_case}}Enum {
+        {% for literal in property.enum %}
+        static const char* {{ literal | dash_to_camelcase}};
+        {% endfor %}
+    }; // {{property.name | to_title_case}}Enum
+      {% endif %}
+
+      {% if property.optional %}
+    bool has{{property.name | to_title_case}}() { return m_{{property.name}}.isJust(); }
+    {{resolve_type(property).raw_return_type}} get{{property.name | to_title_case}}({{resolve_type(property).raw_pass_type}} defaultValue) { return m_{{property.name}}.isJust() ? m_{{property.name}}.fromJust() : defaultValue; }
+      {% else %}
+    {{resolve_type(property).raw_return_type}} get{{property.name | to_title_case}}() { return {{resolve_type(property).to_raw_type % ("m_" + property.name)}}; }
+      {% endif %}
+    void set{{property.name | to_title_case}}({{resolve_type(property).pass_type}} value) { m_{{property.name}} = value; }
+    {% endfor %}
+
+    PassRefPtr<protocol::DictionaryValue> serialize() const;
+    PassOwnPtr<{{type.id}}> clone() const;
+
+    template<int STATE>
+    class {{type.id}}Builder {
+    public:
+        enum {
+            NoFieldsSet = 0,
+    {% set count = 0 %}
+    {% for property in type.properties %}
+      {% if not(property.optional) %}
+        {% set count = count + 1 %}
+          {{property.name | to_title_case}}Set = 1 << {{count}},
+      {% endif %}
+    {% endfor %}
+            AllFieldsSet = (
+    {%- for property in type.properties %}
+      {% if not(property.optional) %}{{property.name | to_title_case}}Set | {%endif %}
+    {% endfor %}0)};
+
+    {% for property in type.properties %}
+
+      {% if property.optional %}
+        {{type.id}}Builder<STATE>& set{{property.name | to_title_case}}({{resolve_type(property).pass_type}} value)
+        {
+            m_result->set{{property.name | to_title_case}}(value);
+            return *this;
+        }
+      {% else %}
+        {{type.id}}Builder<STATE | {{property.name | to_title_case}}Set>& set{{property.name | to_title_case}}({{resolve_type(property).pass_type}} value)
+        {
+            static_assert(!(STATE & {{property.name | to_title_case}}Set), "property {{property.name}} should not be set yet");
+            m_result->set{{property.name | to_title_case}}(value);
+            return castState<{{property.name | to_title_case}}Set>();
+        }
+      {% endif %}
+    {% endfor %}
+
+        PassOwnPtr<{{type.id}}> build()
+        {
+            static_assert(STATE == AllFieldsSet, "state should be AllFieldsSet");
+            return m_result.release();
+        }
+
+    private:
+        friend class {{type.id}};
+        {{type.id}}Builder() : m_result(adoptPtr(new {{type.id}}())) { }
+
+        template<int STEP> {{type.id}}Builder<STATE | STEP>& castState()
+        {
+            return *reinterpret_cast<{{type.id}}Builder<STATE | STEP>*>(this);
+        }
+
+        {{type_def.type}} m_result;
+    };
+
+    static {{type.id}}Builder<0> create()
+    {
+        return {{type.id}}Builder<0>();
+    }
+
+private:
+    {{type.id}}() { }
+
+    {% for property in type.properties %}
+      {% if property.optional %}
+    Maybe<{{resolve_type(property).raw_type}}> m_{{property.name}};
+      {% else %}
+    {{resolve_type(property).type}} m_{{property.name}};
+      {% endif %}
+    {% endfor %}
+};
+
+  {% endfor %}
+
+} // {{domain.domain}}
+{% endfor %}
+
+} // namespace protocol
+} // namespace blink
+
+#endif // !defined({{class_name}}_h)

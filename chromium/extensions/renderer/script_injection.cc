@@ -22,11 +22,11 @@
 #include "extensions/renderer/extensions_renderer_client.h"
 #include "extensions/renderer/script_injection_callback.h"
 #include "extensions/renderer/scripts_run_info.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebScriptSource.h"
-#include "third_party/WebKit/public/web/WebSecurityOrigin.h"
 #include "url/gurl.h"
 
 namespace extensions {
@@ -195,10 +195,8 @@ void ScriptInjection::RequestPermissionFromBrowser() {
   // invalid request (which is treated like a notification).
   request_id_ = g_next_pending_id++;
   render_frame_->Send(new ExtensionHostMsg_RequestScriptInjectionPermission(
-      render_frame_->GetRoutingID(),
-      host_id().id(),
-      injector_->script_type(),
-      request_id_));
+      render_frame_->GetRoutingID(), host_id().id(), injector_->script_type(),
+      run_location_, request_id_));
 }
 
 void ScriptInjection::NotifyWillNotInject(

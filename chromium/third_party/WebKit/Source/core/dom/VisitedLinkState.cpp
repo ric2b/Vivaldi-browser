@@ -29,9 +29,9 @@
 #include "core/dom/VisitedLinkState.h"
 
 #include "core/HTMLNames.h"
-#include "core/XLinkNames.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/html/HTMLAnchorElement.h"
+#include "core/svg/SVGURIReference.h"
 #include "public/platform/Platform.h"
 
 namespace blink {
@@ -42,7 +42,7 @@ static inline const AtomicString& linkAttribute(const Element& element)
     if (element.isHTMLElement())
         return element.fastGetAttribute(HTMLNames::hrefAttr);
     ASSERT(element.isSVGElement());
-    return element.getAttribute(XLinkNames::hrefAttr);
+    return SVGURIReference::legacyHrefString(toSVGElement(element));
 }
 
 static inline LinkHash linkHashForElement(const Element& element, const AtomicString& attribute = AtomicString())
@@ -68,6 +68,7 @@ void VisitedLinkState::invalidateStyleForAllLinks(bool invalidateVisitedLinkHash
                 toHTMLAnchorElement(node).invalidateCachedVisitedLinkHash();
             toElement(node).pseudoStateChanged(CSSSelector::PseudoLink);
             toElement(node).pseudoStateChanged(CSSSelector::PseudoVisited);
+            toElement(node).pseudoStateChanged(CSSSelector::PseudoAnyLink);
         }
     }
 }
@@ -80,6 +81,7 @@ void VisitedLinkState::invalidateStyleForLink(LinkHash linkHash)
         if (node.isLink() && linkHashForElement(toElement(node)) == linkHash) {
             toElement(node).pseudoStateChanged(CSSSelector::PseudoLink);
             toElement(node).pseudoStateChanged(CSSSelector::PseudoVisited);
+            toElement(node).pseudoStateChanged(CSSSelector::PseudoAnyLink);
         }
     }
 }

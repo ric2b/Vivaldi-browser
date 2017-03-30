@@ -14,7 +14,14 @@ if (current_toolchain == host_toolchain) {
 
   # GYP: //third_party/android_protobuf/android_protobuf.gyp:android_protoc
   executable("android_protoc") {
-    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs -= [
+      "//build/config/compiler:chromium_code",
+
+      # Does not compile with sanitizers.
+      "//build/config/sanitizers:default_sanitizer_flags",
+      "//build/config/sanitizers:default_sanitizer_coverage_flags",
+    ]
+
     configs += [
       "//build/config/compiler:no_chromium_code",
 
@@ -142,6 +149,7 @@ if (is_android) {
 
   # GYP: //third_party/android_protobuf/android_protobuf.gyp:protobuf_nano_javalib
   android_library("protobuf_nano_javalib") {
+    chromium_code = false
     java_files = [
       "src/java/src/main/java/com/google/protobuf/nano/CodedInputByteBufferNano.java",
       "src/java/src/main/java/com/google/protobuf/nano/CodedOutputByteBufferNano.java",

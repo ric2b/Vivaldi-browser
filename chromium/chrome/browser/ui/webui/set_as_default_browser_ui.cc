@@ -9,7 +9,6 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/ui/browser.h"
@@ -28,6 +27,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
 #include "chrome/installer/util/install_util.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -96,7 +96,7 @@ class ResponseDelegate {
 class SetAsDefaultBrowserHandler
     : public WebUIMessageHandler,
       public base::SupportsWeakPtr<SetAsDefaultBrowserHandler>,
-      public ShellIntegration::DefaultWebClientObserver {
+      public shell_integration::DefaultWebClientObserver {
  public:
   explicit SetAsDefaultBrowserHandler(
       const base::WeakPtr<ResponseDelegate>& response_delegate);
@@ -105,11 +105,9 @@ class SetAsDefaultBrowserHandler
   // WebUIMessageHandler implementation.
   void RegisterMessages() override;
 
-  // ShellIntegration::DefaultWebClientObserver implementation.
+  // shell_integration::DefaultWebClientObserver implementation.
   void SetDefaultWebClientUIState(
-      ShellIntegration::DefaultWebClientUIState state) override;
-  void OnSetAsDefaultConcluded(bool close_chrome) override;
-  bool IsInteractiveSetDefaultPermitted() override;
+      shell_integration::DefaultWebClientUIState state) override;
 
  private:
   // Handler for the 'Next' (or 'make Chrome the Metro browser') button.
@@ -118,9 +116,11 @@ class SetAsDefaultBrowserHandler
   // Close this web ui.
   void ConcludeInteraction(MakeChromeDefaultResult interaction_result);
 
-  scoped_refptr<ShellIntegration::DefaultBrowserWorker> default_browser_worker_;
-  bool set_default_returned_;
-  bool set_default_result_;
+  // The worker pointer is reference counted. While it is running, the
+  // message loops of the FILE and UI thread will hold references to it
+  // and it will be automatically freed once all its tasks have finished.
+  scoped_refptr<shell_integration::DefaultBrowserWorker>
+      default_browser_worker_;
   base::WeakPtr<ResponseDelegate> response_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(SetAsDefaultBrowserHandler);
@@ -128,10 +128,10 @@ class SetAsDefaultBrowserHandler
 
 SetAsDefaultBrowserHandler::SetAsDefaultBrowserHandler(
     const base::WeakPtr<ResponseDelegate>& response_delegate)
-    : default_browser_worker_(new ShellIntegration::DefaultBrowserWorker(this)),
-      set_default_returned_(false), set_default_result_(false),
-      response_delegate_(response_delegate) {
-}
+    : default_browser_worker_(new shell_integration::DefaultBrowserWorker(
+          this,
+          /*delete_observer=*/false)),
+      response_delegate_(response_delegate) {}
 
 SetAsDefaultBrowserHandler::~SetAsDefaultBrowserHandler() {
   default_browser_worker_->ObserverDestroyed();
@@ -145,18 +145,14 @@ void SetAsDefaultBrowserHandler::RegisterMessages() {
 }
 
 void SetAsDefaultBrowserHandler::SetDefaultWebClientUIState(
-    ShellIntegration::DefaultWebClientUIState state) {
+    shell_integration::DefaultWebClientUIState state) {
   // The callback is expected to be invoked once the procedure has completed.
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (!set_default_returned_)
-    return;
-
-  if (state == ShellIntegration::STATE_NOT_DEFAULT && set_default_result_) {
-    // The operation concluded, but Chrome is still not the default.
-    // If the call has succeeded, this suggests user has decided not to make
-    // chrome the default.
+  if (state == shell_integration::STATE_NOT_DEFAULT) {
+    // The operation concluded, but Chrome is still not the default. This
+    // suggests the user has decided not to make Chrome the default.
     ConcludeInteraction(MAKE_CHROME_DEFAULT_REGRETTED);
-  } else if (state == ShellIntegration::STATE_IS_DEFAULT) {
+  } else if (state == shell_integration::STATE_IS_DEFAULT) {
     ConcludeInteraction(MAKE_CHROME_DEFAULT_ACCEPTED);
   }
 
@@ -164,19 +160,8 @@ void SetAsDefaultBrowserHandler::SetDefaultWebClientUIState(
   // choice.
 }
 
-void SetAsDefaultBrowserHandler::OnSetAsDefaultConcluded(bool call_result) {
-  set_default_returned_ = true;
-  set_default_result_ = call_result;
-}
-
-bool SetAsDefaultBrowserHandler::IsInteractiveSetDefaultPermitted() {
-  return true;
-}
-
 void SetAsDefaultBrowserHandler::HandleLaunchSetDefaultBrowserFlow(
     const base::ListValue* args) {
-  set_default_returned_ = false;
-  set_default_result_ = false;
   default_browser_worker_->StartSetAsDefault();
 }
 

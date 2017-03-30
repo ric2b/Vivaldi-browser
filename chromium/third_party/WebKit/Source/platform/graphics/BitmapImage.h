@@ -54,12 +54,9 @@ public:
         return adoptRef(new BitmapImage(observer));
     }
 
-    // This allows constructing a BitmapImage with a forced non-default orientation.
-    static PassRefPtr<BitmapImage> createWithOrientationForTesting(const SkBitmap&, ImageOrientation);
-
     ~BitmapImage() override;
 
-    bool isBitmapImage() const override;
+    bool isBitmapImage() const override { return true; }
 
     bool currentFrameHasSingleSecurityOrigin() const override;
 
@@ -84,16 +81,19 @@ public:
     ImageAnimationPolicy animationPolicy() override { return m_animationPolicy; }
     void advanceTime(double deltaTimeInSeconds) override;
 
-    // Advance the image animation by one frame.
-    void advanceAnimationForTesting() override { internalAdvanceAnimation(false); }
-
     PassRefPtr<SkImage> imageForCurrentFrame() override;
     PassRefPtr<Image> imageForDefaultFrame() override;
+
     bool currentFrameKnownToBeOpaque(MetadataMode = UseCurrentMetadata) override;
     bool currentFrameIsComplete() override;
     bool currentFrameIsLazyDecoded() override;
 
     ImageOrientation currentFrameOrientation();
+
+    // Construct a BitmapImage with the given orientation.
+    static PassRefPtr<BitmapImage> createWithOrientationForTesting(const SkBitmap&, ImageOrientation);
+    // Advance the image animation by one frame.
+    void advanceAnimationForTesting() override { internalAdvanceAnimation(false); }
 
 private:
     friend class BitmapImageTest;
@@ -146,10 +146,8 @@ private:
     // If the image is large enough, calls destroyDecodedData().
     void destroyDecodedDataIfNecessary();
 
-    // Generally called by destroyDecodedData(), destroys whole-image metadata
-    // and notifies observers that the memory footprint has (hopefully)
-    // decreased by |frameBytesCleared|.
-    void destroyMetadataAndNotify(size_t frameBytesCleared);
+    // Notifies observers that the memory footprint has changed.
+    void notifyMemoryChanged(int delta);
 
     // Whether or not size is available yet.
     bool isSizeAvailable();

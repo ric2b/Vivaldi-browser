@@ -13,6 +13,7 @@
 
 namespace blink {
 
+class CanvasRenderingContext2D;
 class CanvasStyle;
 class CSSValue;
 class Element;
@@ -74,6 +75,7 @@ public:
     bool hasClip() const { return m_hasClip; }
     bool hasComplexClip() const { return m_hasComplexClip; }
     void playbackClips(SkCanvas* canvas) const { m_clipList.playback(canvas); }
+    const SkPath& getCurrentClipPath() const { return m_clipList.getCurrentClipPath(); }
 
     void setFont(const Font&, CSSFontSelector*);
     const Font& font() const;
@@ -84,8 +86,9 @@ public:
     void setFilter(PassRefPtrWillBeRawPtr<CSSValue>);
     void setUnparsedFilter(const String& filterString) { m_unparsedFilter = filterString; }
     const String& unparsedFilter() const { return m_unparsedFilter; }
-    SkImageFilter* getFilter(Element*, const Font&) const;
-    bool hasFilter() const { return m_filterValue; }
+    SkImageFilter* getFilter(Element*, const Font&, IntSize canvasSize, CanvasRenderingContext2D*) const;
+    bool hasFilter(Element*, const Font&, IntSize canvasSize, CanvasRenderingContext2D*) const;
+    void clearResolvedFilter() const;
 
     void setStrokeStyle(CanvasStyle*);
     CanvasStyle* strokeStyle() const { return m_strokeStyle.get(); }
@@ -227,6 +230,6 @@ private:
     ClipList m_clipList;
 };
 
-} // blink
+} // namespace blink
 
 #endif

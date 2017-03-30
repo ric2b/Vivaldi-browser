@@ -115,7 +115,7 @@ bool MediaQueryEvaluator::mediaTypeMatch(const String& mediaTypeToMatch) const
         || equalIgnoringCase(mediaTypeToMatch, mediaType());
 }
 
-static bool applyRestrictor(MediaQuery::Restrictor r, bool value)
+static bool applyRestrictor(MediaQuery::RestrictorType r, bool value)
 {
     return r == MediaQuery::Not ? !value : value;
 }
@@ -671,4 +671,4 @@ bool MediaQueryEvaluator::eval(const MediaQueryExp* expr) const
     return false;
 }
 
-} // namespace
+} // namespace blink

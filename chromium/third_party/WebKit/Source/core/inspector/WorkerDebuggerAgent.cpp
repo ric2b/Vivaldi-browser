@@ -30,20 +30,19 @@
 
 #include "core/inspector/WorkerDebuggerAgent.h"
 
-#include "core/inspector/InjectedScript.h"
 #include "core/inspector/WorkerThreadDebugger.h"
-#include "core/inspector/v8/V8Debugger.h"
 #include "core/workers/WorkerGlobalScope.h"
+#include "platform/v8_inspector/public/V8Debugger.h"
 
 namespace blink {
 
-PassOwnPtrWillBeRawPtr<WorkerDebuggerAgent> WorkerDebuggerAgent::create(WorkerThreadDebugger* workerThreadDebugger, WorkerGlobalScope* inspectedWorkerGlobalScope, InjectedScriptManager* injectedScriptManager)
+PassOwnPtrWillBeRawPtr<WorkerDebuggerAgent> WorkerDebuggerAgent::create(V8Debugger* debugger, WorkerGlobalScope* inspectedWorkerGlobalScope, V8RuntimeAgent* runtimeAgent)
 {
-    return adoptPtrWillBeNoop(new WorkerDebuggerAgent(workerThreadDebugger, inspectedWorkerGlobalScope, injectedScriptManager));
+    return adoptPtrWillBeNoop(new WorkerDebuggerAgent(debugger, inspectedWorkerGlobalScope, runtimeAgent));
 }
 
-WorkerDebuggerAgent::WorkerDebuggerAgent(WorkerThreadDebugger* workerThreadDebugger, WorkerGlobalScope* inspectedWorkerGlobalScope, InjectedScriptManager* injectedScriptManager)
-    : InspectorDebuggerAgent(injectedScriptManager, workerThreadDebugger->debugger(), WorkerThreadDebugger::contextGroupId())
+WorkerDebuggerAgent::WorkerDebuggerAgent(V8Debugger* debugger, WorkerGlobalScope* inspectedWorkerGlobalScope, V8RuntimeAgent* runtimeAgent)
+    : InspectorDebuggerAgent(runtimeAgent, debugger, WorkerThreadDebugger::contextGroupId())
     , m_inspectedWorkerGlobalScope(inspectedWorkerGlobalScope)
 {
 }

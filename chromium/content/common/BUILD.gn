@@ -134,13 +134,6 @@ source_set("common") {
                         ".",
                         "//content")
 
-  # These files are only built in a GN build because they bring in
-  # dependencies that don't build with GYP.
-  sources += [
-    "mojo/mojo_shell_connection_impl.cc",
-    "mojo/mojo_shell_connection_impl.h",
-  ]
-
   configs += [
     "//content:content_implementation",
     "//build/config:precompiled_headers",
@@ -161,10 +154,11 @@ source_set("common") {
     "//gpu/command_buffer/client:gles2_interface",
     "//gpu/command_buffer/common:gles2_utils",
     "//mojo/converters/network",
-    "//mojo/runner/child:lib",
     "//mojo/shell/public/cpp",
+    "//mojo/shell/runner/child:lib",
     "//net",
     "//skia",
+    "//third_party/WebKit/public:blink",
     "//third_party/icu",
     "//third_party/libjingle",
     "//ui/accessibility",
@@ -187,7 +181,6 @@ source_set("common") {
 
       # TODO: the dependency on gl_in_process_context should be decoupled from
       # content and moved to android_webview. See crbug.com/365797.
-      ":mojo_bindings",
       "//gpu/blink",
       "//gpu/command_buffer/client:gl_in_process_context",
       "//gpu/command_buffer/client:gles2_c_lib",
@@ -200,15 +193,16 @@ source_set("common") {
       "//media:shared_memory_support",
       "//media/midi",
       "//mojo/common:common_base",
+      "//mojo/edk/system",
       "//mojo/environment:chromium",
       "//mojo/shell/public/interfaces",
       "//sandbox",
       "//storage/common",
-      "//third_party/WebKit/public:blink",
       "//third_party/boringssl",
-      "//third_party/mojo/src/mojo/edk/system",
       "//ui/gl",
     ]
+
+    public_deps += [ ":mojo_bindings" ]
   }
 
   defines = []
@@ -286,10 +280,7 @@ source_set("common") {
   if (use_ozone) {
     configs += [ "//ui/ozone:vgem_map" ]
 
-    deps += [
-      "//ui/ozone:ozone",
-      "//ui/ozone:ozone_base",
-    ]
+    deps += [ "//ui/ozone" ]
   } else {
     sources -= [
       "cursors/webcursor_ozone.cc",
@@ -373,16 +364,14 @@ source_set("common") {
       ]
     }
 
-    if (enable_mojo_media == "gpu") {
-      deps += [ "//media/mojo/services:application" ]
+    if (mojo_media_host == "gpu") {
+      deps += [ "//media/mojo/services:cdm_service" ]
     }
   }
 
   if (is_chromeos) {
     sources += [
       "gpu/media/accelerated_video_decoder.h",
-      "gpu/media/gpu_arc_video_service.cc",
-      "gpu/media/gpu_arc_video_service.h",
       "gpu/media/h264_decoder.cc",
       "gpu/media/h264_decoder.h",
       "gpu/media/h264_dpb.cc",
@@ -396,7 +385,6 @@ source_set("common") {
       "gpu/media/vp9_picture.cc",
       "gpu/media/vp9_picture.h",
     ]
-    deps += [ "//components/arc" ]
     if (use_v4lplugin) {
       defines += [ "USE_LIBV4L2" ]
       sources += get_target_outputs(":libv4l2_generate_stubs")
@@ -537,6 +525,7 @@ mojom("mojo_bindings") {
     "background_sync_service.mojom",
     "geolocation_service.mojom",
     "image_downloader/image_downloader.mojom",
+    "leveldb_wrapper.mojom",
     "permission_service.mojom",
     "presentation/presentation_service.mojom",
     "process_control.mojom",
@@ -544,13 +533,15 @@ mojom("mojo_bindings") {
     "render_widget_window_tree_client_factory.mojom",
     "service_port_service.mojom",
     "service_worker/embedded_worker_setup.mojom",
+    "storage_partition_service.mojom",
     "vr_service.mojom",
     "wake_lock_service.mojom",
   ]
 
   import_dirs = [ "//mojo/services" ]
 
-  deps = [
+  public_deps = [
+    "//components/leveldb/public/interfaces",
     "//components/mus/public/interfaces",
     "//content/public/common:mojo_bindings",
     "//mojo/shell/public/interfaces",

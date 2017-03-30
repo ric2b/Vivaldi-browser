@@ -62,7 +62,6 @@ component("web") {
     sources += bindings_unittest_files
     sources += core_unittest_files
     sources += modules_unittest_files
-    sources += platform_unittest_support_files
     sources += platform_web_unittest_files
 
     sources += [ "WebTestingSupport.cpp" ]
@@ -73,6 +72,11 @@ component("web") {
     set_sources_assignment_filter([])
     sources += [ "linux/WebFontRendering.cpp" ]
     set_sources_assignment_filter(sources_assignment_filter)
+  }
+
+  if (remove_webcore_debug_symbols) {
+    configs -= [ "//build/config/compiler:default_symbols" ]
+    configs += [ "//build/config/compiler:no_symbols" ]
   }
 }
 
@@ -95,15 +99,6 @@ source_set("test_support") {
 
     include_dirs = [ "$root_gen_dir/blink" ]
   }
-}
-
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("webkit_unit_tests_run") {
-  testonly = true
-  deps = [
-    ":webkit_unit_tests",
-  ]
 }
 
 group("webkit_unit_tests_data") {
@@ -163,13 +158,13 @@ test("webkit_unit_tests") {
     sources += bindings_unittest_files
     sources += core_unittest_files
     sources += modules_unittest_files
-    sources += platform_unittest_support_files
     sources += platform_web_unittest_files
   }
 
   if (is_android) {
     deps += [
       "//base:base_java",
+      "//content/public/android:content_java",
       "//content/shell/android:content_shell_assets",
       "//net/android:net_java",
     ]

@@ -8,9 +8,9 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "components/password_manager/core/browser/password_store_change.h"
+#include "components/prefs/pref_service.h"
 #include "url/origin.h"
 
 using autofill::PasswordForm;
@@ -137,6 +137,21 @@ PasswordStoreChangeList PasswordStoreDefault::RemoveLoginsSyncedBetweenImpl(
   return changes;
 }
 
+PasswordStoreChangeList
+PasswordStoreDefault::DisableAutoSignInForAllLoginsImpl() {
+  ScopedVector<autofill::PasswordForm> forms;
+  PasswordStoreChangeList changes;
+  if (login_db_ && login_db_->GetAutoSignInLogins(&forms)) {
+    if (login_db_->DisableAutoSignInForAllLogins()) {
+      for (const auto* form : forms) {
+        changes.push_back(
+            PasswordStoreChange(PasswordStoreChange::UPDATE, *form));
+      }
+    }
+  }
+  return changes;
+}
+
 bool PasswordStoreDefault::RemoveStatisticsCreatedBetweenImpl(
     base::Time delete_begin,
     base::Time delete_end) {
@@ -145,8 +160,7 @@ bool PasswordStoreDefault::RemoveStatisticsCreatedBetweenImpl(
 }
 
 ScopedVector<autofill::PasswordForm> PasswordStoreDefault::FillMatchingLogins(
-    const autofill::PasswordForm& form,
-    AuthorizationPromptPolicy prompt_policy) {
+    const autofill::PasswordForm& form) {
   ScopedVector<autofill::PasswordForm> matched_forms;
   if (login_db_ && !login_db_->GetLogins(form, &matched_forms))
     return ScopedVector<autofill::PasswordForm>();

@@ -6,11 +6,12 @@
 #define CC_SURFACES_SURFACE_AGGREGATOR_H_
 
 #include <set>
+#include <unordered_map>
+#include <unordered_set>
 
-#include "base/containers/hash_tables.h"
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "cc/quads/draw_quad.h"
 #include "cc/quads/render_pass.h"
 #include "cc/resources/transferable_resource.h"
@@ -36,7 +37,7 @@ class CC_SURFACES_EXPORT SurfaceAggregatorClient {
 
 class CC_SURFACES_EXPORT SurfaceAggregator {
  public:
-  typedef base::hash_map<SurfaceId, int> SurfaceIndexMap;
+  using SurfaceIndexMap = std::unordered_map<SurfaceId, int, SurfaceIdHash>;
 
   SurfaceAggregator(SurfaceAggregatorClient* client,
                     SurfaceManager* manager,
@@ -88,7 +89,7 @@ class CC_SURFACES_EXPORT SurfaceAggregator {
   void CopyQuadsToPass(
       const QuadList& source_quad_list,
       const SharedQuadStateList& source_shared_quad_state_list,
-      const base::hash_map<ResourceId, ResourceId>& resource_to_child_map,
+      const std::unordered_map<ResourceId, ResourceId>& resource_to_child_map,
       const gfx::Transform& target_transform,
       const ClipData& clip_rect,
       RenderPass* dest_pass,
@@ -113,13 +114,16 @@ class CC_SURFACES_EXPORT SurfaceAggregator {
   ResourceProvider* provider_;
 
   class RenderPassIdAllocator;
-  typedef base::ScopedPtrHashMap<SurfaceId, scoped_ptr<RenderPassIdAllocator>>
-      RenderPassIdAllocatorMap;
+  using RenderPassIdAllocatorMap =
+      std::unordered_map<SurfaceId,
+                         scoped_ptr<RenderPassIdAllocator>,
+                         SurfaceIdHash>;
   RenderPassIdAllocatorMap render_pass_allocator_map_;
   int next_render_pass_id_;
   const bool aggregate_only_damaged_;
 
-  typedef base::hash_map<SurfaceId, int> SurfaceToResourceChildIdMap;
+  using SurfaceToResourceChildIdMap =
+      std::unordered_map<SurfaceId, int, SurfaceIdHash>;
   SurfaceToResourceChildIdMap surface_id_to_resource_child_id_;
 
   // The following state is only valid for the duration of one Aggregate call
@@ -128,7 +132,7 @@ class CC_SURFACES_EXPORT SurfaceAggregator {
 
   // This is the set of surfaces referenced in the aggregation so far, used to
   // detect cycles.
-  typedef std::set<SurfaceId> SurfaceSet;
+  using SurfaceSet = std::set<SurfaceId>;
   SurfaceSet referenced_surfaces_;
 
   // For each Surface used in the last aggregation, gives the frame_index at
@@ -137,7 +141,7 @@ class CC_SURFACES_EXPORT SurfaceAggregator {
   SurfaceIndexMap contained_surfaces_;
 
   // After surface validation, every Surface in this set is valid.
-  base::hash_set<SurfaceId> valid_surfaces_;
+  std::unordered_set<SurfaceId, SurfaceIdHash> valid_surfaces_;
 
   // This is the pass list for the aggregated frame.
   RenderPassList* dest_pass_list_;
@@ -151,6 +155,8 @@ class CC_SURFACES_EXPORT SurfaceAggregator {
 
   // Resource list for the aggregated frame.
   TransferableResourceArray* dest_resource_list_;
+
+  base::WeakPtrFactory<SurfaceAggregator> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SurfaceAggregator);
 };

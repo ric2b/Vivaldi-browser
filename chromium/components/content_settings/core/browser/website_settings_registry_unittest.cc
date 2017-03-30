@@ -3,13 +3,13 @@
 // found in the LICENSE file.
 
 #include "base/logging.h"
-#include "base/prefs/pref_registry.h"
 #include "base/values.h"
 #include "components/content_settings/core/browser/website_settings_info.h"
 #include "components/content_settings/core/browser/website_settings_registry.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_registry.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace content_settings {
@@ -46,7 +46,8 @@ TEST_F(WebsiteSettingsRegistryTest, GetByName) {
   registry()->Register(static_cast<ContentSettingsType>(10), "test", nullptr,
                        WebsiteSettingsInfo::UNSYNCABLE,
                        WebsiteSettingsInfo::LOSSY,
-                       WebsiteSettingsInfo::TOP_LEVEL_DOMAIN_ONLY_SCOPE);
+                       WebsiteSettingsInfo::TOP_LEVEL_DOMAIN_ONLY_SCOPE,
+                       WebsiteSettingsInfo::INHERIT_IN_INCOGNITO);
   info = registry()->GetByName("test");
   ASSERT_TRUE(info);
   EXPECT_EQ(10, info->type());
@@ -71,7 +72,8 @@ TEST_F(WebsiteSettingsRegistryTest, Properties) {
                        make_scoped_ptr(new base::FundamentalValue(999)),
                        WebsiteSettingsInfo::SYNCABLE,
                        WebsiteSettingsInfo::LOSSY,
-                       WebsiteSettingsInfo::TOP_LEVEL_DOMAIN_ONLY_SCOPE);
+                       WebsiteSettingsInfo::TOP_LEVEL_DOMAIN_ONLY_SCOPE,
+                       WebsiteSettingsInfo::INHERIT_IN_INCOGNITO);
   info = registry()->Get(static_cast<ContentSettingsType>(10));
   ASSERT_TRUE(info);
   EXPECT_EQ("profile.content_settings.exceptions.test", info->pref_name());
@@ -85,6 +87,8 @@ TEST_F(WebsiteSettingsRegistryTest, Properties) {
             info->GetPrefRegistrationFlags());
   EXPECT_EQ(WebsiteSettingsInfo::TOP_LEVEL_DOMAIN_ONLY_SCOPE,
             info->scoping_type());
+  EXPECT_EQ(WebsiteSettingsInfo::INHERIT_IN_INCOGNITO,
+            info->incognito_behavior());
 }
 
 TEST_F(WebsiteSettingsRegistryTest, Iteration) {
@@ -92,7 +96,8 @@ TEST_F(WebsiteSettingsRegistryTest, Iteration) {
                        make_scoped_ptr(new base::FundamentalValue(999)),
                        WebsiteSettingsInfo::SYNCABLE,
                        WebsiteSettingsInfo::LOSSY,
-                       WebsiteSettingsInfo::TOP_LEVEL_DOMAIN_ONLY_SCOPE);
+                       WebsiteSettingsInfo::TOP_LEVEL_DOMAIN_ONLY_SCOPE,
+                       WebsiteSettingsInfo::INHERIT_IN_INCOGNITO);
 
   bool found = false;
   for (const WebsiteSettingsInfo* info : *registry()) {

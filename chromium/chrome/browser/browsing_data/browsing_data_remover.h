@@ -14,7 +14,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
-#include "base/prefs/pref_member.h"
 #include "base/sequenced_task_runner_helpers.h"
 #include "base/synchronization/waitable_event_watcher.h"
 #include "base/task/cancelable_task_tracker.h"
@@ -22,6 +21,7 @@
 #include "build/build_config.h"
 #include "chrome/common/features.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/prefs/pref_member.h"
 #include "components/search_engines/template_url_service.h"
 #include "storage/common/quota/quota_types.h"
 #include "url/gurl.h"
@@ -62,12 +62,20 @@ class BrowsingDataRemover : public KeyedService
 {
  public:
   // Time period ranges available when doing browsing data removals.
+  // TODO(msramek): As this is now reused on Android, we should move it
+  // to browsing_data_counter_utils.h (and rename appropriately), so that
+  // all fundamental types related to browsing data on all platforms are in
+  // one place.
+  //
+  // A Java counterpart will be generated for this enum.
+  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser
   enum TimePeriod {
     LAST_HOUR = 0,
     LAST_DAY,
     LAST_WEEK,
     FOUR_WEEKS,
-    EVERYTHING
+    EVERYTHING,
+    TIME_PERIOD_LAST = EVERYTHING
   };
 
   // Mask used for Remove.
@@ -291,12 +299,12 @@ class BrowsingDataRemover : public KeyedService
 #endif
 
   // Removes the specified items related to browsing for a specific host. If the
-  // provided |remove_url| is empty, data is removed for all origins. The
+  // provided |remove_url| is empty, data is removed for all origins; otherwise,
+  // it is restricted by origin (where implemented yet). The
   // |origin_type_mask| parameter defines the set of origins from which data
   // should be removed (protected, unprotected, or both).
-  // TODO(mkwst): The current implementation relies on unique (empty) origins to
-  // signal removal of all origins. Reconsider this behavior if/when we build
-  // a "forget this site" feature.
+  // TODO(ttr314): Remove "(where implemented yet)" constraint above once
+  // crbug.com/113621 is done.
   void RemoveImpl(const TimeRange& time_range,
                   int remove_mask,
                   const GURL& remove_url,
@@ -344,6 +352,9 @@ class BrowsingDataRemover : public KeyedService
   // Callback for when passwords stats for the requested time range have been
   // cleared.
   void OnClearedPasswordsStats();
+
+  // Callback for when the autosignin state of passwords has been revoked.
+  void OnClearedAutoSignIn();
 
   // Callback for when cookies have been deleted. Invokes NotifyIfDone.
   void OnClearedCookies();
@@ -444,6 +455,7 @@ class BrowsingDataRemover : public KeyedService
 #if defined(ENABLE_WEBRTC)
   bool waiting_for_clear_webrtc_logs_ = false;
 #endif
+  bool waiting_for_clear_auto_sign_in_ = false;
 
   // The removal mask for the current removal operation.
   int remove_mask_ = 0;

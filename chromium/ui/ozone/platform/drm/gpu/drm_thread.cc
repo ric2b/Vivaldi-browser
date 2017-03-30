@@ -76,7 +76,10 @@ DrmThread::~DrmThread() {
 }
 
 void DrmThread::Start() {
-  if (!StartWithOptions(base::Thread::Options(base::MessageLoop::TYPE_IO, 0)))
+  base::Thread::Options thread_options;
+  thread_options.message_loop_type = base::MessageLoop::TYPE_IO;
+  thread_options.priority = base::ThreadPriority::DISPLAY;
+  if (!StartWithOptions(thread_options))
     LOG(FATAL) << "Failed to create DRM thread";
 }
 
@@ -104,6 +107,12 @@ void DrmThread::CreateBuffer(gfx::AcceleratedWidget widget,
       static_cast<GbmDevice*>(device_manager_->GetDrmDevice(widget).get());
   DCHECK(gbm);
   *buffer = GbmBuffer::CreateBuffer(gbm, format, size, usage);
+}
+
+void DrmThread::GetScanoutFormats(
+    gfx::AcceleratedWidget widget,
+    std::vector<gfx::BufferFormat>* scanout_formats) {
+  display_manager_->GetScanoutFormats(widget, scanout_formats);
 }
 
 void DrmThread::SchedulePageFlip(gfx::AcceleratedWidget widget,

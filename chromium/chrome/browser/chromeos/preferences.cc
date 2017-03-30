@@ -12,9 +12,6 @@
 #include "base/command_line.h"
 #include "base/i18n/time_formatting.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_member.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -37,6 +34,9 @@
 #include "components/drive/drive_pref_names.h"
 #include "components/feedback/tracing_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_member.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/syncable_prefs/pref_service_syncable.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user.h"
@@ -286,7 +286,7 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterBooleanPref(prefs::kForceMaximizeOnFirstRun, false);
 
-  registry->RegisterBooleanPref(prefs::kLangugaeImeMenuActivated, false);
+  registry->RegisterBooleanPref(prefs::kLanguageImeMenuActivated, false);
 }
 
 void Preferences::InitUserPrefs(syncable_prefs::PrefServiceSyncable* prefs) {
@@ -319,7 +319,7 @@ void Preferences::InitUserPrefs(syncable_prefs::PrefServiceSyncable* prefs) {
                              prefs, callback);
   previous_input_method_.Init(prefs::kLanguagePreviousInputMethod,
                               prefs, callback);
-  ime_menu_activated_.Init(prefs::kLangugaeImeMenuActivated, prefs, callback);
+  ime_menu_activated_.Init(prefs::kLanguageImeMenuActivated, prefs, callback);
 
   xkb_auto_repeat_enabled_.Init(
       prefs::kLanguageXkbAutoRepeatEnabled, prefs, callback);
@@ -585,14 +585,11 @@ void Preferences::ApplyPreferences(ApplyReason reason,
     ime_state_->SetEnabledExtensionImes(&split_values);
   }
 
-  if (pref_name == prefs::kLangugaeImeMenuActivated &&
+  if (pref_name == prefs::kLanguageImeMenuActivated &&
       (reason == REASON_PREF_CHANGED || reason == REASON_ACTIVE_USER_CHANGED)) {
     const bool activated = ime_menu_activated_.GetValue();
-    if (activated)
-      DVLOG(1) << "IME menu is activated.";
-    else
-      DVLOG(1) << "IME menu is deactivated.";
-    // TODO(azurewei): Fire inputMethodPrivate API event.
+    input_method::InputMethodManager::Get()->ImeMenuActivationChanged(
+        activated);
   }
 
   if (user_is_active) {

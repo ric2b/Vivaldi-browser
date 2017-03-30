@@ -75,11 +75,14 @@ public:
     void setRegistration(WebPassOwnPtr<WebServiceWorkerRegistration::Handle>) override;
     void dispatchActivateEvent(int) override;
     void dispatchCrossOriginMessageEvent(const WebCrossOriginServiceWorkerClient&, const WebString& message, const WebMessagePortChannelArray&) override;
+    void dispatchExtendableMessageEvent(int, const WebString& message, const WebMessagePortChannelArray&) override;
     void dispatchFetchEvent(int, const WebServiceWorkerRequest&) override;
+    void dispatchForeignFetchEvent(int, const WebServiceWorkerRequest&) override;
     void dispatchGeofencingEvent(int, WebGeofencingEventType, const WebString& regionID, const WebCircularGeofencingRegion&) override;
     void dispatchInstallEvent(int) override;
     void dispatchMessageEvent(const WebString& message, const WebMessagePortChannelArray&) override;
     void dispatchNotificationClickEvent(int, int64_t notificationID, const WebNotificationData&, int actionIndex) override;
+    void dispatchNotificationCloseEvent(int, int64_t notificationID, const WebNotificationData&) override;
     void dispatchPushEvent(int, const WebString& data) override;
     void dispatchServicePortConnectEvent(WebServicePortConnectEventCallbacks*, const WebURL& targetURL, const WebString& origin, WebServicePortID) override;
     void dispatchSyncEvent(int, const WebSyncRegistration&, LastChanceOption) override;
@@ -111,6 +114,8 @@ private:
     WebServiceWorkerContextClient& client() const;
     Document& document() const;
     ServiceWorkerGlobalScope* workerGlobalScope() const;
+
+    void dispatchFetchEventImpl(int eventID, const WebServiceWorkerRequest&, const AtomicString& eventTypeName);
 
     // Non-null until the WebEmbeddedWorkerImpl explicitly detach()es
     // as part of its finalization.

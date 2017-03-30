@@ -12,6 +12,11 @@
 
 namespace chromeos {
 namespace switches {
+// If this flag is passed, failed policy fetches will not cause profile
+// initialization to fail. This is useful for tests because it means that
+// tests don't have to mock out the policy infrastructure.
+const char kAllowFailedPolicyFetchForTest[] =
+    "allow-failed-policy-fetch-for-test";
 
 // Allows remote attestation (RA) in dev mode for testing purpose. Usually RA
 // is disabled in dev mode because it will always fail. However, there are cases
@@ -56,6 +61,9 @@ const char kDerelictDetectionTimeout[] = "derelict-detection-timeout";
 
 // Time before a derelict machines starts demo mode.
 const char kDerelictIdleTimeout[] = "derelict-idle-timeout";
+
+// Disables ARC Opt-in verification process and ARC is enabled by default.
+const char kDisableArcOptInVerification[] = "disable-arc-opt-in-verification";
 
 // Disables wallpaper boot animation (except of OOBE case).
 const char kDisableBootAnimation[] = "disable-boot-animation";
@@ -150,6 +158,9 @@ const char kEnableScreenshotTestingWithMode[] =
 // than the kiosk app mode.
 const char kEnableKioskMode[] = "enable-kiosk-mode";
 
+// Enable the multiple display layout UI.
+const char kEnableMultiDisplayLayout[] = "enable-multi-display-layout";
+
 // Enables request of tablet site (via user agent override).
 const char kEnableRequestTabletSite[] = "enable-request-tablet-site";
 
@@ -243,9 +254,8 @@ const char kOobeTimerInterval[] = "oobe-timer-interval";
 // Indicates that a guest session has been started before OOBE completion.
 const char kOobeGuestSession[] = "oobe-guest-session";
 
-// Indicates that if we should start bootstrapping Master/Slave OOBE.
+// Indicates that if we should start bootstrapping Master OOBE.
 const char kOobeBootstrappingMaster[] = "oobe-bootstrapping-master";
-const char kOobeBootstrappingSlave[] = "oobe-bootstrapping-slave";
 
 // Specifies power stub behavior:
 //  'cycle=2' - Cycles power states every 2 seconds.

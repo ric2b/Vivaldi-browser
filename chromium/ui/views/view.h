@@ -31,6 +31,7 @@
 #include "ui/events/event.h"
 #include "ui/events/event_target.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/native_widget_types.h"
@@ -1347,9 +1348,11 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Creates the layer and related fields for this view.
   void CreateLayer();
 
-  // Parents all un-parented layers within this view's hierarchy to this view's
-  // layer.
-  void UpdateParentLayers();
+  // Recursively calls UpdateParentLayers() on all descendants, stopping at any
+  // Views that have layers. Calls UpdateParentLayer() for any Views that have
+  // a layer with no parent. If at least one descendant had an unparented layer
+  // true is returned.
+  bool UpdateParentLayers();
 
   // Parents this view's layer to |parent_layer|, and sets its bounds and other
   // properties in accordance to |offset|, the view's offset from the

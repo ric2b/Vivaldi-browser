@@ -29,8 +29,8 @@
 #include "platform/PlatformExport.h"
 #include "platform/geometry/FloatSize.h"
 #include "platform/graphics/ColorSpace.h"
+#include "platform/graphics/CompositorFilterOperations.h"
 #include "platform/heap/Handle.h"
-#include "public/platform/WebFilterOperations.h"
 
 class SkImageFilter;
 
@@ -45,17 +45,11 @@ public:
     ~SkiaImageFilterBuilder();
 
     PassRefPtr<SkImageFilter> build(FilterEffect*, ColorSpace, bool requiresPMColorValidation = true);
-    void buildFilterOperations(const FilterOperations&, WebFilterOperations*);
+    void buildFilterOperations(const FilterOperations&, CompositorFilterOperations*);
     PassRefPtr<SkImageFilter> buildTransform(const AffineTransform&, SkImageFilter* input);
 
     PassRefPtr<SkImageFilter> transformColorSpace(
         SkImageFilter* input, ColorSpace srcColorSpace, ColorSpace dstColorSpace);
-
-    void setCropOffset(const FloatSize& cropOffset) { m_cropOffset = cropOffset; }
-    FloatSize cropOffset() { return m_cropOffset; }
-
-private:
-    FloatSize m_cropOffset;
 };
 
 } // namespace blink

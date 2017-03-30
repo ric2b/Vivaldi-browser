@@ -19,12 +19,12 @@ class AbortsPageLoadMetricsObserverTest
   }
 };
 
-TEST_F(AbortsPageLoadMetricsObserverTest, NewNavigationBeforeCommit) {
+TEST_F(AbortsPageLoadMetricsObserverTest, UnknownNavigationBeforeCommit) {
   StartNavigation(GURL("https://www.google.com"));
   // Simulate the user performing another navigation before commit.
   NavigateAndCommit(GURL("https://www.example.com"));
   histogram_tester().ExpectTotalCount(
-      internal::kHistogramAbortNewNavigationBeforeCommit, 1);
+      internal::kHistogramAbortUnknownNavigationBeforeCommit, 1);
 }
 
 TEST_F(AbortsPageLoadMetricsObserverTest, NewNavigationBeforePaint) {
@@ -147,6 +147,7 @@ TEST_F(AbortsPageLoadMetricsObserverTest, NoAbortNewNavigationAfterPaint) {
   page_load_metrics::PageLoadTiming timing;
   timing.navigation_start = base::Time::FromDoubleT(1);
   timing.first_paint = base::TimeDelta::FromMicroseconds(1);
+  PopulateRequiredTimingFields(&timing);
   NavigateAndCommit(GURL("https://www.google.com"));
   SimulateTimingUpdate(timing);
   NavigateAndCommit(GURL("https://www.example.com"));

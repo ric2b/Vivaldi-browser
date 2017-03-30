@@ -1084,8 +1084,7 @@ WebInspector.DOMModel = function(target) {
     this._attributeLoadNodeIds = {};
     target.registerDOMDispatcher(new WebInspector.DOMDispatcher(this));
 
-    this._showRulers = false;
-    this._showExtensionLines = false;
+    this._inspectModeEnabled = false;
 
     this._defaultHighlighter = new WebInspector.DefaultDOMNodeHighlighter(this._agent);
     this._highlighter = this._defaultHighlighter;
@@ -1786,20 +1785,19 @@ WebInspector.DOMModel.prototype = {
          */
         function onDocumentAvailable()
         {
-            this.dispatchEventToListeners(WebInspector.DOMModel.Events.InspectModeWillBeToggled, mode !== DOMAgent.InspectMode.None);
+            this._inspectModeEnabled = mode !== DOMAgent.InspectMode.None;
+            this.dispatchEventToListeners(WebInspector.DOMModel.Events.InspectModeWillBeToggled, this._inspectModeEnabled);
             this._highlighter.setInspectMode(mode, this._buildHighlightConfig(), callback);
         }
         this.requestDocument(onDocumentAvailable.bind(this));
     },
 
     /**
-     * @param {boolean} showRulers
-     * @param {boolean} showExtensionLines
+     * @return {boolean}
      */
-    setHighlightSettings: function(showRulers, showExtensionLines)
+    inspectModeEnabled: function()
     {
-        this._showRulers = showRulers;
-        this._showExtensionLines = showExtensionLines;
+        return this._inspectModeEnabled;
     },
 
     /**
@@ -1809,7 +1807,8 @@ WebInspector.DOMModel.prototype = {
     _buildHighlightConfig: function(mode)
     {
         mode = mode || "all";
-        var highlightConfig = { showInfo: mode === "all", showRulers: this._showRulers, showExtensionLines: this._showExtensionLines };
+        var showRulers = WebInspector.moduleSetting("showMetricsRulers").get();
+        var highlightConfig = { showInfo: mode === "all", showRulers: showRulers, showExtensionLines: showRulers };
         if (mode === "all" || mode === "content")
             highlightConfig.contentColor = WebInspector.Color.PageHighlight.Content.toProtocolRGBA();
 
@@ -1826,7 +1825,7 @@ WebInspector.DOMModel.prototype = {
             highlightConfig.eventTargetColor = WebInspector.Color.PageHighlight.EventTarget.toProtocolRGBA();
             highlightConfig.shapeColor = WebInspector.Color.PageHighlight.Shape.toProtocolRGBA();
             highlightConfig.shapeMarginColor = WebInspector.Color.PageHighlight.ShapeMargin.toProtocolRGBA();
-            highlightConfig.displayAsMaterial = Runtime.experiments.isEnabled("materialDesign");
+            highlightConfig.displayAsMaterial = Runtime.experiments.isEnabled("inspectTooltip");
         }
         return highlightConfig;
     },

@@ -5,32 +5,27 @@
 #ifndef MOJO_SERVICES_NETWORK_NETWORK_SERVICE_DELEGATE_H_
 #define MOJO_SERVICES_NETWORK_NETWORK_SERVICE_DELEGATE_H_
 
+#include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/threading/thread.h"
-#include "components/filesystem/public/interfaces/file_system.mojom.h"
 #include "mojo/services/network/network_context.h"
 #include "mojo/services/network/public/interfaces/cookie_store.mojom.h"
 #include "mojo/services/network/public/interfaces/network_service.mojom.h"
 #include "mojo/services/network/public/interfaces/url_loader_factory.mojom.h"
 #include "mojo/services/network/public/interfaces/web_socket_factory.mojom.h"
 #include "mojo/services/tracing/public/cpp/tracing_impl.h"
-#include "mojo/shell/public/cpp/application_delegate.h"
-#include "mojo/shell/public/cpp/application_impl.h"
 #include "mojo/shell/public/cpp/interface_factory.h"
-
-namespace sql {
-class ScopedMojoFilesystemVFS;
-}
+#include "mojo/shell/public/cpp/message_loop_ref.h"
+#include "mojo/shell/public/cpp/shell_client.h"
 
 namespace mojo {
 class NetworkServiceDelegateObserver;
 
-class NetworkServiceDelegate : public ApplicationDelegate,
+class NetworkServiceDelegate : public ShellClient,
                                public InterfaceFactory<NetworkService>,
                                public InterfaceFactory<CookieStore>,
                                public InterfaceFactory<WebSocketFactory>,
-                               public InterfaceFactory<URLLoaderFactory>,
-                               public filesystem::FileSystemClient {
+                               public InterfaceFactory<URLLoaderFactory> {
  public:
   NetworkServiceDelegate();
   ~NetworkServiceDelegate() override;
@@ -39,52 +34,41 @@ class NetworkServiceDelegate : public ApplicationDelegate,
   void RemoveObserver(NetworkServiceDelegateObserver* observer);
 
  private:
-  // Notifies all of our observers of a Shuts down our IO thread. Safe to call
-  // multiple times.
-  void EnsureIOThreadShutdown();
-
-  // ApplicationDelegate implementation.
-  void Initialize(ApplicationImpl* app) override;
-  bool ConfigureIncomingConnection(ApplicationConnection* connection) override;
-  bool OnShellConnectionError() override;
-  void Quit() override;
+  // mojo::ShellClient implementation.
+  void Initialize(Connector* connector, const std::string& url,
+                  uint32_t id, uint32_t user_id) override;
+  bool AcceptConnection(Connection* connection) override;
+  bool ShellConnectionLost() override;
 
   // InterfaceFactory<NetworkService> implementation.
-  void Create(ApplicationConnection* connection,
+  void Create(Connection* connection,
               InterfaceRequest<NetworkService> request) override;
 
   // InterfaceFactory<CookieStore> implementation.
-  void Create(ApplicationConnection* connection,
+  void Create(Connection* connection,
               InterfaceRequest<CookieStore> request) override;
 
   // InterfaceFactory<WebSocketFactory> implementation.
-  void Create(ApplicationConnection* connection,
+  void Create(Connection* connection,
               InterfaceRequest<WebSocketFactory> request) override;
 
   // InterfaceFactory<URLLoaderFactory> implementation.
-  void Create(ApplicationConnection* connection,
+  void Create(Connection* connection,
               InterfaceRequest<URLLoaderFactory> request) override;
 
-  // Overridden from FileSystemClient:
-  void OnFileSystemShutdown() override;
-
  private:
-  ApplicationImpl* app_;
+  void Quit();
+
   mojo::TracingImpl tracing_;
 
   // Observers that want notifications that our worker thread is going away.
   base::ObserverList<NetworkServiceDelegateObserver> observers_;
 
-  Binding<filesystem::FileSystemClient> binding_;
-
-  // A worker thread that blocks for file IO.
-  scoped_ptr<base::Thread> io_worker_thread_;
-
-  // Our connection to the filesystem service, which stores our cookies and
-  // other data.
-  filesystem::FileSystemPtr files_;
-
   scoped_ptr<NetworkContext> context_;
+
+  mojo::MessageLoopRefFactory ref_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(NetworkServiceDelegate);
 };
 
 }  // namespace mojo

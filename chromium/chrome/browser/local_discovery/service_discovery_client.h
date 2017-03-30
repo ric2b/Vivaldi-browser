@@ -13,7 +13,7 @@
 #include "base/time/time.h"
 #include "net/base/address_family.h"
 #include "net/base/host_port_pair.h"
-#include "net/base/ip_address_number.h"
+#include "net/base/ip_address.h"
 
 namespace net {
 class MDnsClient;
@@ -24,6 +24,7 @@ namespace local_discovery {
 struct ServiceDescription {
  public:
   ServiceDescription();
+  ServiceDescription(const ServiceDescription& other);
   ~ServiceDescription();
 
   // Convenience function to get useful parts of the service name. A service
@@ -38,7 +39,7 @@ struct ServiceDescription {
   // The metadata (from TXT record) of the service.
   std::vector<std::string> metadata;
   // IP address of the service, if available from cache. May be empty.
-  net::IPAddressNumber ip_address;
+  net::IPAddress ip_address;
   // Last time the service was seen.
   base::Time last_seen;
 };
@@ -100,8 +101,8 @@ class ServiceResolver {
 class LocalDomainResolver {
  public:
   typedef base::Callback<void(bool /*success*/,
-                              const net::IPAddressNumber& /*address_ipv4*/,
-                              const net::IPAddressNumber& /*address_ipv6*/)>
+                              const net::IPAddress& /*address_ipv4*/,
+                              const net::IPAddress& /*address_ipv6*/)>
       IPAddressCallback;
 
   virtual ~LocalDomainResolver() {}

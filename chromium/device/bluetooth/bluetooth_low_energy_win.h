@@ -12,7 +12,6 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
-#include "base/win/scoped_handle.h"
 #include "device/bluetooth/bluetooth_export.h"
 #include "device/bluetooth/bluetooth_low_energy_defs_win.h"
 
@@ -75,17 +74,16 @@ class DEVICE_BLUETOOTH_EXPORT DevicePropertyValue {
   DISALLOW_COPY_AND_ASSIGN(DevicePropertyValue);
 };
 
-// Returns true only on Windows platforms supporting Bluetooth Low Energy.
-bool IsBluetoothLowEnergySupported();
-
-struct BluetoothLowEnergyServiceInfo {
+struct DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyServiceInfo {
   BluetoothLowEnergyServiceInfo();
   ~BluetoothLowEnergyServiceInfo();
 
   BTH_LE_UUID uuid;
+  // Attribute handle uniquely identifies this service on the device.
+  USHORT attribute_handle = 0;
 };
 
-struct BluetoothLowEnergyDeviceInfo {
+struct DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyDeviceInfo {
   BluetoothLowEnergyDeviceInfo();
   ~BluetoothLowEnergyDeviceInfo();
 
@@ -98,30 +96,67 @@ struct BluetoothLowEnergyDeviceInfo {
   bool connected;
 };
 
-// Enumerates the list of known (i.e. already paired) Bluetooth LE devices on
-// this machine. In case of error, returns false and sets |error| with an error
-// message describing the problem.
-// Note: This function returns an error if Bluetooth Low Energy is not supported
-// on this Windows platform.
-bool EnumerateKnownBluetoothLowEnergyDevices(
-    ScopedVector<BluetoothLowEnergyDeviceInfo>* devices,
-    std::string* error);
-
-// Enumerates the list of known (i.e. cached) GATT services for a given
-// Bluetooth LE device |device_path| into |services|. In case of error, returns
-// false and sets |error| with an error message describing the problem. Note:
-// This function returns an error if Bluetooth Low Energy is not supported on
-// this Windows platform.
-bool EnumerateKnownBluetoothLowEnergyServices(
-    const base::FilePath& device_path,
-    ScopedVector<BluetoothLowEnergyServiceInfo>* services,
-    std::string* error);
-
 bool DEVICE_BLUETOOTH_EXPORT
 ExtractBluetoothAddressFromDeviceInstanceIdForTesting(
     const std::string& instance_id,
     BLUETOOTH_ADDRESS* btha,
     std::string* error);
+
+// Wraps Windows APIs used to access Bluetooth Low Energy devices, providing an
+// interface that can be replaced with fakes in tests.
+class DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyWrapper {
+ public:
+  static BluetoothLowEnergyWrapper* GetInstance();
+  static void DeleteInstance();
+  static void SetInstanceForTest(BluetoothLowEnergyWrapper* instance);
+
+  // Returns true only on Windows platforms supporting Bluetooth Low Energy.
+  virtual bool IsBluetoothLowEnergySupported();
+
+  // Enumerates the list of known (i.e. already paired) Bluetooth LE devices on
+  // this machine. In case of error, returns false and sets |error| with an
+  // error message describing the problem.
+  // Note: This function returns an error if Bluetooth Low Energy is not
+  // supported on this Windows platform.
+  virtual bool EnumerateKnownBluetoothLowEnergyDevices(
+      ScopedVector<BluetoothLowEnergyDeviceInfo>* devices,
+      std::string* error);
+
+  // Enumerates the list of known Bluetooth LE GATT service devices on this
+  // machine (a Bluetooth LE device usually has more than one GATT
+  // services that each of them has a device interface on the machine). In case
+  // of error, returns false and sets |error| with an error message describing
+  // the problem.
+  // Note: This function returns an error if Bluetooth Low Energy is not
+  // supported on this Windows platform.
+  virtual bool EnumerateKnownBluetoothLowEnergyGattServiceDevices(
+      ScopedVector<BluetoothLowEnergyDeviceInfo>* devices,
+      std::string* error);
+
+  // Enumerates the list of known (i.e. cached) GATT services for a given
+  // Bluetooth LE device |device_path| into |services|. In case of error,
+  // returns false and sets |error| with an error message describing the
+  // problem.
+  // Note: This function returns an error if Bluetooth Low Energy is not
+  // supported on this Windows platform.
+  virtual bool EnumerateKnownBluetoothLowEnergyServices(
+      const base::FilePath& device_path,
+      ScopedVector<BluetoothLowEnergyServiceInfo>* services,
+      std::string* error);
+
+  // Reads characteristics of |service| with service device path |service_path|.
+  // The result will be stored in |*out_included_characteristics| and
+  // |*out_counts|.
+  virtual HRESULT ReadCharacteristicsOfAService(
+      base::FilePath& service_path,
+      const PBTH_LE_GATT_SERVICE service,
+      scoped_ptr<BTH_LE_GATT_CHARACTERISTIC>* out_included_characteristics,
+      USHORT* out_counts);
+
+ protected:
+  BluetoothLowEnergyWrapper();
+  virtual ~BluetoothLowEnergyWrapper();
+};
 
 }  // namespace win
 }  // namespace device

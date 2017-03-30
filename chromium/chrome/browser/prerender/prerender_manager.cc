@@ -42,6 +42,8 @@
 #include "chrome/browser/ui/tab_contents/core_tab_helper_delegate.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/prerender_types.h"
+#include "components/content_settings/core/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "components/search/search.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
@@ -271,7 +273,7 @@ PrerenderHandle* PrerenderManager::AddPrerenderFromLinkRelPrerender(
     if (!source_web_contents)
       return NULL;
     if (origin == ORIGIN_LINK_REL_PRERENDER_CROSSDOMAIN &&
-        source_web_contents->GetURL().host() == url.host()) {
+        source_web_contents->GetURL().host_piece() == url.host_piece()) {
       origin = ORIGIN_LINK_REL_PRERENDER_SAMEDOMAIN;
     }
     // TODO(ajwong): This does not correctly handle storage for isolated apps.
@@ -298,7 +300,19 @@ PrerenderHandle* PrerenderManager::AddPrerenderFromExternalRequest(
     const content::Referrer& referrer,
     SessionStorageNamespace* session_storage_namespace,
     const gfx::Size& size) {
-  return AddPrerender(ORIGIN_EXTERNAL_REQUEST, url, referrer, size,
+  return AddPrerender(
+      ORIGIN_EXTERNAL_REQUEST, url, referrer, size, session_storage_namespace);
+}
+
+PrerenderHandle* PrerenderManager::AddPrerenderOnCellularFromExternalRequest(
+    const GURL& url,
+    const content::Referrer& referrer,
+    SessionStorageNamespace* session_storage_namespace,
+    const gfx::Size& size) {
+  return AddPrerender(ORIGIN_EXTERNAL_REQUEST_FORCED_CELLULAR,
+                      url,
+                      referrer,
+                      size,
                       session_storage_namespace);
 }
 
@@ -575,8 +589,10 @@ void PrerenderManager::RecordPerceivedPageLoadTime(
     double fraction_plt_elapsed_at_swap_in,
     const GURL& url) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (GetPredictionStatus() != NetworkPredictionStatus::ENABLED)
+  if (GetPredictionStatusForOrigin(origin)
+      != NetworkPredictionStatus::ENABLED) {
     return;
+  }
 
   histograms_->RecordPerceivedPageLoadTime(
       origin, perceived_page_load_time, navigation_type, url);
@@ -662,13 +678,25 @@ bool PrerenderManager::HasPrerenderedUrl(
   content::SessionStorageNamespace* session_storage_namespace = web_contents->
       GetController().GetDefaultSessionStorageNamespace();
 
-  for (ScopedVector<PrerenderData>::const_iterator it =
-           active_prerenders_.begin();
-       it != active_prerenders_.end(); ++it) {
-    PrerenderContents* prerender_contents = (*it)->contents();
-    if (prerender_contents->Matches(url, session_storage_namespace)) {
+  for (const auto& prerender_data : active_prerenders_) {
+    PrerenderContents* prerender_contents = prerender_data->contents();
+    if (prerender_contents->Matches(url, session_storage_namespace))
       return true;
-    }
+  }
+  return false;
+}
+
+bool PrerenderManager::HasPrerenderedAndFinishedLoadingUrl(
+    GURL url,
+    content::WebContents* web_contents) const {
+  content::SessionStorageNamespace* session_storage_namespace =
+      web_contents->GetController().GetDefaultSessionStorageNamespace();
+
+  for (const auto& prerender_data : active_prerenders_) {
+    PrerenderContents* prerender_contents = prerender_data->contents();
+    if (prerender_contents->Matches(url, session_storage_namespace) &&
+        prerender_contents->has_finished_loading())
+      return true;
   }
   return false;
 }
@@ -777,6 +805,12 @@ base::DictionaryValue* PrerenderManager::GetAsValue() const {
   dict_value->Set("active", GetActivePrerendersAsValue());
   dict_value->SetBoolean("enabled",
       GetPredictionStatus() == NetworkPredictionStatus::ENABLED);
+  std::string disabled_note;
+  if (GetPredictionStatus() == NetworkPredictionStatus::DISABLED_ALWAYS)
+    disabled_note = "Disabled by user setting";
+  if (GetPredictionStatus() == NetworkPredictionStatus::DISABLED_DUE_TO_NETWORK)
+    disabled_note = "Disabled on cellular connection by default";
+  dict_value->SetString("disabled_note", disabled_note);
   dict_value->SetBoolean("omnibox_enabled", IsOmniboxEnabled(profile_));
   // If prerender is disabled via a flag this method is not even called.
   std::string enabled_note;
@@ -922,7 +956,14 @@ PrerenderHandle* PrerenderManager::AddPrerender(
   // histogram tracking.
   histograms_->RecordPrerender(origin, url_arg);
 
-  NetworkPredictionStatus prerendering_status = GetPredictionStatus();
+  if (profile_->GetPrefs()->GetBoolean(prefs::kBlockThirdPartyCookies)) {
+    RecordFinalStatusWithoutCreatingPrerenderContents(
+        url, origin, FINAL_STATUS_BLOCK_THIRD_PARTY_COOKIES);
+    return nullptr;
+  }
+
+  NetworkPredictionStatus prerendering_status =
+      GetPredictionStatusForOrigin(origin);
   if (prerendering_status != NetworkPredictionStatus::ENABLED) {
     FinalStatus final_status =
         prerendering_status == NetworkPredictionStatus::DISABLED_DUE_TO_NETWORK
@@ -1271,6 +1312,28 @@ void PrerenderManager::RecordNetworkBytes(Origin origin,
 NetworkPredictionStatus PrerenderManager::GetPredictionStatus() const {
   DCHECK(CalledOnValidThread());
   return CanPrefetchAndPrerenderUI(profile_->GetPrefs());
+}
+
+NetworkPredictionStatus PrerenderManager::GetPredictionStatusForOrigin(
+    Origin origin) const {
+  DCHECK(CalledOnValidThread());
+
+  // LINK rel=prerender origins ignore the network state and the privacy
+  // settings.
+  if (origin == ORIGIN_LINK_REL_PRERENDER_SAMEDOMAIN ||
+      origin == ORIGIN_LINK_REL_PRERENDER_CROSSDOMAIN) {
+    return NetworkPredictionStatus::ENABLED;
+  }
+
+  // Prerendering forced for cellular networks still prevents navigation with
+  // the DISABLED_ALWAYS selected via privacy settings.
+  NetworkPredictionStatus prediction_status =
+      CanPrefetchAndPrerenderUI(profile_->GetPrefs());
+  if (origin == ORIGIN_EXTERNAL_REQUEST_FORCED_CELLULAR &&
+      prediction_status == NetworkPredictionStatus::DISABLED_DUE_TO_NETWORK) {
+    return NetworkPredictionStatus::ENABLED;
+  }
+  return prediction_status;
 }
 
 void PrerenderManager::AddProfileNetworkBytesIfEnabled(int64_t bytes) {

@@ -125,14 +125,14 @@ PrintSettings::PrintSettings() {
   Clear();
 }
 
+PrintSettings::PrintSettings(const PrintSettings& other) = default;
+
 PrintSettings::~PrintSettings() {
 }
 
 void PrintSettings::Clear() {
   ranges_.clear();
   margin_type_ = DEFAULT_MARGINS;
-  min_shrink_ = 1.25;
-  max_shrink_ = 2.;
   desired_dpi_ = 72;
   selection_only_ = false;
   title_ = base::string16();

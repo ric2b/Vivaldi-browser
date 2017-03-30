@@ -89,11 +89,6 @@ public abstract class ChromeSwitches {
     public static final String DISABLE_LOFI_SNACKBAR = "disable-lo-fi-snackbar";
 
     /**
-     * Enable content snippets on the NTP
-     */
-    public static final String ENABLE_NTP_SNIPPETS = "enable-ntp-snippets";
-
-    /**
      * Enable interests on the NTP
      */
     public static final String ENABLE_INTERESTS = "enable-interests";
@@ -227,6 +222,25 @@ public abstract class ChromeSwitches {
      */
     public static final String DISABLE_WEB_NOTIFICATION_CUSTOM_LAYOUTS =
             "disable-web-notification-custom-layouts";
+
+    /**
+     * Determines which of the Herb prototypes is being tested.
+     * See about:flags for descriptions.
+     */
+    public static final String HERB_FLAVOR_DISABLED_SWITCH =
+            "tab-management-experiment-type-disabled";
+    public static final String HERB_FLAVOR_ANISE_SWITCH = "tab-management-experiment-type-anise";
+    public static final String HERB_FLAVOR_BASIL_SWITCH = "tab-management-experiment-type-basil";
+    public static final String HERB_FLAVOR_CHIVE_SWITCH = "tab-management-experiment-type-chive";
+    public static final String HERB_FLAVOR_DILL_SWITCH = "tab-management-experiment-type-dill";
+
+    public static final String HERB_FLAVOR_DEFAULT = "Default";
+    public static final String HERB_FLAVOR_CONTROL = "Control";
+    public static final String HERB_FLAVOR_DISABLED = "Disabled";
+    public static final String HERB_FLAVOR_ANISE = "Anise";
+    public static final String HERB_FLAVOR_BASIL = "Basil";
+    public static final String HERB_FLAVOR_CHIVE = "Chive";
+    public static final String HERB_FLAVOR_DILL = "Dill";
 
     /**
      * Enable tab switcher in document mode (merged tabs and apps option).

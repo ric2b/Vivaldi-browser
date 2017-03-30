@@ -26,7 +26,7 @@ class DRTSurfaceOSMesa : public gfx::GLSurfaceOSMesa {
  public:
   // Size doesn't matter, the surface is resized to the right size later.
   DRTSurfaceOSMesa()
-      : GLSurfaceOSMesa(gfx::OSMesaSurfaceFormatRGBA, gfx::Size(1, 1)) {}
+      : GLSurfaceOSMesa(gfx::GLSurface::SURFACE_OSMESA_RGBA, gfx::Size(1, 1)) {}
 
   // Implement a subset of GLSurface.
   gfx::SwapResult SwapBuffers() override;
@@ -48,7 +48,8 @@ bool g_allow_os_mesa = false;
 scoped_refptr<gfx::GLSurface> ImageTransportSurface::CreateNativeSurface(
     GpuChannelManager* manager,
     GpuCommandBufferStub* stub,
-    const gfx::GLSurfaceHandle& surface_handle) {
+    const gfx::GLSurfaceHandle& surface_handle,
+    gfx::GLSurface::Format format) {
   DCHECK(surface_handle.transport_type == gfx::NATIVE_DIRECT ||
          surface_handle.transport_type == gfx::NULL_TRANSPORT);
 
@@ -67,7 +68,7 @@ scoped_refptr<gfx::GLSurface> ImageTransportSurface::CreateNativeSurface(
         return scoped_refptr<gfx::GLSurface>();
       }
       scoped_refptr<gfx::GLSurface> surface(new DRTSurfaceOSMesa());
-      if (!surface.get() || !surface->Initialize())
+      if (!surface.get() || !surface->Initialize(format))
         return surface;
       return scoped_refptr<gfx::GLSurface>(new PassThroughImageTransportSurface(
           manager, stub, surface.get()));

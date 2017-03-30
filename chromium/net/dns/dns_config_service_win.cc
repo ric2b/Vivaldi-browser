@@ -26,7 +26,6 @@
 #include "base/win/registry.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/windows_version.h"
-#include "net/base/net_util.h"
 #include "net/base/network_change_notifier.h"
 #include "net/dns/dns_hosts.h"
 #include "net/dns/dns_protocol.h"
@@ -281,10 +280,12 @@ HostsParseWinResult AddLocalhostEntries(DnsHosts* hosts) {
       }
       if (!have_ipv4 && (ipe.GetFamily() == ADDRESS_FAMILY_IPV4)) {
         have_ipv4 = true;
-        (*hosts)[DnsHostsKey(localname, ADDRESS_FAMILY_IPV4)] = ipe.address();
+        (*hosts)[DnsHostsKey(localname, ADDRESS_FAMILY_IPV4)] =
+            ipe.address().bytes();
       } else if (!have_ipv6 && (ipe.GetFamily() == ADDRESS_FAMILY_IPV6)) {
         have_ipv6 = true;
-        (*hosts)[DnsHostsKey(localname, ADDRESS_FAMILY_IPV6)] = ipe.address();
+        (*hosts)[DnsHostsKey(localname, ADDRESS_FAMILY_IPV6)] =
+            ipe.address().bytes();
       }
     }
   }
@@ -513,7 +514,7 @@ ConfigParseWinResult ConvertSettingsToDnsConfig(
       IPEndPoint ipe;
       if (ipe.FromSockAddr(address->Address.lpSockaddr,
                            address->Address.iSockaddrLength)) {
-        if (IsStatelessDiscoveryAddress(ipe.address()))
+        if (IsStatelessDiscoveryAddress(ipe.address().bytes()))
           continue;
         // Override unset port.
         if (!ipe.port())

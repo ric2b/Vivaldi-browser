@@ -22,8 +22,8 @@
 #include "core/page/ChromeClient.h"
 
 #include "core/dom/Document.h"
+#include "core/dom/Element.h"
 #include "core/frame/LocalFrame.h"
-#include "core/html/HTMLInputElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/layout/HitTestResult.h"
 #include "core/page/FrameTree.h"
@@ -149,13 +149,12 @@ void ChromeClient::setToolTip(const HitTestResult& result)
     if (toolTip.isEmpty())
         toolTip = result.title(toolTipDirection);
 
-    // Lastly, for <input type="file"> that allow multiple files, we'll consider
-    // a tooltip for the selected filenames.
+    // Lastly, some elements provide default tooltip strings.  e.g. <input
+    // type="file" multiple> shows a tooltip for the selected filenames.
     if (toolTip.isEmpty()) {
         if (Node* node = result.innerNode()) {
-            if (isHTMLInputElement(*node)) {
-                HTMLInputElement* input = toHTMLInputElement(node);
-                toolTip = input->defaultToolTip();
+            if (node->isElementNode()) {
+                toolTip = toElement(node)->defaultToolTip();
 
                 // FIXME: We should obtain text direction of tooltip from
                 // ChromeClient or platform. As of October 2011, all client
@@ -189,17 +188,6 @@ void ChromeClient::print(LocalFrame* frame)
     ScopedPageLoadDeferrer deferrer;
 
     printDelegate(frame);
-}
-
-float ChromeClient::screenToViewport(float length) const
-{
-    // Convert the thickness in the screen (dip) to the viewport by applying
-    // the invert of the viewport to screen scale.
-    // TODO(oshima): Add native implementation instead of using viewportToScreen.
-
-    IntRect inScreen(0, 0, 100, 0);
-    inScreen = viewportToScreen(inScreen);
-    return length * 100.f / inScreen.width();
 }
 
 } // namespace blink

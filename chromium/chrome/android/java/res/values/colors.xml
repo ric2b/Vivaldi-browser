@@ -14,6 +14,8 @@
     <color name="explanation_text_color">#909090</color>
     <color name="text_highlight_color">#C6DAFC</color>
     <color name="dark_action_bar_color">#263238</color>
+    <color name="descriptive_text_color">#646464</color>
+    <color name="ui_link_text_color">#3367D6</color>
 
     <!-- Infobar colors -->
     <color name="infobar_accent_blue">#4285f4</color>
@@ -78,8 +80,11 @@
 
     <!-- First Run Experience Colors -->
     <color name="fre_text_color">#000000</color>
-    <color name="fre_light_text_color">#494949</color>
     <color name="fre_title_color">#161616</color>
+    
+    <!-- Account Signin Colors -->
+    <!-- As in dimens.xml, signin uses values from the First Run Experience -->
+    <color name="signin_light_text_color">#494949</color>
 
     <!-- Sad Tab colors -->
     <color name="sad_tab_header_text_color">#333333</color>
@@ -117,6 +122,10 @@
     <!-- LocationBar colors -->
     <color name="locationbar_light_hint_text">#80ffffff</color>
     <color name="locationbar_light_selection_color">#cc5595fe</color>
+    <color name="locationbar_status_color">@color/light_normal_color</color>
+    <color name="locationbar_status_color_light">#ffffff</color>
+    <color name="locationbar_status_separator_color">#3d000000</color>
+    <color name="locationbar_status_separator_color_light">#3dffffff</color>
 
     <!-- Find in Page colors -->
     <color name="find_result_bar_background_color">#bfffffff</color>
@@ -143,14 +152,14 @@
     <color name="webapp_url_bar_bg">#fafafa</color>
     <color name="webapp_url_bar_separator">#e1e1e1</color>
 
-    <!-- Enhanced bookmark UI colors -->
-    <color name="enhanced_bookmark_detail_text">#212121</color>
-    <color name="enhanced_bookmark_detail_section">#7C7B79</color>
-    <color name="enhanced_bookmark_app_bar_shadow_color">#1D000000</color>
-    <color name="enhanced_bookmark_drawer_selected_background_color">#F0F0F0</color>
-    <color name="enhanced_bookmark_list_item_highlight_color">#804281f4</color>
-    <color name="enhanced_bookmark_icon_background_color">#ff787878</color>
-    <color name="enhanced_bookmark_appbar_background">@color/default_primary_color</color>
+    <!-- Bookmark UI colors -->
+    <color name="bookmark_detail_text">#212121</color>
+    <color name="bookmark_detail_section">#7C7B79</color>
+    <color name="bookmark_app_bar_shadow_color">#1D000000</color>
+    <color name="bookmark_drawer_selected_background_color">#F0F0F0</color>
+    <color name="bookmark_list_item_highlight_color">#804281f4</color>
+    <color name="bookmark_icon_background_color">#ff787878</color>
+    <color name="bookmark_appbar_background">@color/default_primary_color</color>
 
     <!-- Opt out promo -->
     <color name="opt_out_text_color">#646464</color>
@@ -158,15 +167,18 @@
     <!-- Media UI Colors -->
     <color name="media_session_icon_color">#14181C</color>
 
-    <!-- Smart Lock for Passwords UI colors-->
-    <color name="smart_lock_auto_signin_snackbar_background_color">#2196F3</color>
-
     <!-- Physical Web colors -->
     <color name="physical_web_header_color">#333</color>
     <color name="physical_web_url_color">#969696</color>
     <color name="physical_web_url_description_color">#646464</color>
     <color name="physical_web_logo_gray_tint">#ccc</color>
 
+    <!-- Physical Web diagnostics colors -->
+    <color name="physical_web_diags_success_color">#00933b</color>
+    <color name="physical_web_diags_failure_color">#f90101</color>
+    <color name="physical_web_diags_indeterminate_color">#f2b50f</color>
+
     <!-- Bottom bar colors -->
     <color name="bottom_bar_shadow_color">#1d000000</color>
+
 </resources>

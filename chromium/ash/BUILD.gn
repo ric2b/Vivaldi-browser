@@ -5,8 +5,10 @@
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
+import("//ui/base/ui_features.gni")
 
-assert(use_ash)
+assert(use_aura)
+assert(enable_hidpi)
 
 gypi_values = exec_script("//build/gypi_to_gn.py",
                           [ rebase_path("ash.gyp") ],
@@ -41,8 +43,10 @@ component("ash") {
     "//ui/app_list",
     "//ui/aura",
     "//ui/base",
+    "//ui/base:ui_data_pack",
     "//ui/base/ime",
     "//ui/compositor",
+    "//ui/display/types",
     "//ui/events",
     "//ui/events:events_base",
     "//ui/events:gesture_detection",
@@ -51,6 +55,9 @@ component("ash") {
     "//ui/gfx/geometry",
     "//ui/keyboard",
     "//ui/message_center",
+    "//ui/native_theme",
+    "//ui/platform_window",
+    "//ui/platform_window/stub",
     "//ui/resources",
     "//ui/strings",
     "//ui/views",
@@ -88,6 +95,7 @@ component("ash") {
 
   if (use_ozone) {
     deps += [
+      "//ui/events:dom_keycode_converter",
       "//ui/events/ozone:events_ozone",
       "//ui/ozone",
     ]
@@ -98,6 +106,9 @@ component("ash") {
       "//chromeos",
       "//chromeos:power_manager_proto",
       "//device/bluetooth",
+
+      # TODO(msw): Remove this; only ash_with_content should depend on webkit.
+      "//third_party/WebKit/public:blink_headers",
       "//third_party/qcms",
       "//ui/chromeos:ui_chromeos",
       "//ui/chromeos/resources",
@@ -113,8 +124,6 @@ component("ash") {
       "accelerators/magnifier_key_scroller.h",
       "accelerators/spoken_feedback_toggler.cc",
       "accelerators/spoken_feedback_toggler.h",
-      "display/display_animator.cc",
-      "display/display_animator.h",
       "display/resolution_notification_controller.cc",
       "display/resolution_notification_controller.h",
       "system/tray/media_security/media_capture_observer.h",
@@ -131,7 +140,6 @@ component("ash") {
 
   if (!use_ozone) {
     sources -= [
-      "host/ash_window_tree_host_ozone.cc",
       "wm/maximize_mode/scoped_disable_internal_mouse_and_keyboard_ozone.cc",
       "wm/maximize_mode/scoped_disable_internal_mouse_and_keyboard_ozone.h",
     ]
@@ -150,6 +158,7 @@ component("ash_with_content") {
     "//base",
     "//base/third_party/dynamic_annotations",
     "//content/public/browser",
+    "//gpu/config",
     "//ipc",
     "//skia",
     "//ui/aura",
@@ -168,6 +177,7 @@ component("ash_with_content") {
   ]
 }
 
+# TODO(msw): Move support code with content deps to test_support_with_content.
 source_set("test_support") {
   testonly = true
   sources = gypi_values.ash_test_support_sources
@@ -179,25 +189,48 @@ source_set("test_support") {
   deps = [
     ":test_support_with_content",  # TODO(beng): reverse this direction.
     "//ash/resources",
+    "//base:i18n",
+    "//base/test:test_support",
     "//components/signin/core/account_id",
+    "//components/user_manager:user_manager",
+    "//content/public/browser",
+    "//content/test:test_support",
+    "//device/bluetooth",
     "//skia",
     "//testing/gtest",
     "//ui/accessibility",
     "//ui/app_list",
     "//ui/app_list:test_support",
+    "//ui/aura",
+    "//ui/aura:test_support",
+    "//ui/base:test_support",
+    "//ui/compositor:test_support",
+    "//ui/display/types",
     "//ui/events:events_base",
+    "//ui/events:test_support",
     "//ui/events/devices",
     "//ui/gl",
+    "//ui/gl:test_support",
+    "//ui/keyboard",
+    "//ui/message_center",
     "//ui/views",
     "//ui/views:test_support",
+    "//ui/wm",
   ]
 
   if (is_win) {
     deps += [ "//ui/platform_window/win" ]
   }
 
+  if (use_x11) {
+    deps += [ "//ui/gfx/x" ]
+  }
+
   if (is_chromeos) {
-    deps += [ "//ui/display" ]
+    deps += [
+      "//chromeos",
+      "//ui/display",
+    ]
   }
 }
 
@@ -227,8 +260,12 @@ source_set("interactive_ui_test_support") {
   deps = [
     ":ash",
     ":test_support",
+    "//base",
     "//skia",
     "//testing/gtest",
+    "//ui/aura",
+    "//ui/base",
+    "//ui/gl:test_support",
   ]
 }
 
@@ -244,6 +281,7 @@ static_library("ash_shell_lib") {
     "//ash/strings",
     "//base",
     "//base:i18n",
+    "//components/user_manager",
     "//net",
     "//skia",
     "//third_party/icu",
@@ -264,6 +302,7 @@ static_library("ash_shell_lib") {
     "//ui/views:test_support",
     "//ui/views/examples:views_examples_lib",
     "//ui/views/examples:views_examples_with_content_lib",
+    "//ui/wm",
   ]
 }
 
@@ -273,11 +312,26 @@ static_library("ash_shell_lib_with_content") {
 
   deps = [
     ":ash_shell_lib",
+    ":ash_with_content",
+    "//base:i18n",
     "//chrome:packed_resources",
     "//content",
     "//content/shell:content_shell_lib",
+    "//device/bluetooth",
+    "//net",
     "//skia",
+    "//ui/aura",
+    "//ui/base",
+    "//ui/compositor",
+    "//ui/events/devices",
+    "//ui/message_center",
+    "//ui/views:test_support",
+    "//ui/wm",
   ]
+
+  if (is_chromeos) {
+    deps += [ "//chromeos" ]
+  }
 }
 
 test("ash_unittests") {
@@ -288,10 +342,10 @@ test("ash_unittests") {
     ":ash",
     ":ash_with_content",
     ":test_support",
+    ":test_support_with_content",
     "//ash/resources",
     "//ash/strings",
     "//base",
-    "//base/allocator",
     "//base/test:test_support",
     "//components/signin/core/account_id",
     "//components/user_manager",
@@ -301,6 +355,7 @@ test("ash_unittests") {
     "//testing/gtest",
     "//third_party/icu",
     "//ui/accessibility",
+    "//ui/app_list",
     "//ui/aura",
     "//ui/aura:test_support",
     "//ui/base",
@@ -308,6 +363,7 @@ test("ash_unittests") {
     "//ui/base/ime",
     "//ui/compositor",
     "//ui/compositor:test_support",
+    "//ui/display/types",
     "//ui/events",
     "//ui/events:gesture_detection",
     "//ui/events:test_support",
@@ -319,12 +375,19 @@ test("ash_unittests") {
     "//ui/message_center",
     "//ui/message_center:test_support",
     "//ui/resources",
+    "//ui/strings",
     "//ui/views",
     "//ui/views:test_support",
     "//ui/views/controls/webview:test_support",
     "//ui/web_dialogs:test_support",
     "//ui/wm",
     "//url",
+  ]
+
+  data_deps = [
+    "//ash/strings:ash_test_strings",
+    "//ash/resources:ash_test_resources_100_percent",
+    "//ash/resources:ash_test_resources_200_percent",
   ]
 
   if (!is_chromeos) {
@@ -359,13 +422,14 @@ test("ash_unittests") {
   if (is_chromeos) {
     sources += [ "first_run/first_run_helper_unittest.cc" ]
     deps += [
+      "//chromeos",
       "//chromeos:power_manager_proto",
       "//chromeos:test_support_without_gmock",
       "//device/bluetooth",
+      "//ui/chromeos:ui_chromeos",
       "//ui/display",
       "//ui/display:test_support",
       "//ui/display:test_util",
-      "//ui/display/types",
     ]
   } else {
     sources -= [
@@ -380,10 +444,6 @@ test("ash_unittests") {
     sources -= [ "touch/touch_transformer_controller_unittest.cc" ]
   }
 
-  # TODO(GYP) is this necessary?
-  #['OS=="linux" and component=="shared_library" and use_allocator!="none"', {
-  # ldflags = "-rdynamic"
-
   if (!is_chromeos) {
     sources -= [ "sticky_keys/sticky_keys_unittest.cc" ]
   }
@@ -397,8 +457,17 @@ executable("ash_shell_with_content") {
 
   deps = [
     ":ash_shell_lib_with_content",
+    "//base",
     "//build/config/sanitizers:deps",
     "//components/user_manager",
+    "//content",
+    "//content/public/app:both",
+  ]
+
+  data_deps = [
+    "//ash/strings:ash_test_strings",
+    "//ash/resources:ash_test_resources_100_percent",
+    "//ash/resources:ash_test_resources_200_percent",
   ]
 
   if (is_win) {

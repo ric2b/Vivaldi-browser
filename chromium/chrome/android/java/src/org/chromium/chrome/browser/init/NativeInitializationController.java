@@ -14,6 +14,7 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
+import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.content.browser.ChildProcessLauncher;
 
 import java.util.ArrayList;
@@ -98,7 +99,8 @@ class NativeInitializationController {
                     mActivityDelegate.onStartupFailure();
                     return;
                 }
-                ChildProcessLauncher.warmUp(mContext);
+                ChromeApplication chrome = (ChromeApplication) mContext;
+                ChildProcessLauncher.warmUp(mContext, chrome.getChildProcessCreationParams());
                 ThreadUtils.runOnUiThread(new Runnable() {
                     @Override
                     public void run() {

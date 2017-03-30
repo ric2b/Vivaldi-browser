@@ -24,7 +24,6 @@ import java.util.HashMap;
  */
 public class QuicTest extends CronetTestBase {
     private static final String TAG = "cr.QuicTest";
-    private static final String[] CERTS_USED = {"quic_test.example.com.crt"};
     private CronetTestFramework mTestFramework;
     private CronetEngine.Builder mBuilder;
 
@@ -47,11 +46,14 @@ public class QuicTest extends CronetTestBase {
                                         .put("delay_tcp_race", true)
                                         .put("max_number_of_lossy_connections", 10)
                                         .put("packet_loss_threshold", 0.5)
-                                        .put("idle_connection_timeout_seconds", 300);
+                                        .put("idle_connection_timeout_seconds", 300)
+                                        .put("close_sessions_on_ip_change", false)
+                                        .put("migrate_sessions_on_network_change", true)
+                                        .put("migrate_sessions_early", true);
         JSONObject experimentalOptions = new JSONObject().put("QUIC", quicParams);
         mBuilder.setExperimentalOptions(experimentalOptions.toString());
 
-        mBuilder.setMockCertVerifierForTesting(MockCertVerifier.createMockCertVerifier(CERTS_USED));
+        mBuilder.setMockCertVerifierForTesting(QuicTestServer.createMockCertVerifier());
         mBuilder.setStoragePath(CronetTestFramework.getTestStorage(getContext()));
         mBuilder.enableHttpCache(CronetEngine.Builder.HTTP_CACHE_DISK_NO_HTTP, 1000 * 1024);
     }
@@ -141,7 +143,7 @@ public class QuicTest extends CronetTestBase {
         JSONObject quicParams = new JSONObject().put("host_whitelist", "test.example.com");
         JSONObject experimentalOptions = new JSONObject().put("QUIC", quicParams);
         builder.setExperimentalOptions(experimentalOptions.toString());
-        builder.setMockCertVerifierForTesting(MockCertVerifier.createMockCertVerifier(CERTS_USED));
+        builder.setMockCertVerifierForTesting(QuicTestServer.createMockCertVerifier());
         mTestFramework = startCronetTestFrameworkWithUrlAndCronetEngineBuilder(null, builder);
         registerHostResolver(mTestFramework);
         TestUrlRequestCallback callback2 = new TestUrlRequestCallback();

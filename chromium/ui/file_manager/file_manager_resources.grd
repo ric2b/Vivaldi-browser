@@ -15,6 +15,7 @@
       <!-- Files.app pages and scripts. -->
       <include name="IDR_FILE_MANAGER_MAIN" file="file_manager/main.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
       <include name="IDR_FILE_MANAGER_MAIN_JS" file="file_manager/foreground/js/main_scripts.js" flattenhtml="true" type="BINDATA" />
+      <include name="IDR_FILE_MANAGER_ELEMENTS_IMPORTER_JS" file="file_manager/foreground/js/elements_importer.js" type="BINDATA" />
       <include name="IDR_FILE_MANAGER_BKGND_JS" file="file_manager/background/js/background.js" type="BINDATA" />
 
       <!-- Common Scripts. -->
@@ -50,6 +51,7 @@
       <include name="IDR_FILE_MANAGER_VOLUME_MANAGER_JS" file="file_manager/background/js/volume_manager.js" flattenhtml="false" type="BINDATA" />
 
       <!-- Polymer elements -->
+      <include name="IDR_FILE_MANAGER_ELEMENTS_ELEMENTS_BUNDLE_HTML" file="file_manager/foreground/elements/elements_bundle.html" type="BINDATA" />
       <include name="IDR_FILE_MANAGER_ELEMENTS_FILES_ICON_BUTTON_HTML" file="file_manager/foreground/elements/files_icon_button.html" type="BINDATA" />
       <include name="IDR_FILE_MANAGER_ELEMENTS_FILES_ICON_BUTTON_JS" file="file_manager/foreground/elements/files_icon_button.js" type="BINDATA" />
       <include name="IDR_FILE_MANAGER_ELEMENTS_FILES_RIPPLE_HTML" file="file_manager/foreground/elements/files_ripple.html" type="BINDATA" />
@@ -167,6 +169,9 @@
       <include name="IDR_AUDIO_PLAYER_ELEMENTS_CONTROL_PANEL_CSS" file="audio_player/elements/control_panel.css" flattenhtml="true" type="BINDATA" />
       <include name="IDR_AUDIO_PLAYER_ELEMENTS_CONTROL_PANEL_HTML" file="audio_player/elements/control_panel.html" type="BINDATA" />
       <include name="IDR_AUDIO_PLAYER_ELEMENTS_CONTROL_PANEL_JS" file="audio_player/elements/control_panel.js" type="BINDATA" />
+      <include name="IDR_AUDIO_PLAYER_ELEMENTS_TRACK_INFO_PANEL_CSS" file="audio_player/elements/track_info_panel.css" flattenhtml="true" type="BINDATA" />
+      <include name="IDR_AUDIO_PLAYER_ELEMENTS_TRACK_INFO_PANEL_HTML" file="audio_player/elements/track_info_panel.html" type="BINDATA" />
+      <include name="IDR_AUDIO_PLAYER_ELEMENTS_TRACK_INFO_PANEL_JS" file="audio_player/elements/track_info_panel.js" type="BINDATA" />
       <include name="IDR_AUDIO_PLAYER_ELEMENTS_TRACK_LIST_CSS" file="audio_player/elements/track_list.css" flattenhtml="true" type="BINDATA" />
       <include name="IDR_AUDIO_PLAYER_ELEMENTS_TRACK_LIST_HTML" file="audio_player/elements/track_list.html" type="BINDATA" />
       <include name="IDR_AUDIO_PLAYER_ELEMENTS_TRACK_LIST_JS" file="audio_player/elements/track_list.js" type="BINDATA" />

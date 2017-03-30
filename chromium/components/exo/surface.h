@@ -14,6 +14,7 @@
 #include "base/observer_list.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/aura/window.h"
+#include "ui/aura/window_observer.h"
 #include "ui/compositor/compositor_observer.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -23,6 +24,10 @@ class TracedValue;
 }
 }
 
+namespace gfx {
+class Path;
+}
+
 namespace exo {
 class Buffer;
 class SurfaceDelegate;
@@ -30,13 +35,15 @@ class SurfaceObserver;
 
 // This class represents a rectangular area that is displayed on the screen.
 // It has a location, size and pixel contents.
-class Surface : public aura::Window, public ui::CompositorObserver {
+class Surface : public aura::Window,
+                public aura::WindowObserver,
+                public ui::CompositorObserver {
  public:
   Surface();
   ~Surface() override;
 
   // Type-checking downcast routine.
-  static Surface* AsSurface(aura::Window* window);
+  static Surface* AsSurface(const aura::Window* window);
 
   // Set a buffer as the content of this surface. A buffer can only be attached
   // to one surface at a time.
@@ -55,6 +62,10 @@ class Surface : public aura::Window, public ui::CompositorObserver {
   // This sets the region of the surface that contains opaque content.
   void SetOpaqueRegion(const SkRegion& region);
 
+  // This sets the region of the surface that can receive pointer and touch
+  // events.
+  void SetInputRegion(const SkRegion& region);
+
   // This sets the scaling factor used to interpret the contents of the buffer
   // attached to the surface. Note that if the scale is larger than 1, then you
   // have to attach a buffer that is larger (by a factor of scale in each
@@ -68,6 +79,9 @@ class Surface : public aura::Window, public ui::CompositorObserver {
   void SetSubSurfacePosition(Surface* sub_surface, const gfx::Point& position);
   void PlaceSubSurfaceAbove(Surface* sub_surface, Surface* reference);
   void PlaceSubSurfaceBelow(Surface* sub_surface, Surface* sibling);
+
+  // This sets the surface viewport for scaling.
+  void SetViewport(const gfx::Size& viewport);
 
   // Surface state (damage regions, attached buffers, etc.) is double-buffered.
   // A Commit() call atomically applies all pending state, replacing the
@@ -83,8 +97,18 @@ class Surface : public aura::Window, public ui::CompositorObserver {
   // Returns true if surface is in synchronized mode.
   bool IsSynchronized() const;
 
-  // Returns the preferred size of surface.
-  gfx::Size GetPreferredSize() const;
+  // Returns the visible bounds of the surface from the user's perspective.
+  gfx::Rect GetVisibleBounds() const;
+
+  // Returns true if |rect| intersects this surface's bounds.
+  bool HitTestRect(const gfx::Rect& rect) const;
+
+  // Returns true if the current input region is different than the surface
+  // bounds.
+  bool HasHitTestMask() const;
+
+  // Returns the current input region of surface in the form of a hit-test mask.
+  void GetHitTestMask(gfx::Path* mask) const;
 
   // Set the surface delegate.
   void SetSurfaceDelegate(SurfaceDelegate* delegate);
@@ -101,7 +125,14 @@ class Surface : public aura::Window, public ui::CompositorObserver {
   // Returns a trace value representing the state of the surface.
   scoped_refptr<base::trace_event::TracedValue> AsTracedValue() const;
 
-  bool HasPendingDamageForTesting() const { return !pending_damage_.IsEmpty(); }
+  bool HasPendingDamageForTesting(const gfx::Rect& damage) const {
+    return pending_damage_.contains(gfx::RectToSkIRect(damage));
+  }
+
+  // Overridden from aura::WindowObserver:
+  void OnWindowAddedToRootWindow(aura::Window* window) override;
+  void OnWindowRemovingFromRootWindow(aura::Window* window,
+                                      aura::Window* new_root) override;
 
   // Overridden from ui::CompositorObserver:
   void OnCompositingDidCommit(ui::Compositor* compositor) override;
@@ -128,9 +159,7 @@ class Surface : public aura::Window, public ui::CompositorObserver {
   base::WeakPtr<Buffer> pending_buffer_;
 
   // The damage region to schedule paint for when Commit() is called.
-  // TODO(reveman): Use SkRegion here after adding a version of
-  // ui::Layer::SchedulePaint that takes a SkRegion.
-  gfx::Rect pending_damage_;
+  SkRegion pending_damage_;
 
   // These lists contains the callbacks to notify the client when it is a good
   // time to start producing a new frame. These callbacks move to
@@ -145,6 +174,9 @@ class Surface : public aura::Window, public ui::CompositorObserver {
   // The opaque region to take effect when Commit() is called.
   SkRegion pending_opaque_region_;
 
+  // The input region to take effect when Commit() is called.
+  SkRegion pending_input_region_;
+
   // The buffer scaling factor to take effect when Commit() is called.
   float pending_buffer_scale_;
 
@@ -155,12 +187,22 @@ class Surface : public aura::Window, public ui::CompositorObserver {
   using SubSurfaceEntryList = std::list<SubSurfaceEntry>;
   SubSurfaceEntryList pending_sub_surfaces_;
 
+  // The viewport to take effect when Commit() is called.
+  gfx::Size pending_viewport_;
+
   // The buffer that is currently set as content of surface.
   base::WeakPtr<Buffer> current_buffer_;
+
+  // The active input region used for hit testing.
+  SkRegion input_region_;
 
   // This is true if a call to Commit() as been made but
   // CommitSurfaceHierarchy() has not yet been called.
   bool needs_commit_surface_hierarchy_;
+
+  // This is set when the compositing starts and passed to active frame
+  // callbacks when compositing successfully ends.
+  base::TimeTicks last_compositing_start_time_;
 
   // This is true when the contents of the surface should be updated next time
   // the compositor successfully ends compositing.

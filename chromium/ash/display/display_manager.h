@@ -82,8 +82,6 @@ class ASH_EXPORT DisplayManager
     virtual void PostDisplayConfigurationChange() = 0;
   };
 
-  typedef std::vector<gfx::Display> DisplayList;
-
   // How the second display will be used.
   // 1) EXTENDED mode extends the desktop to the second dislpay.
   // 2) MIRRORING mode copies the content of the primary display to
@@ -133,15 +131,14 @@ class ASH_EXPORT DisplayManager
   void RefreshFontParams();
 
   // Returns the display layout used for current displays.
-  DisplayLayout GetCurrentDisplayLayout();
+  const DisplayLayout& GetCurrentDisplayLayout() const;
 
-  // Returns the current display pair.
-  DisplayIdPair GetCurrentDisplayIdPair() const;
+  // Returns the current display list.
+  DisplayIdList GetCurrentDisplayIdList() const;
 
   // Sets the layout for the current display pair. The |layout| specifies
-  // the locaion of the secondary display relative to the primary.
-  void SetLayoutForCurrentDisplays(
-      const DisplayLayout& layout_relative_to_primary);
+  // the locaion of the displays relative to their parents.
+  void SetLayoutForCurrentDisplays(scoped_ptr<DisplayLayout> layout);
 
   // Returns display for given |id|;
   const gfx::Display& GetDisplayForId(int64_t id) const;
@@ -391,19 +388,24 @@ private:
   // When the size of |display_list| equals 2, the bounds are updated using
   // the layout registered for the display pair. For more than 2 displays,
   // the bounds are updated using horizontal layout.
-  // Returns true if any of the non-primary display's bounds has been changed
-  // from current value, or false otherwise.
-  bool UpdateNonPrimaryDisplayBoundsForLayout(
-      DisplayList* display_list, std::vector<size_t>* updated_indices) const;
+  void UpdateNonPrimaryDisplayBoundsForLayout(
+      DisplayList* display_list,
+      std::vector<size_t>* updated_indices);
 
   void CreateMirrorWindowIfAny();
 
   void RunPendingTasksForTest();
 
-  static void UpdateDisplayBoundsForLayout(
-      const DisplayLayout& layout,
-      const gfx::Display& primary_display,
-      gfx::Display* secondary_display);
+  // Applies the |layout| and updates the bounds of displays in |display_list|.
+  // |updated_ids| contains the ids for displays whose bounds have changed.
+  void ApplyDisplayLayout(const DisplayLayout& layout,
+                          DisplayList* display_list,
+                          std::vector<int64_t>* updated_ids);
+
+  // Apply the display placement to the display layout.
+  // Returns true if the display bounds has been updated.
+  bool ApplyDisplayPlacement(const DisplayPlacement& placement,
+                             DisplayList* display_list);
 
   Delegate* delegate_;  // not owned.
 

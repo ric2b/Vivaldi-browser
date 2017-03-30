@@ -40,6 +40,7 @@
 #include "core/html/CrossOriginAttribute.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/inspector/InspectorInstrumentation.h"
 #include "core/layout/LayoutImage.h"
 #include "core/layout/LayoutVideo.h"
 #include "core/layout/svg/LayoutSVGImage.h"
@@ -92,6 +93,8 @@ public:
         , m_weakFactory(this)
         , m_referrerPolicy(referrerPolicy)
     {
+        ExecutionContext& context = m_loader->element()->document();
+        m_operationId = InspectorInstrumentation::traceAsyncOperationStarting(&context, "Load image");
         v8::Isolate* isolate = V8PerIsolateData::mainThreadIsolate();
         v8::HandleScope scope(isolate);
         // If we're invoked from C++ without a V8 context on the stack, we should
@@ -112,12 +115,15 @@ public:
     {
         if (!m_loader)
             return;
+        ExecutionContext& context = m_loader->element()->document();
+        InspectorInstrumentationCookie cookie = InspectorInstrumentation::traceAsyncOperationCompletedCallbackStarting(&context, m_operationId);
         if (m_scriptState->contextIsValid()) {
             ScriptState::Scope scope(m_scriptState.get());
             m_loader->doUpdateFromElement(m_shouldBypassMainWorldCSP, m_updateBehavior, m_referrerPolicy);
         } else {
             m_loader->doUpdateFromElement(m_shouldBypassMainWorldCSP, m_updateBehavior, m_referrerPolicy);
         }
+        InspectorInstrumentation::traceAsyncCallbackCompleted(cookie);
     }
 
     void clearLoader()
@@ -138,11 +144,11 @@ private:
     RefPtr<ScriptState> m_scriptState;
     WeakPtrFactory<Task> m_weakFactory;
     ReferrerPolicy m_referrerPolicy;
+    int m_operationId;
 };
 
 ImageLoader::ImageLoader(Element* element)
     : m_element(element)
-    , m_image(0)
     , m_derefElementTimer(this, &ImageLoader::timerFired)
     , m_hasPendingLoadEvent(false)
     , m_hasPendingErrorEvent(false)
@@ -150,7 +156,6 @@ ImageLoader::ImageLoader(Element* element)
     , m_loadingImageDocument(false)
     , m_elementIsProtected(false)
     , m_suppressErrorEvents(false)
-    , m_highPriorityClientCount(0)
 {
     WTF_LOG(Timers, "new ImageLoader %p", this);
 #if ENABLE(OILPAN)
@@ -175,13 +180,10 @@ void ImageLoader::dispose()
         m_pendingTask->clearLoader();
 #endif
 
-#if ENABLE(OILPAN)
-    for (const auto& client : m_clients)
-        willRemoveClient(*client);
-#endif
-
-    if (m_image)
+    if (m_image) {
         m_image->removeClient(this);
+        m_image = nullptr;
+    }
 
 #if !ENABLE(OILPAN)
     ASSERT(m_hasPendingLoadEvent || !loadEventSender().hasPendingEvents(this));
@@ -194,27 +196,10 @@ void ImageLoader::dispose()
 #endif
 }
 
-#if ENABLE(OILPAN)
-void ImageLoader::clearWeakMembers(Visitor* visitor)
-{
-    Vector<UntracedMember<ImageLoaderClient>> deadClients;
-    for (const auto& client : m_clients) {
-        if (!Heap::isHeapObjectAlive(client)) {
-            willRemoveClient(*client);
-            deadClients.append(client);
-        }
-    }
-    for (unsigned i = 0; i < deadClients.size(); ++i)
-        m_clients.remove(deadClients[i]);
-}
-#endif
-
 DEFINE_TRACE(ImageLoader)
 {
+    visitor->trace(m_image);
     visitor->trace(m_element);
-#if ENABLE(OILPAN)
-    visitor->template registerWeakMembers<ImageLoader, &ImageLoader::clearWeakMembers>(this);
-#endif
 }
 
 void ImageLoader::setImage(ImageResource* newImage)
@@ -231,7 +216,6 @@ void ImageLoader::setImageWithoutConsideringPendingLoadEvent(ImageResource* newI
     ASSERT(m_failedLoadURL.isEmpty());
     ImageResource* oldImage = m_image.get();
     if (newImage != oldImage) {
-        sourceImageChanged();
         m_image = newImage;
         if (m_hasPendingLoadEvent) {
             loadEventSender().cancelEvent(this);
@@ -262,7 +246,7 @@ static void configureRequest(FetchRequest& request, ImageLoader::BypassMainWorld
         request.setCrossOriginAccessControl(element.document().securityOrigin(), crossOrigin);
 
     if (clientHintsPreferences.shouldSendResourceWidth() && isHTMLImageElement(element))
-        request.setResourceWidth(toHTMLImageElement(element).resourceWidth());
+        request.setResourceWidth(toHTMLImageElement(element).getResourceWidth());
 }
 
 inline void ImageLoader::dispatchErrorEvent()
@@ -310,7 +294,7 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, Up
 
     AtomicString imageSourceURL = m_element->imageSourceURL();
     KURL url = imageSourceToKURL(imageSourceURL);
-    ResourcePtr<ImageResource> newImage = 0;
+    RefPtrWillBeRawPtr<ImageResource> newImage = nullptr;
     RefPtrWillBeRawPtr<Element> protectElement(m_element.get());
     if (!url.isNull()) {
         // Unlike raw <img>, we block mixed content inside of <picture> or <img srcset>.
@@ -360,13 +344,10 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, Up
         noImageResourceToLoad();
     }
 
-    ImageResource* oldImage = m_image.get();
+    RefPtrWillBeRawPtr<ImageResource> oldImage = m_image.get();
     if (updateBehavior == UpdateSizeChanged && m_element->layoutObject() && m_element->layoutObject()->isImage() && newImage == oldImage) {
         toLayoutImage(m_element->layoutObject())->intrinsicSizeChanged();
     } else {
-        if (newImage != oldImage)
-            sourceImageChanged();
-
         if (m_hasPendingLoadEvent) {
             loadEventSender().cancelEvent(this);
             m_hasPendingLoadEvent = false;
@@ -626,31 +607,6 @@ void ImageLoader::dispatchPendingErrorEvent()
     updatedHasPendingEvent();
 }
 
-void ImageLoader::addClient(ImageLoaderClient* client)
-{
-    if (client->requestsHighLiveResourceCachePriority()) {
-        if (m_image && !m_highPriorityClientCount++)
-            memoryCache()->updateDecodedResource(m_image.get(), UpdateForPropertyChange, MemoryCacheLiveResourcePriorityHigh);
-    }
-    m_clients.add(client);
-}
-
-void ImageLoader::willRemoveClient(ImageLoaderClient& client)
-{
-    if (client.requestsHighLiveResourceCachePriority()) {
-        ASSERT(m_highPriorityClientCount);
-        m_highPriorityClientCount--;
-        if (m_image && !m_highPriorityClientCount)
-            memoryCache()->updateDecodedResource(m_image.get(), UpdateForPropertyChange, MemoryCacheLiveResourcePriorityLow);
-    }
-}
-
-void ImageLoader::removeClient(ImageLoaderClient* client)
-{
-    willRemoveClient(*client);
-    m_clients.remove(client);
-}
-
 bool ImageLoader::getImageAnimationPolicy(ImageResource*, ImageAnimationPolicy& policy)
 {
     if (!element()->document().settings())
@@ -676,14 +632,6 @@ void ImageLoader::elementDidMoveToNewDocument()
         m_loadDelayCounter->documentChanged(m_element->document());
     clearFailedLoadURL();
     setImage(0);
-}
-
-void ImageLoader::sourceImageChanged()
-{
-    for (auto& client : m_clients) {
-        ImageLoaderClient* handle = client;
-        handle->notifyImageSourceChanged();
-    }
 }
 
 } // namespace blink

@@ -15,7 +15,7 @@
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_iterator.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/devtools_http_handler/devtools_http_handler.h"
@@ -104,8 +104,8 @@ ChromeDevToolsHttpHandlerDelegate::~ChromeDevToolsHttpHandlerDelegate() {
 
 std::string ChromeDevToolsHttpHandlerDelegate::GetDiscoveryPageHTML() {
   std::set<Profile*> profiles;
-  for (chrome::BrowserIterator it; !it.done(); it.Next())
-    profiles.insert((*it)->profile());
+  for (auto* browser : *BrowserList::GetInstance())
+    profiles.insert(browser->profile());
 
   for (std::set<Profile*>::iterator it = profiles.begin();
        it != profiles.end(); ++it) {
@@ -127,8 +127,8 @@ std::string ChromeDevToolsHttpHandlerDelegate::GetFrontendResource(
 
 std::string ChromeDevToolsHttpHandlerDelegate::GetPageThumbnailData(
     const GURL& url) {
-  for (chrome::BrowserIterator it; !it.done(); it.Next()) {
-    Profile* profile = (*it)->profile();
+  for (auto* browser : *BrowserList::GetInstance()) {
+    Profile* profile = browser->profile();
     scoped_refptr<history::TopSites> top_sites =
         TopSitesFactory::GetForProfile(profile);
     if (!top_sites)
@@ -153,10 +153,8 @@ void RemoteDebuggingServer::EnableTetheringForDebug() {
   g_tethering_enabled.Get() = true;
 }
 
-RemoteDebuggingServer::RemoteDebuggingServer(
-    chrome::HostDesktopType host_desktop_type,
-    const std::string& ip,
-    uint16_t port) {
+RemoteDebuggingServer::RemoteDebuggingServer(const std::string& ip,
+                                             uint16_t port) {
   base::FilePath output_dir;
   if (!port) {
     // The client requested an ephemeral port. Must write the selected

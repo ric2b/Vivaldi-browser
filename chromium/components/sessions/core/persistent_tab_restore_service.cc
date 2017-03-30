@@ -1040,9 +1040,8 @@ const TabRestoreService::Entries& PersistentTabRestoreService::entries() const {
 }
 
 std::vector<LiveTab*> PersistentTabRestoreService::RestoreMostRecentEntry(
-    LiveTabContext* context,
-    int host_desktop_type) {
-  return helper_.RestoreMostRecentEntry(context, host_desktop_type);
+    LiveTabContext* context) {
+  return helper_.RestoreMostRecentEntry(context);
 }
 
 // gisli@vivaldi.com: Added RestorePreviousSession.
@@ -1069,7 +1068,7 @@ std::vector<LiveTab*> PersistentTabRestoreService::RestorePreviousSession(
   for (TabRestoreService::Entries::iterator it = previous_entries.begin();
       it != previous_entries.end(); ++it) {
     std::vector<LiveTab *> entryContents =
-       helper_.RestoreEntryById(context, (*it)->id, host_desktop_type, UNKNOWN);
+       helper_.RestoreEntryById(context, (*it)->id, UNKNOWN);
     contents.insert( contents.end(), entryContents.begin(), entryContents.end() );
   }
   return contents;
@@ -1083,9 +1082,8 @@ TabRestoreService::Tab* PersistentTabRestoreService::RemoveTabEntryById(
 std::vector<LiveTab*> PersistentTabRestoreService::RestoreEntryById(
     LiveTabContext* context,
     SessionID::id_type id,
-    int host_desktop_type,
     WindowOpenDisposition disposition) {
-  return helper_.RestoreEntryById(context, id, host_desktop_type, disposition);
+  return helper_.RestoreEntryById(context, id, disposition);
 }
 
 bool PersistentTabRestoreService::IsLoaded() const {

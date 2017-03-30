@@ -10,6 +10,7 @@
 
 #include "base/macros.h"
 #include "components/filesystem/files_test_base.h"
+#include "mojo/common/common_type_converters.h"
 #include "mojo/util/capture_util.h"
 
 using mojo::Capture;
@@ -33,31 +34,31 @@ TEST_F(DirectoryImplTest, Read) {
       {"my_file2", kFlagWrite | kFlagCreate},
       {"my_file3", kFlagAppend | kFlagCreate }};
   for (size_t i = 0; i < arraysize(files_to_create); i++) {
-    error = FILE_ERROR_FAILED;
+    error = FileError::FAILED;
     directory->OpenFile(files_to_create[i].name, nullptr,
                         files_to_create[i].open_flags, Capture(&error));
     ASSERT_TRUE(directory.WaitForIncomingResponse());
-    EXPECT_EQ(FILE_ERROR_OK, error);
+    EXPECT_EQ(FileError::OK, error);
   }
   // Make a directory.
-  error = FILE_ERROR_FAILED;
+  error = FileError::FAILED;
   directory->OpenDirectory(
       "my_dir", nullptr, kFlagRead | kFlagWrite | kFlagCreate, Capture(&error));
   ASSERT_TRUE(directory.WaitForIncomingResponse());
-  EXPECT_EQ(FILE_ERROR_OK, error);
+  EXPECT_EQ(FileError::OK, error);
 
-  error = FILE_ERROR_FAILED;
+  error = FileError::FAILED;
   mojo::Array<DirectoryEntryPtr> directory_contents;
   directory->Read(Capture(&error, &directory_contents));
   ASSERT_TRUE(directory.WaitForIncomingResponse());
-  EXPECT_EQ(FILE_ERROR_OK, error);
+  EXPECT_EQ(FileError::OK, error);
 
   // Expected contents of the directory.
   std::map<std::string, FsFileType> expected_contents;
-  expected_contents["my_file1"] = FS_FILE_TYPE_REGULAR_FILE;
-  expected_contents["my_file2"] = FS_FILE_TYPE_REGULAR_FILE;
-  expected_contents["my_file3"] = FS_FILE_TYPE_REGULAR_FILE;
-  expected_contents["my_dir"] = FS_FILE_TYPE_DIRECTORY;
+  expected_contents["my_file1"] = FsFileType::REGULAR_FILE;
+  expected_contents["my_file2"] = FsFileType::REGULAR_FILE;
+  expected_contents["my_file3"] = FsFileType::REGULAR_FILE;
+  expected_contents["my_dir"] = FsFileType::DIRECTORY;
   // Note: We don't expose ".." or ".".
 
   EXPECT_EQ(expected_contents.size(), directory_contents.size());
@@ -79,50 +80,50 @@ TEST_F(DirectoryImplTest, BasicRenameDelete) {
   FileError error;
 
   // Create my_file.
-  error = FILE_ERROR_FAILED;
+  error = FileError::FAILED;
   directory->OpenFile("my_file", nullptr, kFlagWrite | kFlagCreate,
                       Capture(&error));
   ASSERT_TRUE(directory.WaitForIncomingResponse());
-  EXPECT_EQ(FILE_ERROR_OK, error);
+  EXPECT_EQ(FileError::OK, error);
 
   // Opening my_file should succeed.
-  error = FILE_ERROR_FAILED;
+  error = FileError::FAILED;
   directory->OpenFile("my_file", nullptr, kFlagRead | kFlagOpen,
                       Capture(&error));
   ASSERT_TRUE(directory.WaitForIncomingResponse());
-  EXPECT_EQ(FILE_ERROR_OK, error);
+  EXPECT_EQ(FileError::OK, error);
 
   // Rename my_file to my_new_file.
   directory->Rename("my_file", "my_new_file", Capture(&error));
   ASSERT_TRUE(directory.WaitForIncomingResponse());
-  EXPECT_EQ(FILE_ERROR_OK, error);
+  EXPECT_EQ(FileError::OK, error);
 
   // Opening my_file should fail.
 
-  error = FILE_ERROR_FAILED;
+  error = FileError::FAILED;
   directory->OpenFile("my_file", nullptr, kFlagRead | kFlagOpen,
                       Capture(&error));
   ASSERT_TRUE(directory.WaitForIncomingResponse());
-  EXPECT_EQ(FILE_ERROR_FAILED, error);
+  EXPECT_EQ(FileError::NOT_FOUND, error);
 
   // Opening my_new_file should succeed.
-  error = FILE_ERROR_FAILED;
+  error = FileError::FAILED;
   directory->OpenFile("my_new_file", nullptr, kFlagRead | kFlagOpen,
                       Capture(&error));
   ASSERT_TRUE(directory.WaitForIncomingResponse());
-  EXPECT_EQ(FILE_ERROR_OK, error);
+  EXPECT_EQ(FileError::OK, error);
 
   // Delete my_new_file (no flags).
   directory->Delete("my_new_file", 0, Capture(&error));
   ASSERT_TRUE(directory.WaitForIncomingResponse());
-  EXPECT_EQ(FILE_ERROR_OK, error);
+  EXPECT_EQ(FileError::OK, error);
 
   // Opening my_new_file should fail.
-  error = FILE_ERROR_FAILED;
+  error = FileError::FAILED;
   directory->OpenFile("my_new_file", nullptr, kFlagRead | kFlagOpen,
                       Capture(&error));
   ASSERT_TRUE(directory.WaitForIncomingResponse());
-  EXPECT_EQ(FILE_ERROR_FAILED, error);
+  EXPECT_EQ(FileError::NOT_FOUND, error);
 }
 
 TEST_F(DirectoryImplTest, CantOpenDirectoriesAsFiles) {
@@ -133,26 +134,113 @@ TEST_F(DirectoryImplTest, CantOpenDirectoriesAsFiles) {
   {
     // Create a directory called 'my_file'
     DirectoryPtr my_file_directory;
-    error = FILE_ERROR_FAILED;
+    error = FileError::FAILED;
     directory->OpenDirectory(
         "my_file", GetProxy(&my_file_directory),
         kFlagRead | kFlagWrite | kFlagCreate,
         Capture(&error));
     ASSERT_TRUE(directory.WaitForIncomingResponse());
-    EXPECT_EQ(FILE_ERROR_OK, error);
+    EXPECT_EQ(FileError::OK, error);
   }
 
   {
     // Attempt to open that directory as a file. This must fail!
     FilePtr file;
-    error = FILE_ERROR_FAILED;
+    error = FileError::FAILED;
     directory->OpenFile("my_file", GetProxy(&file), kFlagRead | kFlagOpen,
                         Capture(&error));
     ASSERT_TRUE(directory.WaitForIncomingResponse());
-    EXPECT_EQ(FILE_ERROR_NOT_A_FILE, error);
+    EXPECT_EQ(FileError::NOT_A_FILE, error);
   }
 }
 
+TEST_F(DirectoryImplTest, WriteFileReadFile) {
+  DirectoryPtr directory;
+  GetTemporaryRoot(&directory);
+  FileError error;
+
+  std::string data("one two three");
+  {
+    directory->WriteFile("data", mojo::Array<uint8_t>::From(data),
+                         Capture(&error));
+    ASSERT_TRUE(directory.WaitForIncomingResponse());
+    EXPECT_EQ(FileError::OK, error);
+  }
+
+  {
+    mojo::Array<uint8_t> file_contents;
+    directory->ReadEntireFile("data", Capture(&error, &file_contents));
+    ASSERT_TRUE(directory.WaitForIncomingResponse());
+    EXPECT_EQ(FileError::OK, error);
+
+    EXPECT_EQ(data, file_contents.To<std::string>());
+  }
+}
+
+TEST_F(DirectoryImplTest, ReadEmptyFileIsNotFoundError) {
+  DirectoryPtr directory;
+  GetTemporaryRoot(&directory);
+  FileError error;
+
+  {
+    mojo::Array<uint8_t> file_contents;
+    directory->ReadEntireFile("doesnt_exist", Capture(&error, &file_contents));
+    ASSERT_TRUE(directory.WaitForIncomingResponse());
+    EXPECT_EQ(FileError::NOT_FOUND, error);
+  }
+}
+
+TEST_F(DirectoryImplTest, CantReadEntireFileOnADirectory) {
+  DirectoryPtr directory;
+  GetTemporaryRoot(&directory);
+  FileError error;
+
+  // Create a directory
+  {
+    DirectoryPtr my_file_directory;
+    error = FileError::FAILED;
+    directory->OpenDirectory(
+        "my_dir", GetProxy(&my_file_directory),
+        kFlagRead | kFlagWrite | kFlagCreate,
+        Capture(&error));
+    ASSERT_TRUE(directory.WaitForIncomingResponse());
+    EXPECT_EQ(FileError::OK, error);
+  }
+
+  // Try to read it as a file
+  {
+    mojo::Array<uint8_t> file_contents;
+    directory->ReadEntireFile("my_dir", Capture(&error, &file_contents));
+    ASSERT_TRUE(directory.WaitForIncomingResponse());
+    EXPECT_EQ(FileError::NOT_A_FILE, error);
+  }
+}
+
+TEST_F(DirectoryImplTest, CantWriteFileOnADirectory) {
+  DirectoryPtr directory;
+  GetTemporaryRoot(&directory);
+  FileError error;
+
+  // Create a directory
+  {
+    DirectoryPtr my_file_directory;
+    error = FileError::FAILED;
+    directory->OpenDirectory(
+        "my_dir", GetProxy(&my_file_directory),
+        kFlagRead | kFlagWrite | kFlagCreate,
+        Capture(&error));
+    ASSERT_TRUE(directory.WaitForIncomingResponse());
+    EXPECT_EQ(FileError::OK, error);
+  }
+
+  {
+    std::string data("one two three");
+    directory->WriteFile("my_dir", mojo::Array<uint8_t>::From(data),
+                         Capture(&error));
+    ASSERT_TRUE(directory.WaitForIncomingResponse());
+    EXPECT_EQ(FileError::NOT_A_FILE, error);
+  }
+}
 
 // TODO(vtl): Test delete flags.
 

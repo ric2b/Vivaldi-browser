@@ -37,7 +37,7 @@ SVGColorProperty::SVGColorProperty(const String& colorString)
 
 String SVGColorProperty::valueAsString() const
 {
-    return m_styleColor.isCurrentColor() ? "currentColor" : m_styleColor.color().serializedAsCSSComponentValue();
+    return m_styleColor.isCurrentColor() ? "currentColor" : m_styleColor.getColor().serializedAsCSSComponentValue();
 }
 
 PassRefPtrWillBeRawPtr<SVGPropertyBase> SVGColorProperty::cloneForAnimation(const String&) const
@@ -105,4 +105,4 @@ float SVGColorProperty::calculateDistance(PassRefPtrWillBeRawPtr<SVGPropertyBase
     return ColorDistance::distance(fromColor, toColor);
 }
 
-}
+} // namespace blink

@@ -20,7 +20,7 @@ import org.chromium.chrome.browser.invalidation.InvalidationServiceFactory;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.signin.SigninManager.SignInFlowObserver;
+import org.chromium.chrome.browser.signin.SigninManager.SignInCallback;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.sync.AndroidSyncSettings;
 import org.chromium.sync.signin.AccountManagerHelper;
@@ -210,7 +210,7 @@ public class SigninHelper {
         }
 
         if (mProfileSyncService != null && AndroidSyncSettings.isSyncEnabled(mContext)) {
-            if (mProfileSyncService.hasSyncSetupCompleted()) {
+            if (mProfileSyncService.isFirstSetupComplete()) {
                 if (accountsChanged) {
                     // Nudge the syncer to ensure it does a full sync.
                     InvalidationServiceFactory.getForProfile(Profile.getLastUsedProfile())
@@ -254,9 +254,9 @@ public class SigninHelper {
         // This is the correct account now.
         final Account account = AccountManagerHelper.createAccountFromName(newName);
 
-        mSigninManager.startSignIn(null, account, true, new SignInFlowObserver() {
+        mSigninManager.signIn(account, null, new SignInCallback() {
             @Override
-            public void onSigninComplete() {
+            public void onSignInComplete() {
                 if (mProfileSyncService != null) {
                     mProfileSyncService.setSetupInProgress(false);
                 }
@@ -264,8 +264,7 @@ public class SigninHelper {
             }
 
             @Override
-            public void onSigninCancelled() {
-            }
+            public void onSignInAborted() {}
         });
     }
 
@@ -374,6 +373,12 @@ public class SigninHelper {
             PreferenceManager.getDefaultSharedPreferences(context)
                     .edit().putInt(ACCOUNT_RENAME_EVENT_INDEX_PREFS_KEY, newIndex).apply();
         }
+    }
+
+    @VisibleForTesting
+    public static void resetAccountRenameEventIndex(Context context) {
+        PreferenceManager.getDefaultSharedPreferences(context)
+                .edit().putInt(ACCOUNT_RENAME_EVENT_INDEX_PREFS_KEY, 0).apply();
     }
 
     public static boolean checkAndClearAccountsChangedPref(Context context) {

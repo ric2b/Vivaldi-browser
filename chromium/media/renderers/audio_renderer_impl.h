@@ -81,7 +81,7 @@ class MEDIA_EXPORT AudioRendererImpl
   // AudioRenderer implementation.
   void Initialize(DemuxerStream* stream,
                   const PipelineStatusCB& init_cb,
-                  const SetCdmReadyCB& set_cdm_ready_cb,
+                  CdmContext* cdm_context,
                   const StatisticsCB& statistics_cb,
                   const BufferingStateCB& buffering_state_cb,
                   const base::Closure& ended_cb,
@@ -161,7 +161,7 @@ class MEDIA_EXPORT AudioRendererImpl
   // this case |audio_delay_milliseconds| should be used to indicate when in the
   // future should the filled buffer be played.
   int Render(AudioBus* audio_bus,
-             uint32_t audio_delay_milliseconds,
+             uint32_t frames_delayed,
              uint32_t frames_skipped) override;
   void OnRenderError() override;
 
@@ -237,6 +237,10 @@ class MEDIA_EXPORT AudioRendererImpl
   // Memory usage of |algorithm_| recorded during the last
   // HandleSplicerBuffer_Locked() call.
   int64_t last_audio_memory_usage_;
+
+  // Sample rate of the last decoded audio buffer. Allows for detection of
+  // sample rate changes due to implicit AAC configuration change.
+  int last_decoded_sample_rate_;
 
   // After Initialize() has completed, all variables below must be accessed
   // under |lock_|. ------------------------------------------------------------

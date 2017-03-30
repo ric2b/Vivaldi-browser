@@ -15,6 +15,9 @@ namespace cc {
 RenderPassDrawQuad::RenderPassDrawQuad() {
 }
 
+RenderPassDrawQuad::RenderPassDrawQuad(const RenderPassDrawQuad& other) =
+    default;
+
 RenderPassDrawQuad::~RenderPassDrawQuad() {
 }
 
@@ -73,11 +76,7 @@ void RenderPassDrawQuad::SetAll(const SharedQuadState* shared_quad_state,
 }
 
 gfx::RectF RenderPassDrawQuad::MaskUVRect() const {
-  gfx::RectF mask_uv_rect((mask_uv_scale.x() * rect.x()) / rect.width(),
-                          (mask_uv_scale.y() * rect.y()) / rect.height(),
-                          mask_uv_scale.x(),
-                          mask_uv_scale.y());
-  return mask_uv_rect;
+  return gfx::ScaleRect(gfx::RectF(rect), mask_uv_scale.x(), mask_uv_scale.y());
 }
 
 const RenderPassDrawQuad* RenderPassDrawQuad::MaterialCast(

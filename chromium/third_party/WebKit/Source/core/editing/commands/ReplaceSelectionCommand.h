@@ -52,13 +52,16 @@ public:
         return adoptRefWillBeNoop(new ReplaceSelectionCommand(document, fragment, options, action));
     }
 
+    EphemeralRange insertedRange() const;
+
     DECLARE_VIRTUAL_TRACE();
 
 private:
     ReplaceSelectionCommand(Document&, PassRefPtrWillBeRawPtr<DocumentFragment>, CommandOptions, EditAction);
 
-    void doApply() override;
+    void doApply(EditingState*) override;
     EditAction editingAction() const override;
+    bool isReplaceSelectionCommand() const override;
 
     class InsertedNodes {
         STACK_ALLOCATED();
@@ -77,7 +80,7 @@ private:
         RefPtrWillBeMember<Node> m_lastNodeInserted;
     };
 
-    Node* insertAsListItems(PassRefPtrWillBeRawPtr<HTMLElement> listElement, Element* insertionBlock, const Position&, InsertedNodes&);
+    Node* insertAsListItems(PassRefPtrWillBeRawPtr<HTMLElement> listElement, Element* insertionBlock, const Position&, InsertedNodes&, EditingState*);
 
     void updateNodesInserted(Node*);
     bool shouldRemoveEndBR(HTMLBRElement*, const VisiblePosition&);
@@ -86,24 +89,24 @@ private:
     bool shouldMergeEnd(bool selectionEndWasEndOfParagraph);
     bool shouldMerge(const VisiblePosition&, const VisiblePosition&);
 
-    void mergeEndIfNeeded();
+    void mergeEndIfNeeded(EditingState*);
 
     void removeUnrenderedTextNodesAtEnds(InsertedNodes&);
 
-    void removeRedundantStylesAndKeepStyleSpanInline(InsertedNodes&);
-    void makeInsertedContentRoundTrippableWithHTMLTreeBuilder(const InsertedNodes&);
-    void moveElementOutOfAncestor(PassRefPtrWillBeRawPtr<Element>, PassRefPtrWillBeRawPtr<ContainerNode> ancestor);
-    void handleStyleSpans(InsertedNodes&);
+    void removeRedundantStylesAndKeepStyleSpanInline(InsertedNodes&, EditingState*);
+    void makeInsertedContentRoundTrippableWithHTMLTreeBuilder(const InsertedNodes&, EditingState*);
+    void moveElementOutOfAncestor(PassRefPtrWillBeRawPtr<Element>, PassRefPtrWillBeRawPtr<Element> ancestor, EditingState*);
+    void handleStyleSpans(InsertedNodes&, EditingState*);
 
     VisiblePosition positionAtStartOfInsertedContent() const;
     VisiblePosition positionAtEndOfInsertedContent() const;
 
     bool shouldPerformSmartReplace() const;
-    void addSpacesForSmartReplace();
-    void completeHTMLReplacement(const Position& lastPositionToSelect);
-    void mergeTextNodesAroundPosition(Position&, Position& positionOnlyToBeUpdated);
+    void addSpacesForSmartReplace(EditingState*);
+    void completeHTMLReplacement(const Position& lastPositionToSelect, EditingState*);
+    void mergeTextNodesAroundPosition(Position&, Position& positionOnlyToBeUpdated, EditingState*);
 
-    bool performTrivialReplace(const ReplacementFragment&);
+    bool performTrivialReplace(const ReplacementFragment&, EditingState*);
 
     Position m_startOfInsertedContent;
     Position m_endOfInsertedContent;
@@ -117,7 +120,12 @@ private:
     EditAction m_editAction;
     bool m_sanitizeFragment;
     bool m_shouldMergeEnd;
+
+    Position m_startOfInsertedRange;
+    Position m_endOfInsertedRange;
 };
+
+DEFINE_TYPE_CASTS(ReplaceSelectionCommand, CompositeEditCommand, command, command->isReplaceSelectionCommand(), command.isReplaceSelectionCommand());
 
 } // namespace blink
 

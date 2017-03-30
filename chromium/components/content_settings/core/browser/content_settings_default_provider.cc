@@ -11,9 +11,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/prefs/pref_registry.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "components/content_settings/core/browser/content_settings_rule.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/website_settings_info.h"
@@ -22,6 +19,9 @@
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_registry.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "url/gurl.h"
 
 namespace content_settings {
@@ -180,6 +180,11 @@ DefaultProvider::DefaultProvider(PrefService* prefs, bool incognito)
       IntToContentSetting(prefs_->GetInteger(
           GetPrefName(CONTENT_SETTINGS_TYPE_KEYGEN))),
       CONTENT_SETTING_NUM_SETTINGS);
+  UMA_HISTOGRAM_ENUMERATION(
+      "ContentSettings.DefaultWebBluetoothGuardSetting",
+      IntToContentSetting(prefs_->GetInteger(
+          GetPrefName(CONTENT_SETTINGS_TYPE_BLUETOOTH_GUARD))),
+      CONTENT_SETTING_NUM_SETTINGS);
 
   pref_change_registrar_.Init(prefs_);
   PrefChangeRegistrar::NamedChangeCallback callback = base::Bind(
@@ -208,14 +213,15 @@ bool DefaultProvider::SetWebsiteSetting(
     return false;
   }
 
-  // The default settings may not be directly modified for OTR sessions.
-  // Instead, they are synced to the main profile's setting.
-  if (is_incognito_)
-    return false;
-
   // Put |in_value| in a scoped pointer to ensure that it gets cleaned up
   // properly if we don't pass on the ownership.
   scoped_ptr<base::Value> value(in_value);
+
+  // The default settings may not be directly modified for OTR sessions.
+  // Instead, they are synced to the main profile's setting.
+  if (is_incognito_)
+    return true;
+
   {
     base::AutoReset<bool> auto_reset(&updating_preferences_, true);
     // Lock the memory map access, so that values are not read by

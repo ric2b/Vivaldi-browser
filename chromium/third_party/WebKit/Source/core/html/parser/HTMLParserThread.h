@@ -32,6 +32,7 @@
 #define HTMLParserThread_h
 
 #include "core/CoreExport.h"
+#include "platform/WaitableEvent.h"
 #include "platform/WebThreadSupportingGC.h"
 #include "wtf/Allocator.h"
 #include "wtf/Functional.h"
@@ -39,6 +40,8 @@
 #include "wtf/PassOwnPtr.h"
 
 namespace blink {
+
+class WebWaitableEvent;
 
 class CORE_EXPORT HTMLParserThread {
     USING_FAST_MALLOC(HTMLParserThread);
@@ -57,7 +60,7 @@ private:
     HTMLParserThread();
     ~HTMLParserThread();
     void setupHTMLParserThread();
-    void cleanupHTMLParserThread();
+    void cleanupHTMLParserThread(WaitableEvent*);
 
     OwnPtr<WebThreadSupportingGC> m_thread;
 };

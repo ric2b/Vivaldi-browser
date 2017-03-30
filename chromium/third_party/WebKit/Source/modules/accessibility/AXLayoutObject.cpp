@@ -41,9 +41,11 @@
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/iterators/CharacterIterator.h"
 #include "core/editing/iterators/TextIterator.h"
+#include "core/frame/FrameOwner.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
+#include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLLabelElement.h"
 #include "core/html/HTMLOptionElement.h"
@@ -63,6 +65,7 @@
 #include "core/layout/LayoutTextControlSingleLine.h"
 #include "core/layout/LayoutTextFragment.h"
 #include "core/layout/LayoutView.h"
+#include "core/layout/api/LineLayoutAPIShim.h"
 #include "core/loader/ProgressTracker.h"
 #include "core/page/Page.h"
 #include "core/paint/PaintLayer.h"
@@ -234,11 +237,8 @@ bool AXLayoutObject::shouldNotifyActiveDescendant() const
 
 ScrollableArea* AXLayoutObject::getScrollableAreaIfScrollable() const
 {
-    // FIXME(dmazzoni): the plan is to get rid of AXScrollView, but until
-    // this is done, a WebArea delegates its scrolling to its parent scroll view.
-    // http://crbug.com/484878
-    if (parentObject() && parentObject()->isAXScrollView())
-        return parentObject()->getScrollableAreaIfScrollable();
+    if (isWebArea())
+        return documentFrameView();
 
     if (!m_layoutObject || !m_layoutObject->isBox())
         return 0;
@@ -348,17 +348,6 @@ void AXLayoutObject::detach()
 //
 // Check object role or purpose.
 //
-
-bool AXLayoutObject::isAttachment() const
-{
-    LayoutBoxModelObject* layoutObject = layoutBoxModelObject();
-    if (!layoutObject)
-        return false;
-    // Widgets are the replaced elements that we represent to AX as attachments
-    bool isLayoutPart = layoutObject->isLayoutPart();
-    ASSERT(!isLayoutPart || (layoutObject->isAtomicInlineLevel() && !isImage()));
-    return isLayoutPart;
-}
 
 static bool isLinkable(const AXObject& object)
 {
@@ -578,9 +567,9 @@ bool AXLayoutObject::computeAccessibilityIsIgnored(IgnoredReasons* ignoredReason
         return true;
     }
 
-    // TODO: we should refactor this - but right now this is necessary to make
-    // sure scroll areas stay in the tree.
-    if (isAttachment())
+    // A LayoutPart is an iframe element or embedded object element or something like
+    // that. We don't want to ignore those.
+    if (m_layoutObject->isLayoutPart())
         return false;
 
     // find out if this element is inside of a label element.
@@ -589,7 +578,7 @@ bool AXLayoutObject::computeAccessibilityIsIgnored(IgnoredReasons* ignoredReason
     if (controlObject && controlObject->isCheckboxOrRadio() && controlObject->nameFromLabelElement()) {
         if (ignoredReasons) {
             HTMLLabelElement* label = labelElementContainer();
-            if (label && !label->isSameNode(node())) {
+            if (label && label != node()) {
                 AXObject* labelAXObject = axObjectCache().getOrCreate(label);
                 ignoredReasons->append(IgnoredReason(AXLabelContainer, labelAXObject));
             }
@@ -659,6 +648,9 @@ bool AXLayoutObject::computeAccessibilityIsIgnored(IgnoredReasons* ignoredReason
     if (hasContentEditableAttributeSet())
         return false;
 
+    if (roleValue() == AbbrRole)
+        return false;
+
     // List items play an important role in defining the structure of lists. They should not be ignored.
     if (roleValue() == ListItemRole)
         return false;
@@ -678,6 +670,9 @@ bool AXLayoutObject::computeAccessibilityIsIgnored(IgnoredReasons* ignoredReason
     if (roleValue() == DetailsRole)
         return false;
 
+    if (roleValue() == MarkRole)
+        return false;
+
     if (roleValue() == MathRole)
         return false;
 
@@ -687,10 +682,10 @@ bool AXLayoutObject::computeAccessibilityIsIgnored(IgnoredReasons* ignoredReason
     if (roleValue() == RubyRole)
         return false;
 
-    if (roleValue() == TimeRole)
+    if (roleValue() == SplitterRole)
         return false;
 
-    if (roleValue() == MarkRole)
+    if (roleValue() == TimeRole)
         return false;
 
     // if this element has aria attributes on it, it should not be ignored.
@@ -704,15 +699,6 @@ bool AXLayoutObject::computeAccessibilityIsIgnored(IgnoredReasons* ignoredReason
     // the side effect of causing the immediate parent accessible to be ignored. This is especially
     // problematic for platforms which have distinct roles for textual block elements.
     if (isHTMLSpanElement(node)) {
-        if (ignoredReasons)
-            ignoredReasons->append(IgnoredReason(AXUninteresting));
-        return true;
-    }
-
-    if (m_layoutObject->isLayoutBlockFlow() && m_layoutObject->childrenInline() && !canSetFocusAttribute()) {
-        if (toLayoutBlockFlow(m_layoutObject)->firstLineBox() || mouseButtonListener())
-            return false;
-
         if (ignoredReasons)
             ignoredReasons->append(IgnoredReason(AXUninteresting));
         return true;
@@ -797,6 +783,23 @@ bool AXLayoutObject::computeAccessibilityIsIgnored(IgnoredReasons* ignoredReason
 
     if (isScrollableContainer())
         return false;
+
+    // Ignore layout objects that are block flows with inline children. These
+    // are usually dummy layout objects that pad out the tree, but there are
+    // some exceptions below.
+    if (m_layoutObject->isLayoutBlockFlow() && m_layoutObject->childrenInline() && !canSetFocusAttribute()) {
+        // If the layout object has any plain text in it, that text will be
+        // inside a LineBox, so the layout object will have a first LineBox.
+        bool hasAnyText = !!toLayoutBlockFlow(m_layoutObject)->firstLineBox();
+
+        // Always include interesting-looking objects.
+        if (hasAnyText || mouseButtonListener())
+            return false;
+
+        if (ignoredReasons)
+            ignoredReasons->append(IgnoredReason(AXUninteresting));
+        return true;
+    }
 
     // By default, objects should be ignored so that the AX hierarchy is not
     // filled with unnecessary items.
@@ -1003,7 +1006,7 @@ AXObject* AXLayoutObject::nextOnLine() const
 
     AXObject* result = 0;
     for (InlineBox* next = inlineBox->nextOnLine(); next; next = next->nextOnLine()) {
-        LayoutObject* layoutObject = &next->layoutObject();
+        LayoutObject* layoutObject = LineLayoutAPIShim::layoutObjectFrom(next->getLineLayoutItem());
         result = axObjectCache().getOrCreate(layoutObject);
         if (result)
             break;
@@ -1032,7 +1035,7 @@ AXObject* AXLayoutObject::previousOnLine() const
 
     AXObject* result = 0;
     for (InlineBox* prev = inlineBox->prevOnLine(); prev; prev = prev->prevOnLine()) {
-        LayoutObject* layoutObject = &prev->layoutObject();
+        LayoutObject* layoutObject = LineLayoutAPIShim::layoutObjectFrom(prev->getLineLayoutItem());
         result = axObjectCache().getOrCreate(layoutObject);
         if (result)
             break;
@@ -1529,9 +1532,16 @@ AXObject* AXLayoutObject::computeParent() const
     if (parentObj)
         return axObjectCache().getOrCreate(parentObj);
 
-    // WebArea's parent should be the scroll view containing it.
-    if (isWebArea())
-        return axObjectCache().getOrCreate(m_layoutObject->frame()->view());
+    // A WebArea's parent should be the containing frame (if local) or page popup owner.
+    if (isWebArea()) {
+        LocalFrame* frame = m_layoutObject->frame();
+        if (frame->owner() && frame->owner()->isLocal()) {
+            HTMLFrameOwnerElement* owner = toHTMLFrameOwnerElement(frame->owner());
+            if (owner && owner->layoutObject())
+                return axObjectCache().getOrCreate(owner->layoutObject());
+        }
+        return axObjectCache().getOrCreate(frame->pagePopupOwner());
+    }
 
     return 0;
 }
@@ -1555,9 +1565,16 @@ AXObject* AXLayoutObject::computeParentIfExists() const
     if (parentObj)
         return axObjectCache().get(parentObj);
 
-    // WebArea's parent should be the scroll view containing it.
-    if (isWebArea())
-        return axObjectCache().get(m_layoutObject->frame()->view());
+    // A WebArea's parent should be the containing frame (if local) or page popup owner.
+    if (isWebArea()) {
+        LocalFrame* frame = m_layoutObject->frame();
+        if (frame->owner() && frame->owner()->isLocal()) {
+            HTMLFrameOwnerElement* owner = toHTMLFrameOwnerElement(frame->owner());
+            if (owner && owner->layoutObject())
+                return axObjectCache().get(owner->layoutObject());
+        }
+        return axObjectCache().get(frame->pagePopupOwner());
+    }
 
     return 0;
 }
@@ -1646,7 +1663,7 @@ void AXLayoutObject::addChildren()
     }
 
     addHiddenChildren();
-    addAttachmentChildren();
+    addFrameChildren();
     addPopupChildren();
     addImageMapChildren();
     addTextFieldChildren();
@@ -1757,13 +1774,6 @@ Element* AXLayoutObject::anchorElement() const
     }
 
     return 0;
-}
-
-Widget* AXLayoutObject::widgetForAttachmentView() const
-{
-    if (!isAttachment())
-        return 0;
-    return toLayoutPart(m_layoutObject)->widget();
 }
 
 //
@@ -2160,13 +2170,13 @@ void AXLayoutObject::lineBreaks(Vector<int>& lineBreaks) const
 
     VisiblePosition visiblePos = visiblePositionForIndex(0);
     VisiblePosition prevVisiblePos = visiblePos;
-    visiblePos = nextLinePosition(visiblePos, 0, HasEditableAXRole);
+    visiblePos = nextLinePosition(visiblePos, LayoutUnit(), HasEditableAXRole);
     // nextLinePosition moves to the end of the current line when there are
     // no more lines.
     while (visiblePos.isNotNull() && !inSameLine(prevVisiblePos, visiblePos)) {
         lineBreaks.append(indexForVisiblePosition(visiblePos));
         prevVisiblePos = visiblePos;
-        visiblePos = nextLinePosition(visiblePos, 0, HasEditableAXRole);
+        visiblePos = nextLinePosition(visiblePos, LayoutUnit(), HasEditableAXRole);
 
         // Make sure we always make forward progress.
         if (visiblePos.deepEquivalent().compareTo(prevVisiblePos.deepEquivalent()) < 0)
@@ -2212,7 +2222,7 @@ bool AXLayoutObject::isTabItemSelected() const
     // The ARIA spec says a tab item can also be selected if it is aria-labeled by a tabpanel
     // that has keyboard focus inside of it, or if a tabpanel in its aria-controls list has KB
     // focus inside of it.
-    AXObject* focusedElement = focusedUIElement();
+    AXObject* focusedElement = axObjectCache().focusedObject();
     if (!focusedElement)
         return false;
 
@@ -2442,19 +2452,22 @@ void AXLayoutObject::addCanvasChildren()
     AXNodeObject::addChildren();
 }
 
-void AXLayoutObject::addAttachmentChildren()
+void AXLayoutObject::addFrameChildren()
 {
-    if (!isAttachment())
+    if (!m_layoutObject || !m_layoutObject->isLayoutPart())
         return;
 
-    // FrameView's need to be inserted into the AX hierarchy when encountered.
-    Widget* widget = widgetForAttachmentView();
+    Widget* widget = toLayoutPart(m_layoutObject)->widget();
     if (!widget || !widget->isFrameView())
         return;
 
-    AXObject* axWidget = axObjectCache().getOrCreate(widget);
-    if (!axWidget->accessibilityIsIgnored())
-        m_children.append(axWidget);
+    Document* doc = toFrameView(widget)->frame().document();
+    if (!doc || !doc->layoutView())
+        return;
+
+    AXObject* axChildFrame = axObjectCache().getOrCreate(doc);
+    if (!axChildFrame->accessibilityIsIgnored())
+        m_children.append(axChildFrame);
 }
 
 void AXLayoutObject::addPopupChildren()

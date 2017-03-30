@@ -7,11 +7,17 @@
 
 #include <stdint.h>
 
-#include <map>
 #include <string>
+#include <vector>
 
 #include "ash/ash_export.h"
-#include "base/compiler_specific.h"
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
+#include "base/memory/scoped_vector.h"
+
+namespace gfx {
+class Display;
+}
 
 namespace base {
 class Value;
@@ -20,42 +26,72 @@ template <typename T> class JSONValueConverter;
 
 namespace ash {
 
-typedef std::pair<int64_t, int64_t> DisplayIdPair;
+// An identifier used to manage display layout in DisplayManager /
+// DisplayLayoutStore.
+using DisplayIdList = std::vector<int64_t>;
 
-struct ASH_EXPORT DisplayLayout {
-  // Layout options where the secondary display should be positioned.
-  enum Position {
-    TOP,
-    RIGHT,
-    BOTTOM,
-    LEFT
-  };
+using DisplayList = std::vector<gfx::Display>;
 
-  // Factory method to create DisplayLayout from ints. The |mirrored| is
-  // set to false and |primary_id| is set to gfx::Display::kInvalidDisplayId.
-  // Used for persistence and webui.
-  static DisplayLayout FromInts(int position, int offsets);
+// DisplayPlacement specifies where the display (D) is placed relative
+// to parent (P) display.  In the following example, the display (D)
+// given by |display_id| is placed at the left side of the parent
+// display (P) given by |parent_display_id|, with a negative offset.
+//
+//        +      +--------+
+// offset |      |        |
+//        +      |   D    +--------+
+//               |        |        |
+//               +--------+   P    |
+//                        |        |
+//                        +--------+
+//
+struct ASH_EXPORT DisplayPlacement {
+  // The id of the display this placement will be applied to.
+  int64_t display_id;
 
+  // The parent display id to which the above display is placed.
+  int64_t parent_display_id;
+
+  // To which side the parent display the display is positioned.
+  enum Position { TOP, RIGHT, BOTTOM, LEFT };
+  Position position;
+
+  // The offset of the position of the secondary display. The offset is
+  // based on the top/left edge of the primary display.
+  int offset;
+
+  explicit DisplayPlacement(const DisplayPlacement& placement);
+  DisplayPlacement(Position position, int offset);
+  DisplayPlacement();
+
+  DisplayPlacement& Swap();
+
+  std::string ToString() const;
+
+  // Used by JSONValueConverter to generate DisplayPlacement from a
+  // JSON value.  See json_value_converter.h.
+  static void RegisterJSONConverter(
+      base::JSONValueConverter<DisplayPlacement>* converter);
+};
+
+class ASH_EXPORT DisplayLayout final {
+ public:
   DisplayLayout();
-  DisplayLayout(Position position, int offset);
-
-  // Returns an inverted display layout.
-  DisplayLayout Invert() const WARN_UNUSED_RESULT;
+  ~DisplayLayout();
 
   // Converter functions to/from base::Value.
   static bool ConvertFromValue(const base::Value& value, DisplayLayout* layout);
   static bool ConvertToValue(const DisplayLayout& layout, base::Value* value);
 
-  // This method is used by base::JSONValueConverter, you don't need to call
-  // this directly. Instead consider using converter functions above.
+  // Used by JSONValueConverter to generate DisplayLayout from a
+  // JSON value.  See json_value_converter.h.
   static void RegisterJSONConverter(
       base::JSONValueConverter<DisplayLayout>* converter);
 
-  Position position;
+  // Validates the layout object.
+  static bool Validate(const DisplayIdList& list, const DisplayLayout& layout);
 
-  // The offset of the position of the secondary display.  The offset is
-  // based on the top/left edge of the primary display.
-  int offset;
+  ScopedVector<DisplayPlacement> placement_list;
 
   // True if displays are mirrored.
   bool mirrored;
@@ -66,9 +102,17 @@ struct ASH_EXPORT DisplayLayout {
   // The id of the display used as a primary display.
   int64_t primary_id;
 
+  scoped_ptr<DisplayLayout> Copy() const;
+
+  // Test if the |layout| has the same placement list. Other fields such
+  // as mirrored, primary_id are ignored.
+  bool HasSamePlacementList(const DisplayLayout& layout) const;
+
   // Returns string representation of the layout for debugging/testing.
-  // This includes "unified" only if the unified desktop feature is enabled.
   std::string ToString() const;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(DisplayLayout);
 };
 
 }  // namespace ash

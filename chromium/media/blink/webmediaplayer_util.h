@@ -13,6 +13,7 @@
 #include "media/blink/media_blink_export.h"
 #include "third_party/WebKit/public/platform/WebEncryptedMediaTypes.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayer.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebSetSinkIdCallbacks.h"
 #include "third_party/WebKit/public/platform/WebTimeRange.h"
 #include "url/gurl.h"
@@ -26,16 +27,19 @@ blink::WebMediaPlayer::NetworkState MEDIA_BLINK_EXPORT
 PipelineErrorToNetworkState(PipelineStatus error);
 
 // Report various metrics to UMA and RAPPOR.
-void MEDIA_BLINK_EXPORT ReportMetrics(blink::WebMediaPlayer::LoadType load_type,
-                                      const GURL& url,
-                                      const GURL& origin_url);
+void MEDIA_BLINK_EXPORT
+ReportMetrics(blink::WebMediaPlayer::LoadType load_type,
+              const GURL& url,
+              const blink::WebSecurityOrigin& security_origin);
 
 // Record a RAPPOR metric for the origin of an HLS playback.
 void MEDIA_BLINK_EXPORT RecordOriginOfHLSPlayback(const GURL& origin_url);
 
-// Convert Initialization Data Types.
+// TODO(ddorwin): Move this function to an EME-specific file.
+// We may also want to move the next one and pass Blink types to WMPI.
 EmeInitDataType MEDIA_BLINK_EXPORT
 ConvertToEmeInitDataType(blink::WebEncryptedMediaInitDataType init_data_type);
+
 blink::WebEncryptedMediaInitDataType MEDIA_BLINK_EXPORT
 ConvertToWebInitDataType(EmeInitDataType init_data_type);
 

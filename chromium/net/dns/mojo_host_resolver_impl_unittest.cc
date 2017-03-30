@@ -14,7 +14,6 @@
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "net/base/address_list.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/dns/mojo_host_type_converters.h"
 #include "net/log/net_log.h"
@@ -143,7 +142,7 @@ class MojoHostResolverImplTest : public testing::Test {
         interfaces::HostResolverRequestInfo::New();
     request->host = host;
     request->port = port;
-    request->address_family = interfaces::ADDRESS_FAMILY_IPV4;
+    request->address_family = interfaces::AddressFamily::IPV4;
     request->is_my_ip_address = is_my_ip_address;
     return request;
   }

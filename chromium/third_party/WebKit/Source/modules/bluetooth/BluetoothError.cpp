@@ -48,9 +48,11 @@ DOMException* BluetoothError::take(ScriptPromiseResolver*, const WebBluetoothErr
         MAP_ERROR(NoBluetoothAdapter, NotFoundError, "Bluetooth adapter not available.");
         MAP_ERROR(ChosenDeviceVanished, NotFoundError, "User selected a device that doesn't exist anymore.");
         MAP_ERROR(ChooserCancelled, NotFoundError, "User cancelled the requestDevice() chooser.");
+        MAP_ERROR(ChooserDisabled, NotFoundError, "User or their enterprise policy has disabled Web Bluetooth globally.");
         MAP_ERROR(ChooserDeniedPermission, NotFoundError, "User denied the browser permission to scan for Bluetooth devices.");
         MAP_ERROR(ServiceNotFound, NotFoundError, "Service not found in device.");
-        MAP_ERROR(CharacteristicNotFound, NotFoundError, "Characteristic not found in device.");
+        MAP_ERROR(CharacteristicNotFound, NotFoundError, "No Characteristics with specified UUID found in Service.");
+        MAP_ERROR(NoCharacteristicsFound, NotFoundError, "No Characteristics found in service.");
 
         // NotSupportedErrors:
         MAP_ERROR(GATTUnknownError, NotSupportedError, "GATT Error Unknown.");
@@ -61,6 +63,12 @@ DOMException* BluetoothError::take(ScriptPromiseResolver*, const WebBluetoothErr
 
         // SecurityErrors:
         MAP_ERROR(GATTNotAuthorized, SecurityError, "GATT operation not authorized.");
+        MAP_ERROR(BlacklistedCharacteristicUUID, SecurityError, "getCharacteristic(s) called with blacklisted UUID. https://goo.gl/4NeimX");
+        MAP_ERROR(BlacklistedRead, SecurityError, "readValue() called on blacklisted object marked exclude-reads. https://goo.gl/4NeimX");
+        MAP_ERROR(BlacklistedWrite, SecurityError, "writeValue() called on blacklisted object marked exclude-writes. https://goo.gl/4NeimX");
+        MAP_ERROR(NotAllowedToAccessService, SecurityError, "Origin is not allowed to access the service. Remember to add the service to a filter or to optionalServices in requestDevice().");
+        MAP_ERROR(RequestDeviceWithBlacklistedUUID, SecurityError, "requestDevice() called with a filter containing a blacklisted UUID. https://goo.gl/4NeimX");
+        MAP_ERROR(RequestDeviceWithUniqueOrigin, SecurityError, "requestDevice() called from sandboxed or otherwise unique origin.");
         MAP_ERROR(RequestDeviceWithoutFrame, SecurityError, "No window to show the requestDevice() dialog.");
 
 #undef MAP_ERROR

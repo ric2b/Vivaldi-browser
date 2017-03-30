@@ -37,11 +37,7 @@ float decibelsToLinear(float decibels)
 
 float linearToDecibels(float linear)
 {
-    // It's not possible to calculate decibels for a zero linear value since it would be -Inf.
-    // -1000.0 dB represents a very tiny linear value in case we ever reach this case.
-    ASSERT(linear);
-    if (!linear)
-        return -1000;
+    ASSERT(linear >= 0);
 
     return 20 * log10f(linear);
 }
@@ -54,7 +50,14 @@ double discreteTimeConstantForSampleRate(double timeConstant, double sampleRate)
 size_t timeToSampleFrame(double time, double sampleRate)
 {
     ASSERT(time >= 0);
-    return static_cast<size_t>(round(time * sampleRate));
+    double frame = round(time * sampleRate);
+
+    // Just return the largest possible size_t value if necessary.
+    if (frame >= std::numeric_limits<size_t>::max()) {
+        return std::numeric_limits<size_t>::max();
+    }
+
+    return static_cast<size_t>(frame);
 }
 
 bool isValidAudioBufferSampleRate(float sampleRate)
@@ -73,7 +76,7 @@ float maxAudioBufferSampleRate()
     // Windows can support audio sampling rates this high, so allow AudioBuffer rates this high as well.
     return 192000;
 }
-} // AudioUtilites
+} // namespace AudioUtilities
 
 } // namespace blink
 

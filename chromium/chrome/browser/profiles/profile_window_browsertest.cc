@@ -35,7 +35,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
 // This test verifies the Desktop implementation of Guest only.
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
 
 namespace {
 
@@ -102,8 +102,7 @@ class ProfileWindowBrowserTest : public InProcessBrowserTest {
 };
 
 Browser* ProfileWindowBrowserTest::OpenGuestBrowser() {
-  size_t num_browsers =
-      BrowserList::GetInstance(chrome::GetActiveDesktop())->size();
+  size_t num_browsers = BrowserList::GetInstance()->size();
 
   // Create a guest browser nicely. Using CreateProfile() and CreateBrowser()
   // does incomplete initialization that would lead to
@@ -111,20 +110,17 @@ Browser* ProfileWindowBrowserTest::OpenGuestBrowser() {
   content::WindowedNotificationObserver browser_creation_observer(
       chrome::NOTIFICATION_BROWSER_WINDOW_READY,
       content::NotificationService::AllSources());
-  profiles::SwitchToGuestProfile(chrome::GetActiveDesktop(),
-                                 ProfileManager::CreateCallback());
+  profiles::SwitchToGuestProfile(ProfileManager::CreateCallback());
 
   browser_creation_observer.Wait();
   DCHECK_NE(static_cast<Profile*>(nullptr),
             g_browser_process->profile_manager()->GetProfileByPath(
                 ProfileManager::GetGuestProfilePath()));
-  EXPECT_EQ(num_browsers + 1,
-            BrowserList::GetInstance(chrome::GetActiveDesktop())->size());
+  EXPECT_EQ(num_browsers + 1, BrowserList::GetInstance()->size());
 
   Profile* guest = g_browser_process->profile_manager()->GetProfileByPath(
       ProfileManager::GetGuestProfilePath());
-  Browser* browser = chrome::FindAnyBrowser(
-      guest, true, chrome::GetActiveDesktop());
+  Browser* browser = chrome::FindAnyBrowser(guest, true);
   EXPECT_TRUE(browser);
 
   // When |browser| closes a BrowsingDataRemover will be created and executed.
@@ -216,4 +212,4 @@ IN_PROC_BROWSER_TEST_F(ProfileWindowBrowserTest, GuestAppMenuLacksBookmarks) {
   EXPECT_EQ(-1, model_guest_profile.GetIndexOfCommandId(IDC_BOOKMARKS_MENU));
 }
 
-#endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_IOS)
+#endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID)

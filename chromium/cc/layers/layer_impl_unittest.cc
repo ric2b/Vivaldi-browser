@@ -127,9 +127,8 @@ TEST(LayerImplTest, VerifyLayerChangesAreTrackedProperly) {
   child->AddChild(LayerImpl::Create(host_impl.active_tree(), 8));
   LayerImpl* grand_child = child->children()[0].get();
   host_impl.active_tree()->SetRootLayer(std::move(root_clip_ptr));
-  host_impl.active_tree()->BuildPropertyTreesForTesting();
-
   root->SetScrollClipLayer(root_clip->id());
+  host_impl.active_tree()->BuildPropertyTreesForTesting();
 
   // Adding children is an internal operation and should not mark layers as
   // changed.
@@ -158,30 +157,17 @@ TEST(LayerImplTest, VerifyLayerChangesAreTrackedProperly) {
   EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
       root->SetUpdateRect(arbitrary_rect));
   EXECUTE_AND_VERIFY_ONLY_LAYER_CHANGED(root->SetBounds(arbitrary_size));
+  host_impl.active_tree()->property_trees()->needs_rebuild = true;
+  host_impl.active_tree()->BuildPropertyTreesForTesting();
 
   // Changing these properties affects the entire subtree of layers.
-  EXECUTE_AND_VERIFY_SUBTREE_CHANGED(
-      root->SetTransformOrigin(arbitrary_point_3f));
   EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->SetFilters(arbitrary_filters));
   EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->SetFilters(FilterOperations()));
-  EXECUTE_AND_VERIFY_SUBTREE_CHANGED(
-      root->SetMaskLayer(LayerImpl::Create(host_impl.active_tree(), 9)));
-  EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->SetMasksToBounds(true));
-  EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->SetContentsOpaque(true));
-  EXECUTE_AND_VERIFY_SUBTREE_CHANGED(
-      root->SetReplicaLayer(LayerImpl::Create(host_impl.active_tree(), 10)));
-  EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->SetPosition(arbitrary_point_f));
-  EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->SetShouldFlattenTransform(false));
-  EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->Set3dSortingContextId(1));
-  EXECUTE_AND_VERIFY_SUBTREE_CHANGED(
-      root->SetDoubleSided(false));  // constructor initializes it to "true".
   EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->ScrollBy(arbitrary_vector2d));
   EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->SetScrollDelta(gfx::Vector2d()));
   EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->PushScrollOffsetFromMainThread(
       gfx::ScrollOffset(arbitrary_vector2d)));
-  EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->SetHideLayerAndSubtree(true));
   EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->SetOpacity(arbitrary_number));
-  EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->SetBlendMode(arbitrary_blend_mode));
   EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->SetTransform(arbitrary_transform));
 
   // Changing these properties only affects the layer itself.
@@ -195,10 +181,12 @@ TEST(LayerImplTest, VerifyLayerChangesAreTrackedProperly) {
   // masksToBounds.
   root->SetMasksToBounds(false);
   EXECUTE_AND_VERIFY_ONLY_LAYER_CHANGED(root->SetBounds(gfx::Size(135, 246)));
+  host_impl.active_tree()->property_trees()->needs_rebuild = true;
+  host_impl.active_tree()->BuildPropertyTreesForTesting();
+
   root->SetMasksToBounds(true);
-  // Should be a different size than previous call, to ensure it marks tree
-  // changed.
-  EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->SetBounds(arbitrary_size));
+  host_impl.active_tree()->property_trees()->needs_rebuild = true;
+  host_impl.active_tree()->BuildPropertyTreesForTesting();
 
   // Changing these properties does not cause the layer to be marked as changed
   // but does cause the layer to need to push properties.
@@ -207,7 +195,7 @@ TEST(LayerImplTest, VerifyLayerChangesAreTrackedProperly) {
   EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
       root->SetElementId(2));
   EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
-      root->SetMutableProperties(kMutablePropertyOpacity));
+      root->SetMutableProperties(MutableProperty::kOpacity));
   EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
       root->SetScrollParent(scroll_parent.get()));
   EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
@@ -338,26 +326,35 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
 
   // Unrelated functions, always set to new values, always set needs update.
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(
-      layer->SetMaskLayer(LayerImpl::Create(host_impl.active_tree(), 4)));
+      layer->SetMaskLayer(LayerImpl::Create(host_impl.active_tree(), 4));
+      layer->NoteLayerPropertyChanged());
   host_impl.active_tree()->BuildPropertyTreesForTesting();
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetMasksToBounds(true));
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetContentsOpaque(true));
+  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetMasksToBounds(true);
+                                      layer->NoteLayerPropertyChanged());
+  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetContentsOpaque(true);
+                                      layer->NoteLayerPropertyChanged());
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(
-      layer->SetReplicaLayer(LayerImpl::Create(host_impl.active_tree(), 5)));
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer2->SetPosition(arbitrary_point_f));
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetShouldFlattenTransform(false));
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->Set3dSortingContextId(1));
+      layer->SetReplicaLayer(LayerImpl::Create(host_impl.active_tree(), 5));
+      layer->NoteLayerPropertyChanged());
+  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer2->SetPosition(arbitrary_point_f);
+                                      layer->NoteLayerPropertyChanged());
+  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetShouldFlattenTransform(false);
+                                      layer->NoteLayerPropertyChanged());
+  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->Set3dSortingContextId(1);
+                                      layer->NoteLayerPropertyChanged());
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(
-      layer->SetDoubleSided(false));  // constructor initializes it to "true".
+      layer->SetDoubleSided(false);  // constructor initializes it to "true".
+      layer->NoteLayerPropertyChanged());
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer->SetBackgroundColor(arbitrary_color));
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer->SetBackgroundFilters(arbitrary_filters));
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetOpacity(arbitrary_number));
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(
-      layer->SetBlendMode(arbitrary_blend_mode));
+  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetBlendMode(arbitrary_blend_mode);
+                                      layer->NoteLayerPropertyChanged());
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetTransform(arbitrary_transform));
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetBounds(arbitrary_size));
+  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetBounds(arbitrary_size);
+                                      layer->NoteLayerPropertyChanged());
 
   // Unrelated functions, set to the same values, no needs update.
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
@@ -385,7 +382,7 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetBounds(arbitrary_size));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetElementId(2));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
-      layer->SetMutableProperties(kMutablePropertyTransform));
+      layer->SetMutableProperties(MutableProperty::kTransform));
 }
 
 TEST(LayerImplTest, SafeOpaqueBackgroundColor) {
@@ -467,7 +464,6 @@ class LayerImplScrollTest : public testing::Test {
         LayerImpl::Create(host_impl_.active_tree(), root_id_));
     host_impl_.active_tree()->root_layer()->AddChild(
         LayerImpl::Create(host_impl_.active_tree(), root_id_ + 1));
-    host_impl_.active_tree()->BuildPropertyTreesForTesting();
     layer()->SetScrollClipLayer(root_id_);
     // Set the max scroll offset by noting that the root layer has bounds (1,1),
     // thus whatever bounds are set for the layer will be the max scroll
@@ -475,6 +471,7 @@ class LayerImplScrollTest : public testing::Test {
     host_impl_.active_tree()->root_layer()->SetBounds(gfx::Size(1, 1));
     gfx::Vector2d max_scroll_offset(51, 81);
     layer()->SetBounds(gfx::Size(max_scroll_offset.x(), max_scroll_offset.y()));
+    host_impl_.active_tree()->BuildPropertyTreesForTesting();
   }
 
   LayerImpl* layer() {

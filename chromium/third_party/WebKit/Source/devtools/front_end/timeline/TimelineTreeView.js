@@ -29,6 +29,7 @@ WebInspector.TimelineTreeView = function(model)
     this._dataGrid = new WebInspector.SortableDataGrid(columns);
     this._dataGrid.addEventListener(WebInspector.DataGrid.Events.SortingChanged, this._sortingChanged, this);
     this._dataGrid.element.addEventListener("mousemove", this._onMouseMove.bind(this), true)
+    this._dataGrid.setResizeMethod(WebInspector.DataGrid.ResizeMethod.Last);
     this._dataGrid.asWidget().show(mainView.element);
 
     this._splitWidget = new WebInspector.SplitWidget(true, true, "timelineTreeViewDetailsSplitWidget");
@@ -106,7 +107,7 @@ WebInspector.TimelineTreeView.prototype = {
     _onHover: function(node) { },
 
     /**
-     * @param {!ConsoleAgent.CallFrame} frame
+     * @param {!RuntimeAgent.CallFrame} frame
      * @return {!Element}
      */
     linkifyLocation: function(frame)
@@ -238,8 +239,8 @@ WebInspector.TimelineTreeView.prototype = {
      */
     _populateColumns: function(columns)
     {
-        columns.push({id: "self", title: WebInspector.UIString("Self Time"), width: "110px", sortable: true});
-        columns.push({id: "total", title: WebInspector.UIString("Total Time"), width: "110px", sortable: true});
+        columns.push({id: "self", title: WebInspector.UIString("Self Time"), width: "110px", fixedWidth: true, sortable: true});
+        columns.push({id: "total", title: WebInspector.UIString("Total Time"), width: "110px", fixedWidth: true, sortable: true});
         columns.push({id: "activity", title: WebInspector.UIString("Activity"), disclosure: true, sortable: true});
     },
 
@@ -402,8 +403,17 @@ WebInspector.TimelineTreeView.eventStackFrame = function(event)
  */
 WebInspector.TimelineTreeView.eventURL = function(event)
 {
+    var data = event.args["data"] || event.args["beginData"];
+    if (data && data["url"])
+        return data["url"];
     var frame = WebInspector.TimelineTreeView.eventStackFrame(event);
-    return frame && frame["url"] || null;
+    while (frame) {
+        var url = frame["url"];
+        if (url)
+            return url;
+        frame = frame.parent;
+    }
+    return null;
 }
 
 /**
@@ -460,7 +470,7 @@ WebInspector.TimelineTreeView.GridNode.prototype = {
                 : WebInspector.TimelineUIUtils.eventTitle(event);
             var frame = WebInspector.TimelineTreeView.eventStackFrame(event);
             if (frame && frame["url"]) {
-                var callFrame = /** @type {!ConsoleAgent.CallFrame} */ (frame);
+                var callFrame = /** @type {!RuntimeAgent.CallFrame} */ (frame);
                 container.createChild("div", "activity-link").appendChild(this._treeView.linkifyLocation(callFrame));
             }
             icon.style.backgroundColor = WebInspector.TimelineUIUtils.eventColor(event);
@@ -711,13 +721,13 @@ WebInspector.AggregatedTimelineTreeView.prototype = {
         case WebInspector.AggregatedTimelineTreeView.GroupBy.Category:
             var category = categories[id] || categories["other"];
             groupNode.name = category.title;
-            groupNode.color = category.fillColorStop1;
+            groupNode.color = category.color;
             break;
         case WebInspector.AggregatedTimelineTreeView.GroupBy.Domain:
         case WebInspector.AggregatedTimelineTreeView.GroupBy.Subdomain:
         case WebInspector.AggregatedTimelineTreeView.GroupBy.URL:
             groupNode.name = id || WebInspector.UIString("unattributed");
-            groupNode.color = id ? WebInspector.TimelineUIUtils.eventColor(event) : categories["other"].fillColorStop1;
+            groupNode.color = id ? WebInspector.TimelineUIUtils.eventColor(event) : categories["other"].color;
             break;
         }
         return groupNode;
@@ -1052,7 +1062,7 @@ WebInspector.EventsTimelineTreeView.prototype = {
      */
     _populateColumns: function(columns)
     {
-        columns.push({id: "startTime", title: WebInspector.UIString("Start Time"), width: "110px", sortable: true});
+        columns.push({id: "startTime", title: WebInspector.UIString("Start Time"), width: "110px", fixedWidth: true, sortable: true});
         WebInspector.TimelineTreeView.prototype._populateColumns.call(this, columns);
     },
 
@@ -1113,10 +1123,11 @@ WebInspector.TimelineStackView = function(treeView)
     header.textContent = WebInspector.UIString("Heaviest stack");
     this._treeView = treeView;
     var columns = [
-        {id: "total", title: WebInspector.UIString("Total Time"), width: "110px"},
+        {id: "total", title: WebInspector.UIString("Total Time"), fixedWidth: true, width: "110px"},
         {id: "activity", title: WebInspector.UIString("Activity")}
     ];
     this._dataGrid = new WebInspector.ViewportDataGrid(columns);
+    this._dataGrid.setResizeMethod(WebInspector.DataGrid.ResizeMethod.Last);
     this._dataGrid.addEventListener(WebInspector.DataGrid.Events.SelectedNode, this._onSelectionChanged, this);
     this._dataGrid.asWidget().show(this.element);
 }

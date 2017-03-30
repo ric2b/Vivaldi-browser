@@ -4,7 +4,7 @@
 
 #include "core/frame/DOMWindow.h"
 
-#include "bindings/core/v8/ScriptCallStackFactory.h"
+#include "bindings/core/v8/ScriptCallStack.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
@@ -21,7 +21,6 @@
 #include "core/input/EventHandler.h"
 #include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/InspectorInstrumentation.h"
-#include "core/inspector/ScriptCallStack.h"
 #include "core/loader/FrameLoaderClient.h"
 #include "core/loader/MixedContentChecker.h"
 #include "core/page/ChromeClient.h"
@@ -203,27 +202,25 @@ void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message, const Mes
     String sourceOrigin = sourceDocument->securityOrigin()->toString();
     String sourceSuborigin = sourceDocument->securityOrigin()->suboriginName();
 
-    // FIXME: MixedContentChecker needs to be refactored for OOPIF.  For now,
-    // create the url using replicated origins for remote frames.
     KURL targetUrl = isLocalDOMWindow() ? document()->url() : KURL(KURL(), frame()->securityContext()->securityOrigin()->toString());
     if (MixedContentChecker::isMixedContent(sourceDocument->securityOrigin(), targetUrl))
         UseCounter::count(frame(), UseCounter::PostMessageFromSecureToInsecure);
     else if (MixedContentChecker::isMixedContent(frame()->securityContext()->securityOrigin(), sourceDocument->url()))
         UseCounter::count(frame(), UseCounter::PostMessageFromInsecureToSecure);
 
+    RefPtrWillBeRawPtr<MessageEvent> event = MessageEvent::create(channels.release(), message, sourceOrigin, String(), source, sourceSuborigin);
     // Give the embedder a chance to intercept this postMessage.  If the
     // target is a remote frame, the message will be forwarded through the
     // browser process.
-    RefPtrWillBeRawPtr<MessageEvent> event = MessageEvent::create(channels.release(), message, sourceOrigin, String(), source, sourceSuborigin);
-    bool didHandleMessageEvent = frame()->client()->willCheckAndDispatchMessageEvent(target.get(), event.get(), source->document()->frame());
-    if (!didHandleMessageEvent) {
-        // Capture stack trace only when inspector front-end is loaded as it may be time consuming.
-        RefPtrWillBeRawPtr<ScriptCallStack> stackTrace = nullptr;
-        if (InspectorInstrumentation::consoleAgentEnabled(sourceDocument))
-            stackTrace = currentScriptCallStack(ScriptCallStack::maxCallStackSizeToCapture);
+    if (frame()->client()->willCheckAndDispatchMessageEvent(target.get(), event.get(), source->document()->frame()))
+        return;
 
-        toLocalDOMWindow(this)->schedulePostMessage(event, source, target.get(), stackTrace.release());
-    }
+    // Capture stack trace only when inspector front-end is loaded as it may be time consuming.
+    RefPtr<ScriptCallStack> stackTrace;
+    if (InspectorInstrumentation::consoleAgentEnabled(sourceDocument))
+        stackTrace = ScriptCallStack::capture();
+
+    toLocalDOMWindow(this)->schedulePostMessage(event, target.get(), stackTrace.release());
 }
 
 // FIXME: Once we're throwing exceptions for cross-origin access violations, we will always sanitize the target
@@ -262,7 +259,10 @@ String DOMWindow::crossDomainAccessErrorMessage(const LocalDOMWindow* callingWin
     // FIXME: This message, and other console messages, have extra newlines. Should remove them.
     const SecurityOrigin* activeOrigin = callingWindow->document()->securityOrigin();
     const SecurityOrigin* targetOrigin = frame()->securityContext()->securityOrigin();
-    ASSERT(!activeOrigin->canAccessCheckSuborigins(targetOrigin));
+    // It's possible for a remote frame to be same origin with respect to a
+    // local frame, but it must still be treated as a disallowed cross-domain
+    // access. See https://crbug.com/601629.
+    ASSERT(frame()->isRemoteFrame() || !activeOrigin->canAccessCheckSuborigins(targetOrigin));
 
     String message = "Blocked a frame with origin \"" + activeOrigin->toString() + "\" from accessing a frame with origin \"" + targetOrigin->toString() + "\". ";
 

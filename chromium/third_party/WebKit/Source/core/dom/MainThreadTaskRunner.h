@@ -65,7 +65,7 @@ private:
 
     void pendingTasksTimerFired(Timer<MainThreadTaskRunner>*);
 
-    WeakPtrWillBeRawPtr<MainThreadTaskRunner> createWeakPointerToSelf();
+    void postTaskInternal(const WebTraceLocation&, PassOwnPtr<ExecutionContextTask>, bool isInspectorTask);
 
     RawPtrWillBeMember<ExecutionContext> m_context;
 #if !ENABLE(OILPAN)
@@ -81,6 +81,6 @@ inline PassOwnPtrWillBeRawPtr<MainThreadTaskRunner> MainThreadTaskRunner::create
     return adoptPtrWillBeNoop(new MainThreadTaskRunner(context));
 }
 
-} // namespace
+} // namespace blink
 
 #endif

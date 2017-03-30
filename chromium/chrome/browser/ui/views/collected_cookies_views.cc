@@ -5,7 +5,6 @@
 #include "chrome/browser/ui/views/collected_cookies_views.h"
 
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
 #include "chrome/browser/browsing_data/browsing_data_appcache_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_channel_id_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_cookie_helper.h"
@@ -27,6 +26,7 @@
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/web_contents.h"
@@ -331,6 +331,7 @@ views::View* CollectedCookiesViews::CreateAllowedPane() {
   // Create the controls that go into the pane.
   allowed_label_ = new views::Label(l10n_util::GetStringUTF16(
       IDS_COLLECTED_COOKIES_ALLOWED_COOKIES_LABEL));
+  allowed_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
 
   allowed_cookies_tree_model_ =
       content_settings->CreateAllowedCookiesTreeModel();

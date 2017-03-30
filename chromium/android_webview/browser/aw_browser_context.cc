@@ -15,13 +15,10 @@
 #include "android_webview/browser/aw_resource_context.h"
 #include "android_webview/browser/jni_dependency_factory.h"
 #include "android_webview/browser/net/aw_url_request_context_getter.h"
-#include "android_webview/browser/net/init_native_callback.h"
 #include "android_webview/common/aw_content_client.h"
 #include "base/base_paths_android.h"
 #include "base/bind.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/pref_service_factory.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_compression_stats.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
@@ -35,6 +32,8 @@
 #include "components/policy/core/browser/configuration_policy_pref_store.h"
 #include "components/policy/core/browser/url_blacklist_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/pref_service_factory.h"
 #include "components/url_formatter/url_fixer.h"
 #include "components/user_prefs/user_prefs.h"
 #include "components/visitedlink/browser/visitedlink_master.h"
@@ -42,7 +41,6 @@
 #include "content/public/browser/ssl_host_state_delegate.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
-#include "net/cookies/cookie_store.h"
 #include "net/proxy/proxy_config_service_android.h"
 #include "net/proxy/proxy_service.h"
 
@@ -182,7 +180,6 @@ void AwBrowserContext::SetLegacyCacheRemovalDelayForTest(int delay_ms) {
 }
 
 void AwBrowserContext::PreMainMessageLoopRun() {
-  cookie_store_ = CreateCookieStore(this);
   FilePath cache_path;
   const FilePath fallback_cache_dir =
       GetPath().Append(FILE_PATH_LITERAL("Cache"));
@@ -205,8 +202,7 @@ void AwBrowserContext::PreMainMessageLoopRun() {
   InitUserPrefService();
 
   url_request_context_getter_ = new AwURLRequestContextGetter(
-      cache_path, cookie_store_.get(), CreateProxyConfigService(),
-      user_pref_service_.get());
+      cache_path, CreateProxyConfigService(), user_pref_service_.get());
 
   data_reduction_proxy_io_data_.reset(
       new data_reduction_proxy::DataReductionProxyIOData(
@@ -265,10 +261,6 @@ void AwBrowserContext::PreMainMessageLoopRun() {
   AwMetricsServiceClient::GetInstance()->Initialize(user_pref_service_.get(),
                                                     GetRequestContext(),
                                                     guid_file_path);
-}
-
-void AwBrowserContext::PostMainMessageLoopRun() {
-  AwMetricsServiceClient::GetInstance()->Finalize();
 }
 
 void AwBrowserContext::AddVisitedURLs(const std::vector<GURL>& urls) {
@@ -351,7 +343,7 @@ void AwBrowserContext::InitUserPrefService() {
 
   metrics::MetricsService::RegisterPrefs(pref_registry);
 
-  base::PrefServiceFactory pref_service_factory;
+  PrefServiceFactory pref_service_factory;
   pref_service_factory.set_user_prefs(make_scoped_refptr(new AwPrefStore()));
   pref_service_factory.set_managed_prefs(
       make_scoped_refptr(new policy::ConfigurationPolicyPrefStore(

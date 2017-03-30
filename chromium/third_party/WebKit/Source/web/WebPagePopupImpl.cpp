@@ -130,16 +130,16 @@ private:
         m_popup->m_widgetClient->scheduleAnimation();
     }
 
-    void attachCompositorAnimationTimeline(WebCompositorAnimationTimeline* timeline, LocalFrame*) override
+    void attachCompositorAnimationTimeline(CompositorAnimationTimeline* timeline, LocalFrame*) override
     {
         if (m_popup->m_layerTreeView)
-            m_popup->m_layerTreeView->attachCompositorAnimationTimeline(timeline);
+            m_popup->m_layerTreeView->attachCompositorAnimationTimeline(timeline->animationTimeline());
     }
 
-    void detachCompositorAnimationTimeline(WebCompositorAnimationTimeline* timeline, LocalFrame*) override
+    void detachCompositorAnimationTimeline(CompositorAnimationTimeline* timeline, LocalFrame*) override
     {
         if (m_popup->m_layerTreeView)
-            m_popup->m_layerTreeView->detachCompositorAnimationTimeline(timeline);
+            m_popup->m_layerTreeView->detachCompositorAnimationTimeline(timeline->animationTimeline());
     }
 
     WebScreenInfo screenInfo() const override
@@ -163,9 +163,37 @@ private:
             m_popup->m_webView->client()->didChangeCursor(WebCursorInfo(cursor));
     }
 
-    void needTouchEvents(bool needsTouchEvents) override
+    void setEventListenerProperties(WebEventListenerClass eventClass, WebEventListenerProperties properties) override
     {
-        m_popup->widgetClient()->hasTouchEventHandlers(needsTouchEvents);
+        if (eventClass == WebEventListenerClass::Touch)
+            m_popup->widgetClient()->hasTouchEventHandlers(properties != WebEventListenerProperties::Nothing);
+        if (m_popup->m_layerTreeView)
+            m_popup->m_layerTreeView->setEventListenerProperties(eventClass, properties);
+    }
+    WebEventListenerProperties eventListenerProperties(WebEventListenerClass eventClass) const override
+    {
+        if (m_popup->m_layerTreeView)
+            return m_popup->m_layerTreeView->eventListenerProperties(eventClass);
+        return WebEventListenerProperties::Nothing;
+    }
+
+    void setHaveScrollEventHandlers(bool hasEventHandlers) override
+    {
+        if (m_popup->m_layerTreeView)
+            m_popup->m_layerTreeView->setHaveScrollEventHandlers(hasEventHandlers);
+    }
+
+    bool haveScrollEventHandlers() const override
+    {
+        if (m_popup->m_layerTreeView)
+            return m_popup->m_layerTreeView->haveScrollEventHandlers();
+        return false;
+    }
+
+    void setTouchAction(TouchAction touchAction) override
+    {
+        if (WebViewClient* client = m_popup->m_webView->client())
+            client->setTouchAction(static_cast<WebTouchAction>(touchAction));
     }
 
     GraphicsLayerFactory* graphicsLayerFactory() const override
@@ -259,6 +287,8 @@ bool WebPagePopupImpl::initializePage()
     frame->setPagePopupOwner(m_popupClient->ownerElement());
     frame->setView(FrameView::create(frame.get()));
     frame->init();
+    frame->view()->setParentVisible(true);
+    frame->view()->setSelfVisible(true);
     frame->view()->setTransparent(false);
     if (AXObjectCache* cache = m_popupClient->ownerElement().document().existingAXObjectCache())
         cache->childrenChanged(&m_popupClient->ownerElement());

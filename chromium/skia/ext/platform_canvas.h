@@ -20,9 +20,11 @@
 
 class SkBaseDevice;
 
-namespace skia {
+// A PlatformCanvas is a software-rasterized SkCanvas which is *also*
+// addressable by the platform-specific drawing API (GDI, Core Graphics,
+// Cairo...).
 
-typedef SkCanvas PlatformCanvas;
+namespace skia {
 
 //
 //  Note about error handling.
@@ -51,7 +53,7 @@ enum OnFailureType {
                                         OnFailureType failure_type);
 
   // Draws the top layer of the canvas into the specified HDC. Only works
-  // with a PlatformCanvas with a BitmapPlatformDevice.
+  // with a SkCanvas with a BitmapPlatformDevice.
   SK_API void DrawToNativeContext(SkCanvas* canvas,
                                   HDC hdc,
                                   int x,
@@ -142,9 +144,6 @@ SK_API bool GetWritablePixels(SkCanvas* canvas, SkPixmap* pixmap);
 // given canvas. If this function returns false, BeginPlatformPaint will
 // return NULL PlatformSurface.
 SK_API bool SupportsPlatformPaint(const SkCanvas* canvas);
-
-// Sets the opacity of each pixel in the specified region to be opaque.
-SK_API void MakeOpaque(SkCanvas* canvas, int x, int y, int width, int height);
 
 // These calls should surround calls to platform drawing routines, the
 // surface returned here can be used with the native platform routines.

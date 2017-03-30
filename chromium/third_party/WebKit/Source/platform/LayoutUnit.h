@@ -35,6 +35,7 @@
 #include "wtf/Assertions.h"
 #include "wtf/MathExtras.h"
 #include "wtf/SaturatedArithmetic.h"
+#include <algorithm>
 #include <limits.h>
 #include <limits>
 #include <stdlib.h>
@@ -61,17 +62,22 @@ static const int kFixedPointDenominator = 1 << kLayoutUnitFractionalBits;
 const int intMaxForLayoutUnit = INT_MAX / kFixedPointDenominator;
 const int intMinForLayoutUnit = INT_MIN / kFixedPointDenominator;
 
+// TODO(thakis): Remove these two lines once http://llvm.org/PR26504 is resolved
+class LayoutUnit;
+inline bool operator<(const LayoutUnit&, const LayoutUnit&);
+
 class LayoutUnit {
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 public:
     LayoutUnit() : m_value(0) { }
-    LayoutUnit(int value) { setValue(value); }
-    LayoutUnit(unsigned short value) { setValue(value); }
-    LayoutUnit(unsigned value) { setValue(value); }
-    LayoutUnit(unsigned long value) { m_value = clampTo<int>(value * kFixedPointDenominator); }
-    LayoutUnit(unsigned long long value) { m_value = clampTo<int>(value * kFixedPointDenominator); }
-    LayoutUnit(float value) { m_value = clampTo<int>(value * kFixedPointDenominator); }
-    LayoutUnit(double value) { m_value = clampTo<int>(value * kFixedPointDenominator); }
+    // TODO(leviw): All of the below constructors should be explicit. crbug.com/581254
+    explicit LayoutUnit(int value) { setValue(value); }
+    explicit LayoutUnit(unsigned short value) { setValue(value); }
+    explicit LayoutUnit(unsigned value) { setValue(value); }
+    explicit LayoutUnit(unsigned long value) { m_value = clampTo<int>(value * kFixedPointDenominator); }
+    explicit LayoutUnit(unsigned long long value) { m_value = clampTo<int>(value * kFixedPointDenominator); }
+    explicit LayoutUnit(float value) { m_value = clampTo<int>(value * kFixedPointDenominator); }
+    explicit LayoutUnit(double value) { m_value = clampTo<int>(value * kFixedPointDenominator); }
 
     static LayoutUnit fromFloatCeil(float value)
     {
@@ -154,6 +160,16 @@ public:
             return intMinForLayoutUnit;
 
         return m_value >> kLayoutUnitFractionalBits;
+    }
+
+    LayoutUnit clampNegativeToZero() const
+    {
+        return std::max(*this, LayoutUnit());
+    }
+
+    LayoutUnit clampPositiveToZero() const
+    {
+        return std::min(*this, LayoutUnit());
     }
 
     LayoutUnit fraction() const
@@ -678,13 +694,13 @@ inline LayoutUnit& operator+=(LayoutUnit& a, const LayoutUnit& b)
 
 inline LayoutUnit& operator+=(LayoutUnit& a, int b)
 {
-    a = a + b;
+    a = a + LayoutUnit(b);
     return a;
 }
 
 inline LayoutUnit& operator+=(LayoutUnit& a, float b)
 {
-    a = a + b;
+    a = LayoutUnit(a + b);
     return a;
 }
 
@@ -696,7 +712,7 @@ inline float& operator+=(float& a, const LayoutUnit& b)
 
 inline LayoutUnit& operator-=(LayoutUnit& a, int b)
 {
-    a = a - b;
+    a = a - LayoutUnit(b);
     return a;
 }
 
@@ -708,7 +724,7 @@ inline LayoutUnit& operator-=(LayoutUnit& a, const LayoutUnit& b)
 
 inline LayoutUnit& operator-=(LayoutUnit& a, float b)
 {
-    a = a - b;
+    a = LayoutUnit(a - b);
     return a;
 }
 
@@ -723,11 +739,10 @@ inline LayoutUnit& operator*=(LayoutUnit& a, const LayoutUnit& b)
     a = a * b;
     return a;
 }
-// operator*=(LayoutUnit& a, int b) is supported by the operator above plus LayoutUnit(int).
 
 inline LayoutUnit& operator*=(LayoutUnit& a, float b)
 {
-    a = a * b;
+    a = LayoutUnit(a * b);
     return a;
 }
 
@@ -742,11 +757,10 @@ inline LayoutUnit& operator/=(LayoutUnit& a, const LayoutUnit& b)
     a = a / b;
     return a;
 }
-// operator/=(LayoutUnit& a, int b) is supported by the operator above plus LayoutUnit(int).
 
 inline LayoutUnit& operator/=(LayoutUnit& a, float b)
 {
-    a = a / b;
+    a = LayoutUnit(a / b);
     return a;
 }
 
@@ -780,6 +794,11 @@ inline LayoutUnit absoluteValue(const LayoutUnit& value)
 inline LayoutUnit layoutMod(const LayoutUnit& numerator, const LayoutUnit& denominator)
 {
     return numerator % denominator;
+}
+
+inline LayoutUnit layoutMod(const LayoutUnit& numerator, int denominator)
+{
+    return numerator % LayoutUnit(denominator);
 }
 
 inline bool isIntegerValue(const LayoutUnit value)

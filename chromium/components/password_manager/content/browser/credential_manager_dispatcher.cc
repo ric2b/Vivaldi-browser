@@ -31,7 +31,7 @@ CredentialManagerDispatcher::CredentialManagerDispatcher(
     PasswordManagerClient* client)
     : WebContentsObserver(web_contents), client_(client), weak_factory_(this) {
   DCHECK(web_contents);
-  auto_signin_enabled_.Init(prefs::kPasswordManagerAutoSignin,
+  auto_signin_enabled_.Init(prefs::kCredentialsEnableAutosignin,
                             client_->GetPrefs());
 }
 
@@ -99,7 +99,7 @@ void CredentialManagerDispatcher::OnRequireUserMediation(int request_id) {
   DCHECK(request_id);
 
   PasswordStore* store = GetPasswordStore();
-  if (!store) {
+  if (!store || !IsUpdatingCredentialAllowed()) {
     web_contents()->GetRenderViewHost()->Send(
         new CredentialManagerMsg_AcknowledgeRequireUserMediation(
             web_contents()->GetRenderViewHost()->GetRoutingID(), request_id));
@@ -144,6 +144,7 @@ void CredentialManagerDispatcher::ScheduleRequireMediationTask(
 void CredentialManagerDispatcher::OnRequestCredential(
     int request_id,
     bool zero_click_only,
+    bool include_passwords,
     const std::vector<GURL>& federations) {
   DCHECK(request_id);
   PasswordStore* store = GetPasswordStore();
@@ -173,24 +174,25 @@ void CredentialManagerDispatcher::OnRequestCredential(
         GetSynthesizedFormForOrigin(),
         base::Bind(&CredentialManagerDispatcher::ScheduleRequestTask,
                    weak_factory_.GetWeakPtr(), request_id, zero_click_only,
-                   federations));
+                   include_passwords, federations));
   } else {
     std::vector<std::string> no_affiliated_realms;
-    ScheduleRequestTask(request_id, zero_click_only, federations,
-                        no_affiliated_realms);
+    ScheduleRequestTask(request_id, zero_click_only, include_passwords,
+                        federations, no_affiliated_realms);
   }
 }
 
 void CredentialManagerDispatcher::ScheduleRequestTask(
     int request_id,
     bool zero_click_only,
+    bool include_passwords,
     const std::vector<GURL>& federations,
     const std::vector<std::string>& android_realms) {
   DCHECK(GetPasswordStore());
   pending_request_.reset(new CredentialManagerPendingRequestTask(
       this, request_id, zero_click_only,
-      web_contents()->GetLastCommittedURL().GetOrigin(), federations,
-      android_realms));
+      web_contents()->GetLastCommittedURL().GetOrigin(), include_passwords,
+      federations, android_realms));
 
   // This will result in a callback to
   // PendingRequestTask::OnGetPasswordStoreResults().
@@ -226,6 +228,7 @@ void CredentialManagerDispatcher::SendCredential(int request_id,
   if (PasswordStore* store = GetPasswordStore()) {
     if (info.type != CredentialType::CREDENTIAL_TYPE_EMPTY &&
         IsZeroClickAllowed()) {
+      DCHECK(IsUpdatingCredentialAllowed());
       scoped_ptr<autofill::PasswordForm> form(
           CreatePasswordFormFromCredentialInfo(info,
                                                pending_request_->origin()));
@@ -259,6 +262,11 @@ CredentialManagerDispatcher::GetSynthesizedFormForOrigin() const {
 void CredentialManagerDispatcher::DoneRequiringUserMediation() {
   DCHECK(pending_require_user_mediation_);
   pending_require_user_mediation_.reset();
+}
+
+bool CredentialManagerDispatcher::IsUpdatingCredentialAllowed() const {
+  return !client_->DidLastPageLoadEncounterSSLErrors() &&
+         !client_->IsOffTheRecord();
 }
 
 }  // namespace password_manager

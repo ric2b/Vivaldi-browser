@@ -8,6 +8,7 @@
     '../skia/skia.gyp:skia',
     '../ui/gl/gl.gyp:gl',
     '../mojo/mojo_base.gyp:mojo_application_base',
+    'content_common_mojo_bindings.gyp:content_common_mojo_bindings',
   ],
   'sources': [
     'gpu/gpu_child_thread.cc',
@@ -21,6 +22,7 @@
     'gpu/gpu_watchdog_thread.h',
     'gpu/in_process_gpu_thread.cc',
     'gpu/in_process_gpu_thread.h',
+    'public/gpu/content_gpu_client.h',
   ],
   'include_dirs': [
     '..',

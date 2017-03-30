@@ -36,16 +36,16 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         bug=478572)
     self.Fail('conformance/extensions/ext-sRGB.html',
         bug=540900)
-    # Once we fix the CopyTexSubImage out-of-bounds behavior, this test will
-    # still fail on Win7/Intel and Android/Qualcomm/Adreno420.
-    self.Fail('conformance/textures/misc/copy-tex-image-and-sub-image-2d.html',
-        bug=577357)
-    # self.Fail('conformance/textures/misc/' +
-    #     'copy-tex-image-and-sub-image-2d.html',
-    #     ['win7', 'intel'])
-    # self.Fail('conformance/textures/misc/' +
-    #     'copy-tex-image-and-sub-image-2d.html',
-    #     ['android', ('qualcomm', 'Adreno (TM) 420')], bug=499555)
+    # We need to add WebGL 1 check in command buffer that format/type from
+    # TexSubImage2D have to match the current texture's.
+    self.Fail('conformance/textures/misc/tex-sub-image-2d-bad-args.html',
+        bug=570453)
+
+    # Fails on multiple platforms
+
+    # OpenGL / NVIDIA failures
+    self.Fail('conformance/attribs/gl-disabled-vertex-attrib.html',
+        ['win', 'linux', 'nvidia', 'opengl'], bug=1007) # angle bug ID
 
     # Win failures
     # Note that the following two tests pass with OpenGL.
@@ -58,7 +58,13 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Fail('conformance/glsl/constructors/' +
               'glsl-construct-vec-mat-index.html',
               ['win'], bug=525188)
+    self.Flaky('conformance/extensions/ext-disjoint-timer-query.html',
+        ['win'], bug=588617)
 
+    # Win7 / Intel failures
+    self.Fail('conformance/textures/misc/' +
+              'copy-tex-image-and-sub-image-2d.html',
+              ['win7', 'intel'])
 
     # Win / AMD flakiness seen on new tryservers.
     # It's unfortunate that this suppression needs to be so broad, but
@@ -88,9 +94,9 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Fail('conformance/ogles/GL/cos/cos_001_to_006.html',
         ['win', 'intel', 'd3d9'], bug=540538)
 
-    # Win / OpenGL / NVIDIA failures
-    self.Fail('conformance/attribs/gl-disabled-vertex-attrib.html',
-        ['win', 'nvidia', 'opengl'], bug=1007) # angle bug ID
+    # WIN / OpenGL / NVIDIA failures
+    # Mark ANGLE's OpenGL as flaky on Windows Nvidia
+    self.Flaky('conformance/*', ['win', 'nvidia', 'opengl'], bug=582083)
 
     # Win / OpenGL / AMD failures
     self.Skip('conformance/glsl/misc/shader-struct-scope.html',
@@ -118,10 +124,38 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Fail('deqp/data/gles2/shaders/preprocessor.html',
         ['mac'], bug=478572)
 
-    # Mac Retina failures
+    # Mac Retina NVIDIA failures
     self.Fail(
         'conformance/glsl/bugs/array-of-struct-with-int-first-position.html',
         ['mac', ('nvidia', 0xfd5), ('nvidia', 0xfe9)], bug=368912)
+    self.Fail('conformance/textures/image_bitmap_from_image/*',
+        ['mac', ('nvidia', 0xfd5), ('nvidia', 0xfe9)], bug=589930)
+    self.Fail('conformance/extensions/webgl-draw-buffers.html',
+        ['mavericks', ('nvidia', 0xfe9)], bug=586536)
+
+    # Mac Retina AMD failures
+    self.Fail('conformance/textures/image_bitmap_from_image/*',
+        ['mac', ('amd', 0x6821)], bug=589930)
+
+    # Mac AMD failures
+    self.Fail('conformance/textures/image_bitmap_from_image/' +
+        'tex-image-and-sub-image-2d-with-image-bitmap-from-image-' +
+        'rgb-rgb-unsigned_byte.html',
+        ['mac', ('amd', 0x679e)], bug=589930)
+    self.Fail('conformance/textures/image_bitmap_from_image/' +
+        'tex-image-and-sub-image-2d-with-image-bitmap-from-image-' +
+        'rgba-rgba-unsigned_byte.html',
+        ['mac', ('amd', 0x679e)], bug=589930)
+
+    # Mac Intel failures
+    self.Fail('conformance/textures/image_bitmap_from_image/' +
+        'tex-image-and-sub-image-2d-with-image-bitmap-from-image-' +
+        'rgb-rgb-unsigned_byte.html',
+        ['mac', 'intel'], bug=589930)
+    self.Fail('conformance/textures/image_bitmap_from_image/' +
+        'tex-image-and-sub-image-2d-with-image-bitmap-from-image-' +
+        'rgba-rgba-unsigned_byte.html',
+        ['mac', 'intel'], bug=589930)
 
     # Linux failures
     # NVIDIA
@@ -134,6 +168,7 @@ class WebGLConformanceExpectations(GpuTestExpectations):
                ['linux', 'amd'], bug=550989)
     self.Fail('deqp/data/gles2/shaders/preprocessor.html',
               ['linux', 'amd'], bug=478572)
+
     # AMD Radeon 6450
     self.Fail('conformance/extensions/angle-instanced-arrays.html',
         ['linux', ('amd', 0x6779)], bug=479260)
@@ -174,8 +209,12 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         ['linux', 'intel'], bug=540543)  # ANGLE bug 1276
     self.Fail('conformance/glsl/misc/shaders-with-varyings.html',
         ['linux', 'intel'], bug=540543)
+    self.Fail('conformance/extensions/ext-disjoint-timer-query.html',
+        ['linux', 'intel', 'opengl'], bug=1312)  # ANGLE bug id
     self.Fail('deqp/data/gles2/shaders/linkage.html',
         ['linux', 'intel'], bug=540543)
+    self.Fail('deqp/data/gles2/shaders/preprocessor.html',
+        ['linux', 'intel', 'opengl'], bug=1312)  # ANGLE bug id
 
     # Android failures
     self.Fail('deqp/data/gles2/shaders/constants.html',
@@ -186,6 +225,12 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         ['android'], bug=478572)
     self.Fail('deqp/data/gles2/shaders/linkage.html',
         ['android'], bug=478572)
+    self.Fail('conformance/textures/image/tex-image-and-sub-image-2d-' +
+              'with-image-rgb-rgb-unsigned_byte.html',
+        ['android'], bug=586183)
+    # The following tests timed out on android, so skip them for now.
+    self.Skip('conformance/textures/image_bitmap_from_video/*',
+        ['android'], bug=585108)
     # The following WebView crashes are causing problems with further
     # tests in the suite, so skip them for now.
     self.Skip('conformance/textures/video/tex-image-and-sub-image-2d-with-' +
@@ -231,6 +276,8 @@ class WebGLConformanceExpectations(GpuTestExpectations):
               ['android', ('qualcomm', 'Adreno (TM) 420')], bug=499555)
     self.Fail('conformance/extensions/oes-texture-float-with-image.html',
               ['android', ('qualcomm', 'Adreno (TM) 420')], bug=499555)
+    self.Fail('conformance/textures/image_bitmap_from_image_data/*',
+        ['android', ('qualcomm', 'Adreno (TM) 420')], bug=585108)
     self.Fail('conformance/textures/video/tex-image-and-sub-image-2d-with-' +
         'video-rgb-rgb-unsigned_byte.html',
         ['android', 'android-content-shell',
@@ -258,6 +305,9 @@ class WebGLConformanceExpectations(GpuTestExpectations):
               ['android', 'android-webview-shell',
                ('qualcomm', 'Adreno (TM) 420')], bug=499874)
     self.Fail('conformance/rendering/gl-scissor-test.html',
+              ['android', ('qualcomm', 'Adreno (TM) 420')], bug=499555)
+    self.Fail('conformance/textures/misc/' +
+              'copy-tex-image-and-sub-image-2d.html',
               ['android', ('qualcomm', 'Adreno (TM) 420')], bug=499555)
     self.Fail('conformance/textures/misc/' +
               'tex-image-and-sub-image-2d-with-array-buffer-view.html',

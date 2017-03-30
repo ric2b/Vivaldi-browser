@@ -2,23 +2,21 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/features.gni")
 import("//build/config/locales.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
+import("//build/config/win/console_app.gni")
 import("//build/config/win/manifest.gni")
 import("//chrome/chrome_repack_locales.gni")
+import("//chrome/common/features.gni")
 import("//chrome/version.gni")
+import("//ui/base/ui_features.gni")
 
 declare_args() {
-  # If true, builds as a console app (rather than a windowed app), which allows
-  # logging to be printed to the user. This will cause a terminal window to pop
-  # up when Chrome is not run from the command line, so should only be used for
-  # development. Only has an effect on Windows builds.
-  win_console_app = false
-
   # Specify the current PGO phase, only used for the Windows MSVS build. Here's
   # the different values that can be used:
   #     0 : Means that PGO is turned off.
@@ -57,12 +55,6 @@ if (is_win) {
     deps = [
       ":chrome_initial",
     ]
-  }
-
-  # The AddressSanitizer build should be a console program as it prints out
-  # stuff on stderr.
-  if (is_asan) {
-    win_console_app = true
   }
 }
 
@@ -153,11 +145,9 @@ if (!is_android) {
         "//content/public/common:static_switches",
         "//crypto",
         "//sandbox",
-        "//third_party/crashpad/crashpad/handler:handler_lib",
-        "//third_party/kasko",
         "//ui/gfx",
+        "//win8:visual_elements_resources",
         "//win8/delegate_execute",
-        "//win8/metro_driver",
       ]
       data_deps = [
         "//chrome/app/version_assembly:version_assembly_manifest",
@@ -190,7 +180,6 @@ if (!is_android) {
         ":browser_dependencies",
         ":child_dependencies",
         ":manpage",
-        "//base/allocator",
 
         # Needed to use the master_preferences functions
         "//chrome/installer/util:with_no_strings",
@@ -202,20 +191,27 @@ if (!is_android) {
 
       public_deps = [
         ":xdg_mime",  # Needs to be public for installer to consume files.
+        "//chrome/common:features",
       ]
-
-      # Needed for chrome_main.cc initialization of libraries.
-      configs += [ "//build/config/linux:pangocairo" ]
 
       # GYP has this in a 'profiling==0 and linux_disable_pie==0' condition.
       # but GN doesn't have either of these flags.
       ldflags = [ "-pie" ]
+
+      if (use_pango || use_cairo) {
+        # Needed for chrome_main.cc initialization of libraries.
+        configs += [ "//build/config/linux:pangocairo" ]
+      }
 
       if (use_x11) {
         configs += [
           "//build/config/linux:x11",
           "//build/config/linux:xext",
         ]
+      }
+
+      if (enable_package_mash_services) {
+        deps += [ "//chrome/app/mash" ]
       }
     }
 
@@ -305,8 +301,8 @@ if (is_mac || is_win) {
 
     deps = [
       ":browser_dependencies",
-      "//base/allocator",
       "//build/config/sanitizers:deps",
+      "//chrome/common:features",
     ]
     if (is_win) {
       output_name = "chrome"
@@ -332,10 +328,12 @@ if (is_mac || is_win) {
         #deps += [ 'chrome_user32_delay_imports' ]  TODO(GYP)
       }
 
-      # This is a large module that can't do incremental linking in some cases.
-      configs -= [ "//build/config/win:default_incremental_linking" ]
-      configs +=
-          [ "//build/config/win:default_large_module_incremental_linking" ]
+      if (!is_component_build) {
+        # This is a large module that can't do incremental linking in some cases.
+        configs -= [ "//build/config/win:default_incremental_linking" ]
+        configs +=
+            [ "//build/config/win:default_large_module_incremental_linking" ]
+      }
     }
 
     if (use_aura) {
@@ -381,6 +379,10 @@ if (is_mac || is_win) {
     if (enable_plugins && enable_pdf && !is_multi_dll_chrome) {
       deps += [ "//pdf" ]
     }
+
+    if (enable_package_mash_services) {
+      deps += [ "//chrome/app/mash" ]
+    }
   }
 
   if (is_multi_dll_chrome) {
@@ -406,8 +408,8 @@ if (is_mac || is_win) {
         ":child_dependencies",
         ":chrome_child_manifest",
         ":chrome_dll_version",
-        "//base/allocator",
         "//build/config/sanitizers:deps",
+        "//chrome/common:features",
         "//components/browser_watcher:browser_watcher_client",
         "//components/crash/content/app",
         "//content/public/app:child",
@@ -422,7 +424,15 @@ if (is_mac || is_win) {
           configs += [ "//build/config/win:no_incremental_linking" ]
         }
         if (chrome_pgo_phase > 0) {
-          configs += [ "//build/config/compiler:optimize_max" ]
+          cflags += [
+            "/GL",  # Whole program optimization.
+
+            # Disable Warning 4702 ("Unreachable code") for the WPO/PGO builds.
+            # Probably anything that this would catch that wouldn't be caught in
+            # a normal build isn't going to actually be a bug, so the
+            # incremental value of C4702 for PGO builds is likely very small.
+            "/wd4702",
+          ]
         }
         if (chrome_pgo_phase == 1) {
           ldflags = [
@@ -461,6 +471,21 @@ group("browser_dependencies") {
     if (enable_print_preview) {
       public_deps += [ "//chrome/service" ]
     }
+  }
+
+  if (!is_component_build) {
+    assert_no_deps = [
+      # Blink and V8 should not be used in the browser process. In component
+      # build this is OK because all of content is linked into one library.
+      # Note that the blink_headers target is OK, so we can't do a wildcard for
+      # all blink targets.
+      # TODO(brettw) bug 582206: Blink should not be linked into the browser
+      # process, and then we can enable this.
+      #"//third_party/WebKit/public:blink",
+      # TODO(brettw) bug 581766: V8 should not be linked into the browser
+      # process, and then we can enable this.
+      #"//v8/*",
+    ]
   }
 }
 
@@ -539,6 +564,7 @@ if (is_win) {
     ]
     deps = [
       "//base",
+      "//components/startup_metric_utils/common",
     ]
   }
 }
@@ -567,7 +593,6 @@ group("extra_resources") {
     "//chrome/browser/resources:net_internals_resources",
     "//chrome/browser/resources:password_manager_internals_resources",
     "//chrome/browser/resources:policy_resources",
-    "//chrome/browser/resources:signin_internals_resources",
     "//chrome/browser/resources:translate_internals_resources",
   ]
   if (!is_ios) {
@@ -644,7 +669,6 @@ repack("packed_extra_resources") {
     "$root_gen_dir/chrome/net_internals_resources.pak",
     "$root_gen_dir/chrome/password_manager_internals_resources.pak",
     "$root_gen_dir/chrome/policy_resources.pak",
-    "$root_gen_dir/chrome/signin_internals_resources.pak",
     "$root_gen_dir/chrome/translate_internals_resources.pak",
     "$root_gen_dir/components/components_resources.pak",
     "$root_gen_dir/net/net_resources.pak",
@@ -658,7 +682,6 @@ repack("packed_extra_resources") {
     "//chrome/browser/resources:net_internals_resources",
     "//chrome/browser/resources:password_manager_internals_resources",
     "//chrome/browser/resources:policy_resources",
-    "//chrome/browser/resources:signin_internals_resources",
     "//chrome/browser/resources:translate_internals_resources",
     "//chrome/common:resources",
     "//components/resources",
@@ -930,6 +953,13 @@ group("strings") {
 }
 
 if (is_android) {
+  # GYP: //chrome/chrome.gyp:data_use_ui_message_enum_java
+  java_cpp_enum("data_use_ui_message_enum_javagen") {
+    sources = [
+      "browser/android/data_usage/data_use_tab_ui_manager_android.cc",
+    ]
+  }
+
   # GYP: //chrome/chrome.gyp:content_setting_java
   java_cpp_enum("content_setting_javagen") {
     sources = [
@@ -955,6 +985,13 @@ if (is_android) {
   java_cpp_enum("page_info_connection_type_javagen") {
     sources = [
       "browser/ui/android/website_settings_popup_android.h",
+    ]
+  }
+
+  # GYP: //chrome/chrome.gyp:website_settings_action_java
+  java_cpp_enum("website_settings_action_javagen") {
+    sources = [
+      "browser/ui/website_settings/website_settings.h",
     ]
   }
 
@@ -993,7 +1030,7 @@ if (is_android) {
       "//chrome/plugin",
       "//chrome/renderer",
       "//chrome/utility",
-      "//components/enhanced_bookmarks",
+      "//components/safe_browsing_db:safe_browsing_db_mobile",
       "//content/public/app:both",
     ]
   }

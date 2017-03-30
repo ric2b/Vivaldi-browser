@@ -22,15 +22,14 @@ ExternalProtocolDialogDelegate::ExternalProtocolDialogDelegate(
     : ProtocolDialogDelegate(url),
       render_process_host_id_(render_process_host_id),
       tab_contents_id_(tab_contents_id),
-      program_name_(ShellIntegration::GetApplicationNameForProtocol(url)) {
-}
+      program_name_(shell_integration::GetApplicationNameForProtocol(url)) {}
 
 ExternalProtocolDialogDelegate::~ExternalProtocolDialogDelegate() {
 }
 
 base::string16 ExternalProtocolDialogDelegate::GetMessageText() const {
-  const int kMaxUrlWithoutSchemeSize = 256;
-  const int kMaxCommandSize = 256;
+  const size_t kMaxUrlWithoutSchemeSize = 256;
+  const size_t kMaxCommandSize = 256;
   base::string16 elided_url_without_scheme;
   base::string16 elided_command;
   gfx::ElideString(base::ASCIIToUTF16(url().possibly_invalid_spec()),

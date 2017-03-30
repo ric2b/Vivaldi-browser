@@ -185,11 +185,11 @@ scoped_ptr<TileTaskWorkerPool> OneCopyTileTaskWorkerPool::Create(
     int max_copy_texture_chromium_size,
     bool use_partial_raster,
     int max_staging_buffer_usage_in_bytes,
-    bool use_rgba_4444_texture_format) {
+    ResourceFormat preferred_tile_format) {
   return make_scoped_ptr<TileTaskWorkerPool>(new OneCopyTileTaskWorkerPool(
       task_runner, task_graph_runner, resource_provider,
       max_copy_texture_chromium_size, use_partial_raster,
-      max_staging_buffer_usage_in_bytes, use_rgba_4444_texture_format));
+      max_staging_buffer_usage_in_bytes, preferred_tile_format));
 }
 
 OneCopyTileTaskWorkerPool::OneCopyTileTaskWorkerPool(
@@ -199,7 +199,7 @@ OneCopyTileTaskWorkerPool::OneCopyTileTaskWorkerPool(
     int max_copy_texture_chromium_size,
     bool use_partial_raster,
     int max_staging_buffer_usage_in_bytes,
-    bool use_rgba_4444_texture_format)
+    ResourceFormat preferred_tile_format)
     : task_runner_(task_runner),
       task_graph_runner_(task_graph_runner),
       namespace_token_(task_graph_runner->GetNamespaceToken()),
@@ -212,7 +212,7 @@ OneCopyTileTaskWorkerPool::OneCopyTileTaskWorkerPool(
       use_partial_raster_(use_partial_raster),
       bytes_scheduled_since_last_flush_(0),
       max_staging_buffer_usage_in_bytes_(max_staging_buffer_usage_in_bytes),
-      use_rgba_4444_texture_format_(use_rgba_4444_texture_format),
+      preferred_tile_format_(preferred_tile_format),
       staging_buffer_usage_in_bytes_(0),
       free_staging_buffer_usage_in_bytes_(0),
       staging_buffer_expiration_delay_(
@@ -285,9 +285,13 @@ void OneCopyTileTaskWorkerPool::CheckForCompletedTasks() {
 
 ResourceFormat OneCopyTileTaskWorkerPool::GetResourceFormat(
     bool must_support_alpha) const {
-  return use_rgba_4444_texture_format_
-             ? RGBA_4444
-             : resource_provider_->best_texture_format();
+  if (resource_provider_->IsResourceFormatSupported(preferred_tile_format_) &&
+      (DoesResourceFormatSupportAlpha(preferred_tile_format_) ||
+       !must_support_alpha)) {
+    return preferred_tile_format_;
+  }
+
+  return resource_provider_->best_texture_format();
 }
 
 bool OneCopyTileTaskWorkerPool::GetResourceRequiresSwizzle(
@@ -314,7 +318,7 @@ void OneCopyTileTaskWorkerPool::ReleaseBufferForRaster(
 
 void OneCopyTileTaskWorkerPool::PlaybackAndCopyOnWorkerThread(
     const Resource* resource,
-    const ResourceProvider::ScopedWriteLockGL* resource_lock,
+    ResourceProvider::ScopedWriteLockGL* resource_lock,
     const DisplayListRasterSource* raster_source,
     const gfx::Rect& raster_full_rect,
     const gfx::Rect& raster_dirty_rect,
@@ -341,9 +345,6 @@ void OneCopyTileTaskWorkerPool::PlaybackAndCopyOnWorkerThread(
                   use_partial_raster_
                       ? gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT
                       : gfx::BufferUsage::GPU_READ_CPU_READ_WRITE);
-      DCHECK_EQ(gfx::NumberOfPlanesForBufferFormat(
-                    staging_buffer->gpu_memory_buffer->GetFormat()),
-                1u);
     }
 
     gfx::Rect playback_rect = raster_full_rect;
@@ -420,10 +421,9 @@ void OneCopyTileTaskWorkerPool::PlaybackAndCopyOnWorkerThread(
       if (!staging_buffer->query_id)
         gl->GenQueriesEXT(1, &staging_buffer->query_id);
 
-#if defined(OS_CHROMEOS)
-      // TODO(reveman): This avoids a performance problem on some ChromeOS
-      // devices. This needs to be removed to support native GpuMemoryBuffer
-      // implementations. crbug.com/436314
+#if defined(OS_CHROMEOS) && defined(ARCH_CPU_ARM_FAMILY)
+      // TODO(reveman): This avoids a performance problem on ARM ChromeOS
+      // devices. crbug.com/580166
       gl->BeginQueryEXT(GL_COMMANDS_ISSUED_CHROMIUM, staging_buffer->query_id);
 #else
       gl->BeginQueryEXT(GL_COMMANDS_COMPLETED_CHROMIUM,
@@ -431,44 +431,59 @@ void OneCopyTileTaskWorkerPool::PlaybackAndCopyOnWorkerThread(
 #endif
     }
 
-    int bytes_per_row =
-        (BitsPerPixel(resource->format()) * resource->size().width()) / 8;
-    int chunk_size_in_rows =
-        std::max(1, max_bytes_per_copy_operation_ / bytes_per_row);
-    // Align chunk size to 4. Required to support compressed texture formats.
-    chunk_size_in_rows = MathUtil::UncheckedRoundUp(chunk_size_in_rows, 4);
-    int y = 0;
-    int height = resource->size().height();
-    while (y < height) {
-      // Copy at most |chunk_size_in_rows|.
-      int rows_to_copy = std::min(chunk_size_in_rows, height - y);
-      DCHECK_GT(rows_to_copy, 0);
+    // Since compressed texture's cannot be pre-allocated we might have an
+    // unallocated resource in which case we need to perform a full size copy.
+    if (IsResourceFormatCompressed(resource->format())) {
+      gl->CompressedCopyTextureCHROMIUM(staging_buffer->texture_id,
+                                        resource_lock->texture_id());
+    } else {
+      int bytes_per_row =
+          (BitsPerPixel(resource->format()) * resource->size().width()) / 8;
+      int chunk_size_in_rows =
+          std::max(1, max_bytes_per_copy_operation_ / bytes_per_row);
+      // Align chunk size to 4. Required to support compressed texture formats.
+      chunk_size_in_rows = MathUtil::UncheckedRoundUp(chunk_size_in_rows, 4);
+      int y = 0;
+      int height = resource->size().height();
+      while (y < height) {
+        // Copy at most |chunk_size_in_rows|.
+        int rows_to_copy = std::min(chunk_size_in_rows, height - y);
+        DCHECK_GT(rows_to_copy, 0);
 
-      gl->CopySubTextureCHROMIUM(
-          staging_buffer->texture_id, resource_lock->texture_id(), 0, y, 0, y,
-          resource->size().width(), rows_to_copy, false, false, false);
-      y += rows_to_copy;
+        gl->CopySubTextureCHROMIUM(
+            staging_buffer->texture_id, resource_lock->texture_id(), 0, y, 0, y,
+            resource->size().width(), rows_to_copy, false, false, false);
+        y += rows_to_copy;
 
-      // Increment |bytes_scheduled_since_last_flush_| by the amount of memory
-      // used for this copy operation.
-      bytes_scheduled_since_last_flush_ += rows_to_copy * bytes_per_row;
+        // Increment |bytes_scheduled_since_last_flush_| by the amount of memory
+        // used for this copy operation.
+        bytes_scheduled_since_last_flush_ += rows_to_copy * bytes_per_row;
 
-      if (bytes_scheduled_since_last_flush_ >= max_bytes_per_copy_operation_) {
-        gl->ShallowFlushCHROMIUM();
-        bytes_scheduled_since_last_flush_ = 0;
+        if (bytes_scheduled_since_last_flush_ >=
+            max_bytes_per_copy_operation_) {
+          gl->ShallowFlushCHROMIUM();
+          bytes_scheduled_since_last_flush_ = 0;
+        }
       }
     }
 
     if (resource_provider_->use_sync_query()) {
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) && defined(ARCH_CPU_ARM_FAMILY)
       gl->EndQueryEXT(GL_COMMANDS_ISSUED_CHROMIUM);
 #else
       gl->EndQueryEXT(GL_COMMANDS_COMPLETED_CHROMIUM);
 #endif
     }
 
+    const uint64_t fence_sync = gl->InsertFenceSyncCHROMIUM();
+
     // Barrier to sync worker context output to cc context.
     gl->OrderingBarrierCHROMIUM();
+
+    // Generate sync token after the barrier for cross context synchronization.
+    gpu::SyncToken sync_token;
+    gl->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
+    resource_lock->UpdateResourceSyncToken(sync_token);
   }
 
   staging_buffer->last_usage = base::TimeTicks::Now();

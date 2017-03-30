@@ -11,6 +11,8 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "ui/aura/client/focus_change_observer.h"
+#include "ui/aura/window_observer.h"
 #include "ui/views/views_export.h"
 
 namespace base {
@@ -18,6 +20,9 @@ template <typename T> struct DefaultSingletonTraits;
 }
 
 namespace aura {
+namespace client {
+class FocusClient;
+}
 class Window;
 }  // namespace aura
 
@@ -27,7 +32,9 @@ class View;
 class Widget;
 
 // A cache responsible for assigning id's to a set of interesting Aura views.
-class VIEWS_EXPORT AXAuraObjCache {
+class VIEWS_EXPORT AXAuraObjCache
+    : public aura::client::FocusChangeObserver,
+      public aura::WindowObserver {
  public:
   // Get the single instance of this class.
   static AXAuraObjCache* GetInstance();
@@ -38,9 +45,9 @@ class VIEWS_EXPORT AXAuraObjCache {
   AXAuraObjWrapper* GetOrCreate(aura::Window* window);
 
   // Gets an id given an Aura view.
-  int32_t GetID(View* view);
-  int32_t GetID(Widget* widget);
-  int32_t GetID(aura::Window* window);
+  int32_t GetID(View* view) const;
+  int32_t GetID(Widget* widget) const;
+  int32_t GetID(aura::Window* window) const;
 
   // Gets the next unique id for this cache. Useful for non-Aura view backed
   // views.
@@ -63,6 +70,9 @@ class VIEWS_EXPORT AXAuraObjCache {
   // Get all top level windows this cache knows about.
   void GetTopLevelWindows(std::vector<AXAuraObjWrapper*>* children);
 
+  // Get the object that has focus.
+  AXAuraObjWrapper* GetFocus();
+
   // Indicates if this object's currently being destroyed.
   bool is_destroying() { return is_destroying_; }
 
@@ -70,7 +80,16 @@ class VIEWS_EXPORT AXAuraObjCache {
   friend struct base::DefaultSingletonTraits<AXAuraObjCache>;
 
   AXAuraObjCache();
-  virtual ~AXAuraObjCache();
+  ~AXAuraObjCache() override;
+
+  View* GetFocusedView();
+
+  // aura::client::FocusChangeObserver override.
+  void OnWindowFocused(aura::Window* gained_focus,
+                       aura::Window* lost_focus) override;
+
+  // aura::WindowObserver override.
+  void OnWindowDestroying(aura::Window* window) override;
 
   template <typename AuraViewWrapper, typename AuraView>
   AXAuraObjWrapper* CreateInternal(
@@ -78,8 +97,9 @@ class VIEWS_EXPORT AXAuraObjCache {
       std::map<AuraView*, int32_t>& aura_view_to_id_map);
 
   template <typename AuraView>
-  int32_t GetIDInternal(AuraView* aura_view,
-                        std::map<AuraView*, int32_t>& aura_view_to_id_map);
+  int32_t GetIDInternal(
+      AuraView* aura_view,
+      const std::map<AuraView*, int32_t>& aura_view_to_id_map) const;
 
   template <typename AuraView>
   void RemoveInternal(AuraView* aura_view,
@@ -91,6 +111,8 @@ class VIEWS_EXPORT AXAuraObjCache {
 
   std::map<int32_t, AXAuraObjWrapper*> cache_;
   int32_t current_id_;
+
+  aura::client::FocusClient* focus_client_;
 
   // True immediately when entering this object's destructor.
   bool is_destroying_;

@@ -26,7 +26,6 @@
 #include "core/dom/PendingScript.h"
 
 #include "bindings/core/v8/ScriptSourceCode.h"
-#include "bindings/core/v8/ScriptStreamer.h"
 #include "core/dom/Element.h"
 #include "core/fetch/ScriptResource.h"
 #include "core/frame/SubresourceIntegrity.h"
@@ -34,34 +33,33 @@
 
 namespace blink {
 
-PendingScript::PendingScript()
-    : m_watchingForLoad(false)
-    , m_startingPosition(TextPosition::belowRangePosition())
-    , m_integrityFailure(false)
+PassOwnPtrWillBeRawPtr<PendingScript> PendingScript::create(Element* element, ScriptResource* resource)
 {
+    return adoptPtrWillBeNoop(new PendingScript(element, resource));
 }
 
 PendingScript::PendingScript(Element* element, ScriptResource* resource)
     : m_watchingForLoad(false)
     , m_element(element)
     , m_integrityFailure(false)
+    , m_client(nullptr)
 {
     setScriptResource(resource);
-}
-
-PendingScript::PendingScript(const PendingScript& other)
-    : ResourceOwner(other)
-    , m_watchingForLoad(other.m_watchingForLoad)
-    , m_element(other.m_element)
-    , m_startingPosition(other.m_startingPosition)
-    , m_integrityFailure(other.m_integrityFailure)
-    , m_streamer(other.m_streamer)
-{
-    setScriptResource(other.resource());
+#if ENABLE(OILPAN)
+    ThreadState::current()->registerPreFinalizer(this);
+#endif
 }
 
 PendingScript::~PendingScript()
 {
+}
+
+void PendingScript::dispose()
+{
+    if (!m_client)
+        return;
+    stopWatchingForLoad();
+    releaseElementAndClear();
 }
 
 PendingScript& PendingScript::operator=(const PendingScript& other)
@@ -81,30 +79,33 @@ PendingScript& PendingScript::operator=(const PendingScript& other)
 void PendingScript::watchForLoad(ScriptResourceClient* client)
 {
     ASSERT(!m_watchingForLoad);
-    // addClient() will call notifyFinished() if the load is complete. Callers
+    // addClient() will call streamingFinished() if the load is complete. Callers
     // who do not expect to be re-entered from this call should not call
     // watchForLoad for a PendingScript which isReady. We also need to set
     // m_watchingForLoad early, since addClient() can result in calling
     // notifyFinished and further stopWatchingForLoad().
     m_watchingForLoad = true;
-    if (m_streamer) {
-        m_streamer->addClient(client);
-    } else {
+    m_client = client;
+    if (!m_streamer)
         resource()->addClient(client);
-    }
 }
 
-void PendingScript::stopWatchingForLoad(ScriptResourceClient* client)
+void PendingScript::stopWatchingForLoad()
 {
     if (!m_watchingForLoad)
         return;
     ASSERT(resource());
-    if (m_streamer) {
-        m_streamer->removeClient(client);
-    } else {
-        resource()->removeClient(client);
-    }
+    if (!m_streamer)
+        resource()->removeClient(m_client);
+    m_client = nullptr;
     m_watchingForLoad = false;
+}
+
+void PendingScript::streamingFinished()
+{
+    ASSERT(resource());
+    if (m_client)
+        m_client->notifyFinished(resource());
 }
 
 void PendingScript::setElement(Element* element)
@@ -154,7 +155,7 @@ void PendingScript::notifyFinished(Resource* resource)
     //
     // See https://crbug.com/500701 for more information.
     if (m_element) {
-        ASSERT(resource->type() == Resource::Script);
+        ASSERT(resource->getType() == Resource::Script);
         ScriptResource* scriptResource = toScriptResource(resource);
         String integrityAttr = m_element->fastGetAttribute(HTMLNames::integrityAttr);
 
@@ -191,6 +192,7 @@ DEFINE_TRACE(PendingScript)
 {
     visitor->trace(m_element);
     visitor->trace(m_streamer);
+    ResourceOwner<ScriptResource>::trace(visitor);
 }
 
 ScriptSourceCode PendingScript::getSource(const KURL& documentURL, bool& errorOccurred) const
@@ -222,4 +224,4 @@ bool PendingScript::isReady() const
     return true;
 }
 
-}
+} // namespace blink

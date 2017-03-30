@@ -252,7 +252,8 @@ TEST_F('OutputE2ETest', 'Input', function() {
               {value: {earconId: 'EDITABLE_TEXT'}, start: 0, end: 0},
 
               // Selection span.
-              {value: {startIndex: 0, endIndex: 0}, start: 1, end: 1},
+              {value: {startIndex: 0, endIndex: 0, offset: 0},
+               start: 1, end: 1},
 
               {value: 'value', start: 1, end: 1},
               {value: 'inputType', start: 2}
@@ -265,7 +266,7 @@ TEST_F('OutputE2ETest', 'Input', function() {
         '||Edit text numeric only',
         {string_: '||Spin button', spans_: [{value: 'name', start: 0, end: 0},
             {value: {earconId:'LISTBOX'}, start: 0, end: 0},
-            {value: {startIndex: 0, endIndex: 0}, start: 1, end: 1},
+            {value: {startIndex: 0, endIndex: 0, offset: 0}, start: 1, end: 1},
             {value: 'value', start: 1, end: 1},
             {value: 'role', start: 2, end: 13}]},
         {string_: '||Time control', spans_: [{value: 'name', start: 0, end: 0},
@@ -319,7 +320,8 @@ TEST_F('OutputE2ETest', 'Input', function() {
         if (typeof expectedValue === 'string') {
           checkBrailleOutput(
               expectedValue,
-              [{value: {startIndex: 0, endIndex: 0}, start: 0, end: 0},
+              [{value: {startIndex: 0, endIndex: 0, offset: 0},
+                start: 0, end: 0},
                {value: new Output.NodeSpan(el), start: 0,
                 end: expectedValue.length}],
               o);
@@ -448,15 +450,16 @@ TEST_F('OutputE2ETest', 'Menu', function() {
     var range = cursors.Range.fromNode(el);
     var o = new Output().withSpeechAndBraille(range, null, 'navigate');
     assertEqualsJSON({string_:
-            '|Menu|with 1 item|a|Menu item| 1 of 1 ', spans_: [
-        {value: 'name', start: 18, end: 19},
-        {value: {earconId: 'BUTTON'}, start:18, end:19},
-        {value: 'role', start:20, end: 29}
+            '|Menu|a|Menu item| 1 of 1 ', spans_: [
+        {value: {earconId: 'LISTBOX'}, start:0, end:0},
+        {value: 'name', start: 6, end: 7},
+        {value: {earconId: 'BUTTON'}, start:6, end:7},
+        {value: 'role', start:8, end: 17}
     ]}, o.speechOutputForTest);
     checkBrailleOutput(
-        'mnu +1 a mnuitm 1/1',
-        [{value: new Output.NodeSpan(el.parent), start: 0, end: 6},
-         {value: new Output.NodeSpan(el), start: 7, end: 19}],
+        'mnu a mnuitm 1/1',
+        [{value: new Output.NodeSpan(el.parent), start: 0, end: 3},
+         {value: new Output.NodeSpan(el), start: 4, end: 16}],
         o);
   });
 });
@@ -539,5 +542,90 @@ TEST_F('OutputE2ETest', 'DivOmitsRole', function() {
         'that has content',
         [{value: new Output.NodeSpan(el), start: 0, end: 16}],
         o);
+  });
+});
+
+TEST_F('OutputE2ETest', 'LessVerboseAncestry', function() {
+  this.runWithLoadedTree(function() {/*!
+    <div role="article"><p>inside</p></div>
+    <div role="article"><p>inside</p></div>
+    <div role="banner"><p>inside</p></div>
+  */},
+  function(root) {
+    var first = root.children[0].firstChild;
+    var second = root.children[1].firstChild;
+    var third = root.children[2].firstChild;
+    var firstRange = cursors.Range.fromNode(first);
+    var secondRange = cursors.Range.fromNode(second);
+    var thirdRange = cursors.Range.fromNode(third);
+
+    var oWithoutPrev = new Output().withSpeech(firstRange, null, 'navigate');
+    var oWithPrev =
+        new Output().withSpeech(secondRange, firstRange, 'navigate');
+    var oWithPrevExit =
+        new Output().withSpeech(thirdRange, secondRange, 'navigate');
+    assertEquals('|Article|inside', oWithoutPrev.speechOutputForTest.string_);
+
+    // Make sure we don't read the exited article ancestry change.
+    assertEquals('|Article|inside', oWithPrev.speechOutputForTest.string_);
+
+    // Different role; do read the exited article ancestry here.
+    assertEquals('Exited Article.||Banner|inside',
+                 oWithPrevExit.speechOutputForTest.string_);
+  });
+});
+
+TEST_F('OutputE2ETest', 'Brief', function() {
+  this.runWithLoadedTree(function() {/*!
+    <div role="article"><p>inside</p></div>
+  */},
+  function(root) {
+    var node = root.children[0].firstChild;
+    var range = cursors.Range.fromNode(node);
+
+    localStorage['useVerboseMode'] = 'false';
+    var oWithoutPrev = new Output().withSpeech(range, null, 'navigate');
+    assertEquals('|inside', oWithoutPrev.speechOutputForTest.string_);
+  });
+});
+
+TEST_F('OutputE2ETest', 'AuralStyledHeadings', function() {
+
+  function toFixed(num) {
+    return parseFloat(Number(num).toFixed(1));
+  }
+  this.runWithLoadedTree(function() {/*!
+      <h1>a</h1><h2>b</h2><h3>c</h3><h4>d</h4><h5>e</h5><h6>f</h6>
+      <h1><a href="a.com">b</a></h1> */},
+    function(root) {
+      var el = root.firstChild;
+      for (var i = 1; i <= 6; ++i) {
+        var range = cursors.Range.fromNode(el);
+        var o = new Output().withRichSpeech(range, null, 'navigate');
+        var letter = String.fromCharCode('a'.charCodeAt(0) + i -1);
+        assertEqualsJSON({string_: 'Heading ' + i + '|' + letter, 'spans_': [
+          // Aural styles.
+          {value: {'relativePitch': -0.2}, start: 0, end: 0},
+          {value: {'relativePitch': toFixed(-0.1 * i)}, start: 10, end: 10},
+
+          // Attributes.
+          {value: 'nameOrDescendants', start: 10, end: 11}
+        ]}, o.speechOutputForTest);
+        el = el.nextSibling;
+      }
+  });
+});
+TEST_F('OutputE2ETest', 'ToggleButton', function() {
+  this.runWithLoadedTree(function() {/*!
+      <div role="button" aria-pressed="true">Subscribe</div>*/},
+    function(root) {
+      var el = root.firstChild;
+      var o = new Output().withSpeech(cursors.Range.fromNode(el));
+      assertEqualsJSON({string_: '|Subscribe|Check box|not checked', spans_: [
+        {value: {earconId: 'CHECK_OFF'}, start: 0, end: 0},
+        {value: 'name', start: 1, end:10},
+        {value: 'role', start: 11, end: 20},
+        {value: 'state', start: 21, end: 32}
+      ]}, o.speechOutputForTest);
   });
 });

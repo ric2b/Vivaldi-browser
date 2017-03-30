@@ -19,7 +19,10 @@
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "third_party/WebKit/public/web/WebContextMenuData.h"
+#include "ui/base/accelerators/accelerator.h"
 #include "ui/base/clipboard/clipboard.h"
+#include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/vivaldi_ui_utils.h"
 
 using blink::WebContextMenuData;
 using extensions::WebViewGuest;
@@ -156,8 +159,11 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
 
         base::ListValue* args = new base::ListValue;
         args->Append(new base::StringValue(text));
-        DCHECK(s_current_webviewguest);
-        s_current_webviewguest->PasteAndGo(*args);
+        extensions::WebViewGuest* current_webviewguest =
+            vivaldi::ui_tools::GetActiveWebViewGuest();
+        if (current_webviewguest) {
+          current_webviewguest->PasteAndGo(*args);
+        }
       }
       break;
     case IDC_VIV_CONTENT_CONTEXT_ADDSEARCHENGINE: {

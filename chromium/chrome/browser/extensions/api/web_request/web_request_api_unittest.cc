@@ -17,7 +17,6 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/prefs/pref_member.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
@@ -34,6 +33,7 @@
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/about_handler/about_protocol_handler.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
+#include "components/prefs/pref_member.h"
 #include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -47,7 +47,6 @@
 #include "extensions/common/features/feature.h"
 #include "net/base/auth.h"
 #include "net/base/elements_upload_data_stream.h"
-#include "net/base/net_util.h"
 #include "net/base/request_priority.h"
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/base/upload_file_element_reader.h"
@@ -2010,7 +2009,7 @@ TEST(ExtensionWebRequestHelpersTest,
       deltas, headers1.get(), &new_headers1, &warning_set, &net_log);
 
   EXPECT_TRUE(new_headers1->HasHeader("Foo"));
-  void* iter = NULL;
+  size_t iter = 0;
   std::string cookie_string;
   std::set<std::string> expected_cookies;
   expected_cookies.insert("name=value; domain=google.com; secure");
@@ -2090,7 +2089,7 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnHeadersReceivedResponses) {
   EXPECT_TRUE(allowed_unsafe_redirect_url1.is_empty());
   std::multimap<std::string, std::string> expected1;
   expected1.insert(std::pair<std::string, std::string>("Key2", "Value3"));
-  void* iter = NULL;
+  size_t iter = 0;
   std::string name;
   std::string value;
   std::multimap<std::string, std::string> actual1;
@@ -2122,7 +2121,7 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnHeadersReceivedResponses) {
                                   &net_log);
   ASSERT_TRUE(new_headers2.get());
   EXPECT_TRUE(allowed_unsafe_redirect_url2.is_empty());
-  iter = NULL;
+  iter = 0;
   std::multimap<std::string, std::string> actual2;
   while (new_headers2->EnumerateHeaderLines(&iter, &name, &value)) {
     actual2.insert(std::pair<std::string, std::string>(name, value));
@@ -2172,7 +2171,7 @@ TEST(ExtensionWebRequestHelpersTest,
   expected1.insert(std::pair<std::string, std::string>("Key1", "Value1"));
   expected1.insert(std::pair<std::string, std::string>("Key1", "Value3"));
   expected1.insert(std::pair<std::string, std::string>("Key2", "Value4"));
-  void* iter = NULL;
+  size_t iter = 0;
   std::string name;
   std::string value;
   std::multimap<std::string, std::string> actual1;

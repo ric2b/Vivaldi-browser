@@ -15,8 +15,8 @@ const char kSyncLastSyncedTime[] = "sync.last_synced_time";
 // 64-bit integer serialization of the base::Time of the last sync poll.
 const char kSyncLastPollTime[] = "sync.last_poll_time";
 
-// Boolean specifying whether the user finished setting up sync.
-const char kSyncHasSetupCompleted[] = "sync.has_setup_completed";
+// Boolean specifying whether the user finished setting up sync at least once.
+const char kSyncFirstSetupComplete[] = "sync.has_setup_completed";
 
 // Boolean specifying whether sync has an auth error.
 const char kSyncHasAuthError[] = "sync.has_auth_error";
@@ -90,9 +90,6 @@ const char kSyncSessionsGUID[] = "sync.session_sync_guid";
 // disabled. This will be refreshed every sign-in.
 const char kSyncSpareBootstrapToken[] = "sync.spare_bootstrap_token";
 #endif  // defined(OS_CHROMEOS)
-
-// Stores how many times to try rollback before giving up.
-const char kSyncRemainingRollbackTries[] = "sync.remaining_rollback_tries";
 
 // Stores the timestamp of first sync.
 const char kSyncFirstSyncTime[] = "sync.first_sync_time";

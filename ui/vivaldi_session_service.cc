@@ -20,7 +20,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_iterator.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_tabrestore.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -311,13 +311,11 @@ bool VivaldiSessionService::Load(const base::FilePath& path, Browser* browser) {
 Browser* VivaldiSessionService::CreateRestoredBrowser(
     Browser::Type type, gfx::Rect bounds, ui::WindowShowState show_state,
     const std::string& app_name) {
-  Browser::CreateParams params(type, profile_,
-                               chrome::HOST_DESKTOP_TYPE_NATIVE);
+  Browser::CreateParams params(type, profile_);
   if (!app_name.empty()) {
     const bool trusted_source = true;  // We only store trusted app windows.
     params = Browser::CreateParams::CreateForApp(
-        app_name, trusted_source, bounds, profile_,
-        chrome::HOST_DESKTOP_TYPE_NATIVE);
+        app_name, trusted_source, bounds, profile_);
   } else {
     params.initial_bounds = bounds;
   }

@@ -21,9 +21,6 @@
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -45,6 +42,9 @@
 #include "chromeos/cryptohome/async_method_caller.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/login/user_names.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_image/user_image.h"
@@ -448,8 +448,8 @@ void WallpaperManager::OnPolicyFetched(const std::string& policy,
   if (!data)
     return;
 
-  wallpaper_loader_->Start(
-      std::move(data),
+  user_image_loader::StartWithData(
+      task_runner_, std::move(data), ImageDecoder::ROBUST_JPEG_CODEC,
       0,  // Do not crop.
       base::Bind(&WallpaperManager::SetPolicyControlledWallpaper,
                  weak_factory_.GetWeakPtr(), account_id));
@@ -577,7 +577,7 @@ void WallpaperManager::DoSetDefaultWallpaper(
                 : wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED;
   DCHECK(file);
   if (!default_wallpaper_image_.get() ||
-      default_wallpaper_image_->file_path() != file->value()) {
+      default_wallpaper_image_->file_path() != *file) {
     default_wallpaper_image_.reset();
     if (!file->empty()) {
       loaded_wallpapers_for_test_++;
@@ -760,8 +760,6 @@ WallpaperManager::WallpaperManager()
       BrowserThread::GetBlockingPool()
           ->GetSequencedTaskRunnerWithShutdownBehavior(
               sequence_token_, base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN);
-  wallpaper_loader_ =
-      new UserImageLoader(ImageDecoder::ROBUST_JPEG_CODEC, task_runner_);
 
   user_manager::UserManager::Get()->AddSessionStateObserver(this);
 }
@@ -954,8 +952,8 @@ void WallpaperManager::StartLoad(const AccountId& account_id,
     wallpaper_cache_[account_id] =
         CustomWallpaperElement(wallpaper_path, gfx::ImageSkia());
   }
-  wallpaper_loader_->Start(
-      wallpaper_path.value(),
+  user_image_loader::StartWithFilePath(
+      task_runner_, wallpaper_path, ImageDecoder::ROBUST_JPEG_CODEC,
       0,  // Do not crop.
       base::Bind(&WallpaperManager::OnWallpaperDecoded,
                  weak_factory_.GetWeakPtr(), account_id, info.layout,
@@ -975,8 +973,8 @@ void WallpaperManager::SetCustomizedDefaultWallpaperAfterCheck(
 
     // Either resized images do not exist or cached version is incorrect.
     // Need to start resize again.
-    wallpaper_loader_->Start(
-        downloaded_file.value(),
+    user_image_loader::StartWithFilePath(
+        task_runner_, downloaded_file, ImageDecoder::ROBUST_JPEG_CODEC,
         0,  // Do not crop.
         base::Bind(&WallpaperManager::OnCustomizedDefaultWallpaperDecoded,
                    weak_factory_.GetWeakPtr(), wallpaper_url,
@@ -1051,8 +1049,8 @@ void WallpaperManager::StartLoadAndSetDefaultWallpaper(
     const wallpaper::WallpaperLayout layout,
     MovableOnDestroyCallbackHolder on_finish,
     scoped_ptr<user_manager::UserImage>* result_out) {
-  wallpaper_loader_->Start(
-      path.value(),
+  user_image_loader::StartWithFilePath(
+      task_runner_, path, ImageDecoder::ROBUST_JPEG_CODEC,
       0,  // Do not crop.
       base::Bind(&WallpaperManager::OnDefaultWallpaperDecoded,
                  weak_factory_.GetWeakPtr(), path, layout,
@@ -1087,15 +1085,13 @@ void WallpaperManager::SetDefaultWallpaperPath(
     if (small_wallpaper_image) {
       default_wallpaper_image_.reset(
           new user_manager::UserImage(*small_wallpaper_image));
-      default_wallpaper_image_->set_file_path(
-          default_small_wallpaper_file.value());
+      default_wallpaper_image_->set_file_path(default_small_wallpaper_file);
     }
   } else {
     if (large_wallpaper_image) {
       default_wallpaper_image_.reset(
           new user_manager::UserImage(*large_wallpaper_image));
-      default_wallpaper_image_->set_file_path(
-          default_large_wallpaper_file.value());
+      default_wallpaper_image_->set_file_path(default_large_wallpaper_file);
     }
   }
 

@@ -7,10 +7,16 @@
 
 #include "chrome/browser/extensions/api/input_ime/input_ime_event_router_base.h"
 #include "chrome/browser/profiles/profile.h"
+#include "extensions/browser/extension_function.h"
 
 class Profile;
 
+namespace input_method {
+class InputMethodEngine;
+}  // namespace input_method
+
 namespace extensions {
+
 class InputImeEventRouterBase;
 
 class InputImeEventRouter : public InputImeEventRouterBase {
@@ -18,7 +24,55 @@ class InputImeEventRouter : public InputImeEventRouterBase {
   explicit InputImeEventRouter(Profile* profile);
   ~InputImeEventRouter() override;
 
+  // Gets the input method engine if the extension is active.
+  input_method::InputMethodEngineBase* GetActiveEngine(
+      const std::string& extension_id) override;
+
+  // Actives the extension with new input method engine, and deletes the
+  // previous engine if another extension was active.
+  void SetActiveEngine(const std::string& extension_id);
+
+  // Deletes the current input method engine of the specific extension.
+  void DeleteInputMethodEngine(const std::string& extension_id);
+
+ private:
+  // The active input method engine.
+  input_method::InputMethodEngine* active_engine_;
+
   DISALLOW_COPY_AND_ASSIGN(InputImeEventRouter);
+};
+
+class InputImeCreateWindowFunction : public UIThreadExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("input.ime.createWindow", INPUT_IME_CREATEWINDOW)
+
+ protected:
+  ~InputImeCreateWindowFunction() override {}
+
+  // ExtensionFunction:
+  ExtensionFunction::ResponseAction Run() override;
+};
+
+class InputImeActivateFunction : public UIThreadExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("input.ime.activate", INPUT_IME_ACTIVATE)
+
+ protected:
+  ~InputImeActivateFunction() override {}
+
+  // UIThreadExtensionFunction:
+  ResponseAction Run() override;
+};
+
+class InputImeDeactivateFunction : public UIThreadExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("input.ime.deactivate", INPUT_IME_DEACTIVATE)
+
+ protected:
+  ~InputImeDeactivateFunction() override {}
+
+  // UIThreadExtensionFunction:
+  ResponseAction Run() override;
 };
 
 }  // namespace extensions

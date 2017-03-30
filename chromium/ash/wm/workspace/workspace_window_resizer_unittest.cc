@@ -11,6 +11,7 @@
 #include "ash/shell.h"
 #include "ash/shell_window_ids.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/display_manager_test_api.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
@@ -65,7 +66,7 @@ class TestWindowDelegate : public aura::test::TestWindowDelegate {
 
 class WorkspaceWindowResizerTest : public test::AshTestBase {
  public:
-  WorkspaceWindowResizerTest() : workspace_resizer_(NULL) {}
+  WorkspaceWindowResizerTest() : workspace_resizer_(nullptr) {}
   ~WorkspaceWindowResizerTest() override {}
 
   void SetUp() override {
@@ -650,7 +651,7 @@ TEST_F(WorkspaceWindowResizerTest, CancelSnapPhantom) {
   ASSERT_EQ(2U, root_windows.size());
 
   window_->SetBoundsInScreen(gfx::Rect(0, 0, 50, 60),
-                             Shell::GetScreen()->GetPrimaryDisplay());
+                             gfx::Screen::GetScreen()->GetPrimaryDisplay());
   EXPECT_EQ(root_windows[0], window_->GetRootWindow());
   EXPECT_FLOAT_EQ(1.0f, window_->layer()->opacity());
   {
@@ -795,7 +796,7 @@ TEST_F(WorkspaceWindowResizerTest, DontDragOffBottom) {
   Shell::GetInstance()->SetDisplayWorkAreaInsets(
       Shell::GetPrimaryRootWindow(), gfx::Insets(0, 0, 10, 0));
 
-  ASSERT_EQ(1, Shell::GetScreen()->GetNumDisplays());
+  ASSERT_EQ(1, gfx::Screen::GetScreen()->GetNumDisplays());
 
   window_->SetBounds(gfx::Rect(100, 200, 300, 400));
   scoped_ptr<WindowResizer> resizer(CreateResizerForTest(
@@ -814,14 +815,14 @@ TEST_F(WorkspaceWindowResizerTest, DontDragOffBottomWithMultiDisplay) {
     return;
 
   UpdateDisplay("800x600,800x600");
-  ASSERT_EQ(2, Shell::GetScreen()->GetNumDisplays());
+  ASSERT_EQ(2, gfx::Screen::GetScreen()->GetNumDisplays());
 
   Shell::GetInstance()->SetDisplayWorkAreaInsets(
       Shell::GetPrimaryRootWindow(), gfx::Insets(0, 0, 10, 0));
 
   // Positions the secondary display at the bottom the primary display.
   Shell::GetInstance()->display_manager()->SetLayoutForCurrentDisplays(
-      ash::DisplayLayout(ash::DisplayLayout::BOTTOM, 0));
+      test::CreateDisplayLayout(ash::DisplayPlacement::BOTTOM, 0));
 
   {
     window_->SetBounds(gfx::Rect(100, 200, 300, 20));

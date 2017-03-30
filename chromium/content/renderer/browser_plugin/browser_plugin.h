@@ -152,7 +152,6 @@ class CONTENT_EXPORT BrowserPlugin :
   // IPC message handlers.
   // Please keep in alphabetical order.
   void OnAdvanceFocus(int instance_id, bool reverse);
-  void OnCompositorFrameSwapped(const IPC::Message& message);
   void OnGuestGone(int instance_id);
   void OnSetChildFrameSurface(int instance_id,
                               const cc::SurfaceId& surface_id,
@@ -174,6 +173,7 @@ class CONTENT_EXPORT BrowserPlugin :
   // then we will attempt to access a nullptr.
   const int render_frame_routing_id_;
   blink::WebPluginContainer* container_;
+  // The plugin's rect in css pixels.
   gfx::Rect view_rect_;
   // Bitmap for crashed plugin. Lazily initialized, non-owning pointer.
   SkBitmap* sad_guest_;

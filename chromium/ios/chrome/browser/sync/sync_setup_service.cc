@@ -8,12 +8,12 @@
 
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/prefs/pref_service.h"
+#include "components/prefs/pref_service.h"
 #include "components/sync_driver/sync_prefs.h"
 #include "components/sync_driver/sync_service.h"
 #include "google_apis/gaia/google_service_auth_error.h"
+#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/pref_names.h"
-#include "ios/public/provider/chrome/browser/browser_state/chrome_browser_state.h"
 #include "net/base/network_change_notifier.h"
 #include "sync/internal_api/public/base/stop_source.h"
 #include "sync/protocol/sync_protocol_error.h"
@@ -103,7 +103,8 @@ void SyncSetupService::SetSyncingAllDataTypes(bool sync_all) {
   sync_service_->SetSetupInProgress(true);
   if (sync_all && !IsSyncEnabled())
     SetSyncEnabled(true);
-  sync_service_->OnUserChoseDatatypes(sync_all, GetDataTypes());
+  sync_service_->OnUserChoseDatatypes(
+      sync_all, Intersection(GetDataTypes(), syncer::UserSelectableTypes()));
 }
 
 bool SyncSetupService::IsSyncEnabled() const {
@@ -163,13 +164,13 @@ bool SyncSetupService::HasFinishedInitialSetup() {
   //   OR
   //   2. User is not signed in or has disabled sync.
   return !sync_service_->CanSyncStart() ||
-         sync_service_->HasSyncSetupCompleted();
+         sync_service_->IsFirstSetupComplete();
 }
 
 void SyncSetupService::PrepareForFirstSyncSetup() {
   // |PrepareForFirstSyncSetup| should always be called while the user is signed
   // out. At that time, sync setup is not completed.
-  DCHECK(!sync_service_->HasSyncSetupCompleted());
+  DCHECK(!sync_service_->IsFirstSetupComplete());
   sync_service_->SetSetupInProgress(true);
 }
 
@@ -178,7 +179,7 @@ void SyncSetupService::CommitChanges() {
     // Turn on the sync setup completed flag only if the user did not turn sync
     // off.
     if (sync_service_->CanSyncStart()) {
-      sync_service_->SetSyncSetupCompleted();
+      sync_service_->SetFirstSetupComplete();
     }
   }
 

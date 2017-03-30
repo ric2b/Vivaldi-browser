@@ -1897,8 +1897,6 @@ KERNEL32.dll!WriteFile
 *!base::File::WriteAtCurrentPos
 *!sessions::SessionBackend::AppendCommandsToFile
 *!sessions::SessionBackend::AppendCommands
-*!base::internal::InvokeHelper<>::MakeItSo
-*!base::internal::Invoker<>::Run
 
 UNADDRESSABLE ACCESS
 name=bug_505734
@@ -2065,14 +2063,6 @@ content.dll!content::ResourceCreationImpl::CreateImageData
 ppapi_proxy.dll!ppapi::proxy::PPB_ImageData_Proxy::CreateImageData
 ppapi_proxy.dll!ppapi::proxy::PPB_ImageData_Proxy::OnHostMsgCreatePlatform
 
-UNINITIALIZED READ
-name=bug_571280
-content.dll!CopyRow_AVX
-content.dll!CopyPlane
-content.dll!I420Copy
-content.dll!content::`anonymous namespace'::CopyFrameToI420
-content.dll!content::WebMediaPlayerMSCompositor::ReplaceCurrentFrameWithACopy
-
 INVALID HEAP ARGUMENT
 name=bug_571551_a
 ...
@@ -2082,7 +2072,6 @@ media.dll!mkvmuxer::Segment::AddFrame
 media.dll!media::WebmMuxer::AddFrame
 media.dll!media::WebmMuxer::OnEncodedVideo
 content.dll!content::MediaRecorderHandler::OnEncodedVideo
-content.dll!base::internal::RunnableAdapter<>::Run
 
 UNADDRESSABLE ACCESS
 name=bug_571551_b
@@ -2093,7 +2082,6 @@ media.dll!mkvmuxer::Segment::AddFrame
 media.dll!media::WebmMuxer::AddFrame
 media.dll!media::WebmMuxer::OnEncodedVideo
 content.dll!content::MediaRecorderHandler::OnEncodedVideo
-content.dll!base::internal::RunnableAdapter<>::Run
 
 HANDLE LEAK
 name=bug_571553
@@ -2103,8 +2091,6 @@ content.dll!content::RenderWidgetHostViewAura::SetIsLoading
 content.dll!content::RenderWidgetHostImpl::SetIsLoading
 content.dll!content::RenderFrameHostManager::SetIsLoading
 content.dll!content::WebContentsImpl::SetIsLoading
-content.dll!content::WebContentsImpl::DidStopLoading
-content.dll!content::FrameTreeNode::DidStopLoading
 
 HANDLE LEAK
 name=bug_571554_a

@@ -12,8 +12,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/models/menu_model.h"
-#include "ui/base/resource/material_design/material_design_controller.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/rect.h"
@@ -815,8 +815,8 @@ void MenuItemView::PaintButton(gfx::Canvas* canvas, PaintButtonMode mode) {
     AdjustBoundsForRTLUI(&check_bounds);
     canvas->DrawImageInt(check, check_bounds.x(), check_bounds.y());
   } else if (type_ == RADIO) {
-    gfx::ImageSkia image =
-        GetRadioButtonImage(delegate->IsItemChecked(GetCommand()));
+    gfx::ImageSkia image = GetRadioButtonImage(
+        delegate->IsItemChecked(GetCommand()), render_selection, icon_color);
     gfx::Rect radio_bounds(icon_x,
                            top_margin + (available_height - image.height()) / 2,
                            image.width(),

@@ -68,13 +68,19 @@ int UnixDomainServerSocket::Listen(const IPEndPoint& address, int backlog) {
 }
 
 int UnixDomainServerSocket::ListenWithAddressAndPort(
-    const std::string& unix_domain_path,
-    uint16_t port_unused,
+    const std::string& address_string,
+    uint16_t port,
     int backlog) {
+  NOTIMPLEMENTED();
+  return ERR_NOT_IMPLEMENTED;
+}
+
+int UnixDomainServerSocket::BindAndListen(const std::string& socket_path,
+                                          int backlog) {
   DCHECK(!listen_socket_);
 
   SockaddrStorage address;
-  if (!UnixDomainClientSocket::FillAddress(unix_domain_path,
+  if (!UnixDomainClientSocket::FillAddress(socket_path,
                                            use_abstract_namespace_,
                                            &address)) {
     return ERR_ADDRESS_INVALID;
@@ -90,7 +96,7 @@ int UnixDomainServerSocket::ListenWithAddressAndPort(
   DCHECK_NE(ERR_IO_PENDING, rv);
   if (rv != OK) {
     PLOG(ERROR)
-        << "Could not bind unix domain socket to " << unix_domain_path
+        << "Could not bind unix domain socket to " << socket_path
         << (use_abstract_namespace_ ? " (with abstract namespace)" : "");
     return rv;
   }

@@ -39,9 +39,9 @@
 namespace blink {
 
 class LayoutPoint;
+class SelectionAdjuster;
 
-// TODO(yosin) We should use capitalized name instead of |SEL_DEFAULT_AFFINITY|.
-const TextAffinity SEL_DEFAULT_AFFINITY = TextAffinity::Downstream; // NOLINT
+const TextAffinity SelDefaultAffinity = TextAffinity::Downstream;
 enum SelectionDirection { DirectionForward, DirectionBackward, DirectionRight, DirectionLeft };
 
 // Listener of |VisibleSelection| modification. |didChangeVisibleSelection()|
@@ -66,22 +66,20 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
 public:
     VisibleSelectionTemplate();
     VisibleSelectionTemplate(const PositionTemplate<Strategy>&, TextAffinity, bool isDirectional = false);
-    VisibleSelectionTemplate(const PositionTemplate<Strategy>& base, const PositionTemplate<Strategy>& extent, TextAffinity = SEL_DEFAULT_AFFINITY, bool isDirectional = false);
-    explicit VisibleSelectionTemplate(const EphemeralRangeTemplate<Strategy>&, TextAffinity = SEL_DEFAULT_AFFINITY, bool isDirectional = false);
+    VisibleSelectionTemplate(const PositionTemplate<Strategy>& base, const PositionTemplate<Strategy>& extent, TextAffinity = SelDefaultAffinity, bool isDirectional = false);
+    explicit VisibleSelectionTemplate(const EphemeralRangeTemplate<Strategy>&, TextAffinity = SelDefaultAffinity, bool isDirectional = false);
 
     explicit VisibleSelectionTemplate(const VisiblePositionTemplate<Strategy>&, bool isDirectional = false);
     VisibleSelectionTemplate(const VisiblePositionTemplate<Strategy>&, const VisiblePositionTemplate<Strategy>&, bool isDirectional = false);
 
     explicit VisibleSelectionTemplate(const PositionWithAffinityTemplate<Strategy>&, bool isDirectional = false);
 
-    static VisibleSelectionTemplate<Strategy> createWithoutValidation(const PositionTemplate<Strategy>& base, const PositionTemplate<Strategy>& extent, const PositionTemplate<Strategy>& start, const PositionTemplate<Strategy>& end, TextAffinity, bool isDirectional);
-
     VisibleSelectionTemplate(const VisibleSelectionTemplate&);
     VisibleSelectionTemplate& operator=(const VisibleSelectionTemplate&);
 
     static VisibleSelectionTemplate selectionFromContentsOfNode(Node*);
 
-    SelectionType selectionType() const { return m_selectionType; }
+    SelectionType getSelectionType() const { return m_selectionType; }
 
     void setAffinity(TextAffinity affinity) { m_affinity = affinity; }
     TextAffinity affinity() const { return m_affinity; }
@@ -104,10 +102,10 @@ public:
     bool operator==(const VisibleSelectionTemplate&) const;
     bool operator!=(const VisibleSelectionTemplate& other) const { return !operator==(other); }
 
-    bool isNone() const { return selectionType() == NoSelection; }
-    bool isCaret() const { return selectionType() == CaretSelection; }
-    bool isRange() const { return selectionType() == RangeSelection; }
-    bool isCaretOrRange() const { return selectionType() != NoSelection; }
+    bool isNone() const { return getSelectionType() == NoSelection; }
+    bool isCaret() const { return getSelectionType() == CaretSelection; }
+    bool isRange() const { return getSelectionType() == RangeSelection; }
+    bool isCaretOrRange() const { return getSelectionType() != NoSelection; }
     bool isNonOrphanedRange() const { return isRange() && !start().isOrphan() && !end().isOrphan(); }
     bool isNonOrphanedCaretOrRange() const { return isCaretOrRange() && !start().isOrphan() && !end().isOrphan(); }
 
@@ -152,6 +150,7 @@ public:
         visitor->trace(m_changeObserver);
     }
 
+    void updateIfNeeded();
     void validatePositionsIfNeeded();
 
 #ifndef NDEBUG
@@ -164,7 +163,7 @@ public:
     void setEndRespectingGranularity(TextGranularity, EWordSide = RightWordIfOnBoundary);
 
 private:
-    VisibleSelectionTemplate(const PositionTemplate<Strategy>& base, const PositionTemplate<Strategy>& extent, const PositionTemplate<Strategy>& start, const PositionTemplate<Strategy>& end, TextAffinity, bool isDirectional);
+    friend class SelectionAdjuster;
 
     void validate(TextGranularity = CharacterGranularity);
 
@@ -198,13 +197,20 @@ private:
     SelectionType m_selectionType; // None, Caret, Range
     bool m_baseIsFirst : 1; // True if base is before the extent
     bool m_isDirectional : 1; // Non-directional ignores m_baseIsFirst and selection always extends on shift + arrow key.
+
+    TextGranularity m_granularity;
+    // |updateIfNeeded()| uses |m_hasTrailingWhitespace| for word granularity.
+    // |m_hasTrailingWhitespace| is set by |appendTrailingWhitespace()|.
+    // TODO(yosin): Once we unify start/end and base/extent, we should get rid
+    // of |m_hasTrailingWhitespace|.
+    bool m_hasTrailingWhitespace : 1;
 };
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT VisibleSelectionTemplate<EditingStrategy>;
-extern template class CORE_EXTERN_TEMPLATE_EXPORT VisibleSelectionTemplate<EditingInComposedTreeStrategy>;
+extern template class CORE_EXTERN_TEMPLATE_EXPORT VisibleSelectionTemplate<EditingInFlatTreeStrategy>;
 
 using VisibleSelection = VisibleSelectionTemplate<EditingStrategy>;
-using VisibleSelectionInComposedTree = VisibleSelectionTemplate<EditingInComposedTreeStrategy>;
+using VisibleSelectionInFlatTree = VisibleSelectionTemplate<EditingInFlatTreeStrategy>;
 
 // TODO(yosin): We should use |operator==()| instead of
 // |equalSelectionsInDOMTree()|.
@@ -223,8 +229,8 @@ CORE_EXPORT PassRefPtrWillBeRawPtr<Range> firstRangeOf(const VisibleSelection&);
 // Outside the WebCore namespace for ease of invocation from gdb.
 void showTree(const blink::VisibleSelection&);
 void showTree(const blink::VisibleSelection*);
-void showTree(const blink::VisibleSelectionInComposedTree&);
-void showTree(const blink::VisibleSelectionInComposedTree*);
+void showTree(const blink::VisibleSelectionInFlatTree&);
+void showTree(const blink::VisibleSelectionInFlatTree*);
 #endif
 
 #endif // VisibleSelection_h

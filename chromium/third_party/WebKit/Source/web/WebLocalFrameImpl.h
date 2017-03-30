@@ -76,10 +76,6 @@ template <typename T> class WebVector;
 class WebLocalFrameImpl final : public WebFrameImplBase, public WebLocalFrame {
 public:
     // WebFrame methods:
-    bool isWebLocalFrame() const override;
-    WebLocalFrame* toWebLocalFrame() override;
-    bool isWebRemoteFrame() const override;
-    WebRemoteFrame* toWebRemoteFrame() override;
     void close() override;
     WebString uniqueName() const override;
     WebString assignedName() const override;
@@ -113,7 +109,6 @@ public:
     void setIsolatedWorldHumanReadableName(int worldID, const WebString&) override;
     void addMessageToConsole(const WebConsoleMessage&) override;
     void collectGarbage() override;
-    bool checkIfRunInsecureContent(const WebURL&) const override;
     v8::Local<v8::Value> executeScriptAndReturnValue(
         const WebScriptSource&) override;
     void requestExecuteScriptAndReturnValue(
@@ -133,11 +128,9 @@ public:
     void reload(bool ignoreCache) override;
     void reloadWithOverrideURL(const WebURL& overrideUrl, bool ignoreCache) override;
     void reloadImage(const WebNode&) override;
+    void reloadLoFiImages() override;
     void loadRequest(const WebURLRequest&) override;
     void loadHistoryItem(const WebHistoryItem&, WebHistoryLoadType, WebURLRequest::CachePolicy) override;
-    void loadData(
-        const WebData&, const WebString& mimeType, const WebString& textEncoding,
-        const WebURL& baseURL, const WebURL& unreachableURL, bool replace) override;
     void loadHTMLString(
         const WebData& html, const WebURL& baseURL, const WebURL& unreachableURL,
         bool replace) override;
@@ -196,31 +189,11 @@ public:
         int& marginLeft) override;
     WebString pageProperty(const WebString& propertyName, int pageIndex) override;
     void printPagesWithBoundaries(WebCanvas*, const WebSize&) override;
-    bool find(
-        int identifier, const WebString& searchText, const WebFindOptions&,
-        bool wrapWithinFrame, WebRect* selectionRect) override;
-    void stopFinding(bool clearSelection) override;
-    void scopeStringMatches(
-        int identifier, const WebString& searchText, const WebFindOptions&,
-        bool reset) override;
-    void cancelPendingScopingEffort() override;
-    void increaseMatchCount(int count, int identifier) override;
-    void resetMatchCount() override;
-    int findMatchMarkersVersion() const override;
-    WebFloatRect activeFindMatchRect() override;
-    void findMatchRects(WebVector<WebFloatRect>&) override;
-    int selectNearestFindMatch(const WebFloatPoint&, WebRect* selectionRect) override;
-    void setTickmarks(const WebVector<WebRect>&) override;
 
     void dispatchMessageEventWithOriginCheck(
         const WebSecurityOrigin& intendedTargetOrigin,
         const WebDOMEvent&) override;
 
-    WebString contentAsText(size_t maxChars) const override;
-    WebString contentAsMarkup() const override;
-    WebString layoutTreeAsText(LayoutAsTextControls toShow = LayoutAsTextNormal) const override;
-
-    WebString markerTextForListItem(const WebElement&) const override;
     WebRect selectionBoundsRect() const override;
 
     bool selectionStartHasSpellingMarkerFor(int from, int length) const override;
@@ -241,12 +214,18 @@ public:
     WebDevToolsAgent* devToolsAgent() override;
     void setFrameOwnerProperties(const WebFrameOwnerProperties&) override;
     WebLocalFrameImpl* localRoot() override;
+    WebLocalFrame* traversePreviousLocal(bool wrap) const override;
+    WebLocalFrame* traverseNextLocal(bool wrap) const override;
     void sendPings(const WebNode& contextNode, const WebURL& destinationURL) override;
     WebURLRequest requestFromHistoryItem(const WebHistoryItem&, WebURLRequest::CachePolicy)
         const override;
     WebURLRequest requestForReload(WebFrameLoadType, const WebURL&) const override;
     void load(const WebURLRequest&, WebFrameLoadType, const WebHistoryItem&,
-        WebHistoryLoadType) override;
+        WebHistoryLoadType, bool isClientRedirect) override;
+    void loadData(
+        const WebData&, const WebString& mimeType, const WebString& textEncoding,
+        const WebURL& baseURL, const WebURL& unreachableURL, bool replace, WebFrameLoadType,
+        const WebHistoryItem&, WebHistoryLoadType, bool isClientRedirect) override;
     bool isLoading() const override;
     bool isResourceLoadInProgress() const override;
     bool isNavigationScheduled() const override;
@@ -254,13 +233,29 @@ public:
     void sendOrientationChangeEvent() override;
     void willShowInstallBannerPrompt(int requestId, const WebVector<WebString>& platforms, WebAppBannerPromptReply*) override;
     WebSandboxFlags effectiveSandboxFlags() const override;
+    void forceSandboxFlags(WebSandboxFlags) override;
     void requestRunTask(WebSuspendableTask*) const override;
     void didCallAddSearchProvider() override;
     void didCallIsSearchProviderInstalled() override;
     void replaceSelection(const WebString&) override;
+    bool find(
+        int identifier, const WebString& searchText, const WebFindOptions&,
+        bool wrapWithinFrame, WebRect* selectionRect, bool* activeNow = nullptr) override;
+    void stopFinding(bool clearSelection) override;
+    void scopeStringMatches(
+        int identifier, const WebString& searchText, const WebFindOptions&,
+        bool reset) override;
+    void cancelPendingScopingEffort() override;
+    void increaseMatchCount(int count, int identifier) override;
+    void resetMatchCount() override;
+    int findMatchMarkersVersion() const override;
+    WebFloatRect activeFindMatchRect() override;
+    void findMatchRects(WebVector<WebFloatRect>&) override;
+    int selectNearestFindMatch(const WebFloatPoint&, WebRect* selectionRect) override;
+    void setTickmarks(const WebVector<WebRect>&) override;
 
     // WebFrameImplBase methods:
-    void initializeCoreFrame(FrameHost*, FrameOwner*, const AtomicString& name, const AtomicString& fallbackName) override;
+    void initializeCoreFrame(FrameHost*, FrameOwner*, const AtomicString& name, const AtomicString& uniqueName) override;
     LocalFrame* frame() const override { return m_frame.get(); }
 
     void willBeDetached();
@@ -358,6 +353,13 @@ private:
 
     WebLocalFrameImpl(WebTreeScopeType, WebFrameClient*);
     WebLocalFrameImpl(WebRemoteFrame*, WebFrameClient*);
+
+    // Inherited from WebFrame, but intentionally hidden: it never makes sense
+    // to call these on a WebLocalFrameImpl.
+    bool isWebLocalFrame() const override;
+    WebLocalFrame* toWebLocalFrame() override;
+    bool isWebRemoteFrame() const override;
+    WebRemoteFrame* toWebRemoteFrame() override;
 
     // Sets the local core frame and registers destruction observers.
     void setCoreFrame(PassRefPtrWillBeRawPtr<LocalFrame>);

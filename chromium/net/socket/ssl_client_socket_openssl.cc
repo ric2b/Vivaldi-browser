@@ -26,6 +26,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/profiler/scoped_tracker.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_local.h"
@@ -38,6 +39,7 @@
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_ev_whitelist.h"
 #include "net/cert/ct_policy_enforcer.h"
+#include "net/cert/ct_policy_status.h"
 #include "net/cert/ct_verifier.h"
 #include "net/cert/x509_certificate_net_log_param.h"
 #include "net/cert/x509_util_openssl.h"
@@ -49,10 +51,6 @@
 #include "net/ssl/ssl_failure_state.h"
 #include "net/ssl/ssl_info.h"
 #include "net/ssl/ssl_private_key.h"
-
-#if defined(OS_WIN)
-#include "base/win/windows_version.h"
-#endif
 
 #if !defined(OS_NACL)
 #include "net/ssl/ssl_key_logger.h"
@@ -87,71 +85,13 @@ const char kDefaultSupportedNPNProtocol[] = "http/1.1";
 const int KDefaultOpenSSLBufferSize = 17 * 1024;
 
 // TLS extension number use for Token Binding.
-const unsigned int kTbExtNum = 30033;
+const unsigned int kTbExtNum = 24;
 
 // Token Binding ProtocolVersions supported.
 const uint8_t kTbProtocolVersionMajor = 0;
-const uint8_t kTbProtocolVersionMinor = 3;
+const uint8_t kTbProtocolVersionMinor = 4;
 const uint8_t kTbMinProtocolVersionMajor = 0;
-const uint8_t kTbMinProtocolVersionMinor = 2;
-
-void FreeX509Stack(STACK_OF(X509)* ptr) {
-  sk_X509_pop_free(ptr, X509_free);
-}
-
-using ScopedX509Stack = crypto::ScopedOpenSSL<STACK_OF(X509), FreeX509Stack>;
-
-// Used for encoding the |connection_status| field of an SSLInfo object.
-int EncodeSSLConnectionStatus(uint16_t cipher_suite,
-                              int compression,
-                              int version) {
-  return cipher_suite |
-         ((compression & SSL_CONNECTION_COMPRESSION_MASK) <<
-          SSL_CONNECTION_COMPRESSION_SHIFT) |
-         ((version & SSL_CONNECTION_VERSION_MASK) <<
-          SSL_CONNECTION_VERSION_SHIFT);
-}
-
-// Returns the net SSL version number (see ssl_connection_status_flags.h) for
-// this SSL connection.
-int GetNetSSLVersion(SSL* ssl) {
-  switch (SSL_version(ssl)) {
-    case TLS1_VERSION:
-      return SSL_CONNECTION_VERSION_TLS1;
-    case TLS1_1_VERSION:
-      return SSL_CONNECTION_VERSION_TLS1_1;
-    case TLS1_2_VERSION:
-      return SSL_CONNECTION_VERSION_TLS1_2;
-    default:
-      NOTREACHED();
-      return SSL_CONNECTION_VERSION_UNKNOWN;
-  }
-}
-
-ScopedX509 OSCertHandleToOpenSSL(
-    X509Certificate::OSCertHandle os_handle) {
-#if defined(USE_OPENSSL_CERTS)
-  return ScopedX509(X509Certificate::DupOSCertHandle(os_handle));
-#else  // !defined(USE_OPENSSL_CERTS)
-  std::string der_encoded;
-  if (!X509Certificate::GetDEREncoded(os_handle, &der_encoded))
-    return ScopedX509();
-  const uint8_t* bytes = reinterpret_cast<const uint8_t*>(der_encoded.data());
-  return ScopedX509(d2i_X509(NULL, &bytes, der_encoded.size()));
-#endif  // defined(USE_OPENSSL_CERTS)
-}
-
-ScopedX509Stack OSCertHandlesToOpenSSL(
-    const X509Certificate::OSCertHandles& os_handles) {
-  ScopedX509Stack stack(sk_X509_new_null());
-  for (size_t i = 0; i < os_handles.size(); i++) {
-    ScopedX509 x509 = OSCertHandleToOpenSSL(os_handles[i]);
-    if (!x509)
-      return ScopedX509Stack();
-    sk_X509_push(stack.get(), x509.release());
-  }
-  return stack;
-}
+const uint8_t kTbMinProtocolVersionMinor = 3;
 
 bool EVP_MDToPrivateKeyHash(const EVP_MD* md, SSLPrivateKey::Hash* hash) {
   switch (EVP_MD_type(md)) {
@@ -224,6 +164,35 @@ scoped_ptr<base::Value> NetLogPrivateKeyOperationCallback(
   value->SetString("type", type_str);
   value->SetString("hash", hash_str);
   return std::move(value);
+}
+
+scoped_ptr<base::Value> NetLogChannelIDLookupCallback(
+    ChannelIDService* channel_id_service,
+    NetLogCaptureMode capture_mode) {
+  ChannelIDStore* store = channel_id_service->GetChannelIDStore();
+  scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  dict->SetBoolean("ephemeral", store->IsEphemeral());
+  dict->SetString("service", base::HexEncode(&channel_id_service,
+                                             sizeof(channel_id_service)));
+  dict->SetString("store", base::HexEncode(&store, sizeof(store)));
+  return std::move(dict);
+}
+
+scoped_ptr<base::Value> NetLogChannelIDLookupCompleteCallback(
+    crypto::ECPrivateKey* key,
+    int result,
+    NetLogCaptureMode capture_mode) {
+  scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  dict->SetInteger("net_error", result);
+  std::string raw_key;
+  if (result == OK && key && key->ExportRawPublicKey(&raw_key)) {
+    std::string key_to_log = "redacted";
+    if (capture_mode.include_cookies_and_credentials()) {
+      key_to_log = base::HexEncode(raw_key.data(), raw_key.length());
+    }
+    dict->SetString("key", key_to_log);
+  }
+  return std::move(dict);
 }
 
 }  // namespace
@@ -483,8 +452,8 @@ SSLClientSocketOpenSSL::PeerCertificateChain::AsOSChain() const {
     intermediates.push_back(sk_X509_value(openssl_chain_.get(), i));
   }
 
-  return make_scoped_refptr(X509Certificate::CreateFromHandle(
-      sk_X509_value(openssl_chain_.get(), 0), intermediates));
+  return X509Certificate::CreateFromHandle(
+      sk_X509_value(openssl_chain_.get(), 0), intermediates);
 #else
   // DER-encode the chain and convert to a platform certificate handle.
   std::vector<base::StringPiece> der_chain;
@@ -496,7 +465,7 @@ SSLClientSocketOpenSSL::PeerCertificateChain::AsOSChain() const {
     der_chain.push_back(der);
   }
 
-  return make_scoped_refptr(X509Certificate::CreateFromDERCertChain(der_chain));
+  return X509Certificate::CreateFromDERCertChain(der_chain);
 #endif
 }
 
@@ -526,6 +495,7 @@ SSLClientSocketOpenSSL::SSLClientSocketOpenSSL(
       channel_id_service_(context.channel_id_service),
       tb_was_negotiated_(false),
       tb_negotiated_param_(TB_PARAM_ECDSAP256),
+      tb_signed_ekm_map_(10),
       ssl_(NULL),
       transport_bio_(NULL),
       transport_(std::move(transport_socket)),
@@ -575,6 +545,51 @@ SSLClientSocket::NextProtoStatus SSLClientSocketOpenSSL::GetNextProto(
 ChannelIDService*
 SSLClientSocketOpenSSL::GetChannelIDService() const {
   return channel_id_service_;
+}
+
+Error SSLClientSocketOpenSSL::GetSignedEKMForTokenBinding(
+    crypto::ECPrivateKey* key,
+    std::vector<uint8_t>* out) {
+  // The same key will be used across multiple requests to sign the same value,
+  // so the signature is cached.
+  std::string raw_public_key;
+  if (!key->ExportRawPublicKey(&raw_public_key))
+    return ERR_FAILED;
+  SignedEkmMap::iterator it = tb_signed_ekm_map_.Get(raw_public_key);
+  if (it != tb_signed_ekm_map_.end()) {
+    *out = it->second;
+    return OK;
+  }
+
+  uint8_t tb_ekm_buf[32];
+  static const char kTokenBindingExporterLabel[] = "EXPORTER-Token-Binding";
+  if (!SSL_export_keying_material(ssl_, tb_ekm_buf, sizeof(tb_ekm_buf),
+                                  kTokenBindingExporterLabel,
+                                  strlen(kTokenBindingExporterLabel), nullptr,
+                                  0, false /* no context */)) {
+    return ERR_FAILED;
+  }
+
+  size_t sig_len;
+  crypto::ScopedEVP_PKEY_CTX pctx(EVP_PKEY_CTX_new(key->key(), nullptr));
+  if (!EVP_PKEY_sign_init(pctx.get()) ||
+      !EVP_PKEY_sign(pctx.get(), nullptr, &sig_len, tb_ekm_buf,
+                     sizeof(tb_ekm_buf))) {
+    return ERR_FAILED;
+  }
+  out->resize(sig_len);
+  if (!EVP_PKEY_sign(pctx.get(), out->data(), &sig_len, tb_ekm_buf,
+                     sizeof(tb_ekm_buf))) {
+    return ERR_FAILED;
+  }
+  out->resize(sig_len);
+
+  tb_signed_ekm_map_.Put(raw_public_key, *out);
+  return OK;
+}
+
+crypto::ECPrivateKey* SSLClientSocketOpenSSL::GetChannelIDKey() const {
+  return channel_id_key_.get();
 }
 
 SSLFailureState SSLClientSocketOpenSSL::GetSSLFailureState() const {
@@ -799,7 +814,7 @@ bool SSLClientSocketOpenSSL::GetSSLInfo(SSLInfo* ssl_info) {
   ssl_info->token_binding_key_param = tb_negotiated_param_;
   ssl_info->pinning_failure_log = pinning_failure_log_;
 
-  AddSCTInfoToSSLInfo(ssl_info);
+  AddCTInfoToSSLInfo(ssl_info);
 
   const SSL_CIPHER* cipher = SSL_get_current_cipher(ssl_);
   CHECK(cipher);
@@ -807,9 +822,11 @@ bool SSLClientSocketOpenSSL::GetSSLInfo(SSLInfo* ssl_info) {
   ssl_info->key_exchange_info =
       SSL_SESSION_get_key_exchange_info(SSL_get_session(ssl_));
 
-  ssl_info->connection_status = EncodeSSLConnectionStatus(
-      static_cast<uint16_t>(SSL_CIPHER_get_id(cipher)), 0 /* no compression */,
-      GetNetSSLVersion(ssl_));
+  SSLConnectionStatusSetCipherSuite(
+      static_cast<uint16_t>(SSL_CIPHER_get_id(cipher)),
+      &ssl_info->connection_status);
+  SSLConnectionStatusSetVersion(GetNetSSLVersion(ssl_),
+                                &ssl_info->connection_status);
 
   if (!SSL_get_secure_renegotiation_support(ssl_))
     ssl_info->connection_status |= SSL_CONNECTION_NO_RENEGOTIATION_EXTENSION;
@@ -999,14 +1016,6 @@ int SSLClientSocketOpenSSL::Init() {
       command.append(SSL_CIPHER_get_name(cipher));
     }
   }
-
-  // Disable ECDSA cipher suites on platforms that do not support ECDSA
-  // signed certificates, as servers may use the presence of such
-  // ciphersuites as a hint to send an ECDSA certificate.
-#if defined(OS_WIN)
-  if (base::win::GetVersion() < base::win::VERSION_VISTA)
-    command.append(":!ECDSA");
-#endif
 
   int rv = SSL_set_cipher_list(ssl_, command.c_str());
   // If this fails (rv = 0) it means there are no ciphers enabled on this SSL.
@@ -1244,7 +1253,9 @@ int SSLClientSocketOpenSSL::DoHandshakeComplete(int result) {
 }
 
 int SSLClientSocketOpenSSL::DoChannelIDLookup() {
-  net_log_.AddEvent(NetLog::TYPE_SSL_CHANNEL_ID_REQUESTED);
+  NetLog::ParametersCallback callback = base::Bind(
+      &NetLogChannelIDLookupCallback, base::Unretained(channel_id_service_));
+  net_log_.BeginEvent(NetLog::TYPE_SSL_GET_CHANNEL_ID, callback);
   GotoState(STATE_CHANNEL_ID_LOOKUP_COMPLETE);
   return channel_id_service_->GetOrCreateChannelID(
       host_and_port_.host(), &channel_id_key_,
@@ -1254,16 +1265,15 @@ int SSLClientSocketOpenSSL::DoChannelIDLookup() {
 }
 
 int SSLClientSocketOpenSSL::DoChannelIDLookupComplete(int result) {
+  net_log_.EndEvent(NetLog::TYPE_SSL_GET_CHANNEL_ID,
+                    base::Bind(&NetLogChannelIDLookupCompleteCallback,
+                               channel_id_key_.get(), result));
   if (result < 0)
     return result;
 
-  if (!channel_id_key_) {
-    LOG(ERROR) << "Failed to import Channel ID.";
-    return ERR_CHANNEL_ID_IMPORT_FAILED;
-  }
-
   // Hand the key to OpenSSL. Check for error in case OpenSSL rejects the key
   // type.
+  DCHECK(channel_id_key_);
   crypto::OpenSSLErrStackTracer err_tracer(FROM_HERE);
   int rv = SSL_set1_tls_channel_id(ssl_, channel_id_key_->key());
   if (!rv) {
@@ -1274,7 +1284,6 @@ int SSLClientSocketOpenSSL::DoChannelIDLookupComplete(int result) {
 
   // Return to the handshake.
   channel_id_sent_ = true;
-  net_log_.AddEvent(NetLog::TYPE_SSL_CHANNEL_ID_PROVIDED);
   GotoState(STATE_HANDSHAKE);
   return OK;
 }
@@ -1419,22 +1428,38 @@ void SSLClientSocketOpenSSL::VerifyCT() {
       server_cert_verify_result_.verified_cert.get(), ocsp_response, sct_list,
       &ct_verify_result_, net_log_);
 
-  if (policy_enforcer_ &&
-      (server_cert_verify_result_.cert_status & CERT_STATUS_IS_EV)) {
-    scoped_refptr<ct::EVCertsWhitelist> ev_whitelist =
-        SSLConfigService::GetEVCertsWhitelist();
-    if (!policy_enforcer_->DoesConformToCTEVPolicy(
-            server_cert_verify_result_.verified_cert.get(), ev_whitelist.get(),
-            ct_verify_result_, net_log_)) {
-      // TODO(eranm): Log via the BoundNetLog, see crbug.com/437766
-      VLOG(1) << "EV certificate for "
-              << server_cert_verify_result_.verified_cert->subject()
-                     .GetDisplayName()
-              << " does not conform to CT policy, removing EV status.";
-      server_cert_verify_result_.cert_status |=
-          CERT_STATUS_CT_COMPLIANCE_FAILED;
-      server_cert_verify_result_.cert_status &= ~CERT_STATUS_IS_EV;
+  ct_verify_result_.ct_policies_applied = (policy_enforcer_ != nullptr);
+  ct_verify_result_.ev_policy_compliance =
+      ct::EVPolicyCompliance::EV_POLICY_DOES_NOT_APPLY;
+  if (policy_enforcer_) {
+    if ((server_cert_verify_result_.cert_status & CERT_STATUS_IS_EV)) {
+      scoped_refptr<ct::EVCertsWhitelist> ev_whitelist =
+          SSLConfigService::GetEVCertsWhitelist();
+      ct::EVPolicyCompliance ev_policy_compliance =
+          policy_enforcer_->DoesConformToCTEVPolicy(
+              server_cert_verify_result_.verified_cert.get(),
+              ev_whitelist.get(), ct_verify_result_.verified_scts, net_log_);
+      ct_verify_result_.ev_policy_compliance = ev_policy_compliance;
+      if (ev_policy_compliance !=
+              ct::EVPolicyCompliance::EV_POLICY_DOES_NOT_APPLY &&
+          ev_policy_compliance !=
+              ct::EVPolicyCompliance::EV_POLICY_COMPLIES_VIA_WHITELIST &&
+          ev_policy_compliance !=
+              ct::EVPolicyCompliance::EV_POLICY_COMPLIES_VIA_SCTS) {
+        // TODO(eranm): Log via the BoundNetLog, see crbug.com/437766
+        VLOG(1) << "EV certificate for "
+                << server_cert_verify_result_.verified_cert->subject()
+                       .GetDisplayName()
+                << " does not conform to CT policy, removing EV status.";
+        server_cert_verify_result_.cert_status |=
+            CERT_STATUS_CT_COMPLIANCE_FAILED;
+        server_cert_verify_result_.cert_status &= ~CERT_STATUS_IS_EV;
+      }
     }
+    ct_verify_result_.cert_policy_compliance =
+        policy_enforcer_->DoesConformToCertPolicy(
+            server_cert_verify_result_.verified_cert.get(),
+            ct_verify_result_.verified_scts, net_log_);
   }
 }
 
@@ -2087,8 +2112,8 @@ int SSLClientSocketOpenSSL::NewSessionCallback(SSL_SESSION* session) {
   return 1;
 }
 
-void SSLClientSocketOpenSSL::AddSCTInfoToSSLInfo(SSLInfo* ssl_info) const {
-  ssl_info->UpdateSignedCertificateTimestamps(ct_verify_result_);
+void SSLClientSocketOpenSSL::AddCTInfoToSSLInfo(SSLInfo* ssl_info) const {
+  ssl_info->UpdateCertificateTransparencyInfo(ct_verify_result_);
 }
 
 std::string SSLClientSocketOpenSSL::GetSessionCacheKey() const {

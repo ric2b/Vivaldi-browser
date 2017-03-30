@@ -29,6 +29,7 @@
 #include "platform/HostWindow.h"
 #include "platform/PlatformGestureEvent.h"
 #include "platform/PlatformMouseEvent.h"
+#include "platform/geometry/FloatRect.h"
 #include "platform/graphics/paint/CullRect.h"
 // See windowActiveChangedForSnowLeopardOnly() below.
 // TODO(ellyjones): remove this when Snow Leopard support is gone.
@@ -81,7 +82,7 @@ Scrollbar::Scrollbar(ScrollableArea* scrollableArea, ScrollbarOrientation orient
     // alone when sizing).
     int thickness = m_theme.scrollbarThickness(controlSize);
     if (m_hostWindow)
-        thickness = m_hostWindow->screenToViewport(thickness);
+        thickness = m_hostWindow->windowToViewportScalar(thickness);
     Widget::setFrameRect(IntRect(0, 0, thickness, thickness));
 
     m_currentPos = scrollableAreaCurrentPos();
@@ -139,12 +140,14 @@ void Scrollbar::offsetDidChange()
     if (position == m_currentPos)
         return;
 
+    float oldPosition = m_currentPos;
     int oldThumbPosition = theme().thumbPosition(*this);
     m_currentPos = position;
-    // TODO(jbroman): The theme should provide the parts to invalidate.
-    // At the moment, the only theme that doesn't invalidate everything is Mac,
-    // which invalidates this as needed in ScrollAnimatorMac.
-    setNeedsPaintInvalidation(NoPart);
+
+    ScrollbarPart invalidParts = theme().invalidateOnThumbPositionChange(
+        *this, oldPosition, position);
+    setNeedsPaintInvalidation(invalidParts);
+
     if (m_pressedPart == ThumbPart)
         setPressedPos(m_pressedPos + theme().thumbPosition(*this) - oldThumbPosition);
 }
@@ -480,7 +483,7 @@ int Scrollbar::scrollbarThickness() const
     int thickness = orientation() == HorizontalScrollbar ? height() : width();
     if (!thickness || !m_hostWindow)
         return thickness;
-    return m_hostWindow->screenToViewport(m_theme.scrollbarThickness(controlSize()));
+    return m_hostWindow->windowToViewportScalar(m_theme.scrollbarThickness(controlSize()));
 }
 
 

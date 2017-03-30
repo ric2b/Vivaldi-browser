@@ -64,6 +64,7 @@ class NET_EXPORT HttpNetworkSession
  public:
   struct NET_EXPORT Params {
     Params();
+    Params(const Params& other);
     ~Params();
 
     ClientSocketFactory* client_socket_factory;
@@ -86,29 +87,20 @@ class NET_EXPORT HttpNetworkSession
     uint16_t testing_fixed_https_port;
     bool enable_tcp_fast_open_for_ssl;
 
-    // Compress SPDY headers.
-    bool enable_spdy_compression;
     // Use SPDY ping frames to test for connection health after idle.
     bool enable_spdy_ping_based_connection_checking;
     NextProto spdy_default_protocol;
-    // The protocols supported by NPN (next protocol negotiation) during the
-    // SSL handshake as well as by HTTP Alternate-Protocol.
-    // TODO(mmenke):  This is currently empty by default, and alternate
-    //                protocols are disabled.  We should use some reasonable
-    //                defaults.
-    NextProtoVector next_protos;
+    bool enable_spdy31;
+    bool enable_http2;
     size_t spdy_session_max_recv_window_size;
     size_t spdy_stream_max_recv_window_size;
-    size_t spdy_initial_max_concurrent_streams;
     // Source of time for SPDY connections.
     SpdySessionPool::TimeFunc time_func;
-    // This SPDY proxy is allowed to push resources from origins that are
-    // different from those of their associated streams.
-    std::string trusted_spdy_proxy;
-    // URLs to exclude from forced SPDY.
-    std::set<HostPortPair> forced_spdy_exclusions;
-    // Process Alt-Svc headers.
-    bool use_alternative_services;
+    // Whether to parse Alt-Svc headers.
+    bool parse_alternative_services;
+    // Whether to enable Alt-Svc entries with hostname different than that of
+    // the origin.
+    bool enable_alternative_service_with_different_host;
     // Only honor alternative service entries which have a higher probability
     // than this value.
     double alternative_service_probability_threshold;
@@ -121,6 +113,8 @@ class NET_EXPORT HttpNetworkSession
 
     // Enables QUIC support.
     bool enable_quic;
+    // Disable QUIC if a connection times out with open streams.
+    bool disable_quic_on_timeout_with_open_streams;
     // Enables QUIC for proxies.
     bool enable_quic_for_proxies;
     // Instruct QUIC to use consistent ephemeral ports when talking to
@@ -185,10 +179,15 @@ class NET_EXPORT HttpNetworkSession
     bool quic_disable_preconnect_if_0rtt;
     // List of hosts for which QUIC is explicitly whitelisted.
     std::unordered_set<std::string> quic_host_whitelist;
-    // If true, active QUIC sessions may be migrated onto new IPs when network
-    // changes.
+    // If true, active QUIC sessions may be migrated onto a new network when
+    // the platform indicates that the default network is changing.
     bool quic_migrate_sessions_on_network_change;
+    // If true, active QUIC sessions experiencing poor connectivity may be
+    // migrated onto a new network.
+    bool quic_migrate_sessions_early;
     ProxyDelegate* proxy_delegate;
+    // Enable support for Token Binding.
+    bool enable_token_binding;
   };
 
   enum SocketPoolType {
@@ -268,10 +267,6 @@ class NET_EXPORT HttpNetworkSession
 
   // Populates |*npn_protos| with protocols to be used with NPN.
   void GetNpnProtos(NextProtoVector* npn_protos) const;
-
-  // Convenience function for searching through |params_| for
-  // |forced_spdy_exclusions|.
-  bool HasSpdyExclusion(HostPortPair host_port_pair) const;
 
  private:
   friend class HttpNetworkSessionPeer;

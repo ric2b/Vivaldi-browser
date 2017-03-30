@@ -30,12 +30,9 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
   // Internal class name.
   static const char kViewClassName[];
 
-  explicit BubbleFrameView(const gfx::Insets& content_margins);
+  BubbleFrameView(const gfx::Insets& title_margins,
+                  const gfx::Insets& content_margins);
   ~BubbleFrameView() override;
-
-  // Insets to make bubble contents align horizontal with the bubble title.
-  // NOTE: this does not take into account whether a title actually exists.
-  static gfx::Insets GetTitleInsets();
 
   // Creates a close button used in the corner of the dialog.
   static LabelButton* CreateCloseButton(ButtonListener* listener);
@@ -75,7 +72,9 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
 
   gfx::Insets content_margins() const { return content_margins_; }
 
-  void SetTitlebarExtraView(View* view);
+  void SetTitlebarExtraView(scoped_ptr<View> view);
+
+  void SetFootnoteView(scoped_ptr<View> view);
 
   // Given the size of the contents and the rect to point at, returns the bounds
   // of the bubble window. The bubble's arrow location may change if the bubble
@@ -114,6 +113,9 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
   // The bubble border.
   BubbleBorder* bubble_border_;
 
+  // Margins around the title label.
+  gfx::Insets title_margins_;
+
   // Margins between the content and the inside of the border, in pixels.
   gfx::Insets content_margins_;
 
@@ -125,6 +127,9 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
   // When supplied, this view is placed in the titlebar between the title and
   // (x) close button.
   View* titlebar_extra_view_;
+
+  // A view to contain the footnote view, if it exists.
+  View* footnote_container_;
 
   // Whether the close button was clicked.
   bool close_button_clicked_;

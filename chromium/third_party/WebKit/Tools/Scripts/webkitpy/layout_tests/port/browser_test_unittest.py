@@ -79,14 +79,14 @@ class BrowserTestWinTest(_BrowserTestTestCaseMixin, port_testcase.PortTestCase):
     port_name = 'win'
     port_maker = browser_test.BrowserTestWinPort
     os_name = 'win'
-    os_version = 'xp'
+    os_version = 'win7'
     driver_name_endswith = 'browser_tests.exe'
     timeout_ms = 20 * 1000
 
 
 class BrowserTestMacTest(_BrowserTestTestCaseMixin, port_testcase.PortTestCase):
     os_name = 'mac'
-    os_version = 'snowleopard'
+    os_version = 'mac10.11'
     port_name = 'mac'
     port_maker = browser_test.BrowserTestMacPort
     driver_name_endswith = 'browser_tests'

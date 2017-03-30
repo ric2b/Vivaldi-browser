@@ -34,8 +34,6 @@ component("gl") {
     "gl_bindings_autogen_gl.h",
     "gl_bindings_autogen_osmesa.cc",
     "gl_bindings_autogen_osmesa.h",
-    "gl_bindings_skia_in_process.cc",
-    "gl_bindings_skia_in_process.h",
     "gl_context.cc",
     "gl_context.h",
     "gl_context_android.cc",
@@ -116,7 +114,7 @@ component("gl") {
   defines = [ "GL_IMPLEMENTATION" ]
 
   include_dirs = [
-    "//third_party/switfshader/include",
+    "//third_party/swiftshader/include",
     "//third_party/mesa/src/include",
   ]
 
@@ -126,7 +124,6 @@ component("gl") {
 
   deps = [
     "//base/third_party/dynamic_annotations",
-    "//skia",
   ]
   public_deps = [
     "//base",
@@ -191,8 +188,8 @@ component("gl") {
 
     deps += [ "//ui/gfx/x" ]
     data_deps = [
-      "//third_party/angle:libEGL_ANGLE",
-      "//third_party/angle:libGLESv2_ANGLE",
+      "//third_party/angle:libEGL",
+      "//third_party/angle:libGLESv2",
     ]
   }
   if (is_win) {
@@ -270,10 +267,7 @@ component("gl") {
       "gl_implementation_ozone.cc",
       "gl_surface_ozone.cc",
     ]
-    deps += [
-      "//ui/ozone",
-      "//ui/ozone:ozone_base",
-    ]
+    deps += [ "//ui/ozone" ]
   }
 }
 
@@ -326,15 +320,6 @@ source_set("test_support") {
       "//ui/platform_window/x11",
     ]
   }
-}
-
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("gl_unittests_run") {
-  testonly = true
-  deps = [
-    ":gl_unittests",
-  ]
 }
 
 test("gl_unittests") {

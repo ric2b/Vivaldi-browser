@@ -7,17 +7,17 @@
 
 #include "mojo/public/cpp/system/macros.h"
 #include "mojo/services/test_service/test_request_tracker_impl.h"
-#include "mojo/shell/public/cpp/application_delegate.h"
 #include "mojo/shell/public/cpp/interface_factory_impl.h"
+#include "mojo/shell/public/cpp/shell_client.h"
 
 namespace mojo {
-class ApplicationImpl;
+class ShellConnection;
 namespace test {
 class TestTimeService;
 
 // Embeds TestRequestTracker mojo services into an application.
 class TestRequestTrackerApplication
-    : public ApplicationDelegate,
+    : public ShellClient,
       public InterfaceFactory<TestTimeService>,
       public InterfaceFactory<TestRequestTracker>,
       public InterfaceFactory<TestTrackedRequestService> {
@@ -25,25 +25,25 @@ class TestRequestTrackerApplication
   TestRequestTrackerApplication();
   ~TestRequestTrackerApplication() override;
 
-  void Initialize(ApplicationImpl* app) override;
-
-  // ApplicationDelegate methods:
-  bool ConfigureIncomingConnection(ApplicationConnection* connection) override;
+  // mojo::ShellClient methods:
+  void Initialize(Connector* connector, const std::string& url,
+                  uint32_t id, uint32_t user_id) override;
+  bool AcceptConnection(Connection* connection) override;
 
   // InterfaceFactory<TestTimeService> methods:
-  void Create(ApplicationConnection* connection,
+  void Create(Connection* connection,
               InterfaceRequest<TestTimeService> request) override;
 
   // InterfaceFactory<TestRequestTracker> methods:
-  void Create(ApplicationConnection* connection,
+  void Create(Connection* connection,
               InterfaceRequest<TestRequestTracker> request) override;
 
   // InterfaceFactory<TestTrackedRequestService> methods:
-  void Create(ApplicationConnection* connection,
+  void Create(Connection* connection,
               InterfaceRequest<TestTrackedRequestService> request) override;
 
  private:
-  ApplicationImpl* app_impl_;
+  Connector* connector_;
   TrackingContext context_;
   MOJO_DISALLOW_COPY_AND_ASSIGN(TestRequestTrackerApplication);
 };

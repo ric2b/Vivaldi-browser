@@ -133,6 +133,7 @@ PolicyBase::PolicyBase()
       delayed_integrity_level_(INTEGRITY_LEVEL_LAST),
       mitigations_(0),
       delayed_mitigations_(0),
+      is_csrss_connected_(true),
       policy_maker_(NULL),
       policy_(NULL),
       lowbox_sid_(NULL) {
@@ -141,8 +142,6 @@ PolicyBase::PolicyBase()
 }
 
 PolicyBase::~PolicyBase() {
-  ClearSharedHandles();
-
   TargetSet::iterator it;
   for (it = targets_.begin(); it != targets_.end(); ++it) {
     TargetProcess* target = (*it);
@@ -179,7 +178,7 @@ TokenLevel PolicyBase::GetInitialTokenLevel() const {
   return initial_level_;
 }
 
-TokenLevel PolicyBase::GetLockdownTokenLevel() const{
+TokenLevel PolicyBase::GetLockdownTokenLevel() const {
   return lockdown_level_;
 }
 
@@ -190,6 +189,10 @@ ResultCode PolicyBase::SetJobLevel(JobLevel job_level, uint32_t ui_exceptions) {
   job_level_ = job_level;
   ui_exceptions_ = ui_exceptions;
   return SBOX_ALL_OK;
+}
+
+JobLevel PolicyBase::GetJobLevel() const {
+  return job_level_;
 }
 
 ResultCode PolicyBase::SetJobMemoryLimit(size_t memory_limit) {
@@ -420,28 +423,19 @@ ResultCode PolicyBase::AddKernelObjectToClose(const base::char16* handle_type,
   return handle_closer_.AddHandle(handle_type, handle_name);
 }
 
-void* PolicyBase::AddHandleToShare(HANDLE handle) {
-  if (base::win::GetVersion() < base::win::VERSION_VISTA)
-    return nullptr;
+void PolicyBase::AddHandleToShare(HANDLE handle) {
+  CHECK(handle && handle != INVALID_HANDLE_VALUE);
 
-  if (!handle)
-    return nullptr;
+  // Ensure the handle can be inherited.
+  BOOL result = SetHandleInformation(handle, HANDLE_FLAG_INHERIT,
+                                     HANDLE_FLAG_INHERIT);
+  PCHECK(result);
 
-  HANDLE duped_handle = nullptr;
-  if (!::DuplicateHandle(::GetCurrentProcess(), handle, ::GetCurrentProcess(),
-                         &duped_handle, 0, TRUE, DUPLICATE_SAME_ACCESS)) {
-    return nullptr;
-  }
-  handles_to_share_.push_back(new base::win::ScopedHandle(duped_handle));
-  return duped_handle;
+  handles_to_share_.push_back(handle);
 }
 
-const HandleList& PolicyBase::GetHandlesBeingShared() {
+const base::HandlesToInheritVector& PolicyBase::GetHandlesBeingShared() {
   return handles_to_share_;
-}
-
-void PolicyBase::ClearSharedHandles() {
-  STLDeleteElements(&handles_to_share_);
 }
 
 ResultCode PolicyBase::MakeJobObject(base::win::ScopedHandle* job) {
@@ -621,6 +615,13 @@ bool PolicyBase::OnJobEmpty(HANDLE job) {
   return true;
 }
 
+void PolicyBase::SetDisconnectCsrss() {
+  if (base::win::GetVersion() >= base::win::VERSION_WIN8) {
+    is_csrss_connected_ = false;
+    AddKernelObjectToClose(L"ALPC Port", NULL);
+  }
+}
+
 EvalResult PolicyBase::EvalPolicy(int service,
                                   CountedParameterSetBase* params) {
   if (NULL != policy_) {
@@ -673,7 +674,7 @@ bool PolicyBase::SetupAllInterceptions(TargetProcess* target) {
     }
   }
 
-  if (!SetupBasicInterceptions(&manager))
+  if (!SetupBasicInterceptions(&manager, is_csrss_connected_))
     return false;
 
   if (!manager.InitializeInterceptions())

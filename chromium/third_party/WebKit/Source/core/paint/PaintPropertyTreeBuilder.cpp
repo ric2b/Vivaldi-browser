@@ -70,6 +70,10 @@ void PaintPropertyTreeBuilder::walk(FrameView& frameView, const PaintPropertyTre
 {
     PaintPropertyTreeBuilderContext localContext(context);
 
+    // TODO(pdr): Creating paint properties for FrameView here will not be
+    // needed once settings()->rootLayerScrolls() is enabled.
+    // TODO(pdr): Make this conditional on the rootLayerScrolls setting.
+
     TransformationMatrix frameTranslate;
     frameTranslate.translate(frameView.x(), frameView.y());
     // The frame owner applies paint offset already.
@@ -83,7 +87,6 @@ void PaintPropertyTreeBuilder::walk(FrameView& frameView, const PaintPropertyTre
     RefPtr<ClipPaintPropertyNode> newClipNodeForContentClip = ClipPaintPropertyNode::create(newTransformNodeForPreTranslation.get(), contentClip, localContext.currentClip);
     localContext.currentClip = localContext.clipForOutOfFlowPositioned = localContext.clipForFixedPositioned = newClipNodeForContentClip.get();
 
-    // This is going away in favor of Settings::rootLayerScrolls.
     DoubleSize scrollOffset = frameView.scrollOffsetDouble();
     TransformationMatrix frameScroll;
     frameScroll.translate(-scrollOffset.width(), -scrollOffset.height());
@@ -307,6 +310,21 @@ static void updateOutOfFlowContext(const LayoutObject& object, bool createdNewTr
     }
 }
 
+PassOwnPtr<ObjectPaintProperties::LocalBorderBoxProperties> recordTreeContextIfNeeded(LayoutObject& object, const PaintPropertyTreeBuilderContext& context)
+{
+    // Note: Currently only layer painter makes use of the pre-computed context.
+    // This condition may be loosened with no adverse effects beside memory use.
+    if (!object.hasLayer())
+        return nullptr;
+
+    OwnPtr<ObjectPaintProperties::LocalBorderBoxProperties> recordedContext = adoptPtr(new ObjectPaintProperties::LocalBorderBoxProperties);
+    recordedContext->paintOffset = context.paintOffset;
+    recordedContext->transform = context.currentTransform;
+    recordedContext->clip = context.currentClip;
+    recordedContext->effect = context.currentEffect;
+    return recordedContext.release();
+}
+
 void PaintPropertyTreeBuilder::walk(LayoutObject& object, const PaintPropertyTreeBuilderContext& context)
 {
     PaintPropertyTreeBuilderContext localContext(context);
@@ -315,6 +333,7 @@ void PaintPropertyTreeBuilder::walk(LayoutObject& object, const PaintPropertyTre
     RefPtr<TransformPaintPropertyNode> newTransformNodeForPaintOffsetTranslation = createPaintOffsetTranslationIfNeeded(object, localContext);
     RefPtr<TransformPaintPropertyNode> newTransformNodeForTransform = createTransformIfNeeded(object, localContext);
     RefPtr<EffectPaintPropertyNode> newEffectNode = createEffectIfNeeded(object, localContext);
+    OwnPtr<ObjectPaintProperties::LocalBorderBoxProperties> newRecordedContext = recordTreeContextIfNeeded(object, localContext);
     RefPtr<ClipPaintPropertyNode> newClipNodeForOverflowClip = createOverflowClipIfNeeded(object, localContext);
     // TODO(trchen): Insert flattening transform here, as specified by
     // http://www.w3.org/TR/css3-transforms/#transform-style-property
@@ -322,14 +341,15 @@ void PaintPropertyTreeBuilder::walk(LayoutObject& object, const PaintPropertyTre
     RefPtr<TransformPaintPropertyNode> newTransformNodeForScrollTranslation = createScrollTranslationIfNeeded(object, localContext);
     updateOutOfFlowContext(object, newTransformNodeForTransform, localContext);
 
-    if (newTransformNodeForPaintOffsetTranslation || newTransformNodeForTransform || newEffectNode || newClipNodeForOverflowClip || newTransformNodeForPerspective || newTransformNodeForScrollTranslation) {
+    if (newTransformNodeForPaintOffsetTranslation || newTransformNodeForTransform || newEffectNode || newClipNodeForOverflowClip || newTransformNodeForPerspective || newTransformNodeForScrollTranslation || newRecordedContext) {
         OwnPtr<ObjectPaintProperties> updatedPaintProperties = ObjectPaintProperties::create(
             newTransformNodeForPaintOffsetTranslation.release(),
             newTransformNodeForTransform.release(),
             newEffectNode.release(),
             newClipNodeForOverflowClip.release(),
             newTransformNodeForPerspective.release(),
-            newTransformNodeForScrollTranslation.release());
+            newTransformNodeForScrollTranslation.release(),
+            newRecordedContext.release());
         object.setObjectPaintProperties(updatedPaintProperties.release());
     } else {
         object.clearObjectPaintProperties();

@@ -31,6 +31,7 @@
 #include "platform/geometry/FloatRectOutsets.h"
 #include "third_party/skia/include/core/SkRect.h"
 #include "wtf/Allocator.h"
+#include "wtf/Forward.h"
 #include "wtf/Vector.h"
 #include <iosfwd>
 
@@ -41,6 +42,10 @@ typedef struct CGRect CGRect;
 #import <Foundation/Foundation.h>
 #endif
 #endif
+
+namespace gfx {
+class RectF;
+}
 
 namespace blink {
 
@@ -181,11 +186,16 @@ public:
 #endif
 
     operator SkRect() const { return SkRect::MakeXYWH(x(), y(), width(), height()); }
+    operator gfx::RectF() const;
 
 #if ENABLE(ASSERT)
     // Prints the rect to the screen.
     void show() const;
     bool mayNotHaveExactIntRectRepresentation() const;
+#endif
+
+#ifndef NDEBUG
+    String toString() const;
 #endif
 
 private:

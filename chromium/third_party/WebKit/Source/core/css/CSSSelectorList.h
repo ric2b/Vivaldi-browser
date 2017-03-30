@@ -75,13 +75,10 @@ public:
         return next - m_selectorArray;
     }
 
-    bool selectorsNeedNamespaceResolution();
-
     bool selectorNeedsUpdatedDistribution(size_t index) const;
 
-    // TODO(kochi): "ShadowDistributed" means the selector has ::content pseudo element.
-    // Once ::slotted is introduced, come up with more readable name.
-    bool selectorHasShadowDistributed(size_t index) const;
+    bool selectorHasContentPseudo(size_t index) const;
+    bool selectorHasSlottedPseudo(size_t index) const;
     bool selectorUsesDeepCombinatorOrShadowPseudo(size_t index) const;
 
     String selectorsText() const;

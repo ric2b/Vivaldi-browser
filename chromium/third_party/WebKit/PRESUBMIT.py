@@ -8,6 +8,7 @@ See http://dev.chromium.org/developers/how-tos/depottools/presubmit-scripts
 for more details about the presubmit API built into gcl.
 """
 
+import re
 import sys
 
 
@@ -113,11 +114,15 @@ def _CheckTestExpectations(input_api, output_api):
 
 
 def _CheckStyle(input_api, output_api):
+    # Files that follow Chromium's coding style do not include capital letters.
+    re_chromium_style_file = re.compile(r'\b[a-z_]+\.(cc|h)$')
     style_checker_path = input_api.os_path.join(input_api.PresubmitLocalPath(),
         'Tools', 'Scripts', 'check-webkit-style')
     args = ([input_api.python_executable, style_checker_path, '--diff-files']
             + [input_api.os_path.join('..', '..', f.LocalPath())
-               for f in input_api.AffectedFiles()])
+               for f in input_api.AffectedFiles()
+               # Filter out files that follow Chromium's coding style.
+               if not re_chromium_style_file.search(f.LocalPath())])
     results = []
 
     try:
@@ -175,11 +180,11 @@ def _CheckForDangerousTestFunctions(input_api, output_api):
         input_api, None)
     errors = ['  * %s' % violation for violation in errors]
     if errors:
-        return [output_api.PresubmitError(
-                    'You should be using FrameTestHelpers::'
-                    'pumpPendingRequests() instead of '
-                    'serveAsynchronousMockedRequests() in the following '
-                    'locations:\n%s' % '\n'.join(errors))]
+        return [output_api.PresubmitPromptOrNotify(
+            'You should probably be using one of the FrameTestHelpers::'
+            '(re)load* functions instead of '
+            'serveAsynchronousMockedRequests() in the following '
+            'locations:\n%s' % '\n'.join(errors))]
     return []
 
 

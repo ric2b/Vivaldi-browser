@@ -8,22 +8,22 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "mojo/services/tracing/public/cpp/tracing_impl.h"
-#include "mojo/shell/public/cpp/application_delegate.h"
+#include "mojo/shell/public/cpp/shell_client.h"
 
 namespace views {
 class AuraInit;
 }
 
-class ViewsExamplesApplicationDelegate : public mojo::ApplicationDelegate {
+class ViewsExamplesApplicationDelegate : public mojo::ShellClient {
  public:
   ViewsExamplesApplicationDelegate();
   ~ViewsExamplesApplicationDelegate() override;
 
  private:
-  // ApplicationDelegate:
-  void Initialize(mojo::ApplicationImpl* app) override;
-  bool ConfigureIncomingConnection(
-      mojo::ApplicationConnection* connection) override;
+  // mojo::ShellClient:
+  void Initialize(mojo::Connector* connector, const std::string& url,
+                  uint32_t id, uint32_t user_id) override;
+  bool AcceptConnection(mojo::Connection* connection) override;
 
   mojo::TracingImpl tracing_;
 

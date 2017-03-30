@@ -22,7 +22,6 @@
 #include "chrome/test/chromedriver/chrome/mobile_device.h"
 #include "chrome/test/chromedriver/chrome/status.h"
 #include "chrome/test/chromedriver/logging.h"
-#include "net/base/net_util.h"
 
 namespace {
 
@@ -467,6 +466,8 @@ Status ParseChromeOptions(
 }  // namespace
 
 Switches::Switches() {}
+
+Switches::Switches(const Switches& other) = default;
 
 Switches::~Switches() {}
 

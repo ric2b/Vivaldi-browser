@@ -23,14 +23,6 @@ BarControlButton::BarControlButton(views::ButtonListener* listener)
       ink_drop_delegate_(new views::ButtonInkDropDelegate(this, this)) {
   set_ink_drop_delegate(ink_drop_delegate_.get());
   set_has_ink_drop_action_on_click(true);
-
-  const int kInkDropLargeSize = 32;
-  const int kInkDropLargeCornerRadius = 4;
-  const int kInkDropSmallSize = 24;
-  const int kInkDropSmallCornerRadius = 2;
-  ink_drop_delegate()->SetInkDropSize(
-      kInkDropLargeSize, kInkDropLargeCornerRadius, kInkDropSmallSize,
-      kInkDropSmallCornerRadius);
 }
 
 BarControlButton::~BarControlButton() {}
@@ -55,15 +47,9 @@ void BarControlButton::OnThemeChanged() {
   SetImage(views::CustomButton::STATE_NORMAL, &image);
   image = gfx::CreateVectorIcon(id_, 16, SkColorSetA(icon_color, 0xff / 2));
   SetImage(views::CustomButton::STATE_DISABLED, &image);
+  set_ink_drop_base_color(icon_color);
 }
 
 void BarControlButton::OnNativeThemeChanged(const ui::NativeTheme* theme) {
   OnThemeChanged();
-}
-
-bool BarControlButton::OnMousePressed(const ui::MouseEvent& event) {
-  if (IsTriggerableEvent(event))
-    ink_drop_delegate()->OnAction(views::InkDropState::ACTION_PENDING);
-
-  return ImageButton::OnMousePressed(event);
 }

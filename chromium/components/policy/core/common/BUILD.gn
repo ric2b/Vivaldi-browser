@@ -136,11 +136,11 @@ source_set("common") {
     ]
     deps = [
       "//base:i18n",
-      "//base:prefs",
       "//base/third_party/dynamic_annotations",
       "//components/data_use_measurement/core",
       "//components/json_schema",
       "//components/policy",
+      "//components/prefs",
       "//google_apis",
       "//net",
       "//third_party/re2",
@@ -280,13 +280,20 @@ if (enable_configuration_policy) {
         "config_dir_policy_loader_unittest.cc",
       ]
     }
+    if (is_win) {
+      # Needed by policy_loader_win_unittest.cc and preg_parser_win_unittest.cc
+      data = [
+        "//chrome/test/data/policy/",
+      ]
+    }
 
     deps = [
       "//base",
-      "//base:prefs_test_support",
       "//base/test:test_support",
       "//components/policy",
       "//components/policy:policy_component_test_support",
+      "//components/prefs:test_support",
+      "//components/prefs:test_support",
       "//google_apis",
       "//net:test_support",
       "//testing/gmock",

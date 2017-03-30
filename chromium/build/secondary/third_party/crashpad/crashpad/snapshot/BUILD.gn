@@ -18,6 +18,8 @@ source_set("snapshot") {
   }
 
   sources = [
+    "capture_memory.cc",
+    "capture_memory.h",
     "cpu_architecture.h",
     "cpu_context.cc",
     "cpu_context.h",
@@ -77,8 +79,10 @@ source_set("snapshot") {
     "process_snapshot.h",
     "system_snapshot.h",
     "thread_snapshot.h",
-    "win/capture_context_memory.cc",
-    "win/capture_context_memory.h",
+    "unloaded_module_snapshot.cc",
+    "unloaded_module_snapshot.h",
+    "win/capture_memory_delegate_win.cc",
+    "win/capture_memory_delegate_win.h",
     "win/cpu_context_win.cc",
     "win/cpu_context_win.h",
     "win/exception_snapshot_win.cc",
@@ -106,4 +110,27 @@ source_set("snapshot") {
     "win/thread_snapshot_win.cc",
     "win/thread_snapshot_win.h",
   ]
+}
+
+if (is_win) {
+  source_set("snapshot_api") {
+    deps = [
+      ":snapshot",
+      "../compat",
+      "../util",
+      "//base",
+    ]
+
+    include_dirs = [ ".." ]
+
+    cflags = [ "/wd4201" ]
+
+    sources = [
+      "api/module_annotations_win.cc",
+      "api/module_annotations_win.h",
+    ]
+  }
+} else {
+  group("snapshot_api") {
+  }
 }

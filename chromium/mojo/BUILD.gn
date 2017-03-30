@@ -24,47 +24,7 @@ group("mojo") {
     deps += [ "//mojo/android" ]
   }
 
-  deps += [ "//mojo/runner" ]
-}
-
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("mojo_public_bindings_unittests_run") {
-  testonly = true
-  deps = [
-    # TODO(use_chrome_edk): "//mojo/edk/test:mojo_public_bindings_unittests"
-    "//third_party/mojo/src/mojo/edk/test:mojo_public_bindings_unittests",
-  ]
-}
-
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("mojo_public_environment_unittests_run") {
-  testonly = true
-  deps = [
-    # TODO(use_chrome_edk): "//mojo/edk/test:mojo_public_environment_unittests"
-    "//third_party/mojo/src/mojo/edk/test:mojo_public_environment_unittests",
-  ]
-}
-
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("mojo_public_system_unittests_run") {
-  testonly = true
-  deps = [
-    # TODO(use_chrome_edk): "//mojo/edk/test:mojo_public_system_unittests"
-    "//third_party/mojo/src/mojo/edk/test:mojo_public_system_unittests",
-  ]
-}
-
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("mojo_public_utility_unittests_run") {
-  testonly = true
-  deps = [
-    # TODO(use_chrome_edk): "//mojo/edk/test:mojo_public_utility_unittests"
-    "//third_party/mojo/src/mojo/edk/test:mojo_public_utility_unittests",
-  ]
+  deps += [ "//mojo/shell:all" ]
 }
 
 group("tests") {
@@ -73,35 +33,19 @@ group("tests") {
     "//ipc/mojo:ipc_mojo_unittests",
     "//mojo/common:mojo_common_unittests",
     "//mojo/converters/surfaces/tests:mojo_surfaces_lib_unittests",
+    "//mojo/edk/js/test:js_integration_tests",
     "//mojo/edk/js/test:js_unittests",
-    "//mojo/shell/public/cpp/tests:mojo_public_application_unittests",
-
-    # TODO(use_chrome_edk):
-    #"//mojo/edk/js/test:js_integration_tests2",
-    #"//mojo/edk/system:mojo_message_pipe_perftests",
-    #"//mojo/edk/system:mojo_system_unittests",
-    #"//mojo/edk/test:mojo_public_bindings_unittests",
-    #"//mojo/edk/test:mojo_public_environment_unittests",
-    #"//mojo/edk/test:mojo_public_system_perftests",
-    #"//mojo/edk/test:mojo_public_system_unittests",
-    #"//mojo/edk/test:mojo_public_utility_unittests",
-    "//third_party/mojo/src/mojo/edk/system:mojo_message_pipe_perftests",
-    "//third_party/mojo/src/mojo/edk/system:mojo_system_unittests",
-    "//third_party/mojo/src/mojo/edk/test:mojo_public_bindings_unittests",
-    "//third_party/mojo/src/mojo/edk/test:mojo_public_environment_unittests",
-    "//third_party/mojo/src/mojo/edk/test:mojo_public_system_perftests",
-    "//third_party/mojo/src/mojo/edk/test:mojo_public_system_unittests",
-    "//third_party/mojo/src/mojo/edk/test:mojo_public_utility_unittests",
-  ]
-
-  deps += [
+    "//mojo/edk/system:mojo_message_pipe_perftests",
+    "//mojo/edk/system:mojo_system_unittests",
+    "//mojo/edk/test:mojo_public_bindings_unittests",
+    "//mojo/edk/test:mojo_public_environment_unittests",
+    "//mojo/edk/test:mojo_public_system_perftests",
+    "//mojo/edk/test:mojo_public_system_unittests",
+    "//mojo/edk/test:mojo_public_utility_unittests",
     "//mojo/services/network:apptests",
-    "//mojo/shell:apptests",
-    "//mojo/shell:mojo_shell_unittests",
-    "//mojo/shell/package_manager:unittests",
+    "//mojo/shell/public/cpp/tests:mojo_public_application_unittests",
+    "//mojo/shell/runner/host:mojo_runner_host_unittests",
+    "//mojo/shell/tests:apptests",
+    "//mojo/shell/tests:mojo_shell_unittests",
   ]
-
-  if (is_android) {
-    deps += [ "//mojo/runner:mojo_runner_apptests_apk" ]
-  }
 }

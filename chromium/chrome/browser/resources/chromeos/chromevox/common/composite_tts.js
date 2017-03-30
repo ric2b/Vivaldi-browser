@@ -45,6 +45,7 @@ cvox.CompositeTts.prototype.speak =
   this.ttsEngines_.forEach(function(engine) {
     engine.speak(textString, queueMode, properties);
   });
+  return this;
 };
 
 
@@ -93,11 +94,24 @@ cvox.CompositeTts.prototype.increaseOrDecreaseProperty =
 /**
  * @override
  */
+cvox.CompositeTts.prototype.propertyToPercentage = function(property) {
+  for (var i = 0, engine; engine = this.ttsEngines_[i]; i++) {
+    var value = engine.propertyToPercentage(property);
+    if (value !== undefined)
+      return value;
+  }
+  return null;
+};
+
+
+/**
+ * @override
+ */
 cvox.CompositeTts.prototype.getDefaultProperty = function(property) {
   for (var i = 0, engine; engine = this.ttsEngines_[i]; i++) {
     var value = engine.getDefaultProperty(property);
-    if (value) {
+    if (value !== undefined)
       return value;
-    }
   }
+  return null;
 };

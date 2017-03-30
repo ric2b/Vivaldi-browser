@@ -14,8 +14,7 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
+#include "base/path_service.h"
 #include "base/rand_util.h"
 #include "base/strings/string16.h"
 #include "base/threading/platform_thread.h"
@@ -32,8 +31,10 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
 #include "chrome/common/features.h"
+#include "chrome/installer/util/util_constants.h"
 #include "components/metrics/call_stack_profile_metrics_provider.h"
 #include "components/metrics/drive_metrics_provider.h"
+#include "components/metrics/file_metrics_provider.h"
 #include "components/metrics/gpu/gpu_metrics_provider.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_service.h"
@@ -46,6 +47,8 @@
 #include "components/metrics/ui/screen_info_metrics_provider.h"
 #include "components/metrics/url_constants.h"
 #include "components/omnibox/browser/omnibox_metrics_provider.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
 #include "components/variations/variations_associated_data.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
@@ -76,6 +79,7 @@
 #if defined(OS_WIN)
 #include <windows.h>
 #include "chrome/browser/metrics/google_update_metrics_provider_win.h"
+#include "chrome/installer/util/browser_distribution.h"
 #include "components/browser_watcher/watcher_metrics_provider_win.h"
 #endif
 
@@ -91,7 +95,7 @@ namespace {
 const int kMaxHistogramGatheringWaitDuration = 60000;  // 60 seconds.
 
 // Standard interval between log uploads, in seconds.
-#if defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_ANDROID)
 const int kStandardUploadIntervalSeconds = 5 * 60;  // Five minutes.
 const int kStandardUploadIntervalCellularSeconds = 15 * 60;  // Fifteen minutes.
 #else
@@ -127,13 +131,42 @@ bool ShouldClearSavedMetrics() {
 #endif
 }
 
+void RegisterInstallerFileMetricsPreferences(PrefRegistrySimple* registry) {
+#if defined(OS_WIN)
+  metrics::FileMetricsProvider::RegisterPrefs(
+      registry, installer::kSetupHistogramAllocatorName);
+#endif
+}
+
+void RegisterInstallerFileMetricsProvider(
+    metrics::MetricsService* metrics_service) {
+#if defined(OS_WIN)
+  scoped_ptr<metrics::FileMetricsProvider> file_metrics(
+    new metrics::FileMetricsProvider(
+        content::BrowserThread::GetBlockingPool()
+            ->GetTaskRunnerWithShutdownBehavior(
+                base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN),
+        g_browser_process->local_state()));
+  base::FilePath program_dir;
+  base::PathService::Get(base::DIR_EXE, &program_dir);
+  file_metrics->RegisterFile(
+      program_dir.AppendASCII(installer::kSetupHistogramAllocatorName)
+          .AddExtension(L".pma"),
+      metrics::FileMetricsProvider::FILE_HISTOGRAMS_ATOMIC,
+      installer::kSetupHistogramAllocatorName);
+  metrics_service->RegisterMetricsProvider(std::move(file_metrics));
+#endif
+}
+
 }  // namespace
 
 
 ChromeMetricsServiceClient::ChromeMetricsServiceClient(
     metrics::MetricsStateManager* state_manager)
     : metrics_state_manager_(state_manager),
+#if defined(OS_CHROMEOS)
       chromeos_metrics_provider_(nullptr),
+#endif
       waiting_for_collect_final_metrics_step_(false),
       num_async_histogram_fetches_in_progress_(0),
       profiler_metrics_provider_(nullptr),
@@ -173,6 +206,8 @@ scoped_ptr<ChromeMetricsServiceClient> ChromeMetricsServiceClient::Create(
 void ChromeMetricsServiceClient::RegisterPrefs(PrefRegistrySimple* registry) {
   metrics::MetricsService::RegisterPrefs(registry);
   metrics::StabilityMetricsHelper::RegisterPrefs(registry);
+
+  RegisterInstallerFileMetricsPreferences(registry);
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
   AndroidMetricsProvider::RegisterPrefs(registry);
@@ -269,7 +304,7 @@ ChromeMetricsServiceClient::CreateUploader(
 }
 
 base::TimeDelta ChromeMetricsServiceClient::GetStandardUploadInterval() {
-#if defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_ANDROID)
   if (IsCellularLogicEnabled())
     return base::TimeDelta::FromSeconds(kStandardUploadIntervalCellularSeconds);
 #endif
@@ -278,7 +313,8 @@ base::TimeDelta ChromeMetricsServiceClient::GetStandardUploadInterval() {
 
 base::string16 ChromeMetricsServiceClient::GetRegistryBackupKey() {
 #if defined(OS_WIN)
-  return L"Software\\" PRODUCT_STRING_PATH L"\\StabilityMetrics";
+  BrowserDistribution* distribution = BrowserDistribution::GetDistribution();
+  return distribution->GetRegistryPath().append(L"\\StabilityMetrics");
 #else
   return base::string16();
 #endif
@@ -330,6 +366,8 @@ void ChromeMetricsServiceClient::Initialize() {
   metrics_service_->RegisterMetricsProvider(
       scoped_ptr<metrics::MetricsProvider>(
           new metrics::ScreenInfoMetricsProvider));
+
+  RegisterInstallerFileMetricsProvider(metrics_service_.get());
 
   drive_metrics_provider_ = new metrics::DriveMetricsProvider(
       content::BrowserThread::GetMessageLoopProxyForThread(
@@ -400,6 +438,18 @@ void ChromeMetricsServiceClient::Initialize() {
 }
 
 void ChromeMetricsServiceClient::OnInitTaskGotHardwareClass() {
+  const base::Closure got_bluetooth_adapter_callback =
+      base::Bind(&ChromeMetricsServiceClient::OnInitTaskGotBluetoothAdapter,
+                 weak_ptr_factory_.GetWeakPtr());
+#if defined(OS_CHROMEOS)
+  chromeos_metrics_provider_->InitTaskGetBluetoothAdapter(
+      got_bluetooth_adapter_callback);
+#else
+  got_bluetooth_adapter_callback.Run();
+#endif  // defined(OS_CHROMEOS)
+}
+
+void ChromeMetricsServiceClient::OnInitTaskGotBluetoothAdapter() {
   const base::Closure got_plugin_info_callback =
       base::Bind(&ChromeMetricsServiceClient::OnInitTaskGotPluginInfo,
                  weak_ptr_factory_.GetWeakPtr());
@@ -519,7 +569,7 @@ void ChromeMetricsServiceClient::OnMemoryDetailCollectionDone() {
   }
 #endif  // !ENABLE_PRINT_PREVIEW
 
-  // Set up the callback to task to call after we receive histograms from all
+  // Set up the callback task to call after we receive histograms from all
   // child processes. |timeout| specifies how long to wait before absolutely
   // calling us back on the task.
   content::FetchHistogramsAsynchronously(base::MessageLoop::current(), callback,

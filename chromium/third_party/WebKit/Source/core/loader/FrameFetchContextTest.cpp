@@ -42,6 +42,7 @@
 #include "core/testing/DummyPageHolder.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/weborigin/KURL.h"
+#include "testing/gmock/include/gmock/gmock-generated-function-mockers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -81,12 +82,21 @@ public:
     DEFINE_INLINE_VIRTUAL_TRACE() { FrameOwner::trace(visitor); }
 
     bool isLocal() const override { return false; }
-    SandboxFlags sandboxFlags() const override { return SandboxNone; }
+    SandboxFlags getSandboxFlags() const override { return SandboxNone; }
     void dispatchLoad() override { }
     void renderFallbackContent() override { }
     ScrollbarMode scrollingMode() const override { return ScrollbarAuto; }
     int marginWidth() const override { return -1; }
     int marginHeight() const override { return -1; }
+};
+
+class MockFrameLoaderClient : public EmptyFrameLoaderClient {
+public:
+    MockFrameLoaderClient()
+        : EmptyFrameLoaderClient()
+    {
+    }
+    MOCK_METHOD4(didDisplayContentWithCertificateErrors, void(const KURL&, const CString&, const WebURL&, const CString&));
 };
 
 class FrameFetchContextTest : public ::testing::Test {
@@ -139,6 +149,32 @@ protected:
     RefPtrWillBePersistent<DocumentLoader> childDocumentLoader;
     RefPtrWillBePersistent<Document> childDocument;
     OwnPtrWillBePersistent<StubFrameOwner> owner;
+};
+
+// This test class sets up a mock frame loader client that expects a
+// call to didDisplayContentWithCertificateErrors().
+class FrameFetchContextDisplayedCertificateErrorsTest : public FrameFetchContextTest {
+protected:
+    void SetUp() override
+    {
+        url = KURL(KURL(), "https://example.test/foo");
+        securityInfo = "security info";
+        mainResourceUrl = KURL(KURL(), "https://www.example.test");
+        MockFrameLoaderClient* client = new MockFrameLoaderClient;
+        EXPECT_CALL(*client, didDisplayContentWithCertificateErrors(url, securityInfo, WebURL(mainResourceUrl), CString()));
+        dummyPageHolder = DummyPageHolder::create(IntSize(500, 500), nullptr, adoptPtrWillBeNoop(client));
+        dummyPageHolder->page().setDeviceScaleFactor(1.0);
+        documentLoader = DocumentLoader::create(&dummyPageHolder->frame(), ResourceRequest(mainResourceUrl), SubstituteData());
+        document = toHTMLDocument(&dummyPageHolder->document());
+        document->setURL(mainResourceUrl);
+        fetchContext = static_cast<FrameFetchContext*>(&documentLoader->fetcher()->context());
+        owner = StubFrameOwner::create();
+        FrameFetchContext::provideDocumentToContext(*fetchContext, document.get());
+    }
+
+    KURL url;
+    KURL mainResourceUrl;
+    CString securityInfo;
 };
 
 class FrameFetchContextUpgradeTest : public FrameFetchContextTest {
@@ -521,6 +557,11 @@ TEST_F(FrameFetchContextTest, EnableDataSaver)
     ResourceRequest resourceRequest("http://www.example.com");
     fetchContext->addAdditionalRequestHeaders(resourceRequest, FetchMainResource);
     EXPECT_STREQ("on", resourceRequest.httpHeaderField("Save-Data").utf8().data());
+
+    // Subsequent call to addAdditionalRequestHeaders should not append to the
+    // save-data header.
+    fetchContext->addAdditionalRequestHeaders(resourceRequest, FetchMainResource);
+    EXPECT_STREQ("on", resourceRequest.httpHeaderField("Save-Data").utf8().data());
 }
 
 TEST_F(FrameFetchContextTest, DisabledDataSaver)
@@ -530,4 +571,18 @@ TEST_F(FrameFetchContextTest, DisabledDataSaver)
     EXPECT_STREQ("", resourceRequest.httpHeaderField("Save-Data").utf8().data());
 }
 
-} // namespace
+// Tests that when a resource with certificate errors is loaded from the
+// memory cache, the embedder is notified.
+TEST_F(FrameFetchContextDisplayedCertificateErrorsTest, MemoryCacheCertificateError)
+{
+    ResourceRequest resourceRequest(url);
+    ResourceResponse response;
+    response.setURL(url);
+    response.setSecurityInfo(securityInfo);
+    response.setHasMajorCertificateErrors(true);
+    RefPtrWillBeRawPtr<Resource> resource = Resource::create(resourceRequest, Resource::Image);
+    resource->setResponse(response);
+    fetchContext->dispatchDidLoadResourceFromMemoryCache(resource.get(), WebURLRequest::FrameTypeNone, WebURLRequest::RequestContextImage);
+}
+
+} // namespace blink

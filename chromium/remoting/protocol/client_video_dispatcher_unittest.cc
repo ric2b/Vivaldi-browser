@@ -12,7 +12,9 @@
 #include "remoting/base/constants.h"
 #include "remoting/proto/video.pb.h"
 #include "remoting/protocol/fake_stream_socket.h"
+#include "remoting/protocol/message_reader.h"
 #include "remoting/protocol/message_serialization.h"
+#include "remoting/protocol/stream_message_pipe_adapter.h"
 #include "remoting/protocol/video_stub.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -31,26 +33,26 @@ class ClientVideoDispatcherTest : public testing::Test,
 
   // ChannelDispatcherBase::EventHandler interface.
   void OnChannelInitialized(ChannelDispatcherBase* channel_dispatcher) override;
-  void OnChannelError(ChannelDispatcherBase* channel_dispatcher,
-                      ErrorCode error) override;
 
  protected:
-  void OnVideoAck(scoped_ptr<VideoAck> ack, const base::Closure& done);
+  void OnChannelError(int error);
+
+  void OnMessageReceived(scoped_ptr<CompoundBuffer> buffer);
   void OnReadError(int error);
 
   base::MessageLoop message_loop_;
 
   // Set to true in OnChannelInitialized().
-  bool initialized_;
+  bool initialized_ = false;
 
   // Client side.
   FakeStreamChannelFactory client_channel_factory_;
+  StreamMessageChannelFactoryAdapter channel_factory_adapter_;
   ClientVideoDispatcher dispatcher_;
 
   // Host side.
   FakeStreamSocket host_socket_;
   MessageReader reader_;
-  ProtobufMessageParser<VideoAck> parser_;
   BufferedSocketWriter writer_;
 
   ScopedVector<VideoPacket> video_packets_;
@@ -60,17 +62,19 @@ class ClientVideoDispatcherTest : public testing::Test,
 };
 
 ClientVideoDispatcherTest::ClientVideoDispatcherTest()
-    : initialized_(false),
-      dispatcher_(this),
-      parser_(base::Bind(&ClientVideoDispatcherTest::OnVideoAck,
-                         base::Unretained(this)),
-              &reader_) {
-  dispatcher_.Init(&client_channel_factory_, this);
+    : channel_factory_adapter_(
+          &client_channel_factory_,
+          base::Bind(&ClientVideoDispatcherTest::OnChannelError,
+                     base::Unretained(this))),
+      dispatcher_(this) {
+  dispatcher_.Init(&channel_factory_adapter_, this);
   base::RunLoop().RunUntilIdle();
   DCHECK(initialized_);
   host_socket_.PairWith(
       client_channel_factory_.GetFakeChannel(kVideoChannelName));
   reader_.StartReading(&host_socket_,
+                       base::Bind(&ClientVideoDispatcherTest::OnMessageReceived,
+                                  base::Unretained(this)),
                        base::Bind(&ClientVideoDispatcherTest::OnReadError,
                                   base::Unretained(this)));
   writer_.Start(
@@ -90,17 +94,16 @@ void ClientVideoDispatcherTest::OnChannelInitialized(
   initialized_ = true;
 }
 
-void ClientVideoDispatcherTest::OnChannelError(
-    ChannelDispatcherBase* channel_dispatcher,
-    ErrorCode error) {
+void ClientVideoDispatcherTest::OnChannelError(int error) {
   // Don't expect channel creation to fail.
   FAIL();
 }
 
-void ClientVideoDispatcherTest::OnVideoAck(scoped_ptr<VideoAck> ack,
-                                           const base::Closure& done) {
+void ClientVideoDispatcherTest::OnMessageReceived(
+    scoped_ptr<CompoundBuffer> buffer) {
+  scoped_ptr<VideoAck> ack = ParseMessage<VideoAck>(buffer.get());
+  EXPECT_TRUE(ack);
   ack_messages_.push_back(ack.release());
-  done.Run();
 }
 
 void ClientVideoDispatcherTest::OnReadError(int error) {

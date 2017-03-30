@@ -410,7 +410,12 @@ TEST_F(DataReductionProxyNetworkDelegateTest, LoFiTransitions) {
   }
 }
 
-TEST_F(DataReductionProxyNetworkDelegateTest, NetHistograms) {
+#if defined(OS_ANDROID)
+#define MAYBE_NetHistograms DISABLED_NetHistograms
+#else
+#define MAYBE_NetHistograms NetHistograms
+#endif
+TEST_F(DataReductionProxyNetworkDelegateTest, MAYBE_NetHistograms) {
   const std::string kReceivedValidOCLHistogramName =
       "Net.HttpContentLengthWithValidOCL";
   const std::string kOriginalValidOCLHistogramName =
@@ -556,100 +561,6 @@ TEST_F(DataReductionProxyNetworkDelegateTest, NetHistograms) {
   }
 }
 
-TEST_F(DataReductionProxyNetworkDelegateTest, OnResolveProxyHandler) {
-  int load_flags = net::LOAD_NORMAL;
-  GURL url("http://www.google.com/");
-
-  // Data reduction proxy info
-  net::ProxyInfo data_reduction_proxy_info;
-  std::string data_reduction_proxy;
-  base::TrimString(params()->DefaultOrigin(), "/", &data_reduction_proxy);
-  data_reduction_proxy_info.UsePacString(
-      "PROXY " +
-      net::ProxyServer::FromURI(
-          params()->DefaultOrigin(),
-          net::ProxyServer::SCHEME_HTTP).host_port_pair().ToString() +
-      "; DIRECT");
-  EXPECT_FALSE(data_reduction_proxy_info.is_empty());
-
-  // Data reduction proxy config
-  net::ProxyConfig data_reduction_proxy_config;
-  data_reduction_proxy_config.proxy_rules().ParseFromString(
-      "http=" + data_reduction_proxy + ",direct://;");
-  data_reduction_proxy_config.set_id(1);
-
-  // Other proxy info
-  net::ProxyInfo other_proxy_info;
-  other_proxy_info.UseNamedProxy("proxy.com");
-  EXPECT_FALSE(other_proxy_info.is_empty());
-
-  // Direct
-  net::ProxyInfo direct_proxy_info;
-  direct_proxy_info.UseDirect();
-  EXPECT_TRUE(direct_proxy_info.is_direct());
-
-  // Empty retry info map
-  net::ProxyRetryInfoMap empty_proxy_retry_info;
-
-  // Retry info map with the data reduction proxy;
-  net::ProxyRetryInfoMap data_reduction_proxy_retry_info;
-  net::ProxyRetryInfo retry_info;
-  retry_info.current_delay = base::TimeDelta::FromSeconds(1000);
-  retry_info.bad_until = base::TimeTicks().Now() + retry_info.current_delay;
-  retry_info.try_while_bad = false;
-  data_reduction_proxy_retry_info[data_reduction_proxy_info.proxy_server()
-                                      .ToURI()] = retry_info;
-
-  net::ProxyInfo result;
-  // Another proxy is used. It should be used afterwards.
-  result.Use(other_proxy_info);
-  OnResolveProxyHandler(url, load_flags, data_reduction_proxy_config,
-                        empty_proxy_retry_info, config(), &result);
-  EXPECT_EQ(other_proxy_info.proxy_server(), result.proxy_server());
-
-  // A direct connection is used. The data reduction proxy should be used
-  // afterwards.
-  // Another proxy is used. It should be used afterwards.
-  result.Use(direct_proxy_info);
-  net::ProxyConfig::ID prev_id = result.config_id();
-  OnResolveProxyHandler(url, load_flags, data_reduction_proxy_config,
-                        empty_proxy_retry_info, config(), &result);
-  EXPECT_EQ(data_reduction_proxy_info.proxy_server(), result.proxy_server());
-  // Only the proxy list should be updated, not he proxy info.
-  EXPECT_EQ(result.config_id(), prev_id);
-
-  // A direct connection is used, but the data reduction proxy is on the retry
-  // list. A direct connection should be used afterwards.
-  result.Use(direct_proxy_info);
-  prev_id = result.config_id();
-  OnResolveProxyHandler(url, load_flags, data_reduction_proxy_config,
-                        data_reduction_proxy_retry_info, config(), &result);
-  EXPECT_TRUE(result.proxy_server().is_direct());
-  EXPECT_EQ(result.config_id(), prev_id);
-
-  // Test that ws:// and wss:// URLs bypass the data reduction proxy.
-  result.UseDirect();
-  OnResolveProxyHandler(GURL("ws://echo.websocket.org/"),
-                        load_flags, data_reduction_proxy_config,
-                        empty_proxy_retry_info, config(), &result);
-  EXPECT_TRUE(result.is_direct());
-
-  OnResolveProxyHandler(GURL("wss://echo.websocket.org/"),
-                        load_flags, data_reduction_proxy_config,
-                        empty_proxy_retry_info, config(), &result);
-  EXPECT_TRUE(result.is_direct());
-
-  // Without DataCompressionProxyCriticalBypass Finch trial set, the
-  // BYPASS_DATA_REDUCTION_PROXY load flag should be ignored.
-  OnResolveProxyHandler(url, load_flags, data_reduction_proxy_config,
-                        empty_proxy_retry_info, config(), &result);
-  EXPECT_FALSE(result.is_direct());
-
-  OnResolveProxyHandler(url, load_flags, data_reduction_proxy_config,
-                        empty_proxy_retry_info, config(), &other_proxy_info);
-  EXPECT_FALSE(other_proxy_info.is_direct());
-}
-
 // Notify network delegate with a NULL request.
 TEST_F(DataReductionProxyNetworkDelegateTest, NullRequest) {
   net::HttpRequestHeaders headers;
@@ -670,7 +581,12 @@ TEST_F(DataReductionProxyNetworkDelegateTest, NullRequest) {
   EXPECT_TRUE(headers.HasHeader(kChromeProxyHeader));
 }
 
-TEST_F(DataReductionProxyNetworkDelegateTest, OnCompletedInternalLoFi) {
+#if defined(OS_ANDROID)
+#define MAYBE_OnCompletedInternalLoFi DISABLED_OnCompletedInternalLoFi
+#else
+#define MAYBE_OnCompletedInternalLoFi OnCompletedInternalLoFi
+#endif
+TEST_F(DataReductionProxyNetworkDelegateTest, MAYBE_OnCompletedInternalLoFi) {
   // Enable Lo-Fi.
   const struct {
     bool lofi_response;
@@ -697,7 +613,14 @@ TEST_F(DataReductionProxyNetworkDelegateTest, OnCompletedInternalLoFi) {
   }
 }
 
-TEST_F(DataReductionProxyNetworkDelegateTest, OnCompletedInternalLoFiPreview) {
+#if defined(OS_ANDROID)
+#define MAYBE_OnCompletedInternalLoFiPreview \
+  DISABLED_OnCompletedInternalLoFiPreview
+#else
+#define MAYBE_OnCompletedInternalLoFiPreview OnCompletedInternalLoFiPreview
+#endif
+TEST_F(DataReductionProxyNetworkDelegateTest,
+       MAYBE_OnCompletedInternalLoFiPreview) {
   // Enable Lo-Fi.
   const struct {
     bool is_preview;
@@ -752,104 +675,6 @@ TEST_F(DataReductionProxyNetworkDelegateTest,
 
   histogram_tester.ExpectBucketCount(kLoFiTransformationTypeHistogram, PREVIEW,
                                      1);
-}
-
-TEST_F(DataReductionProxyNetworkDelegateTest, OnCompletedSizeFor200) {
-  int64_t baseline_received_bytes = total_received_bytes();
-  int64_t baseline_original_received_bytes = total_original_received_bytes();
-
-  const char kDrpResponseHeaders[] =
-      "HTTP/1.1 200 OK\r\n"
-      "Date: Wed, 28 Nov 2007 09:40:09 GMT\r\n"
-      "Warning: 199 Misc-Agent \"some warning text\"\r\n"
-      "Via:\r\n"
-      "Via: 1.1 Chrome-Compression-Proxy-Suffix, 9.9 other-proxy\r\n"
-      "Via: 2.2 Chrome-Compression-Proxy\r\n"
-      "Warning: 214 Chrome-Compression-Proxy \"Transformation Applied\"\r\n"
-      "X-Original-Content-Length: 10000\r\n"
-      "Chrome-Proxy: q=low\r\n"
-      "Content-Length: 1000\r\n\r\n";
-
-  scoped_ptr<net::URLRequest> request = FetchURLRequest(
-      GURL("http://example.com/path/"), nullptr, kDrpResponseHeaders, 1000);
-
-  EXPECT_EQ(request->GetTotalReceivedBytes(),
-            total_received_bytes() - baseline_received_bytes);
-
-  const std::string raw_headers = net::HttpUtil::AssembleRawHeaders(
-      kDrpResponseHeaders, arraysize(kDrpResponseHeaders) - 1);
-  EXPECT_EQ(static_cast<int64_t>(raw_headers.size() +
-                                 10000 /* original_response_body */),
-            total_original_received_bytes() - baseline_original_received_bytes);
-}
-
-TEST_F(DataReductionProxyNetworkDelegateTest, OnCompletedSizeFor304) {
-  int64_t baseline_received_bytes = total_received_bytes();
-  int64_t baseline_original_received_bytes = total_original_received_bytes();
-
-  const char kDrpResponseHeaders[] =
-      "HTTP/1.1 304 Not Modified\r\n"
-      "Via: 1.1 Chrome-Compression-Proxy\r\n"
-      "X-Original-Content-Length: 10000\r\n\r\n";
-
-  scoped_ptr<net::URLRequest> request = FetchURLRequest(
-      GURL("http://example.com/path/"), nullptr, kDrpResponseHeaders, 0);
-
-  EXPECT_EQ(request->GetTotalReceivedBytes(),
-            total_received_bytes() - baseline_received_bytes);
-
-  const std::string raw_headers = net::HttpUtil::AssembleRawHeaders(
-      kDrpResponseHeaders, arraysize(kDrpResponseHeaders) - 1);
-  EXPECT_EQ(static_cast<int64_t>(raw_headers.size() +
-                                 10000 /* original_response_body */),
-            total_original_received_bytes() - baseline_original_received_bytes);
-}
-
-TEST_F(DataReductionProxyNetworkDelegateTest, OnCompletedSizeForWriteError) {
-  int64_t baseline_received_bytes = total_received_bytes();
-  int64_t baseline_original_received_bytes = total_original_received_bytes();
-
-  net::MockWrite writes[] = {
-      net::MockWrite("GET http://example.com/path/ HTTP/1.1\r\n"
-                     "Host: example.com\r\n"),
-      net::MockWrite(net::ASYNC, net::ERR_ABORTED)};
-  net::StaticSocketDataProvider socket(nullptr, 0, writes, arraysize(writes));
-  mock_socket_factory()->AddSocketDataProvider(&socket);
-
-  net::TestDelegate delegate;
-  scoped_ptr<net::URLRequest> request = context()->CreateRequest(
-      GURL("http://example.com/path/"), net::IDLE, &delegate);
-  request->Start();
-  base::RunLoop().RunUntilIdle();
-
-  EXPECT_EQ(request->GetTotalReceivedBytes(),
-            total_received_bytes() - baseline_received_bytes);
-  EXPECT_EQ(request->GetTotalReceivedBytes(),
-            total_original_received_bytes() - baseline_original_received_bytes);
-}
-
-TEST_F(DataReductionProxyNetworkDelegateTest, OnCompletedSizeForReadError) {
-  int64_t baseline_received_bytes = total_received_bytes();
-  int64_t baseline_original_received_bytes = total_original_received_bytes();
-
-  net::MockRead reads[] = {net::MockRead("HTTP/1.1 200 OK\r\n"
-                                         "Via: 1.1 Chrome-Compression-Proxy\r\n"
-                                         "X-Original-Content-Length: 10000\r\n"
-                                         "Content-Length: 1000\r\n\r\n"),
-                           net::MockRead(net::ASYNC, net::ERR_ABORTED)};
-  net::StaticSocketDataProvider socket(reads, arraysize(reads), nullptr, 0);
-  mock_socket_factory()->AddSocketDataProvider(&socket);
-
-  net::TestDelegate delegate;
-  scoped_ptr<net::URLRequest> request = context()->CreateRequest(
-      GURL("http://example.com/path/"), net::IDLE, &delegate);
-  request->Start();
-  base::RunLoop().RunUntilIdle();
-
-  EXPECT_EQ(request->GetTotalReceivedBytes(),
-            total_received_bytes() - baseline_received_bytes);
-  EXPECT_EQ(request->GetTotalReceivedBytes(),
-            total_original_received_bytes() - baseline_original_received_bytes);
 }
 
 }  // namespace

@@ -9,12 +9,10 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/i18n/rtl.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_iterator.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/settings_window_manager.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -22,6 +20,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/prefs/pref_service.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -41,15 +40,15 @@ bool ShouldAddPage(const GURL& url) {
     return false;
 
   if (url.SchemeIs(content::kChromeUIScheme)) {
-    if (url.host() == chrome::kChromeUISettingsHost ||
-        url.host() == chrome::kChromeUISettingsFrameHost) {
+    if (url.host_piece() == chrome::kChromeUISettingsHost ||
+        url.host_piece() == chrome::kChromeUISettingsFrameHost) {
       return false;
     }
 
     // For a settings page, the path will start with "/settings" not "settings"
     // so find() will return 1, not 0.
-    if (url.host() == chrome::kChromeUIUberHost &&
-        url.path().find(chrome::kChromeUISettingsHost) == 1) {
+    if (url.host_piece() == chrome::kChromeUIUberHost &&
+        url.path_piece().find(chrome::kChromeUISettingsHost) == 1) {
       return false;
     }
   }
@@ -188,8 +187,7 @@ void CustomHomePagesTableModel::SetToCurrentlyOpenPages() {
 
   // Add tabs from appropriate browser windows.
   int add_index = 0;
-  for (chrome::BrowserIterator it; !it.done(); it.Next()) {
-    Browser* browser = *it;
+  for (auto* browser : *BrowserList::GetInstance()) {
     if (!ShouldIncludeBrowser(browser))
       continue;
 

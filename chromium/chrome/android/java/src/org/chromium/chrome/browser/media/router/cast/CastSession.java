@@ -24,6 +24,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.media.ui.MediaNotificationInfo;
 import org.chromium.chrome.browser.media.ui.MediaNotificationListener;
 import org.chromium.chrome.browser.media.ui.MediaNotificationManager;
+import org.chromium.chrome.browser.tab.Tab;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -33,6 +34,7 @@ import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
@@ -202,8 +204,7 @@ public class CastSession implements MediaNotificationListener {
         mHandler = new Handler();
 
         mMessageChannel = new CastMessagingChannel(this);
-        addNamespace(MEDIA_NAMESPACE);
-        addNamespace(GAMES_NAMESPACE);
+        updateNamespaces();
 
         final Context context = ApplicationStatus.getApplicationContext();
 
@@ -243,6 +244,7 @@ public class CastSession implements MediaNotificationListener {
                 .setPrivate(false)
                 .setIcon(R.drawable.ic_notification_media_route)
                 .setActions(MediaNotificationInfo.ACTION_STOP)
+                .setContentIntent(Tab.createBringTabToFrontIntent(tabId))
                 .setId(R.id.presentation_notification)
                 .setListener(this);
         MediaNotificationManager.show(context, mNotificationBuilder.build());
@@ -306,19 +308,19 @@ public class CastSession implements MediaNotificationListener {
                 });
     }
 
-    public void sendStringMessage(String message, int callbackId) {
-        if (handleInternalMessage(message, callbackId)) return;
-
-        // TODO(avayvod): figure out what to do with custom namespace messages.
-        mRouteProvider.onMessageSentResult(false, callbackId);
-    }
-
     public String getSourceId() {
         return mSource.getUrn();
     }
 
     public String getSinkId() {
         return mCastDevice.getDeviceId();
+    }
+
+    public void onClientConnected(String clientId) {
+        sendClientMessageTo(
+                clientId, "new_session", buildSessionMessage(), INVALID_SEQUENCE_NUMBER);
+
+        if (mMediaPlayer != null && !isApiClientInvalid()) mMediaPlayer.requestStatus(mApiClient);
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////
@@ -432,94 +434,16 @@ public class CastSession implements MediaNotificationListener {
         }
     }
 
-    private boolean handleInternalMessage(String message, int callbackId) {
-        Log.d(TAG, "Received message from client: %s", message);
-        boolean success = true;
-        try {
-            JSONObject jsonMessage = new JSONObject(message);
-
-            String messageType = jsonMessage.getString("type");
-            if ("client_connect".equals(messageType)) {
-                success = handleClientConnectMessage(jsonMessage);
-            } else if ("client_disconnect".equals(messageType)) {
-                success = handleClientDisconnectMessage(jsonMessage);
-            } else if ("leave_session".equals(messageType)) {
-                success = handleLeaveSessionMessage(jsonMessage);
-            } else if ("v2_message".equals(messageType)) {
-                success = handleCastV2Message(jsonMessage);
-            } else if ("app_message".equals(messageType)) {
-                success = handleAppMessage(jsonMessage);
-            } else {
-                Log.e(TAG, "Unsupported message: %s", message);
-                return false;
-            }
-        } catch (JSONException e) {
-            Log.e(TAG, "JSONException while handling internal message: " + e);
+    public boolean handleSessionMessage(
+            JSONObject message, String messageType) throws JSONException {
+        if ("v2_message".equals(messageType)) {
+            return handleCastV2Message(message);
+        } else if ("app_message".equals(messageType)) {
+            return handleAppMessage(message);
+        } else {
+            Log.e(TAG, "Unsupported message: %s", message);
             return false;
         }
-
-        mRouteProvider.onMessageSentResult(success, callbackId);
-        return true;
-    }
-
-    private boolean handleClientConnectMessage(JSONObject jsonMessage) throws JSONException {
-        String clientId = jsonMessage.getString("clientId");
-        if (clientId == null || !mRouteProvider.getClients().contains(clientId)) return false;
-
-        sendClientMessageTo(
-                clientId, "new_session", buildSessionMessage(), INVALID_SEQUENCE_NUMBER);
-
-        if (mMediaPlayer != null && !isApiClientInvalid()) mMediaPlayer.requestStatus(mApiClient);
-
-        return true;
-    }
-
-    private boolean handleClientDisconnectMessage(JSONObject jsonMessage) throws JSONException {
-        String clientId = jsonMessage.getString("clientId");
-        if (clientId == null || !mRouteProvider.getClients().contains(clientId)) return false;
-
-        mRouteProvider.onClientDisconnected(clientId);
-
-        return true;
-    }
-
-    // An example of the leave_session message.
-    //    {
-    //        "type": "leave_message",
-    //        "message": "<cast session id>",
-    //        "sequenceNumber": 0,  // optional
-    //        "timeoutMillis": 0,
-    //        "clientId": "<client id>"
-    //    }
-    private boolean handleLeaveSessionMessage(JSONObject jsonMessage) throws JSONException {
-        String clientId = jsonMessage.getString("clientId");
-
-        if (clientId == null || !mRouteProvider.getClients().contains(clientId)) return false;
-
-        String sessionId = jsonMessage.getString("message");
-        if (!mSessionId.equals(sessionId)) return false;
-
-        int sequenceNumber = jsonMessage.optInt("sequenceNumber", INVALID_SEQUENCE_NUMBER);
-
-        sendClientMessageTo(clientId, "leave_session", null, sequenceNumber);
-
-        // Send a "disconnect_session" message to all the clients that match with the leaving
-        // client's auto join policy.
-        Map<String, ClientRecord> clientRecords = mRouteProvider.getClientRecords();
-        ClientRecord leavingClient = clientRecords.get(clientId);
-        for (ClientRecord client : clientRecords.values()) {
-            if ((MediaSource.AUTOJOIN_TAB_AND_ORIGIN_SCOPED.equals(leavingClient.autoJoinPolicy)
-                            && client.origin.equals(leavingClient.origin)
-                            && client.tabId == leavingClient.tabId)
-                    || (MediaSource.AUTOJOIN_ORIGIN_SCOPED.equals(leavingClient.autoJoinPolicy)
-                            && client.origin.equals(leavingClient.origin))) {
-                sendClientMessageTo(
-                        client.clientId, "disconnect_session", sessionId, INVALID_SEQUENCE_NUMBER);
-            }
-        }
-
-
-        return true;
     }
 
     // An example of the Cast V2 message:
@@ -665,7 +589,7 @@ public class CastSession implements MediaNotificationListener {
         String namespaceName = jsonAppMessageWrapper.getString("namespaceName");
         if (namespaceName == null || namespaceName.isEmpty()) return false;
 
-        if (!mNamespaces.contains(namespaceName)) addNamespace(namespaceName);
+        if (!mNamespaces.contains(namespaceName)) return false;
 
         int sequenceNumber = jsonMessage.optInt("sequenceNumber", INVALID_SEQUENCE_NUMBER);
 
@@ -793,8 +717,6 @@ public class CastSession implements MediaNotificationListener {
             Log.e(TAG, "Failed to build the reply: " + e);
         }
 
-        Log.d(TAG, "Sending message to client: " + json);
-
         return json.toString();
     }
 
@@ -804,6 +726,8 @@ public class CastSession implements MediaNotificationListener {
         try {
             mApplicationStatus = Cast.CastApi.getApplicationStatus(mApiClient);
             mApplicationMetadata = Cast.CastApi.getApplicationMetadata(mApiClient);
+
+            updateNamespaces();
 
             broadcastClientMessage("update_session", buildSessionMessage());
         } catch (IllegalStateException e) {
@@ -896,14 +820,26 @@ public class CastSession implements MediaNotificationListener {
 
     private JSONArray extractNamespaces() throws JSONException {
         JSONArray jsonNamespaces = new JSONArray();
-        // TODO(avayvod): Need a way to retrieve all the supported namespaces (e.g. YouTube).
-        // See crbug.com/529680.
         for (String namespace : mNamespaces) {
             JSONObject jsonNamespace = new JSONObject();
             jsonNamespace.put("name", namespace);
             jsonNamespaces.put(jsonNamespace);
         }
         return jsonNamespaces;
+    }
+
+    private void updateNamespaces() {
+        if (mApplicationMetadata == null) return;
+
+        List<String> newNamespaces = mApplicationMetadata.getSupportedNamespaces();
+
+        Set<String> toRemove = new HashSet<String>(mNamespaces);
+        toRemove.removeAll(newNamespaces);
+        for (String namespaceToRemove : toRemove) unregisterNamespace(namespaceToRemove);
+
+        for (String newNamespace : newNamespaces) {
+            if (!mNamespaces.contains(newNamespace)) addNamespace(newNamespace);
+        }
     }
 
     private boolean isApiClientInvalid() {

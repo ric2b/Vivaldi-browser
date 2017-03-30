@@ -58,18 +58,18 @@ FormatBlockCommand::FormatBlockCommand(Document& document, const QualifiedName& 
 {
 }
 
-void FormatBlockCommand::formatSelection(const VisiblePosition& startOfSelection, const VisiblePosition& endOfSelection)
+void FormatBlockCommand::formatSelection(const VisiblePosition& startOfSelection, const VisiblePosition& endOfSelection, EditingState* editingState)
 {
     if (!isElementForFormatBlock(tagName()))
         return;
-    ApplyBlockElementCommand::formatSelection(startOfSelection, endOfSelection);
+    ApplyBlockElementCommand::formatSelection(startOfSelection, endOfSelection, editingState);
     m_didApply = true;
 }
 
-void FormatBlockCommand::formatRange(const Position& start, const Position& end, const Position& endOfSelection, RefPtrWillBeRawPtr<HTMLElement>& blockElement)
+void FormatBlockCommand::formatRange(const Position& start, const Position& end, const Position& endOfSelection, RefPtrWillBeRawPtr<HTMLElement>& blockElement, EditingState* editingState)
 {
     Element* refElement = enclosingBlockFlowElement(createVisiblePosition(end));
-    Element* root = editableRootForPosition(start);
+    Element* root = rootEditableElementOf(start);
     // Root is null for elements with contenteditable=false.
     if (!root || !refElement)
         return;
@@ -92,20 +92,24 @@ void FormatBlockCommand::formatRange(const Position& start, const Position& end,
         // Create a new blockquote and insert it as a child of the root editable element. We accomplish
         // this by splitting all parents of the current paragraph up to that point.
         blockElement = createBlockElement();
-        insertNodeBefore(blockElement, nodeAfterInsertionPosition);
+        insertNodeBefore(blockElement, nodeAfterInsertionPosition, editingState);
+        if (editingState->isAborted())
+            return;
     }
 
     Position lastParagraphInBlockNode = blockElement->lastChild() ? positionAfterNode(blockElement->lastChild()) : Position();
     bool wasEndOfParagraph = isEndOfParagraph(createVisiblePosition(lastParagraphInBlockNode));
 
-    moveParagraphWithClones(createVisiblePosition(start), createVisiblePosition(end), blockElement.get(), outerBlock.get());
+    moveParagraphWithClones(createVisiblePosition(start), createVisiblePosition(end), blockElement.get(), outerBlock.get(), editingState);
+    if (editingState->isAborted())
+        return;
 
     // Copy the inline style of the original block element to the newly created block-style element.
     if (outerBlock.get() != nodeAfterInsertionPosition.get() && toHTMLElement(nodeAfterInsertionPosition.get())->hasAttribute(styleAttr))
         blockElement->setAttribute(styleAttr, toHTMLElement(nodeAfterInsertionPosition.get())->getAttribute(styleAttr));
 
     if (wasEndOfParagraph && !isEndOfParagraph(createVisiblePosition(lastParagraphInBlockNode)) && !isStartOfParagraph(createVisiblePosition(lastParagraphInBlockNode)))
-        insertBlockPlaceholder(lastParagraphInBlockNode);
+        insertBlockPlaceholder(lastParagraphInBlockNode, editingState);
 }
 
 Element* FormatBlockCommand::elementForFormatBlockCommand(Range* range)
@@ -173,4 +177,4 @@ Node* enclosingBlockToSplitTreeTo(Node* startNode)
     return lastBlock;
 }
 
-}
+} // namespace blink

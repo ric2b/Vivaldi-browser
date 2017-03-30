@@ -12,17 +12,19 @@ namespace blink {
 using namespace HTMLNames;
 
 
-RelList::RelList(Element* element) : m_element(element) { }
+RelList::RelList(Element* element) : DOMTokenList(nullptr), m_element(element) { }
 
 #if !ENABLE(OILPAN)
 void RelList::ref()
 {
     m_element->ref();
+    DOMTokenList::ref();
 }
 
 void RelList::deref()
 {
     m_element->deref();
+    DOMTokenList::deref();
 }
 #endif
 
@@ -60,7 +62,6 @@ static RelList::SupportedTokens& supportedTokens()
         supportedValuesMap.add("icon");
         supportedValuesMap.add("alternate");
         supportedValuesMap.add("prefetch");
-        supportedValuesMap.add("subresource");
         supportedValuesMap.add("prerender");
         supportedValuesMap.add("next");
         supportedValuesMap.add("manifest");

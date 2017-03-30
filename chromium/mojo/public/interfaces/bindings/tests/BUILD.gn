@@ -22,8 +22,20 @@ mojom("test_interfaces") {
     "test_constants.mojom",
     "test_native_types.mojom",
     "test_structs.mojom",
+    "test_sync_methods.mojom",
     "validation_test_interfaces.mojom",
   ]
+
+  with_environment = false
+}
+
+mojom("test_struct_traits_interfaces") {
+  testonly = true
+  sources = [
+    "struct_with_traits.mojom",
+  ]
+
+  typemaps = [ "struct_with_traits.typemap" ]
 
   with_environment = false
 }

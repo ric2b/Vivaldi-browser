@@ -23,12 +23,12 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.library_loader.LibraryLoader;
-import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.Linker;
 import org.chromium.base.library_loader.ProcessInitException;
-import org.chromium.content.browser.ChildProcessConnection;
+import org.chromium.content.browser.ChildProcessConstants;
 import org.chromium.content.browser.ChildProcessLauncher;
 import org.chromium.content.browser.FileDescriptorInfo;
+import org.chromium.content.common.ContentSwitches;
 import org.chromium.content.common.IChildProcessCallback;
 import org.chromium.content.common.IChildProcessService;
 import org.chromium.content.common.SurfaceWrapper;
@@ -50,7 +50,8 @@ import java.util.concurrent.atomic.AtomicReference;
 @SuppressWarnings("SynchronizeOnNonFinalField")
 public class ChildProcessService extends Service {
     private static final String MAIN_THREAD_NAME = "ChildProcessMain";
-    private static final String TAG = "cr.ChildProcessService";
+    private static final String TAG = "ChildProcessService";
+    protected static final FileDescriptorInfo[] EMPTY_FILE_DESCRIPTOR_INFO = {};
     private IChildProcessCallback mCallback;
 
     // This is the native "Main" thread for the renderer / utility process.
@@ -63,6 +64,8 @@ public class ChildProcessService extends Service {
     private FileDescriptorInfo[] mFdInfos;
     // Linker-specific parameters for this child process service.
     private ChromiumLinkerParams mLinkerParams;
+    // Child library process type.
+    private int mLibraryProcessType;
 
     private static AtomicReference<Context> sContext = new AtomicReference<Context>(null);
     private boolean mLibraryInitialized = false;
@@ -90,33 +93,7 @@ public class ChildProcessService extends Service {
         @Override
         public int setupConnection(Bundle args, IChildProcessCallback callback) {
             mCallback = callback;
-            // Required to unparcel FileDescriptorInfo.
-            args.setClassLoader(getClassLoader());
-            synchronized (mMainThread) {
-                // Allow the command line to be set via bind() intent or setupConnection, but
-                // the FD can only be transferred here.
-                if (mCommandLineParams == null) {
-                    mCommandLineParams = args.getStringArray(
-                            ChildProcessConnection.EXTRA_COMMAND_LINE);
-                }
-                // We must have received the command line by now
-                assert mCommandLineParams != null;
-                mCpuCount = args.getInt(ChildProcessConnection.EXTRA_CPU_COUNT);
-                mCpuFeatures = args.getLong(ChildProcessConnection.EXTRA_CPU_FEATURES);
-                assert mCpuCount > 0;
-                Parcelable[] fdInfosAsParcelable =
-                        args.getParcelableArray(ChildProcessConnection.EXTRA_FILES);
-                // For why this arraycopy is necessary:
-                // http://stackoverflow.com/questions/8745893/i-dont-get-why-this-classcastexception-occurs
-                mFdInfos = new FileDescriptorInfo[fdInfosAsParcelable.length];
-                System.arraycopy(fdInfosAsParcelable, 0, mFdInfos, 0, fdInfosAsParcelable.length);
-                Bundle sharedRelros = args.getBundle(Linker.EXTRA_LINKER_SHARED_RELROS);
-                if (sharedRelros != null) {
-                    getLinker().useSharedRelros(sharedRelros);
-                    sharedRelros = null;
-                }
-                mMainThread.notifyAll();
-            }
+            getServiceInfo(args);
             return Process.myPid();
         }
 
@@ -176,8 +153,7 @@ public class ChildProcessService extends Service {
 
                     boolean loadAtFixedAddressFailed = false;
                     try {
-                        LibraryLoader.get(LibraryProcessType.PROCESS_CHILD)
-                                .loadNow(getApplicationContext());
+                        LibraryLoader.get(mLibraryProcessType).loadNow(getApplicationContext());
                         isLoaded = true;
                     } catch (ProcessInitException e) {
                         if (requestedSharedRelro) {
@@ -191,8 +167,7 @@ public class ChildProcessService extends Service {
                     if (!isLoaded && requestedSharedRelro) {
                         linker.disableSharedRelros();
                         try {
-                            LibraryLoader.get(LibraryProcessType.PROCESS_CHILD)
-                                    .loadNow(getApplicationContext());
+                            LibraryLoader.get(mLibraryProcessType).loadNow(getApplicationContext());
                             isLoaded = true;
                         } catch (ProcessInitException e) {
                             Log.e(TAG, "Failed to load native library on retry", e);
@@ -201,10 +176,10 @@ public class ChildProcessService extends Service {
                     if (!isLoaded) {
                         System.exit(-1);
                     }
-                    LibraryLoader.get(LibraryProcessType.PROCESS_CHILD)
+                    LibraryLoader.get(mLibraryProcessType)
                             .registerRendererProcessHistogram(requestedSharedRelro,
                                     loadAtFixedAddressFailed);
-                    LibraryLoader.get(LibraryProcessType.PROCESS_CHILD).initialize();
+                    LibraryLoader.get(mLibraryProcessType).initialize();
                     synchronized (mMainThread) {
                         mLibraryInitialized = true;
                         mMainThread.notifyAll();
@@ -268,18 +243,67 @@ public class ChildProcessService extends Service {
         // child processes do not currently support reconnect; they must be initialized from
         // scratch every time.
         stopSelf();
+        initializeParams(intent);
+        return mBinder;
+    }
 
+    /**
+     * Helper method to initialize the params from intent.
+     * @param intent Intent to launch the service.
+     */
+    protected void initializeParams(Intent intent) {
         synchronized (mMainThread) {
-            mCommandLineParams = intent.getStringArrayExtra(
-                    ChildProcessConnection.EXTRA_COMMAND_LINE);
+            mCommandLineParams =
+                    intent.getStringArrayExtra(ChildProcessConstants.EXTRA_COMMAND_LINE);
             // mLinkerParams is never used if Linker.isUsed() returns false.
             // See onCreate().
             mLinkerParams = new ChromiumLinkerParams(intent);
+            mLibraryProcessType =
+                    ChildProcessLauncher.ChildProcessCreationParams.getLibraryProcessType(intent);
             mIsBound = true;
             mMainThread.notifyAll();
         }
+    }
 
-        return mBinder;
+    /**
+     * Helper method to get the information about the service from a given bundle.
+     * @param bundle Bundle that contains the information to start the service.
+     */
+    void getServiceInfo(Bundle bundle) {
+        // Required to unparcel FileDescriptorInfo.
+        bundle.setClassLoader(getClassLoader());
+        synchronized (mMainThread) {
+            // Allow the command line to be set via bind() intent or setupConnection, but
+            // the FD can only be transferred here.
+            if (mCommandLineParams == null) {
+                mCommandLineParams =
+                        bundle.getStringArray(ChildProcessConstants.EXTRA_COMMAND_LINE);
+            }
+            // We must have received the command line by now
+            assert mCommandLineParams != null;
+            mCpuCount = bundle.getInt(ChildProcessConstants.EXTRA_CPU_COUNT);
+            mCpuFeatures = bundle.getLong(ChildProcessConstants.EXTRA_CPU_FEATURES);
+            assert mCpuCount > 0;
+            Parcelable[] fdInfosAsParcelable =
+                    bundle.getParcelableArray(ChildProcessConstants.EXTRA_FILES);
+            if (fdInfosAsParcelable != null) {
+                // For why this arraycopy is necessary:
+                // http://stackoverflow.com/questions/8745893/i-dont-get-why-this-classcastexception-occurs
+                mFdInfos = new FileDescriptorInfo[fdInfosAsParcelable.length];
+                System.arraycopy(fdInfosAsParcelable, 0, mFdInfos, 0, fdInfosAsParcelable.length);
+            } else {
+                String processType = ContentSwitches.getSwitchValue(
+                        mCommandLineParams, ContentSwitches.SWITCH_PROCESS_TYPE);
+                assert ContentSwitches.SWITCH_DOWNLOAD_PROCESS.equals(processType);
+                mFdInfos = EMPTY_FILE_DESCRIPTOR_INFO;
+            }
+            Bundle sharedRelros = bundle.getBundle(Linker.EXTRA_LINKER_SHARED_RELROS);
+            if (sharedRelros != null) {
+                getLinker().useSharedRelros(sharedRelros);
+                sharedRelros = null;
+            }
+            mMainThread.notifyAll();
+        }
     }
 
     /**

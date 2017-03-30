@@ -27,7 +27,6 @@
 #define ScriptRunner_h
 
 #include "core/CoreExport.h"
-#include "core/fetch/ResourcePtr.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Deque.h"
 #include "wtf/HashMap.h"
@@ -98,6 +97,7 @@ private:
 #endif
 
 #if !ENABLE(OILPAN)
+    bool m_isDisposed;
     WeakPtrFactory<ScriptRunner> m_weakPointerFactoryForTasks;
 #endif
 };

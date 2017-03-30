@@ -10,20 +10,20 @@
 #include "base/debug/leak_tracker.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/safe_browsing/metadata.pb.h"
 #include "chrome/browser/safe_browsing/ping_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_blocking_page.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/safe_browsing/threat_details.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
+#include "components/safe_browsing_db/metadata.pb.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
@@ -72,6 +72,9 @@ SafeBrowsingUIManager::UnsafeResource::UnsafeResource()
       render_process_host_id(-1),
       render_frame_id(MSG_ROUTING_NONE),
       threat_source(safe_browsing::ThreatSource::UNKNOWN) {}
+
+SafeBrowsingUIManager::UnsafeResource::UnsafeResource(
+    const UnsafeResource& other) = default;
 
 SafeBrowsingUIManager::UnsafeResource::~UnsafeResource() { }
 

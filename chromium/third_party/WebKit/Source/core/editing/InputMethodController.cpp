@@ -238,7 +238,7 @@ void InputMethodController::setComposition(const String& text, const Vector<Comp
     // Updates styles before setting selection for composition to prevent
     // inserting the previous composition text into text nodes oddly.
     // See https://bugs.webkit.org/show_bug.cgi?id=46868
-    frame().document()->updateLayoutTreeIfNeeded();
+    frame().document()->updateLayoutTree();
 
     selectComposition();
 
@@ -349,11 +349,11 @@ void InputMethodController::setCompositionFromExistingText(const Vector<Composit
         return;
 
     const Position start = range.startPosition();
-    if (editableRootForPosition(start) != editable)
+    if (rootEditableElementOf(start) != editable)
         return;
 
     const Position end = range.endPosition();
-    if (editableRootForPosition(end) != editable)
+    if (rootEditableElementOf(end) != editable)
         return;
 
     clear();

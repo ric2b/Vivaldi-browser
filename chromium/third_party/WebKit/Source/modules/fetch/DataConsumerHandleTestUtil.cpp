@@ -11,15 +11,15 @@ namespace blink {
 DataConsumerHandleTestUtil::Thread::Thread(const char* name, InitializationPolicy initializationPolicy)
     : m_thread(WebThreadSupportingGC::create(name))
     , m_initializationPolicy(initializationPolicy)
-    , m_waitableEvent(adoptPtr(Platform::current()->createWaitableEvent()))
+    , m_waitableEvent(adoptPtr(new WaitableEvent()))
 {
-    m_thread->postTask(BLINK_FROM_HERE, new Task(threadSafeBind(&Thread::initialize, AllowCrossThreadAccess(this))));
+    m_thread->postTask(BLINK_FROM_HERE, threadSafeBind(&Thread::initialize, AllowCrossThreadAccess(this)));
     m_waitableEvent->wait();
 }
 
 DataConsumerHandleTestUtil::Thread::~Thread()
 {
-    m_thread->postTask(BLINK_FROM_HERE, new Task(threadSafeBind(&Thread::shutdown, AllowCrossThreadAccess(this))));
+    m_thread->postTask(BLINK_FROM_HERE, threadSafeBind(&Thread::shutdown, AllowCrossThreadAccess(this)));
     m_waitableEvent->wait();
 }
 
@@ -165,7 +165,7 @@ DataConsumerHandleTestUtil::ReplayingHandle::Context::Context()
     , m_client(nullptr)
     , m_result(ShouldWait)
     , m_isHandleAttached(true)
-    , m_detached(adoptPtr(Platform::current()->createWaitableEvent()))
+    , m_detached(adoptPtr(new WaitableEvent()))
 {
 }
 
@@ -193,7 +193,7 @@ void DataConsumerHandleTestUtil::ReplayingHandle::Context::notify()
     if (!m_client)
         return;
     ASSERT(m_readerThread);
-    m_readerThread->taskRunner()->postTask(BLINK_FROM_HERE, new Task(threadSafeBind(&Context::notifyInternal, this)));
+    m_readerThread->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&Context::notifyInternal, this));
 }
 
 void DataConsumerHandleTestUtil::ReplayingHandle::Context::notifyInternal()
@@ -250,7 +250,7 @@ void DataConsumerHandleTestUtil::HandleReader::didGetReadable()
     }
     OwnPtr<HandleReadResult> result = adoptPtr(new HandleReadResult(r, m_data));
     m_data.clear();
-    Platform::current()->currentThread()->taskRunner()->postTask(BLINK_FROM_HERE, new Task(bind(&HandleReader::runOnFinishedReading, this, result.release())));
+    Platform::current()->currentThread()->taskRunner()->postTask(BLINK_FROM_HERE, bind(&HandleReader::runOnFinishedReading, this, result.release()));
     m_reader = nullptr;
 }
 
@@ -284,7 +284,7 @@ void DataConsumerHandleTestUtil::HandleTwoPhaseReader::didGetReadable()
     }
     OwnPtr<HandleReadResult> result = adoptPtr(new HandleReadResult(r, m_data));
     m_data.clear();
-    Platform::current()->currentThread()->taskRunner()->postTask(BLINK_FROM_HERE, new Task(bind(&HandleTwoPhaseReader::runOnFinishedReading, this, result.release())));
+    Platform::current()->currentThread()->taskRunner()->postTask(BLINK_FROM_HERE, bind(&HandleTwoPhaseReader::runOnFinishedReading, this, result.release()));
     m_reader = nullptr;
 }
 

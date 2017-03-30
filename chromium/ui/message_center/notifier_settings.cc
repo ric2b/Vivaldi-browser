@@ -24,6 +24,8 @@ NotifierId::NotifierId()
     : type(SYSTEM_COMPONENT) {
 }
 
+NotifierId::NotifierId(const NotifierId& other) = default;
+
 bool NotifierId::operator==(const NotifierId& other) const {
   if (type != other.type)
     return false;
@@ -63,9 +65,8 @@ Notifier::~Notifier() {
 
 NotifierGroup::NotifierGroup(const gfx::Image& icon,
                              const base::string16& name,
-                             const base::string16& login_info,
-                             size_t index)
-    : icon(icon), name(name), login_info(login_info), index(index) {}
+                             const base::string16& login_info)
+    : icon(icon), name(name), login_info(login_info) {}
 
 NotifierGroup::~NotifierGroup() {}
 

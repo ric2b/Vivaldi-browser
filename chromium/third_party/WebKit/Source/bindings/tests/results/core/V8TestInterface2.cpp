@@ -14,12 +14,9 @@
 #include "bindings/core/v8/V8Iterator.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
 #include "bindings/core/v8/V8TestInterfaceEmpty.h"
-#include "core/dom/ContextFeatures.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/frame/LocalDOMWindow.h"
-#include "platform/RuntimeEnabledFeatures.h"
-#include "platform/TraceEvent.h"
 #include "wtf/GetPtr.h"
 #include "wtf/RefPtr.h"
 
@@ -31,7 +28,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestInterface2::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterface2::domTemplate, V8TestInterface2::refObject, V8TestInterface2::derefObject, V8TestInterface2::trace, 0, V8TestInterface2::visitDOMWrapper, V8TestInterface2::preparePrototypeAndInterfaceObject, V8TestInterface2::installConditionallyEnabledProperties, "TestInterface2", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Dependent, WrapperTypeInfo::RefCountedObject };
+const WrapperTypeInfo V8TestInterface2::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterface2::domTemplate, V8TestInterface2::refObject, V8TestInterface2::derefObject, V8TestInterface2::trace, V8TestInterface2::visitDOMWrapper, V8TestInterface2::preparePrototypeAndInterfaceObject, V8TestInterface2::installConditionallyEnabledProperties, "TestInterface2", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Dependent, WrapperTypeInfo::RefCountedObject };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -68,9 +65,7 @@ static void itemMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 
 static void itemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     TestInterface2V8Internal::itemMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void setItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -105,9 +100,7 @@ static void setItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 
 static void setItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     TestInterface2V8Internal::setItemMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void deleteItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -135,9 +128,7 @@ static void deleteItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 
 static void deleteItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     TestInterface2V8Internal::deleteItemMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void namedItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -165,9 +156,7 @@ static void namedItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 
 static void namedItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     TestInterface2V8Internal::namedItemMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void setNamedItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -202,9 +191,7 @@ static void setNamedItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 
 static void setNamedItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     TestInterface2V8Internal::setNamedItemMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void deleteNamedItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -232,9 +219,7 @@ static void deleteNamedItemMethod(const v8::FunctionCallbackInfo<v8::Value>& inf
 
 static void deleteNamedItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     TestInterface2V8Internal::deleteNamedItemMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void stringifierMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -245,9 +230,7 @@ static void stringifierMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& i
 
 static void stringifierMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     TestInterface2V8Internal::stringifierMethodMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void keysMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -265,9 +248,7 @@ static void keysMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 
 static void keysMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     TestInterface2V8Internal::keysMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void valuesMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -285,9 +266,7 @@ static void valuesMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 
 static void valuesMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     TestInterface2V8Internal::valuesMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void entriesMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -305,9 +284,7 @@ static void entriesMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 
 static void entriesMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     TestInterface2V8Internal::entriesMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void forEachMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -340,9 +317,7 @@ static void forEachMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 
 static void forEachMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     TestInterface2V8Internal::forEachMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void hasMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -374,9 +349,7 @@ static void hasMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 
 static void hasMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     TestInterface2V8Internal::hasMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void toStringMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -387,9 +360,7 @@ static void toStringMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 
 static void toStringMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     TestInterface2V8Internal::toStringMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void iteratorMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -407,9 +378,7 @@ static void iteratorMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 
 static void iteratorMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     TestInterface2V8Internal::iteratorMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -434,9 +403,7 @@ static void indexedPropertyGetter(uint32_t index, const v8::PropertyCallbackInfo
 
 static void indexedPropertyGetterCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMIndexedProperty");
     TestInterface2V8Internal::indexedPropertyGetter(index, info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void indexedPropertySetter(uint32_t index, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -459,9 +426,7 @@ static void indexedPropertySetter(uint32_t index, v8::Local<v8::Value> v8Value, 
 
 static void indexedPropertySetterCallback(uint32_t index, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMIndexedProperty");
     TestInterface2V8Internal::indexedPropertySetter(index, v8Value, info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void indexedPropertyDeleter(uint32_t index, const v8::PropertyCallbackInfo<v8::Boolean>& info)
@@ -477,9 +442,7 @@ static void indexedPropertyDeleter(uint32_t index, const v8::PropertyCallbackInf
 
 static void indexedPropertyDeleterCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Boolean>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMIndexedProperty");
     TestInterface2V8Internal::indexedPropertyDeleter(index, info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void namedPropertyGetter(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -499,9 +462,7 @@ static void namedPropertyGetter(v8::Local<v8::Name> name, const v8::PropertyCall
 
 static void namedPropertyGetterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMNamedProperty");
     TestInterface2V8Internal::namedPropertyGetter(name, info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void namedPropertySetter(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -529,9 +490,7 @@ static void namedPropertySetter(v8::Local<v8::Name> name, v8::Local<v8::Value> v
 
 static void namedPropertySetterCallback(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMNamedProperty");
     TestInterface2V8Internal::namedPropertySetter(name, v8Value, info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void namedPropertyQuery(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Integer>& info)
@@ -550,9 +509,7 @@ static void namedPropertyQuery(v8::Local<v8::Name> name, const v8::PropertyCallb
 
 static void namedPropertyQueryCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Integer>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMNamedProperty");
     TestInterface2V8Internal::namedPropertyQuery(name, info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void namedPropertyDeleter(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Boolean>& info)
@@ -570,9 +527,7 @@ static void namedPropertyDeleter(v8::Local<v8::Name> name, const v8::PropertyCal
 
 static void namedPropertyDeleterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Boolean>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMNamedProperty");
     TestInterface2V8Internal::namedPropertyDeleter(name, info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void namedPropertyEnumerator(const v8::PropertyCallbackInfo<v8::Array>& info)
@@ -593,9 +548,7 @@ static void namedPropertyEnumerator(const v8::PropertyCallbackInfo<v8::Array>& i
 
 static void namedPropertyEnumeratorCallback(const v8::PropertyCallbackInfo<v8::Array>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMNamedProperty");
     TestInterface2V8Internal::namedPropertyEnumerator(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 } // namespace TestInterface2V8Internal
@@ -629,7 +582,6 @@ const V8DOMConfiguration::MethodConfiguration V8TestInterface2Methods[] = {
 
 void V8TestInterface2::constructorCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SCOPED_SAMPLING_STATE("blink", "DOMConstructor");
     if (!info.IsConstructCall()) {
         V8ThrowException::throwTypeError(info.GetIsolate(), ExceptionMessages::constructorNotCallableAsFunction("TestInterface2"));
         return;
@@ -648,7 +600,7 @@ static void installV8TestInterface2Template(v8::Local<v8::FunctionTemplate> func
     functionTemplate->ReadOnlyPrototype();
 
     v8::Local<v8::Signature> defaultSignature;
-    defaultSignature = V8DOMConfiguration::installDOMClassTemplate(isolate, functionTemplate, "TestInterface2", v8::Local<v8::FunctionTemplate>(), V8TestInterface2::internalFieldCount,
+    defaultSignature = V8DOMConfiguration::installDOMClassTemplate(isolate, functionTemplate, V8TestInterface2::wrapperTypeInfo.interfaceName, v8::Local<v8::FunctionTemplate>(), V8TestInterface2::internalFieldCount,
         0, 0,
         0, 0,
         V8TestInterface2Methods, WTF_ARRAY_LENGTH(V8TestInterface2Methods));
@@ -658,6 +610,7 @@ static void installV8TestInterface2Template(v8::Local<v8::FunctionTemplate> func
     ALLOW_UNUSED_LOCAL(instanceTemplate);
     v8::Local<v8::ObjectTemplate> prototypeTemplate = functionTemplate->PrototypeTemplate();
     ALLOW_UNUSED_LOCAL(prototypeTemplate);
+    V8DOMConfiguration::setClassString(isolate, prototypeTemplate, V8TestInterface2::wrapperTypeInfo.interfaceName);
     if (RuntimeEnabledFeatures::featureNameEnabled()) {
         const V8DOMConfiguration::ConstantConfiguration constantConstValue1Configuration = {"CONST_VALUE_1", 1, 0, V8DOMConfiguration::ConstantTypeUnsignedShort};
         V8DOMConfiguration::installConstant(isolate, functionTemplate, prototypeTemplate, constantConstValue1Configuration);

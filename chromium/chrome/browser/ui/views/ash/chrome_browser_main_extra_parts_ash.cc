@@ -18,53 +18,12 @@
 #include "chrome/common/chrome_switches.h"
 #include "ui/aura/env.h"
 #include "ui/gfx/screen.h"
-#include "ui/gfx/screen_type_delegate.h"
 #include "ui/keyboard/content/keyboard.h"
 #include "ui/keyboard/keyboard_controller.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/ui/views/select_file_dialog_extension.h"
 #include "chrome/browser/ui/views/select_file_dialog_extension_factory.h"
-#endif
-
-#if !defined(OS_CHROMEOS)
-#include "ui/shell_dialogs/select_file_dialog.h"
-#include "ui/shell_dialogs/shell_dialogs_delegate.h"
-#endif
-
-#if defined(OS_WIN)
-#include "base/win/windows_version.h"
-#endif
-
-#if !defined(OS_CHROMEOS)
-class ScreenTypeDelegateWin : public gfx::ScreenTypeDelegate {
- public:
-  ScreenTypeDelegateWin() {}
-  gfx::ScreenType GetScreenTypeForNativeView(gfx::NativeView view) override {
-    return chrome::IsNativeViewInAsh(view) ?
-        gfx::SCREEN_TYPE_ALTERNATE :
-        gfx::SCREEN_TYPE_NATIVE;
-  }
- private:
-  DISALLOW_COPY_AND_ASSIGN(ScreenTypeDelegateWin);
-};
-
-class ShellDialogsDelegateWin : public ui::ShellDialogsDelegate {
- public:
-  ShellDialogsDelegateWin() {}
-  bool IsWindowInMetro(gfx::NativeWindow window) override {
-#if defined(OS_WIN)
-    if (base::win::GetVersion() < base::win::VERSION_WIN8)
-      return false;
-#endif
-    return chrome::IsNativeViewInAsh(window);
-  }
- private:
-  DISALLOW_COPY_AND_ASSIGN(ShellDialogsDelegateWin);
-};
-
-base::LazyInstance<ShellDialogsDelegateWin> g_shell_dialogs_delegate;
-
 #endif
 
 ChromeBrowserMainExtraPartsAsh::ChromeBrowserMainExtraPartsAsh() {
@@ -80,12 +39,6 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   ash::Shell::GetInstance()->CreateShelf();
   ash::Shell::GetInstance()->ShowShelf();
-#endif
-  } else {
-#if !defined(OS_CHROMEOS)
-    gfx::Screen::SetScreenTypeDelegate(new ScreenTypeDelegateWin);
-    ui::SelectFileDialog::SetShellDialogsDelegate(
-        g_shell_dialogs_delegate.Pointer());
 #endif
   }
 #if defined(OS_CHROMEOS)

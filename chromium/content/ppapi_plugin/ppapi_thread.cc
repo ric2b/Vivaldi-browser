@@ -55,7 +55,7 @@
 #if defined(OS_WIN)
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
-#include "content/common/font_warmup_win.h"
+#include "content/child/font_warmup_win.h"
 #include "sandbox/win/src/sandbox.h"
 #elif defined(OS_MACOSX)
 #include "content/common/sandbox_init_mac.h"
@@ -208,27 +208,8 @@ IPC::PlatformFileForTransit PpapiThread::ShareHandleWithRemote(
 base::SharedMemoryHandle PpapiThread::ShareSharedMemoryHandleWithRemote(
     const base::SharedMemoryHandle& handle,
     base::ProcessId remote_pid) {
-#if defined(OS_WIN)
-  if (peer_handle_.IsValid()) {
-    DCHECK(is_broker_);
-    IPC::PlatformFileForTransit platform_file = IPC::GetFileHandleForProcess(
-        handle.GetHandle(), peer_handle_.Get(), false);
-    base::ProcessId pid = base::GetProcId(peer_handle_.Get());
-    return base::SharedMemoryHandle(platform_file, pid);
-  }
-#endif
-
   DCHECK(remote_pid != base::kNullProcessId);
-#if defined(OS_WIN) || defined(OS_MACOSX)
-  base::SharedMemoryHandle duped_handle;
-  bool success =
-      BrokerDuplicateSharedMemoryHandle(handle, remote_pid, &duped_handle);
-  if (success)
-    return duped_handle;
-  return base::SharedMemory::NULLHandle();
-#else
   return base::SharedMemory::DuplicateHandle(handle);
-#endif  // defined(OS_WIN) || defined(OS_MACOSX)
 }
 
 std::set<PP_Instance>* PpapiThread::GetGloballySeenInstanceIDSet() {

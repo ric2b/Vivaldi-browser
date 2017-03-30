@@ -53,7 +53,7 @@ class CC_EXPORT OneCopyTileTaskWorkerPool
       int max_copy_texture_chromium_size,
       bool use_partial_raster,
       int max_staging_buffer_usage_in_bytes,
-      bool use_rgba_4444_texture_format);
+      ResourceFormat preferred_tile_format);
 
   // Overridden from TileTaskWorkerPool:
   TileTaskRunner* AsTileTaskRunner() override;
@@ -79,7 +79,7 @@ class CC_EXPORT OneCopyTileTaskWorkerPool
   // Playback raster source and copy result into |resource|.
   void PlaybackAndCopyOnWorkerThread(
       const Resource* resource,
-      const ResourceProvider::ScopedWriteLockGL* resource_lock,
+      ResourceProvider::ScopedWriteLockGL* resource_lock,
       const DisplayListRasterSource* raster_source,
       const gfx::Rect& raster_full_rect,
       const gfx::Rect& raster_dirty_rect,
@@ -95,7 +95,7 @@ class CC_EXPORT OneCopyTileTaskWorkerPool
                             int max_copy_texture_chromium_size,
                             bool use_partial_raster,
                             int max_staging_buffer_usage_in_bytes,
-                            bool use_rgba_4444_texture_format);
+                            ResourceFormat preferred_tile_format);
 
  private:
   struct StagingBuffer {
@@ -152,7 +152,7 @@ class CC_EXPORT OneCopyTileTaskWorkerPool
   StagingBufferDeque busy_buffers_;
   int bytes_scheduled_since_last_flush_;
   const int max_staging_buffer_usage_in_bytes_;
-  bool use_rgba_4444_texture_format_;
+  ResourceFormat preferred_tile_format_;
   int staging_buffer_usage_in_bytes_;
   int free_staging_buffer_usage_in_bytes_;
   const base::TimeDelta staging_buffer_expiration_delay_;

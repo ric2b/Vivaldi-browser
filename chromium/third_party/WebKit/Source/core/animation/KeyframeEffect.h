@@ -48,6 +48,8 @@ class ExceptionState;
 class PropertyHandle;
 class SampledEffect;
 
+// Represents the effect of an Animation on an Element's properties.
+// http://w3c.github.io/web-animations/#keyframe-effect
 class CORE_EXPORT KeyframeEffect final : public AnimationEffect {
     DEFINE_WRAPPERTYPEINFO();
 public:
@@ -55,9 +57,9 @@ public:
 
     static KeyframeEffect* create(Element*, EffectModel*, const Timing&, Priority = DefaultPriority, EventDelegate* = nullptr);
     // Web Animations API Bindings constructors.
-    static KeyframeEffect* create(Element*, const Vector<Dictionary>& keyframeDictionaryVector, double duration, ExceptionState&);
-    static KeyframeEffect* create(Element*, const Vector<Dictionary>& keyframeDictionaryVector, const KeyframeEffectOptions& timingInput, ExceptionState&);
-    static KeyframeEffect* create(Element*, const Vector<Dictionary>& keyframeDictionaryVector, ExceptionState&);
+    static KeyframeEffect* create(Element*, const EffectModelOrDictionarySequenceOrDictionary& effectInput, double duration, ExceptionState&);
+    static KeyframeEffect* create(Element*, const EffectModelOrDictionarySequenceOrDictionary& effectInput, const KeyframeEffectOptions& timingInput, ExceptionState&);
+    static KeyframeEffect* create(Element*, const EffectModelOrDictionarySequenceOrDictionary& effectInput, ExceptionState&);
 
     ~KeyframeEffect() override;
 
@@ -67,9 +69,10 @@ public:
     const EffectModel* model() const { return m_model.get(); }
     EffectModel* model() { return m_model.get(); }
     void setModel(EffectModel* model) { m_model = model; }
-    Priority priority() const { return m_priority; }
+    Priority getPriority() const { return m_priority; }
     Element* target() const { return m_target; }
 
+    void notifySampledEffectRemovedFromAnimationStack();
 #if !ENABLE(OILPAN)
     void notifyElementDestroyed();
 #endif

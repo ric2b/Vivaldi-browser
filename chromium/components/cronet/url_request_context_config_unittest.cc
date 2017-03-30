@@ -19,6 +19,8 @@ TEST(URLRequestContextConfigTest, SetQuicExperimentalOptions) {
   URLRequestContextConfig config(
       // Enable QUIC.
       true,
+      // QUIC User Agent ID.
+      "Default QUIC User Agent ID",
       // Enable SPDY.
       true,
       // Enable SDCH.
@@ -38,8 +40,11 @@ TEST(URLRequestContextConfigTest, SetQuicExperimentalOptions) {
       "{\"QUIC\":{\"max_server_configs_stored_in_properties\":2,"
       "\"delay_tcp_race\":true,"
       "\"max_number_of_lossy_connections\":10,"
+      "\"prefer_aes\":true,"
+      "\"user_agent_id\":\"Custom QUIC UAID\","
       "\"packet_loss_threshold\":0.5,"
       "\"idle_connection_timeout_seconds\":300,"
+      "\"close_sessions_on_ip_change\":true,"
       "\"connection_options\":\"TIME,TBBR,REJ\"},"
       "\"AsyncDNS\":{\"enable\":true}}",
       // Data reduction proxy key.
@@ -69,11 +74,17 @@ TEST(URLRequestContextConfigTest, SetQuicExperimentalOptions) {
   quic_connection_options.push_back(net::kREJ);
   EXPECT_EQ(quic_connection_options, params->quic_connection_options);
 
+  // Check Custom QUIC User Agent Id.
+  EXPECT_EQ("Custom QUIC UAID", params->quic_user_agent_id);
+
   // Check max_server_configs_stored_in_properties.
   EXPECT_EQ(2u, params->quic_max_server_configs_stored_in_properties);
 
   // Check delay_tcp_race.
   EXPECT_TRUE(params->quic_delay_tcp_race);
+
+  // Check prefer_aes.
+  EXPECT_TRUE(params->quic_prefer_aes);
 
   // Check max_number_of_lossy_connections and packet_loss_threshold.
   EXPECT_EQ(10, params->quic_max_number_of_lossy_connections);
@@ -82,8 +93,61 @@ TEST(URLRequestContextConfigTest, SetQuicExperimentalOptions) {
   // Check idle_connection_timeout_seconds.
   EXPECT_EQ(300, params->quic_idle_connection_timeout_seconds);
 
+  EXPECT_TRUE(params->quic_close_sessions_on_ip_change);
+  EXPECT_FALSE(params->quic_migrate_sessions_on_network_change);
+
   // Check AsyncDNS resolver is enabled.
   EXPECT_TRUE(context->host_resolver()->GetDnsConfigAsValue());
+}
+
+TEST(URLRequestContextConfigTest, SetQuicConnectionMigrationOptions) {
+  URLRequestContextConfig config(
+      // Enable QUIC.
+      true,
+      // QUIC User Agent ID.
+      "Default QUIC User Agent ID",
+      // Enable SPDY.
+      true,
+      // Enable SDCH.
+      false,
+      // Type of http cache.
+      URLRequestContextConfig::HttpCacheType::DISK,
+      // Max size of http cache in bytes.
+      1024000,
+      // Disable caching for HTTP responses. Other information may be stored in
+      // the cache.
+      false,
+      // Storage path for http cache and cookie storage.
+      "/data/data/org.chromium.net/app_cronet_test/test_storage",
+      // User-Agent request header field.
+      "fake agent",
+      // JSON encoded experimental options.
+      "{\"QUIC\":{\"migrate_sessions_on_network_change\":true,"
+      "\"migrate_sessions_early\":true}}",
+      // Data reduction proxy key.
+      "",
+      // Data reduction proxy.
+      "",
+      // Fallback data reduction proxy.
+      "",
+      // Data reduction proxy secure proxy check URL.
+      "",
+      // MockCertVerifier to use for testing purposes.
+      scoped_ptr<net::CertVerifier>());
+
+  net::URLRequestContextBuilder builder;
+  net::NetLog net_log;
+  config.ConfigureURLRequestContextBuilder(&builder, &net_log);
+  // Set a ProxyConfigService to avoid DCHECK failure when building.
+  builder.set_proxy_config_service(make_scoped_ptr(
+      new net::ProxyConfigServiceFixed(net::ProxyConfig::CreateDirect())));
+  scoped_ptr<net::URLRequestContext> context(builder.Build());
+  const net::HttpNetworkSession::Params* params =
+      context->GetNetworkSessionParams();
+
+  EXPECT_FALSE(params->quic_close_sessions_on_ip_change);
+  EXPECT_TRUE(params->quic_migrate_sessions_on_network_change);
+  EXPECT_TRUE(params->quic_migrate_sessions_early);
 }
 
 }  // namespace cronet

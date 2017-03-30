@@ -10,6 +10,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/base/cursor/cursor.h"
+#include "ui/base/default_style.h"
 #include "ui/base/default_theme_provider.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/ime/input_method.h"
@@ -110,31 +111,7 @@ class DefaultWidgetDelegate : public WidgetDelegate {
 ////////////////////////////////////////////////////////////////////////////////
 // Widget, InitParams:
 
-Widget::InitParams::InitParams()
-    : type(TYPE_WINDOW),
-      delegate(nullptr),
-      child(false),
-      opacity(INFER_OPACITY),
-      accept_events(true),
-      activatable(ACTIVATABLE_DEFAULT),
-      keep_on_top(false),
-      visible_on_all_workspaces(false),
-      ownership(NATIVE_WIDGET_OWNS_WIDGET),
-      mirror_origin_in_rtl(false),
-      shadow_type(SHADOW_TYPE_DEFAULT),
-      remove_standard_frame(false),
-      use_system_default_icon(false),
-      show_state(ui::SHOW_STATE_DEFAULT),
-      parent(nullptr),
-      native_widget(nullptr),
-      native_theme(nullptr),
-      desktop_window_tree_host(nullptr),
-      layer_type(ui::LAYER_TEXTURED),
-      context(nullptr),
-      force_show_in_taskbar(false),
-      thumbnail_window(false),
-      force_software_compositing(false) {
-}
+Widget::InitParams::InitParams() : InitParams(TYPE_WINDOW) {}
 
 Widget::InitParams::InitParams(Type type)
     : type(type),
@@ -153,7 +130,6 @@ Widget::InitParams::InitParams(Type type)
       show_state(ui::SHOW_STATE_DEFAULT),
       parent(nullptr),
       native_widget(nullptr),
-      native_theme(nullptr),
       desktop_window_tree_host(nullptr),
       layer_type(ui::LAYER_TEXTURED),
       context(nullptr),
@@ -161,6 +137,8 @@ Widget::InitParams::InitParams(Type type)
       thumbnail_window(false),
       force_software_compositing(false) {
 }
+
+Widget::InitParams::InitParams(const InitParams& other) = default;
 
 Widget::InitParams::~InitParams() {
 }
@@ -170,7 +148,6 @@ Widget::InitParams::~InitParams() {
 
 Widget::Widget()
     : native_widget_(nullptr),
-      native_theme_(nullptr),
       widget_delegate_(nullptr),
       non_client_view_(nullptr),
       dragged_view_(nullptr),
@@ -301,14 +278,16 @@ void Widget::ReparentNativeView(gfx::NativeView native_view,
 
 // static
 int Widget::GetLocalizedContentsWidth(int col_resource_id) {
-  return ui::GetLocalizedContentsWidthForFont(col_resource_id,
-      ResourceBundle::GetSharedInstance().GetFont(ResourceBundle::BaseFont));
+  return ui::GetLocalizedContentsWidthForFont(
+      col_resource_id, ResourceBundle::GetSharedInstance().GetFontWithDelta(
+                           ui::kMessageFontSizeDelta));
 }
 
 // static
 int Widget::GetLocalizedContentsHeight(int row_resource_id) {
-  return ui::GetLocalizedContentsHeightForFont(row_resource_id,
-      ResourceBundle::GetSharedInstance().GetFont(ResourceBundle::BaseFont));
+  return ui::GetLocalizedContentsHeightForFont(
+      row_resource_id, ResourceBundle::GetSharedInstance().GetFontWithDelta(
+                           ui::kMessageFontSizeDelta));
 }
 
 // static
@@ -371,7 +350,6 @@ void Widget::Init(const InitParams& in_params) {
         internal::NativeWidgetPrivate::IsMouseButtonDown();
   }
   native_widget_->InitNativeWidget(params);
-  native_theme_ = params.native_theme;
   if (RequiresNonClientView(params.type)) {
     non_client_view_ = new NonClientView;
     non_client_view_->SetFrameView(CreateNonClientFrameView());
@@ -534,9 +512,9 @@ void Widget::CenterWindow(const gfx::Size& size) {
 }
 
 void Widget::SetBoundsConstrained(const gfx::Rect& bounds) {
-  gfx::Rect work_area =
-      gfx::Screen::GetScreenFor(GetNativeView())->GetDisplayNearestPoint(
-          bounds.origin()).work_area();
+  gfx::Rect work_area = gfx::Screen::GetScreen()
+                            ->GetDisplayNearestPoint(bounds.origin())
+                            .work_area();
   if (work_area.IsEmpty()) {
     SetBounds(bounds);
   } else {
@@ -776,7 +754,7 @@ const ui::ThemeProvider* Widget::GetThemeProvider() const {
 }
 
 const ui::NativeTheme* Widget::GetNativeTheme() const {
-  return native_theme_? native_theme_ : native_widget_->GetNativeTheme();
+  return native_widget_->GetNativeTheme();
 }
 
 FocusManager* Widget::GetFocusManager() {

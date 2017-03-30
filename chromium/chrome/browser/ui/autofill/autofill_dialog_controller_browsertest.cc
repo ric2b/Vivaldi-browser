@@ -11,7 +11,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
 #include "base/time/time.h"
@@ -43,6 +42,7 @@
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/browser_thread.h"
@@ -101,7 +101,6 @@ class TestAutofillDialogController : public AutofillDialogControllerImpl {
                                      base::Bind(&MockCallback)),
         message_loop_runner_(runner),
         use_validation_(false),
-        sign_in_user_index_(0U),
         weak_ptr_factory_(this) {
     Profile* profile =
         Profile::FromBrowserContext(contents->GetBrowserContext());
@@ -199,9 +198,6 @@ class TestAutofillDialogController : public AutofillDialogControllerImpl {
   // A list of notifications to show in the notification area of the dialog.
   // This is used to control what |CurrentNotifications()| returns for testing.
   std::vector<DialogNotification> notifications_;
-
-  // The user index that is assigned in IsSignInContinueUrl().
-  size_t sign_in_user_index_;
 
   // Allows generation of WeakPtrs, so controller liveness can be tested.
   base::WeakPtrFactory<TestAutofillDialogController> weak_ptr_factory_;

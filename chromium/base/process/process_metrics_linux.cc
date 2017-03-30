@@ -86,7 +86,8 @@ size_t ReadProcStatusAndGetFieldAsSizeT(pid_t pid, const std::string& field) {
       return value;
     }
   }
-  NOTREACHED();
+  // This can be reached if the process dies when proc is read -- in that case,
+  // the kernel can return missing fields.
   return 0;
 }
 
@@ -555,6 +556,9 @@ SystemMemoryInfoKB::SystemMemoryInfoKB() {
 #endif
 }
 
+SystemMemoryInfoKB::SystemMemoryInfoKB(const SystemMemoryInfoKB& other) =
+    default;
+
 scoped_ptr<Value> SystemMemoryInfoKB::ToValue() const {
   scoped_ptr<DictionaryValue> res(new DictionaryValue());
 
@@ -765,6 +769,8 @@ SystemDiskInfo::SystemDiskInfo() {
   io_time = 0;
   weighted_io_time = 0;
 }
+
+SystemDiskInfo::SystemDiskInfo(const SystemDiskInfo& other) = default;
 
 scoped_ptr<Value> SystemDiskInfo::ToValue() const {
   scoped_ptr<DictionaryValue> res(new DictionaryValue());

@@ -89,55 +89,41 @@ class BrowserFinderChromeOSTest : public BrowserWithTestWindowTest {
 
 TEST_F(BrowserFinderChromeOSTest, IncognitoBrowserMatchTest) {
   // GetBrowserCount() use kMatchAll to find all browser windows for profile().
-  EXPECT_EQ(1u,
-            chrome::GetBrowserCount(profile(), chrome::HOST_DESKTOP_TYPE_ASH));
-  EXPECT_TRUE(
-      chrome::FindAnyBrowser(profile(), true, chrome::HOST_DESKTOP_TYPE_ASH));
-  EXPECT_TRUE(
-      chrome::FindAnyBrowser(profile(), false, chrome::HOST_DESKTOP_TYPE_ASH));
+  EXPECT_EQ(1u, chrome::GetBrowserCount(profile()));
+  EXPECT_TRUE(chrome::FindAnyBrowser(profile(), true));
+  EXPECT_TRUE(chrome::FindAnyBrowser(profile(), false));
   set_browser(nullptr);
 
   // Create an incognito browser.
-  Browser::CreateParams params(profile()->GetOffTheRecordProfile(),
-                               chrome::HOST_DESKTOP_TYPE_ASH);
+  Browser::CreateParams params(profile()->GetOffTheRecordProfile());
   scoped_ptr<Browser> incognito_browser(
       chrome::CreateBrowserWithAuraTestWindowForParams(nullptr, &params));
   // Incognito windows are excluded in GetBrowserCount() because kMatchAll
   // doesn't match original profile of the browser with the given profile.
-  EXPECT_EQ(0u,
-            chrome::GetBrowserCount(profile(), chrome::HOST_DESKTOP_TYPE_ASH));
-  EXPECT_TRUE(
-      chrome::FindAnyBrowser(profile(), true, chrome::HOST_DESKTOP_TYPE_ASH));
-  EXPECT_FALSE(
-      chrome::FindAnyBrowser(profile(), false, chrome::HOST_DESKTOP_TYPE_ASH));
+  EXPECT_EQ(0u, chrome::GetBrowserCount(profile()));
+  EXPECT_TRUE(chrome::FindAnyBrowser(profile(), true));
+  EXPECT_FALSE(chrome::FindAnyBrowser(profile(), false));
 }
 
 TEST_F(BrowserFinderChromeOSTest, FindBrowserOwnedByAnotherProfile) {
   set_browser(nullptr);
 
-  Browser::CreateParams params(profile()->GetOriginalProfile(),
-                               chrome::HOST_DESKTOP_TYPE_ASH);
+  Browser::CreateParams params(profile()->GetOriginalProfile());
   scoped_ptr<Browser> browser(
       chrome::CreateBrowserWithAuraTestWindowForParams(nullptr, &params));
   GetUserWindowManager()->SetWindowOwner(browser->window()->GetNativeWindow(),
                                          test_account_id1_);
-  EXPECT_EQ(1u,
-            chrome::GetBrowserCount(profile(), chrome::HOST_DESKTOP_TYPE_ASH));
-  EXPECT_TRUE(
-      chrome::FindAnyBrowser(profile(), true, chrome::HOST_DESKTOP_TYPE_ASH));
-  EXPECT_TRUE(
-      chrome::FindAnyBrowser(profile(), false, chrome::HOST_DESKTOP_TYPE_ASH));
+  EXPECT_EQ(1u, chrome::GetBrowserCount(profile()));
+  EXPECT_TRUE(chrome::FindAnyBrowser(profile(), true));
+  EXPECT_TRUE(chrome::FindAnyBrowser(profile(), false));
 
   // Move the browser window to another user's desktop. Then no window should
   // be available for the current profile.
   GetUserWindowManager()->ShowWindowForUser(
       browser->window()->GetNativeWindow(), test_account_id2_);
-  EXPECT_EQ(0u,
-            chrome::GetBrowserCount(profile(), chrome::HOST_DESKTOP_TYPE_ASH));
-  EXPECT_FALSE(
-      chrome::FindAnyBrowser(profile(), true, chrome::HOST_DESKTOP_TYPE_ASH));
-  EXPECT_FALSE(
-      chrome::FindAnyBrowser(profile(), false, chrome::HOST_DESKTOP_TYPE_ASH));
+  EXPECT_EQ(0u, chrome::GetBrowserCount(profile()));
+  EXPECT_FALSE(chrome::FindAnyBrowser(profile(), true));
+  EXPECT_FALSE(chrome::FindAnyBrowser(profile(), false));
 }
 
 }  // namespace test

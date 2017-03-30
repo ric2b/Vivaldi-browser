@@ -40,7 +40,7 @@ WebInspector.FontView = function(mimeType, contentProvider)
     this._url = contentProvider.contentURL();
     this._mimeType = mimeType;
     this._contentProvider = contentProvider;
-    this._mimeTypeLabel = new WebInspector.ToolbarLabel(mimeType);
+    this._mimeTypeLabel = new WebInspector.ToolbarText(mimeType);
 }
 
 WebInspector.FontView._fontPreviewLines = [ "ABCDEFGHIJKLM", "NOPQRSTUVWXYZ", "abcdefghijklm", "nopqrstuvwxyz", "1234567890" ];
@@ -77,7 +77,7 @@ WebInspector.FontView.prototype = {
         var uniqueFontName = "WebInspectorFontPreview" + (++WebInspector.FontView._fontId);
 
         this.fontStyleElement = createElement("style");
-        this._contentProvider.requestContent(this._onFontContentLoaded.bind(this, uniqueFontName));
+        this._contentProvider.requestContent().then(this._onFontContentLoaded.bind(this, uniqueFontName));
         this.element.appendChild(this.fontStyleElement);
 
         var fontPreview = createElement("div");

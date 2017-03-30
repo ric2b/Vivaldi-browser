@@ -9,6 +9,7 @@
 #include "base/lazy_instance.h"
 #include "base/mac/foundation_util.h"
 #include "base/strings/stringize_macros.h"
+#include "base/strings/stringprintf.h"
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
@@ -29,6 +30,11 @@ namespace {
 
 using WidgetToLayerMap = std::map<gfx::AcceleratedWidget, CALayer*>;
 base::LazyInstance<WidgetToLayerMap> g_widget_to_layer_map;
+
+const char kGLSLVersion[] = "#version 110";
+
+const char kTextureRectangleRequired[] =
+    "#extension GL_ARB_texture_rectangle : require";
 
 // clang-format off
 const char kVertexShader[] =
@@ -274,18 +280,22 @@ bool GLImageIOSurface::CopyTexImage(unsigned target) {
 
   if (format_ != BufferFormat::YUV_420_BIPLANAR)
     return false;
-
-  if (target != GL_TEXTURE_2D) {
-    LOG(ERROR) << "YUV_420_BIPLANAR requires TEXTURE_2D target";
+  if (target != GL_TEXTURE_RECTANGLE_ARB) {
+    LOG(ERROR) << "YUV_420_BIPLANAR requires GL_TEXTURE_RECTANGLE_ARB target";
     return false;
   }
 
   if (!framebuffer_) {
     glGenFramebuffersEXT(1, &framebuffer_);
     vertex_buffer_ = gfx::GLHelper::SetupQuadVertexBuffer();
-    vertex_shader_ = gfx::GLHelper::LoadShader(GL_VERTEX_SHADER, kVertexShader);
-    fragment_shader_ =
-        gfx::GLHelper::LoadShader(GL_FRAGMENT_SHADER, kFragmentShader);
+    vertex_shader_ = gfx::GLHelper::LoadShader(
+        GL_VERTEX_SHADER,
+        base::StringPrintf("%s\n%s", kGLSLVersion, kVertexShader).c_str());
+    fragment_shader_ = gfx::GLHelper::LoadShader(
+        GL_FRAGMENT_SHADER,
+        base::StringPrintf("%s\n%s\n%s", kGLSLVersion,
+                           kTextureRectangleRequired, kFragmentShader)
+            .c_str());
     program_ = gfx::GLHelper::SetupProgram(vertex_shader_, fragment_shader_);
     gfx::ScopedUseProgram use_program(program_);
 
@@ -308,10 +318,10 @@ bool GLImageIOSurface::CopyTexImage(unsigned target) {
       static_cast<CGLContextObj>(gfx::GLContext::GetCurrent()->GetHandle());
 
   GLint target_texture = 0;
-  glGetIntegerv(GL_TEXTURE_BINDING_2D, &target_texture);
+  glGetIntegerv(GL_TEXTURE_BINDING_RECTANGLE_ARB, &target_texture);
   DCHECK(target_texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, size_.width(), size_.height(), 0,
-               GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+  glTexImage2D(GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGB, size_.width(),
+               size_.height(), 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
 
   CGLError cgl_error = kCGLNoError;
   {
@@ -345,7 +355,7 @@ bool GLImageIOSurface::CopyTexImage(unsigned target) {
       gfx::ScopedViewport viewport(0, 0, size_.width(), size_.height());
       glViewport(0, 0, size_.width(), size_.height());
       glFramebufferTexture2DEXT(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                GL_TEXTURE_2D, target_texture, 0);
+                                GL_TEXTURE_RECTANGLE_ARB, target_texture, 0);
       DCHECK_EQ(static_cast<GLenum>(GL_FRAMEBUFFER_COMPLETE),
                 glCheckFramebufferStatusEXT(GL_FRAMEBUFFER));
 
@@ -353,10 +363,9 @@ bool GLImageIOSurface::CopyTexImage(unsigned target) {
       glUniform2f(size_location_, size_.width(), size_.height());
 
       gfx::GLHelper::DrawQuad(vertex_buffer_);
-
       // Detach the output texture from the fbo.
       glFramebufferTexture2DEXT(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                GL_TEXTURE_2D, 0, 0);
+                                GL_TEXTURE_RECTANGLE_ARB, 0, 0);
     }
   }
   return true;

@@ -12,18 +12,23 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task_runner_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "jingle/glue/thread_wrapper.h"
 #include "net/base/test_data_directory.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "remoting/base/rsa_key_pair.h"
+#include "remoting/base/url_request.h"
 #include "remoting/client/audio_player.h"
 #include "remoting/client/chromoting_client.h"
 #include "remoting/client/client_context.h"
 #include "remoting/client/client_user_interface.h"
+#include "remoting/codec/video_decoder_verbatim.h"
+#include "remoting/codec/video_decoder_vpx.h"
 #include "remoting/host/chromoting_host.h"
 #include "remoting/host/chromoting_host_context.h"
 #include "remoting/host/fake_desktop_environment.h"
+#include "remoting/protocol/frame_consumer.h"
 #include "remoting/protocol/jingle_session_manager.h"
 #include "remoting/protocol/me2me_host_authenticator_factory.h"
 #include "remoting/protocol/negotiating_client_authenticator.h"
@@ -32,6 +37,7 @@
 #include "remoting/protocol/video_frame_pump.h"
 #include "remoting/protocol/video_renderer.h"
 #include "remoting/signaling/fake_signal_strategy.h"
+#include "remoting/test/cyclic_frame_generator.h"
 #include "remoting/test/fake_network_dispatcher.h"
 #include "remoting/test/fake_port_allocator.h"
 #include "remoting/test/fake_socket_factory.h"
@@ -40,6 +46,8 @@
 namespace remoting {
 
 using protocol::ChannelConfig;
+
+namespace {
 
 const char kHostJid[] = "host_jid@example.com/host";
 const char kHostOwner[] = "jane.doe@example.com";
@@ -73,23 +81,37 @@ class FakeCursorShapeStub : public protocol::CursorShapeStub {
   void SetCursorShape(const protocol::CursorShapeInfo& cursor_shape) override{};
 };
 
+scoped_ptr<webrtc::DesktopFrame> DoDecodeFrame(
+    VideoDecoder* decoder,
+    VideoPacket* packet,
+    scoped_ptr<webrtc::DesktopFrame> frame) {
+  if (!decoder->DecodePacket(*packet, frame.get()))
+    frame.reset();
+  return frame;
+}
+
+}  // namespace
+
 class ProtocolPerfTest
     : public testing::Test,
       public testing::WithParamInterface<NetworkPerformanceParams>,
       public ClientUserInterface,
       public protocol::VideoRenderer,
       public protocol::VideoStub,
+      public protocol::FrameConsumer,
       public HostStatusObserver {
  public:
   ProtocolPerfTest()
       : host_thread_("host"),
         capture_thread_("capture"),
-        encode_thread_("encode") {
+        encode_thread_("encode"),
+        decode_thread_("decode") {
     protocol::VideoFramePump::EnableTimestampsForTests();
     host_thread_.StartWithOptions(
         base::Thread::Options(base::MessageLoop::TYPE_IO, 0));
     capture_thread_.Start();
     encode_thread_.Start();
+    decode_thread_.Start();
   }
 
   virtual ~ProtocolPerfTest() {
@@ -123,26 +145,57 @@ class ProtocolPerfTest
   // VideoRenderer interface.
   void OnSessionConfig(const protocol::SessionConfig& config) override {}
   protocol::VideoStub* GetVideoStub() override { return this; }
-  protocol::FrameConsumer* GetFrameConsumer() override {
-    NOTREACHED();
-    return nullptr;
-  }
+  protocol::FrameConsumer* GetFrameConsumer() override { return this; }
 
   // protocol::VideoStub interface.
-  void ProcessVideoPacket(scoped_ptr<VideoPacket> video_packet,
+  void ProcessVideoPacket(scoped_ptr<VideoPacket> packet,
                           const base::Closure& done) override {
-    if (video_packet->data().empty()) {
+    if (packet->data().empty()) {
       // Ignore keep-alive packets
       done.Run();
       return;
     }
 
-    last_video_packet_ = std::move(video_packet);
+    if (packet->format().has_screen_width() &&
+        packet->format().has_screen_height()) {
+      frame_size_.set(packet->format().screen_width(),
+                      packet->format().screen_height());
+    }
 
+    scoped_ptr<webrtc::DesktopFrame> frame(
+        new webrtc::BasicDesktopFrame(frame_size_));
+    base::PostTaskAndReplyWithResult(
+        decode_thread_.task_runner().get(), FROM_HERE,
+        base::Bind(&DoDecodeFrame, video_decoder_.get(), packet.get(),
+                   base::Passed(&frame)),
+        base::Bind(&ProtocolPerfTest::OnFrameDecoded, base::Unretained(this),
+                   base::Passed(&packet), done));
+  }
+
+  void OnFrameDecoded(scoped_ptr<VideoPacket> packet,
+                      const base::Closure& done,
+                      scoped_ptr<webrtc::DesktopFrame> frame) {
+    last_video_packet_ = std::move(packet);
+    DrawFrame(std::move(frame), done);
+  }
+
+  // protocol::FrameConsumer interface.
+  scoped_ptr<webrtc::DesktopFrame> AllocateFrame(
+      const webrtc::DesktopSize& size) override {
+    return make_scoped_ptr(new webrtc::BasicDesktopFrame(size));
+  }
+
+  void DrawFrame(scoped_ptr<webrtc::DesktopFrame> frame,
+                 const base::Closure& done) override {
+    last_video_frame_ = std::move(frame);
     if (!on_frame_task_.is_null())
       on_frame_task_.Run();
+    if (!done.is_null())
+      done.Run();
+  }
 
-    done.Run();
+  protocol::FrameConsumer::PixelFormat GetPixelFormat() override {
+    return FORMAT_BGRA;
   }
 
   // HostStatusObserver interface.
@@ -170,10 +223,21 @@ class ProtocolPerfTest
       connecting_loop_->Quit();
   }
 
-  void ReceiveFrame(base::TimeDelta* latency) {
+  scoped_ptr<webrtc::DesktopFrame> ReceiveFrame() {
+    last_video_frame_.reset();
+
     waiting_frames_loop_.reset(new base::RunLoop());
     on_frame_task_ = waiting_frames_loop_->QuitClosure();
     waiting_frames_loop_->Run();
+
+    EXPECT_TRUE(last_video_frame_);
+    return std::move(last_video_frame_);
+  }
+
+  void ReceiveFrameAndGetLatency(base::TimeDelta* latency) {
+    last_video_packet_.reset();
+
+    ReceiveFrame();
 
     if (latency) {
       base::TimeTicks timestamp =
@@ -182,14 +246,15 @@ class ProtocolPerfTest
     }
   }
 
-  void ReceiveFrames(int frames, base::TimeDelta* max_latency) {
+  void ReceiveMultipleFramesAndGetMaxLatency(int frames,
+                                             base::TimeDelta* max_latency) {
     if (max_latency)
       *max_latency = base::TimeDelta();
 
     for (int i = 0; i < frames; ++i) {
       base::TimeDelta latency;
 
-      ReceiveFrame(&latency);
+      ReceiveFrameAndGetLatency(&latency);
 
       if (max_latency && latency > *max_latency) {
         *max_latency = latency;
@@ -201,7 +266,8 @@ class ProtocolPerfTest
   // should call WaitConnected() to wait until connection is established. The
   // host is started on |host_thread_| while the client works on the main
   // thread.
-  void StartHostAndClient(protocol::ChannelConfig::Codec video_codec) {
+  void StartHostAndClient(bool use_webrtc,
+                          protocol::ChannelConfig::Codec video_codec) {
     fake_network_dispatcher_ =  new FakeNetworkDispatcher();
 
     client_signaling_.reset(new FakeSignalStrategy(kClientJid));
@@ -214,6 +280,19 @@ class ProtocolPerfTest
     protocol_config_->mutable_video_configs()->push_back(
         protocol::ChannelConfig(
             protocol::ChannelConfig::TRANSPORT_STREAM, 2, video_codec));
+    protocol_config_->set_webrtc_supported(use_webrtc);
+    protocol_config_->set_ice_supported(!use_webrtc);
+
+    switch (video_codec) {
+      case ChannelConfig::CODEC_VERBATIM:
+        video_decoder_.reset(new VideoDecoderVerbatim());
+        break;
+      case ChannelConfig::CODEC_VP8:
+        video_decoder_ = VideoDecoderVpx::CreateForVP8();
+        break;
+      default:
+        NOTREACHED();
+    }
 
     host_thread_.task_runner()->PostTask(
         FROM_HERE,
@@ -241,7 +320,7 @@ class ProtocolPerfTest
         GetParam().out_of_order_rate);
     scoped_refptr<protocol::TransportContext> transport_context(
         new protocol::TransportContext(
-            host_signaling_.get(), std::move(port_allocator_factory),
+            host_signaling_.get(), std::move(port_allocator_factory), nullptr,
             network_settings, protocol::TransportRole::SERVER));
     scoped_ptr<protocol::SessionManager> session_manager(
         new protocol::JingleSessionManager(host_signaling_.get()));
@@ -252,9 +331,7 @@ class ProtocolPerfTest
     host_.reset(new ChromotingHost(
         &desktop_environment_factory_, std::move(session_manager),
         transport_context, host_thread_.task_runner(),
-        host_thread_.task_runner(), capture_thread_.task_runner(),
-        encode_thread_.task_runner(), host_thread_.task_runner(),
-        host_thread_.task_runner()));
+        encode_thread_.task_runner()));
 
     base::FilePath certs_dir(net::GetTestCertsDirectory());
 
@@ -275,7 +352,7 @@ class ProtocolPerfTest
     host_secret.value = "123456";
     scoped_ptr<protocol::AuthenticatorFactory> auth_factory =
         protocol::Me2MeHostAuthenticatorFactory::CreateWithSharedSecret(
-            true, kHostOwner, host_cert, key_pair, host_secret, nullptr);
+            true, kHostOwner, host_cert, key_pair, "", host_secret, nullptr);
     host_->SetAuthenticatorFactory(std::move(auth_factory));
 
     host_->AddStatusObserver(this);
@@ -306,8 +383,8 @@ class ProtocolPerfTest
         GetParam().out_of_order_rate);
     scoped_refptr<protocol::TransportContext> transport_context(
         new protocol::TransportContext(
-            host_signaling_.get(), std::move(port_allocator_factory),
-            network_settings, protocol::TransportRole::SERVER));
+            host_signaling_.get(), std::move(port_allocator_factory), nullptr,
+            network_settings, protocol::TransportRole::CLIENT));
 
     std::vector<protocol::AuthenticationMethod> auth_methods;
     auth_methods.push_back(protocol::AuthenticationMethod::Spake2(
@@ -332,6 +409,61 @@ class ProtocolPerfTest
     secret_fetched_callback.Run("123456");
   }
 
+  void MeasureTotalLatency(bool webrtc) {
+    scoped_refptr<test::CyclicFrameGenerator> frame_generator =
+        test::CyclicFrameGenerator::Create();
+    frame_generator->set_draw_barcode(true);
+
+    desktop_environment_factory_.set_frame_generator(base::Bind(
+        &test::CyclicFrameGenerator::GenerateFrame, frame_generator));
+
+    StartHostAndClient(webrtc, protocol::ChannelConfig::CODEC_VP8);
+    ASSERT_NO_FATAL_FAILURE(WaitConnected());
+
+    base::TimeDelta total_latency_big_frames;
+    int big_frame_count = 0;
+    base::TimeDelta total_latency_small_frames;
+    int small_frame_count = 0;
+
+    int last_frame_id = -1;
+    for (int i = 0; i < 30; ++i) {
+      scoped_ptr<webrtc::DesktopFrame> frame = ReceiveFrame();
+      test::CyclicFrameGenerator::FrameInfo frame_info =
+          frame_generator->IdentifyFrame(frame.get());
+      base::TimeDelta latency = base::TimeTicks::Now() - frame_info.timestamp;
+
+      if (frame_info.frame_id > last_frame_id) {
+        last_frame_id = frame_info.frame_id;
+
+        switch (frame_info.type) {
+          case test::CyclicFrameGenerator::FrameType::EMPTY:
+            NOTREACHED();
+            break;
+          case test::CyclicFrameGenerator::FrameType::FULL:
+            total_latency_big_frames += latency;
+            ++big_frame_count;
+            break;
+          case test::CyclicFrameGenerator::FrameType::CURSOR:
+            total_latency_small_frames += latency;
+            ++small_frame_count;
+            break;
+        }
+      } else {
+        LOG(ERROR) << "Unexpected duplicate frame " << frame_info.frame_id;
+      }
+    }
+
+    CHECK(big_frame_count);
+    VLOG(0) << "Average latency for big frames: "
+            << (total_latency_big_frames / big_frame_count).InMillisecondsF();
+
+    if (small_frame_count) {
+      VLOG(0)
+          << "Average latency for small frames: "
+          << (total_latency_small_frames / small_frame_count).InMillisecondsF();
+    }
+  }
+
   base::MessageLoopForIO message_loop_;
 
   scoped_refptr<FakeNetworkDispatcher> fake_network_dispatcher_;
@@ -339,6 +471,7 @@ class ProtocolPerfTest
   base::Thread host_thread_;
   base::Thread capture_thread_;
   base::Thread encode_thread_;
+  base::Thread decode_thread_;
   FakeDesktopEnvironmentFactory desktop_environment_factory_;
 
   FakeCursorShapeStub cursor_shape_stub_;
@@ -351,6 +484,8 @@ class ProtocolPerfTest
   scoped_ptr<ChromotingHost> host_;
   scoped_ptr<ClientContext> client_context_;
   scoped_ptr<ChromotingClient> client_;
+  webrtc::DesktopSize frame_size_;
+  scoped_ptr<VideoDecoder> video_decoder_;
 
   scoped_ptr<base::RunLoop> connecting_loop_;
   scoped_ptr<base::RunLoop> waiting_frames_loop_;
@@ -361,6 +496,7 @@ class ProtocolPerfTest
   base::Closure on_frame_task_;
 
   scoped_ptr<VideoPacket> last_video_packet_;
+  scoped_ptr<webrtc::DesktopFrame> last_video_frame_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ProtocolPerfTest);
@@ -400,17 +536,17 @@ INSTANTIATE_TEST_CASE_P(
         NetworkPerformanceParams(100000, 200000, 130, 5, 0.01)));
 
 TEST_P(ProtocolPerfTest, StreamFrameRate) {
-  StartHostAndClient(protocol::ChannelConfig::CODEC_VP8);
+  StartHostAndClient(false, protocol::ChannelConfig::CODEC_VP8);
   ASSERT_NO_FATAL_FAILURE(WaitConnected());
 
   base::TimeDelta latency;
 
-  ReceiveFrame(&latency);
+  ReceiveFrameAndGetLatency(&latency);
   LOG(INFO) << "First frame latency: " << latency.InMillisecondsF() << "ms";
-  ReceiveFrames(20, nullptr);
+  ReceiveMultipleFramesAndGetMaxLatency(20, nullptr);
 
   base::TimeTicks started = base::TimeTicks::Now();
-  ReceiveFrames(40, &latency);
+  ReceiveMultipleFramesAndGetMaxLatency(40, &latency);
   base::TimeDelta elapsed = base::TimeTicks::Now() - started;
   LOG(INFO) << "Frame rate: " << (40.0 / elapsed.InSecondsF());
   LOG(INFO) << "Maximum latency: " << latency.InMillisecondsF() << "ms";
@@ -428,7 +564,7 @@ class IntermittentChangeFrameGenerator
       : frame_index_(0) {}
 
   scoped_ptr<webrtc::DesktopFrame> GenerateFrame(
-      webrtc::DesktopCapturer::Callback* callback) {
+      webrtc::SharedMemoryFactory* shared_memory_factory) {
     const int kWidth = 1000;
     const int kHeight = kIntermittentFrameSize / kWidth / 4;
 
@@ -464,10 +600,10 @@ TEST_P(ProtocolPerfTest, IntermittentChanges) {
       base::Bind(&IntermittentChangeFrameGenerator::GenerateFrame,
                  new IntermittentChangeFrameGenerator()));
 
-  StartHostAndClient(protocol::ChannelConfig::CODEC_VERBATIM);
+  StartHostAndClient(false, protocol::ChannelConfig::CODEC_VERBATIM);
   ASSERT_NO_FATAL_FAILURE(WaitConnected());
 
-  ReceiveFrame(nullptr);
+  ReceiveFrameAndGetLatency(nullptr);
 
   base::TimeDelta expected = GetParam().latency_average;
   if (GetParam().bandwidth > 0) {
@@ -481,7 +617,7 @@ TEST_P(ProtocolPerfTest, IntermittentChanges) {
   const int kFrames = 5;
   for (int i = 0; i < kFrames; ++i) {
     base::TimeDelta latency;
-    ReceiveFrame(&latency);
+    ReceiveFrameAndGetLatency(&latency);
     LOG(INFO) << "Latency: " << latency.InMillisecondsF()
               << "ms Encode: " << last_video_packet_->encode_time_ms()
               << "ms Capture: " << last_video_packet_->capture_time_ms()
@@ -490,6 +626,14 @@ TEST_P(ProtocolPerfTest, IntermittentChanges) {
   }
 
   LOG(INFO) << "Average: " << (sum / kFrames).InMillisecondsF();
+}
+
+TEST_P(ProtocolPerfTest, TotalLatencyIce) {
+  MeasureTotalLatency(false);
+}
+
+TEST_P(ProtocolPerfTest, TotalLatencyWebrtc) {
+  MeasureTotalLatency(true);
 }
 
 }  // namespace remoting

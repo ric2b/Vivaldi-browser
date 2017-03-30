@@ -16,7 +16,7 @@
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_iterator.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/sessions/content/content_serialized_navigation_builder.h"
@@ -78,13 +78,7 @@ base::FilePath GenerateFilename(Profile* profile,
 }
 
 Browser* GetActiveBrowser() {
-  for (chrome::BrowserIterator it; !it.done(); it.Next()) {
-    Browser* browser = *it;
-    if (browser->window()->IsActive()) {
-      return browser;
-    }
-  }
-  return nullptr;
+  return BrowserList::GetInstance()->GetLastActive();
 }
 
 }  // namespace
@@ -109,8 +103,7 @@ bool SessionsPrivateSaveOpenTabsFunction::RunAsync() {
   } else {
     base::FilePath path = GenerateFilename(GetProfile(), params->name, true);
 
-    for (chrome::BrowserIterator it; !it.done(); it.Next()) {
-      Browser* browser = *it;
+    for (auto* browser: *BrowserList::GetInstance()) {
       // Make sure the browser has tabs and a window. Browser's destructor
       // removes itself from the BrowserList. When a browser is closed the
       // destructor is not necessarily run immediately. This means it's possible

@@ -34,25 +34,21 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/loader/DocumentThreadableLoader.h"
 #include "core/loader/ThreadableLoaderClientWrapper.h"
-#include "core/loader/WorkerLoaderClientBridge.h"
 #include "core/loader/WorkerThreadableLoader.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerThread.h"
 
 namespace blink {
 
-PassRefPtr<ThreadableLoader> ThreadableLoader::create(ExecutionContext& context, ThreadableLoaderClient* client, const ResourceRequest& request, const ThreadableLoaderOptions& options, const ResourceLoaderOptions& resourceLoaderOptions)
+PassRefPtr<ThreadableLoader> ThreadableLoader::create(ExecutionContext& context, ThreadableLoaderClient* client, const ThreadableLoaderOptions& options, const ResourceLoaderOptions& resourceLoaderOptions)
 {
     ASSERT(client);
 
     if (context.isWorkerGlobalScope()) {
-        WorkerGlobalScope& workerGlobalScope = toWorkerGlobalScope(context);
-        RefPtr<ThreadableLoaderClientWrapper> clientWrapper(ThreadableLoaderClientWrapper::create(client));
-        OwnPtr<ThreadableLoaderClient> clientBridge(WorkerLoaderClientBridge::create(clientWrapper, workerGlobalScope.thread()->workerLoaderProxy()));
-        return WorkerThreadableLoader::create(workerGlobalScope, clientWrapper, clientBridge.release(), request, options, resourceLoaderOptions);
+        return WorkerThreadableLoader::create(toWorkerGlobalScope(context), client, options, resourceLoaderOptions);
     }
 
-    return DocumentThreadableLoader::create(toDocument(context), client, request, options, resourceLoaderOptions);
+    return DocumentThreadableLoader::create(toDocument(context), client, options, resourceLoaderOptions);
 }
 
 void ThreadableLoader::loadResourceSynchronously(ExecutionContext& context, const ResourceRequest& request, ThreadableLoaderClient& client, const ThreadableLoaderOptions& options, const ResourceLoaderOptions& resourceLoaderOptions)

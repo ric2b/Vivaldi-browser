@@ -52,6 +52,7 @@ Pritisnite Shift + Alt, da ga preklopite.</translation>
 <translation id="252373100621549798">Neznan prikaz</translation>
 <translation id="2532589005999780174">Visokokontrastni način</translation>
 <translation id="2562916301614567480">Zasebno omrežje</translation>
+<translation id="2661637000095600270">Zaslonov ni bilo mogoče zrcaliti, ker ni bila najdena nobena podprta ločljivost. Uporabljeno je razširjeno namizje. Kliknite, če želite poslati poročilo s povratnimi informacijami.</translation>
 <translation id="2692809339924654275"><ph name="BLUETOOTH" />: vzpostavljanje povezave ...</translation>
 <translation id="2700058918926273959">Seja se konča čez <ph name="SESSION_TIME_REMAINING" />. Odjavljeni boste.</translation>
 <translation id="2727977024730340865">Priključen je nizkoenergijski polnilnik. Polnjenje akumulatorja morda ne bo zanesljivo.</translation>
@@ -113,7 +114,6 @@ Pritisnite tipko za iskanje ali Shift, da jo prekličete.</translation>
 <translation id="4250680216510889253">Ne</translation>
 <translation id="4279490309300973883">Zrcaljenje</translation>
 <translation id="4321179778687042513">ctrl</translation>
-<translation id="4379753398862151997">Dragi monitor, med nama se ne bo obneslo. (Ta monitor ni podprt)</translation>
 <translation id="4421231901400348175">Deljenje nadzora nad zaslonom z osebo <ph name="HELPER_NAME" /> prek pomoči na daljavo.</translation>
 <translation id="4430019312045809116">Glasnost</translation>
 <translation id="4527045527269911712">Naprava Bluetooth »<ph name="DEVICE_NAME" />« želi dovoljenje za seznanjanje.</translation>
@@ -153,7 +153,7 @@ Pritisnite Shift + Alt, da ga preklopite.</translation>
 <translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">Razveljavi</translation>
 <translation id="595202126637698455">Sledenje učinkovitosti delovanja je omogočeno</translation>
-<translation id="5958529069007801266">Nadzorovan uporabnik</translation>
+<translation id="5958529069007801266">Zaščiteni uporabnik</translation>
 <translation id="5977415296283489383">Slušalke</translation>
 <translation id="5978382165065462689">Deljenje nadzora nad zaslonom prek pomoči na daljavo.</translation>
 <translation id="5980301590375426705">Zapusti sejo gosta</translation>
@@ -182,7 +182,6 @@ Pritisnite Shift + Alt, da ga preklopite.</translation>
 <translation id="6650933572246256093">Naprava Bluetooth »<ph name="DEVICE_NAME" />« želi vaše dovoljenje za seznanjanje. V napravi vnesite to geslo: <ph name="PASSKEY" /></translation>
 <translation id="6713285437468012787">Naprava Bluetooth »<ph name="DEVICE_NAME" />« je seznanjena in je zdaj na voljo vsem uporabnikom. To seznanitev lahko odstranite v nastavitvah.</translation>
 <translation id="6785414152754474415">Napolnjenost akumulatorja: <ph name="PERCENTAGE" /> % – polnjenje še poteka.</translation>
-<translation id="6803622936009808957">Zaslonov ni bilo mogoče zrcaliti, ker ni bilo najdene nobene podprte ločljivosti. Uporabljeno je razširjeno namizje.</translation>
 <translation id="683971173229319003">Iskanje + L</translation>
 <translation id="68610848741840742">ChromeVox (izgovorjava povratnih informacij)</translation>
 <translation id="6911468394164995108">Pridružite se drugemu ...</translation>
@@ -237,6 +236,7 @@ Pritisnite Alt in tipko za iskanje ali Shift, da jo prekličete.</translation>
 <translation id="8878886163241303700">Razširjanje zaslona</translation>
 <translation id="8938800817013097409">Naprava USB-C (vrata desno zadaj)</translation>
 <translation id="8940956008527784070">Akumulator je skoraj prazen (<ph name="PERCENTAGE" /> %)</translation>
+<translation id="9008540565042607572">Dragi monitor, med nama se ne bo obneslo. (Ta monitor ni podprt. Kliknite, če želite poslati poročilo s povratnimi informacijami.)</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9080206825613744995">Mikrofon je v uporabi.</translation>
 <translation id="9089416786594320554">Načini vnosa</translation>

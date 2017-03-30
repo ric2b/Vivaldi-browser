@@ -7,12 +7,22 @@
 
 #include <stddef.h>
 
-#include "base/macros.h"
+#include <string>
+#include <vector>
 
+#include "base/macros.h"
+#include "base/strings/string16.h"
+#include "chrome/browser/profiles/profile_info_cache_observer.h"
+
+namespace base {
+class FilePath;
+}  // namespace base
 class ProfileAttributesEntry;
 
 class ProfileAttributesStorage {
  public:
+  using Observer = ProfileInfoCacheObserver;
+
   ProfileAttributesStorage() {}
   ~ProfileAttributesStorage() {}
 
@@ -34,6 +44,8 @@ class ProfileAttributesStorage {
   // Returns a vector containing one attributes entry per known profile. They
   // are not sorted in any particular order.
   virtual std::vector<ProfileAttributesEntry*> GetAllProfilesAttributes() = 0;
+  virtual std::vector<ProfileAttributesEntry*>
+      GetAllProfilesAttributesSortedByName() = 0;
 
   // Populates |entry| with the data for the profile at |path| and returns true
   // if the operation is successful and |entry| can be used. Returns false
@@ -46,6 +58,18 @@ class ProfileAttributesStorage {
   // Returns the count of known profiles.
   virtual size_t GetNumberOfProfiles() const = 0;
 
+  // Returns a unique name that can be assigned to a newly created profile.
+  virtual base::string16 ChooseNameForNewProfile(size_t icon_index) const = 0;
+
+  // Returns an avatar icon index that can be assigned to a newly created
+  // profile. Note that the icon may not be unique since there are a limited
+  // set of default icons.
+  virtual size_t ChooseAvatarIconIndexForNewProfile() const = 0;
+
+  virtual void AddObserver(ProfileAttributesStorage::Observer* observer) = 0;
+  virtual void RemoveObserver(ProfileAttributesStorage::Observer* observer) = 0;
+
+ private:
   DISALLOW_COPY_AND_ASSIGN(ProfileAttributesStorage);
 };
 

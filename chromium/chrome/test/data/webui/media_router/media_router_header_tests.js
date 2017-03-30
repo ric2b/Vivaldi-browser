@@ -20,7 +20,8 @@ cr.define('media_router_header', function() {
         'arrow-drop-icon',
         'back-button',
         'close-button',
-        'header-text'
+        'header-text',
+        'user-email-container',
       ];
 
       // Checks whether the current icon matches the icon used for the view.
@@ -30,8 +31,10 @@ cr.define('media_router_header', function() {
       };
 
       // Checks whether |element| is hidden.
+      // An element is considered hidden if it does not exist (e.g. unstamped)
+      // or its |hidden| property is |false|.
       var checkElementHidden = function(hidden, element) {
-        assertEquals(hidden, element.hidden);
+        assertEquals(hidden, !element || element.hidden);
       };
 
       // Checks whether the elements specified in |elementIdList| are visible.
@@ -46,27 +49,34 @@ cr.define('media_router_header', function() {
         }
       };
 
+      // Checks whether |expected| and the text in the |element| are equal.
+      var checkElementText = function(expected, element) {
+        assertEquals(expected.trim(), element.textContent.trim());
+      };
+
       // Import media_router_header.html before running suite.
       suiteSetup(function() {
         return PolymerTest.importHtml(
-            'chrome://media-router/elements/media_router_header/' +
-            'media_router_header.html');
+            'chrome://media-router/elements/media_router_container/' +
+            'media_router_container.html');
       });
 
       // Initialize an media-router-header before each test.
       setup(function(done) {
         PolymerTest.clearBody();
-        header = document.createElement('media-router-header');
-        document.body.appendChild(header);
+        container = document.createElement('media-router-container');
+        document.body.appendChild(container);
+        header = container.$['container-header'];
 
         // Allow for the media router header to be created and attached.
         setTimeout(done);
       });
 
-      // Tests for 'close-button-click' event firing when the close button
-      // is clicked.
+      // Tests for 'close-dialog' event firing when the close button is
+      // clicked.
       test('close button click', function(done) {
-        header.addEventListener('close-button-click', function() {
+        header.addEventListener('close-dialog', function(data) {
+          assertFalse(data.detail.pressEscToClose);
           done();
         });
         MockInteractions.tap(header.$['close-button']);
@@ -81,13 +91,70 @@ cr.define('media_router_header', function() {
         MockInteractions.tap(header.$['back-button']);
       });
 
-      // Tests for 'arrow-drop-click' event firing when the arrow drop button
-      // is clicked.
+      // Tests for 'header-or-arrow-click' event firing when the arrow drop
+      // button is clicked on the CAST_MODE_LIST view.
       test('arrow drop icon click', function(done) {
-        header.addEventListener('arrow-drop-click', function() {
+        header.view = media_router.MediaRouterView.CAST_MODE_LIST;
+        header.addEventListener('header-or-arrow-click', function() {
           done();
         });
         MockInteractions.tap(header.$['arrow-drop-icon']);
+      });
+
+      // Tests for 'header-or-arrow-click' event firing when the arrow drop
+      // button is clicked on the SINK_LIST view.
+      test('arrow drop icon click', function(done) {
+        header.view = media_router.MediaRouterView.SINK_LIST;
+        header.addEventListener('header-or-arrow-click', function() {
+          done();
+        });
+        MockInteractions.tap(header.$['arrow-drop-icon']);
+      });
+
+      // Tests for 'header-or-arrow-click' event firing when the header text is
+      // clicked on the CAST_MODE_LIST view.
+      test('header text click on cast mode list view', function(done) {
+        header.view = media_router.MediaRouterView.CAST_MODE_LIST;
+        header.addEventListener('header-or-arrow-click', function() {
+          done();
+        });
+        MockInteractions.tap(header.$['header-text']);
+      });
+
+      // Tests for 'header-or-arrow-click' event firing when the header text is
+      // clicked on the SINK_LIST view.
+      test('header text click on sink list view', function(done) {
+        header.view = media_router.MediaRouterView.SINK_LIST;
+        header.addEventListener('header-or-arrow-click', function() {
+          done();
+        });
+        MockInteractions.tap(header.$['header-text']);
+      });
+
+      // Tests for no event firing when the header text is clicked on certain
+      // views.
+      test('header text click without event firing', function(done) {
+        header.addEventListener('header-or-arrow-click', function() {
+          assertNotReached();
+        });
+
+        header.view = media_router.MediaRouterView.FILTER;
+        MockInteractions.tap(header.$['header-text']);
+        header.view = media_router.MediaRouterView.ISSUE;
+        MockInteractions.tap(header.$['header-text']);
+        header.view = media_router.MediaRouterView.ROUTE_DETAILS;
+        MockInteractions.tap(header.$['header-text']);
+        done();
+      });
+
+      // Tests for 'header-height-changed' event firing when the header changes
+      // if email is shown.
+      test('header height changed with email shown', function(done) {
+        header.addEventListener('header-height-changed', function() {
+          done();
+        });
+        header.userEmail = 'user@example.com';
+        header.showEmail = true;
       });
 
       // Tests the |computeArrowDropIcon_| function.
@@ -117,7 +184,8 @@ cr.define('media_router_header', function() {
                                     'header-text']);
 
         header.view = media_router.MediaRouterView.FILTER;
-        checkElementsVisibleWithId(['close-button',
+        checkElementsVisibleWithId(['back-button',
+                                    'close-button',
                                     'header-text']);
 
         header.view = media_router.MediaRouterView.ISSUE;
@@ -133,6 +201,34 @@ cr.define('media_router_header', function() {
         checkElementsVisibleWithId(['arrow-drop-icon',
                                     'close-button',
                                     'header-text']);
+      });
+
+      // Verify email is shown and header updated if showEmail is true.
+      test('visibility and style of UI depending on email', function(done) {
+        header.userEmail = 'user@example.com';
+        header.showEmail = true;
+        setTimeout(function() {
+          assertEquals(header.headerWithEmailHeight_, header.offsetHeight)
+
+          assertFalse(header.$$('#user-email-container').hidden);
+          checkElementText(
+              header.userEmail,
+              header.$$('#user-email-container'));
+          done();
+        });
+      });
+
+      // Verify no email is shown and header is not modified if email is empty.
+      test('visibility and style of UI for empty email', function(done) {
+        header.userEmail = undefined;
+        header.showEmail = true;
+        setTimeout(function() {
+          assertNotEquals(header.headerWithEmailHeight_, header.offsetHeight)
+          checkElementText(
+              '',
+              header.$$('#user-email-container'));
+          done();
+        });
       });
     });
   }

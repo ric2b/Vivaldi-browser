@@ -12,17 +12,17 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/mac/bind_objc_block.h"
-#include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/threading/worker_pool.h"
 #include "components/net_log/chrome_net_log.h"
+#include "components/prefs/pref_service.h"
+#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_constants.h"
 #include "ios/chrome/browser/ios_chrome_io_thread.h"
 #include "ios/chrome/browser/net/cookie_util.h"
 #include "ios/chrome/browser/net/ios_chrome_network_delegate.h"
 #include "ios/chrome/browser/net/ios_chrome_url_request_context_getter.h"
 #include "ios/chrome/browser/pref_names.h"
-#include "ios/public/provider/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/web/public/web_thread.h"
 #include "net/base/sdch_manager.h"
 #include "net/disk_cache/disk_cache.h"
@@ -60,7 +60,7 @@ void OffTheRecordChromeBrowserStateIOData::Handle::DoomIncognitoCache() {
       main_request_context_getter_;
   web::WebThread::PostTask(
       web::WebThread::IO, FROM_HERE, base::BindBlock(^{
-        DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::IO);
+        DCHECK_CURRENTLY_ON(web::WebThread::IO);
         net::HttpCache* cache = getter->GetURLRequestContext()
                                     ->http_transaction_factory()
                                     ->GetCache();
@@ -75,7 +75,7 @@ OffTheRecordChromeBrowserStateIOData::Handle::Handle(
     : io_data_(new OffTheRecordChromeBrowserStateIOData()),
       browser_state_(browser_state),
       initialized_(false) {
-  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::UI);
+  DCHECK_CURRENTLY_ON(web::WebThread::UI);
   DCHECK(browser_state);
   io_data_->cookie_path_ =
       browser_state->GetStatePath().Append(kIOSChromeCookieFilename);
@@ -84,7 +84,7 @@ OffTheRecordChromeBrowserStateIOData::Handle::Handle(
 }
 
 OffTheRecordChromeBrowserStateIOData::Handle::~Handle() {
-  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::UI);
+  DCHECK_CURRENTLY_ON(web::WebThread::UI);
 
   // Stop listening to notifications.
   CFNotificationCenterRemoveObserver(CFNotificationCenterGetLocalCenter(), this,
@@ -96,7 +96,7 @@ OffTheRecordChromeBrowserStateIOData::Handle::~Handle() {
 scoped_refptr<IOSChromeURLRequestContextGetter>
 OffTheRecordChromeBrowserStateIOData::Handle::CreateMainRequestContextGetter(
     ProtocolHandlerMap* protocol_handlers) const {
-  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::UI);
+  DCHECK_CURRENTLY_ON(web::WebThread::UI);
   LazyInitialize();
   DCHECK(!main_request_context_getter_.get());
   main_request_context_getter_ =

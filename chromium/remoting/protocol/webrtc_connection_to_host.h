@@ -23,6 +23,7 @@ namespace protocol {
 class ClientControlDispatcher;
 class ClientEventDispatcher;
 class SessionConfig;
+class WebrtcVideoRendererAdapter;
 
 class WebrtcConnectionToHost : public ConnectionToHost,
                                public Session::EventHandler,
@@ -54,11 +55,13 @@ class WebrtcConnectionToHost : public ConnectionToHost,
   void OnWebrtcTransportConnecting() override;
   void OnWebrtcTransportConnected() override;
   void OnWebrtcTransportError(ErrorCode error) override;
+  void OnWebrtcTransportMediaStreamAdded(
+      scoped_refptr<webrtc::MediaStreamInterface> stream) override;
+  void OnWebrtcTransportMediaStreamRemoved(
+      scoped_refptr<webrtc::MediaStreamInterface> stream) override;
 
   // ChannelDispatcherBase::EventHandler interface.
   void OnChannelInitialized(ChannelDispatcherBase* channel_dispatcher) override;
-  void OnChannelError(ChannelDispatcherBase* channel_dispatcher,
-                      ErrorCode error) override;
 
   void NotifyIfChannelsReady();
 
@@ -70,6 +73,7 @@ class WebrtcConnectionToHost : public ConnectionToHost,
 
   // Stub for incoming messages.
   ClientStub* client_stub_ = nullptr;
+  VideoRenderer* video_renderer_ = nullptr;
   ClipboardStub* clipboard_stub_ = nullptr;
 
   scoped_ptr<Session> session_;
@@ -79,6 +83,8 @@ class WebrtcConnectionToHost : public ConnectionToHost,
   scoped_ptr<ClientEventDispatcher> event_dispatcher_;
   ClipboardFilter clipboard_forwarder_;
   InputFilter event_forwarder_;
+
+  scoped_ptr<WebrtcVideoRendererAdapter> video_adapter_;
 
   // Internal state of the connection.
   State state_ = INITIALIZING;

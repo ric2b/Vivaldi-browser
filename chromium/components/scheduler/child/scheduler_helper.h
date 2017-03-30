@@ -34,8 +34,9 @@ class SCHEDULER_EXPORT SchedulerHelper : public TaskQueueManager::Observer {
   ~SchedulerHelper() override;
 
   // TaskQueueManager::Observer implementation:
-  void OnUnregisterTaskQueue(
-      const scoped_refptr<internal::TaskQueueImpl>& queue) override;
+  void OnUnregisterTaskQueue(const scoped_refptr<TaskQueue>& queue) override;
+  void OnTriedToExecuteBlockedTask(const TaskQueue& queue,
+                                   const base::PendingTask& task) override;
 
   // Returns the default task runner.
   scoped_refptr<TaskQueue> DefaultTaskRunner();
@@ -78,6 +79,11 @@ class SCHEDULER_EXPORT SchedulerHelper : public TaskQueueManager::Observer {
     // Called when |queue| is unregistered.
     virtual void OnUnregisterTaskQueue(
         const scoped_refptr<TaskQueue>& queue) = 0;
+
+    // Called when the scheduler tried to execute a task from a disabled
+    // queue. See TaskQueue::Spec::SetShouldReportWhenExecutionBlocked.
+    virtual void OnTriedToExecuteBlockedTask(const TaskQueue& queue,
+                                             const base::PendingTask& task) = 0;
   };
 
   // Called once to set the Observer. This function is called on the main
@@ -91,6 +97,7 @@ class SCHEDULER_EXPORT SchedulerHelper : public TaskQueueManager::Observer {
   void UnregisterTimeDomain(TimeDomain* time_domain);
   const scoped_refptr<SchedulerTqmDelegate>& scheduler_tqm_delegate() const;
   bool GetAndClearSystemIsQuiescentBit();
+  TaskQueue* CurrentlyExecutingTaskQueue() const;
 
   // Test helpers.
   void SetWorkBatchSizeForTesting(size_t work_batch_size);

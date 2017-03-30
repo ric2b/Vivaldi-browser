@@ -48,6 +48,9 @@ public:
 
     void updateStyle();
 
+    // Must call setStyleWithWritingModeOfParent() instead.
+    void setStyle(PassRefPtr<ComputedStyle>) = delete;
+
 private:
     LayoutFullScreen();
     void willBeDestroyed() override;
@@ -58,6 +61,6 @@ protected:
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutFullScreen, isLayoutFullScreen());
 
-}
+} // namespace blink
 
 #endif

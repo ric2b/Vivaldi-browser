@@ -10,34 +10,35 @@
 <link rel="import" href="chrome://md-settings/controls/settings_radio_group.html">
 <link rel="import" href="chrome://md-settings/settings_page/settings_animated_pages.html">
 <link rel="import" href="chrome://md-settings/settings_page/settings_subheader.html">
+<link rel="import" href="chrome://md-settings/settings_shared_css.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="appearance_fonts_page.html">
 
 <dom-module id="settings-appearance-page">
   <link rel="import" type="css"
-      href="chrome://md-settings/settings_shared.css">
-  <link rel="import" type="css"
       href="chrome://md-settings/appearance_page/appearance_shared.css">
   <link rel="import" type="css" href="chrome://resources/css/widgets.css">
   <link rel="import" href="chrome://resources/html/action_link.html">
   <template>
+    <style include="settings-shared"></style>
     <settings-animated-pages id="pages" current-route="{{currentRoute}}"
         section="appearance">
       <neon-animatable id="main">
-        <div class="settings-box split">
-          <div class="start">
-            <iron-icon icon="image:brightness-1"></iron-icon>
-            <paper-button i18n-content="setWallpaper"></paper-button>
-          </div>
+        <div class="settings-box first two-line">
+          <iron-icon icon="image:brightness-1"></iron-icon>
+          <paper-button class="primary-button middle">
+            <div>[[i18n('setWallpaper')]]</div>
+            <div class="secondary">[[i18n('openWallpaperApp')]]</div>
+          </paper-button>
           <iron-icon icon="exit-to-app" disabled></iron-icon>
         </div>
-        <div class="settings-box split">
-          <div class="start">
-            <iron-icon icon="image:brightness-1"></iron-icon>
-            <paper-button id="get-themes"
-                on-tap="openThemesGallery_"
-                >[[i18n('getThemes')]]</paper-button>
-          </div>
+        <div class="settings-box two-line">
+          <iron-icon icon="image:brightness-1"></iron-icon>
+          <paper-button class="primary-button middle" id="get-themes"
+              on-tap="openThemesGallery_">
+            <div>[[i18n('getThemes')]]</div>
+            <div class="secondary">[[i18n('chooseFromWebStore')]]</div>
+          </paper-button>
           <template is="dom-if" if="[[!allowResetTheme_]]">
             <iron-icon icon="exit-to-app"></iron-icon>
           </template>
@@ -46,46 +47,47 @@
                 >[[i18n('resetToDefaultTheme')]]</paper-button>
           </template>
         </div>
-        <div class="settings-box split two-line">
+        <div class="settings-box two-line">
           <settings-checkbox class="start" i18n-values="label:showHomeButton"
               pref="{{prefs.browser.show_home_button}}">
           </settings-checkbox>
         </div>
         <template is="dom-if" if="[[prefs.browser.show_home_button.value]]">
-          <settings-radio-group pref="{{prefs.homepage_is_newtabpage}}">
-            <paper-radio-button name="true"
-                >[[i18n('homePageNtp')]]</paper-radio-button>
-            <paper-radio-button name="false"
-                >[[i18n('other')]]</paper-radio-button>
-          </settings-radio-group>
-          <div class="radio-extended">
-            <settings-input no-label-float pref="{{prefs.homepage}}"
-                label="[[i18n('exampleDotCom')]]">
-            </settings-input>
+          <div class="list-frame">
+            <settings-radio-group pref="{{prefs.homepage_is_newtabpage}}">
+              <paper-radio-button class="list-item" name="true">
+                 [[i18n('homePageNtp')]]
+              </paper-radio-button>
+              <paper-radio-button class="list-item" name="false">
+                [[i18n('other')]]
+                <settings-input no-label-float pref="{{prefs.homepage}}"
+                    label="[[i18n('exampleDotCom')]]">
+                </settings-input>
+              </paper-radio-button>
+            </settings-radio-group>
           </div>
         </template>
-        <div class="settings-box split">
+        <div class="settings-box">
           <settings-checkbox class="start" i18n-values="label:showBookmarksBar"
               pref="{{prefs.bookmark_bar.show_on_all_tabs}}">
           </settings-checkbox>
         </div>
-        <div class="settings-box split">
+        <div class="settings-box">
           <div class="start" i18n-content="fontSize"></div>
           <settings-dropdown-menu id="defaultFontSize"
               pref="{{prefs.webkit.webprefs.default_font_size}}"
-              menu-options="[[fontSizeOptions_]]">
+              menu-options="[[fontSizeOptions_]]" no-label-float>
           </settings-dropdown-menu>
         </div>
-        <div class="settings-box split">
+        <div class="settings-box">
           <div class="start" i18n-content="customizeFonts"></div>
           <paper-button on-tap="onCustomizeFontsTap_"
               i18n-content="customizeFonts"></paper-button>
         </div>
-        <div class="settings-box split">
+        <div class="settings-box">
           <div class="start" i18n-content="pageZoom"></div>
-          <settings-dropdown-menu id="pageZoom"
-              pref="{{defaultZoomLevel_}}"
-              menu-options="[[pageZoomOptions_]]">
+          <settings-dropdown-menu id="pageZoom" pref="{{defaultZoomLevel_}}"
+              menu-options="[[pageZoomOptions_]]" no-label-float>
           </settings-dropdown-menu>
         </div>
       </neon-animatable>

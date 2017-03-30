@@ -23,6 +23,9 @@ component("mus") {
     "native_widget_mus.h",
     "platform_window_mus.cc",
     "platform_window_mus.h",
+    "screen_mus.cc",
+    "screen_mus.h",
+    "screen_mus_delegate.h",
     "surface_binding.cc",
     "surface_binding.h",
     "surface_context_factory.cc",
@@ -129,31 +132,35 @@ group("tests") {
   testonly = true
 
   deps = [
-    ":views_apptests",
+    ":views_mus_unittests",
   ]
 }
 
-mojo_native_application("views_apptests") {
+test("views_mus_unittests") {
   testonly = true
 
-  configs = [ "//build/config:precompiled_headers" ]
+  configs += [ "//build/config:precompiled_headers" ]
 
   # TODO(sky): add more files.
   sources = [
-    "../widget/native_widget_unittest.cc",
-    "../widget/root_view_unittest.cc",
-    "../widget/widget_unittest.cc",
+    "../run_all_unittests.cc",
+    "../run_all_unittests.h",
+    "../view_targeter_unittest.cc",
     "platform_test_helper_mus.cc",
+    "run_all_unittests_mus.cc",
   ]
 
   deps = [
     ":mus",
     "//base",
     "//base:i18n",
-    "//base/allocator",
     "//base/test:test_support",
     "//cc",
-    "//mojo/shell/public/cpp:test_support",
+    "//mojo/shell/background:lib",
+    "//mojo/shell/background:main",
+    "//mojo/shell/background/tests:test_support",
+    "//mojo/shell/public/cpp:sources",
+    "//mojo/shell/runner/host:lib",
     "//skia",
     "//testing/gtest",
     "//third_party/icu",

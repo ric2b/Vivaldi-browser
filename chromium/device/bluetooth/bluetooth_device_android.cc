@@ -8,6 +8,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/metrics/sparse_histogram.h"
 #include "base/strings/stringprintf.h"
 #include "device/bluetooth/bluetooth_adapter_android.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service_android.h"
@@ -17,6 +18,20 @@ using base::android::AttachCurrentThread;
 using base::android::AppendJavaStringArrayToStringVector;
 
 namespace device {
+namespace {
+void RecordConnectionSuccessResult(int32_t status) {
+  UMA_HISTOGRAM_SPARSE_SLOWLY("Bluetooth.Android.GATTConnection.Success.Result",
+                              status);
+}
+void RecordConnectionFailureResult(int32_t status) {
+  UMA_HISTOGRAM_SPARSE_SLOWLY("Bluetooth.Android.GATTConnection.Failure.Result",
+                              status);
+}
+void RecordConnectionTerminatedResult(int32_t status) {
+  UMA_HISTOGRAM_SPARSE_SLOWLY(
+      "Bluetooth.Android.GATTConnection.Disconnected.Result", status);
+}
+}  // namespace
 
 BluetoothDeviceAndroid* BluetoothDeviceAndroid::Create(
     BluetoothAdapterAndroid* adapter,
@@ -78,6 +93,13 @@ uint16_t BluetoothDeviceAndroid::GetProductID() const {
 
 uint16_t BluetoothDeviceAndroid::GetDeviceID() const {
   // Android API does not provide Device ID.
+  return 0;
+}
+
+uint16_t BluetoothDeviceAndroid::GetAppearance() const {
+  // TODO(crbug.com/588083): Implementing GetAppearance()
+  // on mac, win, and android platforms for chrome
+  NOTIMPLEMENTED();
   return 0;
 }
 
@@ -208,36 +230,21 @@ void BluetoothDeviceAndroid::OnConnectionStateChange(
     bool connected) {
   gatt_connected_ = connected;
   if (gatt_connected_) {
+    RecordConnectionSuccessResult(status);
     DidConnectGatt();
+  } else if (!create_gatt_connection_error_callbacks_.empty()) {
+    // We assume that if there are any pending connection callbacks there
+    // was a failed connection attempt.
+    RecordConnectionFailureResult(status);
+    // TODO(ortuno): Return an error code based on |status|
+    // http://crbug.com/578191
+    DidFailToConnectGatt(ERROR_FAILED);
   } else {
+    // Otherwise an existing connection was terminated.
+    RecordConnectionTerminatedResult(status);
     gatt_services_.clear();
     SetGattServicesDiscoveryComplete(false);
-
-    switch (status) {   // Constants are from android.bluetooth.BluetoothGatt.
-      case 0x0000008f:  // GATT_CONNECTION_CONGESTED
-        return DidFailToConnectGatt(ERROR_CONNECTION_CONGESTED);
-      case 0x00000101:  // GATT_FAILURE
-        return DidFailToConnectGatt(ERROR_FAILED);
-      case 0x00000005:  // GATT_INSUFFICIENT_AUTHENTICATION
-        return DidFailToConnectGatt(ERROR_AUTH_FAILED);
-      case 0x0000000f:  // GATT_INSUFFICIENT_ENCRYPTION
-        return DidFailToConnectGatt(ERROR_INSUFFICIENT_ENCRYPTION);
-      case 0x0000000d:  // GATT_INVALID_ATTRIBUTE_LENGTH
-        return DidFailToConnectGatt(ERROR_ATTRIBUTE_LENGTH_INVALID);
-      case 0x00000007:  // GATT_INVALID_OFFSET
-        return DidFailToConnectGatt(ERROR_OFFSET_INVALID);
-      case 0x00000002:  // GATT_READ_NOT_PERMITTED
-        return DidFailToConnectGatt(ERROR_READ_NOT_PERMITTED);
-      case 0x00000006:  // GATT_REQUEST_NOT_SUPPORTED
-        return DidFailToConnectGatt(ERROR_REQUEST_NOT_SUPPORTED);
-      case 0x00000000:  // GATT_SUCCESS
-        return DidDisconnectGatt();
-      case 0x00000003:  // GATT_WRITE_NOT_PERMITTED
-        return DidFailToConnectGatt(ERROR_WRITE_NOT_PERMITTED);
-      default:
-        VLOG(1) << "Unhandled status: " << status;
-        return DidFailToConnectGatt(ERROR_UNKNOWN);
-    }
+    DidDisconnectGatt();
   }
 }
 
@@ -245,8 +252,7 @@ void BluetoothDeviceAndroid::OnGattServicesDiscovered(
     JNIEnv* env,
     const JavaParamRef<jobject>& jcaller) {
   SetGattServicesDiscoveryComplete(true);
-  FOR_EACH_OBSERVER(BluetoothAdapter::Observer, GetAdapter()->GetObservers(),
-                    GattServicesDiscovered(GetAdapter(), this));
+  adapter_->NotifyGattServicesDiscovered(this);
 }
 
 void BluetoothDeviceAndroid::CreateGattRemoteService(
@@ -262,13 +268,13 @@ void BluetoothDeviceAndroid::CreateGattRemoteService(
     return;
 
   BluetoothDevice::GattServiceMap::iterator service_iterator =
-      gatt_services_.set(instance_id_string,
-                         BluetoothRemoteGattServiceAndroid::Create(
-                             GetAdapter(), this, bluetooth_gatt_service_wrapper,
-                             instance_id_string, j_device_.obj()));
+      gatt_services_.set(
+          instance_id_string,
+          BluetoothRemoteGattServiceAndroid::Create(
+              GetAndroidAdapter(), this, bluetooth_gatt_service_wrapper,
+              instance_id_string, j_device_.obj()));
 
-  FOR_EACH_OBSERVER(BluetoothAdapter::Observer, GetAdapter()->GetObservers(),
-                    GattServiceAdded(adapter_, this, service_iterator->second));
+  adapter_->NotifyGattServiceAdded(service_iterator->second);
 }
 
 BluetoothDeviceAndroid::BluetoothDeviceAndroid(BluetoothAdapterAndroid* adapter)

@@ -41,7 +41,7 @@
 #include "net/base/host_port_pair.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
+#include "net/base/url_util.h"
 #include "net/dns/address_sorter.h"
 #include "net/dns/dns_client.h"
 #include "net/dns/dns_config_service.h"
@@ -215,7 +215,7 @@ bool IsGloballyReachable(const IPAddressNumber& dest,
   if (rv != OK)
     return false;
   DCHECK_EQ(ADDRESS_FAMILY_IPV6, endpoint.GetFamily());
-  const IPAddressNumber& address = endpoint.address();
+  const IPAddressNumber& address = endpoint.address().bytes();
   bool is_link_local = (address[0] == 0xFE) && ((address[1] & 0xC0) == 0x80);
   if (is_link_local)
     return false;
@@ -299,7 +299,7 @@ AddressList EnsurePortOnAddressList(const AddressList& list, uint16_t port) {
 // Returns true if |addresses| contains only IPv4 loopback addresses.
 bool IsAllIPv4Loopback(const AddressList& addresses) {
   for (unsigned i = 0; i < addresses.size(); ++i) {
-    const IPAddressNumber& address = addresses[i].address();
+    const IPAddressNumber& address = addresses[i].address().bytes();
     switch (addresses[i].GetFamily()) {
       case ADDRESS_FAMILY_IPV4:
         if (address[0] != 127)
@@ -489,6 +489,33 @@ class PriorityTracker {
 }  // namespace
 
 //-----------------------------------------------------------------------------
+
+bool ResolveLocalHostname(base::StringPiece host,
+                          uint16_t port,
+                          AddressList* address_list) {
+  static const unsigned char kLocalhostIPv4[] = {127, 0, 0, 1};
+  static const unsigned char kLocalhostIPv6[] = {
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
+
+  address_list->clear();
+
+  bool is_local6;
+  if (!IsLocalHostname(host, &is_local6))
+    return false;
+
+  address_list->push_back(
+      IPEndPoint(IPAddressNumber(kLocalhostIPv6,
+                                 kLocalhostIPv6 + arraysize(kLocalhostIPv6)),
+                 port));
+  if (!is_local6) {
+    address_list->push_back(
+        IPEndPoint(IPAddressNumber(kLocalhostIPv4,
+                                   kLocalhostIPv4 + arraysize(kLocalhostIPv4)),
+                   port));
+  }
+
+  return true;
+}
 
 const unsigned HostResolverImpl::kMaximumDnsFailures = 16;
 
@@ -711,7 +738,7 @@ class HostResolverImpl::ProcTask
     // Fail the resolution if the result contains 127.0.53.53. See the comment
     // block of kIcanNameCollisionIp for details on why.
     for (const auto& it : results) {
-      const IPAddressNumber& cur = it.address();
+      const IPAddressNumber& cur = it.address().bytes();
       if (cur.size() == arraysize(kIcanNameCollisionIp) &&
           0 == memcmp(&cur.front(), kIcanNameCollisionIp, cur.size())) {
         error = ERR_ICANN_NAME_COLLISION;
@@ -1826,6 +1853,9 @@ HostResolverImpl::ProcTaskParams::ProcTaskParams(
   if (max_retry_attempts == HostResolver::kDefaultRetryAttempts)
     max_retry_attempts = kDefaultMaxRetryAttempts;
 }
+
+HostResolverImpl::ProcTaskParams::ProcTaskParams(const ProcTaskParams& other) =
+    default;
 
 HostResolverImpl::ProcTaskParams::~ProcTaskParams() {}
 

@@ -13,10 +13,6 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
-#include "base/metrics/field_trial.h"
-#include "base/prefs/overlay_user_pref_store.h"
-#include "base/prefs/pref_change_registrar.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -36,7 +32,11 @@
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/overlay_user_pref_store.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "components/prefs/pref_service.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
+#include "components/strings/grit/components_locale_settings.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_view_host.h"
@@ -326,14 +326,6 @@ void RegisterLocalizedFontPref(user_prefs::PrefRegistrySyncable* registry,
   registry->RegisterIntegerPref(path, val);
 }
 
-bool IsAutodetectEncodingEnabledByDefault() {
-  const std::string group_name = base::FieldTrialList::FindFullName(
-      "AutodetectEncoding");
-  return base::StartsWith(group_name,
-                          "Enabled",
-                          base::CompareCase::INSENSITIVE_ASCII);
-}
-
 }  // namespace
 
 // Watching all these settings per tab is slow when a user has a lot of tabs and
@@ -561,6 +553,15 @@ void PrefsTabHelper::RegisterProfilePrefs(
               l10n_util::GetStringUTF8(pref.resource_id)))
         pref.resource_id = IDS_FIXED_FONT_FAMILY_ALT_WIN;
     }
+
+    // The standard font (Meiryo) isn't installed by default as of Win 10.
+    if (base::win::GetVersion() >= base::win::VERSION_WIN10) {
+      if (pref.pref_name == prefs::kWebKitStandardFontFamilyJapanese) {
+        pref.resource_id = IDS_STANDARD_FONT_FAMILY_JAPANESE_ALT_WIN;
+      } else if (pref.pref_name == prefs::kWebKitSansSerifFontFamilyJapanese) {
+        pref.resource_id = IDS_SANS_SERIF_FONT_FAMILY_JAPANESE_ALT_WIN;
+      }
+    }
 #endif
 
     UScriptCode pref_script = GetScriptOfFontPref(pref.pref_name);
@@ -597,11 +598,9 @@ void PrefsTabHelper::RegisterProfilePrefs(
                             IDS_MINIMUM_FONT_SIZE);
   RegisterLocalizedFontPref(registry, prefs::kWebKitMinimumLogicalFontSize,
                             IDS_MINIMUM_LOGICAL_FONT_SIZE);
-  bool uses_universal_detector = IsAutodetectEncodingEnabledByDefault() ||
-      l10n_util::GetStringUTF8(IDS_USES_UNIVERSAL_DETECTOR) == "true";
   registry->RegisterBooleanPref(
       prefs::kWebKitUsesUniversalDetector,
-      uses_universal_detector,
+      l10n_util::GetStringUTF8(IDS_USES_UNIVERSAL_DETECTOR) == "true",
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterStringPref(
       prefs::kStaticEncodings,

@@ -85,22 +85,20 @@ public:
     DEFINE_ATTRIBUTE_EVENT_LISTENER(activate);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(fetch);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(message);
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(sync);
+    DEFINE_ATTRIBUTE_EVENT_LISTENER(foreignfetch);
 
     DECLARE_VIRTUAL_TRACE();
 
 protected:
     // EventTarget
-    bool dispatchEventInternal(PassRefPtrWillBeRawPtr<Event>) override;
+    DispatchEventResult dispatchEventInternal(PassRefPtrWillBeRawPtr<Event>) override;
     bool addEventListenerInternal(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener>, const EventListenerOptions&) override;
 
 private:
-    class SkipWaitingCallback;
-
     ServiceWorkerGlobalScope(const KURL&, const String& userAgent, ServiceWorkerThread*, double timeOrigin, PassOwnPtr<SecurityOrigin::PrivilegeData>, PassOwnPtrWillBeRawPtr<WorkerClients>);
     void importScripts(const Vector<String>& urls, ExceptionState&) override;
     PassOwnPtrWillBeRawPtr<CachedMetadataHandler> createWorkerScriptCachedMetadataHandler(const KURL& scriptURL, const Vector<char>* metaData) override;
-    void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtrWillBeRawPtr<ScriptCallStack>) override;
+    void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack>) override;
     void scriptLoaded(size_t scriptSize, size_t cachedMetadataSize) override;
 
     PersistentWillBeMember<ServiceWorkerClients> m_clients;

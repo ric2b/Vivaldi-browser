@@ -7,7 +7,7 @@
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/values.h"
-#include "net/base/net_util.h"
+#include "net/base/url_util.h"
 
 namespace {
 
@@ -78,6 +78,9 @@ PerOriginStorageInfo::PerOriginStorageInfo(const GURL& origin,
       in_use_(-1),
       used_count_(-1) {
 }
+
+PerOriginStorageInfo::PerOriginStorageInfo(const PerOriginStorageInfo& other) =
+    default;
 
 PerOriginStorageInfo::~PerOriginStorageInfo() {}
 

@@ -28,6 +28,10 @@
   DISABLE(MediaSourceTest, Playback_AudioOnly_AAC_ADTS)
   DISABLE(MediaSourceTest, Playback_Video_MP4_Audio_WEBM)
 
+  // Disabled because the Widevine lib is not included in the package build,
+  // as it crashes vivaldi
+  DISABLE(PepperContentSettingsSpecialCasesPluginsBlockedTest, WidevineCdm)
+
   // Does not work for vivaldi
   DISABLE(ProfileSigninConfirmationHelperBrowserTest, HasNotBeenShutdown)
   DISABLE(ProfileSigninConfirmationHelperBrowserTest, HasNoSyncedExtensions)

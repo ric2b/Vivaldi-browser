@@ -35,16 +35,10 @@
 #include "content/public/common/result_codes.h"
 #include "ipc/attachment_broker.h"
 #include "ipc/attachment_broker_privileged.h"
-#include "third_party/mojo/src/mojo/edk/embedder/embedder.h"
+#include "mojo/edk/embedder/embedder.h"
 
 #if defined(OS_MACOSX)
 #include "content/browser/mach_broker_mac.h"
-#endif
-
-
-#if defined(MOJO_SHELL_CLIENT)
-#include "content/browser/mojo/mojo_shell_client_host.h"
-#include "content/common/mojo/mojo_shell_connection_impl.h"
 #endif
 
 namespace content {
@@ -195,7 +189,6 @@ void BrowserChildProcessHostImpl::Launch(
     switches::kTraceToConsole,
     switches::kV,
     switches::kVModule,
-    "use-new-edk",  // TODO(use_chrome_edk): temporary.
   };
   cmd_line->CopySwitchesFrom(browser_command_line, kForwardSwitches,
                              arraysize(kForwardSwitches));
@@ -414,25 +407,10 @@ void BrowserChildProcessHostImpl::OnProcessLaunched() {
   const base::Process& process = child_process_->GetProcess();
   DCHECK(process.IsValid());
 
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch("use-new-edk")) {
-    mojo::embedder::ScopedPlatformHandle client_pipe;
-#if defined(MOJO_SHELL_CLIENT)
-    if (IsRunningInMojoShell()) {
-      client_pipe = RegisterProcessWithBroker(process.Pid());
-    } else
-#endif
-    {
-      client_pipe = mojo::embedder::ChildProcessLaunched(process.Handle());
-    }
-    Send(new ChildProcessMsg_SetMojoParentPipeHandle(
-        IPC::GetFileHandleForProcess(
-#if defined(OS_WIN)
-                                     client_pipe.release().handle,
-#else
-                                     client_pipe.release().fd,
-#endif
-                                     process.Handle(), true)));
-  }
+  mojo::edk::ScopedPlatformHandle client_pipe =
+      mojo::edk::ChildProcessLaunched(process.Handle());
+  Send(new ChildProcessMsg_SetMojoParentPipeHandle(IPC::GetFileHandleForProcess(
+      client_pipe.release().handle, process.Handle(), true)));
 
 #if defined(OS_WIN)
   // Start a WaitableEventWatcher that will invoke OnProcessExitedEarly if the

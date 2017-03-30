@@ -4,8 +4,8 @@
 //
 // Message definitions for the input subprotocol.
 //
-// The InputMessage protobuf generally carries web input events.  Currently we
-// just serialize the blink::WebInputEvent POD struct.
+// The InputMessage protobuf generally carries web gesture events.  Currently we
+// just serialize the blink::WebGestureEvent POD struct.
 
 syntax = "proto2";
 
@@ -77,7 +77,7 @@ message InputMessage {
   optional Type type = 1;
 
   // An ID that corresponds to RenderWidgetMessage.render_widget_id.
-  optional uint32 render_widget_id = 10;
+  optional int32 render_widget_id = 10;
 
   // Seconds since client platform start (boot) with millisecond resolution.
   // On Android, this is based off of the client's SystemClock#uptimeMillis().
@@ -96,4 +96,3 @@ message InputMessage {
   optional GestureTap gesture_tap = 8;
   optional GesturePinchUpdate gesture_pinch_update = 9;
 }
-

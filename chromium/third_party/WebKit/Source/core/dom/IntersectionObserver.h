@@ -32,31 +32,34 @@ public:
     void observe(Element*, ExceptionState&);
     void unobserve(Element*, ExceptionState&);
     HeapVector<Member<IntersectionObserverEntry>> takeRecords();
+    Element* root() const;
+    String rootMargin() const;
+    const Vector<float>& thresholds() const { return m_thresholds; }
 
-    Node* root() const { return m_root.get(); }
+    Node* rootNode() const { return m_root.get(); }
     LayoutObject* rootLayoutObject() const;
     bool hasPercentMargin() const;
     const Length& topMargin() const { return m_topMargin; }
     const Length& rightMargin() const { return m_rightMargin; }
     const Length& bottomMargin() const { return m_bottomMargin; }
     const Length& leftMargin() const { return m_leftMargin; }
-    bool isDescendantOfRoot(const Element*) const;
-    void computeIntersectionObservations(double timestamp);
+    void computeIntersectionObservations();
     void enqueueIntersectionObserverEntry(IntersectionObserverEntry&);
     void applyRootMargin(LayoutRect&) const;
     unsigned firstThresholdGreaterThan(float ratio) const;
     void deliver();
-    void setActive(bool);
     void disconnect();
     void removeObservation(IntersectionObservation&);
     bool hasEntries() const { return m_entries.size(); }
+    const HeapHashSet<WeakMember<IntersectionObservation>>& observations() const { return m_observations; }
 
     DECLARE_TRACE();
 
 private:
     explicit IntersectionObserver(IntersectionObserverCallback&, Node&, const Vector<Length>& rootMargin, const Vector<float>& thresholds);
-
-    void checkRootAndDetachIfNeeded();
+#if ENABLE(OILPAN)
+    void clearWeakMembers(Visitor*);
+#endif
 
     Member<IntersectionObserverCallback> m_callback;
     WeakPtrWillBeWeakMember<Node> m_root;

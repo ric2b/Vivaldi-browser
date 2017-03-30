@@ -225,12 +225,12 @@ def StructFromData(module, data):
     struct.fields_data = data['fields']
   struct.attributes = data.get('attributes')
 
-  # Enforce that a [native=True] attribute is set to make native-only struct
+  # Enforce that a [Native] attribute is set to make native-only struct
   # declarations more explicit.
   if struct.native_only:
-    if not struct.attributes or not struct.attributes.get('native', False):
+    if not struct.attributes or not struct.attributes.get('Native', False):
       raise Exception("Native-only struct declarations must include a " +
-                      "native=True attribute.")
+                      "Native attribute.")
 
   return struct
 
@@ -322,6 +322,14 @@ def MethodFromData(module, data, interface):
         lambda parameter: ParameterFromData(module, parameter, interface),
                           data['response_parameters'])
   method.attributes = data.get('attributes')
+
+  # Enforce that only methods with response can have a [Sync] attribute.
+  if method.sync and method.response_parameters is None:
+    raise Exception("Only methods with response can include a [Sync] "
+                    "attribute. If no response parameters are needed, you "
+                    "could use an empty response parameter list, i.e., "
+                    "\"=> ()\".")
+
   return method
 
 def InterfaceToData(interface):

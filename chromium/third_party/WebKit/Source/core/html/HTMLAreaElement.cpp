@@ -25,21 +25,31 @@
 #include "core/dom/ElementTraversal.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLMapElement.h"
+#include "core/html/parser/HTMLParserIdioms.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutImage.h"
 #include "core/layout/LayoutView.h"
-#include "platform/LengthFunctions.h"
 #include "platform/graphics/Path.h"
 #include "platform/transforms/AffineTransform.h"
 
 namespace blink {
+
+namespace {
+
+// Adapt a double to the allowed range of a LayoutUnit and narrow it to float precision.
+float clampCoordinate(double value)
+{
+    return LayoutUnit(value).toFloat();
+}
+
+}
 
 using namespace HTMLNames;
 
 inline HTMLAreaElement::HTMLAreaElement(Document& document)
     : HTMLAnchorElement(areaTag, document)
     , m_lastSize(-1, -1)
-    , m_shape(Unknown)
+    , m_shape(Rect)
 {
 }
 
@@ -57,17 +67,20 @@ DEFINE_NODE_FACTORY(HTMLAreaElement)
 void HTMLAreaElement::parseAttribute(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& value)
 {
     if (name == shapeAttr) {
-        if (equalIgnoringCase(value, "default"))
+        if (equalIgnoringASCIICase(value, "default")) {
             m_shape = Default;
-        else if (equalIgnoringCase(value, "circle"))
+        } else if (equalIgnoringASCIICase(value, "circle") || equalIgnoringASCIICase(value, "circ")) {
             m_shape = Circle;
-        else if (equalIgnoringCase(value, "poly"))
+        } else if (equalIgnoringASCIICase(value, "polygon") || equalIgnoringASCIICase(value, "poly")) {
             m_shape = Poly;
-        else if (equalIgnoringCase(value, "rect"))
+        } else {
+            // The missing (and implicitly invalid) value default for the
+            // 'shape' attribute is 'rect'.
             m_shape = Rect;
+        }
         invalidateCachedRegion();
     } else if (name == coordsAttr) {
-        m_coords = parseHTMLAreaElementCoords(value.string());
+        m_coords = parseHTMLListOfFloatingPointNumbers(value.string());
         invalidateCachedRegion();
     } else if (name == altAttr || name == accesskeyAttr) {
         // Do nothing.
@@ -126,51 +139,35 @@ Path HTMLAreaElement::getRegion(const LayoutSize& size) const
     if (m_coords.isEmpty() && m_shape != Default)
         return Path();
 
-    LayoutUnit width = size.width();
-    LayoutUnit height = size.height();
-
-    // If element omits the shape attribute, select shape based on number of coordinates.
-    Shape shape = m_shape;
-    if (shape == Unknown) {
-        if (m_coords.size() == 3)
-            shape = Circle;
-        else if (m_coords.size() == 4)
-            shape = Rect;
-        else if (m_coords.size() >= 6)
-            shape = Poly;
-    }
-
     Path path;
-    switch (shape) {
+    switch (m_shape) {
     case Poly:
         if (m_coords.size() >= 6) {
             int numPoints = m_coords.size() / 2;
-            path.moveTo(FloatPoint(minimumValueForLength(m_coords[0], width).toFloat(), minimumValueForLength(m_coords[1], height).toFloat()));
+            path.moveTo(FloatPoint(clampCoordinate(m_coords[0]), clampCoordinate(m_coords[1])));
             for (int i = 1; i < numPoints; ++i)
-                path.addLineTo(FloatPoint(minimumValueForLength(m_coords[i * 2], width).toFloat(), minimumValueForLength(m_coords[i * 2 + 1], height).toFloat()));
+                path.addLineTo(FloatPoint(clampCoordinate(m_coords[i * 2]), clampCoordinate(m_coords[i * 2 + 1])));
             path.closeSubpath();
+            path.setWindRule(RULE_EVENODD);
         }
         break;
     case Circle:
-        if (m_coords.size() >= 3) {
-            Length radius = m_coords[2];
-            float r = std::min(minimumValueForLength(radius, width).toFloat(), minimumValueForLength(radius, height).toFloat());
-            path.addEllipse(FloatRect(minimumValueForLength(m_coords[0], width).toFloat() - r, minimumValueForLength(m_coords[1], height).toFloat() - r, 2 * r, 2 * r));
+        if (m_coords.size() >= 3 && m_coords[2] > 0) {
+            float r = clampCoordinate(m_coords[2]);
+            path.addEllipse(FloatRect(clampCoordinate(m_coords[0]) - r, clampCoordinate(m_coords[1]) - r, 2 * r, 2 * r));
         }
         break;
     case Rect:
         if (m_coords.size() >= 4) {
-            float x0 = minimumValueForLength(m_coords[0], width).toFloat();
-            float y0 = minimumValueForLength(m_coords[1], height).toFloat();
-            float x1 = minimumValueForLength(m_coords[2], width).toFloat();
-            float y1 = minimumValueForLength(m_coords[3], height).toFloat();
+            float x0 = clampCoordinate(m_coords[0]);
+            float y0 = clampCoordinate(m_coords[1]);
+            float x1 = clampCoordinate(m_coords[2]);
+            float y1 = clampCoordinate(m_coords[3]);
             path.addRect(FloatRect(x0, y0, x1 - x0, y1 - y0));
         }
         break;
     case Default:
-        path.addRect(FloatRect(0, 0, width.toFloat(), height.toFloat()));
-        break;
-    case Unknown:
+        path.addRect(FloatRect(FloatPoint(0, 0), FloatSize(size)));
         break;
     }
 
@@ -223,6 +220,7 @@ void HTMLAreaElement::setFocus(bool shouldBeFocused)
 
 void HTMLAreaElement::updateFocusAppearance(SelectionBehaviorOnFocus selectionBehavior)
 {
+    document().updateLayoutTreeForNode(this);
     if (!isFocusable())
         return;
 
@@ -230,4 +228,4 @@ void HTMLAreaElement::updateFocusAppearance(SelectionBehaviorOnFocus selectionBe
         imageElement->updateFocusAppearance(selectionBehavior);
 }
 
-}
+} // namespace blink

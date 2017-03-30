@@ -8,13 +8,14 @@ import android.app.Activity;
 import android.net.Uri;
 
 import org.chromium.base.VisibleForTesting;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.NativePage;
 import org.chromium.chrome.browser.UrlConstants;
-import org.chromium.chrome.browser.enhancedbookmarks.EnhancedBookmarkPage;
+import org.chromium.chrome.browser.bookmarks.BookmarkPage;
+import org.chromium.chrome.browser.physicalweb.PhysicalWebDiagnosticsPage;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.util.FeatureUtilities;
-import org.chromium.ui.base.DeviceFormFactor;
 
 /**
  * Creates NativePage objects to show chrome-native:// URLs using the native Android view system.
@@ -36,14 +37,8 @@ public class NativePageFactory {
             }
         }
 
-        protected NativePage buildBookmarksPage(Activity activity, Tab tab,
-                TabModelSelector tabModelSelector) {
-            if (DeviceFormFactor.isTablet(activity)) {
-                return EnhancedBookmarkPage.buildPage(activity, tab);
-            } else {
-                // TODO(kkimlabs): Remove BookmarksPage completely. http://crbug.com/502911
-                return BookmarksPage.buildPage(activity, tab, tabModelSelector);
-            }
+        protected NativePage buildBookmarksPage(Activity activity, Tab tab) {
+            return new BookmarkPage(activity, tab);
         }
 
         protected NativePage buildRecentTabsPage(Activity activity, Tab tab) {
@@ -52,10 +47,14 @@ public class NativePageFactory {
                     : new RecentTabsManager(tab, tab.getProfile(), activity);
             return new RecentTabsPage(activity, recentTabsManager);
         }
+
+        protected NativePage buildPhysicalWebDiagnosticsPage(Activity activity) {
+            return new PhysicalWebDiagnosticsPage(activity);
+        }
     }
 
     enum NativePageType {
-        NONE, CANDIDATE, NTP, BOOKMARKS, RECENT_TABS
+        NONE, CANDIDATE, NTP, BOOKMARKS, RECENT_TABS, PHYSICAL_WEB
     }
 
     private static NativePageType nativePageType(String url, NativePage candidatePage,
@@ -78,6 +77,12 @@ public class NativePageFactory {
             return NativePageType.BOOKMARKS;
         } else if (UrlConstants.RECENT_TABS_HOST.equals(host) && !isIncognito) {
             return NativePageType.RECENT_TABS;
+        } else if (UrlConstants.PHYSICAL_WEB_HOST.equals(host)) {
+            if (ChromeFeatureList.isEnabled("PhysicalWeb")) {
+                return NativePageType.PHYSICAL_WEB;
+            } else {
+                return NativePageType.NONE;
+            }
         } else {
             return NativePageType.NONE;
         }
@@ -117,11 +122,13 @@ public class NativePageFactory {
                 page = sNativePageBuilder.buildNewTabPage(activity, tab, tabModelSelector);
                 break;
             case BOOKMARKS:
-                page = sNativePageBuilder.buildBookmarksPage(activity, tab, tabModelSelector);
-                if (page == null) return null;  // Enhanced Bookmarks page is not shown on phone
+                page = sNativePageBuilder.buildBookmarksPage(activity, tab);
                 break;
             case RECENT_TABS:
                 page = sNativePageBuilder.buildRecentTabsPage(activity, tab);
+                break;
+            case PHYSICAL_WEB:
+                page = sNativePageBuilder.buildPhysicalWebDiagnosticsPage(activity);
                 break;
             default:
                 assert false;

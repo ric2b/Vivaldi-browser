@@ -1,4 +1,4 @@
-# Copyright (c) 2012 The Chromium Authors. All rights reserved.
+# Copyright 2012 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -36,6 +36,9 @@ class CSSChecker(object):
       s = _remove_mixins(s)
       return s
 
+    def _extract_inline_style(s):
+      return '\n'.join(re.findall(r'<style>([^<]*)<\/style>', s))
+
     def _remove_ats(s):
       at_reg = re.compile(r"""
           @(?!\d+x\b)\w+[^'"]*?{  # @at-keyword selector junk {, not @2x
@@ -52,7 +55,7 @@ class CSSChecker(object):
       return re.sub(re.compile(r'--[\d\w-]+: {.*?};', re.DOTALL), '', s)
 
     def _remove_template_expressions(s):
-      return re.sub(re.compile(r'\${[^}]*}', re.DOTALL), '', s)
+      return re.sub(re.compile(r'\$i18n{[^}]*}', re.DOTALL), '', s)
 
     def _remove_grit(s):
       grit_reg = re.compile(r"""
@@ -375,13 +378,20 @@ class CSSChecker(object):
                                                   file_filter=self.file_filter)
     files = []
     for f in affected_files:
-      # Remove all /*comments*/, @at-keywords, and grit <if|include> tags; we're
-      # not using a real parser. TODO(dbeam): Check alpha in <if> blocks.
-      file_contents = _remove_all('\n'.join(f.NewContents()))
-      files.append((f.LocalPath(), file_contents))
+      file_contents = '\n'.join(f.NewContents())
+      path = f.LocalPath()
+      # Handle CSS files and HTML files with inline styles.
+      if path.endswith('.html'):
+        file_contents = _extract_inline_style(file_contents)
 
-    # Only look at CSS files for now.
-    for f in filter(lambda f: f[0].endswith('.css'), files):
+      if path.endswith('.html') or path.endswith('.css'):
+        # Remove all /*comments*/, @at-keywords, and grit <if|include> tags;
+        # we're not using a real parser. TODO(dbeam): Check alpha in <if>
+        # blocks.
+        file_contents = _remove_all(file_contents)
+        files.append((path, file_contents))
+
+    for f in files:
       file_errors = []
       for check in added_or_modified_files_checks:
         # If the check is multiline, it receieves the whole file and gives us

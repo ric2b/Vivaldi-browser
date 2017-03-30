@@ -22,7 +22,6 @@
 #include "content/public/test/test_file_system_backend.h"
 #include "content/public/test/test_file_system_context.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_request_headers.h"
 #include "net/url_request/url_request.h"
@@ -252,9 +251,11 @@ class FileSystemDirURLRequestJobTest : public testing::Test {
                           const std::string& url,
                           bool is_directory,
                           int64_t size) {
+#define NUMBER "([0-9-]*)"
 #define STR "([^\"]*)"
     icu::UnicodeString pattern("^<script>addRow\\(\"" STR "\",\"" STR
-                               "\",(0|1),\"" STR "\",\"" STR "\"\\);</script>");
+        "\",(0|1)," NUMBER ",\"" STR "\"," NUMBER ",\"" STR "\"\\);</script>");
+#undef NUMBER
 #undef STR
     icu::UnicodeString input(entry_line.c_str());
 
@@ -262,7 +263,7 @@ class FileSystemDirURLRequestJobTest : public testing::Test {
     icu::RegexMatcher match(pattern, input, 0, status);
 
     EXPECT_TRUE(match.find());
-    EXPECT_EQ(5, match.groupCount());
+    EXPECT_EQ(7, match.groupCount());
     EXPECT_EQ(icu::UnicodeString(name.c_str()), match.group(1, status));
     EXPECT_EQ(icu::UnicodeString(url.c_str()), match.group(2, status));
     EXPECT_EQ(icu::UnicodeString(is_directory ? "1" : "0"),
@@ -270,10 +271,10 @@ class FileSystemDirURLRequestJobTest : public testing::Test {
     if (size >= 0) {
       icu::UnicodeString size_string(
           base::FormatBytesUnlocalized(size).c_str());
-      EXPECT_EQ(size_string, match.group(4, status));
+      EXPECT_EQ(size_string, match.group(5, status));
     }
 
-    icu::UnicodeString date_ustr(match.group(5, status));
+    icu::UnicodeString date_ustr(match.group(7, status));
     scoped_ptr<icu::DateFormat> formatter(
         icu::DateFormat::createDateTimeInstance(icu::DateFormat::kShort));
     UErrorCode parse_status = U_ZERO_ERROR;

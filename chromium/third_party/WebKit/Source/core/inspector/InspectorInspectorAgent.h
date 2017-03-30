@@ -31,7 +31,6 @@
 #define InspectorInspectorAgent_h
 
 #include "core/CoreExport.h"
-#include "core/InspectorFrontend.h"
 #include "core/inspector/InspectorBaseAgent.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/Vector.h"
@@ -39,39 +38,37 @@
 namespace blink {
 
 class LocalFrame;
-class InjectedScriptManager;
-class JSONObject;
+
+namespace protocol {
+class DictionaryValue;
+}
 
 typedef String ErrorString;
 
-class CORE_EXPORT InspectorInspectorAgent final : public InspectorBaseAgent<InspectorInspectorAgent, InspectorFrontend::Inspector>, public InspectorBackendDispatcher::InspectorCommandHandler {
+class CORE_EXPORT InspectorInspectorAgent final : public InspectorBaseAgent<InspectorInspectorAgent, protocol::Frontend::Inspector>, public protocol::Dispatcher::InspectorCommandHandler {
     WTF_MAKE_NONCOPYABLE(InspectorInspectorAgent);
 public:
-    static PassOwnPtrWillBeRawPtr<InspectorInspectorAgent> create(InjectedScriptManager* injectedScriptManager)
+    static PassOwnPtrWillBeRawPtr<InspectorInspectorAgent> create()
     {
-        return adoptPtrWillBeNoop(new InspectorInspectorAgent(injectedScriptManager));
+        return adoptPtrWillBeNoop(new InspectorInspectorAgent());
     }
 
     ~InspectorInspectorAgent() override;
-    DECLARE_VIRTUAL_TRACE();
 
     // Inspector front-end API.
     void enable(ErrorString*) override;
 
     // InspectorAgent overrides.
     void disable(ErrorString*) override;
-    void didCommitLoadForLocalFrame(LocalFrame*) override;
     void restore() override;
 
     // Generic code called from custom implementations.
     void evaluateForTestInFrontend(long testCallId, const String& script);
 
-    void inspect(PassRefPtr<TypeBuilder::Runtime::RemoteObject> objectToInspect, PassRefPtr<JSONObject> hints);
+    void inspect(PassOwnPtr<protocol::Runtime::RemoteObject> objectToInspect, PassRefPtr<protocol::DictionaryValue> hints);
 
 private:
-    explicit InspectorInspectorAgent(InjectedScriptManager*);
-
-    RawPtrWillBeMember<InjectedScriptManager> m_injectedScriptManager;
+    InspectorInspectorAgent();
 
     Vector<std::pair<long, String>> m_pendingEvaluateTestCommands;
 };

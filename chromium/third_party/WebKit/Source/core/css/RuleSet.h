@@ -86,7 +86,7 @@ public:
     unsigned specificity() const { return m_specificity; }
     unsigned linkMatchType() const { return m_linkMatchType; }
     bool hasDocumentSecurityOrigin() const { return m_hasDocumentSecurityOrigin; }
-    PropertyWhitelistType propertyWhitelistType(bool isMatchingUARules = false) const { return isMatchingUARules ? PropertyWhitelistNone : static_cast<PropertyWhitelistType>(m_propertyWhitelistType); }
+    PropertyWhitelistType propertyWhitelist(bool isMatchingUARules = false) const { return isMatchingUARules ? PropertyWhitelistNone : static_cast<PropertyWhitelistType>(m_propertyWhitelist); }
     // Try to balance between memory usage (there can be lots of RuleData objects) and good filtering performance.
     static const unsigned maximumIdentifierCount = 4;
     const unsigned* descendantSelectorIdentifierHashes() const { return m_descendantSelectorIdentifierHashes; }
@@ -104,7 +104,7 @@ private:
     unsigned m_containsUncommonAttributeSelector : 1;
     unsigned m_linkMatchType : 2; //  CSSSelector::LinkMatchMask
     unsigned m_hasDocumentSecurityOrigin : 1;
-    unsigned m_propertyWhitelistType : 2;
+    unsigned m_propertyWhitelist : 2;
     // Use plain array instead of a Vector to minimize memory overhead.
     unsigned m_descendantSelectorIdentifierHashes[maximumIdentifierCount];
 };
@@ -145,7 +145,8 @@ public:
     const WillBeHeapVector<RawPtrWillBeMember<StyleRuleFontFace>>& fontFaceRules() const { return m_fontFaceRules; }
     const WillBeHeapVector<RawPtrWillBeMember<StyleRuleKeyframes>>& keyframesRules() const { return m_keyframesRules; }
     const WillBeHeapVector<MinimalRuleData>& deepCombinatorOrShadowPseudoRules() const { return m_deepCombinatorOrShadowPseudoRules; }
-    const WillBeHeapVector<MinimalRuleData>& shadowDistributedRules() const { return m_shadowDistributedRules; }
+    const WillBeHeapVector<MinimalRuleData>& contentPseudoElementRules() const { return m_contentPseudoElementRules; }
+    const WillBeHeapVector<MinimalRuleData>& slottedPseudoElementRules() const { return m_slottedPseudoElementRules; }
     const MediaQueryResultList& viewportDependentMediaQueryResults() const { return m_viewportDependentMediaQueryResults; }
     const MediaQueryResultList& deviceDependentMediaQueryResults() const { return m_deviceDependentMediaQueryResults; }
 
@@ -222,9 +223,8 @@ private:
     WillBeHeapVector<RawPtrWillBeMember<StyleRuleFontFace>> m_fontFaceRules;
     WillBeHeapVector<RawPtrWillBeMember<StyleRuleKeyframes>> m_keyframesRules;
     WillBeHeapVector<MinimalRuleData> m_deepCombinatorOrShadowPseudoRules;
-    // TODO(kochi): "shadowDistributed" means the selector has ::content pseudo element.
-    // Once ::slotted is introduced, come up with more readable name.
-    WillBeHeapVector<MinimalRuleData> m_shadowDistributedRules;
+    WillBeHeapVector<MinimalRuleData> m_contentPseudoElementRules;
+    WillBeHeapVector<MinimalRuleData> m_slottedPseudoElementRules;
 
     MediaQueryResultList m_viewportDependentMediaQueryResults;
     MediaQueryResultList m_deviceDependentMediaQueryResults;

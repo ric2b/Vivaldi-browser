@@ -89,6 +89,7 @@ public:
     LocalDOMWindow* domWindow() const;
     virtual ExecutionContext* executionContext() const;
     virtual void setExecutionContext(ExecutionContext*);
+    int contextIdInDebugger();
 
     // This can return an empty handle if the v8::Context is gone.
     v8::Local<v8::Context> context() const { return m_context.newLocal(m_isolate); }
@@ -101,14 +102,6 @@ public:
 
     V8PerContextData* perContextData() const { return m_perContextData.get(); }
     void disposePerContextData();
-
-    class Observer {
-    public:
-        virtual ~Observer() { }
-        virtual void willDisposeScriptState(ScriptState*) = 0;
-    };
-    void addObserver(Observer*);
-    void removeObserver(Observer*);
 
     bool evalEnabled() const;
     void setEvalEnabled(bool);
@@ -135,7 +128,6 @@ private:
 #if ENABLE(ASSERT)
     bool m_globalObjectDetached;
 #endif
-    Vector<Observer*> m_observers;
 };
 
 // ScriptStateProtectingContext keeps the context associated with the ScriptState alive.
@@ -164,6 +156,6 @@ private:
     ScopedPersistent<v8::Context> m_context;
 };
 
-}
+} // namespace blink
 
 #endif // ScriptState_h

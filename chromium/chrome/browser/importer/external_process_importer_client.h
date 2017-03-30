@@ -27,6 +27,7 @@
 class ExternalProcessImporterHost;
 struct ImportedBookmarkEntry;
 struct ImportedNotesEntry;
+struct ImportedSpeedDialEntry;
 struct ImportedFaviconUsage;
 class InProcessImporterBridge;
 
@@ -85,6 +86,8 @@ class ExternalProcessImporterClient : public content::UtilityProcessHostClient {
                           size_t total_notes_count);
   void OnNotesImportGroup(
       const std::vector<ImportedNotesEntry>& notes_group);
+  void OnSpeedDialImportStart(size_t total_count);
+  void OnSpeedDialImportGroup(const std::vector<ImportedSpeedDialEntry>& group);
   void OnFaviconsImportStart(size_t total_favicons_count);
   void OnFaviconsImportGroup(
       const favicon_base::FaviconUsageDataList& favicons_group);
@@ -127,6 +130,8 @@ class ExternalProcessImporterClient : public content::UtilityProcessHostClient {
   std::vector<ImportedNotesEntry> notes_;
   std::vector<ImporterAutofillFormDataEntry> autofill_form_data_;
 
+  std::vector<ImportedSpeedDialEntry> speeddial_;
+
   // Usually some variation on IDS_BOOKMARK_GROUP_...; the name of the folder
   // under which imported bookmarks will be placed.
   base::string16 bookmarks_first_folder_name_;
@@ -140,6 +145,9 @@ class ExternalProcessImporterClient : public content::UtilityProcessHostClient {
 
   // Total number of notes to import.
   size_t total_notes_count_;
+
+  // Total number of speed dial to import.
+  size_t total_speeddial_count_;
 
   // Total number of history items to import.
   size_t total_history_rows_count_;

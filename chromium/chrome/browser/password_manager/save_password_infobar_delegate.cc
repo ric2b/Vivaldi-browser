@@ -20,6 +20,7 @@
 #include "content/public/browser/web_contents.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "url/origin.h"
 
 // static
 void SavePasswordInfoBarDelegate::Create(
@@ -31,7 +32,8 @@ void SavePasswordInfoBarDelegate::Create(
   sync_driver::SyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile);
   bool is_smartlock_branding_enabled =
-      password_bubble_experiment::IsSmartLockBrandingEnabled(sync_service);
+      password_bubble_experiment::IsSmartLockBrandingSavePromptEnabled(
+          sync_service);
   bool should_show_first_run_experience =
       password_bubble_experiment::ShouldShowSavePromptFirstRunExperience(
           sync_service, profile->GetPrefs());
@@ -94,9 +96,9 @@ SavePasswordInfoBarDelegate::SavePasswordInfoBarDelegate(
   base::string16 message;
   gfx::Range message_link_range = gfx::Range();
   PasswordTittleType type =
-      form_to_save_->pending_credentials().federation_url.is_empty()
-      ? PasswordTittleType::SAVE_PASSWORD
-      : PasswordTittleType::UPDATE_PASSWORD;
+      form_to_save_->pending_credentials().federation_origin.unique()
+          ? PasswordTittleType::SAVE_PASSWORD
+          : PasswordTittleType::UPDATE_PASSWORD;
   GetSavePasswordDialogTitleTextAndLinkRange(
       web_contents->GetVisibleURL(), form_to_save_->observed_form().origin,
       is_smartlock_branding_enabled, type,

@@ -86,6 +86,8 @@
       '<(VIVALDI)/ui/vivaldi_browser_window.h',
       '<(VIVALDI)/ui/vivaldi_session_service.cc',
       '<(VIVALDI)/ui/vivaldi_session_service.h',
+      '<(VIVALDI)/ui/vivaldi_ui_utils.cc',
+      '<(VIVALDI)/ui/vivaldi_ui_utils.h',
     ],
     'vivaldi_browser_ui_mac': [
       '<(VIVALDI)/ui/cocoa/vivaldi_browser_window_cocoa.h',
@@ -159,6 +161,10 @@
     'vivaldi_add_mac_resources_chrome_exe' : [
       '<(VIVALDI)/app/resources/theme/vivaldi/mac/app.icns',
       '<(VIVALDI)/app/resources/theme/vivaldi/mac/document.icns',
+    ],
+    #components_unittests
+    'vivaldi_tab_zoom_pref' : [
+      '<(VIVALDI)/prefs/vivaldi_tab_zoom_pref_tests.cc',
     ],
   },
 }

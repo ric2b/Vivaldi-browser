@@ -29,7 +29,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/Text.h"
 #include "core/dom/shadow/ShadowRoot.h"
-#include "core/frame/UseCounter.h"
+#include "core/frame/Deprecation.h"
 #include "core/html/FormData.h"
 #include "core/html/HTMLOptionElement.h"
 #include "core/html/HTMLSelectElement.h"
@@ -49,7 +49,7 @@ using namespace HTMLNames;
 HTMLKeygenElement::HTMLKeygenElement(Document& document, HTMLFormElement* form)
     : HTMLFormControlElementWithState(keygenTag, document, form)
 {
-    UseCounter::countDeprecation(document, UseCounter::HTMLKeygenElement);
+    Deprecation::countDeprecation(document, UseCounter::HTMLKeygenElement);
     if (document.frame())
         document.frame()->loader().client()->didUseKeygen();
 }
@@ -140,4 +140,4 @@ bool HTMLKeygenElement::supportsAutofocus() const
     return true;
 }
 
-} // namespace
+} // namespace blink

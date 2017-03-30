@@ -13,7 +13,6 @@
 #include "base/i18n/string_compare.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -23,6 +22,7 @@
 #include "chrome/browser/ui/translate/translate_bubble_model_impl.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/prefs/pref_service.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/browser/translate_ui_delegate.h"
@@ -76,7 +76,7 @@ TranslateBubbleView::~TranslateBubbleView() {
 }
 
 // static
-void TranslateBubbleView::ShowBubble(
+views::Widget* TranslateBubbleView::ShowBubble(
     views::View* anchor_view,
     content::WebContents* web_contents,
     translate::TranslateStep step,
@@ -88,7 +88,7 @@ void TranslateBubbleView::ShowBubble(
     if (translate_bubble_view_->web_contents() == web_contents &&
         translate_bubble_view_->model()->GetViewState() ==
         TranslateBubbleModel::VIEW_STATE_ADVANCED) {
-      return;
+      return nullptr;
     }
     if (step != translate::TRANSLATE_STEP_TRANSLATE_ERROR) {
       TranslateBubbleModel::ViewState state =
@@ -97,11 +97,11 @@ void TranslateBubbleView::ShowBubble(
     } else {
       translate_bubble_view_->SwitchToErrorView(error_type);
     }
-    return;
+    return nullptr;
   } else {
     if (step == translate::TRANSLATE_STEP_AFTER_TRANSLATE &&
         reason == AUTOMATIC) {
-      return;
+      return nullptr;
     }
   }
 
@@ -120,8 +120,9 @@ void TranslateBubbleView::ShowBubble(
       new TranslateBubbleModelImpl(step, std::move(ui_delegate)));
   TranslateBubbleView* view = new TranslateBubbleView(
       anchor_view, std::move(model), error_type, web_contents);
-  views::BubbleDelegateView::CreateBubble(view);
+  views::Widget* bubble_widget = views::BubbleDelegateView::CreateBubble(view);
   view->ShowForReason(reason);
+  return bubble_widget;
 }
 
 // static
@@ -270,9 +271,6 @@ TranslateBubbleView::TranslateBubbleView(
       TranslateBubbleModel::VIEW_STATE_BEFORE_TRANSLATE) {
     translate_executed_ = true;
   }
-
-  set_margins(gfx::Insets(views::kPanelVertMargin, views::kPanelHorizMargin,
-                          views::kPanelVertMargin, views::kPanelHorizMargin));
 
   translate_bubble_view_ = this;
 }

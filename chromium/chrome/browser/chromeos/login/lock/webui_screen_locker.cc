@@ -70,7 +70,7 @@ WebUIScreenLocker::WebUIScreenLocker(ScreenLocker* screen_locker)
   set_should_emit_login_prompt_visible(false);
   ash::Shell::GetInstance()->lock_state_controller()->AddObserver(this);
   ash::Shell::GetInstance()->delegate()->AddVirtualKeyboardStateObserver(this);
-  ash::Shell::GetScreen()->AddObserver(this);
+  gfx::Screen::GetScreen()->AddObserver(this);
   DBusThreadManager::Get()->GetPowerManagerClient()->AddObserver(this);
 
   if (keyboard::KeyboardController::GetInstance()) {
@@ -80,8 +80,7 @@ WebUIScreenLocker::WebUIScreenLocker(ScreenLocker* screen_locker)
 }
 
 void WebUIScreenLocker::LockScreen() {
-  gfx::Rect bounds =
-      gfx::Screen::GetNativeScreen()->GetPrimaryDisplay().bounds();
+  gfx::Rect bounds = gfx::Screen::GetScreen()->GetPrimaryDisplay().bounds();
 
   lock_time_ = base::TimeTicks::Now();
   LockWindow* lock_window = LockWindow::Create();
@@ -165,7 +164,7 @@ void WebUIScreenLocker::ResetAndFocusUserPod() {
 
 WebUIScreenLocker::~WebUIScreenLocker() {
   DBusThreadManager::Get()->GetPowerManagerClient()->RemoveObserver(this);
-  ash::Shell::GetScreen()->RemoveObserver(this);
+  gfx::Screen::GetScreen()->RemoveObserver(this);
   ash::Shell::GetInstance()->
       lock_state_controller()->RemoveObserver(this);
 
@@ -245,6 +244,7 @@ void WebUIScreenLocker::MigrateUserData(const std::string& old_password) {
 }
 
 void WebUIScreenLocker::OnSigninScreenReady() {
+  VLOG(2) << "Lock screen signin screen is ready";
 }
 
 void WebUIScreenLocker::OnStartEnterpriseEnrollment() {
@@ -352,6 +352,27 @@ void WebUIScreenLocker::RenderProcessGone(base::TerminationStatus status) {
   }
 }
 
+void WebUIScreenLocker::PluginCrashed(const base::FilePath& plugin_path,
+                                      base::ProcessId plugin_pid) {
+  LOG(ERROR) << "Plugin crash on lock screen (plugin_path: "
+             << plugin_path.LossyDisplayName() << " plugin_pid: " << plugin_pid
+             << ")";
+}
+
+void WebUIScreenLocker::PluginHungStatusChanged(
+    int plugin_child_id,
+    const base::FilePath& plugin_path,
+    bool is_hung) {
+  LOG(ERROR) << "Plugin hung status change on lock screen;"
+             << " (plugin_child_id: " << plugin_child_id
+             << " plugin_path: " << plugin_path.LossyDisplayName()
+             << " is_hung: " << is_hung << ")";
+}
+
+void WebUIScreenLocker::WebContentsDestroyed() {
+  VLOG(2) << "Lock screen WebContents instance destroyed";
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // ash::KeyboardStateObserver overrides.
 
@@ -396,8 +417,7 @@ void WebUIScreenLocker::OnDisplayRemoved(const gfx::Display& old_display) {
 
 void WebUIScreenLocker::OnDisplayMetricsChanged(const gfx::Display& display,
                                                 uint32_t changed_metrics) {
-  gfx::Display primary_display =
-      gfx::Screen::GetNativeScreen()->GetPrimaryDisplay();
+  gfx::Display primary_display = gfx::Screen::GetScreen()->GetPrimaryDisplay();
   if (display.id() != primary_display.id() ||
       !(changed_metrics & DISPLAY_METRIC_BOUNDS)) {
     return;

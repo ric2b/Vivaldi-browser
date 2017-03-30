@@ -24,7 +24,6 @@
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_timeline.h"
 #include "cc/base/switches.h"
-#include "cc/blink/web_compositor_animation_timeline_impl.h"
 #include "cc/blink/web_layer_impl.h"
 #include "cc/debug/layer_tree_debug_state.h"
 #include "cc/debug/micro_benchmark.h"
@@ -44,7 +43,9 @@
 #include "components/scheduler/renderer/renderer_scheduler.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
+#include "content/common/input/input_event_utils.h"
 #include "content/public/common/content_switches.h"
+#include "content/renderer/gpu/render_widget_compositor_delegate.h"
 #include "content/renderer/input/input_handler_manager.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
@@ -54,7 +55,6 @@
 #include "third_party/WebKit/public/web/WebKit.h"
 #include "third_party/WebKit/public/web/WebRuntimeFeatures.h"
 #include "third_party/WebKit/public/web/WebSelection.h"
-#include "third_party/WebKit/public/web/WebWidget.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/native_theme/native_theme_switches.h"
 
@@ -135,7 +135,7 @@ cc::LayerSelection ConvertWebSelection(const WebSelection& web_selection) {
   return cc_selection;
 }
 
-gfx::Size CalculateDefaultTileSize(RenderWidget* widget) {
+gfx::Size CalculateDefaultTileSize(float initial_device_scale_factor) {
   int default_tile_size = 256;
 #if defined(OS_ANDROID)
   // TODO(epenner): unify this for all platforms if it
@@ -180,7 +180,7 @@ gfx::Size CalculateDefaultTileSize(RenderWidget* widget) {
   }
 #elif defined(OS_CHROMEOS)
   // Use 512 for high DPI (dsf=2.0f) devices.
-  if (widget->screen_info().deviceScaleFactor >= 2.0f)
+  if (initial_device_scale_factor >= 2.0f)
     default_tile_size = 512;
 #endif
 
@@ -205,27 +205,27 @@ static cc::TopControlsState ConvertTopControlsState(
 
 // static
 scoped_ptr<RenderWidgetCompositor> RenderWidgetCompositor::Create(
-    RenderWidget* widget,
+    RenderWidgetCompositorDelegate* delegate,
+    float device_scale_factor,
     CompositorDependencies* compositor_deps) {
   scoped_ptr<RenderWidgetCompositor> compositor(
-      new RenderWidgetCompositor(widget, compositor_deps));
-  compositor->Initialize();
+      new RenderWidgetCompositor(delegate, compositor_deps));
+  compositor->Initialize(device_scale_factor);
   return compositor;
 }
 
 RenderWidgetCompositor::RenderWidgetCompositor(
-    RenderWidget* widget,
+    RenderWidgetCompositorDelegate* delegate,
     CompositorDependencies* compositor_deps)
     : num_failed_recreate_attempts_(0),
-      widget_(widget),
+      delegate_(delegate),
       compositor_deps_(compositor_deps),
       never_visible_(false),
       layout_and_paint_async_callback_(nullptr),
       remote_proto_channel_receiver_(nullptr),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
-void RenderWidgetCompositor::Initialize() {
+void RenderWidgetCompositor::Initialize(float device_scale_factor) {
   base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 
   cc::LayerTreeSettings settings;
@@ -257,7 +257,9 @@ void RenderWidgetCompositor::Initialize() {
   blink::WebRuntimeFeatures::enableCompositorAnimationTimelines(
       settings.use_compositor_animation_timelines);
 
-  settings.default_tile_size = CalculateDefaultTileSize(widget_);
+  settings.use_mouse_wheel_gestures = UseGestureBasedWheelScrolling();
+
+  settings.default_tile_size = CalculateDefaultTileSize(device_scale_factor);
   if (cmd->HasSwitch(switches::kDefaultTileWidth)) {
     int tile_width = 0;
     GetSwitchValueAsInt(*cmd,
@@ -332,10 +334,6 @@ void RenderWidgetCompositor::Initialize() {
         settings.top_controls_hide_threshold = hide_threshold;
   }
 
-  settings.verify_property_trees =
-      cmd->HasSwitch(cc::switches::kEnablePropertyTreeVerification);
-  if (cmd->HasSwitch(cc::switches::kDisableCompositorPropertyTrees))
-    settings.use_property_trees = false;
   settings.renderer_settings.allow_antialiasing &=
       !cmd->HasSwitch(cc::switches::kDisableCompositedAntialiasing);
   // The means the renderer compositor has 2 possible modes:
@@ -408,14 +406,16 @@ void RenderWidgetCompositor::Initialize() {
   // low end, so always use default policy.
   bool use_low_memory_policy =
       base::SysInfo::IsLowEndDevice() && !using_synchronous_compositor;
-  // RGBA_4444 textures are only enabled by default for low end devices
-  // and are disabled for Android WebView as it doesn't support the format.
-  settings.renderer_settings.use_rgba_4444_textures = use_low_memory_policy;
   if (use_low_memory_policy) {
     // On low-end we want to be very carefull about killing other
     // apps. So initially we use 50% more memory to avoid flickering
     // or raster-on-demand.
     settings.max_memory_for_prepaint_percentage = 67;
+
+    // RGBA_4444 textures are only enabled by default for low end devices
+    // and are disabled for Android WebView as it doesn't support the format.
+    if (!cmd->HasSwitch(switches::kDisableRGBA4444Textures))
+      settings.renderer_settings.preferred_tile_format = cc::RGBA_4444;
   } else {
     // On other devices we have increased memory excessively to avoid
     // raster-on-demand already, so now we reserve 50% _only_ to avoid
@@ -451,12 +451,16 @@ void RenderWidgetCompositor::Initialize() {
   if (cmd->HasSwitch(cc::switches::kEnableBeginFrameScheduling))
     settings.use_external_begin_frame_source = true;
 
-  settings.renderer_settings.use_rgba_4444_textures |=
-      cmd->HasSwitch(switches::kEnableRGBA4444Textures);
-  settings.renderer_settings.use_rgba_4444_textures &=
-      !cmd->HasSwitch(switches::kDisableRGBA4444Textures);
+  if (cmd->HasSwitch(switches::kEnableRGBA4444Textures) &&
+      !cmd->HasSwitch(switches::kDisableRGBA4444Textures)) {
+    settings.renderer_settings.preferred_tile_format = cc::RGBA_4444;
+  }
 
-  if (widget_->for_oopif()) {
+  if (cmd->HasSwitch(cc::switches::kEnableTileCompression)) {
+    settings.renderer_settings.preferred_tile_format = cc::ETC1;
+  }
+
+  if (delegate_->ForOOPIF()) {
     // TODO(simonhong): Apply BeginFrame scheduling for OOPIF.
     // See crbug.com/471411.
     settings.use_external_begin_frame_source = false;
@@ -489,8 +493,7 @@ void RenderWidgetCompositor::Initialize() {
 
   scoped_ptr<cc::BeginFrameSource> external_begin_frame_source;
   if (settings.use_external_begin_frame_source) {
-    external_begin_frame_source =
-        compositor_deps_->CreateExternalBeginFrameSource(widget_->routing_id());
+    external_begin_frame_source = delegate_->CreateExternalBeginFrameSource();
   }
 
   cc::LayerTreeHost::InitParams params;
@@ -503,10 +506,9 @@ void RenderWidgetCompositor::Initialize() {
   params.external_begin_frame_source = std::move(external_begin_frame_source);
   if (use_remote_compositing) {
     DCHECK(!compositor_thread_task_runner.get());
-
-    // TODO(khushalsagar): Replace this with LayerTreeHost::CreateRemote
-    // See crbug/550687.
-    layer_tree_host_ = cc::LayerTreeHost::CreateSingleThreaded(this, &params);
+    params.image_serialization_processor =
+        compositor_deps_->GetImageSerializationProcessor();
+    layer_tree_host_ = cc::LayerTreeHost::CreateRemoteServer(this, &params);
   } else if (compositor_thread_task_runner.get()) {
     layer_tree_host_ = cc::LayerTreeHost::CreateThreaded(
         compositor_thread_task_runner, &params);
@@ -608,21 +610,16 @@ void RenderWidgetCompositor::clearRootLayer() {
 }
 
 void RenderWidgetCompositor::attachCompositorAnimationTimeline(
-    blink::WebCompositorAnimationTimeline* compositor_timeline) {
-  DCHECK(compositor_timeline);
+    cc::AnimationTimeline* compositor_timeline) {
   DCHECK(layer_tree_host_->animation_host());
-  layer_tree_host_->animation_host()->AddAnimationTimeline(
-      static_cast<const cc_blink::WebCompositorAnimationTimelineImpl*>(
-          compositor_timeline)->animation_timeline());
+  layer_tree_host_->animation_host()->AddAnimationTimeline(compositor_timeline);
 }
 
 void RenderWidgetCompositor::detachCompositorAnimationTimeline(
-    blink::WebCompositorAnimationTimeline* compositor_timeline) {
-  DCHECK(compositor_timeline);
+    cc::AnimationTimeline* compositor_timeline) {
   DCHECK(layer_tree_host_->animation_host());
   layer_tree_host_->animation_host()->RemoveAnimationTimeline(
-      static_cast<const cc_blink::WebCompositorAnimationTimelineImpl*>(
-          compositor_timeline)->animation_timeline());
+      compositor_timeline);
 }
 
 void RenderWidgetCompositor::setViewportSize(
@@ -746,6 +743,56 @@ void RenderWidgetCompositor::clearSelection() {
   layer_tree_host_->RegisterSelection(empty_selection);
 }
 
+static_assert(
+    static_cast<cc::EventListenerClass>(blink::WebEventListenerClass::Touch) ==
+        cc::EventListenerClass::kTouch,
+    "EventListenerClass and WebEventListenerClass enums must match");
+static_assert(static_cast<cc::EventListenerClass>(
+                  blink::WebEventListenerClass::MouseWheel) ==
+                  cc::EventListenerClass::kMouseWheel,
+              "EventListenerClass and WebEventListenerClass enums must match");
+
+static_assert(static_cast<cc::EventListenerProperties>(
+                  blink::WebEventListenerProperties::Nothing) ==
+                  cc::EventListenerProperties::kNone,
+              "EventListener and WebEventListener enums must match");
+static_assert(static_cast<cc::EventListenerProperties>(
+                  blink::WebEventListenerProperties::Passive) ==
+                  cc::EventListenerProperties::kPassive,
+              "EventListener and WebEventListener enums must match");
+static_assert(static_cast<cc::EventListenerProperties>(
+                  blink::WebEventListenerProperties::Blocking) ==
+                  cc::EventListenerProperties::kBlocking,
+              "EventListener and WebEventListener enums must match");
+static_assert(static_cast<cc::EventListenerProperties>(
+                  blink::WebEventListenerProperties::BlockingAndPassive) ==
+                  cc::EventListenerProperties::kBlockingAndPassive,
+              "EventListener and WebEventListener enums must match");
+
+void RenderWidgetCompositor::setEventListenerProperties(
+    blink::WebEventListenerClass eventClass,
+    blink::WebEventListenerProperties properties) {
+  layer_tree_host_->SetEventListenerProperties(
+      static_cast<cc::EventListenerClass>(eventClass),
+      static_cast<cc::EventListenerProperties>(properties));
+}
+
+blink::WebEventListenerProperties
+RenderWidgetCompositor::eventListenerProperties(
+    blink::WebEventListenerClass event_class) const {
+  return static_cast<blink::WebEventListenerProperties>(
+      layer_tree_host_->event_listener_properties(
+          static_cast<cc::EventListenerClass>(event_class)));
+}
+
+void RenderWidgetCompositor::setHaveScrollEventHandlers(bool has_handlers) {
+  layer_tree_host_->SetHaveScrollEventHandlers(has_handlers);
+}
+
+bool RenderWidgetCompositor::haveScrollEventHandlers() const {
+  return layer_tree_host_->have_scroll_event_handlers();
+}
+
 void CompositeAndReadbackAsyncCallback(
     blink::WebCompositeAndReadbackAsyncCallback* callback,
     scoped_ptr<cc::CopyOutputResult> result) {
@@ -865,7 +912,7 @@ void RenderWidgetCompositor::setTopControlsShownRatio(float ratio) {
 }
 
 void RenderWidgetCompositor::WillBeginMainFrame() {
-  widget_->WillBeginCompositorFrame();
+  delegate_->WillBeginCompositorFrame();
 }
 
 void RenderWidgetCompositor::DidBeginMainFrame() {
@@ -874,7 +921,7 @@ void RenderWidgetCompositor::DidBeginMainFrame() {
 void RenderWidgetCompositor::BeginMainFrame(const cc::BeginFrameArgs& args) {
   compositor_deps_->GetRendererScheduler()->WillBeginFrame(args);
   double frame_time_sec = (args.frame_time - base::TimeTicks()).InSecondsF();
-  widget_->webwidget()->beginFrame(frame_time_sec);
+  delegate_->BeginMainFrame(frame_time_sec);
 }
 
 void RenderWidgetCompositor::BeginMainFrameNotExpectedSoon() {
@@ -882,8 +929,7 @@ void RenderWidgetCompositor::BeginMainFrameNotExpectedSoon() {
 }
 
 void RenderWidgetCompositor::UpdateLayerTreeHost() {
-  widget_->webwidget()->updateAllLifecyclePhases();
-
+  delegate_->UpdateVisualState();
   if (temporary_copy_output_request_) {
     // For WebViewImpl, this will always have a root layer.  For other widgets,
     // the widget may be closed before servicing this request, so ignore it.
@@ -903,24 +949,22 @@ void RenderWidgetCompositor::ApplyViewportDeltas(
     const gfx::Vector2dF& elastic_overscroll_delta,
     float page_scale,
     float top_controls_delta) {
-  widget_->webwidget()->applyViewportDeltas(
-      inner_delta,
-      outer_delta,
-      elastic_overscroll_delta,
-      page_scale,
-      top_controls_delta);
+  delegate_->ApplyViewportDeltas(inner_delta, outer_delta,
+                                 elastic_overscroll_delta, page_scale,
+                                 top_controls_delta);
 }
 
 void RenderWidgetCompositor::RequestNewOutputSurface() {
   // If the host is closing, then no more compositing is possible.  This
   // prevents shutdown races between handling the close message and
   // the CreateOutputSurface task.
-  if (widget_->host_closing())
+  if (delegate_->IsClosing())
     return;
 
   bool fallback =
       num_failed_recreate_attempts_ >= OUTPUT_SURFACE_RETRIES_BEFORE_FALLBACK;
-  scoped_ptr<cc::OutputSurface> surface(widget_->CreateOutputSurface(fallback));
+  scoped_ptr<cc::OutputSurface> surface(
+      delegate_->CreateOutputSurface(fallback));
 
   if (!surface) {
     DidFailToInitializeOutputSurface();
@@ -954,35 +998,35 @@ void RenderWidgetCompositor::WillCommit() {
 
 void RenderWidgetCompositor::DidCommit() {
   DCHECK(!temporary_copy_output_request_);
-  widget_->DidCommitCompositorFrame();
+  delegate_->DidCommitCompositorFrame();
   compositor_deps_->GetRendererScheduler()->DidCommitFrameToCompositor();
 }
 
 void RenderWidgetCompositor::DidCommitAndDrawFrame() {
-  widget_->DidCommitAndDrawCompositorFrame();
+  delegate_->DidCommitAndDrawCompositorFrame();
 }
 
 void RenderWidgetCompositor::DidCompleteSwapBuffers() {
-  widget_->DidCompleteSwapBuffers();
+  delegate_->DidCompleteSwapBuffers();
   bool threaded = !!compositor_deps_->GetCompositorImplThreadTaskRunner().get();
   if (!threaded)
-    widget_->OnSwapBuffersComplete();
+    delegate_->OnSwapBuffersComplete();
 }
 
 void RenderWidgetCompositor::DidCompletePageScaleAnimation() {
-  widget_->DidCompletePageScaleAnimation();
+  delegate_->DidCompletePageScaleAnimation();
 }
 
 void RenderWidgetCompositor::ScheduleAnimation() {
-  widget_->scheduleAnimation();
+  delegate_->ScheduleAnimation();
 }
 
 void RenderWidgetCompositor::DidPostSwapBuffers() {
-  widget_->OnSwapBuffersPosted();
+  delegate_->OnSwapBuffersPosted();
 }
 
 void RenderWidgetCompositor::DidAbortSwapBuffers() {
-  widget_->OnSwapBuffersAborted();
+  delegate_->OnSwapBuffersAborted();
 }
 
 void RenderWidgetCompositor::SetProtoReceiver(ProtoReceiver* receiver) {
@@ -995,39 +1039,14 @@ void RenderWidgetCompositor::SendCompositorProto(
   size_t unsigned_size = base::checked_cast<size_t>(signed_size);
   std::vector<uint8_t> serialized(unsigned_size);
   proto.SerializeToArray(serialized.data(), signed_size);
-  widget_->ForwardCompositorProto(serialized);
+  delegate_->ForwardCompositorProto(serialized);
 }
 
 void RenderWidgetCompositor::RecordFrameTimingEvents(
     scoped_ptr<cc::FrameTimingTracker::CompositeTimingSet> composite_events,
     scoped_ptr<cc::FrameTimingTracker::MainFrameTimingSet> main_frame_events) {
-  for (const auto& composite_event : *composite_events ) {
-    int64_t frameId = composite_event.first;
-    const std::vector<cc::FrameTimingTracker::CompositeTimingEvent>& events =
-        composite_event.second;
-    std::vector<blink::WebFrameTimingEvent> webEvents;
-    for (size_t i = 0; i < events.size(); ++i) {
-      webEvents.push_back(blink::WebFrameTimingEvent(
-          events[i].frame_id,
-          (events[i].timestamp - base::TimeTicks()).InSecondsF()));
-    }
-    widget_->webwidget()->recordFrameTimingEvent(
-        blink::WebWidget::CompositeEvent, frameId, webEvents);
-  }
-  for (const auto& main_frame_event : *main_frame_events ) {
-    int64_t frameId = main_frame_event.first;
-    const std::vector<cc::FrameTimingTracker::MainFrameTimingEvent>& events =
-        main_frame_event.second;
-    std::vector<blink::WebFrameTimingEvent> webEvents;
-    for (size_t i = 0; i < events.size(); ++i) {
-      webEvents.push_back(blink::WebFrameTimingEvent(
-          events[i].frame_id,
-          (events[i].timestamp - base::TimeTicks()).InSecondsF(),
-          (events[i].end_time - base::TimeTicks()).InSecondsF()));
-    }
-    widget_->webwidget()->recordFrameTimingEvent(
-        blink::WebWidget::RenderEvent, frameId, webEvents);
-  }
+  delegate_->RecordFrameTimingEvents(std::move(composite_events),
+                                     std::move(main_frame_events));
 }
 
 void RenderWidgetCompositor::SetSurfaceIdNamespace(

@@ -5,8 +5,13 @@
 
 """Loading trace recorder."""
 
+import argparse
+import datetime
+import json
+import logging
 import os
 import sys
+import time
 
 _SRC_DIR = os.path.abspath(os.path.join(
     os.path.dirname(__file__), '..', '..', '..'))
@@ -19,61 +24,60 @@ import devil_chromium
 
 import device_setup
 import devtools_monitor
+import loading_trace
+import page_track
+import request_track
+import tracing
 
 
-class PageTrack(devtools_monitor.Track):
-  """Records the events from the page track."""
-  def __init__(self, connection):
-    super(PageTrack, self).__init__()
-    self._connection = connection
-    self._events = []
-    self._main_frame_id = None
-    self._connection.RegisterListener('Page.frameStartedLoading', self)
-    self._connection.RegisterListener('Page.frameStoppedLoading', self)
+def MonitorUrl(connection, url, clear_cache=False,
+               categories=tracing.DEFAULT_CATEGORIES,
+               timeout=devtools_monitor.DEFAULT_TIMEOUT):
+  """Monitor a URL via a trace recorder.
 
-  def Handle(self, method, msg):
-    params = msg['params']
-    frame_id = params['frameId']
-    should_stop = False
-    if method == 'Page.frameStartedLoading' and self._main_frame_id is None:
-      self._main_frame_id = params['frameId']
-    elif (method == 'Page.frameStoppedLoading'
-          and params['frameId'] == self._main_frame_id):
-      should_stop = True
-    self._events.append((method, frame_id))
-    if should_stop:
-      self._connection.StopMonitoring()
+  Args:
+    connection: A devtools_monitor.DevToolsConnection instance.
+    url: url to navigate to as string.
+    clear_cache: boolean indicating if cache should be cleared before loading.
+    categories: List of tracing event categories to record.
+    timeout: Websocket timeout.
 
-  def GetEvents(self):
-    return self._events
+  Returns:
+    loading_trace.LoadingTrace.
+  """
+  page = page_track.PageTrack(connection)
+  request = request_track.RequestTrack(connection)
+  trace = tracing.TracingTrack(connection, categories=categories)
+  connection.SetUpMonitoring()
+  if clear_cache:
+    connection.ClearCache()
+  connection.SendAndIgnoreResponse('Page.navigate', {'url': url})
+  connection.StartMonitoring(timeout=timeout)
+  metadata = {'date': datetime.datetime.utcnow().isoformat(),
+              'seconds_since_epoch': time.time()}
+  return loading_trace.LoadingTrace(url, metadata, page, request, trace)
 
-
-class AndroidTraceRecorder(object):
-  """Records a loading trace."""
-  def __init__(self, url):
-    self.url = url
-    self.devtools_connection = None
-    self.page_track = None
-
-  def Go(self):
-    self.devtools_connection = devtools_monitor.DevToolsConnection(
-        device_setup.DEVTOOLS_HOSTNAME, device_setup.DEVTOOLS_PORT)
-    self.page_track = PageTrack(self.devtools_connection)
-
-    self.devtools_connection.SetUpMonitoring()
-    self.devtools_connection.SendAndIgnoreResponse(
-        'Page.navigate', {'url': self.url})
-    self.devtools_connection.StartMonitoring()
-    print self.page_track.GetEvents()
+def RecordAndDumpTrace(device, url, output_filename):
+  with file(output_filename, 'w') as output,\
+        device_setup.DeviceConnection(device) as connection:
+    trace = MonitorUrl(connection, url)
+    json.dump(trace.ToJsonDict(), output)
 
 
-def DoIt(url):
+def main():
+  logging.basicConfig(level=logging.INFO)
   devil_chromium.Initialize()
-  devices = device_utils.DeviceUtils.HealthyDevices()
-  device = devices[0]
-  trace_recorder = AndroidTraceRecorder(url)
-  device_setup.SetUpAndExecute(device, 'chrome', trace_recorder.Go)
+
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--url', required=True)
+  parser.add_argument('--output', required=True)
+  args = parser.parse_args()
+  url = args.url
+  if not url.startswith('http'):
+    url = 'http://' + url
+  device = device_utils.DeviceUtils.HealthyDevices()[0]
+  RecordAndDumpTrace(device, url, args.output)
 
 
 if __name__ == '__main__':
-  DoIt(sys.argv[1])
+  main()

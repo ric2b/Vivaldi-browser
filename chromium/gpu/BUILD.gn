@@ -60,6 +60,8 @@ shared_library("command_buffer_gles2") {
     "gles2_conform_support/egl/egl.cc",
     "gles2_conform_support/egl/surface.cc",
     "gles2_conform_support/egl/surface.h",
+    "gles2_conform_support/egl/test_support.cc",
+    "gles2_conform_support/egl/test_support.h",
   ]
 
   deps = [
@@ -78,6 +80,43 @@ shared_library("command_buffer_gles2") {
     defines += [ "EGLAPI=__declspec(dllexport)" ]
   } else {
     defines += [ "EGLAPI=__attribute__((visibility(\"default\")))" ]
+  }
+}
+
+# GYP version: //gpu/gpu.gyp:command_buffer_gles2_tests
+test("command_buffer_gles2_tests") {
+  sources = [
+    "command_buffer/tests/command_buffer_gles2_tests_main.cc",
+    "command_buffer/tests/egl_test.cc",
+  ]
+
+  deps = [
+    ":command_buffer_gles2",
+    "//base",
+    "//base/test:test_support",
+    "//base/third_party/dynamic_annotations",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  defines = [
+    "COMMAND_BUFFER_GLES_LIB_SUPPORT_ONLY",
+    "EGLAPIENTRY=",
+  ]
+  if (current_os == "win") {
+    defines += [ "EGLAPI=__declspec(dllimport)" ]
+  } else {
+    defines += [ "EGLAPI=" ]
+  }
+
+  libs = []
+
+  if (is_android) {
+    libs += [ "android" ]
+    deps += [ "//ui/android:ui_java" ]
+  }
+  if (!is_component_build) {
+    configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
   }
 }
 
@@ -101,13 +140,6 @@ source_set("test_support") {
   ]
 }
 
-group("gl_tests_run") {
-  testonly = true
-  deps = [
-    ":gl_tests",
-  ]
-}
-
 test("gl_tests") {
   sources = [
     "command_buffer/tests/compressed_texture_test.cc",
@@ -121,6 +153,7 @@ test("gl_tests") {
     "command_buffer/tests/gl_copy_texture_CHROMIUM_unittest.cc",
     "command_buffer/tests/gl_cube_map_texture_unittest.cc",
     "command_buffer/tests/gl_depth_texture_unittest.cc",
+    "command_buffer/tests/gl_dynamic_config_unittest.cc",
     "command_buffer/tests/gl_ext_blend_func_extended_unittest.cc",
     "command_buffer/tests/gl_ext_multisample_compatibility_unittest.cc",
     "command_buffer/tests/gl_ext_srgb_unittest.cc",
@@ -133,6 +166,7 @@ test("gl_tests") {
     "command_buffer/tests/gl_program_unittest.cc",
     "command_buffer/tests/gl_query_unittest.cc",
     "command_buffer/tests/gl_readback_unittest.cc",
+    "command_buffer/tests/gl_request_extension_unittest.cc",
     "command_buffer/tests/gl_shared_resources_unittest.cc",
     "command_buffer/tests/gl_stream_draw_unittest.cc",
     "command_buffer/tests/gl_test_utils.cc",
@@ -176,15 +210,6 @@ test("gl_tests") {
   }
 }
 
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("gpu_unittests_run") {
-  testonly = true
-  deps = [
-    ":gpu_unittests",
-  ]
-}
-
 test("gpu_unittests") {
   sources = [
     "command_buffer/client/buffer_tracker_unittest.cc",
@@ -208,7 +233,7 @@ test("gpu_unittests") {
     "command_buffer/common/gles2_cmd_format_test_autogen.h",
     "command_buffer/common/gles2_cmd_utils_unittest.cc",
     "command_buffer/common/id_allocator_test.cc",
-    "command_buffer/common/trace_event.h",
+    "command_buffer/common/id_type_unittest.cc",
     "command_buffer/common/unittest_main.cc",
     "command_buffer/service/buffer_manager_unittest.cc",
     "command_buffer/service/cmd_parser_test.cc",
@@ -327,24 +352,4 @@ test("gpu_perftests") {
     "//ui/gfx/geometry",
     "//ui/gl",
   ]
-}
-
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("angle_unittests_run") {
-  testonly = true
-  deps = [
-    "//third_party/angle/src/tests:angle_unittests",
-  ]
-}
-
-if (is_win || is_linux || is_mac) {
-  # TODO(GYP): Delete this after we've converted everything to GN.
-  # The _run targets exist only for compatibility w/ GYP.
-  group("angle_end2end_tests_run") {
-    testonly = true
-    deps = [
-      "//third_party/angle/src/tests:angle_end2end_tests",
-    ]
-  }
 }

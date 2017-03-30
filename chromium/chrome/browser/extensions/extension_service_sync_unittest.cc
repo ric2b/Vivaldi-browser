@@ -202,7 +202,7 @@ TEST_F(ExtensionServiceSyncTest, DisableExtensionFromSync) {
   // The user has enabled sync.
   ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile());
-  sync_service->SetSyncSetupCompleted();
+  sync_service->SetFirstSetupComplete();
 
   service()->Init();
   ASSERT_TRUE(service()->is_ready());
@@ -243,7 +243,7 @@ TEST_F(ExtensionServiceSyncTest, IgnoreSyncChangesWhenLocalStateIsMoreRecent) {
   // The user has enabled sync.
   ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile());
-  sync_service->SetSyncSetupCompleted();
+  sync_service->SetFirstSetupComplete();
   // Make sure ExtensionSyncService is created, so it'll be notified of changes.
   extension_sync_service();
 
@@ -301,7 +301,7 @@ TEST_F(ExtensionServiceSyncTest, DontSelfNotify) {
   InitializeInstalledExtensionService(pref_path, source_install_dir);
 
   // The user has enabled sync.
-  ProfileSyncServiceFactory::GetForProfile(profile())->SetSyncSetupCompleted();
+  ProfileSyncServiceFactory::GetForProfile(profile())->SetFirstSetupComplete();
   // Make sure ExtensionSyncService is created, so it'll be notified of changes.
   extension_sync_service();
 
@@ -407,7 +407,7 @@ TEST_F(ExtensionServiceSyncTest, GetSyncData) {
   EXPECT_EQ(extensions::util::IsIncognitoEnabled(good_crx, profile()),
             data->incognito_enabled());
   EXPECT_EQ(ExtensionSyncData::BOOLEAN_UNSET, data->all_urls_enabled());
-  EXPECT_TRUE(data->version().Equals(*extension->version()));
+  EXPECT_EQ(data->version(), *extension->version());
   EXPECT_EQ(extensions::ManifestURL::GetUpdateURL(extension),
             data->update_url());
   EXPECT_EQ(extension->name(), data->name());
@@ -508,7 +508,7 @@ TEST_F(ExtensionServiceSyncTest, GetSyncDataTerminated) {
   EXPECT_EQ(extensions::util::IsIncognitoEnabled(good_crx, profile()),
             data->incognito_enabled());
   EXPECT_EQ(ExtensionSyncData::BOOLEAN_UNSET, data->all_urls_enabled());
-  EXPECT_TRUE(data->version().Equals(*extension->version()));
+  EXPECT_EQ(data->version(), *extension->version());
   EXPECT_EQ(extensions::ManifestURL::GetUpdateURL(extension),
             data->update_url());
   EXPECT_EQ(extension->name(), data->name());
@@ -1061,7 +1061,7 @@ TEST_F(ExtensionServiceSyncTest, ProcessSyncDataVersionCheck) {
     scoped_ptr<ExtensionSyncData> extension_data =
         ExtensionSyncData::CreateFromSyncData(data[0]);
     ASSERT_TRUE(extension_data);
-    EXPECT_TRUE(installed_version.Equals(extension_data->version()));
+    EXPECT_EQ(installed_version, extension_data->version());
   }
 
   // Should do nothing if extension version > sync version.
@@ -1080,7 +1080,7 @@ TEST_F(ExtensionServiceSyncTest, ProcessSyncDataVersionCheck) {
     scoped_ptr<ExtensionSyncData> extension_data =
         ExtensionSyncData::CreateFromSyncData(data[0]);
     ASSERT_TRUE(extension_data);
-    EXPECT_TRUE(installed_version.Equals(extension_data->version()));
+    EXPECT_EQ(installed_version, extension_data->version());
   }
 
   // Should kick off an update if extension version < sync version.
@@ -1102,7 +1102,7 @@ TEST_F(ExtensionServiceSyncTest, ProcessSyncDataVersionCheck) {
     scoped_ptr<ExtensionSyncData> extension_data =
         ExtensionSyncData::CreateFromSyncData(data[0]);
     ASSERT_TRUE(extension_data);
-    EXPECT_TRUE(new_version.Equals(extension_data->version()));
+    EXPECT_EQ(new_version, extension_data->version());
   }
 
   EXPECT_FALSE(service()->pending_extension_manager()->IsIdPending(good_crx));
@@ -1417,7 +1417,7 @@ TEST_F(ExtensionServiceSyncTest, DontSyncThemes) {
   InitializeEmptyExtensionService();
 
   // The user has enabled sync.
-  ProfileSyncServiceFactory::GetForProfile(profile())->SetSyncSetupCompleted();
+  ProfileSyncServiceFactory::GetForProfile(profile())->SetFirstSetupComplete();
   // Make sure ExtensionSyncService is created, so it'll be notified of changes.
   extension_sync_service();
 

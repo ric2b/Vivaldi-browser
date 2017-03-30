@@ -115,15 +115,6 @@ if (is_android) {
 
 # TODO(dpranke): crbug.com/360936. Get this to build and run on Android.
 if (!is_android) {
-  # TODO(GYP): Delete this after we've converted everything to GN.
-  # The _run targets exist only for compatibility w/ GYP.
-  group("url_unittests_run") {
-    testonly = true
-    deps = [
-      ":url_unittests",
-    ]
-  }
-
   test("url_unittests") {
     sources = [
       "gurl_unittest.cc",
@@ -138,12 +129,6 @@ if (!is_android) {
 
     # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
     configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
-
-    #if (is_posix && !is_mac && !is_ios) {
-    #  if (use_allocator!="none") {
-    #    deps += "//base/allocator"
-    #  }
-    #}
 
     deps = [
       ":url",

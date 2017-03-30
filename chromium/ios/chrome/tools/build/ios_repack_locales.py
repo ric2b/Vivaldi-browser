@@ -42,6 +42,10 @@ def calc_inputs(options, locale):
   """Determine the files that need processing for the given locale."""
   inputs = []
 
+  #e.g. 'out/Debug/gen/components/strings/components_locale_settings_da.pak'
+  inputs.append(os.path.join(options.share_int_dir, 'components', 'strings',
+                'components_locale_settings_%s.pak' % locale))
+
   #e.g. 'out/Debug/gen/components/strings/components_strings_da.pak'
   inputs.append(os.path.join(options.share_int_dir, 'components', 'strings',
                 'components_strings_%s.pak' % locale))
@@ -56,9 +60,9 @@ def calc_inputs(options, locale):
   inputs.append(os.path.join(options.share_int_dir, 'ui', 'strings',
                 'ui_strings_%s.pak' % locale))
 
-  #e.g. 'out/Debug/gen/ios/chrome/ios_locale_settings_da.pak'
-  inputs.append(os.path.join(options.share_int_dir, 'ios', 'chrome',
-                'ios_locale_settings_%s.pak' % locale))
+  #e.g. 'out/Debug/gen/ui/strings/app_locale_settings_da.pak',
+  inputs.append(os.path.join(options.share_int_dir, 'ui', 'strings',
+                'app_locale_settings_%s.pak' % locale))
 
   #e.g. 'out/Debug/gen/ios/chrome/ios_strings_da.pak'
   inputs.append(os.path.join(options.share_int_dir, 'ios', 'chrome',

@@ -51,7 +51,7 @@ const LangToOffset kLanguageToOffsetExceptions[] = {
   // Alias es-es to es (all others wildcard to es-419).
   { L"es-es", IDS_L10N_OFFSET_ES },
   // Google web properties use iw for he. Handle both just to be safe.
-  { L"he", IDS_L10N_OFFSET_IW },
+  { L"he", IDS_L10N_OFFSET_HE }, // Vivaldi: Use HE for language code he; resource merger overrides filenames
   // Google web properties use no for nb. Handle both just to be safe.
   { L"nb", IDS_L10N_OFFSET_NO },
   // Some Google web properties use tl for fil. Handle both just to be safe.

@@ -14,7 +14,6 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list_observer.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/sync/profile_signin_confirmation_helper.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "components/signin/core/browser/signin_tracker.h"
@@ -112,9 +111,7 @@ class OneClickSigninSyncStarter : public SigninTracker::Observer,
   // If the |browser| argument is non-null, returns the pointer directly.
   // Otherwise creates a new browser for the given profile on the given
   // desktop, adds an empty tab and makes sure the browser is visible.
-  static Browser* EnsureBrowser(Browser* browser,
-                                Profile* profile,
-                                chrome::HostDesktopType desktop_type);
+  static Browser* EnsureBrowser(Browser* browser, Profile* profile);
 
  private:
   friend class OneClickSigninSyncStarterTest;
@@ -134,7 +131,8 @@ class OneClickSigninSyncStarter : public SigninTracker::Observer,
   void AccountAddedToCookie(const GoogleServiceAuthError& error) override;
 
   // LoginUIService::Observer override.
-  void OnSyncConfirmationUIClosed(bool configure_sync_first) override;
+  void OnSyncConfirmationUIClosed(
+      LoginUIService::SyncConfirmationUIClosedResults results) override;
 
 #if defined(ENABLE_CONFIGURATION_POLICY)
   // User input handler for the signin confirmation dialog.
@@ -172,8 +170,7 @@ class OneClickSigninSyncStarter : public SigninTracker::Observer,
 
   // Callback invoked once a profile is created, so we can complete the
   // credentials transfer, load policy, and open the first window.
-  void CompleteInitForNewProfile(chrome::HostDesktopType desktop_type,
-                                 Profile* profile,
+  void CompleteInitForNewProfile(Profile* profile,
                                  Profile::CreateStatus status);
 
 #endif  // defined(ENABLE_CONFIGURATION_POLICY)
@@ -218,6 +215,8 @@ class OneClickSigninSyncStarter : public SigninTracker::Observer,
   // the default "You are signed in" message is displayed.
   void DisplayFinalConfirmationBubble(const base::string16& custom_message);
 
+  void DisplayModalSyncConfirmationWindow();
+
   // Loads the |continue_url_| in the current tab.
   void LoadContinueUrl();
 
@@ -225,7 +224,6 @@ class OneClickSigninSyncStarter : public SigninTracker::Observer,
   Browser* browser_;
   scoped_ptr<SigninTracker> signin_tracker_;
   StartSyncMode start_mode_;
-  chrome::HostDesktopType desktop_type_;
   ConfirmationRequired confirmation_required_;
   GURL current_url_;
   GURL continue_url_;

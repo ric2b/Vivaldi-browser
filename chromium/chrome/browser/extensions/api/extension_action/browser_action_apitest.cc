@@ -20,7 +20,6 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -509,8 +508,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, IncognitoBasic) {
   Profile* incognito_profile = browser()->profile()->GetOffTheRecordProfile();
   base::RunLoop().RunUntilIdle();  // Wait for profile initialization.
   Browser* incognito_browser =
-      new Browser(Browser::CreateParams(incognito_profile,
-                                        browser()->host_desktop_type()));
+      new Browser(Browser::CreateParams(incognito_profile));
 
   ASSERT_EQ(0,
             BrowserActionTestUtil(incognito_browser).NumberOfBrowserActions());
@@ -544,8 +542,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, IncognitoSplit) {
   // Open an incognito window.
   Profile* incognito_profile = browser()->profile()->GetOffTheRecordProfile();
   Browser* incognito_browser =
-      new Browser(Browser::CreateParams(incognito_profile,
-                                        browser()->host_desktop_type()));
+      new Browser(Browser::CreateParams(incognito_profile));
   base::RunLoop().RunUntilIdle();  // Wait for profile initialization.
   // Navigate just to have a tab in this window, otherwise wonky things happen.
   OpenURLOffTheRecord(browser()->profile(), GURL("about:blank"));
@@ -766,11 +763,16 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, BrowserActionOpenPopupOnPopup) {
   Browser* popup_browser = params.browser;
   // Verify it is a popup, and it is the active window.
   ASSERT_TRUE(popup_browser);
+  // The window isn't considered "active" on MacOSX for odd reasons. The more
+  // important test is that it *is* considered the last active browser, since
+  // that's what we check when we try to open the popup.
+#if !defined(OS_MACOSX)
+  EXPECT_TRUE(popup_browser->window()->IsActive());
+#endif
   EXPECT_FALSE(browser()->window()->IsActive());
   EXPECT_FALSE(popup_browser->SupportsWindowFeature(Browser::FEATURE_TOOLBAR));
   EXPECT_EQ(popup_browser,
-            chrome::FindLastActiveWithProfile(browser()->profile(),
-                                              chrome::GetActiveDesktop()));
+            chrome::FindLastActiveWithProfile(browser()->profile()));
 
   // Load up the extension, which will call chrome.browserAction.openPopup()
   // when it is loaded and verify that the popup didn't open.

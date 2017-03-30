@@ -60,7 +60,9 @@ import org.chromium.chrome.browser.appmenu.AppMenu;
 import org.chromium.chrome.browser.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.appmenu.AppMenuObserver;
 import org.chromium.chrome.browser.appmenu.AppMenuPropertiesDelegate;
-import org.chromium.chrome.browser.bookmark.BookmarksBridge.BookmarkModelObserver;
+import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkModelObserver;
+import org.chromium.chrome.browser.bookmarks.BookmarkModel;
+import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
@@ -75,8 +77,6 @@ import org.chromium.chrome.browser.datausage.DataUseTabUIManager;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.dom_distiller.DistilledPagePrefsView;
 import org.chromium.chrome.browser.dom_distiller.ReaderModeManager;
-import org.chromium.chrome.browser.enhancedbookmarks.EnhancedBookmarkUtils;
-import org.chromium.chrome.browser.enhancedbookmarks.EnhancedBookmarksModel;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.gsa.ContextReporter;
 import org.chromium.chrome.browser.gsa.GSAServiceClient;
@@ -104,6 +104,7 @@ import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarManageable;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.browser.sync.SyncController;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.AsyncTabParamsManager;
 import org.chromium.chrome.browser.tabmodel.ChromeTabCreator;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModel;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
@@ -248,7 +249,14 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
 
         ApplicationInitialization.enableFullscreenFlags(
                 getResources(), this, getControlContainerHeightResource());
-        getWindow().setBackgroundDrawable(getBackgroundDrawable());
+        // TODO(twellington): Remove this work around when the underlying bug is fixed.
+        //                    See crbug.com/583099.
+        if (!Build.VERSION.CODENAME.equals("N")) {
+            getWindow().setBackgroundDrawable(getBackgroundDrawable());
+        }
+        mWindowAndroid = ((ChromeApplication) getApplicationContext())
+                .createActivityWindowAndroid(this);
+        mWindowAndroid.restoreInstanceState(getSavedInstanceState());
     }
 
     @SuppressLint("NewApi")
@@ -256,9 +264,6 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     public void postInflationStartup() {
         super.postInflationStartup();
 
-        mWindowAndroid = ((ChromeApplication) getApplicationContext())
-                .createActivityWindowAndroid(this);
-        mWindowAndroid.restoreInstanceState(getSavedInstanceState());
         mSnackbarManager = new SnackbarManager(getWindow());
         mDataUseSnackbarController = new DataUseSnackbarController(this, getSnackbarManager());
 
@@ -481,7 +486,8 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             public void didFirstVisuallyNonEmptyPaint(Tab tab) {
                 if (DataUseTabUIManager.checkAndResetDataUseTrackingStarted(tab)) {
                     mDataUseSnackbarController.showDataUseTrackingStartedBar();
-                } else if (DataUseTabUIManager.getOptedOutOfDataUseDialog(getApplicationContext())
+                } else if (DataUseTabUIManager.shouldShowDataUseEndedSnackbar(
+                                   getApplicationContext())
                         && DataUseTabUIManager.checkAndResetDataUseTrackingEnded(tab)) {
                     mDataUseSnackbarController.showDataUseTrackingEndedBar();
                 }
@@ -693,6 +699,9 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
 
     @Override
     public void onStart() {
+        if (AsyncTabParamsManager.hasParamsWithTabToReparent()) {
+            mCompositorViewHolder.prepareForTabReparenting();
+        }
         super.onStart();
         if (mContextReporter != null) mContextReporter.enable();
 
@@ -899,8 +908,17 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         ContentBitmapCallback callback = new ContentBitmapCallback() {
                     @Override
                     public void onFinishGetBitmap(Bitmap bitmap, int response) {
-                        ShareHelper.share(shareDirectly, mainActivity, currentTab.getTitle(),
-                                currentTab.getUrl(), bitmap);
+                        // Check whether this page is an offline page, and use its online URL if so.
+                        String url = currentTab.getOfflinePageOriginalUrl();
+                        RecordHistogram.recordBooleanHistogram(
+                                "OfflinePages.SharedPageWasOffline", url != null);
+
+                        // If there is no entry in the offline pages DB for this tab, use the tab's
+                        // URL directly.
+                        if (url == null) url = currentTab.getUrl();
+
+                        ShareHelper.share(
+                                shareDirectly, mainActivity, currentTab.getTitle(), url, bitmap);
                         if (shareDirectly) {
                             RecordUserAction.record("MobileMenuDirectShare");
                         } else {
@@ -1008,7 +1026,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         }
 
         // Defense in depth against the UI being erroneously enabled.
-        if (!mToolbarManager.getBookmarksBridge().isEditBookmarksEnabled()) {
+        if (!mToolbarManager.getBookmarkBridge().isEditBookmarksEnabled()) {
             assert false;
             return;
         }
@@ -1019,30 +1037,17 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         // TODO(bauerb): This does not take partner bookmarks into account.
         final long bookmarkId = tabToBookmark.getUserBookmarkId();
 
-        final EnhancedBookmarksModel bookmarkModel = new EnhancedBookmarksModel();
+        final BookmarkModel bookmarkModel = new BookmarkModel();
         bookmarkModel.runAfterBookmarkModelLoaded(new Runnable() {
             @Override
             public void run() {
                 // Gives up the bookmarking if the tab is being destroyed.
                 if (!tabToBookmark.isClosing() && tabToBookmark.isInitialized()) {
-                    EnhancedBookmarkUtils.addOrEditBookmark(bookmarkId, bookmarkModel,
+                    BookmarkUtils.addOrEditBookmark(bookmarkId, bookmarkModel,
                             tabToBookmark, getSnackbarManager(), ChromeActivity.this);
                 }
             }
         });
-    }
-
-    /**
-     * Saves an offline copy for the specified tab that is bookmarked.
-     * @param tab The tab that needs to save an offline copy.
-     */
-    public void saveBookmarkOffline(Tab tab) {
-        if (tab == null || tab.isFrozen()) {
-            return;
-        }
-
-        EnhancedBookmarkUtils.saveBookmarkOffline(tab.getUserBookmarkId(),
-                new EnhancedBookmarksModel(), tab, getSnackbarManager(), ChromeActivity.this);
     }
 
     /**
@@ -1189,7 +1194,8 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             view.exitFullscreen(false);
             return true;
         }
-        if (getFullscreenManager().getPersistentFullscreenMode()) {
+        if (getFullscreenManager() != null
+                && getFullscreenManager().getPersistentFullscreenMode()) {
             getFullscreenManager().setPersistentFullscreenMode(false);
             return true;
         }
@@ -1368,7 +1374,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
                 RecordUserAction.record("MobileToolbarReload");
             }
         } else if (id == R.id.info_menu_id) {
-            WebsiteSettingsPopup.show(this, currentTab.getProfile(), currentTab.getWebContents());
+            WebsiteSettingsPopup.show(this, currentTab, null);
         } else if (id == R.id.open_history_menu_id) {
             currentTab.loadUrl(
                     new LoadUrlParams(UrlConstants.HISTORY_URL, PageTransition.AUTO_TOPLEVEL));
@@ -1464,7 +1470,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         return -1;
     }
 
-    private final void postDeferredStartupIfNeeded() {
+    protected final void postDeferredStartupIfNeeded() {
         if (!mDeferredStartupNotified) {
             // We want to perform deferred startup tasks a short time after the first page
             // load completes, but only when the main thread Looper has become idle.

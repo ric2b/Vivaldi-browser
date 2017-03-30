@@ -19,6 +19,7 @@
 class GURL;
 struct ImportedBookmarkEntry;
 struct ImportedNotesEntry;
+struct ImportedSpeedDialEntry;
 struct ImporterAutofillFormDataEntry;
 
 namespace autofill {
@@ -44,6 +45,9 @@ class ImporterBridge : public base::RefCountedThreadSafe<ImporterBridge> {
   virtual void AddNotes(
       const std::vector<ImportedNotesEntry>& bookmarks,
       const base::string16& first_folder_name) = 0;
+
+  virtual void AddSpeedDial(
+      const std::vector<ImportedSpeedDialEntry>& speeddials) = 0;
 
   virtual void AddHomePage(const GURL& home_page) = 0;
 

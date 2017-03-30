@@ -60,6 +60,7 @@ class ChromeContentClient : public content::ContentClient {
   void AddPepperPlugins(
       std::vector<content::PepperPluginInfo>* plugins) override;
   void AddAdditionalSchemes(std::vector<url::SchemeWithType>* standard_schemes,
+                            std::vector<url::SchemeWithType>* referrer_schemes,
                             std::vector<std::string>* saveable_shemes) override;
   bool CanSendWhileSwappedOut(const IPC::Message* message) override;
   std::string GetProduct() const override;
@@ -73,7 +74,7 @@ class ChromeContentClient : public content::ContentClient {
   gfx::Image& GetNativeImageNamed(int resource_id) const override;
   std::string GetProcessTypeNameInEnglish(int type) override;
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MACOSX)
   bool GetSandboxProfileForSandboxType(
       int sandbox_type,
       int* sandbox_profile_resource_id) const override;

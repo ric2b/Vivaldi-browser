@@ -4,11 +4,11 @@
 
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
-#include "base/prefs/pref_service.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/api/tabs.h"
 #include "components/favicon/content/content_favicon_driver.h"
+#include "components/prefs/pref_service.h"
 #include "components/ui/zoom/zoom_controller.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/web_contents_observer.h"

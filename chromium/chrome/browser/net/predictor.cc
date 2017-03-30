@@ -16,8 +16,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -36,6 +34,8 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/address_list.h"
 #include "net/base/completion_callback.h"
@@ -354,7 +354,7 @@ UrlList Predictor::GetPredictedUrlListAtStartup(PrefService* user_prefs) {
   if (SessionStartupPref::URLS == tab_start_pref.type) {
     for (size_t i = 0; i < tab_start_pref.urls.size(); i++) {
       GURL gurl = tab_start_pref.urls[i];
-      if (!gurl.is_valid() || gurl.SchemeIsFile() || gurl.host().empty())
+      if (!gurl.is_valid() || gurl.SchemeIsFile() || gurl.host_piece().empty())
         continue;
       if (gurl.SchemeIsHTTPOrHTTPS())
         urls.push_back(gurl.GetWithEmptyPath());
@@ -966,7 +966,7 @@ void Predictor::PrepareFrameSubresources(const GURL& original_url,
       evalution = PRECONNECTION;
       future_url->second.IncrementPreconnectionCount();
       int count = static_cast<int>(std::ceil(connection_expectation));
-      if (url.host() == future_url->first.host())
+      if (url.host_piece() == future_url->first.host_piece())
         ++count;
       PreconnectUrlOnIOThread(future_url->first, first_party_for_cookies,
                               motivation,

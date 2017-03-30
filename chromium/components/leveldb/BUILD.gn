@@ -1,0 +1,88 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//mojo/public/mojo_application.gni")
+import("//mojo/public/mojo_application_manifest.gni")
+
+source_set("lib") {
+  sources = [
+    "env_mojo.cc",
+    "env_mojo.h",
+    "leveldb_database_impl.cc",
+    "leveldb_database_impl.h",
+    "leveldb_file_thread.cc",
+    "leveldb_file_thread.h",
+    "leveldb_service_impl.cc",
+    "leveldb_service_impl.h",
+    "util.cc",
+    "util.h",
+  ]
+
+  deps = [
+    "//components/filesystem/public/interfaces",
+    "//components/leveldb/public/interfaces",
+    "//mojo/common",
+    "//mojo/message_pump",
+    "//mojo/platform_handle",
+    "//mojo/shell/public/cpp",
+    "//third_party/leveldatabase",
+  ]
+}
+
+mojo_native_application("leveldb") {
+  sources = [
+    "leveldb_app.cc",
+    "leveldb_app.h",
+    "main.cc",
+  ]
+
+  deps = [
+    ":lib",
+    ":manifest",
+    "//components/leveldb/public/interfaces",
+    "//mojo/common",
+    "//mojo/environment:chromium",
+    "//mojo/platform_handle:for_shared_library",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/system",
+    "//mojo/services/tracing/public/cpp",
+    "//mojo/shell/public/cpp",
+  ]
+}
+
+mojo_application_manifest("manifest") {
+  application_name = "leveldb"
+  source = "manifest.json"
+}
+
+mojo_native_application("apptests") {
+  output_name = "leveldb_apptests"
+
+  testonly = true
+
+  sources = [
+    "leveldb_apptest.cc",
+  ]
+
+  deps = [
+    ":apptest_manifest",
+    "//base",
+    "//components/filesystem/public/interfaces",
+    "//components/leveldb/public/interfaces",
+    "//mojo/common",
+    "//mojo/platform_handle:for_shared_library",
+    "//mojo/public/cpp/bindings",
+    "//mojo/shell/public/cpp:test_support",
+  ]
+
+  data_deps = [
+    ":leveldb",
+    "//components/filesystem:filesystem",
+  ]
+}
+
+mojo_application_manifest("apptest_manifest") {
+  application_name = "leveldb_apptests"
+  source = "apptest_manifest.json"
+}

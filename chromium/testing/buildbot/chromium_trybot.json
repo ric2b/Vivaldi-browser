@@ -33,15 +33,6 @@
       "test": "ash_unittests"
     },
     {
-      "platforms": [
-        "win"
-      ],
-      "swarming": {
-        "can_use_on_swarming_builders": true
-      },
-      "test": "ash_unittests"
-    },
-    {
       "swarming": {
         "can_use_on_swarming_builders": true
       },
@@ -75,6 +66,17 @@
         "chromium_chromeos_ozone"
       ],
       "test": "chromevox_tests"
+    },
+    {
+      "platforms": [
+        "win",
+        "mac",
+        "linux"
+      ],
+      "swarming": {
+        "can_use_on_swarming_builders": true
+      },
+      "test": "chrome_app_unittests"
     },
     {
       "platforms": [

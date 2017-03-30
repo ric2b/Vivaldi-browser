@@ -7,7 +7,6 @@
 #include <stdint.h>
 
 #include "base/location.h"
-#include "base/prefs/pref_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -21,6 +20,8 @@
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/psl_matching_helper.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "components/prefs/pref_service.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using autofill::PasswordForm;
@@ -28,6 +29,8 @@ using base::UTF8ToUTF16;
 using base::UTF16ToUTF8;
 using password_manager::PasswordStoreChange;
 using password_manager::PasswordStoreChangeList;
+using testing::Pointee;
+using testing::UnorderedElementsAre;
 
 namespace {
 
@@ -289,7 +292,8 @@ class NativeBackendLibsecretTest : public testing::Test {
     form_google_.date_synced = base::Time::Now();
     form_google_.display_name = UTF8ToUTF16("Joe Schmoe");
     form_google_.icon_url = GURL("http://www.google.com/icon");
-    form_google_.federation_url = GURL("http://www.google.com/federation_url");
+    form_google_.federation_origin =
+        url::Origin(GURL("http://www.google.com/"));
     form_google_.skip_zero_click = true;
     form_google_.generation_upload_status = PasswordForm::POSITIVE_SIGNAL_SENT;
     form_google_.form_data.name = UTF8ToUTF16("form_name");
@@ -306,7 +310,8 @@ class NativeBackendLibsecretTest : public testing::Test {
     form_facebook_.date_synced = base::Time::Now();
     form_facebook_.display_name = UTF8ToUTF16("Joe Schmoe");
     form_facebook_.icon_url = GURL("http://www.facebook.com/icon");
-    form_facebook_.federation_url = GURL("http://www.facebook.com/federation");
+    form_facebook_.federation_origin =
+        url::Origin(GURL("http://www.facebook.com/"));
     form_facebook_.skip_zero_click = true;
     form_facebook_.generation_upload_status = PasswordForm::NO_SIGNAL_SENT;
 
@@ -347,7 +352,8 @@ class NativeBackendLibsecretTest : public testing::Test {
     EXPECT_TRUE(item_value) << " in attribute " << attribute;
     if (item_value) {
       uint32_t int_value;
-      bool conversion_ok = base::StringToUint((char*)item_value, &int_value);
+      bool conversion_ok =
+          base::StringToUint(static_cast<char*>(item_value), &int_value);
       EXPECT_TRUE(conversion_ok);
       EXPECT_EQ(value, int_value);
     }
@@ -392,8 +398,13 @@ class NativeBackendLibsecretTest : public testing::Test {
         base::Int64ToString(form.date_synced.ToInternalValue()));
     CheckStringAttribute(item, "display_name", UTF16ToUTF8(form.display_name));
     CheckStringAttribute(item, "avatar_url", form.icon_url.spec());
-    CheckStringAttribute(item, "federation_url", form.federation_url.spec());
-    CheckUint32Attribute(item, "skip_zero_click", form.skip_zero_click);
+    // We serialize unique origins as "", in order to make other systems that
+    // read from the login database happy. https://crbug.com/591310
+    CheckStringAttribute(item, "federation_url",
+                         form.federation_origin.unique()
+                             ? ""
+                             : form.federation_origin.Serialize());
+    CheckUint32Attribute(item, "should_skip_zero_click", form.skip_zero_click);
     CheckUint32Attribute(item, "generation_upload_status",
                          form.generation_upload_status);
     CheckStringAttribute(item, "application", app_string);
@@ -627,6 +638,20 @@ TEST_F(NativeBackendLibsecretTest, BasicListLogins) {
                         "chrome-42");
 }
 
+TEST_F(NativeBackendLibsecretTest, GetAllLogins) {
+  NativeBackendLibsecret backend(42);
+
+  VerifiedAdd(&backend, form_google_);
+  VerifiedAdd(&backend, form_facebook_);
+
+  ScopedVector<autofill::PasswordForm> form_list;
+  EXPECT_TRUE(backend.GetAllLogins(&form_list));
+
+  ASSERT_EQ(2u, form_list.size());
+  EXPECT_THAT(form_list, UnorderedElementsAre(Pointee(form_google_),
+                                              Pointee(form_facebook_)));
+}
+
 // Save a password for www.facebook.com and see it suggested for m.facebook.com.
 TEST_F(NativeBackendLibsecretTest, PSLMatchingPositive) {
   PasswordForm result;
@@ -667,6 +692,14 @@ TEST_F(NativeBackendLibsecretTest, PSLUpdatingStrictAddLogin) {
   // TODO(vabr): if AddLogin becomes no longer valid for existing logins, then
   // just delete this test.
   CheckPSLUpdate(UPDATE_BY_ADDLOGIN);
+}
+
+TEST_F(NativeBackendLibsecretTest, FetchFederatedCredential) {
+  other_auth_.signon_realm = "federation://www.example.com/google.com";
+  other_auth_.federation_origin = url::Origin(GURL("https://google.com/"));
+  EXPECT_TRUE(CheckCredentialAvailability(other_auth_,
+                                          GURL("http://www.example.com/"),
+                                          PasswordForm::SCHEME_HTML, nullptr));
 }
 
 TEST_F(NativeBackendLibsecretTest, BasicUpdateLogin) {
@@ -852,6 +885,37 @@ TEST_F(NativeBackendLibsecretTest, RemoveLoginsCreatedBetween) {
 
 TEST_F(NativeBackendLibsecretTest, RemoveLoginsSyncedBetween) {
   CheckRemoveLoginsBetween(SYNCED);
+}
+
+TEST_F(NativeBackendLibsecretTest, DisableAutoSignInForAllLogins) {
+  NativeBackendLibsecret backend(42);
+  backend.Init();
+  form_google_.skip_zero_click = false;
+  form_facebook_.skip_zero_click = false;
+
+  VerifiedAdd(&backend, form_google_);
+  VerifiedAdd(&backend, form_facebook_);
+
+  EXPECT_EQ(2u, global_mock_libsecret_items->size());
+  for (const auto& item : *global_mock_libsecret_items)
+    CheckUint32Attribute(item, "should_skip_zero_click", 0);
+
+  // Set the canonical forms to the updated value for the following comparison.
+  form_google_.skip_zero_click = true;
+  form_facebook_.skip_zero_click = true;
+  PasswordStoreChangeList expected_changes;
+  expected_changes.push_back(
+      PasswordStoreChange(PasswordStoreChange::UPDATE, form_facebook_));
+  expected_changes.push_back(
+      PasswordStoreChange(PasswordStoreChange::UPDATE, form_google_));
+
+  PasswordStoreChangeList changes;
+  EXPECT_TRUE(backend.DisableAutoSignInForAllLogins(&changes));
+  CheckPasswordChanges(expected_changes, changes);
+
+  EXPECT_EQ(2u, global_mock_libsecret_items->size());
+  for (const auto& item : *global_mock_libsecret_items)
+    CheckUint32Attribute(item, "should_skip_zero_click", 1);
 }
 
 TEST_F(NativeBackendLibsecretTest, SomeKeyringAttributesAreMissing) {

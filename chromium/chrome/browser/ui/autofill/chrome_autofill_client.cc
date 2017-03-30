@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/prefs/pref_service.h"
 #include "build/build_config.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/autofill/risk_util.h"
@@ -41,6 +40,7 @@
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/profile_identity_provider.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/navigation_entry.h"
@@ -55,7 +55,7 @@
 #include "components/ui/zoom/zoom_controller.h"
 #endif
 
-#if defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_ANDROID)
 #include "components/autofill/core/browser/autofill_save_card_infobar_delegate_mobile.h"
 #include "components/autofill/core/browser/autofill_save_card_infobar_mobile.h"
 #include "components/infobars/core/infobar.h"
@@ -64,21 +64,6 @@
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(autofill::ChromeAutofillClient);
 
 namespace autofill {
-
-namespace {
-
-#if !defined(OS_ANDROID)
-bool IsSaveCardBubbleEnabled() {
-#if defined(OS_MACOSX)
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableSaveCardBubble);
-#else
-  return true;
-#endif
-}
-#endif  // !defined(OS_ANDROID)
-
-}  // namespace
 
 ChromeAutofillClient::ChromeAutofillClient(content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
@@ -190,25 +175,19 @@ void ChromeAutofillClient::OnUnmaskVerificationResult(
 void ChromeAutofillClient::ConfirmSaveCreditCardLocally(
     const CreditCard& card,
     const base::Closure& callback) {
-#if defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_ANDROID)
   InfoBarService::FromWebContents(web_contents())->AddInfoBar(
       CreateSaveCardInfoBarMobile(
           make_scoped_ptr(new AutofillSaveCardInfoBarDelegateMobile(
               false, card, scoped_ptr<base::DictionaryValue>(nullptr),
               callback))));
 #else
-  if (IsSaveCardBubbleEnabled()) {
-    // Do lazy initialization of SaveCardBubbleControllerImpl.
-    autofill::SaveCardBubbleControllerImpl::CreateForWebContents(
-        web_contents());
-    autofill::SaveCardBubbleControllerImpl* controller =
-        autofill::SaveCardBubbleControllerImpl::FromWebContents(web_contents());
-    controller->ShowBubbleForLocalSave(card, callback);
-    return;
-  }
-
-  AutofillCCInfoBarDelegate::CreateForLocalSave(
-      InfoBarService::FromWebContents(web_contents()), callback);
+  // Do lazy initialization of SaveCardBubbleControllerImpl.
+  autofill::SaveCardBubbleControllerImpl::CreateForWebContents(
+      web_contents());
+  autofill::SaveCardBubbleControllerImpl* controller =
+      autofill::SaveCardBubbleControllerImpl::FromWebContents(web_contents());
+  controller->ShowBubbleForLocalSave(card, callback);
 #endif
 }
 
@@ -216,7 +195,7 @@ void ChromeAutofillClient::ConfirmSaveCreditCardToCloud(
     const CreditCard& card,
     scoped_ptr<base::DictionaryValue> legal_message,
     const base::Closure& callback) {
-#if defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_ANDROID)
   InfoBarService::FromWebContents(web_contents())->AddInfoBar(
       CreateSaveCardInfoBarMobile(
           make_scoped_ptr(new AutofillSaveCardInfoBarDelegateMobile(

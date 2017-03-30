@@ -184,9 +184,6 @@ If you update this file, be sure also to update google_chrome_strings.grd. -->
       <message name="IDS_TASK_MANAGER_TITLE" desc="The title of the Task Manager window">
         Task Manager - Chromium
       </message>
-      <message name="IDS_SESSION_CRASHED_VIEW_MESSAGE" desc="Message shown when the last session didn't exit cleanly.">
-        Chromium didn't shut down correctly.
-      </message>
       <message name="IDS_SESSION_CRASHED_VIEW_UMA_OPTIN" desc="Text besides the checkbox to let users optin to UMA in the restore from previous crash bubble.">
         Help make Chromium better by sending crash reports and <ph name="UMA_LINK">$1<ex>usage statistics</ex></ph> to Google
       </message>
@@ -221,8 +218,8 @@ If you update this file, be sure also to update google_chrome_strings.grd. -->
           Chromium OS open source licenses
         </message>
       </if>
-      <message name="IDS_ABOUT_TERMS_OF_SERVICE" desc="The terms of service label in the About box.">
-        Not used in Chromium. Placeholder to keep resource maps in sync. It expects one argument: $1.
+      <message name="IDS_ABOUT_TERMS_OF_SERVICE" desc="The terms of service label in the About box." translateable="false">
+        Not used in Chromium. Placeholder to keep resource maps in sync. It expects one argument: <ph name="ARGUMENT">$1</ph>.
       </message>
       <if expr="is_linux and not chromeos">
         <!-- These messages are not actually used, but they are here as placeholders to match the Chrome messages. -->
@@ -423,7 +420,7 @@ Chromium is unable to recover your settings.
           Installation failed due to unspecified error. Please download Chromium again.
         </message>
         <message name="IDS_INSTALL_OS_NOT_SUPPORTED" desc="Error displayed if OS is not supported">
-          Chromium requires Windows Vista or Windows XP with SP2 or higher.
+          Chromium requires Windows 7 or higher.
         </message>
         <message name="IDS_INSTALL_OS_ERROR" desc="Error displayed when any Windows API call fails and we do not have more specific information.">
           An operating system error occurred during installation. Please download Chromium again.
@@ -518,10 +515,6 @@ Chromium is unable to recover your settings.
           A module with the same name has been known to conflict with Chromium.
         </message>
       </if>
-      <!-- Page Info bubble -->
-      <message name="IDS_PAGE_INFO_INTERNAL_PAGE" desc="Message to display in the page info bubble when the page you are on is a chrome:// page or about:something.">
-        You are viewing a secure Chromium page.
-      </message>
 
       <!-- Print Preview -->
       <message name="IDS_PRINT_PREVIEW_NO_PLUGIN" desc="Message to display when the PDF viewer is missing.">
@@ -632,16 +625,6 @@ For Chromium, processes used to display diagnostics information (such as this "a
       <if expr="chromeos">
         <message name="IDS_UPGRADE_UPDATING_CHANNEL_SWITCH" desc="Status label: Updating Chromium OS to a specified channel">
           Updating your device to <ph name="CHANNEL_NAME">$1<ex>stable</ex></ph> channel...
-        </message>
-      </if>
-
-      <!-- iOS Upgrade available info bar-->
-      <if expr="is_ios">
-        <message name="IDS_UPGRADE_AVAILABLE" desc="Text to inform the user of the presence of a new version of the application">
-          Chromium just got better! A new version is available.
-        </message>
-        <message name="IDS_UPGRADE_AVAILABLE_BUTTON" desc="Diplayed on a button the user can use to upgrade the a more recent version of the application. [Length: 10em]">
-          Update
         </message>
       </if>
 

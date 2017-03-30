@@ -3,63 +3,75 @@
 // found in the LICENSE file.
 
 /**
- * @fileoverview 'cr-search-engine-entry' is a component for showing a search
- * engine with its name, domain and query URL.
+ * @fileoverview 'settings-search-engine-entry' is a component for showing a
+ * search engine with its name, domain and query URL.
  *
  * @group Chrome Settings Elements
- * @element cr-search-engine-entry
+ * @element settings-search-engine-entry
  */
 Polymer({
-  is: 'cr-search-engine-entry',
+  is: 'settings-search-engine-entry',
 
   properties: {
     /** @type {!SearchEngine} */
-    engine: Object
+    engine: Object,
+
+    /** @private {boolean} */
+    showEditSearchEngineDialog_: Boolean,
+
+    /** @type {boolean} */
+    isDefault: {
+      reflectToAttribute: true,
+      type: Boolean,
+      computed: 'computeIsDefault_(engine)'
+    },
+  },
+
+  /** @private {!settings.SearchEnginesBrowserProxy} */
+  browserProxy_: null,
+
+  /** @override */
+  created: function() {
+    this.browserProxy_ = settings.SearchEnginesBrowserProxyImpl.getInstance();
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  computeIsDefault_: function() {
+    return this.engine.default;
   },
 
   /** @private */
-  deleteEngine_: function() {
-    chrome.searchEnginesPrivate.removeSearchEngine(this.engine.guid);
+  onDeleteTap_: function() {
+    this.browserProxy_.removeSearchEngine(this.engine.modelIndex);
   },
 
   /** @private */
-  makeDefault_: function() {
-    chrome.searchEnginesPrivate.setSelectedSearchEngine(this.engine.guid);
-    this.makeNotEditable_();
+  onEditTap_: function() {
+    this.closePopupMenu_();
+
+    this.showEditSearchEngineDialog_ = true;
+    this.async(function() {
+      var dialog = this.$$('settings-search-engine-dialog');
+      // Register listener to detect when the dialog is closed. Flip the boolean
+      // once closed to force a restamp next time it is shown such that the
+      // previous dialog's contents are cleared.
+      dialog.addEventListener('iron-overlay-closed', function() {
+        this.showEditSearchEngineDialog_ = false;
+      }.bind(this));
+    }.bind(this));
   },
 
   /** @private */
-  toggleEditable_: function() {
-    this.$.domainField.disabled = !this.$.domainField.disabled;
-    this.$.keywordField.disabled = !this.$.keywordField.disabled;
-    this.$.queryURLField.disabled = !this.$.queryURLField.disabled;
-
-    this.$.checkIcon.hidden =
-        !this.$.checkIcon.hidden || this.engine.isSelected;
-    this.$.deleteIcon.hidden =
-        !this.$.deleteIcon.hidden || this.engine.isSelected;
+  onMakeDefaultTap_: function() {
+    this.closePopupMenu_();
+    this.browserProxy_.setDefaultSearchEngine(this.engine.modelIndex);
   },
 
   /** @private */
-  makeNotEditable_: function() {
-    this.$.domainField.disabled = true;
-    this.$.keywordField.disabled = true;
-    this.$.queryURLField.disabled = true;
-
-    this.$.checkIcon.hidden = true;
-    this.$.deleteIcon.hidden = true;
+  closePopupMenu_: function() {
+    this.$$('iron-dropdown').close();
   },
-
-  /** @private */
-  fieldChanged_: function() {
-    // NOTE: This currently doesn't fire in response to a change event from the
-    // paper-input, even though it should. This Polymer change should fix the
-    // issue:  https://github.com/PolymerElements/paper-input/pull/33
-    chrome.searchEnginesPrivate.updateSearchEngine(
-        this.engine.guid,
-        this.$.domainField.value,
-        this.$.keywordField.value,
-        this.$.queryURLField.value);
-    this.makeNotEditable_();
-  }
 });

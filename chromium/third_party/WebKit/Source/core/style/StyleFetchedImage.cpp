@@ -53,6 +53,7 @@ StyleFetchedImage::~StyleFetchedImage()
 void StyleFetchedImage::dispose()
 {
     m_image->removeClient(this);
+    m_image = nullptr;
 }
 
 WrappedImagePtr StyleFetchedImage::data() const
@@ -95,19 +96,14 @@ LayoutSize StyleFetchedImage::imageSize(const LayoutObject* layoutObject, float 
     return m_image->imageSize(LayoutObject::shouldRespectImageOrientation(layoutObject), multiplier);
 }
 
-bool StyleFetchedImage::imageHasRelativeWidth() const
+bool StyleFetchedImage::imageHasRelativeSize() const
 {
-    return m_image->imageHasRelativeWidth();
+    return m_image->imageHasRelativeSize();
 }
 
-bool StyleFetchedImage::imageHasRelativeHeight() const
+void StyleFetchedImage::computeIntrinsicDimensions(const LayoutObject*, FloatSize& intrinsicSize, FloatSize& intrinsicRatio)
 {
-    return m_image->imageHasRelativeHeight();
-}
-
-void StyleFetchedImage::computeIntrinsicDimensions(const LayoutObject*, Length& intrinsicWidth, Length& intrinsicHeight, FloatSize& intrinsicRatio)
-{
-    m_image->computeIntrinsicDimensions(intrinsicWidth, intrinsicHeight, intrinsicRatio);
+    m_image->computeIntrinsicDimensions(intrinsicSize, intrinsicRatio);
 }
 
 bool StyleFetchedImage::usesImageContainerSize() const
@@ -149,8 +145,9 @@ bool StyleFetchedImage::knownToBeOpaque(const LayoutObject* layoutObject) const
 
 DEFINE_TRACE(StyleFetchedImage)
 {
+    visitor->trace(m_image);
     visitor->trace(m_document);
     StyleImage::trace(visitor);
 }
 
-}
+} // namespace blink

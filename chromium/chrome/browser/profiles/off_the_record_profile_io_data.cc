@@ -10,7 +10,6 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/threading/worker_pool.h"
 #include "build/build_config.h"
@@ -25,6 +24,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/net_log/chrome_net_log.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
 #include "content/public/browser/resource_context.h"
@@ -295,14 +295,11 @@ void OffTheRecordProfileIOData::
       io_thread_globals->url_request_backoff_manager.get());
   // All we care about for extensions is the cookie store. For incognito, we
   // use a non-persistent cookie store.
-  net::CookieMonster* extensions_cookie_store =
-      content::CreateCookieStore(content::CookieStoreConfig())->
-          GetCookieMonster();
+  content::CookieStoreConfig cookie_config;
   // Enable cookies for chrome-extension URLs.
-  const char* const schemes[] = {
-      extensions::kExtensionScheme
-  };
-  extensions_cookie_store->SetCookieableSchemes(schemes, arraysize(schemes));
+  cookie_config.cookieable_schemes.push_back(extensions::kExtensionScheme);
+  net::CookieStore* extensions_cookie_store =
+      content::CreateCookieStore(cookie_config);
   extensions_context->set_cookie_store(extensions_cookie_store);
 
   scoped_ptr<net::URLRequestJobFactoryImpl> extensions_job_factory(

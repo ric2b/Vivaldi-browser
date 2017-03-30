@@ -260,7 +260,9 @@ gfx::Point EventSystemLocationFromNative(
     const base::NativeEvent& native_event) {
   POINT global_point = { static_cast<short>(LOWORD(native_event.lParam)),
                          static_cast<short>(HIWORD(native_event.lParam)) };
-  ClientToScreen(native_event.hwnd, &global_point);
+  // Wheel events have position in screen coordinates.
+  if (!IsMouseWheelEvent(native_event))
+    ClientToScreen(native_event.hwnd, &global_point);
   return gfx::Point(global_point);
 }
 
@@ -322,24 +324,20 @@ int GetTouchId(const base::NativeEvent& xev) {
   return 0;
 }
 
-float GetTouchRadiusX(const base::NativeEvent& native_event) {
-  NOTIMPLEMENTED();
-  return 1.0;
-}
-
-float GetTouchRadiusY(const base::NativeEvent& native_event) {
-  NOTIMPLEMENTED();
-  return 1.0;
-}
-
 float GetTouchAngle(const base::NativeEvent& native_event) {
   NOTIMPLEMENTED();
   return 0.0;
 }
 
-float GetTouchForce(const base::NativeEvent& native_event) {
+PointerDetails GetTouchPointerDetailsFromNative(
+    const base::NativeEvent& native_event) {
   NOTIMPLEMENTED();
-  return 0.0;
+  return PointerDetails(EventPointerType::POINTER_TYPE_TOUCH,
+                        /* radius_x */ 1.0,
+                        /* radius_y */ 1.0,
+                        /* force */ 0.f,
+                        /* tilt_x */ 0.f,
+                        /* tilt_y */ 0.f);
 }
 
 bool GetScrollOffsets(const base::NativeEvent& native_event,

@@ -9,10 +9,7 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/V8DOMConfiguration.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
-#include "core/dom/ContextFeatures.h"
 #include "core/dom/Document.h"
-#include "platform/RuntimeEnabledFeatures.h"
-#include "platform/TraceEvent.h"
 #include "wtf/GetPtr.h"
 #include "wtf/RefPtr.h"
 
@@ -24,7 +21,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestInterfaceEmpty::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceEmpty::domTemplate, V8TestInterfaceEmpty::refObject, V8TestInterfaceEmpty::derefObject, V8TestInterfaceEmpty::trace, 0, 0, V8TestInterfaceEmpty::preparePrototypeAndInterfaceObject, V8TestInterfaceEmpty::installConditionallyEnabledProperties, "TestInterfaceEmpty", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
+const WrapperTypeInfo V8TestInterfaceEmpty::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceEmpty::domTemplate, V8TestInterfaceEmpty::refObject, V8TestInterfaceEmpty::derefObject, V8TestInterfaceEmpty::trace, 0, V8TestInterfaceEmpty::preparePrototypeAndInterfaceObject, V8TestInterfaceEmpty::installConditionallyEnabledProperties, "TestInterfaceEmpty", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -43,7 +40,7 @@ static void installV8TestInterfaceEmptyTemplate(v8::Local<v8::FunctionTemplate> 
     functionTemplate->ReadOnlyPrototype();
 
     v8::Local<v8::Signature> defaultSignature;
-    defaultSignature = V8DOMConfiguration::installDOMClassTemplate(isolate, functionTemplate, "TestInterfaceEmpty", v8::Local<v8::FunctionTemplate>(), V8TestInterfaceEmpty::internalFieldCount,
+    defaultSignature = V8DOMConfiguration::installDOMClassTemplate(isolate, functionTemplate, V8TestInterfaceEmpty::wrapperTypeInfo.interfaceName, v8::Local<v8::FunctionTemplate>(), V8TestInterfaceEmpty::internalFieldCount,
         0, 0,
         0, 0,
         0, 0);
@@ -51,6 +48,7 @@ static void installV8TestInterfaceEmptyTemplate(v8::Local<v8::FunctionTemplate> 
     ALLOW_UNUSED_LOCAL(instanceTemplate);
     v8::Local<v8::ObjectTemplate> prototypeTemplate = functionTemplate->PrototypeTemplate();
     ALLOW_UNUSED_LOCAL(prototypeTemplate);
+    V8DOMConfiguration::setClassString(isolate, prototypeTemplate, V8TestInterfaceEmpty::wrapperTypeInfo.interfaceName);
 }
 
 v8::Local<v8::FunctionTemplate> V8TestInterfaceEmpty::domTemplate(v8::Isolate* isolate)

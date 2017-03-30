@@ -61,7 +61,6 @@
           "height": {"type": "integer", "optional": true, "description": "The height of the tab in pixels."},
           "sessionId": { "type": "string", "optional": true, "description": "The session ID used to uniquely identify a Tab obtained from the $(ref:sessions) API." },
           "extData": { "type": "string", "optional": true, "description": "The ext data of the tab." },
-          "lastActiveTime": {"type": "integer", "optional": true, "description": "Last time the tab was opened or activated."},
           "discarded": {"type": "boolean", "description": "True if the tab has been discarded. (Thrown out of memory and reloaded when activated.)"}
         }
       },

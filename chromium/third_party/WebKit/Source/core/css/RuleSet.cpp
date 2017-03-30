@@ -78,6 +78,8 @@ static bool containsUncommonAttributeSelector(const CSSSelector& selector)
             return true;
         if (selectorListContainsUncommonAttributeSelector(current))
             return true;
+        if (current->relationIsAffectedByPseudoContent() || current->getPseudoType() == CSSSelector::PseudoSlotted)
+            return false;
         if (current->relation() != CSSSelector::SubSelector) {
             current = current->tagHistory();
             break;
@@ -96,9 +98,9 @@ static bool containsUncommonAttributeSelector(const CSSSelector& selector)
 static inline PropertyWhitelistType determinePropertyWhitelistType(const AddRuleFlags addRuleFlags, const CSSSelector& selector)
 {
     for (const CSSSelector* component = &selector; component; component = component->tagHistory()) {
-        if (component->pseudoType() == CSSSelector::PseudoCue || (component->match() == CSSSelector::PseudoElement && component->value() == TextTrackCue::cueShadowPseudoId()))
+        if (component->getPseudoType() == CSSSelector::PseudoCue || (component->match() == CSSSelector::PseudoElement && component->value() == TextTrackCue::cueShadowPseudoId()))
             return PropertyWhitelistCue;
-        if (component->pseudoType() == CSSSelector::PseudoFirstLetter)
+        if (component->getPseudoType() == CSSSelector::PseudoFirstLetter)
             return PropertyWhitelistFirstLetter;
     }
     return PropertyWhitelistNone;
@@ -113,7 +115,7 @@ RuleData::RuleData(StyleRule* rule, unsigned selectorIndex, unsigned position, A
     , m_containsUncommonAttributeSelector(blink::containsUncommonAttributeSelector(selector()))
     , m_linkMatchType(selector().computeLinkMatchType())
     , m_hasDocumentSecurityOrigin(addRuleFlags & RuleHasDocumentSecurityOrigin)
-    , m_propertyWhitelistType(determinePropertyWhitelistType(addRuleFlags, selector()))
+    , m_propertyWhitelist(determinePropertyWhitelistType(addRuleFlags, selector()))
 {
     SelectorFilter::collectIdentifierHashes(selector(), m_descendantSelectorIdentifierHashes, maximumIdentifierCount);
 }
@@ -142,7 +144,7 @@ static void extractValuesforSelector(const CSSSelector* selector, AtomicString& 
     default:
         break;
     }
-    if (selector->pseudoType() == CSSSelector::PseudoWebKitCustomElement)
+    if (selector->getPseudoType() == CSSSelector::PseudoWebKitCustomElement)
         customPseudoElementName = selector->value();
 }
 
@@ -181,7 +183,7 @@ bool RuleSet::findBestRuleSetAndAdd(const CSSSelector& component, RuleData& rule
         return true;
     }
 
-    switch (component.pseudoType()) {
+    switch (component.getPseudoType()) {
     case CSSSelector::PseudoCue:
         m_cuePseudoRules.append(ruleData);
         return true;
@@ -216,7 +218,8 @@ bool RuleSet::findBestRuleSetAndAdd(const CSSSelector& component, RuleData& rule
 void RuleSet::addRule(StyleRule* rule, unsigned selectorIndex, AddRuleFlags addRuleFlags)
 {
     RuleData ruleData(rule, selectorIndex, m_ruleCount++, addRuleFlags);
-    m_features.collectFeaturesFromRuleData(ruleData);
+    if (m_features.collectFeaturesFromRuleData(ruleData) == RuleFeatureSet::SelectorNeverMatches)
+        return;
 
     if (!findBestRuleSetAndAdd(ruleData.selector(), ruleData)) {
         // If we didn't find a specialized map to stick it in, file under universal rules.
@@ -260,8 +263,10 @@ void RuleSet::addChildRules(const WillBeHeapVector<RefPtrWillBeMember<StyleRuleB
             for (size_t selectorIndex = 0; selectorIndex != kNotFound; selectorIndex = selectorList.indexOfNextSelectorAfter(selectorIndex)) {
                 if (selectorList.selectorUsesDeepCombinatorOrShadowPseudo(selectorIndex)) {
                     m_deepCombinatorOrShadowPseudoRules.append(MinimalRuleData(styleRule, selectorIndex, addRuleFlags));
-                } else if (selectorList.selectorHasShadowDistributed(selectorIndex)) {
-                    m_shadowDistributedRules.append(MinimalRuleData(styleRule, selectorIndex, addRuleFlags));
+                } else if (selectorList.selectorHasContentPseudo(selectorIndex)) {
+                    m_contentPseudoElementRules.append(MinimalRuleData(styleRule, selectorIndex, addRuleFlags));
+                } else if (selectorList.selectorHasSlottedPseudo(selectorIndex)) {
+                    m_slottedPseudoElementRules.append(MinimalRuleData(styleRule, selectorIndex, addRuleFlags));
                 } else {
                     addRule(styleRule, selectorIndex, addRuleFlags);
                 }
@@ -341,7 +346,8 @@ void RuleSet::compactRules()
     m_fontFaceRules.shrinkToFit();
     m_keyframesRules.shrinkToFit();
     m_deepCombinatorOrShadowPseudoRules.shrinkToFit();
-    m_shadowDistributedRules.shrinkToFit();
+    m_contentPseudoElementRules.shrinkToFit();
+    m_slottedPseudoElementRules.shrinkToFit();
 }
 
 DEFINE_TRACE(MinimalRuleData)
@@ -382,7 +388,8 @@ DEFINE_TRACE(RuleSet)
     visitor->trace(m_fontFaceRules);
     visitor->trace(m_keyframesRules);
     visitor->trace(m_deepCombinatorOrShadowPseudoRules);
-    visitor->trace(m_shadowDistributedRules);
+    visitor->trace(m_contentPseudoElementRules);
+    visitor->trace(m_slottedPseudoElementRules);
     visitor->trace(m_viewportDependentMediaQueryResults);
     visitor->trace(m_deviceDependentMediaQueryResults);
     visitor->trace(m_pendingRules);

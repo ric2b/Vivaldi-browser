@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -25,6 +24,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/signin_pref_names.h"
 #include "content/public/browser/render_view_host.h"
@@ -101,7 +101,7 @@ void NewTabPageSyncHandler::BuildAndSendSyncStatus() {
   }
 
   // Don't show sync status if setup is not complete.
-  if (!sync_service_->HasSyncSetupCompleted()) {
+  if (!sync_service_->IsFirstSetupComplete()) {
     return;
   }
 
@@ -133,7 +133,7 @@ void NewTabPageSyncHandler::HandleSyncLinkClicked(const base::ListValue* args) {
   chrome::ShowBrowserSignin(browser,
                             signin_metrics::AccessPoint::ACCESS_POINT_NTP_LINK);
 
-  if (sync_service_->HasSyncSetupCompleted()) {
+  if (sync_service_->IsFirstSetupComplete()) {
     base::string16 user = base::UTF8ToUTF16(
         SigninManagerFactory::GetForProfile(Profile::FromWebUI(web_ui()))
             ->GetAuthenticatedAccountInfo()

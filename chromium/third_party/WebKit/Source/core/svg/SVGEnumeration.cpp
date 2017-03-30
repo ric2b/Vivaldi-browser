@@ -72,12 +72,12 @@ SVGParsingError SVGEnumerationBase::setValueAsString(const String& string)
             ASSERT(entry.first);
             m_value = entry.first;
             notifyChange();
-            return NoError;
+            return SVGParseStatus::NoError;
         }
     }
 
     notifyChange();
-    return ParsingAttributeFailedError;
+    return SVGParseStatus::ExpectedEnumeration;
 }
 
 void SVGEnumerationBase::add(PassRefPtrWillBeRawPtr<SVGPropertyBase>, SVGElement*)
@@ -100,4 +100,4 @@ float SVGEnumerationBase::calculateDistance(PassRefPtrWillBeRawPtr<SVGPropertyBa
     return -1;
 }
 
-}
+} // namespace blink

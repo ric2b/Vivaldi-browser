@@ -24,8 +24,8 @@ void AddRouteDetailsStrings(content::WebUIDataSource* html_source) {
       IDS_MEDIA_ROUTER_CASTING_ACTIVITY_STATUS);
   html_source->AddLocalizedString("stopCastingButton",
       IDS_MEDIA_ROUTER_STOP_CASTING_BUTTON);
-  html_source->AddLocalizedString("joinButton",
-      IDS_MEDIA_ROUTER_JOIN_BUTTON);
+  html_source->AddLocalizedString("startCastingButton",
+                                  IDS_MEDIA_ROUTER_START_CASTING_BUTTON);
 }
 
 void AddIssuesStrings(content::WebUIDataSource* html_source) {
@@ -43,13 +43,17 @@ void AddMediaRouterContainerStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedString("firstRunFlowTitle",
                                   IDS_MEDIA_ROUTER_FIRST_RUN_FLOW_TITLE);
 #if defined(GOOGLE_CHROME_BUILD)
-  html_source->AddLocalizedString("firstRunFlowCloudOptInText",
-      IDS_MEDIA_ROUTER_FIRST_RUN_FLOW_CLOUD_OPT_IN_TEXT);
+  html_source->AddLocalizedString("firstRunFlowCloudPrefText",
+      IDS_MEDIA_ROUTER_FIRST_RUN_FLOW_CLOUD_PREF_TEXT);
 #endif  // defined(GOOGLE_CHROME_BUILD)
   html_source->AddLocalizedString("autoCastMode",
                                   IDS_MEDIA_ROUTER_AUTO_CAST_MODE);
   html_source->AddLocalizedString("deviceMissing",
                                   IDS_MEDIA_ROUTER_DEVICE_MISSING);
+  html_source->AddLocalizedString("searchInputLabel",
+                                  IDS_MEDIA_ROUTER_SEARCH_LABEL);
+  html_source->AddLocalizedString("searchNoMatches",
+                                  IDS_MEDIA_ROUTER_SEARCH_NO_MATCHES);
   html_source->AddLocalizedString("selectCastModeHeader",
       IDS_MEDIA_ROUTER_SELECT_CAST_MODE_HEADER);
   html_source->AddLocalizedString("shareYourScreenSubheading",

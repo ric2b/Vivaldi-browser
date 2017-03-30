@@ -15,7 +15,7 @@
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/browser/chromeos/net/network_portal_detector_test_impl.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
-#include "chrome/browser/ui/webui/signin/inline_login_ui.h"
+#include "chrome/browser/ui/webui/signin/get_auth_frame.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chromeos/chromeos_switches.h"
@@ -102,9 +102,8 @@ void OobeBaseTest::SetUpOnMainThread() {
       chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
       content::NotificationService::AllSources()));
 
-  js_checker_.set_web_contents(LoginDisplayHostImpl::default_host()
-                                   ->GetWebUILoginView()
-                                   ->GetWebContents());
+  js_checker_.set_web_contents(
+      LoginDisplayHost::default_host()->GetWebUILoginView()->GetWebContents());
 
   test::UserSessionManagerTestApi session_manager_test_api(
       UserSessionManager::GetInstance());
@@ -117,7 +116,7 @@ void OobeBaseTest::SetUpOnMainThread() {
 
 void OobeBaseTest::TearDownOnMainThread() {
   // If the login display is still showing, exit gracefully.
-  if (LoginDisplayHostImpl::default_host()) {
+  if (LoginDisplayHost::default_host()) {
     base::MessageLoop::current()->PostTask(FROM_HERE,
                                            base::Bind(&chrome::AttemptExit));
     content::RunMessageLoop();
@@ -202,8 +201,7 @@ void OobeBaseTest::JsExpect(const std::string& expression) {
 }
 
 content::WebUI* OobeBaseTest::GetLoginUI() {
-  return static_cast<chromeos::LoginDisplayHostImpl*>(
-      chromeos::LoginDisplayHostImpl::default_host())->GetOobeUI()->web_ui();
+  return LoginDisplayHost::default_host()->GetOobeUI()->web_ui();
 }
 
 WebUILoginDisplay* OobeBaseTest::GetLoginDisplay() {
@@ -247,8 +245,8 @@ void OobeBaseTest::WaitForSigninScreen() {
 }
 
 void OobeBaseTest::ExecuteJsInSigninFrame(const std::string& js) {
-  content::RenderFrameHost* frame = InlineLoginUI::GetAuthFrame(
-      GetLoginUI()->GetWebContents(), GURL(), gaia_frame_parent_);
+  content::RenderFrameHost* frame =
+      signin::GetAuthFrame(GetLoginUI()->GetWebContents(), gaia_frame_parent_);
   ASSERT_TRUE(content::ExecuteScript(frame, js));
 }
 

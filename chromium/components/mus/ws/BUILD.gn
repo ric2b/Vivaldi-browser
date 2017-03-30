@@ -5,6 +5,7 @@
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 import("//mojo/public/mojo_application.gni")
+import("//mojo/public/mojo_application_manifest.gni")
 
 source_set("lib") {
   sources = [
@@ -29,8 +30,6 @@ source_set("lib") {
     "focus_controller.h",
     "focus_controller_delegate.h",
     "focus_controller_observer.h",
-    "forwarding_window_manager.cc",
-    "forwarding_window_manager.h",
     "operation.cc",
     "operation.h",
     "server_window.cc",
@@ -51,6 +50,10 @@ source_set("lib") {
     "window_finder.h",
     "window_manager_access_policy.cc",
     "window_manager_access_policy.h",
+    "window_manager_factory_service.cc",
+    "window_manager_factory_service.h",
+    "window_tree_factory.cc",
+    "window_tree_factory.h",
     "window_tree_host_connection.cc",
     "window_tree_host_connection.h",
     "window_tree_host_delegate.h",
@@ -117,8 +120,11 @@ group("tests") {
   deps = [
     ":apptests",
     ":window_manager_unittests",
-    "//components/mus/public/cpp/tests:mojo_view_manager_lib_unittests",
   ]
+  if (!is_android) {
+    deps +=
+        [ "//components/mus/public/cpp/tests:mojo_view_manager_lib_unittests" ]
+  }
 }
 
 test("window_manager_unittests") {
@@ -141,6 +147,7 @@ test("window_manager_unittests") {
     ":test_support",
     "//base",
     "//base/test:test_config",
+    "//cc:cc",
     "//components/mus/common",
     "//components/mus/public/cpp",
     "//components/mus/public/interfaces",
@@ -148,13 +155,13 @@ test("window_manager_unittests") {
     "//mojo/converters/geometry",
     "//mojo/converters/input_events",
     "//mojo/converters/transform",
+    "//mojo/edk/test:run_all_unittests",
     "//mojo/environment:chromium",
     "//mojo/gles2",
-    "//mojo/platform_handle",
+    "//mojo/platform_handle:for_shared_library",
     "//mojo/public/cpp/bindings:bindings",
     "//mojo/shell/public/interfaces",
     "//testing/gtest",
-    "//third_party/mojo/src/mojo/edk/test:run_all_unittests",
     "//ui/events",
     "//ui/gfx",
     "//ui/gfx:test_support",
@@ -177,6 +184,7 @@ mojo_native_application("apptests") {
   ]
 
   deps = [
+    ":manifest",
     ":test_support",
     "//base",
     "//base/test:test_config",
@@ -196,4 +204,13 @@ mojo_native_application("apptests") {
   data_deps = [
     ":lib",
   ]
+
+  if (use_x11) {
+    deps += [ "//tools/xdisplaycheck" ]
+  }
+}
+
+mojo_application_manifest("manifest") {
+  application_name = "mus_apptests"
+  source = "apptest_manifest.json"
 }

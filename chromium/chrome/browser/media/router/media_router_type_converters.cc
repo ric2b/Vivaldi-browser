@@ -12,22 +12,24 @@ using media_router::interfaces::MediaSinkPtr;
 
 using PresentationConnectionState =
     media_router::interfaces::MediaRouter::PresentationConnectionState;
+using PresentationConnectionCloseReason =
+    media_router::interfaces::MediaRouter::PresentationConnectionCloseReason;
+using RouteRequestResultCode = media_router::interfaces::RouteRequestResultCode;
 
 namespace mojo {
 
 media_router::MediaSink::IconType SinkIconTypeFromMojo(
     media_router::interfaces::MediaSink::IconType type) {
   switch (type) {
-    case media_router::interfaces::MediaSink::IconType::ICON_TYPE_CAST:
+    case media_router::interfaces::MediaSink::IconType::CAST:
       return media_router::MediaSink::CAST;
-    case media_router::interfaces::MediaSink::IconType::ICON_TYPE_CAST_AUDIO:
+    case media_router::interfaces::MediaSink::IconType::CAST_AUDIO:
       return media_router::MediaSink::CAST_AUDIO;
-    case media_router::interfaces::MediaSink::
-        IconType::ICON_TYPE_CAST_AUDIO_GROUP:
+    case media_router::interfaces::MediaSink::IconType::CAST_AUDIO_GROUP:
       return media_router::MediaSink::CAST_AUDIO_GROUP;
-    case media_router::interfaces::MediaSink::IconType::ICON_TYPE_HANGOUT:
+    case media_router::interfaces::MediaSink::IconType::HANGOUT:
       return media_router::MediaSink::HANGOUT;
-    case media_router::interfaces::MediaSink::IconType::ICON_TYPE_GENERIC:
+    case media_router::interfaces::MediaSink::IconType::GENERIC:
       return media_router::MediaSink::GENERIC;
     default:
       NOTREACHED() << "Unknown sink icon type " << type;
@@ -39,21 +41,18 @@ media_router::interfaces::MediaSink::IconType SinkIconTypeToMojo(
     media_router::MediaSink::IconType type) {
   switch (type) {
     case media_router::MediaSink::CAST:
-      return media_router::interfaces::MediaSink::IconType::ICON_TYPE_CAST;
+      return media_router::interfaces::MediaSink::IconType::CAST;
     case media_router::MediaSink::CAST_AUDIO:
-      return
-          media_router::interfaces::MediaSink::IconType::ICON_TYPE_CAST_AUDIO;
+      return media_router::interfaces::MediaSink::IconType::CAST_AUDIO;
     case media_router::MediaSink::CAST_AUDIO_GROUP:
-      return
-          media_router::interfaces::MediaSink::
-              IconType::ICON_TYPE_CAST_AUDIO_GROUP;
+      return media_router::interfaces::MediaSink::IconType::CAST_AUDIO_GROUP;
     case media_router::MediaSink::HANGOUT:
-      return media_router::interfaces::MediaSink::IconType::ICON_TYPE_HANGOUT;
+      return media_router::interfaces::MediaSink::IconType::HANGOUT;
     case media_router::MediaSink::GENERIC:
-      return media_router::interfaces::MediaSink::IconType::ICON_TYPE_GENERIC;
+      return media_router::interfaces::MediaSink::IconType::GENERIC;
     default:
       NOTREACHED() << "Unknown sink icon type " << type;
-      return media_router::interfaces::MediaSink::ICON_TYPE_GENERIC;
+      return media_router::interfaces::MediaSink::IconType::GENERIC;
   }
 }
 
@@ -75,30 +74,34 @@ TypeConverter<media_router::MediaSink, MediaSinkPtr>::Convert(
 media_router::MediaRoute
 TypeConverter<media_router::MediaRoute, MediaRoutePtr>::Convert(
     const MediaRoutePtr& input) {
-  return media_router::MediaRoute(
+  media_router::MediaRoute media_route(
       input->media_route_id, media_router::MediaSource(input->media_source),
       input->media_sink_id, input->description, input->is_local,
       input->custom_controller_path, input->for_display);
+  media_route.set_off_the_record(input->off_the_record);
+  return media_route;
 }
 
 // static
 scoped_ptr<media_router::MediaRoute>
 TypeConverter<scoped_ptr<media_router::MediaRoute>, MediaRoutePtr>::Convert(
     const MediaRoutePtr& input) {
-  return make_scoped_ptr(new media_router::MediaRoute(
+  scoped_ptr<media_router::MediaRoute> media_route(new media_router::MediaRoute(
       input->media_route_id, media_router::MediaSource(input->media_source),
       input->media_sink_id, input->description, input->is_local,
       input->custom_controller_path, input->for_display));
+  media_route->set_off_the_record(input->off_the_record);
+  return media_route;
 }
 
 media_router::Issue::Severity IssueSeverityFromMojo(
     media_router::interfaces::Issue::Severity severity) {
   switch (severity) {
-    case media_router::interfaces::Issue::Severity::SEVERITY_FATAL:
+    case media_router::interfaces::Issue::Severity::FATAL:
       return media_router::Issue::FATAL;
-    case media_router::interfaces::Issue::Severity::SEVERITY_WARNING:
+    case media_router::interfaces::Issue::Severity::WARNING:
       return media_router::Issue::WARNING;
-    case media_router::interfaces::Issue::Severity::SEVERITY_NOTIFICATION:
+    case media_router::interfaces::Issue::Severity::NOTIFICATION:
       return media_router::Issue::NOTIFICATION;
     default:
       NOTREACHED() << "Unknown issue severity " << severity;
@@ -109,9 +112,9 @@ media_router::Issue::Severity IssueSeverityFromMojo(
 media_router::IssueAction::Type IssueActionTypeFromMojo(
     media_router::interfaces::Issue::ActionType action_type) {
   switch (action_type) {
-    case media_router::interfaces::Issue::ActionType::ACTION_TYPE_DISMISS:
+    case media_router::interfaces::Issue::ActionType::DISMISS:
       return media_router::IssueAction::TYPE_DISMISS;
-    case media_router::interfaces::Issue::ActionType::ACTION_TYPE_LEARN_MORE:
+    case media_router::interfaces::Issue::ActionType::LEARN_MORE:
       return media_router::IssueAction::TYPE_LEARN_MORE;
     default:
       NOTREACHED() << "Unknown issue action type " << action_type;
@@ -140,17 +143,48 @@ media_router::Issue TypeConverter<media_router::Issue, IssuePtr>::Convert(
 content::PresentationConnectionState PresentationConnectionStateFromMojo(
     PresentationConnectionState state) {
   switch (state) {
-    case PresentationConnectionState::PRESENTATION_CONNECTION_STATE_CONNECTING:
+    case PresentationConnectionState::CONNECTING:
       return content::PRESENTATION_CONNECTION_STATE_CONNECTING;
-    case PresentationConnectionState::PRESENTATION_CONNECTION_STATE_CONNECTED:
+    case PresentationConnectionState::CONNECTED:
       return content::PRESENTATION_CONNECTION_STATE_CONNECTED;
-    case PresentationConnectionState::PRESENTATION_CONNECTION_STATE_CLOSED:
+    case PresentationConnectionState::CLOSED:
       return content::PRESENTATION_CONNECTION_STATE_CLOSED;
-    case PresentationConnectionState::PRESENTATION_CONNECTION_STATE_TERMINATED:
+    case PresentationConnectionState::TERMINATED:
       return content::PRESENTATION_CONNECTION_STATE_TERMINATED;
     default:
       NOTREACHED() << "Unknown PresentationConnectionState " << state;
       return content::PRESENTATION_CONNECTION_STATE_TERMINATED;
+  }
+}
+
+content::PresentationConnectionCloseReason
+PresentationConnectionCloseReasonFromMojo(
+    PresentationConnectionCloseReason reason) {
+  switch (reason) {
+    case PresentationConnectionCloseReason::CONNECTION_ERROR:
+      return content::PRESENTATION_CONNECTION_CLOSE_REASON_CONNECTION_ERROR;
+    case PresentationConnectionCloseReason::CLOSED:
+      return content::PRESENTATION_CONNECTION_CLOSE_REASON_CLOSED;
+    case PresentationConnectionCloseReason::WENT_AWAY:
+      return content::PRESENTATION_CONNECTION_CLOSE_REASON_WENT_AWAY;
+    default:
+      NOTREACHED() << "Unknown PresentationConnectionCloseReason " << reason;
+      return content::PRESENTATION_CONNECTION_CLOSE_REASON_CONNECTION_ERROR;
+  }
+}
+
+media_router::RouteRequestResult::ResultCode RouteRequestResultCodeFromMojo(
+    RouteRequestResultCode result_code) {
+  switch (result_code) {
+    case RouteRequestResultCode::UNKNOWN_ERROR:
+      return media_router::RouteRequestResult::UNKNOWN_ERROR;
+    case RouteRequestResultCode::OK:
+      return media_router::RouteRequestResult::OK;
+    case RouteRequestResultCode::TIMED_OUT:
+      return media_router::RouteRequestResult::TIMED_OUT;
+    default:
+      NOTREACHED() << "Unknown RouteRequestResultCode " << result_code;
+      return media_router::RouteRequestResult::UNKNOWN_ERROR;
   }
 }
 

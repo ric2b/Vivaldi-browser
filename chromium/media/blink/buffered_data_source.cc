@@ -23,12 +23,15 @@ namespace {
 // of FFmpeg.
 const int kInitialReadBufferSize = 32768;
 
-// Number of cache misses or read failures we allow for a single Read() before
-// signaling an error.
-const int kLoaderRetries = 3;
-
 // The number of milliseconds to wait before retrying a failed load.
 const int kLoaderFailedRetryDelayMs = 250;
+
+// Each retry, add this many MS to the delay.
+// total delay is:
+// (kLoaderPartialRetryDelayMs +
+//  kAdditionalDelayPerRetryMs * (kMaxRetries - 1) / 2) * kLoaderRetries
+//  = 29250 ms
+const int kAdditionalDelayPerRetryMs = 50;
 
 }  // namespace
 
@@ -256,10 +259,12 @@ void BufferedDataSource::SetBitrate(int bitrate) {
                                     bitrate));
 }
 
-void BufferedDataSource::OnBufferingHaveEnough() {
+void BufferedDataSource::OnBufferingHaveEnough(bool always_cancel) {
   DCHECK(render_task_runner_->BelongsToCurrentThread());
-  if (loader_ && preload_ == METADATA && !media_has_played_ && !IsStreaming())
+  if (loader_ && (always_cancel || (preload_ == METADATA &&
+                                    !media_has_played_ && !IsStreaming()))) {
     loader_->CancelUponDeferral();
+  }
 }
 
 int64_t BufferedDataSource::GetMemoryUsage() const {
@@ -498,7 +503,9 @@ void BufferedDataSource::ReadCallback(
             FROM_HERE, base::Bind(&BufferedDataSource::ReadCallback,
                                   weak_factory_.GetWeakPtr(),
                                   BufferedResourceLoader::kCacheMiss, 0),
-            base::TimeDelta::FromMilliseconds(kLoaderFailedRetryDelayMs));
+            base::TimeDelta::FromMilliseconds(kLoaderFailedRetryDelayMs +
+                                              read_op_->retries() *
+                                                  kAdditionalDelayPerRetryMs));
         return;
       }
 
@@ -548,7 +555,7 @@ void BufferedDataSource::LoadingStateChangedCallback(
   if (assume_fully_buffered())
     return;
 
-  bool is_downloading_data;
+  bool is_downloading_data = false;
   switch (state) {
     case BufferedResourceLoader::kLoading:
       is_downloading_data = true;

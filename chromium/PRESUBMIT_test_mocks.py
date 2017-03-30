@@ -97,6 +97,9 @@ class MockFile(object):
     self._new_contents = new_contents
     self._changed_contents = [(i + 1, l) for i, l in enumerate(new_contents)]
 
+  def Action(self):
+    return 'A'  # TODO(dbeam): feel free to change if your test actually uses.
+
   def ChangedContents(self):
     return self._changed_contents
 
@@ -104,6 +107,9 @@ class MockFile(object):
     return self._new_contents
 
   def LocalPath(self):
+    return self._local_path
+
+  def AbsoluteLocalPath(self):
     return self._local_path
 
   def rfind(self, p):

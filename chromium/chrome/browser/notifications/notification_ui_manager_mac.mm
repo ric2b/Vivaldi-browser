@@ -17,6 +17,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/grit/generated_resources.h"
+#include "ui/base/l10n/l10n_util_mac.h"
 #include "url/gurl.h"
 
 @class NSUserNotification;
@@ -29,17 +31,14 @@
 // notification#context_message in NSUserNotification.informativeText
 // notification#tag in NSUserNotification.identifier (10.9)
 // notification#icon in NSUserNotification.contentImage (10.9)
+// Site settings button is implemented as NSUserNotification's action button
+// Not possible to implement:
+// -notification.requireInteraction
+// -The event associated to the close button
 
 // TODO(miguelg) implement the following features
 // - Sound names can be implemented by setting soundName in NSUserNotification
 //   NSUserNotificationDefaultSoundName gives you the platform default.
-// - notification.requireInteraction can be implemented by removing the
-//   notification and adding it again in "notification center only mode" in
-//   the shouldPresentNotification delegate method.
-//   This also requires refactoring the popup_timer class so it does not require
-//   a notification center.
-// - One Action can be implemented using the actionButton
-// - more than one action is only possible in 10.10 and using a private API.
 
 namespace {
 
@@ -116,15 +115,51 @@ void NotificationUIManagerMac::Add(const Notification& notification,
           : base::SysUTF16ToNSString(notification.context_message());
   [toast setInformativeText:informativeText];
 
-  // TODO(miguelg): Implement support for buttons
-  toast.get().hasActionButton = NO;
-
   // Some functionality is only available in 10.9+ or requires private APIs
   // Icon
   if ([toast respondsToSelector:@selector(_identityImage)] &&
       !notification.icon().IsEmpty()) {
     [toast setValue:notification.icon().ToNSImage() forKey:@"_identityImage"];
     [toast setValue:@NO forKey:@"_identityImageHasBorder"];
+  }
+
+  // Buttons
+  if ([toast respondsToSelector:@selector(_showsButtons)]) {
+    [toast setValue:@YES forKey:@"_showsButtons"];
+    // A default close button label is provided by the platform but we
+    // explicitly override it in case the user decides to not
+    // use the OS language in Chrome.
+    [toast setOtherButtonTitle:l10n_util::GetNSString(
+                                   IDS_NOTIFICATION_BUTTON_CLOSE)];
+
+    // Display the Settings button as the action button if there either are no
+    // developer-provided action buttons, or the alternate action menu is not
+    // available on this Mac version. This avoids needlessly showing the menu.
+    if (notification.buttons().empty() ||
+        ![toast respondsToSelector:@selector(_alwaysShowAlternateActionMenu)]) {
+      [toast setActionButtonTitle:l10n_util::GetNSString(
+                                      IDS_NOTIFICATION_BUTTON_SETTINGS)];
+    } else {
+      // Otherwise show the alternate menu, then show the developer actions and
+      // finally the settings one.
+      DCHECK(
+          [toast respondsToSelector:@selector(_alwaysShowAlternateActionMenu)]);
+      DCHECK(
+          [toast respondsToSelector:@selector(_alternateActionButtonTitles)]);
+
+      // utf8 ellipsis:
+      [toast setActionButtonTitle:@"\u2026"];
+      [toast setValue:@YES
+               forKey:@"_alwaysShowAlternateActionMenu"];
+
+      NSMutableArray* buttons = [NSMutableArray arrayWithCapacity:3];
+      for (const auto& action : notification.buttons())
+        [buttons addObject:base::SysUTF16ToNSString(action.title)];
+      [buttons
+          addObject:l10n_util::GetNSString(IDS_NOTIFICATION_BUTTON_SETTINGS)];
+
+      [toast setValue:buttons forKey:@"_alternateActionButtonTitles"];
+    }
   }
 
   // Tag
@@ -261,12 +296,51 @@ void NotificationUIManagerMac::CancelAll() {
 
   GURL origin(notificationOrigin);
 
+  // Initialize operation and button index for the case where the
+  // notification itself was clicked.
+  PlatformNotificationServiceImpl::NotificationOperation operation =
+      PlatformNotificationServiceImpl::NOTIFICATION_CLICK;
+  int buttonIndex = -1;
+
+  // Determine whether the user clicked on a button, and if they did, whether it
+  // was a developer-provided button or the mandatory Settings button.
+  if (notification.activationType ==
+      NSUserNotificationActivationTypeActionButtonClicked) {
+    NSArray* alternateButtons = @[];
+    if ([notification
+            respondsToSelector:@selector(_alternateActionButtonTitles)]) {
+      alternateButtons =
+          [notification valueForKey:@"_alternateActionButtonTitles"];
+    }
+
+    bool multipleButtons = (alternateButtons.count > 0);
+
+    // No developer actions, just the settings button.
+    if (!multipleButtons) {
+      operation = PlatformNotificationServiceImpl::NOTIFICATION_SETTINGS;
+      buttonIndex = -1;
+    } else {
+      // 0 based array containing.
+      // Button 1
+      // Button 2 (optional)
+      // Settings
+      NSNumber* actionIndex =
+          [notification valueForKey:@"_alternateActionIndex"];
+      operation = (actionIndex.unsignedLongValue == alternateButtons.count - 1)
+                      ? PlatformNotificationServiceImpl::NOTIFICATION_SETTINGS
+                      : PlatformNotificationServiceImpl::NOTIFICATION_CLICK;
+      buttonIndex =
+          (actionIndex.unsignedLongValue == alternateButtons.count - 1)
+              ? -1
+              : actionIndex.intValue;
+    }
+  }
+
   PlatformNotificationServiceImpl::GetInstance()
       ->ProcessPersistentNotificationOperation(
-          PlatformNotificationServiceImpl::NOTIFICATION_CLICK,
-          base::SysNSStringToUTF8(persistentProfileId), [isIncognito boolValue],
-          origin, persistentNotificationId.longLongValue,
-          -1 /* buttons not yet implemented */);
+          operation, base::SysNSStringToUTF8(persistentProfileId),
+          [isIncognito boolValue], origin,
+          persistentNotificationId.longLongValue, buttonIndex);
 }
 
 - (BOOL)userNotificationCenter:(NSUserNotificationCenter*)center

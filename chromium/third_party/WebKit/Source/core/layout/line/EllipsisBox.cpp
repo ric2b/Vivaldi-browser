@@ -37,9 +37,9 @@ void EllipsisBox::paint(const PaintInfo& paintInfo, const LayoutPoint& paintOffs
 
 IntRect EllipsisBox::selectionRect() const
 {
-    const ComputedStyle& style = lineLayoutItem().styleRef(isFirstLineStyle());
+    const ComputedStyle& style = getLineLayoutItem().styleRef(isFirstLineStyle());
     const Font& font = style.font();
-    return enclosingIntRect(font.selectionRectForText(constructTextRun(font, m_str, style, TextRun::AllowTrailingExpansion), IntPoint(logicalLeft(), logicalTop() + root().selectionTopAdjustedForPrecedingBlock()), root().selectionHeightAdjustedForPrecedingBlock()));
+    return enclosingIntRect(font.selectionRectForText(constructTextRun(font, m_str, style, TextRun::AllowTrailingExpansion), IntPoint(logicalLeft(), logicalTop() + root().selectionTop()), root().selectionHeight()));
 }
 
 bool EllipsisBox::nodeAtPoint(HitTestResult& result, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, LayoutUnit lineTop, LayoutUnit lineBottom)
@@ -52,10 +52,8 @@ bool EllipsisBox::nodeAtPoint(HitTestResult& result, const HitTestLocation& loca
     boxOrigin.moveBy(accumulatedOffset);
     LayoutRect boundsRect(boxOrigin, size());
     if (visibleToHitTestRequest(result.hitTestRequest()) && boundsRect.intersects(LayoutRect(HitTestLocation::rectForPoint(locationInContainer.point(), 0, 0, 0, 0)))) {
-        lineLayoutItem().updateHitTestResult(result, locationInContainer.point() - toLayoutSize(adjustedLocation));
-        // FIXME: the call to rawValue() below is temporary and should be removed once the transition
-        // to LayoutUnit-based types is complete (crbug.com/321237)
-        if (!result.addNodeToListBasedTestResult(lineLayoutItem().node(), locationInContainer, boundsRect))
+        getLineLayoutItem().updateHitTestResult(result, locationInContainer.point() - toLayoutSize(adjustedLocation));
+        if (result.addNodeToListBasedTestResult(getLineLayoutItem().node(), locationInContainer, boundsRect) == StopHitTesting)
             return true;
     }
 

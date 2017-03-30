@@ -79,11 +79,7 @@ const char kTopChromeMDMaterial[] = "material";
 const char kTopChromeMDMaterialHybrid[] = "material-hybrid";
 
 // Classic, non-material, mode for the |kTopChromeMD| switch.
-const char kTopChromeMDNonMaterial[] = "";
+const char kTopChromeMDNonMaterial[] = "non-material";
 #endif  // defined(ENABLE_TOPCHROME_MD)
-
-// On Windows only: requests that Chrome connect to the running Metro viewer
-// process.
-const char kViewerConnect[] = "connect-to-metro-viewer";
 
 }  // namespace switches

@@ -25,15 +25,14 @@ struct BluetoothScanFilter;
 // their services.
 //
 // |AddDevice| generates device ids, which are random strings that are unique
-// for each (origin, device address) pair.
+// in the map.
 class CONTENT_EXPORT BluetoothAllowedDevicesMap final {
  public:
   BluetoothAllowedDevicesMap();
   ~BluetoothAllowedDevicesMap();
 
   // Adds the Bluetooth Device with |device_address| to the map of allowed
-  // devices for that origin. Generates and returns a device id for the
-  // (|origin|, |device_address|) pair.
+  // devices for that origin. Generates and returns a device id.
   const std::string& AddDevice(
       const url::Origin& origin,
       const std::string& device_address,
@@ -45,12 +44,8 @@ class CONTENT_EXPORT BluetoothAllowedDevicesMap final {
   void RemoveDevice(const url::Origin& origin,
                     const std::string& device_address);
 
-  // TODO(ortuno): Add function to check if origin is allowed to access
-  // a device's service and add tests for that function.
-  // https://crbug.com/493460
-
   // Returns the Bluetooth Device's id for |origin|. Returns an empty string
-  // if the origin is not allowed to access the device.
+  // if |origin| is not allowed to access the device.
   const std::string& GetDeviceId(const url::Origin& origin,
                                  const std::string& device_address);
 
@@ -59,17 +54,24 @@ class CONTENT_EXPORT BluetoothAllowedDevicesMap final {
   const std::string& GetDeviceAddress(const url::Origin& origin,
                                       const std::string& device_id);
 
+  // Returns true if the origin has previously been granted access to
+  // the service.
+  bool IsOriginAllowedToAccessService(const url::Origin& origin,
+                                      const std::string& device_id,
+                                      const std::string& service_uuid) const;
+
  private:
   typedef std::map<std::string, std::string> DeviceAddressToIdMap;
   typedef std::map<std::string, std::string> DeviceIdToAddressMap;
   typedef std::map<std::string, std::set<std::string>> DeviceIdToServicesMap;
 
-  // Returns an id guaranteed to be unique for the origin. The id is randomly
+  // Returns an id guaranteed to be unique for the map. The id is randomly
   // generated so that an origin can't guess the id used in another origin.
-  std::string GenerateDeviceId(const url::Origin& origin);
-  std::set<std::string> UnionOfServices(
+  std::string GenerateDeviceId();
+  void AddUnionOfServicesTo(
       const std::vector<BluetoothScanFilter>& filters,
-      const std::vector<device::BluetoothUUID>& optional_services);
+      const std::vector<device::BluetoothUUID>& optional_services,
+      std::set<std::string>* unionOfServices);
 
   std::map<url::Origin, DeviceAddressToIdMap>
       origin_to_device_address_to_id_map_;
@@ -77,6 +79,9 @@ class CONTENT_EXPORT BluetoothAllowedDevicesMap final {
       origin_to_device_id_to_address_map_;
   std::map<url::Origin, DeviceIdToServicesMap>
       origin_to_device_id_to_services_map_;
+
+  // Keep track of all device_ids in the map.
+  std::set<std::string> device_id_set_;
 };
 
 }  //  namespace content

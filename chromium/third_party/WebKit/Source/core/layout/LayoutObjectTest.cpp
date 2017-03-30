@@ -106,21 +106,20 @@ TEST_F(LayoutObjectTest, ContainingBlockAbsoluteLayoutObjectShouldNotBeNonStatic
     EXPECT_EQ(layoutObject->containingBlock(), bodyLayoutObject);
 }
 
-TEST_F(LayoutObjectTest, MapToVisibleRectInContainerSpace)
+TEST_F(LayoutObjectTest, MapToVisibleRectInAncestorSpace)
 {
     setBodyInnerHTML(
         "<div id='container' style='overflow: scroll; will-change: transform; width: 50px; height: 50px'>"
         "  <span><img style='width: 20px; height: 100px'></span>"
         "  text text text text text text text"
         "</div>");
-    LayoutBlock* container = toLayoutBlock(document().getElementById("container")->layoutObject());
+    LayoutBlock* container = toLayoutBlock(getLayoutObjectByElementId("container"));
     LayoutText* text = toLayoutText(container->lastChild());
 
-    container->setScrollTop(50);
+    container->setScrollTop(LayoutUnit(50));
     LayoutRect rect(0, 60, 20, 20);
     text->mapToVisibleRectInAncestorSpace(container, rect, nullptr);
     EXPECT_TRUE(rect == LayoutRect(0, 10, 20, 20));
 }
 
-}
-
+} // namespace blink

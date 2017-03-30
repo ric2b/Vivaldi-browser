@@ -334,6 +334,24 @@ abstract class ToolbarLayout extends FrameLayout implements Toolbar {
     public void setCustomTabCloseClickHandler(OnClickListener listener) { }
 
     /**
+     * Sets whether the urlbar should be hidden on first page load.
+     */
+    public void setUrlBarHidden(boolean hide) { }
+
+    /**
+     * @return The name of the publisher of the content if it can be reliably extracted, or null
+     *         otherwise.
+     */
+    public String getContentPublisher() {
+        return null;
+    }
+
+    /**
+     * Tells the Toolbar to update what buttons it is currently displaying.
+     */
+    public void updateButtonVisibility() { }
+
+    /**
      * Gives inheriting classes the chance to update the visibility of the
      * back button.
      * @param canGoBack Whether or not the current tab has any history to go back to.
@@ -647,6 +665,8 @@ abstract class ToolbarLayout extends FrameLayout implements Toolbar {
     public void removeAppMenuUpdateBadge(boolean animate) {
         boolean wasShowingMenuBadge = mShowMenuBadge;
         mShowMenuBadge = false;
+        setMenuButtonContentDescription(false);
+
         if (!animate || !wasShowingMenuBadge) {
             mMenuBadge.setVisibility(View.GONE);
             return;
@@ -687,6 +707,7 @@ abstract class ToolbarLayout extends FrameLayout implements Toolbar {
      * bitmap.
      */
     protected void setAppMenuUpdateBadgeToVisible(boolean animate) {
+        setMenuButtonContentDescription(true);
         if (!animate || mIsMenuBadgeAnimationRunning) {
             mMenuBadge.setVisibility(View.VISIBLE);
             return;
@@ -732,5 +753,23 @@ abstract class ToolbarLayout extends FrameLayout implements Toolbar {
     protected void setAppMenuUpdateBadgeDrawable(boolean useLightDrawable) {
         mMenuBadge.setImageResource(useLightDrawable ? R.drawable.badge_update_light
                 : R.drawable.badge_update_dark);
+    }
+
+    /**
+     * Sets the content description for the menu button.
+     * @param isUpdateBadgeVisible Whether the update menu badge is visible.
+     */
+    protected void setMenuButtonContentDescription(boolean isUpdateBadgeVisible) {
+        if (isUpdateBadgeVisible) {
+            mMenuButton.setContentDescription(getResources().getString(
+                    R.string.accessibility_toolbar_btn_menu_update));
+        } else {
+            mMenuButton.setContentDescription(getResources().getString(
+                    R.string.accessibility_toolbar_btn_menu));
+        }
+    }
+
+    @Override
+    public void setReturnButtonListener(View.OnClickListener listener) {
     }
 }

@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//mojo/public/mojo_application.gni")
+import("//mojo/public/mojo_application_manifest.gni")
 
 mojo_native_application("tracing") {
   sources = [
@@ -13,9 +14,15 @@ mojo_native_application("tracing") {
 
   deps = [
     ":lib",
+    ":manifest",
     "//mojo/public/cpp/system",
     "//mojo/shell/public/cpp",
   ]
+}
+
+mojo_application_manifest("manifest") {
+  application_name = "tracing"
+  source = "manifest.json"
 }
 
 source_set("lib") {

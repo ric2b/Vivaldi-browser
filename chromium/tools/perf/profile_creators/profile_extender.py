@@ -76,7 +76,7 @@ class ProfileExtender(object):
     Returns:
         List of OS ('win', 'mac', or 'linux') that this extender can run on.
     """
-    return ["win", "mac", "linux"]
+    return ['win', 'mac', 'linux']
 
   def SetUpBrowser(self):
     """Finds and starts the browser.
@@ -92,11 +92,11 @@ class ProfileExtender(object):
     enabled_os_list = self.EnabledOSList()
     if self._os_name not in enabled_os_list:
       raise NotImplementedError(
-        'This profile extender on %s is not yet supported'
-        % self._os_name)
+          'This profile extender on %s is not yet supported'
+          % self._os_name)
     if possible_browser.IsRemote():
       raise NotImplementedError(
-        'Profile extenders are not yet supported on remote platforms.')
+          'Profile extenders are not yet supported on remote platforms.')
     assert possible_browser.supports_tab_control
 
     self._SetUpWebPageReplay(self.finder_options, possible_browser)
@@ -109,6 +109,7 @@ class ProfileExtender(object):
     super class implementation.
     """
     if self._browser:
+      self._browser.platform.network_controller.Close()
       self._browser.Close()
       self._browser = None
 
@@ -128,20 +129,16 @@ class ProfileExtender(object):
 
     self.FetchWebPageReplayArchives()
 
-    # The browser options needs to be passed to both the network controller
-    # as well as the browser backend.
-    browser_options = finder_options.browser_options
     if finder_options.use_live_sites:
-      browser_options.wpr_mode = wpr_modes.WPR_OFF
+      wpr_mode = wpr_modes.WPR_OFF
     else:
-      browser_options.wpr_mode = wpr_modes.WPR_REPLAY
+      wpr_mode = wpr_modes.WPR_REPLAY
 
     network_controller = possible_browser.platform.network_controller
-    make_javascript_deterministic = True
-
-    network_controller.SetReplayArgs(
-        wpr_archive_path, browser_options.wpr_mode, browser_options.netsim,
-        browser_options.extra_wpr_args, make_javascript_deterministic)
+    network_controller.Open(wpr_mode, finder_options.browser_options.netsim,
+                            finder_options.browser_options.extra_wpr_args)
+    network_controller.StartReplay(
+        wpr_archive_path, make_javascript_deterministic=True)
 
   def _GetPossibleBrowser(self, finder_options):
     """Return a possible_browser with the given options."""
@@ -154,4 +151,3 @@ class ProfileExtender(object):
         possible_browser.browser_type)
 
     return possible_browser
-

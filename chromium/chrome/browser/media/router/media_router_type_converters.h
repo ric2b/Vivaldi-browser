@@ -10,9 +10,11 @@
 
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/media/router/issue.h"
+#include "chrome/browser/media/router/media_router.h"
 #include "chrome/browser/media/router/media_router.mojom.h"
 #include "chrome/browser/media/router/media_sink.h"
 #include "chrome/browser/media/router/media_source.h"
+#include "chrome/browser/media/router/route_request_result.h"
 #include "content/public/browser/presentation_session.h"
 #include "mojo/common/common_type_converters.h"
 
@@ -66,6 +68,16 @@ struct TypeConverter<media_router::Issue, media_router::interfaces::IssuePtr> {
 // PresentationConnectionState conversion.
 content::PresentationConnectionState PresentationConnectionStateFromMojo(
     media_router::interfaces::MediaRouter::PresentationConnectionState state);
+
+// PresentationConnectionCloseReason conversion.
+content::PresentationConnectionCloseReason
+PresentationConnectionCloseReasonFromMojo(
+    media_router::interfaces::MediaRouter::PresentationConnectionCloseReason
+        reason);
+
+// RouteRequestResult conversion.
+media_router::RouteRequestResult::ResultCode RouteRequestResultCodeFromMojo(
+    media_router::interfaces::RouteRequestResultCode result_code);
 
 }  // namespace mojo
 

@@ -20,7 +20,6 @@
 #include "chrome/browser/extensions/webstore_install_helper.h"
 #include "chrome/browser/extensions/webstore_installer.h"
 #include "chrome/browser/ui/browser_list_observer.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "extensions/common/extension.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "url/gurl.h"
@@ -62,6 +61,7 @@ class BundleInstaller : public WebstoreInstallHelper::Delegate,
     };
 
     Item();
+    Item(const Item& other);
     ~Item();
 
     // Gets the localized name, formatted for display in the bubble.
@@ -198,9 +198,6 @@ class BundleInstaller : public WebstoreInstallHelper::Delegate,
   // The display name of the user for which this install happens, in the case
   // of delegated installs. Empty for regular installs.
   std::string delegated_username_;
-
-  // The desktop type of the browser.
-  chrome::HostDesktopType host_desktop_type_;
 
   // The profile that the bundle should be installed in.
   Profile* profile_;

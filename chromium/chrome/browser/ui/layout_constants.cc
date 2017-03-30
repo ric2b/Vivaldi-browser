@@ -6,18 +6,19 @@
 
 #include "base/logging.h"
 #include "build/build_config.h"
-#include "ui/base/resource/material_design/material_design_controller.h"
+#include "ui/base/material_design/material_design_controller.h"
 
 int GetLayoutConstant(LayoutConstant constant) {
   const int kFindBarVerticalOffset[] = {1, 6, 6};
   const int kIconLabelViewInternalPadding[] = {3, 2, 2};
   const int kIconLabelViewTrailingPadding[] = {2, 8, 8};
   const int kLocationBarBorderThickness[] = {2, 1, 1};
+  const int kLocationBarBubbleFontVerticalPadding[] = {1, 2, 4};
   const int kLocationBarBubbleHorizontalPadding[] = {1, 4, 4};
-  const int kLocationBarBubbleVerticalPadding[] = {1, 4, 4};
+  const int kLocationBarBubbleVerticalPadding[] = {1, 3, 3};
   const int kLocationBarHeight[] = {27, 28, 32};
   const int kLocationBarHorizontalPadding[] = {3, 6, 6};
-  const int kLocationBarVerticalPadding[] = {2, 2, 2};
+  const int kLocationBarVerticalPadding[] = {0, 1, 1};
   const int kOmniboxDropdownBorderInterior[] = {6, 0, 0};
   const int kOmniboxFontPixelSize[] = {16, 14, 14};
   const int kTabCloseButtonTrailingPaddingOverlap[] = {2, 0, 0};
@@ -50,6 +51,8 @@ int GetLayoutConstant(LayoutConstant constant) {
       return kIconLabelViewTrailingPadding[mode];
     case LOCATION_BAR_BORDER_THICKNESS:
       return kLocationBarBorderThickness[mode];
+    case LOCATION_BAR_BUBBLE_FONT_VERTICAL_PADDING:
+      return kLocationBarBubbleFontVerticalPadding[mode];
     case LOCATION_BAR_BUBBLE_HORIZONTAL_PADDING:
       return kLocationBarBubbleHorizontalPadding[mode];
     case LOCATION_BAR_BUBBLE_VERTICAL_PADDING:

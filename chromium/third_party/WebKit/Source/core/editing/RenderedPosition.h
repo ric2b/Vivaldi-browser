@@ -47,9 +47,9 @@ class RenderedPosition {
 public:
     RenderedPosition();
     explicit RenderedPosition(const VisiblePosition&);
-    explicit RenderedPosition(const VisiblePositionInComposedTree&);
+    explicit RenderedPosition(const VisiblePositionInFlatTree&);
     RenderedPosition(const Position&, TextAffinity);
-    RenderedPosition(const PositionInComposedTree&, TextAffinity);
+    RenderedPosition(const PositionInFlatTree&, TextAffinity);
     bool isEquivalent(const RenderedPosition&) const;
 
     bool isNull() const { return !m_layoutObject; }
@@ -117,6 +117,6 @@ inline RenderedPosition::RenderedPosition(LayoutObject* layoutObject, InlineBox*
 
 CORE_EXPORT bool layoutObjectContainsPosition(LayoutObject*, const Position&);
 
-};
+} // namespace blink
 
 #endif // RenderedPosition_h

@@ -19,11 +19,13 @@
 #include "chrome/renderer/plugins/plugin_preroller.h"
 #include "chrome/renderer/plugins/plugin_uma.h"
 #include "components/content_settings/content/common/content_settings_messages.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/context_menu_params.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "gin/object_template_builder.h"
+#include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
@@ -262,7 +264,7 @@ void ChromePluginPlaceholder::PluginListChanged() {
   render_frame()->Send(
       new ChromeViewHostMsg_GetPluginInfo(routing_id(),
                                           GURL(GetPluginParams().url),
-                                          GURL(top_origin),
+                                          blink::WebStringToGURL(top_origin),
                                           mime_type,
                                           &output));
   if (output.status == status_)

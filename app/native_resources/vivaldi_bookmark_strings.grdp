@@ -7,6 +7,9 @@
   <message name="IDS_IMPORTED_BOOKMARKS" desc="The group name of imported bookmarks">
     Imported bookmarks
   </message>
+  <message name="IDS_SPEEDDIAL_GROUP_FROM_OPERA" desc="The group name of imported Speed Dial bookmarks">
+    Imported Speed Dial
+  </message>
   <message name="IDS_IMPORT_HTML_BOOKMARKS_FILE_TITLE" desc="The title of the HTML bookmark import dialog.">
     Select HTML bookmark file
   </message>

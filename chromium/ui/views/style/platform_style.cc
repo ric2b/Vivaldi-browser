@@ -5,9 +5,10 @@
 #include "ui/views/style/platform_style.h"
 
 #include "build/build_config.h"
-#include "ui/base/resource/material_design/material_design_controller.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/label_button_border.h"
+#include "ui/views/controls/scrollbar/native_scroll_bar.h"
 
 namespace views {
 
@@ -25,6 +26,12 @@ scoped_ptr<LabelButtonBorder> PlatformStyle::CreateLabelButtonBorder(
       Button::STYLE_TEXTBUTTON));
   return border;
 }
+
+// static
+scoped_ptr<ScrollBar> PlatformStyle::CreateScrollBar(bool is_horizontal) {
+  return make_scoped_ptr(new NativeScrollBar(is_horizontal));
+}
+
 #endif
 
 #if !defined(OS_LINUX) || defined(OS_CHROMEOS)

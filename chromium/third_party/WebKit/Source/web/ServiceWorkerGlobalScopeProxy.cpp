@@ -53,6 +53,7 @@
 #include "modules/push_messaging/PushEvent.h"
 #include "modules/push_messaging/PushMessageData.h"
 #include "modules/serviceworkers/ExtendableEvent.h"
+#include "modules/serviceworkers/ExtendableMessageEvent.h"
 #include "modules/serviceworkers/FetchEvent.h"
 #include "modules/serviceworkers/InstallEvent.h"
 #include "modules/serviceworkers/ServiceWorkerGlobalScope.h"
@@ -101,20 +102,29 @@ void ServiceWorkerGlobalScopeProxy::dispatchActivateEvent(int eventID)
     workerGlobalScope()->dispatchExtendableEvent(event.release(), observer);
 }
 
+void ServiceWorkerGlobalScopeProxy::dispatchExtendableMessageEvent(int eventID, const WebString& message, const WebMessagePortChannelArray& webChannels)
+{
+    ASSERT(RuntimeEnabledFeatures::serviceWorkerExtendableMessageEventEnabled());
+
+    WebSerializedScriptValue value = WebSerializedScriptValue::fromString(message);
+    MessagePortArray* ports = MessagePort::toMessagePortArray(m_workerGlobalScope, webChannels);
+    // TODO(nhiroki): Support |origin| and |source| attributes.
+    // (http://crbug.com/543198)
+
+    WaitUntilObserver* observer = WaitUntilObserver::create(workerGlobalScope(), WaitUntilObserver::Message, eventID);
+
+    RefPtrWillBeRawPtr<Event> event(ExtendableMessageEvent::create(value, String(), ports, observer));
+    workerGlobalScope()->dispatchExtendableEvent(event.release(), observer);
+}
+
 void ServiceWorkerGlobalScopeProxy::dispatchFetchEvent(int eventID, const WebServiceWorkerRequest& webRequest)
 {
-    RespondWithObserver* observer = RespondWithObserver::create(workerGlobalScope(), eventID, webRequest.url(), webRequest.mode(), webRequest.frameType(), webRequest.requestContext());
-    bool defaultPrevented = false;
-    Request* request = Request::create(workerGlobalScope(), webRequest);
-    request->headers()->setGuard(Headers::ImmutableGuard);
-    FetchEventInit eventInit;
-    eventInit.setCancelable(true);
-    eventInit.setRequest(request);
-    eventInit.setClientId(webRequest.isMainResourceLoad() ? WebString() : webRequest.clientId());
-    eventInit.setIsReload(webRequest.isReload());
-    RefPtrWillBeRawPtr<FetchEvent> fetchEvent(FetchEvent::create(EventTypeNames::fetch, eventInit, observer));
-    defaultPrevented = !workerGlobalScope()->dispatchEvent(fetchEvent.release());
-    observer->didDispatchEvent(defaultPrevented);
+    dispatchFetchEventImpl(eventID, webRequest, EventTypeNames::fetch);
+}
+
+void ServiceWorkerGlobalScopeProxy::dispatchForeignFetchEvent(int eventID, const WebServiceWorkerRequest& webRequest)
+{
+    dispatchFetchEventImpl(eventID, webRequest, EventTypeNames::foreignfetch);
 }
 
 void ServiceWorkerGlobalScopeProxy::dispatchGeofencingEvent(int eventID, WebGeofencingEventType eventType, const WebString& regionID, const WebCircularGeofencingRegion& region)
@@ -145,10 +155,20 @@ void ServiceWorkerGlobalScopeProxy::dispatchNotificationClickEvent(int eventID, 
 {
     WaitUntilObserver* observer = WaitUntilObserver::create(workerGlobalScope(), WaitUntilObserver::NotificationClick, eventID);
     NotificationEventInit eventInit;
-    eventInit.setNotification(Notification::create(workerGlobalScope(), notificationID, data));
+    eventInit.setNotification(Notification::create(workerGlobalScope(), notificationID, data, true /* showing */));
     if (0 <= actionIndex && actionIndex < static_cast<int>(data.actions.size()))
         eventInit.setAction(data.actions[actionIndex].action);
     RefPtrWillBeRawPtr<Event> event(NotificationEvent::create(EventTypeNames::notificationclick, eventInit, observer));
+    workerGlobalScope()->dispatchExtendableEvent(event.release(), observer);
+}
+
+void ServiceWorkerGlobalScopeProxy::dispatchNotificationCloseEvent(int eventID, int64_t notificationID, const WebNotificationData& data)
+{
+    WaitUntilObserver* observer = WaitUntilObserver::create(workerGlobalScope(), WaitUntilObserver::NotificationClose, eventID);
+    NotificationEventInit eventInit;
+    eventInit.setAction(WTF::String()); // initialize as null.
+    eventInit.setNotification(Notification::create(workerGlobalScope(), notificationID, data, false /* showing */));
+    RefPtrWillBeRawPtr<Event> event(NotificationEvent::create(EventTypeNames::notificationclose, eventInit, observer));
     workerGlobalScope()->dispatchExtendableEvent(event.release(), observer);
 }
 
@@ -210,8 +230,8 @@ void ServiceWorkerGlobalScopeProxy::didEvaluateWorkerScript(bool success)
 
 void ServiceWorkerGlobalScopeProxy::didInitializeWorkerContext()
 {
-    ScriptState::Scope scope(workerGlobalScope()->script()->scriptState());
-    client().didInitializeWorkerContext(workerGlobalScope()->script()->context(), WebURL(m_documentURL));
+    ScriptState::Scope scope(workerGlobalScope()->scriptController()->scriptState());
+    client().didInitializeWorkerContext(workerGlobalScope()->scriptController()->context(), WebURL(m_documentURL));
 }
 
 void ServiceWorkerGlobalScopeProxy::workerGlobalScopeStarted(WorkerGlobalScope* workerGlobalScope)
@@ -230,7 +250,7 @@ void ServiceWorkerGlobalScopeProxy::workerGlobalScopeClosed()
 void ServiceWorkerGlobalScopeProxy::willDestroyWorkerGlobalScope()
 {
     v8::HandleScope handleScope(workerGlobalScope()->thread()->isolate());
-    client().willDestroyWorkerContext(workerGlobalScope()->script()->context());
+    client().willDestroyWorkerContext(workerGlobalScope()->scriptController()->context());
     m_workerGlobalScope = nullptr;
 }
 
@@ -272,6 +292,21 @@ ServiceWorkerGlobalScope* ServiceWorkerGlobalScopeProxy::workerGlobalScope() con
 {
     ASSERT(m_workerGlobalScope);
     return m_workerGlobalScope;
+}
+
+void ServiceWorkerGlobalScopeProxy::dispatchFetchEventImpl(int eventID, const WebServiceWorkerRequest& webRequest, const AtomicString& eventTypeName)
+{
+    RespondWithObserver* observer = RespondWithObserver::create(workerGlobalScope(), eventID, webRequest.url(), webRequest.mode(), webRequest.frameType(), webRequest.requestContext());
+    Request* request = Request::create(workerGlobalScope(), webRequest);
+    request->headers()->setGuard(Headers::ImmutableGuard);
+    FetchEventInit eventInit;
+    eventInit.setCancelable(true);
+    eventInit.setRequest(request);
+    eventInit.setClientId(webRequest.isMainResourceLoad() ? WebString() : webRequest.clientId());
+    eventInit.setIsReload(webRequest.isReload());
+    RefPtrWillBeRawPtr<FetchEvent> fetchEvent(FetchEvent::create(eventTypeName, eventInit, observer));
+    DispatchEventResult dispatchResult = workerGlobalScope()->dispatchEvent(fetchEvent.release());
+    observer->didDispatchEvent(dispatchResult);
 }
 
 } // namespace blink

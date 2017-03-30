@@ -13,11 +13,11 @@
 
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/common/extensions/extension_constants.h"
+#include "components/prefs/pref_service.h"
 
 // TODO(nona): move this header from this file.
 #include "chrome/grit/generated_resources.h"
@@ -28,7 +28,6 @@
 // For SetHardwareKeyboardLayoutForTesting.
 #include "ui/base/ime/chromeos/fake_input_method_delegate.h"
 #include "ui/base/ime/chromeos/input_method_delegate.h"
-#include "ui/base/ime/chromeos/input_method_whitelist.h"
 
 #include "ui/base/l10n/l10n_util.h"
 
@@ -805,9 +804,10 @@ void InputMethodUtil::ResetInputMethods(const InputMethodDescriptors& imes) {
   AppendInputMethods(imes);
 }
 
-void InputMethodUtil::InitXkbInputMethodsForTesting() {
+void InputMethodUtil::InitXkbInputMethodsForTesting(
+    const InputMethodDescriptors& imes) {
   cached_hardware_layouts_.clear();
-  ResetInputMethods(*(InputMethodWhitelist().GetSupportedInputMethods()));
+  ResetInputMethods(imes);
 }
 
 const InputMethodUtil::InputMethodIdToDescriptorMap&

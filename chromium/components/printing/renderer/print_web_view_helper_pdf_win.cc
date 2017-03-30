@@ -16,10 +16,6 @@ namespace printing {
 #if defined(ENABLE_BASIC_PRINTING)
 bool PrintWebViewHelper::PrintPagesNative(blink::WebFrame* frame,
                                           int page_count) {
-  PdfMetafileSkia metafile;
-  if (!metafile.Init())
-    return false;
-
   const PrintMsg_PrintPages_Params& params = *print_pages_params_;
   std::vector<int> printed_pages = GetPrintedPages(params, page_count);
   if (printed_pages.empty())
@@ -27,6 +23,9 @@ bool PrintWebViewHelper::PrintPagesNative(blink::WebFrame* frame,
 
   std::vector<gfx::Size> page_size_in_dpi(printed_pages.size());
   std::vector<gfx::Rect> content_area_in_dpi(printed_pages.size());
+
+  PdfMetafileSkia metafile;
+  CHECK(metafile.Init());
 
   PrintMsg_PrintPage_Params page_params;
   page_params.params = params.params;
@@ -61,6 +60,7 @@ bool PrintWebViewHelper::PrintPagesNative(blink::WebFrame* frame,
     printed_page_params.content_area = content_area_in_dpi[i];
     Send(new PrintHostMsg_DidPrintPage(routing_id(), printed_page_params));
     // Send the rest of the pages with an invalid metafile handle.
+    printed_page_params.metafile_data_handle.Close();
     printed_page_params.metafile_data_handle = base::SharedMemoryHandle();
   }
   return true;

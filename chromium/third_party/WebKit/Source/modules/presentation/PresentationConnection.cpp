@@ -13,11 +13,13 @@
 #include "core/events/MessageEvent.h"
 #include "core/fileapi/FileReaderLoader.h"
 #include "core/fileapi/FileReaderLoaderClient.h"
+#include "core/frame/Deprecation.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
 #include "modules/EventTargetModules.h"
 #include "modules/presentation/Presentation.h"
 #include "modules/presentation/PresentationConnectionAvailableEvent.h"
+#include "modules/presentation/PresentationConnectionCloseEvent.h"
 #include "modules/presentation/PresentationController.h"
 #include "modules/presentation/PresentationRequest.h"
 #include "public/platform/modules/presentation/WebPresentationConnectionClient.h"
@@ -58,6 +60,25 @@ const AtomicString& connectionStateToString(WebPresentationConnectionState state
 
     ASSERT_NOT_REACHED();
     return terminatedValue;
+}
+
+const AtomicString& connectionCloseReasonToString(WebPresentationConnectionCloseReason reason)
+{
+    DEFINE_STATIC_LOCAL(const AtomicString, errorValue, ("error", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, closedValue, ("closed", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, wentAwayValue, ("wentaway", AtomicString::ConstructFromLiteral));
+
+    switch (reason) {
+    case WebPresentationConnectionCloseReason::Error:
+        return errorValue;
+    case WebPresentationConnectionCloseReason::Closed:
+        return closedValue;
+    case WebPresentationConnectionCloseReason::WentAway:
+        return wentAwayValue;
+    }
+
+    ASSERT_NOT_REACHED();
+    return errorValue;
 }
 
 void throwPresentationDisconnectedError(ExceptionState& exceptionState)
@@ -165,7 +186,13 @@ ExecutionContext* PresentationConnection::executionContext() const
 bool PresentationConnection::addEventListenerInternal(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener> listener, const EventListenerOptions& options)
 {
     if (eventType == EventTypeNames::statechange)
-        UseCounter::count(executionContext(), UseCounter::PresentationConnectionStateChangeEventListener);
+        Deprecation::countDeprecation(executionContext(), UseCounter::PresentationConnectionStateChangeEventListener);
+    else if (eventType == EventTypeNames::connect)
+        UseCounter::count(executionContext(), UseCounter::PresentationConnectionConnectEventListener);
+    else if (eventType == EventTypeNames::close)
+        UseCounter::count(executionContext(), UseCounter::PresentationConnectionCloseEventListener);
+    else if (eventType == EventTypeNames::terminate)
+        UseCounter::count(executionContext(), UseCounter::PresentationConnectionTerminateEventListener);
     else if (eventType == EventTypeNames::message)
         UseCounter::count(executionContext(), UseCounter::PresentationConnectionMessageEventListener);
 
@@ -347,6 +374,27 @@ void PresentationConnection::didChangeState(WebPresentationConnectionState state
 
     m_state = state;
     dispatchEvent(Event::create(EventTypeNames::statechange));
+    switch (m_state) {
+    case WebPresentationConnectionState::Connected:
+        dispatchEvent(Event::create(EventTypeNames::connect));
+        return;
+    case WebPresentationConnectionState::Terminated:
+        dispatchEvent(Event::create(EventTypeNames::terminate));
+        return;
+    // Closed state is handled in |didClose()|.
+    case WebPresentationConnectionState::Closed:
+        return;
+    }
+    ASSERT_NOT_REACHED();
+}
+
+void PresentationConnection::didClose(WebPresentationConnectionCloseReason reason, const String& message)
+{
+    if (m_state == WebPresentationConnectionState::Closed)
+        return;
+
+    m_state = WebPresentationConnectionState::Closed;
+    dispatchEvent(PresentationConnectionCloseEvent::create(EventTypeNames::close, connectionCloseReasonToString(reason), message));
 }
 
 void PresentationConnection::didFinishLoadingBlob(PassRefPtr<DOMArrayBuffer> buffer)

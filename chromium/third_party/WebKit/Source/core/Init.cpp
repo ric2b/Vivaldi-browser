@@ -56,6 +56,7 @@
 #include "platform/FontFamilyNames.h"
 #include "platform/HTTPNames.h"
 #include "platform/weborigin/KURL.h"
+#include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "wtf/Partitions.h"
 
@@ -129,6 +130,7 @@ void CoreInitializer::init()
 
     EventTracer::initialize();
     KURL::initialize();
+    SchemeRegistry::initialize();
     SecurityPolicy::init();
 
     registerEventFactory();
@@ -141,11 +143,17 @@ void CoreInitializer::init()
     ScriptStreamerThread::init();
 }
 
-void CoreInitializer::shutdown()
+void CoreInitializer::terminateThreads()
 {
     // Make sure we stop the HTMLParserThread before Platform::current() is
     // cleared.
     HTMLParserThread::shutdown();
+
+    WorkerThread::terminateAndWaitForAllWorkers();
+}
+
+void CoreInitializer::shutdown()
+{
 }
 
 } // namespace blink

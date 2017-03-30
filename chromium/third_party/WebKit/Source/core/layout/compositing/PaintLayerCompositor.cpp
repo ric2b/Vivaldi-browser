@@ -52,16 +52,16 @@
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/paint/FramePainter.h"
 #include "core/paint/TransformRecorder.h"
+#include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/TraceEvent.h"
+#include "platform/graphics/CompositorMutableProperties.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/paint/CullRect.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/PaintController.h"
 #include "platform/graphics/paint/TransformDisplayItem.h"
-#include "public/platform/Platform.h"
-#include "public/platform/WebCompositorMutableProperties.h"
 
 namespace blink {
 
@@ -194,6 +194,12 @@ void updateDescendantDependentFlagsForEntireSubtree(PaintLayer& layer)
 
 void PaintLayerCompositor::updateIfNeededRecursive()
 {
+    SCOPED_BLINK_UMA_HISTOGRAM_TIMER("Blink.Compositing.UpdateTime");
+    updateIfNeededRecursiveInternal();
+}
+
+void PaintLayerCompositor::updateIfNeededRecursiveInternal()
+{
     FrameView* view = m_layoutView.frameView();
     if (view->shouldThrottleRendering())
         return;
@@ -205,8 +211,8 @@ void PaintLayerCompositor::updateIfNeededRecursive()
         // It's possible for trusted Pepper plugins to force hit testing in situations where
         // the frame tree is in an inconsistent state, such as in the middle of frame detach.
         // TODO(bbudge) Remove this check when trusted Pepper plugins are gone.
-        if (localFrame->document()->isActive())
-            localFrame->contentLayoutObject()->compositor()->updateIfNeededRecursive();
+        if (localFrame->document()->isActive() && localFrame->contentLayoutObject())
+            localFrame->contentLayoutObject()->compositor()->updateIfNeededRecursiveInternal();
     }
 
     TRACE_EVENT0("blink", "PaintLayerCompositor::updateIfNeededRecursive");
@@ -245,7 +251,7 @@ void PaintLayerCompositor::updateIfNeededRecursive()
         if (!child->isLocalFrame())
             continue;
         LocalFrame* localFrame = toLocalFrame(child);
-        if (localFrame->shouldThrottleRendering())
+        if (localFrame->shouldThrottleRendering() || !localFrame->contentLayoutObject())
             continue;
         localFrame->contentLayoutObject()->compositor()->assertNoUnresolvedDirtyBits();
     }
@@ -344,7 +350,6 @@ static void forceRecomputePaintInvalidationRectsIncludingNonCompositingDescendan
     }
 }
 
-
 void PaintLayerCompositor::updateIfNeeded()
 {
     CompositingUpdateType updateType = m_pendingUpdateType;
@@ -396,10 +401,10 @@ void PaintLayerCompositor::updateIfNeeded()
         if (RuntimeEnabledFeatures::compositorWorkerEnabled() && m_scrollLayer) {
             if (Element* scrollingElement = m_layoutView.document().scrollingElement()) {
                 uint64_t elementId = 0;
-                uint32_t mutableProperties = WebCompositorMutablePropertyNone;
+                uint32_t mutableProperties = CompositorMutableProperty::kNone;
                 if (scrollingElement->hasCompositorProxy()) {
                     elementId = DOMNodeIds::idForNode(scrollingElement);
-                    mutableProperties = (WebCompositorMutablePropertyScrollLeft | WebCompositorMutablePropertyScrollTop) & scrollingElement->compositorMutableProperties();
+                    mutableProperties = (CompositorMutableProperty::kScrollLeft | CompositorMutableProperty::kScrollTop) & scrollingElement->compositorMutableProperties();
                 }
                 m_scrollLayer->setElementId(elementId);
                 m_scrollLayer->setCompositorMutableProperties(mutableProperties);
@@ -429,7 +434,7 @@ void PaintLayerCompositor::updateIfNeeded()
 
         if (childList.isEmpty())
             destroyRootLayer();
-        else
+        else if (m_rootContentLayer)
             m_rootContentLayer->setChildren(childList);
 
         applyOverlayFullscreenVideoAdjustmentIfNeeded();
@@ -589,10 +594,8 @@ void PaintLayerCompositor::frameViewDidScroll()
     else
         m_scrollLayer->setPosition(-scrollPosition);
 
-
-    Platform::current()->histogramEnumeration("Renderer.AcceleratedFixedRootBackground",
-        ScrolledMainFrameBucket,
-        AcceleratedFixedRootBackgroundHistogramMax);
+    DEFINE_STATIC_LOCAL(EnumerationHistogram, acceleratedBackgroundHistogram, ("Renderer.AcceleratedFixedRootBackground", AcceleratedFixedRootBackgroundHistogramMax));
+    acceleratedBackgroundHistogram.count(ScrolledMainFrameBucket);
 }
 
 void PaintLayerCompositor::frameViewScrollbarsExistenceDidChange()
@@ -663,7 +666,7 @@ PaintLayerCompositor* PaintLayerCompositor::frameContentsCompositor(LayoutPart* 
 bool PaintLayerCompositor::attachFrameContentLayersToIframeLayer(LayoutPart* layoutObject)
 {
     PaintLayerCompositor* innerCompositor = frameContentsCompositor(layoutObject);
-    if (!innerCompositor || !innerCompositor->staleInCompositingMode() || innerCompositor->rootLayerAttachment() != RootLayerAttachedViaEnclosingFrame)
+    if (!innerCompositor || !innerCompositor->staleInCompositingMode() || innerCompositor->getRootLayerAttachment() != RootLayerAttachedViaEnclosingFrame)
         return false;
 
     PaintLayer* layer = layoutObject->layer();
@@ -767,6 +770,11 @@ void PaintLayerCompositor::updateDirectCompositingReasons(PaintLayer* layer)
 
 bool PaintLayerCompositor::canBeComposited(const PaintLayer* layer) const
 {
+    FrameView* frameView = layer->layoutObject()->frameView();
+    // Elements within an invisible frame must not be composited because they are not drawn.
+    if (frameView && !frameView->isVisible())
+        return false;
+
     const bool hasCompositorAnimation = m_compositingReasonFinder.requiresCompositingForAnimation(*layer->layoutObject()->style());
     return m_hasAcceleratedCompositing && (hasCompositorAnimation || !layer->subtreeIsInvisible()) && layer->isSelfPaintingLayer() && !layer->layoutObject()->isLayoutFlowThread();
 }
@@ -1143,7 +1151,7 @@ void PaintLayerCompositor::attachCompositorTimeline()
     if (!page)
         return;
 
-    WebCompositorAnimationTimeline* compositorTimeline = frame.document() ? frame.document()->timeline().compositorTimeline() : nullptr;
+    CompositorAnimationTimeline* compositorTimeline = frame.document() ? frame.document()->timeline().compositorTimeline() : nullptr;
     if (compositorTimeline)
         page->chromeClient().attachCompositorAnimationTimeline(compositorTimeline, &frame);
 }
@@ -1155,7 +1163,7 @@ void PaintLayerCompositor::detachCompositorTimeline()
     if (!page)
         return;
 
-    WebCompositorAnimationTimeline* compositorTimeline = frame.document() ? frame.document()->timeline().compositorTimeline() : nullptr;
+    CompositorAnimationTimeline* compositorTimeline = frame.document() ? frame.document()->timeline().compositorTimeline() : nullptr;
     if (compositorTimeline)
         page->chromeClient().detachCompositorAnimationTimeline(compositorTimeline, &frame);
 }

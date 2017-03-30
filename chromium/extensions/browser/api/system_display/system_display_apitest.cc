@@ -88,8 +88,6 @@ class MockDisplayInfoProvider : public DisplayInfoProvider {
     return true;
   }
 
-  gfx::Screen* GetActiveScreen() override { return NULL; }
-
   void EnableUnifiedDesktop(bool enable) override {
     unified_desktop_enabled_ = enable;
   }
@@ -142,9 +140,8 @@ class SystemDisplayApiTest : public ShellApiTest {
 
   void SetUpOnMainThread() override {
     ShellApiTest::SetUpOnMainThread();
-    ANNOTATE_LEAKING_OBJECT_PTR(
-        gfx::Screen::GetScreenByType(gfx::SCREEN_TYPE_NATIVE));
-    gfx::Screen::SetScreenInstance(gfx::SCREEN_TYPE_NATIVE, screen_.get());
+    ANNOTATE_LEAKING_OBJECT_PTR(gfx::Screen::GetScreen());
+    gfx::Screen::SetScreenInstance(screen_.get());
     DisplayInfoProvider::InitializeForTesting(provider_.get());
   }
 

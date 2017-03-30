@@ -11,12 +11,13 @@
 #include "base/stl_util.h"
 #include "base/threading/thread_local.h"
 #include "mojo/converters/network/network_type_converters.h"
-#include "mojo/runner/child/runner_connection.h"
-#include "mojo/shell/public/cpp/application_delegate.h"
-#include "mojo/shell/public/cpp/application_impl.h"
+#include "mojo/shell/public/cpp/shell_client.h"
+#include "mojo/shell/public/cpp/shell_connection.h"
+#include "mojo/shell/runner/child/runner_connection.h"
 
 namespace content {
 namespace {
+
 using MojoShellConnectionPtr =
     base::ThreadLocalPointer<MojoShellConnectionImpl>;
 
@@ -34,8 +35,22 @@ bool IsRunningInMojoShell() {
 // static
 void MojoShellConnectionImpl::Create() {
   DCHECK(!lazy_tls_ptr.Pointer()->Get());
-  MojoShellConnectionImpl* connection = new MojoShellConnectionImpl;
+  MojoShellConnectionImpl* connection =
+      new MojoShellConnectionImpl(true /* external */);
   lazy_tls_ptr.Pointer()->Set(connection);
+}
+
+// static
+void MojoShellConnectionImpl::Create(
+    mojo::shell::mojom::ShellClientRequest request) {
+  DCHECK(!lazy_tls_ptr.Pointer()->Get());
+  MojoShellConnectionImpl* connection =
+      new MojoShellConnectionImpl(false /* external */);
+  lazy_tls_ptr.Pointer()->Set(connection);
+
+  connection->shell_connection_.reset(
+      new mojo::ShellConnection(connection, std::move(request)));
+  connection->shell_connection_->WaitForInitialize();
 }
 
 // static
@@ -57,36 +72,48 @@ void MojoShellConnectionImpl::BindToMessagePipe(
   WaitForShell(std::move(handle));
 }
 
-MojoShellConnectionImpl::MojoShellConnectionImpl() : initialized_(false) {}
+MojoShellConnectionImpl::MojoShellConnectionImpl(bool external) :
+    external_(external), initialized_(false) {}
+
 MojoShellConnectionImpl::~MojoShellConnectionImpl() {
   STLDeleteElements(&listeners_);
 }
 
 void MojoShellConnectionImpl::WaitForShell(
     mojo::ScopedMessagePipeHandle handle) {
-  mojo::InterfaceRequest<mojo::Application> application_request;
-  runner_connection_.reset(mojo::runner::RunnerConnection::ConnectToRunner(
-      &application_request, std::move(handle)));
-  application_impl_.reset(
-      new mojo::ApplicationImpl(this, std::move(application_request)));
-  application_impl_->WaitForInitialize();
+  mojo::shell::mojom::ShellClientRequest request;
+  runner_connection_.reset(mojo::shell::RunnerConnection::ConnectToRunner(
+      &request, std::move(handle), false /* exit_on_error */));
+  if (!runner_connection_) {
+    delete this;
+    lazy_tls_ptr.Pointer()->Set(nullptr);
+    return;
+  }
+  shell_connection_.reset(new mojo::ShellConnection(this, std::move(request)));
+  shell_connection_->WaitForInitialize();
 }
 
-void MojoShellConnectionImpl::Initialize(mojo::ApplicationImpl* application) {
+void MojoShellConnectionImpl::Initialize(mojo::Connector* connector,
+                                         const std::string& url,
+                                         uint32_t id,
+                                         uint32_t user_id) {
   initialized_ = true;
 }
 
-bool MojoShellConnectionImpl::ConfigureIncomingConnection(
-    mojo::ApplicationConnection* connection) {
+bool MojoShellConnectionImpl::AcceptConnection(mojo::Connection* connection) {
   bool found = false;
   for (auto listener : listeners_)
-    found |= listener->ConfigureIncomingConnection(connection);
+    found |= listener->AcceptConnection(connection);
   return found;
 }
 
-mojo::ApplicationImpl* MojoShellConnectionImpl::GetApplication() {
+mojo::Connector* MojoShellConnectionImpl::GetConnector() {
   DCHECK(initialized_);
-  return application_impl_.get();
+  return shell_connection_->connector();
+}
+
+bool MojoShellConnectionImpl::UsingExternalShell() const {
+  return external_;
 }
 
 void MojoShellConnectionImpl::AddListener(Listener* listener) {

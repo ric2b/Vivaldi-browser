@@ -26,9 +26,13 @@
 #ifndef V8ScriptRunner_h
 #define V8ScriptRunner_h
 
+#include "bindings/core/v8/ScriptState.h"
+#include "bindings/core/v8/ScriptValue.h"
+#include "bindings/core/v8/V8BindingMacros.h"
 #include "bindings/core/v8/V8CacheOptions.h"
 #include "core/CoreExport.h"
 #include "core/fetch/AccessControlStatus.h"
+#include "platform/text/CompressibleString.h"
 #include "wtf/Allocator.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/text/TextPosition.h"
@@ -50,7 +54,7 @@ public:
     // For the following methods, the caller sites have to hold
     // a HandleScope and a ContextScope.
     static v8::MaybeLocal<v8::Script> compileScript(const ScriptSourceCode&, v8::Isolate*, AccessControlStatus = SharableCrossOrigin, V8CacheOptions = V8CacheOptionsDefault);
-    static v8::MaybeLocal<v8::Script> compileScript(const String&, const String& fileName, const String& sourceMapUrl, const TextPosition&, v8::Isolate*, CachedMetadataHandler* = nullptr, AccessControlStatus = SharableCrossOrigin, V8CacheOptions = V8CacheOptionsDefault);
+    static v8::MaybeLocal<v8::Script> compileScript(const CompressibleString&, const String& fileName, const String& sourceMapUrl, const TextPosition&, v8::Isolate*, CachedMetadataHandler* = nullptr, AccessControlStatus = SharableCrossOrigin, V8CacheOptions = V8CacheOptionsDefault);
     // CachedMetadataHandler is set when metadata caching is supported. For
     // normal scripe resources, CachedMetadataHandler is from ScriptResource.
     // For worker script, ScriptResource is null but CachedMetadataHandler may be
@@ -67,6 +71,31 @@ public:
 
     static unsigned tagForParserCache(CachedMetadataHandler*);
     static unsigned tagForCodeCache(CachedMetadataHandler*);
+
+
+    // Utiltiies for calling functions added to the V8 extras binding object.
+
+    template <size_t N>
+    static v8::MaybeLocal<v8::Value> callExtra(ScriptState* scriptState, const char* name, v8::Local<v8::Value>(&args)[N])
+    {
+        return callExtraHelper(scriptState, name, N, args);
+    }
+
+    template <size_t N>
+    static v8::Local<v8::Value> callExtraOrCrash(ScriptState* scriptState, const char* name, v8::Local<v8::Value>(&args)[N])
+    {
+        return v8CallOrCrash(callExtraHelper(scriptState, name, N, args));
+    }
+
+private:
+    static v8::MaybeLocal<v8::Value> callExtraHelper(ScriptState* scriptState, const char* name, size_t numArgs, v8::Local<v8::Value>* args)
+    {
+        v8::Isolate* isolate = scriptState->isolate();
+        v8::Local<v8::Value> undefined = v8::Undefined(isolate);
+        v8::Local<v8::Value> functionValue = scriptState->getFromExtrasExports(name).v8Value();
+        v8::Local<v8::Function> function = functionValue.As<v8::Function>();
+        return V8ScriptRunner::callInternalFunction(function, undefined, numArgs, args, isolate);
+    }
 };
 
 } // namespace blink

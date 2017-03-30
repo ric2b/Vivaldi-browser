@@ -183,17 +183,17 @@
         'test_support_sync_core',
       ],
       'sources': [
-        'internal_api/public/test/fake_metadata_change_list.h',
         'internal_api/public/test/fake_model_type_service.h',
         'internal_api/public/test/fake_sync_manager.h',
+        'internal_api/public/test/model_type_store_test_util.h',
         'internal_api/public/test/null_sync_context_proxy.h',
         'internal_api/public/test/sync_manager_factory_for_profile_sync_test.h',
         'internal_api/public/test/test_entry_factory.h',
         'internal_api/public/test/test_internal_components_factory.h',
         'internal_api/public/test/test_user_share.h',
-        'internal_api/test/fake_metadata_change_list.cc',
         'internal_api/test/fake_model_type_service.cc',
         'internal_api/test/fake_sync_manager.cc',
+        'internal_api/test/model_type_store_test_util.cc',
         'internal_api/test/null_sync_context_proxy.cc',
         'internal_api/test/sync_manager_factory_for_profile_sync_test.cc',
         'internal_api/test/sync_manager_for_profile_sync_test.cc',
@@ -321,12 +321,9 @@
         'internal_api/public/util/proto_value_ptr_unittest.cc',
         'internal_api/public/util/weak_handle_unittest.cc',
         'internal_api/shared_model_type_processor_unittest.cc',
-        'internal_api/sync_backup_manager_unittest.cc',
         'internal_api/sync_context_proxy_impl_unittest.cc',
         'internal_api/sync_encryption_handler_impl_unittest.cc',
         'internal_api/sync_manager_impl_unittest.cc',
-        'internal_api/sync_rollback_manager_base_unittest.cc',
-        'internal_api/sync_rollback_manager_unittest.cc',
         'internal_api/syncapi_server_connection_manager_unittest.cc',
         'js/js_event_details_unittest.cc',
         'js/sync_js_controller_unittest.cc',
@@ -335,7 +332,6 @@
         'sessions/model_type_registry_unittest.cc',
         'sessions/nudge_tracker_unittest.cc',
         'sessions/status_controller_unittest.cc',
-        'syncable/deferred_on_disk_directory_backing_store_unittest.cc',
         'syncable/directory_backing_store_unittest.cc',
         'syncable/directory_unittest.cc',
         'syncable/directory_unittest.h',
@@ -354,14 +350,6 @@
         'util/protobuf_unittest.cc',
       ],
       'conditions': [
-        # TODO(akalin): This is needed because histogram.cc uses
-        # leak_annotations.h, which pulls this in.  Make 'base'
-        # propagate this dependency.
-        ['OS=="linux" and use_allocator!="none"', {
-          'dependencies': [
-            '../base/allocator/allocator.gyp:allocator',
-          ],
-        }],
         ['OS == "android"', {
           'dependencies': [
             '../testing/android/native_test.gyp:native_test_native_code',

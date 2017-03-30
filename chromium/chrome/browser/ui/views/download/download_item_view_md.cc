@@ -17,7 +17,6 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
@@ -40,11 +39,12 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/download_danger_type.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/resource/material_design/material_design_controller.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
 #include "ui/events/event.h"
@@ -860,7 +860,6 @@ void DownloadItemViewMd::ClearWarningDialog() {
   delete dangerous_download_label_;
   dangerous_download_label_ = NULL;
   dangerous_download_label_sized_ = false;
-  cached_button_size_.SetSize(0, 0);
 
   // We need to load the icon now that the download has the real path.
   LoadIcon();
@@ -944,25 +943,9 @@ gfx::ImageSkia DownloadItemViewMd::GetWarningIcon() {
 
 gfx::Size DownloadItemViewMd::GetButtonSize() const {
   DCHECK(discard_button_ && (mode_ == MALICIOUS_MODE || save_button_));
-  gfx::Size size;
-
-  // We cache the size when successfully retrieved, not for performance reasons
-  // but because if this DownloadItemViewMd is being animated while the tab is
-  // not showing, the native buttons are not parented and their preferred size
-  // is 0, messing-up the layout.
-  if (cached_button_size_.width() != 0)
-    return cached_button_size_;
-
+  gfx::Size size = discard_button_->GetPreferredSize();
   if (save_button_)
-    size = save_button_->GetMinimumSize();
-  gfx::Size discard_size = discard_button_->GetMinimumSize();
-
-  size.SetSize(std::max(size.width(), discard_size.width()),
-               std::max(size.height(), discard_size.height()));
-
-  if (size.width() != 0)
-    cached_button_size_ = size;
-
+    size.SetToMax(save_button_->GetPreferredSize());
   return size;
 }
 

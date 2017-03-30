@@ -42,20 +42,15 @@ MediaCodecStatus MediaCodecBridge::QueueSecureInputBuffer(
                                 subsamples.size(), presentation_time);
 }
 
-int MediaCodecBridge::GetOutputBuffersCount() {
-  return 0;
-}
-
-size_t MediaCodecBridge::GetOutputBuffersCapacity() {
-  return 0;
-}
-
 bool MediaCodecBridge::FillInputBuffer(int index,
                                        const uint8_t* data,
                                        size_t size) {
   uint8_t* dst = nullptr;
   size_t capacity = 0;
-  GetInputBuffer(index, &dst, &capacity);
+  if (GetInputBuffer(index, &dst, &capacity) != MEDIA_CODEC_OK) {
+    LOG(ERROR) << "GetInputBuffer failed";
+    return false;
+  }
   CHECK(dst);
 
   if (size > capacity) {

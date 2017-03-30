@@ -83,6 +83,15 @@ protected:
             commit();
     }
 
+    bool displayItemListContains(const DisplayItemList& displayItemList, DisplayItemClient& client, DisplayItem::Type type)
+    {
+        for (auto& item : displayItemList) {
+            if (item.client() == client && item.type() == type)
+                return true;
+        }
+        return false;
+    }
+
 private:
     bool m_originalSlimmingPaintOffsetCachingEnabled;
     bool m_originalSlimmingPaintV2Enabled;
@@ -140,6 +149,8 @@ const DisplayItem::Type backgroundType = DisplayItem::BoxDecorationBackground;
 const DisplayItem::Type cachedBackgroundType = DisplayItem::drawingTypeToCachedDrawingType(backgroundType);
 const DisplayItem::Type foregroundType = DisplayItem::paintPhaseToDrawingType(PaintPhaseForeground);
 const DisplayItem::Type cachedForegroundType = DisplayItem::drawingTypeToCachedDrawingType(foregroundType);
+const DisplayItem::Type documentBackgroundType = DisplayItem::DocumentBackground;
+const DisplayItem::Type cachedDocumentBackgroundType = DisplayItem::drawingTypeToCachedDrawingType(DisplayItem::DocumentBackground);
 
 } // namespace blink
 

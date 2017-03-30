@@ -72,9 +72,7 @@ class MockResourceBundleDelegate : public ui::ResourceBundle::Delegate {
   MOCK_METHOD2(GetPathForLocalePack, base::FilePath(
       const base::FilePath& pack_path, const std::string& locale));
   MOCK_METHOD1(GetImageNamed, gfx::Image(int resource_id));
-  MOCK_METHOD2(GetNativeImageNamed,
-      gfx::Image(int resource_id,
-                 ui::ResourceBundle::ImageRTL rtl));
+  MOCK_METHOD1(GetNativeImageNamed, gfx::Image(int resource_id));
   MOCK_METHOD2(LoadDataResourceBytes,
       base::RefCountedStaticMemory*(int resource_id,
                                     ui::ScaleFactor scale_factor));
@@ -92,11 +90,6 @@ class MockResourceBundleDelegate : public ui::ResourceBundle::Delegate {
                           base::string16* value) override {
     *value = GetLocalizedStringMock(message_id);
     return true;
-  }
-  MOCK_METHOD1(GetFontMock,
-               gfx::Font*(ui::ResourceBundle::FontStyle style));
-  scoped_ptr<gfx::Font> GetFont(ui::ResourceBundle::FontStyle style) override {
-    return make_scoped_ptr(GetFontMock(style));
   }
 };
 
@@ -250,7 +243,7 @@ TEST_F(ResourceBundleTest, DelegateGetNativeImageNamed) {
       .Times(Between(0, 1))
       .WillOnce(Return(empty_image));
   EXPECT_CALL(delegate,
-      GetNativeImageNamed(resource_id, ui::ResourceBundle::RTL_DISABLED))
+      GetNativeImageNamed(resource_id))
       .Times(Between(0, 1))
       .WillOnce(Return(empty_image));
 
@@ -343,59 +336,6 @@ TEST_F(ResourceBundleTest, DelegateGetLocalizedStringWithOverride) {
   base::string16 result = resource_bundle->GetLocalizedString(resource_id);
   EXPECT_EQ(delegate_data, result);
 }
-
-#if (defined(USE_OZONE) && !defined(USE_PANGO)) || defined(OS_ANDROID)
-#define MAYBE_DelegateGetFontList DISABLED_DelegateGetFontList
-#else
-#define MAYBE_DelegateGetFontList DelegateGetFontList
-#endif
-
-TEST_F(ResourceBundleTest, MAYBE_DelegateGetFontList) {
-  MockResourceBundleDelegate delegate;
-  ResourceBundle* resource_bundle = CreateResourceBundle(&delegate);
-
-  // Should be called once for each font type. When we return NULL the default
-  // font will be created.
-  gfx::Font* test_font = NULL;
-  EXPECT_CALL(delegate, GetFontMock(_))
-      .Times(8)
-      .WillRepeatedly(Return(test_font));
-
-  const gfx::FontList* font_list =
-      &resource_bundle->GetFontList(ui::ResourceBundle::BaseFont);
-  EXPECT_TRUE(font_list);
-
-  const gfx::Font* font =
-      &resource_bundle->GetFont(ui::ResourceBundle::BaseFont);
-  EXPECT_TRUE(font);
-}
-
-#if defined(OS_CHROMEOS) && defined(USE_PANGO)
-TEST_F(ResourceBundleTest, FontListReload) {
-  MockResourceBundleDelegate delegate;
-  ResourceBundle* resource_bundle = CreateResourceBundle(&delegate);
-
-  // Should be called once for each font type. When we return NULL the default
-  // font will be created.
-  gfx::Font* test_font = nullptr;
-  EXPECT_CALL(delegate, GetFontMock(_))
-      .Times(16)
-      .WillRepeatedly(Return(test_font));
-
-  EXPECT_CALL(delegate, GetLocalizedStringMock(IDS_UI_FONT_FAMILY_CROS))
-      .WillOnce(Return(base::UTF8ToUTF16("test font, 12px")));
-  resource_bundle->ReloadFonts();
-  // Don't test the font name; it'll get mapped to something else by Fontconfig.
-  EXPECT_EQ(12, gfx::FontList().GetPrimaryFont().GetFontSize());
-  EXPECT_EQ(gfx::Font::NORMAL, gfx::FontList().GetPrimaryFont().GetStyle());
-
-  EXPECT_CALL(delegate, GetLocalizedStringMock(IDS_UI_FONT_FAMILY_CROS))
-      .WillOnce(Return(base::UTF8ToUTF16("test font 2, Bold 10px")));
-  resource_bundle->ReloadFonts();
-  EXPECT_EQ(10, gfx::FontList().GetPrimaryFont().GetFontSize());
-  EXPECT_EQ(gfx::Font::BOLD, gfx::FontList().GetPrimaryFont().GetStyle());
-}
-#endif
 
 TEST_F(ResourceBundleTest, LocaleDataPakExists) {
   ResourceBundle* resource_bundle = CreateResourceBundle(NULL);

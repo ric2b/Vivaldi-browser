@@ -35,8 +35,6 @@ class UI_BASE_IME_EXPORT InputMethodAuraLinux
   void OnInputLocaleChanged() override;
   std::string GetInputLocale() override;
   bool IsCandidatePopupOpen() const override;
-  void OnFocus() override;
-  void OnBlur() override;
 
   // Overriden from ui::LinuxInputMethodContextDelegate
   void OnCommit(const base::string16& text) override;
@@ -59,6 +57,9 @@ class UI_BASE_IME_EXPORT InputMethodAuraLinux
   void UpdateContextFocusState();
   void ResetContext();
 
+  // Callback function for IMEEngineHandlerInterface::ProcessKeyEvent.
+  void ProcessKeyEventDone(ui::KeyEvent* event, bool filtered, bool is_handled);
+
   scoped_ptr<LinuxInputMethodContext> context_;
   scoped_ptr<LinuxInputMethodContext> context_simple_;
 
@@ -80,6 +81,9 @@ class UI_BASE_IME_EXPORT InputMethodAuraLinux
   // If it's true then all input method result received before the next key
   // event will be discarded.
   bool suppress_next_result_;
+
+  // Used for making callbacks.
+  base::WeakPtrFactory<InputMethodAuraLinux> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(InputMethodAuraLinux);
 };

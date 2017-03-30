@@ -15,7 +15,6 @@
 #include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
-#include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
@@ -32,9 +31,11 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/common/extensions/api/downloads.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_item.h"
@@ -47,7 +48,6 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/notification_types.h"
 #include "net/base/data_url.h"
-#include "net/base/net_util.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/url_request/url_request_slow_download_job.h"
 #include "net/url_request/url_request.h"
@@ -428,32 +428,23 @@ class DownloadExtensionTest : public ExtensionApiTest {
       DownloadItem* item = GetOnRecordManager()->CreateDownloadItem(
           content::DownloadItem::kInvalidId + 1 + i,
           downloads_directory().Append(history_info[i].filename),
-          downloads_directory().Append(history_info[i].filename),
-          url_chain, GURL(),    // URL Chain, referrer
-          std::string(), std::string(), // mime_type, original_mime_type
-          current, current,  // start_time, end_time
-          std::string(), std::string(), // etag, last_modified
-          1, 1,              // received_bytes, total_bytes
-          history_info[i].state,  // state
-          content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
-          (history_info[i].state != content::DownloadItem::CANCELLED ?
-              content::DOWNLOAD_INTERRUPT_REASON_NONE :
-              content::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED),
-          false);                 // opened
+          downloads_directory().Append(history_info[i].filename), url_chain,
+          GURL(),                        // URL Chain, referrer
+          std::string(), std::string(),  // mime_type, original_mime_type
+          current, current,              // start_time, end_time
+          std::string(), std::string(),  // etag, last_modified
+          1, 1,                          // received_bytes, total_bytes
+          history_info[i].state,         // state
+          history_info[i].danger_type,
+          (history_info[i].state != content::DownloadItem::CANCELLED
+               ? content::DOWNLOAD_INTERRUPT_REASON_NONE
+               : content::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED),
+          false);  // opened
       items->push_back(item);
     }
 
     // Order by ID so that they are in the order that we created them.
     std::sort(items->begin(), items->end(), download_id_comparator);
-    // Set the danger type if necessary.
-    for (size_t i = 0; i < count; ++i) {
-      if (history_info[i].danger_type !=
-          content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS) {
-        EXPECT_EQ(content::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT,
-                  history_info[i].danger_type);
-        items->at(i)->OnContentCheckCompleted(history_info[i].danger_type);
-      }
-    }
     return true;
   }
 
@@ -1775,15 +1766,42 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       << kInvalidURLs[index];
   }
 
-  EXPECT_STREQ("NETWORK_INVALID_REQUEST", RunFunctionAndReturnError(
+  int result_id = -1;
+  scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
       new DownloadsDownloadFunction(),
-      "[{\"url\": \"javascript:document.write(\\\"hello\\\");\"}]").c_str());
-  EXPECT_STREQ("NETWORK_INVALID_REQUEST", RunFunctionAndReturnError(
+      "[{\"url\": \"javascript:document.write(\\\"hello\\\");\"}]"));
+  ASSERT_TRUE(result.get());
+  ASSERT_TRUE(result->GetAsInteger(&result_id));
+  DownloadItem* item = GetCurrentManager()->GetDownload(result_id);
+  ASSERT_TRUE(item);
+  ASSERT_TRUE(WaitForInterruption(
+      item, content::DOWNLOAD_INTERRUPT_REASON_NETWORK_INVALID_REQUEST,
+      "[{\"state\": \"in_progress\","
+      "  \"url\": \"javascript:document.write(\\\"hello\\\");\"}]"));
+
+  result.reset(
+      RunFunctionAndReturnResult(new DownloadsDownloadFunction(),
+                                 "[{\"url\": \"javascript:return false;\"}]"));
+  ASSERT_TRUE(result.get());
+  ASSERT_TRUE(result->GetAsInteger(&result_id));
+  item = GetCurrentManager()->GetDownload(result_id);
+  ASSERT_TRUE(item);
+  ASSERT_TRUE(WaitForInterruption(
+      item, content::DOWNLOAD_INTERRUPT_REASON_NETWORK_INVALID_REQUEST,
+      "[{\"state\": \"in_progress\","
+      "  \"url\": \"javascript:return false;\"}]"));
+
+  result.reset(RunFunctionAndReturnResult(
       new DownloadsDownloadFunction(),
-      "[{\"url\": \"javascript:return false;\"}]").c_str());
-  EXPECT_STREQ("NETWORK_FAILED", RunFunctionAndReturnError(
-      new DownloadsDownloadFunction(),
-      "[{\"url\": \"ftp://example.com/example.txt\"}]").c_str());
+      "[{\"url\": \"ftp://example.com/example.txt\"}]"));
+  ASSERT_TRUE(result.get());
+  ASSERT_TRUE(result->GetAsInteger(&result_id));
+  item = GetCurrentManager()->GetDownload(result_id);
+  ASSERT_TRUE(item);
+  ASSERT_TRUE(WaitForInterruption(
+      item, content::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED,
+      "[{\"state\": \"in_progress\","
+      "  \"url\": \"ftp://example.com/example.txt\"}]"));
 }
 
 // TODO(benjhayden): Set up a test ftp server, add ftp://localhost* to
@@ -2042,7 +2060,6 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       content::DOWNLOAD_INTERRUPT_REASON_SERVER_UNAUTHORIZED,
       base::StringPrintf("[{\"danger\": \"safe\","
                          "  \"incognito\": false,"
-                         "  \"mime\": \"text/html\","
                          "  \"paused\": false,"
                          "  \"url\": \"%s\"}]",
                          download_url.c_str())));

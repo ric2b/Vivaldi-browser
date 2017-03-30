@@ -16,7 +16,6 @@
 
 namespace net {
 
-namespace tools {
 
 namespace test {
 class QuicSimpleServerStreamPeer;
@@ -44,6 +43,7 @@ class QuicSimpleServerStream : public QuicSpdyStream {
 
   // The response body of error responses.
   static const char* const kErrorResponseBody;
+  static const char* const kNotFoundResponseBody;
 
  protected:
   // Sends a basic 200 response using SendHeaders for the headers and WriteData
@@ -51,8 +51,12 @@ class QuicSimpleServerStream : public QuicSpdyStream {
   virtual void SendResponse();
 
   // Sends a basic 500 response using SendHeaders for the headers and WriteData
-  // for the body
+  // for the body.
   virtual void SendErrorResponse();
+
+  // Sends a basic 404 response using SendHeaders for the headers and WriteData
+  // for the body.
+  void SendNotFoundResponse();
 
   void SendHeadersAndBody(const SpdyHeaderBlock& response_headers,
                           base::StringPiece body);
@@ -75,7 +79,6 @@ class QuicSimpleServerStream : public QuicSpdyStream {
   DISALLOW_COPY_AND_ASSIGN(QuicSimpleServerStream);
 };
 
-}  // namespace tools
 }  // namespace net
 
 #endif  // NET_TOOLS_QUIC_QUIC_SIMPLE_SERVER_STREAM_H_

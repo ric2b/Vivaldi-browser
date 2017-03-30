@@ -16,6 +16,7 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "policy/policy_constants.h"
 #include "remoting/base/auto_thread.h"
+#include "remoting/base/chromium_url_request.h"
 #include "remoting/base/logging.h"
 #include "remoting/base/rsa_key_pair.h"
 #include "remoting/host/chromoting_host.h"
@@ -27,7 +28,7 @@
 #include "remoting/host/it2me_desktop_environment.h"
 #include "remoting/host/policy_watcher.h"
 #include "remoting/host/register_support_host_request.h"
-#include "remoting/protocol/chromium_port_allocator.h"
+#include "remoting/protocol/chromium_port_allocator_factory.h"
 #include "remoting/protocol/ice_transport.h"
 #include "remoting/protocol/it2me_host_authenticator_factory.h"
 #include "remoting/protocol/jingle_session_manager.h"
@@ -76,8 +77,8 @@ void It2MeHost::Connect() {
 
   desktop_environment_factory_.reset(new It2MeDesktopEnvironmentFactory(
       host_context_->network_task_runner(),
-      host_context_->input_task_runner(),
-      host_context_->ui_task_runner()));
+      host_context_->video_capture_task_runner(),
+      host_context_->input_task_runner(), host_context_->ui_task_runner()));
 
   // Start monitoring configured policies.
   policy_watcher_->StartWatching(
@@ -238,7 +239,8 @@ void It2MeHost::FinishConnect() {
   scoped_refptr<protocol::TransportContext> transport_context =
       new protocol::TransportContext(
           signal_strategy_.get(),
-          make_scoped_ptr(new protocol::ChromiumPortAllocatorFactory(
+          make_scoped_ptr(new protocol::ChromiumPortAllocatorFactory()),
+          make_scoped_ptr(new ChromiumUrlRequestFactory(
               host_context_->url_request_context_getter())),
           network_settings, protocol::TransportRole::SERVER);
 
@@ -253,13 +255,10 @@ void It2MeHost::FinishConnect() {
   session_manager->set_protocol_config(std::move(protocol_config));
 
   // Create the host.
-  host_.reset(new ChromotingHost(
-      desktop_environment_factory_.get(), std::move(session_manager),
-      transport_context, host_context_->audio_task_runner(),
-      host_context_->input_task_runner(),
-      host_context_->video_capture_task_runner(),
-      host_context_->video_encode_task_runner(),
-      host_context_->network_task_runner(), host_context_->ui_task_runner()));
+  host_.reset(new ChromotingHost(desktop_environment_factory_.get(),
+                                 std::move(session_manager), transport_context,
+                                 host_context_->audio_task_runner(),
+                                 host_context_->video_encode_task_runner()));
   host_->AddStatusObserver(this);
   host_status_logger_.reset(
       new HostStatusLogger(host_->AsWeakPtr(), ServerLogEntry::IT2ME,
@@ -332,6 +331,11 @@ void It2MeHost::OnPolicyUpdate(scoped_ptr<base::DictionaryValue> policies) {
   if (policies->GetString(policy::key::kRemoteAccessHostDomain, &host_domain)) {
     UpdateHostDomainPolicy(host_domain);
   }
+  std::string client_domain;
+  if (policies->GetString(policy::key::kRemoteAccessHostClientDomain,
+                          &client_domain)) {
+    UpdateClientDomainPolicy(client_domain);
+  }
 
   policy_received_ = true;
 
@@ -375,6 +379,19 @@ void It2MeHost::UpdateHostDomainPolicy(const std::string& host_domain) {
   }
 
   required_host_domain_ = host_domain;
+}
+
+void It2MeHost::UpdateClientDomainPolicy(const std::string& client_domain) {
+  DCHECK(host_context_->network_task_runner()->BelongsToCurrentThread());
+
+  VLOG(2) << "UpdateClientDomainPolicy: " << client_domain;
+
+  // When setting a client  domain policy, disconnect any existing session.
+  if (!client_domain.empty() && IsConnected()) {
+    Shutdown();
+  }
+
+  required_client_domain_ = client_domain;
 }
 
 It2MeHost::~It2MeHost() {
@@ -459,7 +476,8 @@ void It2MeHost::OnReceivedSupportID(
 
   scoped_ptr<protocol::AuthenticatorFactory> factory(
       new protocol::It2MeHostAuthenticatorFactory(
-          local_certificate, host_key_pair_, access_code));
+          local_certificate, host_key_pair_, access_code,
+          required_client_domain_));
   host_->SetAuthenticatorFactory(std::move(factory));
 
   // Pass the Access Code to the script object before changing state.

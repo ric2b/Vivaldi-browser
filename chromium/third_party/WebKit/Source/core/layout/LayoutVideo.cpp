@@ -90,7 +90,7 @@ LayoutSize LayoutVideo::calculateIntrinsicSize()
     // of the video resource, if that is available; otherwise it is the intrinsic
     // height of the poster frame, if that is available; otherwise it is 150 CSS pixels.
     WebMediaPlayer* webMediaPlayer = mediaElement()->webMediaPlayer();
-    if (webMediaPlayer && video->readyState() >= HTMLVideoElement::HAVE_METADATA) {
+    if (webMediaPlayer && video->getReadyState() >= HTMLVideoElement::HAVE_METADATA) {
         IntSize size = webMediaPlayer->naturalSize();
         if (!size.isEmpty())
             return LayoutSize(size);
@@ -104,7 +104,7 @@ LayoutSize LayoutVideo::calculateIntrinsicSize()
     // size to 300x1 the video will resize itself in these cases, and audio will
     // have the correct height (it needs to be > 0 for controls to layout properly).
     if (video->ownerDocument() && video->ownerDocument()->isMediaDocument())
-        return LayoutSize(defaultSize().width(), 1);
+        return LayoutSize(defaultSize().width(), LayoutUnit(1));
 
     return defaultSize();
 }
@@ -141,12 +141,6 @@ bool LayoutVideo::shouldDisplayVideo() const
 void LayoutVideo::paintReplaced(const PaintInfo& paintInfo, const LayoutPoint& paintOffset) const
 {
     VideoPainter(*this).paintReplaced(paintInfo, paintOffset);
-}
-
-bool LayoutVideo::acceleratedRenderingInUse() const
-{
-    WebLayer* webLayer = mediaElement()->platformLayer();
-    return webLayer && !webLayer->isOrphan();
 }
 
 void LayoutVideo::layout()

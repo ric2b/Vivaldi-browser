@@ -21,6 +21,7 @@ static const char* s_avoidOptimization = nullptr;
 uintptr_t StackFrameDepth::s_stackFrameLimit = 0;
 #if ENABLE(ASSERT)
 bool StackFrameDepth::s_isEnabled = false;
+bool StackFrameDepth::s_isUsingFallbackStackSize = false;
 #endif
 
 // NEVER_INLINE ensures that |dummy| array on configureLimit() is not optimized away,
@@ -31,31 +32,45 @@ NEVER_INLINE static uintptr_t currentStackFrameBaseOnCallee(const char* dummy)
     return StackFrameDepth::currentStackFrame();
 }
 
+uintptr_t StackFrameDepth::getFallbackStackLimit()
+{
+    // Allocate an |kSafeStackFrameSize|-sized object on stack and query
+    // stack frame base after it.
+    char dummy[kSafeStackFrameSize];
+
+    // Check that the stack frame can be used.
+    dummy[sizeof(dummy) - 1] = 0;
+#if ENABLE(ASSERT)
+    // Use a larger stack limit for what's acceptable if the platform
+    // thread ends up using the fallback size to decide if switching to
+    // lazy marking is in order.
+    s_isUsingFallbackStackSize = true;
+#endif
+    return currentStackFrameBaseOnCallee(dummy);
+}
+
 void StackFrameDepth::enableStackLimit()
 {
 #if ENABLE(ASSERT)
     s_isEnabled = true;
+    s_isUsingFallbackStackSize = false;
 #endif
 
-    static const int kStackRoomSize = 1024;
-
+    // All supported platforms will currently return a non-zero estimate,
+    // except if ASan is enabled.
     size_t stackSize = getUnderestimatedStackSize();
-    if (stackSize) {
-        Address stackBase = reinterpret_cast<Address>(getStackStart());
-        RELEASE_ASSERT(stackSize > static_cast<const size_t>(kStackRoomSize));
-        size_t stackRoom = stackSize - kStackRoomSize;
-        RELEASE_ASSERT(stackBase > reinterpret_cast<Address>(stackRoom));
-        s_stackFrameLimit = reinterpret_cast<uintptr_t>(stackBase - stackRoom);
+    if (!stackSize) {
+        s_stackFrameLimit = getFallbackStackLimit();
         return;
     }
 
-    // Fallback version
-    // Allocate a 32KB object on stack and query stack frame base after it.
-    char dummy[kSafeStackFrameSize];
-    s_stackFrameLimit = currentStackFrameBaseOnCallee(dummy);
+    static const int kStackRoomSize = 1024;
 
-    // Assert that the stack frame can be used.
-    dummy[sizeof(dummy) - 1] = 0;
+    Address stackBase = reinterpret_cast<Address>(getStackStart());
+    RELEASE_ASSERT(stackSize > static_cast<const size_t>(kStackRoomSize));
+    size_t stackRoom = stackSize - kStackRoomSize;
+    RELEASE_ASSERT(stackBase > reinterpret_cast<Address>(stackRoom));
+    s_stackFrameLimit = reinterpret_cast<uintptr_t>(stackBase - stackRoom);
 }
 
 size_t StackFrameDepth::getUnderestimatedStackSize()
@@ -72,7 +87,7 @@ size_t StackFrameDepth::getUnderestimatedStackSize()
 #if defined(__GLIBC__) || OS(ANDROID) || OS(FREEBSD)
     // pthread_getattr_np() can fail if the thread is not invoked by
     // pthread_create() (e.g., the main thread of webkit_unit_tests).
-    // In this case, this method returns 0 and the caller must handle it.
+    // If so, a conservative size estimate is returned.
 
     pthread_attr_t attr;
     int error;
@@ -94,7 +109,12 @@ size_t StackFrameDepth::getUnderestimatedStackSize()
     pthread_attr_destroy(&attr);
 #endif
 
-    return 0;
+    // Return a 512k stack size, (conservatively) assuming the following:
+    //  - that size is much lower than the pthreads default (x86 pthreads has a 2M default.)
+    //  - no one is running Blink with an RLIMIT_STACK override, let alone as
+    //    low as 512k.
+    //
+    return 512 * 1024;
 #elif OS(MACOSX)
     // pthread_get_stacksize_np() returns too low a value for the main thread on
     // OSX 10.9, http://mail.openjdk.java.net/pipermail/hotspot-dev/2013-October/011369.html

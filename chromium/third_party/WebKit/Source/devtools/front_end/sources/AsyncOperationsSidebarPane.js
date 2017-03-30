@@ -279,14 +279,17 @@ WebInspector.AsyncOperationsSidebarPane.prototype = {
     {
         var element = createElementWithClass("li", "async-operation");
 
-        var title = operation.description || WebInspector.UIString("Async Operation");
+        var title;
+        if (operation.stack)
+            title = operation.stack.description;
+        if (!title)
+            title = WebInspector.UIString("Async Operation");
+
         var label = createCheckboxLabel(title, operation[this._checkedSymbol]);
         label.checkboxElement.addEventListener("click", this._checkboxClicked.bind(this, operation.id), false);
         element.appendChild(label);
-        var debuggerModel = WebInspector.DebuggerModel.fromTarget(this._target);
-        var callFrame = WebInspector.DebuggerPresentationUtils.callFrameAnchorFromStackTrace(debuggerModel, operation.stackTrace, operation.asyncStackTrace, this._revealBlackboxedCallFrames);
-        if (callFrame)
-            element.createChild("div").appendChild(this._linkifier.linkifyConsoleCallFrame(this._target, callFrame));
+        if (operation.stack && operation.stack.callFrames.length)
+            element.createChild("div").appendChild(this._linkifier.linkifyStackTraceTopFrame(this._target, operation.stack));
 
         element[this._operationIdSymbol] = operation.id;
         this._operationIdToElement.set(operation.id, element);
@@ -353,7 +356,7 @@ WebInspector.AsyncOperationsSidebarPane.prototype = {
         var operation = this._operationForPopover(anchor);
         if (!operation)
             return;
-        var content = WebInspector.DOMPresentationUtils.buildStackTracePreviewContents(this._target, this._linkifier, operation.stackTrace, operation.asyncStackTrace);
+        var content = WebInspector.DOMPresentationUtils.buildStackTracePreviewContents(this._target, this._linkifier, operation.stack);
         popover.setCanShrink(true);
         popover.showForAnchor(content, anchor);
     },
@@ -372,7 +375,7 @@ WebInspector.AsyncOperationsSidebarPane.prototype = {
             return null;
         var operationId = anchor[this._operationIdSymbol];
         var operation = operationId && asyncOperations.get(operationId);
-        if (!operation || !operation.stackTrace)
+        if (!operation || !operation.stack)
             return null;
         return operation;
     },

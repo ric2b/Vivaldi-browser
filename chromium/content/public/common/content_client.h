@@ -42,6 +42,7 @@ namespace content {
 
 class ContentBrowserClient;
 class ContentClient;
+class ContentGpuClient;
 class ContentPluginClient;
 class ContentRendererClient;
 class ContentUtilityClient;
@@ -72,6 +73,7 @@ class CONTENT_EXPORT ContentClient {
   virtual ~ContentClient();
 
   ContentBrowserClient* browser() { return browser_; }
+  ContentGpuClient* gpu() { return gpu_; }
   ContentPluginClient* plugin() { return plugin_; }
   ContentRendererClient* renderer() { return renderer_; }
   ContentUtilityClient* utility() { return utility_; }
@@ -86,10 +88,11 @@ class CONTENT_EXPORT ContentClient {
   virtual void AddPepperPlugins(
       std::vector<content::PepperPluginInfo>* plugins) {}
 
-  // Gives the embedder a chance to register its own standard and saveable
-  // url schemes early on in the startup sequence.
+  // Gives the embedder a chance to register its own standard, referrer and
+  // saveable url schemes early on in the startup sequence.
   virtual void AddAdditionalSchemes(
       std::vector<url::SchemeWithType>* standard_schemes,
+      std::vector<url::SchemeWithType>* referrer_schemes,
       std::vector<std::string>* savable_schemes) {}
 
   // Returns whether the given message should be sent in a swapped out renderer.
@@ -159,6 +162,8 @@ class CONTENT_EXPORT ContentClient {
 
   // The embedder API for participating in browser logic.
   ContentBrowserClient* browser_;
+  // The embedder API for participating in gpu logic.
+  ContentGpuClient* gpu_;
   // The embedder API for participating in plugin logic.
   ContentPluginClient* plugin_;
   // The embedder API for participating in renderer logic.

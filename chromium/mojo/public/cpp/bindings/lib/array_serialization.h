@@ -8,12 +8,16 @@
 #include <stddef.h>
 #include <string.h>  // For |memcpy()|.
 
+#include <limits>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
+#include "base/logging.h"
 #include "mojo/public/c/system/macros.h"
 #include "mojo/public/cpp/bindings/lib/array_internal.h"
 #include "mojo/public/cpp/bindings/lib/map_serialization.h"
+#include "mojo/public/cpp/bindings/lib/native_serialization.h"
 #include "mojo/public/cpp/bindings/lib/string_serialization.h"
 #include "mojo/public/cpp/bindings/lib/template_util.h"
 #include "mojo/public/cpp/bindings/lib/validation_errors.h"
@@ -31,7 +35,7 @@ inline void SerializeArray_(
     const internal::ArrayValidateParams* validate_params);
 
 template <typename E, typename F>
-inline bool Deserialize_(internal::Array_Data<F>* data,
+inline bool Deserialize_(internal::Array_Data<F>* input,
                          Array<E>* output,
                          internal::SerializationContext* context);
 
@@ -55,9 +59,9 @@ struct ArraySerializer<E, F, false> {
                                 Buffer* buf,
                                 Array_Data<F>* output,
                                 const ArrayValidateParams* validate_params) {
-    MOJO_DCHECK(!validate_params->element_is_nullable)
+    DCHECK(!validate_params->element_is_nullable)
         << "Primitive type should be non-nullable";
-    MOJO_DCHECK(!validate_params->element_validate_params)
+    DCHECK(!validate_params->element_validate_params)
         << "Primitive type should not have array validate params";
 
     if (input.size())
@@ -85,9 +89,9 @@ struct ArraySerializer<bool, bool, false> {
                                 Buffer* buf,
                                 Array_Data<bool>* output,
                                 const ArrayValidateParams* validate_params) {
-    MOJO_DCHECK(!validate_params->element_is_nullable)
+    DCHECK(!validate_params->element_is_nullable)
         << "Primitive type should be non-nullable";
-    MOJO_DCHECK(!validate_params->element_validate_params)
+    DCHECK(!validate_params->element_validate_params)
         << "Primitive type should not have array validate params";
 
     // TODO(darin): Can this be a memcpy somehow instead of a bit-by-bit copy?
@@ -117,7 +121,7 @@ struct ArraySerializer<ScopedHandleBase<H>, H, false> {
                                 Buffer* buf,
                                 Array_Data<H>* output,
                                 const ArrayValidateParams* validate_params) {
-    MOJO_DCHECK(!validate_params->element_validate_params)
+    DCHECK(!validate_params->element_validate_params)
         << "Handle type should not have array validate params";
 
     for (size_t i = 0; i < input.size(); ++i) {
@@ -198,7 +202,7 @@ struct ArraySerializer<
                     Buffer* buf,
                     typename WrapperTraits<T>::DataType* output,
                     const ArrayValidateParams* validate_params) {
-      MOJO_DCHECK(!validate_params)
+      DCHECK(!validate_params)
           << "Struct type should not have array validate params";
 
       Serialize_(std::move(input), buf, output);
@@ -286,11 +290,10 @@ struct ArraySerializer<String, String_Data*> {
                                 Buffer* buf,
                                 Array_Data<String_Data*>* output,
                                 const ArrayValidateParams* validate_params) {
-    MOJO_DCHECK(
-        validate_params->element_validate_params &&
-        !validate_params->element_validate_params->element_validate_params &&
-        !validate_params->element_validate_params->element_is_nullable &&
-        validate_params->element_validate_params->expected_num_elements == 0)
+    DCHECK(validate_params->element_validate_params &&
+           !validate_params->element_validate_params->element_validate_params &&
+           !validate_params->element_validate_params->element_is_nullable &&
+           validate_params->element_validate_params->expected_num_elements == 0)
         << "String type has unexpected array validate params";
 
     for (size_t i = 0; i < input.size(); ++i) {
@@ -318,14 +321,114 @@ struct ArraySerializer<String, String_Data*> {
   }
 };
 
+// Another layer of abstraction to switch between standard mojom type
+// serializers and native-only serializers.
+template <typename E,
+          bool use_native = ShouldUseNativeSerializer<E>::value>
+struct ArraySerializationStrategy;
+
+// Serialization strategy for standard mojom types. This branches further
+// by choosing an ArraySerializer specialization from above.
+template <typename E>
+struct ArraySerializationStrategy<E, false> {
+  static size_t GetSerializedSize(const Array<E>& input) {
+    DCHECK(input);
+    return ArraySerializer<E, typename WrapperTraits<E>::DataType>::
+        GetSerializedSize(input);
+  }
+
+  template <typename F>
+  static void Serialize(Array<E> input,
+                        Buffer* buf,
+                        Array_Data<F>** output,
+                        const ArrayValidateParams* validate_params) {
+    DCHECK(input);
+    Array_Data<F>* result = Array_Data<F>::New(input.size(), buf);
+    if (result) {
+      ArraySerializer<E, F>::SerializeElements(std::move(input), buf, result,
+                                               validate_params);
+    }
+    *output = result;
+  }
+
+  template <typename F>
+  static bool Deserialize(Array_Data<F>* input,
+                          Array<E>* output,
+                          SerializationContext* context) {
+    DCHECK(input);
+    return ArraySerializer<E, F>::DeserializeElements(input, output, context);
+  }
+};
+
+// Serialization for arrays of native-only types, which are opaquely serialized
+// as arrays of uint8_t arrays.
+template <typename E>
+struct ArraySerializationStrategy<E, true> {
+  static size_t GetSerializedSize(const Array<E>& input) {
+    DCHECK(input);
+    DCHECK_LE(input.size(), std::numeric_limits<uint32_t>::max());
+    size_t size = ArrayDataTraits<Array_Data<uint8_t>*>::GetStorageSize(
+        static_cast<uint32_t>(input.size()));
+    for (size_t i = 0; i < input.size(); ++i) {
+      size_t element_size = GetSerializedSizeNative_(input[i]);
+      DCHECK_LT(element_size, std::numeric_limits<uint32_t>::max());
+      size += ArrayDataTraits<uint8_t>::GetStorageSize(
+          static_cast<uint32_t>(element_size));
+    }
+    return size;
+  }
+
+  template <typename F>
+  static void Serialize(Array<E> input,
+                        Buffer* buf,
+                        Array_Data<F>** output,
+                        const ArrayValidateParams* validate_params) {
+    static_assert(
+        std::is_same<F, Array_Data<uint8_t>*>::value,
+        "Native-only type array must serialize to array of byte arrays.");
+    DCHECK(input);
+    DCHECK(validate_params);
+    // TODO(rockot): We may want to support nullable (i.e. scoped_ptr<T>)
+    // elements here.
+    DCHECK(!validate_params->element_is_nullable);
+    Array_Data<Array_Data<uint8_t>*>* result =
+        Array_Data<Array_Data<uint8_t>*>::New(input.size(), buf);
+    for (size_t i = 0; i < input.size(); ++i)
+      SerializeNative_(input[i], buf, &result->at(i));
+    *output = result;
+  }
+
+  template <typename F>
+  static bool Deserialize(Array_Data<F>* input,
+                          Array<E>* output,
+                          SerializationContext* context) {
+    static_assert(
+        std::is_same<F, Array_Data<uint8_t>*>::value,
+        "Native-only type array must deserialize from array of byte arrays.");
+    DCHECK(input);
+
+    Array<E> result(input->size());
+    bool success = true;
+    for (size_t i = 0; i < input->size(); ++i) {
+      // We don't short-circuit on failure since we can't know what the native
+      // type's ParamTraits' expectations are.
+      success = success &&
+          DeserializeNative_(input->at(i), &result[i], context);
+    }
+    output->Swap(&result);
+    return success;
+  }
+};
+
 }  // namespace internal
 
 template <typename E>
 inline size_t GetSerializedSize_(const Array<E>& input) {
   if (!input)
     return 0;
-  typedef typename internal::WrapperTraits<E>::DataType F;
-  return internal::ArraySerializer<E, F>::GetSerializedSize(input);
+  using Strategy = internal::ArraySerializationStrategy<
+      E, internal::ShouldUseNativeSerializer<E>::value>;
+  return Strategy::GetSerializedSize(input);
 }
 
 template <typename E, typename F>
@@ -334,6 +437,8 @@ inline void SerializeArray_(
     internal::Buffer* buf,
     internal::Array_Data<F>** output,
     const internal::ArrayValidateParams* validate_params) {
+  using Strategy = internal::ArraySerializationStrategy<
+      E, internal::ShouldUseNativeSerializer<E>::value>;
   if (input) {
     MOJO_INTERNAL_DLOG_SERIALIZATION_WARNING(
         validate_params->expected_num_elements != 0 &&
@@ -342,14 +447,8 @@ inline void SerializeArray_(
         internal::MakeMessageWithExpectedArraySize(
             "fixed-size array has wrong number of elements", input.size(),
             validate_params->expected_num_elements));
-
-    internal::Array_Data<F>* result =
-        internal::Array_Data<F>::New(input.size(), buf);
-    if (result) {
-      internal::ArraySerializer<E, F>::SerializeElements(
-          std::move(input), buf, result, validate_params);
-    }
-    *output = result;
+    Strategy::template Serialize<F>(std::move(input), buf, output,
+                                    validate_params);
   } else {
     *output = nullptr;
   }
@@ -359,14 +458,11 @@ template <typename E, typename F>
 inline bool Deserialize_(internal::Array_Data<F>* input,
                          Array<E>* output,
                          internal::SerializationContext* context) {
-  if (input) {
-    if (!internal::ArraySerializer<E, F>::DeserializeElements(input, output,
-                                                              context)) {
-      return false;
-    }
-  } else {
-    output->reset();
-  }
+  using Strategy = internal::ArraySerializationStrategy<
+      E, internal::ShouldUseNativeSerializer<E>::value>;
+  if (input)
+    return Strategy::template Deserialize<F>(input, output, context);
+  *output = nullptr;
   return true;
 }
 

@@ -259,10 +259,9 @@ base::string16 ElideText(const base::string16& text,
 }
 
 bool ElideString(const base::string16& input,
-                 int max_len,
+                 size_t max_len,
                  base::string16* output) {
-  DCHECK_GE(max_len, 0);
-  if (static_cast<int>(input.length()) <= max_len) {
+  if (input.length() <= max_len) {
     output->assign(input);
     return false;
   }
@@ -571,7 +570,7 @@ void RectangleText::AddString(const base::string16& input) {
       // The BREAK_NEWLINE iterator will keep the trailing newline character,
       // except in the case of the last line, which may not have one.  Remove
       // the newline character, if it exists.
-      last_line_ended_in_lf_ = !line.empty() && line[line.length() - 1] == '\n';
+      last_line_ended_in_lf_ = !line.empty() && line.back() == '\n';
       if (last_line_ended_in_lf_)
         line.resize(line.length() - 1);
       AddLine(line);

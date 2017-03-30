@@ -738,6 +738,11 @@ const GLubyte* GLES2TraceImplementation::GetString(GLenum name) {
   return gl_->GetString(name);
 }
 
+const GLubyte* GLES2TraceImplementation::GetStringi(GLenum name, GLuint index) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::GetStringi");
+  return gl_->GetStringi(name, index);
+}
+
 void GLES2TraceImplementation::GetSynciv(GLsync sync,
                                          GLenum pname,
                                          GLsizei bufsize,
@@ -2126,16 +2131,6 @@ void GLES2TraceImplementation::LoseContextCHROMIUM(GLenum current,
   gl_->LoseContextCHROMIUM(current, other);
 }
 
-GLuint GLES2TraceImplementation::InsertSyncPointCHROMIUM() {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::InsertSyncPointCHROMIUM");
-  return gl_->InsertSyncPointCHROMIUM();
-}
-
-void GLES2TraceImplementation::WaitSyncPointCHROMIUM(GLuint sync_point) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::WaitSyncPointCHROMIUM");
-  gl_->WaitSyncPointCHROMIUM(sync_point);
-}
-
 GLuint64 GLES2TraceImplementation::InsertFenceSyncCHROMIUM() {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::InsertFenceSyncCHROMIUM");
   return gl_->InsertFenceSyncCHROMIUM();
@@ -2495,6 +2490,16 @@ GLint GLES2TraceImplementation::GetFragDataIndexEXT(GLuint program,
                                                     const char* name) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::GetFragDataIndexEXT");
   return gl_->GetFragDataIndexEXT(program, name);
+}
+
+void GLES2TraceImplementation::UniformMatrix4fvStreamTextureMatrixCHROMIUM(
+    GLint location,
+    GLboolean transpose,
+    const GLfloat* default_value) {
+  TRACE_EVENT_BINARY_EFFICIENT0(
+      "gpu", "GLES2Trace::UniformMatrix4fvStreamTextureMatrixCHROMIUM");
+  gl_->UniformMatrix4fvStreamTextureMatrixCHROMIUM(location, transpose,
+                                                   default_value);
 }
 
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_TRACE_IMPLEMENTATION_IMPL_AUTOGEN_H_

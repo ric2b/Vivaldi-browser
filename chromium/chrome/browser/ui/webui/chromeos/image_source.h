@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -22,9 +23,6 @@ class UserImage;
 }
 
 namespace chromeos {
-
-// TODO(michaelpg): Generalize UserImageLoader for classes like ImageSource.
-class UserImageLoader;
 
 // Data source that reads and decodes an image from the RO file system.
 class ImageSource : public content::URLDataSource {
@@ -44,13 +42,17 @@ class ImageSource : public content::URLDataSource {
   std::string GetMimeType(const std::string& path) const override;
 
  private:
+  // Continuation from StartDataRequest().
+  void StartDataRequestAfterPathExists(
+      const base::FilePath& image_path,
+      const content::URLDataSource::GotDataCallback& got_data_callback,
+      bool path_exists);
+
   // Checks whether we have allowed the image to be loaded.
   bool IsWhitelisted(const std::string& path) const;
 
   // The background task runner on which file I/O and image decoding are done.
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
-
-  scoped_refptr<UserImageLoader> image_loader_;
 
   base::WeakPtrFactory<ImageSource> weak_factory_;
 

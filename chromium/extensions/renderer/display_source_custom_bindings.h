@@ -29,15 +29,21 @@ class DisplaySourceCustomBindings : public ObjectBackedNativeHandler {
       const v8::FunctionCallbackInfo<v8::Value>& args);
   void TerminateSession(
       const v8::FunctionCallbackInfo<v8::Value>& args);
-
-  void DispatchSessionStarted(int sink_id) const;
+  // Call completion callbacks.
+  void OnCallCompleted(int call_id,
+                       bool success,
+                       const std::string& error_message);
+  void OnSessionStarted(int sink_id,
+                        int call_id,
+                        bool success,
+                        const std::string& error_message);
+  // Dispatch events
   void DispatchSessionTerminated(int sink_id) const;
   void DispatchSessionError(int sink_id,
                             DisplaySourceErrorType type,
                             const std::string& message) const;
 
-  // DisplaySession callbacks.
-  void OnSessionStarted(int sink_id);
+  // DisplaySession notification callbacks.
   void OnSessionTerminated(int sink_id);
   void OnSessionError(int sink_id,
                       DisplaySourceErrorType type,

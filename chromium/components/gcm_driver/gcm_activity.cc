@@ -44,8 +44,17 @@ SendingActivity::SendingActivity() {
 SendingActivity::~SendingActivity() {
 }
 
+DecryptionFailureActivity::DecryptionFailureActivity() {
+}
+
+DecryptionFailureActivity::~DecryptionFailureActivity() {
+}
+
 RecordedActivities::RecordedActivities() {
 }
+
+RecordedActivities::RecordedActivities(const RecordedActivities& other) =
+    default;
 
 RecordedActivities::~RecordedActivities() {
 }

@@ -8,7 +8,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
 #include "net/base/test_completion_callback.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/socket/ssl_client_socket.h"
@@ -73,7 +72,8 @@ class TestUDPClientSocket : public DatagramClientSocket {
   int Connect(const IPEndPoint& remote) override {
     if (connected_)
       return ERR_UNEXPECTED;
-    AddressMapping::const_iterator it = mapping_->find(remote.address());
+    AddressMapping::const_iterator it =
+        mapping_->find(remote.address().bytes());
     if (it == mapping_->end())
       return ERR_FAILED;
     connected_ = true;

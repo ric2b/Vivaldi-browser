@@ -4,9 +4,10 @@
 
 #include <stddef.h>
 
-#include "base/containers/hash_tables.h"
+#include <unordered_map>
+
 #include "base/thread_task_runner_handle.h"
-#include "cc/animation/scrollbar_animation_controller.h"
+#include "cc/input/scrollbar_animation_controller.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/layers/painted_scrollbar_layer.h"
 #include "cc/layers/painted_scrollbar_layer_impl.h"
@@ -65,7 +66,7 @@ class FakeResourceTrackingLayerTreeHost : public FakeLayerTreeHost {
  public:
   FakeResourceTrackingLayerTreeHost(FakeLayerTreeHostClient* client,
                                     LayerTreeHost::InitParams* params)
-      : FakeLayerTreeHost(client, params, CompositorMode::SingleThreaded),
+      : FakeLayerTreeHost(client, params, CompositorMode::SINGLE_THREADED),
         next_id_(1),
         total_ui_resource_created_(0),
         total_ui_resource_deleted_(0) {
@@ -109,7 +110,8 @@ class FakeResourceTrackingLayerTreeHost : public FakeLayerTreeHost {
   }
 
  private:
-  using UIResourceBitmapMap = base::hash_map<UIResourceId, UIResourceBitmap>;
+  using UIResourceBitmapMap =
+      std::unordered_map<UIResourceId, UIResourceBitmap>;
   UIResourceBitmapMap ui_resource_bitmap_map_;
 
   int next_id_;
@@ -156,13 +158,20 @@ TEST_F(ScrollbarLayerTest, ShouldScrollNonOverlayOnMainThread) {
   PaintedScrollbarLayerImpl* scrollbar_layer_impl =
       static_cast<PaintedScrollbarLayerImpl*>(
           layer_impl_tree_root->children()[1].get());
+  layer_impl_tree_root->layer_tree_impl()->BuildPropertyTreesForTesting();
+  ScrollTree& scroll_tree =
+      layer_impl_tree_root->layer_tree_impl()->property_trees()->scroll_tree;
+  ScrollNode* scroll_node =
+      scroll_tree.Node(scrollbar_layer_impl->scroll_tree_index());
 
   // When the scrollbar is not an overlay scrollbar, the scroll should be
   // responded to on the main thread as the compositor does not yet implement
   // scrollbar scrolling.
-  EXPECT_EQ(InputHandler::SCROLL_ON_MAIN_THREAD,
-            scrollbar_layer_impl->TryScroll(
-                gfx::PointF(), InputHandler::GESTURE, SCROLL_BLOCKS_ON_NONE));
+  InputHandler::ScrollStatus status = layer_tree_host_->host_impl()->TryScroll(
+      gfx::PointF(), InputHandler::GESTURE, scroll_tree, scroll_node);
+  EXPECT_EQ(InputHandler::SCROLL_ON_MAIN_THREAD, status.thread);
+  EXPECT_EQ(MainThreadScrollingReason::kScrollbarScrolling,
+            status.main_thread_scrolling_reasons);
 
   // Create and attach an overlay scrollbar.
   scrollbar.reset(new FakeScrollbar(false, false, true));
@@ -172,12 +181,18 @@ TEST_F(ScrollbarLayerTest, ShouldScrollNonOverlayOnMainThread) {
       false, 0, 0);
   scrollbar_layer_impl = static_cast<PaintedScrollbarLayerImpl*>(
       layer_impl_tree_root->children()[1].get());
+  layer_impl_tree_root->layer_tree_impl()->BuildPropertyTreesForTesting();
+  scroll_tree =
+      layer_impl_tree_root->layer_tree_impl()->property_trees()->scroll_tree;
+  scroll_node = scroll_tree.Node(scrollbar_layer_impl->scroll_tree_index());
 
   // The user shouldn't be able to drag an overlay scrollbar and the scroll
   // may be handled in the compositor.
-  EXPECT_EQ(InputHandler::SCROLL_IGNORED,
-            scrollbar_layer_impl->TryScroll(
-                gfx::PointF(), InputHandler::GESTURE, SCROLL_BLOCKS_ON_NONE));
+  status = layer_tree_host_->host_impl()->TryScroll(
+      gfx::PointF(), InputHandler::GESTURE, scroll_tree, scroll_node);
+  EXPECT_EQ(InputHandler::SCROLL_IGNORED, status.thread);
+  EXPECT_EQ(MainThreadScrollingReason::kNotScrollable,
+            status.main_thread_scrolling_reasons);
 }
 
 TEST_F(ScrollbarLayerTest, ScrollOffsetSynchronization) {
@@ -449,8 +464,14 @@ TEST_F(ScrollbarLayerTest, LayerDrivenSolidColorDrawQuads) {
     scroll_layer->InsertChild(child2, 1);
     layer_tree_root->AddChild(scroll_layer);
     layer_tree_host_->SetRootLayer(layer_tree_root);
+
+    // Choose layer bounds to give max_scroll_offset = (8, 8).
+    layer_tree_root->SetBounds(gfx::Size(2, 2));
+    scroll_layer->SetBounds(gfx::Size(10, 10));
+
     layer_tree_host_->UpdateLayers();
   }
+
   LayerImpl* layer_impl_tree_root =
       layer_tree_host_->CommitAndCreateLayerImplTree();
   LayerImpl* scroll_layer_impl = layer_impl_tree_root->children()[0].get();
@@ -458,9 +479,6 @@ TEST_F(ScrollbarLayerTest, LayerDrivenSolidColorDrawQuads) {
   auto* scrollbar_layer_impl = static_cast<ScrollbarLayerImplBase*>(
       scroll_layer_impl->children()[1].get());
 
-  // Choose layer bounds to give max_scroll_offset = (8, 8).
-  layer_impl_tree_root->SetBounds(gfx::Size(2, 2));
-  scroll_layer_impl->SetBounds(gfx::Size(10, 10));
   scroll_layer_impl->ScrollBy(gfx::Vector2dF(4.f, 0.f));
 
   scrollbar_layer_impl->SetBounds(gfx::Size(kTrackLength, kThumbThickness));
@@ -636,7 +654,7 @@ TEST_F(ScrollbarLayerTestMaxTextureSize, DirectRenderer) {
   int max_size = 0;
   context->getIntegerv(GL_MAX_TEXTURE_SIZE, &max_size);
   SetScrollbarBounds(gfx::Size(max_size + 100, max_size + 100));
-  RunTest(CompositorMode::Threaded, false);
+  RunTest(CompositorMode::THREADED, false);
 }
 
 TEST_F(ScrollbarLayerTestMaxTextureSize, DelegatingRenderer) {
@@ -645,7 +663,7 @@ TEST_F(ScrollbarLayerTestMaxTextureSize, DelegatingRenderer) {
   int max_size = 0;
   context->getIntegerv(GL_MAX_TEXTURE_SIZE, &max_size);
   SetScrollbarBounds(gfx::Size(max_size + 100, max_size + 100));
-  RunTest(CompositorMode::Threaded, true);
+  RunTest(CompositorMode::THREADED, true);
 }
 
 class ScrollbarLayerTestResourceCreationAndRelease : public ScrollbarLayerTest {

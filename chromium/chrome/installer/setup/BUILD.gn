@@ -22,9 +22,8 @@ if (is_win) {
 
     deps = [
       ":lib",
-      "//base/allocator",
       "//build/config/sanitizers:deps",
-      "//components/crash/content/app:app_breakpad_mac_win_to_be_deleted",
+      "//components/crash/content/app:app",
     ]
   }
 
@@ -42,6 +41,8 @@ if (is_win) {
       "installer_crash_reporter_client.h",
       "installer_crash_reporting.cc",
       "installer_crash_reporting.h",
+      "installer_metrics.cc",
+      "installer_metrics.h",
       "setup_constants.cc",
       "setup_constants.h",
       "setup_util.cc",
@@ -56,9 +57,10 @@ if (is_win) {
       "//chrome/common:version_header",
       "//chrome/installer/util:with_rc_strings",
       "//chrome_elf:constants",
-      "//components/crash/content/app:app_breakpad_mac_win_to_be_deleted",
+      "//components/crash/content/app:app",
       "//components/crash/content/app:lib",
       "//components/crash/core/common",
+      "//content/public/common:static_switches",
       "//courgette:courgette_lib",
       "//rlz:rlz_lib",
       "//third_party/bspatch",
@@ -83,11 +85,15 @@ if (is_win) {
       ":lib",
       "//base",
       "//base:i18n",
-      "//base/allocator",
       "//base/test:test_support",
       "//chrome/installer/mini_installer:unit_tests",
       "//testing/gmock",
       "//testing/gtest",
+    ]
+
+    data = [
+      "//chrome/installer/test/data/",
+      "//chrome/test/data/installer/",
     ]
   }
 }

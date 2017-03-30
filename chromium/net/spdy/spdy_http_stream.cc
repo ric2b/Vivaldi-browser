@@ -17,7 +17,6 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "net/base/host_port_pair.h"
-#include "net/base/net_util.h"
 #include "net/base/upload_data_stream.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_request_info.h"
@@ -537,7 +536,7 @@ void SpdyHttpStream::DoRequestCallback(int rv) {
 
   // Since Run may result in being called back, reset request_callback_ in
   // advance.
-  ResetAndReturn(&request_callback_).Run(rv);
+  base::ResetAndReturn(&request_callback_).Run(rv);
 }
 
 void SpdyHttpStream::DoResponseCallback(int rv) {
@@ -546,7 +545,7 @@ void SpdyHttpStream::DoResponseCallback(int rv) {
 
   // Since Run may result in being called back, reset response_callback_ in
   // advance.
-  ResetAndReturn(&response_callback_).Run(rv);
+  base::ResetAndReturn(&response_callback_).Run(rv);
 }
 
 void SpdyHttpStream::GetSSLInfo(SSLInfo* ssl_info) {
@@ -570,13 +569,19 @@ bool SpdyHttpStream::GetRemoteEndpoint(IPEndPoint* endpoint) {
   return spdy_session_->GetPeerAddress(endpoint) == OK;
 }
 
+Error SpdyHttpStream::GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
+                                                  std::vector<uint8_t>* out) {
+  return spdy_session_->GetSignedEKMForTokenBinding(key, out);
+}
+
 void SpdyHttpStream::Drain(HttpNetworkSession* session) {
   NOTREACHED();
   Close(false);
   delete this;
 }
 
-void SpdyHttpStream::PopulateNetErrorDetails(NetErrorDetails* /*details*/) {
+void SpdyHttpStream::PopulateNetErrorDetails(NetErrorDetails* details) {
+  details->connection_info = HttpResponseInfo::CONNECTION_INFO_HTTP2;
   return;
 }
 

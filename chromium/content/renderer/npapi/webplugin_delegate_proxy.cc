@@ -94,81 +94,6 @@ ScopedLogLevel::~ScopedLogLevel() {
   logging::SetMinLogLevel(old_level_);
 }
 
-// Proxy for WebPluginResourceClient.  The object owns itself after creation,
-// deleting itself after its callback has been called.
-class ResourceClientProxy : public WebPluginResourceClient {
- public:
-  ResourceClientProxy(PluginChannelHost* channel, int instance_id)
-    : channel_(channel), instance_id_(instance_id), resource_id_(0) {
-  }
-
-  ~ResourceClientProxy() override {}
-
-  // PluginResourceClient implementation:
-  void WillSendRequest(const GURL& url, int http_status_code) override {
-    DCHECK(channel_.get() != NULL);
-    channel_->Send(new PluginMsg_WillSendRequest(
-        instance_id_, resource_id_, url, http_status_code));
-  }
-
-  void DidReceiveResponse(const std::string& mime_type,
-                          const std::string& headers,
-                          uint32_t expected_length,
-                          uint32_t last_modified,
-                          bool request_is_seekable) override {
-    DCHECK(channel_.get() != NULL);
-    PluginMsg_DidReceiveResponseParams params;
-    params.id = resource_id_;
-    params.mime_type = mime_type;
-    params.headers = headers;
-    params.expected_length = expected_length;
-    params.last_modified = last_modified;
-    params.request_is_seekable = request_is_seekable;
-    // Grab a reference on the underlying channel so it does not get
-    // deleted from under us.
-    scoped_refptr<PluginChannelHost> channel_ref(channel_);
-    channel_->Send(new PluginMsg_DidReceiveResponse(instance_id_, params));
-  }
-
-  void DidReceiveData(const char* buffer,
-                      int length,
-                      int data_offset) override {
-    DCHECK(channel_.get() != NULL);
-    DCHECK_GT(length, 0);
-    std::vector<char> data;
-    data.resize(static_cast<size_t>(length));
-    memcpy(&data.front(), buffer, length);
-    // Grab a reference on the underlying channel so it does not get
-    // deleted from under us.
-    scoped_refptr<PluginChannelHost> channel_ref(channel_);
-    channel_->Send(new PluginMsg_DidReceiveData(instance_id_, resource_id_,
-                                                data, data_offset));
-  }
-
-  void DidFinishLoading(unsigned long resource_id) override {
-    DCHECK(channel_.get() != NULL);
-    DCHECK_EQ(resource_id, resource_id_);
-    channel_->Send(new PluginMsg_DidFinishLoading(instance_id_, resource_id_));
-    channel_ = NULL;
-    base::MessageLoop::current()->DeleteSoon(FROM_HERE, this);
-  }
-
-  void DidFail(unsigned long resource_id) override {
-    DCHECK(channel_.get() != NULL);
-    DCHECK_EQ(resource_id, resource_id_);
-    channel_->Send(new PluginMsg_DidFail(instance_id_, resource_id_));
-    channel_ = NULL;
-    base::MessageLoop::current()->DeleteSoon(FROM_HERE, this);
-  }
-
-  int ResourceId() override { return resource_id_; }
-
- private:
-  scoped_refptr<PluginChannelHost> channel_;
-  int instance_id_;
-  unsigned long resource_id_;
-};
-
 }  // namespace
 
 WebPluginDelegateProxy::WebPluginDelegateProxy(
@@ -373,7 +298,6 @@ bool WebPluginDelegateProxy::OnMessageReceived(const IPC::Message& msg) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(WebPluginDelegateProxy, msg)
     IPC_MESSAGE_HANDLER(PluginHostMsg_SetWindow, OnSetWindow)
-    IPC_MESSAGE_HANDLER(PluginHostMsg_CancelResource, OnCancelResource)
     IPC_MESSAGE_HANDLER(PluginHostMsg_InvalidateRect, OnInvalidateRect)
     IPC_MESSAGE_HANDLER(PluginHostMsg_GetWindowScriptNPObject,
                         OnGetWindowScriptNPObject)
@@ -384,12 +308,6 @@ bool WebPluginDelegateProxy::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(PluginHostMsg_CancelDocumentLoad, OnCancelDocumentLoad)
     IPC_MESSAGE_HANDLER(PluginHostMsg_DidStartLoading, OnDidStartLoading)
     IPC_MESSAGE_HANDLER(PluginHostMsg_DidStopLoading, OnDidStopLoading)
-    IPC_MESSAGE_HANDLER(PluginHostMsg_DeferResourceLoading,
-                        OnDeferResourceLoading)
-    IPC_MESSAGE_HANDLER(PluginHostMsg_URLRedirectResponse,
-                        OnURLRedirectResponse)
-    IPC_MESSAGE_HANDLER(PluginHostMsg_CheckIfRunInsecureContent,
-                        OnCheckIfRunInsecureContent)
 #if defined(OS_WIN)
     IPC_MESSAGE_HANDLER(PluginHostMsg_SetWindowlessData, OnSetWindowlessData)
     IPC_MESSAGE_HANDLER(PluginHostMsg_NotifyIMEStatus, OnNotifyIMEStatus)
@@ -437,11 +355,8 @@ static void CopySharedMemoryHandleForMessage(
     const base::SharedMemoryHandle& handle_in,
     base::SharedMemoryHandle* handle_out,
     base::ProcessId peer_pid) {
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) || defined(OS_WIN)
   *handle_out = base::SharedMemory::DuplicateHandle(handle_in);
-#elif defined(OS_WIN)
-  // On Windows we need to duplicate the handle for the plugin process.
-  BrokerDuplicateSharedMemoryHandle(handle_in, peer_pid, handle_out);
 #else
 #error Shared memory copy not implemented.
 #endif
@@ -542,8 +457,8 @@ void WebPluginDelegateProxy::ResetWindowlessBitmaps() {
   transport_stores_[0].bitmap.reset();
   transport_stores_[1].bitmap.reset();
 
-  transport_stores_[0].canvas.reset();
-  transport_stores_[1].canvas.reset();
+  transport_stores_[0].canvas.clear();
+  transport_stores_[1].canvas.clear();
   transport_store_painted_ = gfx::Rect();
   front_buffer_diff_ = gfx::Rect();
 }
@@ -557,12 +472,12 @@ static size_t BitmapSizeForPluginRect(const gfx::Rect& plugin_rect) {
 
 bool WebPluginDelegateProxy::CreateLocalBitmap(
     std::vector<uint8_t>* memory,
-    scoped_ptr<skia::PlatformCanvas>* canvas) {
+    skia::RefPtr<SkCanvas>* canvas) {
   const size_t size = BitmapSizeForPluginRect(plugin_rect_);
   memory->resize(size);
   if (memory->size() != size)
     return false;
-  canvas->reset(skia::CreatePlatformCanvas(
+  *canvas = skia::AdoptRef(skia::CreatePlatformCanvas(
       plugin_rect_.width(), plugin_rect_.height(), true, &((*memory)[0]),
       skia::CRASH_ON_FAILURE));
   return true;
@@ -571,7 +486,7 @@ bool WebPluginDelegateProxy::CreateLocalBitmap(
 
 bool WebPluginDelegateProxy::CreateSharedBitmap(
     scoped_ptr<SharedMemoryBitmap>* memory,
-    scoped_ptr<skia::PlatformCanvas>* canvas) {
+    skia::RefPtr<SkCanvas>* canvas) {
   *memory = ChildThreadImpl::current()
                 ->shared_bitmap_manager()
                 ->AllocateSharedMemoryBitmap(plugin_rect_.size());
@@ -579,11 +494,11 @@ bool WebPluginDelegateProxy::CreateSharedBitmap(
     return false;
   DCHECK((*memory)->shared_memory());
 #if defined(OS_POSIX)
-  canvas->reset(skia::CreatePlatformCanvas(
+  *canvas = skia::AdoptRef(skia::CreatePlatformCanvas(
       plugin_rect_.width(), plugin_rect_.height(), true, (*memory)->pixels(),
       skia::RETURN_NULL_ON_FAILURE));
 #else
-  canvas->reset(skia::CreatePlatformCanvas(
+  *canvas = skia::AdoptRef(skia::CreatePlatformCanvas(
       plugin_rect_.width(), plugin_rect_.height(), true,
       (*memory)->shared_memory()->handle().GetHandle(),
       skia::RETURN_NULL_ON_FAILURE));
@@ -862,11 +777,6 @@ void WebPluginDelegateProxy::OnNotifyIMEStatus(int input_type,
 }
 #endif
 
-void WebPluginDelegateProxy::OnCancelResource(int id) {
-  if (plugin_)
-    plugin_->CancelResource(id);
-}
-
 void WebPluginDelegateProxy::OnInvalidateRect(const gfx::Rect& rect) {
   if (!plugin_)
     return;
@@ -1022,11 +932,6 @@ void WebPluginDelegateProxy::OnDidStopLoading() {
   plugin_->DidStopLoading();
 }
 
-void WebPluginDelegateProxy::OnDeferResourceLoading(unsigned long resource_id,
-                                                    bool defer) {
-  plugin_->SetDeferResourceLoading(resource_id, defer);
-}
-
 #if defined(OS_MACOSX)
 void WebPluginDelegateProxy::OnAcceleratedPluginEnabledRendering() {
   uses_compositor_ = true;
@@ -1071,18 +976,5 @@ bool WebPluginDelegateProxy::UseSynchronousGeometryUpdates() {
   return false;
 }
 #endif
-
-void WebPluginDelegateProxy::OnURLRedirectResponse(bool allow,
-                                                   int resource_id) {
-  if (!plugin_)
-    return;
-
-  plugin_->URLRedirectResponse(allow, resource_id);
-}
-
-void WebPluginDelegateProxy::OnCheckIfRunInsecureContent(const GURL& url,
-                                                         bool* result) {
-  *result = plugin_->CheckIfRunInsecureContent(url);
-}
 
 }  // namespace content

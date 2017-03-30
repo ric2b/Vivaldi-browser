@@ -9,6 +9,7 @@ from telemetry.web_perf.metrics import smoothness
 
 
 class _CustomResultsWrapper(timeline_based_measurement.ResultsWrapperInterface):
+
   def __init__(self):
     super(_CustomResultsWrapper, self).__init__()
     self._pages_to_tir_labels = {}
@@ -17,8 +18,8 @@ class _CustomResultsWrapper(timeline_based_measurement.ResultsWrapperInterface):
     tir_label = self._pages_to_tir_labels.get(new_value.page)
     if tir_label:
       assert tir_label == self._tir_label, (
-        'Smoothness measurement do not support multiple interaction record '
-        'labels per page yet. See crbug.com/453109 for more information.')
+          'Smoothness measurement do not support multiple interaction record '
+          'labels per page yet. See crbug.com/453109 for more information.')
     else:
       self._pages_to_tir_labels[new_value.page] = self._tir_label
 
@@ -28,6 +29,7 @@ class _CustomResultsWrapper(timeline_based_measurement.ResultsWrapperInterface):
 
 
 class Smoothness(page_test.PageTest):
+
   def __init__(self, needs_browser_restart_after_each_page=False):
     super(Smoothness, self).__init__(needs_browser_restart_after_each_page)
     self._results_wrapper = _CustomResultsWrapper()
@@ -48,7 +50,7 @@ class Smoothness(page_test.PageTest):
         ','.join(custom_categories))
 
     options = timeline_based_measurement.Options(category_filter)
-    options.SetTimelineBasedMetrics([smoothness.SmoothnessMetric()])
+    options.SetLegacyTimelineBasedMetrics([smoothness.SmoothnessMetric()])
     for delay in page.GetSyntheticDelayCategories():
       options.category_filter.AddSyntheticDelay(delay)
     self._tbm = timeline_based_measurement.TimelineBasedMeasurement(
@@ -64,6 +66,7 @@ class Smoothness(page_test.PageTest):
 
 
 class Repaint(Smoothness):
+
   def CustomizeBrowserOptions(self, options):
     options.AppendExtraBrowserArgs([
         '--enable-impl-side-painting',
@@ -71,7 +74,9 @@ class Repaint(Smoothness):
         '--enable-gpu-benchmarking'
     ])
 
+
 class SmoothnessWithRestart(Smoothness):
+
   def __init__(self):
     super(SmoothnessWithRestart, self).__init__(
         needs_browser_restart_after_each_page=True)

@@ -29,7 +29,7 @@ class GL_EXPORT NoOpGLSurface : public GLSurface {
   explicit NoOpGLSurface(const gfx::Size& size) : size_(size) {}
 
   // Implement GLSurface.
-  bool Initialize() override { return true; }
+  bool Initialize(GLSurface::Format format) override { return true; }
   void Destroy() override {}
   bool IsOffscreen() override { return true; }
   gfx::SwapResult SwapBuffers() override {
@@ -138,7 +138,7 @@ scoped_refptr<GLSurface> GLSurface::CreateOffscreenGLSurface(
   switch (GetGLImplementation()) {
     case kGLImplementationOSMesaGL: {
       scoped_refptr<GLSurface> surface(
-          new GLSurfaceOSMesa(OSMesaSurfaceFormatRGBA, size));
+          new GLSurfaceOSMesa(SURFACE_OSMESA_RGBA, size));
       if (!surface->Initialize())
         return NULL;
 

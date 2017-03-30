@@ -7,6 +7,16 @@
     'chromium_code': 1,
   },
   'targets': [
+   {
+      # GN version: //ui/base/ime:text_input_types
+      'target_name': 'text_input_types',
+      'type': 'none',
+      'sources' : [
+        'text_input_flags.h',
+        'text_input_mode.h',
+        'text_input_type.h',
+      ],
+    },
     {
       # GN version: //ui/base/ime
       'target_name': 'ui_base_ime',
@@ -25,6 +35,7 @@
         '../../gfx/gfx.gyp:gfx',
         '../../gfx/gfx.gyp:gfx_geometry',
         '../ui_base.gyp:ui_base',
+        ':text_input_types',
       ],
       'defines': [
         'UI_BASE_IME_IMPLEMENTATION',
@@ -56,8 +67,6 @@
         'chromeos/input_method_descriptor.h',
         'chromeos/input_method_manager.cc',
         'chromeos/input_method_manager.h',
-        'chromeos/input_method_whitelist.cc',
-        'chromeos/input_method_whitelist.h',
         'chromeos/mock_component_extension_ime_manager_delegate.cc',
         'chromeos/mock_component_extension_ime_manager_delegate.h',
         'chromeos/mock_ime_candidate_window_handler.cc',
@@ -73,9 +82,7 @@
         'composition_underline.h',
         'ime_bridge.cc',
         'ime_bridge.h',
-        'ime_engine_handler_interface.cc',
         'ime_engine_handler_interface.h',
-        'ime_engine_observer.h',
         'ime_input_context_handler_interface.h',
         'infolist_entry.cc',
         'infolist_entry.h',
@@ -107,12 +114,8 @@
         'linux/linux_input_method_context_factory.h',
         'mock_input_method.cc',
         'mock_input_method.h',
-        'remote_input_method_delegate_win.h',
-        'remote_input_method_win.cc',
-        'remote_input_method_win.h',
         'text_input_client.cc',
         'text_input_client.h',
-        'text_input_type.h',
         'ui_base_ime_export.h',
         'win/imm32_manager.cc',
         'win/imm32_manager.h',

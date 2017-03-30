@@ -21,6 +21,11 @@ import subprocess
 import sys
 import time
 
+# Import _strptime before threaded code. datetime.datetime.strptime is
+# threadsafe except for the initial import of the _strptime module.
+# See crbug.com/584730 and https://bugs.python.org/issue7980.
+import _strptime  # pylint: disable=unused-import
+
 import devil_chromium
 from devil import devil_env
 from devil.android import battery_utils
@@ -336,11 +341,12 @@ def FinishProvisioning(device, options):
     device.SendKeyEvent(keyevent.KEYCODE_MENU)
 
   if options.min_battery_level is not None:
+    battery = battery_utils.BatteryUtils(device)
     try:
-      battery = battery_utils.BatteryUtils(device)
       battery.ChargeDeviceToLevel(options.min_battery_level)
-    except device_errors.CommandFailedError:
-      logging.exception('Unable to charge device to specified level.')
+    except device_errors.DeviceChargingError:
+      device.Reboot()
+      battery.ChargeDeviceToLevel(options.min_battery_level)
 
   if options.max_battery_temp is not None:
     try:

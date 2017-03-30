@@ -12,18 +12,52 @@
 #include <vector>
 
 #include "base/strings/stringprintf.h"
+#include "base/test/test_timeouts.h"
+#include "base/thread_task_runner_handle.h"
+#include "cc/surfaces/surface.h"
+#include "cc/surfaces/surface_manager.h"
+#include "content/browser/compositor/delegated_frame_host.h"
+#include "content/browser/compositor/surface_utils.h"
+#include "content/browser/frame_host/cross_process_frame_connector.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/navigator.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
+#include "content/browser/frame_host/render_widget_host_view_child_frame.h"
+#include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/resource_throttle.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
+#include "content/shell/browser/shell_javascript_dialog_manager.h"
 #include "content/test/test_frame_navigation_observer.h"
 #include "net/url_request/url_request.h"
 
 namespace content {
+
+namespace {
+
+// Helper class used by the TestNavigationManager to pause navigations.
+class TestNavigationManagerThrottle : public NavigationThrottle {
+ public:
+  TestNavigationManagerThrottle(NavigationHandle* handle,
+                                base::Closure on_will_start_request_closure)
+      : NavigationThrottle(handle),
+        on_will_start_request_closure_(on_will_start_request_closure) {}
+  ~TestNavigationManagerThrottle() override {}
+
+ private:
+  // NavigationThrottle implementation.
+  NavigationThrottle::ThrottleCheckResult WillStartRequest() override {
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                            on_will_start_request_closure_);
+    return NavigationThrottle::DEFER;
+  }
+
+  base::Closure on_will_start_request_closure_;
+};
+
+}  // namespace
 
 void NavigateFrameToURL(FrameTreeNode* node, const GURL& url) {
   TestFrameNavigationObserver observer(node);
@@ -32,6 +66,13 @@ void NavigateFrameToURL(FrameTreeNode* node, const GURL& url) {
   params.frame_tree_node_id = node->frame_tree_node_id();
   node->navigator()->GetController()->LoadURLWithParams(params);
   observer.Wait();
+}
+
+void SetShouldProceedOnBeforeUnload(Shell* shell, bool proceed) {
+  ShellJavaScriptDialogManager* manager =
+      static_cast<ShellJavaScriptDialogManager*>(
+          shell->GetJavaScriptDialogManager(shell->web_contents()));
+  manager->set_should_proceed_on_beforeunload(proceed);
 }
 
 FrameTreeVisualizer::FrameTreeVisualizer() {
@@ -86,13 +127,19 @@ std::string FrameTreeVisualizer::DepictFrameTree(FrameTreeNode* root) {
       to_explore.push(node->child_at(i));
     }
 
-    // Sort the proxies by SiteInstance ID to avoid hash_map ordering.
-    std::map<int, RenderFrameProxyHost*> sorted_proxy_hosts =
-        node->render_manager()->GetAllProxyHostsForTesting();
-    for (auto& proxy_pair : sorted_proxy_hosts) {
-      RenderFrameProxyHost* proxy = proxy_pair.second;
-      legend[GetName(proxy->GetSiteInstance())] = proxy->GetSiteInstance();
+    // Sort the proxies by SiteInstance ID to avoid unordered_map ordering.
+    std::vector<SiteInstance*> site_instances;
+    for (const auto& proxy_pair :
+         node->render_manager()->GetAllProxyHostsForTesting()) {
+      site_instances.push_back(proxy_pair.second->GetSiteInstance());
     }
+    std::sort(site_instances.begin(), site_instances.end(),
+              [](SiteInstance* lhs, SiteInstance* rhs) {
+                return lhs->GetId() < rhs->GetId();
+              });
+
+    for (SiteInstance* site_instance : site_instances)
+      legend[GetName(site_instance)] = site_instance;
   }
 
   // Traversal 4: Now that all names are assigned, make a big loop to pretty-
@@ -155,9 +202,9 @@ std::string FrameTreeVisualizer::DepictFrameTree(FrameTreeNode* root) {
     }
 
     // Show the SiteInstances of the RenderFrameProxyHosts of this node.
-    std::map<int, RenderFrameProxyHost*> sorted_proxy_host_map =
+    const auto& proxy_host_map =
         node->render_manager()->GetAllProxyHostsForTesting();
-    if (!sorted_proxy_host_map.empty()) {
+    if (!proxy_host_map.empty()) {
       // Show a dashed line of variable length before the proxy list. Always at
       // least two dashes.
       line.append(" --");
@@ -176,7 +223,7 @@ std::string FrameTreeVisualizer::DepictFrameTree(FrameTreeNode* root) {
 
       // Sort these alphabetically, to avoid hash_map ordering dependency.
       std::vector<std::string> sorted_proxy_hosts;
-      for (auto& proxy_pair : sorted_proxy_host_map) {
+      for (const auto& proxy_pair : proxy_host_map) {
         sorted_proxy_hosts.push_back(
             GetName(proxy_pair.second->GetSiteInstance()));
       }
@@ -256,6 +303,45 @@ class HttpRequestStallThrottle : public ResourceThrottle {
 
 }  // namespace
 
+SurfaceHitTestReadyNotifier::SurfaceHitTestReadyNotifier(
+    RenderWidgetHostViewChildFrame* target_view)
+    : target_view_(target_view) {
+  surface_manager_ = GetSurfaceManager();
+}
+
+void SurfaceHitTestReadyNotifier::WaitForSurfaceReady() {
+  root_surface_id_ = target_view_->FrameConnectorForTesting()
+                         ->GetRootRenderWidgetHostViewForTesting()
+                         ->SurfaceIdForTesting();
+  if (ContainsSurfaceId())
+    return;
+
+  while (true) {
+    // TODO(kenrb): Need a better way to do this. If
+    // RenderWidgetHostViewBase lifetime observer lands (see
+    // https://codereview.chromium.org/1711103002/), we can add a callback
+    // from OnSwapCompositorFrame and avoid this busy waiting, which is very
+    // frequent in tests in this file.
+    base::RunLoop run_loop;
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
+    run_loop.Run();
+    if (ContainsSurfaceId())
+      break;
+  }
+}
+
+bool SurfaceHitTestReadyNotifier::ContainsSurfaceId() {
+  if (root_surface_id_.is_null())
+    return false;
+  for (cc::SurfaceId id : surface_manager_->GetSurfaceForId(root_surface_id_)
+                              ->referenced_surfaces()) {
+    if (id == target_view_->SurfaceIdForTesting())
+      return true;
+  }
+  return false;
+}
+
 NavigationStallDelegate::NavigationStallDelegate(const GURL& url) : url_(url) {}
 
 void NavigationStallDelegate::RequestBeginning(
@@ -267,6 +353,65 @@ void NavigationStallDelegate::RequestBeginning(
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   if (request->url() == url_)
     throttles->push_back(new HttpRequestStallThrottle);
+}
+
+TestNavigationManager::TestNavigationManager(WebContents* web_contents,
+                                             const GURL& url)
+    : WebContentsObserver(web_contents),
+      url_(url),
+      navigation_paused_(false),
+      handle_(nullptr),
+      weak_factory_(this) {}
+
+TestNavigationManager::~TestNavigationManager() {}
+
+void TestNavigationManager::WaitForWillStartRequest() {
+  if (navigation_paused_)
+    return;
+  loop_runner_ = new MessageLoopRunner();
+  loop_runner_->Run();
+  loop_runner_ = nullptr;
+}
+
+void TestNavigationManager::ResumeNavigation() {
+  if (!navigation_paused_ || !handle_)
+    return;
+  navigation_paused_ = false;
+  handle_->Resume();
+}
+
+void TestNavigationManager::WaitForNavigationFinished() {
+  if (!handle_)
+    return;
+  loop_runner_ = new MessageLoopRunner();
+  loop_runner_->Run();
+  loop_runner_ = nullptr;
+}
+
+void TestNavigationManager::DidStartNavigation(NavigationHandle* handle) {
+  if (handle_ || handle->GetURL() != url_)
+    return;
+
+  handle_ = handle;
+  scoped_ptr<NavigationThrottle> throttle(new TestNavigationManagerThrottle(
+      handle_, base::Bind(&TestNavigationManager::OnWillStartRequest,
+                          weak_factory_.GetWeakPtr())));
+  handle_->RegisterThrottleForTesting(std::move(throttle));
+}
+
+void TestNavigationManager::DidFinishNavigation(NavigationHandle* handle) {
+  if (handle != handle_)
+    return;
+  handle_ = nullptr;
+  navigation_paused_ = false;
+  if (loop_runner_)
+    loop_runner_->Quit();
+}
+
+void TestNavigationManager::OnWillStartRequest() {
+  navigation_paused_ = true;
+  if (loop_runner_)
+    loop_runner_->Quit();
 }
 
 }  // namespace content

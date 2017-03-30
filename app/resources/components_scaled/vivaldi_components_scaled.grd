@@ -4,6 +4,7 @@
   <release seq="1" allow_pseudo="false">
     <structures>
       <structure type="chrome_scaled_image" name="IDR_LOCATION_BAR_HTTP" file="vivaldi/location_bar_http.png" />
+      <structure type="chrome_scaled_image" name="IDR_ERROR_NETWORK_GENERIC" file="vivaldi/error_network_generic.png" />
     </structures>
   </release>
 </grit>

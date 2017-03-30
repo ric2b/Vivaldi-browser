@@ -17,7 +17,6 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
-#include "base/prefs/pref_change_registrar.h"
 #include "base/scoped_observer.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
@@ -26,6 +25,7 @@
 #include "chrome/browser/supervised_user/supervised_users.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/sync_driver/sync_service_observer.h"
 #include "components/sync_driver/sync_type_preference_provider.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -71,7 +71,7 @@ class SupervisedUserService : public KeyedService,
                               public extensions::ManagementPolicy::Provider,
 #endif
                               public SyncTypePreferenceProvider,
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
                               public sync_driver::SyncServiceObserver,
                               public chrome::BrowserListObserver,
 #endif
@@ -108,6 +108,10 @@ class SupervisedUserService : public KeyedService,
 
   // Returns the whitelist service.
   SupervisedUserWhitelistService* GetWhitelistService();
+
+  const std::vector<scoped_refptr<SupervisedUserSiteList>>& whitelists() const {
+    return whitelists_;
+  }
 
   // Whether the user can request to get access to blocked URLs or to new
   // extensions.
@@ -150,7 +154,7 @@ class SupervisedUserService : public KeyedService,
   // custodian.
   base::string16 GetExtensionsLockedMessage() const;
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
   // Initializes this profile for syncing, using the provided |refresh_token| to
   // mint access tokens for Sync.
   void InitSync(const std::string& refresh_token);
@@ -182,13 +186,13 @@ class SupervisedUserService : public KeyedService,
   // SyncTypePreferenceProvider implementation:
   syncer::ModelTypeSet GetPreferredDataTypes() const override;
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
   // sync_driver::SyncServiceObserver implementation:
   void OnStateChanged() override;
 
   // chrome::BrowserListObserver implementation:
   void OnBrowserSetLastActive(Browser* browser) override;
-#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
+#endif  // !defined(OS_ANDROID)
 
   // SupervisedUserURLFilter::Observer implementation:
   void OnSiteListUpdated() override;
@@ -258,7 +262,7 @@ class SupervisedUserService : public KeyedService,
 
   void SetActive(bool active);
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
   void OnCustodianProfileDownloaded(const base::string16& full_name);
 
   void OnSupervisedUserRegistered(const AuthErrorCallback& callback,
@@ -388,6 +392,8 @@ class SupervisedUserService : public KeyedService,
   scoped_ptr<FileDownloader> blacklist_downloader_;
 
   scoped_ptr<SupervisedUserWhitelistService> whitelist_service_;
+
+  std::vector<scoped_refptr<SupervisedUserSiteList>> whitelists_;
 
   // Used to create permission requests.
   ScopedVector<PermissionRequestCreator> permissions_creators_;

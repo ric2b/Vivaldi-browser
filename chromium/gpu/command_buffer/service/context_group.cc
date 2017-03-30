@@ -30,6 +30,33 @@
 namespace gpu {
 namespace gles2 {
 
+namespace {
+
+void GetIntegerv(GLenum pname, uint32_t* var) {
+  GLint value = 0;
+  glGetIntegerv(pname, &value);
+  *var = value;
+}
+
+DisallowedFeatures AdjustDisallowedFeatures(
+    ContextType context_type, const DisallowedFeatures& disallowed_features) {
+  DisallowedFeatures adjusted_disallowed_features = disallowed_features;
+  if (context_type == CONTEXT_TYPE_WEBGL1) {
+    adjusted_disallowed_features.npot_support = true;
+    adjusted_disallowed_features.oes_texture_half_float_linear = true;
+  }
+  if (context_type == CONTEXT_TYPE_WEBGL1 ||
+      context_type == CONTEXT_TYPE_WEBGL2) {
+    adjusted_disallowed_features.chromium_color_buffer_float_rgba = true;
+    adjusted_disallowed_features.chromium_color_buffer_float_rgb = true;
+    adjusted_disallowed_features.ext_color_buffer_float = true;
+    adjusted_disallowed_features.oes_texture_float_linear = true;
+  }
+  return adjusted_disallowed_features;
+}
+
+}  // namespace anonymous
+
 ContextGroup::ContextGroup(
     const scoped_refptr<MailboxManager>& mailbox_manager,
     const scoped_refptr<MemoryTracker>& memory_tracker,
@@ -87,12 +114,6 @@ ContextGroup::ContextGroup(
   }
 }
 
-static void GetIntegerv(GLenum pname, uint32_t* var) {
-  GLint value = 0;
-  glGetIntegerv(pname, &value);
-  *var = value;
-}
-
 bool ContextGroup::Initialize(GLES2Decoder* decoder,
                               ContextType context_type,
                               const DisallowedFeatures& disallowed_features) {
@@ -107,7 +128,10 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
     return true;
   }
 
-  if (!feature_info_->Initialize(context_type, disallowed_features)) {
+  DisallowedFeatures adjusted_disallowed_features =
+      AdjustDisallowedFeatures(context_type, disallowed_features);
+
+  if (!feature_info_->Initialize(context_type, adjusted_disallowed_features)) {
     LOG(ERROR) << "ContextGroup::Initialize failed because FeatureInfo "
                << "initialization failed.";
     return false;
@@ -170,7 +194,8 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
       GL_MAX_VERTEX_ATTRIBS, kGLES2RequiredMinimumVertexAttribs,
       &max_vertex_attribs_)) {
     LOG(ERROR) << "ContextGroup::Initialize failed because too few "
-               << "vertex attributes supported.";
+               << "vertex attributes supported (" << max_vertex_attribs_
+               << ", should be " << kGLES2RequiredMinimumVertexAttribs << ").";
     return false;
   }
 
@@ -179,7 +204,8 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
       GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, kGLES2RequiredMinimumTextureUnits,
       &max_texture_units_)) {
     LOG(ERROR) << "ContextGroup::Initialize failed because too few "
-               << "texture units supported.";
+               << "texture units supported (" << max_texture_units_
+               << ", should be " << kGLES2RequiredMinimumTextureUnits << ").";
     return false;
   }
 
@@ -195,18 +221,35 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
   const GLint kMin3DTextureSize = 256;
 
   if (!QueryGLFeature(GL_MAX_TEXTURE_SIZE, kMinTextureSize,
-                      &max_texture_size) ||
-      !QueryGLFeature(GL_MAX_CUBE_MAP_TEXTURE_SIZE, kMinCubeMapSize,
-                      &max_cube_map_texture_size) ||
-      (feature_info_->gl_version_info().IsES3Capable() &&
-       !QueryGLFeature(GL_MAX_3D_TEXTURE_SIZE, kMin3DTextureSize,
-                       &max_3d_texture_size)) ||
-      (feature_info_->feature_flags().arb_texture_rectangle &&
-       !QueryGLFeature(GL_MAX_RECTANGLE_TEXTURE_SIZE_ARB,
-                       kMinRectangleTextureSize,
-                       &max_rectangle_texture_size))) {
+                      &max_texture_size)) {
     LOG(ERROR) << "ContextGroup::Initialize failed because maximum "
-               << "texture size is too small.";
+               << "2d texture size is too small (" << max_texture_size
+               << ", should be " << kMinTextureSize << ").";
+    return false;
+  }
+  if (!QueryGLFeature(GL_MAX_CUBE_MAP_TEXTURE_SIZE, kMinCubeMapSize,
+                      &max_cube_map_texture_size)) {
+    LOG(ERROR) << "ContextGroup::Initialize failed because maximum "
+               << "cube texture size is too small ("
+               << max_cube_map_texture_size << ", should be " << kMinCubeMapSize
+               << ").";
+    return false;
+  }
+  if (feature_info_->gl_version_info().IsES3Capable() &&
+      !QueryGLFeature(GL_MAX_3D_TEXTURE_SIZE, kMin3DTextureSize,
+                      &max_3d_texture_size)) {
+    LOG(ERROR) << "ContextGroup::Initialize failed because maximum "
+               << "3d texture size is too small (" << max_3d_texture_size
+               << ", should be " << kMin3DTextureSize << ").";
+    return false;
+  }
+  if (feature_info_->feature_flags().arb_texture_rectangle &&
+      !QueryGLFeature(GL_MAX_RECTANGLE_TEXTURE_SIZE_ARB,
+                      kMinRectangleTextureSize, &max_rectangle_texture_size)) {
+    LOG(ERROR) << "ContextGroup::Initialize failed because maximum "
+               << "rectangle texture size is too small ("
+               << max_rectangle_texture_size << ", should be "
+               << kMinRectangleTextureSize << ").";
     return false;
   }
 
@@ -235,14 +278,19 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
 
   const GLint kMinTextureImageUnits = 8;
   const GLint kMinVertexTextureImageUnits = 0;
-  if (!QueryGLFeatureU(
-      GL_MAX_TEXTURE_IMAGE_UNITS, kMinTextureImageUnits,
-      &max_texture_image_units_) ||
-      !QueryGLFeatureU(
-      GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS, kMinVertexTextureImageUnits,
-      &max_vertex_texture_image_units_)) {
+  if (!QueryGLFeatureU(GL_MAX_TEXTURE_IMAGE_UNITS, kMinTextureImageUnits,
+                       &max_texture_image_units_)) {
     LOG(ERROR) << "ContextGroup::Initialize failed because too few "
-               << "texture units.";
+               << "texture image units supported (" << max_texture_image_units_
+               << ", should be " << kMinTextureImageUnits << ").";
+  }
+  if (!QueryGLFeatureU(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS,
+                       kMinVertexTextureImageUnits,
+                       &max_vertex_texture_image_units_)) {
+    LOG(ERROR) << "ContextGroup::Initialize failed because too few "
+               << "vertex texture image units supported ("
+               << max_vertex_texture_image_units_ << ", should be "
+               << kMinTextureImageUnits << ").";
     return false;
   }
 

@@ -29,6 +29,7 @@
 #include "ui/gfx/skia_util.h"
 
 namespace cc {
+class ImageSerializationProcessor;
 
 namespace {
 
@@ -56,7 +57,8 @@ scoped_refptr<DisplayItemList> DisplayItemList::Create(
 }
 
 scoped_refptr<DisplayItemList> DisplayItemList::CreateFromProto(
-    const proto::DisplayItemList& proto) {
+    const proto::DisplayItemList& proto,
+    ImageSerializationProcessor* image_serialization_processor) {
   gfx::Rect layer_rect = ProtoToRect(proto.layer_rect());
   scoped_refptr<DisplayItemList> list =
       DisplayItemList::Create(ProtoToRect(proto.layer_rect()),
@@ -64,8 +66,8 @@ scoped_refptr<DisplayItemList> DisplayItemList::CreateFromProto(
 
   for (int i = 0; i < proto.items_size(); i++) {
     const proto::DisplayItem& item_proto = proto.items(i);
-    DisplayItemProtoFactory::AllocateAndConstruct(layer_rect, list.get(),
-                                                  item_proto);
+    DisplayItemProtoFactory::AllocateAndConstruct(
+        layer_rect, list.get(), item_proto, image_serialization_processor);
   }
 
   list->Finalize();
@@ -97,7 +99,9 @@ DisplayItemList::DisplayItemList(gfx::Rect layer_rect,
 DisplayItemList::~DisplayItemList() {
 }
 
-void DisplayItemList::ToProtobuf(proto::DisplayItemList* proto) {
+void DisplayItemList::ToProtobuf(
+    proto::DisplayItemList* proto,
+    ImageSerializationProcessor* image_serialization_processor) {
   // The flattened SkPicture approach is going away, and the proto
   // doesn't currently support serializing that flattened picture.
   DCHECK(retain_individual_display_items_);
@@ -107,7 +111,7 @@ void DisplayItemList::ToProtobuf(proto::DisplayItemList* proto) {
 
   DCHECK_EQ(0, proto->items_size());
   for (const auto& item : items_)
-    item.ToProtobuf(proto->add_items());
+    item.ToProtobuf(proto->add_items(), image_serialization_processor);
 }
 
 void DisplayItemList::Raster(SkCanvas* canvas,
@@ -162,11 +166,12 @@ bool DisplayItemList::RetainsIndividualDisplayItems() const {
 }
 
 void DisplayItemList::Finalize() {
-  // TODO(wkorman): Uncomment the assert below once we've investigated
-  // and resolved issues. http://crbug.com/557905
   // TODO(dtrainor): Need to deal with serializing visual_rects_.
   // http://crbug.com/568757.
-  // DCHECK_EQ(items_.size(), visual_rects_.size());
+  DCHECK(!retain_individual_display_items_ ||
+         items_.size() == visual_rects_.size())
+      << "items.size() " << items_.size() << " visual_rects.size() "
+      << visual_rects_.size();
 
   // TODO(vmpstr): Build and make use of an RTree from the visual
   // rects. For now we just clear them out since we won't ever need
@@ -307,6 +312,10 @@ void DisplayItemList::GetDiscardableImagesInRect(
 bool DisplayItemList::HasDiscardableImageInRect(
     const gfx::Rect& layer_rect) const {
   return image_map_.HasDiscardableImageInRect(layer_rect);
+}
+
+bool DisplayItemList::MayHaveDiscardableImages() const {
+  return !image_map_.empty();
 }
 
 }  // namespace cc

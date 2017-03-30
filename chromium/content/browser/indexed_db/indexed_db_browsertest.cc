@@ -201,7 +201,13 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, CursorTestIncognito) {
              true /* incognito */);
 }
 
-IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, CursorPrefetch) {
+// crbug.com/513787
+#if defined(ANDROID)
+#define MAYBE_CursorPrefetch DISABLED_CursorPrefetch
+#else
+#define MAYBE_CursorPrefetch CursorPrefetch
+#endif
+IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, MAYBE_CursorPrefetch) {
   SimpleTest(GetTestUrl("indexeddb", "cursor_prefetch.html"));
 }
 
@@ -461,14 +467,9 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTestWithGCExposed, DISABLED_BlobDidAck) {
   EXPECT_EQ(0UL, blob_context->context()->blob_count());
 }
 
-// Very flaky on Linux. See crbug.com/459835.
-#if defined(OS_LINUX)
-#define MAYBE_BlobDidAckPrefetch DISABLED_BlobDidAckPrefetch
-#else
-#define MAYBE_BlobDidAckPrefetch BlobDidAckPrefetch
-#endif
+// Flaky. See crbug.com/459835.
 IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTestWithGCExposed,
-                       MAYBE_BlobDidAckPrefetch) {
+                       DISABLED_BlobDidAckPrefetch) {
   SimpleTest(GetTestUrl("indexeddb", "blob_did_ack_prefetch.html"));
   // Wait for idle so that the blob ack has time to be received/processed by
   // the browser process.

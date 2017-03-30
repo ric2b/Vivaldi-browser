@@ -53,6 +53,7 @@
     left: 0;
     font-size: 13px;
     overflow: auto;
+    z-index: 500;
 }
 
 .panel.timeline .banner a,
@@ -214,7 +215,7 @@
     margin: 0 6px;
     position: relative;
     top: 1px;
-    border: 1px solid;
+    border: 1px solid rgba(0, 0, 0, 0.2);
 }
 
 .popover ul {
@@ -226,6 +227,12 @@
 #resources-container-content {
     overflow: hidden;
     min-height: 100%;
+}
+
+.timeline-toolbar-resizer {
+    background-image: url(Images/toolbarResizerVertical.png);
+    background-repeat: no-repeat;
+    background-position: right center, center;
 }
 
 .memory-graph-label {
@@ -377,6 +384,7 @@
 .timeline-details-chip-title > div {
     width: 12px;
     height: 12px;
+    border: 1px solid rgba(0, 0, 0, 0.2);
     display: inline-block;
     margin-right: 4px;
     content: " ";

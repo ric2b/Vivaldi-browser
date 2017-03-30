@@ -10,7 +10,6 @@
 #include "base/environment.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/rand_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -29,6 +28,7 @@
 #include "components/password_manager/core/browser/password_store_factory_util.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 
 #if defined(OS_WIN)
@@ -248,8 +248,9 @@ PasswordStoreFactory::BuildServiceInstanceFor(
 
   if (!backend.get()) {
     LOG(WARNING) << "Using basic (unencrypted) store for password storage. "
-        "See http://code.google.com/p/chromium/wiki/LinuxPasswordStorage for "
-        "more information about password storage options.";
+        "See "
+        "https://chromium.googlesource.com/chromium/src/+/master/docs/linux_password_storage.md"
+        " for more information about password storage options.";
   }
 
   ps = new PasswordStoreX(main_thread_runner, db_thread_runner,
@@ -257,7 +258,7 @@ PasswordStoreFactory::BuildServiceInstanceFor(
   RecordBackendStatistics(desktop_env, store_type, used_backend);
 #elif defined(USE_OZONE)
   ps = new password_manager::PasswordStoreDefault(
-      main_thread_runner, db_thread_runner, login_db.Pass());
+      main_thread_runner, db_thread_runner, std::move(login_db));
 #else
   NOTIMPLEMENTED();
 #endif

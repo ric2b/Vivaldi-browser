@@ -35,6 +35,7 @@
 
 using ::gfx::MockGLInterface;
 using ::testing::_;
+using ::testing::AnyNumber;
 using ::testing::DoAll;
 using ::testing::InSequence;
 using ::testing::Invoke;
@@ -847,10 +848,20 @@ TEST_P(GLES2DecoderManualInitTest, ReadPixels2RowLengthWorkaround) {
       .WillOnce(Return(GL_NO_ERROR))
       .RetiresOnSaturation();
   for (GLint ii = 0; ii < kHeight; ++ii) {
+    if (ii + 1 == kHeight) {
+      EXPECT_CALL(*gl_, PixelStorei(GL_PACK_ROW_LENGTH, kWidth))
+          .Times(1)
+          .RetiresOnSaturation();
+    }
     void* offset = reinterpret_cast<void*>(ii * kRowLength * kBytesPerPixel);
     EXPECT_CALL(*gl_, ReadPixels(0, ii, kWidth, 1, kFormat, kType, offset))
         .Times(1)
         .RetiresOnSaturation();
+    if (ii + 1 == kHeight) {
+      EXPECT_CALL(*gl_, PixelStorei(GL_PACK_ROW_LENGTH, kRowLength))
+          .Times(1)
+          .RetiresOnSaturation();
+    }
   }
 
   ReadPixels cmd;
@@ -960,12 +971,18 @@ TEST_P(GLES2DecoderManualInitTest,
   EXPECT_CALL(*gl_, PixelStorei(GL_PACK_ALIGNMENT, 1))
       .Times(1)
       .RetiresOnSaturation();
+  EXPECT_CALL(*gl_, PixelStorei(GL_PACK_ROW_LENGTH, kWidth))
+      .Times(1)
+      .RetiresOnSaturation();
   void* offset = reinterpret_cast<void*>((kHeight - 1) * padded_row_size);
   EXPECT_CALL(*gl_,
               ReadPixels(0, kHeight - 1, kWidth, 1, kFormat, kType, offset))
       .Times(1)
       .RetiresOnSaturation();
   EXPECT_CALL(*gl_, PixelStorei(GL_PACK_ALIGNMENT, kAlignment))
+      .Times(1)
+      .RetiresOnSaturation();
+  EXPECT_CALL(*gl_, PixelStorei(GL_PACK_ROW_LENGTH, kRowLength))
       .Times(1)
       .RetiresOnSaturation();
 
@@ -2441,8 +2458,8 @@ TEST_P(GLES3DecoderTest, CopyTexImage2DInvalidInternalFormat_Float) {
   GLenum target = GL_TEXTURE_2D;
   GLint level = 0;
   GLenum internal_format = GL_RG16F;
-  GLenum format = GL_RG;
-  GLenum type = GL_HALF_FLOAT;
+  GLenum format = GL_RGBA;
+  GLenum type = GL_UNSIGNED_BYTE;
   GLsizei width = 16;
   GLsizei height = 8;
   GLint border = 0;
@@ -2455,7 +2472,7 @@ TEST_P(GLES3DecoderTest, CopyTexImage2DInvalidInternalFormat_Float) {
   DoBindTexture(GL_TEXTURE_2D, kFBOClientTextureId, kFBOServiceTextureId);
   DoTexImage2D(GL_TEXTURE_2D,
                level,
-               internal_format,
+               GL_RGBA8,
                width,
                height,
                0,
@@ -2476,6 +2493,9 @@ TEST_P(GLES3DecoderTest, CopyTexImage2DInvalidInternalFormat_Float) {
               CopyTexImage2D(
                   target, level, internal_format, 0, 0, width, height, border))
       .Times(0);
+  EXPECT_CALL(*gl_, CheckFramebufferStatusEXT(GL_READ_FRAMEBUFFER))
+      .WillOnce(Return(GL_FRAMEBUFFER_COMPLETE))
+      .RetiresOnSaturation();
   DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
   CopyTexImage2D cmd;
   cmd.Init(target, level, internal_format, 0, 0, width, height);
@@ -2525,6 +2545,9 @@ TEST_P(GLES3DecoderTest, CopyTexImage2DInvalidInternalFormat_Integer) {
               CopyTexImage2D(
                   target, level, internal_format, 0, 0, width, height, border))
       .Times(0);
+  EXPECT_CALL(*gl_, CheckFramebufferStatusEXT(GL_READ_FRAMEBUFFER))
+      .WillOnce(Return(GL_FRAMEBUFFER_COMPLETE))
+      .RetiresOnSaturation();
   DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
   CopyTexImage2D cmd;
   cmd.Init(target, level, internal_format, 0, 0, width, height);
@@ -2574,6 +2597,9 @@ TEST_P(GLES3DecoderTest, CopyTexImage2DInvalidInternalFormat_sRGB) {
               CopyTexImage2D(
                   target, level, internal_format, 0, 0, width, height, border))
       .Times(0);
+  EXPECT_CALL(*gl_, CheckFramebufferStatusEXT(GL_READ_FRAMEBUFFER))
+      .WillOnce(Return(GL_FRAMEBUFFER_COMPLETE))
+      .RetiresOnSaturation();
   DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
   CopyTexImage2D cmd;
   cmd.Init(target, level, internal_format, 0, 0, width, height);
@@ -2925,6 +2951,41 @@ TEST_P(GLES2DecoderManualInitTest, InvalidateFramebufferBinding) {
   EXPECT_TRUE(
       gfx::MockGLInterface::GetGLProcAddress("glInvalidateFramebuffer") !=
       gfx::MockGLInterface::GetGLProcAddress("glDiscardFramebufferEXT"));
+}
+
+TEST_P(GLES2DecoderTest, ClearBackbufferBitsOnFlipSwap) {
+  surface_->set_buffers_flipped(true);
+
+  EXPECT_EQ(0u, GetAndClearBackbufferClearBitsForTest());
+
+  SwapBuffers& cmd = *GetImmediateAs<SwapBuffers>();
+  cmd.Init();
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+  EXPECT_EQ(static_cast<uint32_t>(GL_COLOR_BUFFER_BIT),
+            GetAndClearBackbufferClearBitsForTest());
+
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+  EXPECT_EQ(0u, GetAndClearBackbufferClearBitsForTest());
+
+  EXPECT_CALL(*gl_, Finish()).Times(AnyNumber());
+  ResizeCHROMIUM& resize_cmd = *GetImmediateAs<ResizeCHROMIUM>();
+  resize_cmd.Init(1, 1, 1.0f, GL_TRUE);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(resize_cmd));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+  EXPECT_EQ(static_cast<uint32_t>(GL_COLOR_BUFFER_BIT),
+            GetAndClearBackbufferClearBitsForTest());
+
+  cmd.Init();
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+  EXPECT_EQ(static_cast<uint32_t>(GL_COLOR_BUFFER_BIT),
+            GetAndClearBackbufferClearBitsForTest());
+
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+  EXPECT_EQ(0u, GetAndClearBackbufferClearBitsForTest());
 }
 
 TEST_P(GLES2DecoderManualInitTest, DiscardFramebufferEXT) {

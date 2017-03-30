@@ -8,16 +8,16 @@
 #include "core/css/CSSFontFace.h"
 #include "core/css/FontLoader.h"
 #include "core/page/NetworkStateNotifier.h"
+#include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/FontDescription.h"
 #include "platform/fonts/SimpleFontData.h"
-#include "public/platform/Platform.h"
 #include "wtf/CurrentTime.h"
 
 namespace blink {
 
-RemoteFontFaceSource::RemoteFontFaceSource(FontResource* font, PassRefPtrWillBeRawPtr<FontLoader> fontLoader, FontDisplay display)
+RemoteFontFaceSource::RemoteFontFaceSource(PassRefPtrWillBeRawPtr<FontResource> font, PassRefPtrWillBeRawPtr<FontLoader> fontLoader, FontDisplay display)
     : m_font(font)
     , m_fontLoader(fontLoader)
     , m_display(display)
@@ -31,7 +31,8 @@ RemoteFontFaceSource::RemoteFontFaceSource(FontResource* font, PassRefPtrWillBeR
 
     if (RuntimeEnabledFeatures::webFontsInterventionEnabled()) {
         // TODO(crbug.com/515343): Consider to use better signals.
-        if (networkStateNotifier().connectionType() == WebConnectionTypeCellular2G && display == FontDisplayAuto) {
+        if (RuntimeEnabledFeatures::webFontsInterventionTriggerEnabled()
+            || (networkStateNotifier().connectionType() == WebConnectionTypeCellular2G && display == FontDisplayAuto)) {
 
             m_isInterventionTriggered = true;
             m_period = SwapPeriod;
@@ -49,6 +50,7 @@ RemoteFontFaceSource::~RemoteFontFaceSource()
 void RemoteFontFaceSource::dispose()
 {
     m_font->removeClient(this);
+    m_font = nullptr;
     pruneTable();
 }
 
@@ -94,7 +96,7 @@ void RemoteFontFaceSource::fontLoaded(FontResource*)
     m_histograms.fontLoaded(m_isInterventionTriggered);
 
     m_font->ensureCustomFontData();
-    if (m_font->status() == Resource::DecodeError)
+    if (m_font->getStatus() == Resource::DecodeError)
         m_fontLoader->didFailToDecode(m_font.get());
 
     pruneTable();
@@ -186,6 +188,7 @@ void RemoteFontFaceSource::beginLoadIfNeeded()
 
 DEFINE_TRACE(RemoteFontFaceSource)
 {
+    visitor->trace(m_font);
     visitor->trace(m_fontLoader);
     CSSFontFaceSource::trace(visitor);
 }
@@ -196,10 +199,10 @@ void RemoteFontFaceSource::FontLoadHistograms::loadStarted()
         m_loadStartTime = currentTimeMS();
 }
 
-void RemoteFontFaceSource::FontLoadHistograms::fallbackFontPainted()
+void RemoteFontFaceSource::FontLoadHistograms::fallbackFontPainted(DisplayPeriod period)
 {
-    if (!m_fallbackPaintTime)
-        m_fallbackPaintTime = currentTimeMS();
+    if (period == BlockPeriod && !m_blankPaintTime)
+        m_blankPaintTime = currentTimeMS();
 }
 
 void RemoteFontFaceSource::FontLoadHistograms::fontLoaded(bool isInterventionTriggered)
@@ -216,47 +219,66 @@ void RemoteFontFaceSource::FontLoadHistograms::longLimitExceeded(bool isInterven
 
 void RemoteFontFaceSource::FontLoadHistograms::recordFallbackTime(const FontResource* font)
 {
-    if (m_fallbackPaintTime <= 0)
+    if (m_blankPaintTime <= 0)
         return;
-    int duration = static_cast<int>(currentTimeMS() - m_fallbackPaintTime);
-    Platform::current()->histogramCustomCounts("WebFont.BlankTextShownTime", duration, 0, 10000, 50);
-    m_fallbackPaintTime = -1;
+    int duration = static_cast<int>(currentTimeMS() - m_blankPaintTime);
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, blankTextShownTimeHistogram, ("WebFont.BlankTextShownTime", 0, 10000, 50));
+    blankTextShownTimeHistogram.count(duration);
+    m_blankPaintTime = -1;
 }
 
 void RemoteFontFaceSource::FontLoadHistograms::recordRemoteFont(const FontResource* font)
 {
     if (m_loadStartTime > 0 && font && !font->isLoading()) {
         int duration = static_cast<int>(currentTimeMS() - m_loadStartTime);
-        Platform::current()->histogramCustomCounts(histogramName(font), duration, 0, 10000, 50);
+        recordLoadTimeHistogram(font, duration);
         m_loadStartTime = -1;
 
         enum { Miss, Hit, DataUrl, CacheHitEnumMax };
         int histogramValue = font->url().protocolIsData() ? DataUrl
             : font->response().wasCached() ? Hit
             : Miss;
-        Platform::current()->histogramEnumeration("WebFont.CacheHit", histogramValue, CacheHitEnumMax);
+        DEFINE_STATIC_LOCAL(EnumerationHistogram, cacheHitHistogram, ("WebFont.CacheHit", CacheHitEnumMax));
+        cacheHitHistogram.count(histogramValue);
 
         enum { CORSFail, CORSSuccess, CORSEnumMax };
         int corsValue = font->isCORSFailed() ? CORSFail : CORSSuccess;
-        Platform::current()->histogramEnumeration("WebFont.CORSSuccess", corsValue, CORSEnumMax);
+        DEFINE_STATIC_LOCAL(EnumerationHistogram, corsHistogram, ("WebFont.CORSSuccess", CORSEnumMax));
+        corsHistogram.count(corsValue);
     }
 }
 
-const char* RemoteFontFaceSource::FontLoadHistograms::histogramName(const FontResource* font)
+void RemoteFontFaceSource::FontLoadHistograms::recordLoadTimeHistogram(const FontResource* font, int duration)
 {
-    if (font->errorOccurred())
-        return "WebFont.DownloadTime.LoadError";
+    if (font->errorOccurred()) {
+        DEFINE_STATIC_LOCAL(CustomCountHistogram, loadErrorHistogram, ("WebFont.DownloadTime.LoadError", 0, 10000, 50));
+        loadErrorHistogram.count(duration);
+        return;
+    }
 
     unsigned size = font->encodedSize();
-    if (size < 10 * 1024)
-        return "WebFont.DownloadTime.0.Under10KB";
-    if (size < 50 * 1024)
-        return "WebFont.DownloadTime.1.10KBTo50KB";
-    if (size < 100 * 1024)
-        return "WebFont.DownloadTime.2.50KBTo100KB";
-    if (size < 1024 * 1024)
-        return "WebFont.DownloadTime.3.100KBTo1MB";
-    return "WebFont.DownloadTime.4.Over1MB";
+    if (size < 10 * 1024) {
+        DEFINE_STATIC_LOCAL(CustomCountHistogram, under10kHistogram, ("WebFont.DownloadTime.0.Under10KB", 0, 10000, 50));
+        under10kHistogram.count(duration);
+        return;
+    }
+    if (size < 50 * 1024) {
+        DEFINE_STATIC_LOCAL(CustomCountHistogram, under50kHistogram, ("WebFont.DownloadTime.1.10KBTo50KB", 0, 10000, 50));
+        under50kHistogram.count(duration);
+        return;
+    }
+    if (size < 100 * 1024) {
+        DEFINE_STATIC_LOCAL(CustomCountHistogram, under100kHistogram, ("WebFont.DownloadTime.2.50KBTo100KB", 0, 10000, 50));
+        under100kHistogram.count(duration);
+        return;
+    }
+    if (size < 1024 * 1024) {
+        DEFINE_STATIC_LOCAL(CustomCountHistogram, under1mbHistogram, ("WebFont.DownloadTime.3.100KBTo1MB", 0, 10000, 50));
+        under1mbHistogram.count(duration);
+        return;
+    }
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, over1mbHistogram, ("WebFont.DownloadTime.4.Over1MB", 0, 10000, 50));
+    over1mbHistogram.count(duration);
 }
 
 void RemoteFontFaceSource::FontLoadHistograms::recordInterventionResult(bool triggered)
@@ -270,7 +292,9 @@ void RemoteFontFaceSource::FontLoadHistograms::recordInterventionResult(bool tri
     if (triggered)
         interventionResult |= 1 << 1;
     const int boundary = 1 << 2;
-    Platform::current()->histogramEnumeration("WebFont.InterventionResult", interventionResult, boundary);
+
+    DEFINE_STATIC_LOCAL(EnumerationHistogram, interventionHistogram, ("WebFont.InterventionResult", boundary));
+    interventionHistogram.count(interventionResult);
 }
 
 } // namespace blink

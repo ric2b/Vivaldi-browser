@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner_util.h"
@@ -34,6 +33,7 @@
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state_handler.h"
 #include "components/login/localized_values_builder.h"
+#include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
@@ -207,21 +207,15 @@ void NetworkScreenHandler::GetAdditionalParameters(
   // So we need to disable activation of login layouts if we are already in
   // active user session.
   //
-  // 3) This is the bootstrapping process for the remora/"Slave" device. The
-  // locale & input of the remora/"Slave" device is set up by a shark/"Master"
-  // device. In this case we don't want EnableLoginLayout() to reset the input
-  // method to the hardware default method.
-  const bool is_remora = g_browser_process->platform_part()
-                             ->browser_policy_connector_chromeos()
-                             ->GetDeviceCloudPolicyManager()
-                             ->IsRemoraRequisition();
-
-  const bool is_slave = base::CommandLine::ForCurrentProcess()->HasSwitch(
-      chromeos::switches::kOobeBootstrappingSlave);
+  // 3) This is the bootstrapping process for a "Slave" device. The locale &
+  // input of the "Slave" device is set up by a "Master" device. In this case we
+  // don't want EnableLoginLayout() to reset the input method to the hardware
+  // default method.
+  const bool is_slave = g_browser_process->local_state()->GetBoolean(
+      prefs::kOobeControllerDetected);
 
   const bool enable_layouts =
-      !user_manager::UserManager::Get()->IsUserLoggedIn() && !is_slave &&
-      !is_remora;
+      !user_manager::UserManager::Get()->IsUserLoggedIn() && !is_slave;
 
   dict->Set("languageList", language_list.release());
   dict->Set(

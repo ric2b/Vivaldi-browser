@@ -32,10 +32,10 @@ import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.NativePage;
 import org.chromium.chrome.browser.UrlConstants;
+import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
 import org.chromium.chrome.browser.compositor.layouts.content.InvalidationAwareThumbnailProvider;
 import org.chromium.chrome.browser.document.DocumentMetricIds;
 import org.chromium.chrome.browser.document.DocumentUtils;
-import org.chromium.chrome.browser.enhancedbookmarks.EnhancedBookmarkUtils;
 import org.chromium.chrome.browser.favicon.FaviconHelper;
 import org.chromium.chrome.browser.favicon.FaviconHelper.FaviconImageCallback;
 import org.chromium.chrome.browser.favicon.FaviconHelper.IconAvailabilityCallback;
@@ -47,8 +47,8 @@ import org.chromium.chrome.browser.ntp.LogoBridge.LogoObserver;
 import org.chromium.chrome.browser.ntp.NewTabPageView.NewTabPageManager;
 import org.chromium.chrome.browser.ntp.interests.InterestsPage;
 import org.chromium.chrome.browser.ntp.interests.InterestsPage.InterestsClickListener;
+import org.chromium.chrome.browser.ntp.snippets.SnippetsManager;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
-import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.preferences.DocumentModeManager;
 import org.chromium.chrome.browser.preferences.DocumentModePreference;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
@@ -59,6 +59,9 @@ import org.chromium.chrome.browser.profiles.MostVisitedSites.ThumbnailCallback;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService.TemplateUrlServiceObserver;
+import org.chromium.chrome.browser.snackbar.Snackbar;
+import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
+import org.chromium.chrome.browser.sync.SyncSessionsMetrics;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
@@ -108,6 +111,7 @@ public class NewTabPage
 
     private TabObserver mTabObserver;
     private MostVisitedSites mMostVisitedSites;
+    private SnackbarController mMostVisitedItemRemovedController;
     private FaviconHelper mFaviconHelper;
     private LargeIconBridge mLargeIconBridge;
     private LogoBridge mLogoBridge;
@@ -117,6 +121,7 @@ public class NewTabPage
     private String mAnimatedLogoUrl;
     private FakeboxDelegate mFakeboxDelegate;
     private OfflinePageBridge mOfflinePageBridge;
+    private SnippetsManager mSnippetsManager;
 
     // The timestamp at which the constructor was called.
     private final long mConstructedTimeNs;
@@ -342,8 +347,7 @@ public class NewTabPage
                 if (mOfflinePageBridge == null) {
                     mOfflinePageBridge = new OfflinePageBridge(mProfile);
                 }
-                url = OfflinePageUtils.getLaunchUrlFromOnlineUrl(
-                        mNewTabPageView.getContext(), mOfflinePageBridge, url);
+                url = mOfflinePageBridge.getLaunchUrlFromOnlineUrl(url);
             }
             mTab.loadUrl(new LoadUrlParams(url, PageTransition.AUTO_BOOKMARK));
         }
@@ -379,7 +383,8 @@ public class NewTabPage
                             mTab, true);
                     return true;
                 case ID_REMOVE:
-                    mMostVisitedSites.blacklistUrl(item.getUrl());
+                    mMostVisitedSites.addBlacklistedUrl(item.getUrl());
+                    showMostVisitedItemRemovedSnackbar(item.getUrl());
                     return true;
                 default:
                     return false;
@@ -390,7 +395,7 @@ public class NewTabPage
         public void navigateToBookmarks() {
             if (mIsDestroyed) return;
             RecordUserAction.record("MobileNTPSwitchToBookmarks");
-            EnhancedBookmarkUtils.showBookmarkManager(mActivity);
+            BookmarkUtils.showBookmarkManager(mActivity);
         }
 
         @Override
@@ -523,6 +528,18 @@ public class NewTabPage
                 tileTypes[i] = items[i].getTileType();
             }
             mMostVisitedSites.recordTileTypeMetrics(tileTypes);
+
+            if (isNtpOfflinePagesEnabled()) {
+                final int maxNumTiles = 12;
+                for (int i = 0; i < items.length; i++) {
+                    if (items[i].isOfflineAvailable()) {
+                        RecordHistogram.recordEnumeratedHistogram(
+                                "NewTabPage.TileOfflineAvailable", i, maxNumTiles);
+                    }
+                }
+            }
+
+            SyncSessionsMetrics.recordYoungestForeignTabAgeOnNTP();
         }
     };
 
@@ -570,10 +587,12 @@ public class NewTabPage
         mLogoBridge = new LogoBridge(mProfile);
         updateSearchProviderHasLogo();
 
+        mSnippetsManager = new SnippetsManager(mNewTabPageManager, mProfile);
+
         LayoutInflater inflater = LayoutInflater.from(activity);
         mNewTabPageView = (NewTabPageView) inflater.inflate(R.layout.new_tab_page, null);
         mNewTabPageView.initialize(mNewTabPageManager, isInSingleUrlBarMode(activity),
-                mSearchProviderHasLogo);
+                mSearchProviderHasLogo, mSnippetsManager);
 
         RecordHistogram.recordBooleanHistogram(
                 "NewTabPage.MobileIsUserOnline", NetworkChangeNotifier.isOnline());
@@ -585,6 +604,28 @@ public class NewTabPage
         } else {
             return new MostVisitedSites(profile);
         }
+    }
+
+    private void showMostVisitedItemRemovedSnackbar(String url) {
+        if (mMostVisitedItemRemovedController == null) {
+            mMostVisitedItemRemovedController = new SnackbarController() {
+                @Override
+                public void onDismissNoAction(Object actionData) {}
+
+                /** Undoes the most visited item removal. */
+                @Override
+                public void onAction(Object actionData) {
+                    if (mIsDestroyed) return;
+                    String url = (String) actionData;
+                    mMostVisitedSites.removeBlacklistedUrl(url);
+                }
+            };
+        }
+        Context context = mNewTabPageView.getContext();
+        Snackbar snackbar = Snackbar.make(context.getString(R.string.most_visited_item_removed),
+                mMostVisitedItemRemovedController, Snackbar.TYPE_ACTION)
+                .setAction(context.getString(R.string.undo), url);
+        mTab.getSnackbarManager().showSnackbar(snackbar);
     }
 
     /** @return The view container for the new tab page. */
@@ -609,7 +650,7 @@ public class NewTabPage
     }
 
     private void updateSearchProviderHasLogo() {
-        if (CommandLine.getInstance().hasSwitch(ChromeSwitches.ENABLE_NTP_SNIPPETS)) {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_SNIPPETS)) {
             mSearchProviderHasLogo = false;
             if (mNewTabPageView != null) mNewTabPageView.setSearchProviderHasLogo(false);
         } else {
@@ -730,6 +771,13 @@ public class NewTabPage
         if (mLogoBridge != null) {
             mLogoBridge.destroy();
             mLogoBridge = null;
+        }
+        if (mSnippetsManager != null) {
+            mSnippetsManager.destroy();
+            mSnippetsManager = null;
+        }
+        if (mMostVisitedItemRemovedController != null) {
+            mTab.getSnackbarManager().dismissSnackbars(mMostVisitedItemRemovedController);
         }
         TemplateUrlService.getInstance().removeObserver(this);
         mTab.removeObserver(mTabObserver);

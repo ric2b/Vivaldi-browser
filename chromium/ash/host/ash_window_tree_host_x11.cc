@@ -218,7 +218,7 @@ bool AshWindowTreeHostX11::CanDispatchEvent(const ui::PlatformEvent& event) {
             !bounds().Contains(ui::EventLocationFromNative(xev)))
           return false;
       } else {
-        gfx::Screen* screen = gfx::Screen::GetScreenFor(window());
+        gfx::Screen* screen = gfx::Screen::GetScreen();
         gfx::Display display = screen->GetDisplayNearestWindow(window());
         return touch_display_id == display.id();
       }
@@ -288,13 +288,6 @@ void AshWindowTreeHostX11::SetCrOSTapPaused(bool state) {
     }
   }
 }
-#endif
-
-AshWindowTreeHost* AshWindowTreeHost::Create(
-    const AshWindowTreeHostInitParams& init_params) {
-  if (init_params.offscreen)
-    return new AshWindowTreeHostUnified(init_params.initial_bounds);
-  return new AshWindowTreeHostX11(init_params.initial_bounds);
-}
+#endif  // defined(OS_CHROMEOS)
 
 }  // namespace ash

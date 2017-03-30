@@ -89,11 +89,12 @@ class PasswordStoreMac : public password_manager::PasswordStore {
   password_manager::PasswordStoreChangeList RemoveLoginsSyncedBetweenImpl(
       base::Time delete_begin,
       base::Time delete_end) override;
+  password_manager::PasswordStoreChangeList DisableAutoSignInForAllLoginsImpl()
+      override;
   bool RemoveStatisticsCreatedBetweenImpl(base::Time delete_begin,
                                           base::Time delete_end) override;
   ScopedVector<autofill::PasswordForm> FillMatchingLogins(
-      const autofill::PasswordForm& form,
-      AuthorizationPromptPolicy prompt_policy) override;
+      const autofill::PasswordForm& form) override;
   bool FillAutofillableLogins(
       ScopedVector<autofill::PasswordForm>* forms) override;
   bool FillBlacklistLogins(

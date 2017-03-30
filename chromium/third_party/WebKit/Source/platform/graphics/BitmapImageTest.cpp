@@ -40,7 +40,8 @@ namespace blink {
 
 class BitmapImageTest : public ::testing::Test {
 public:
-    class FakeImageObserver : public ImageObserver {
+    class FakeImageObserver : public NoBaseWillBeGarbageCollectedFinalized<FakeImageObserver>, public ImageObserver {
+        WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(FakeImageObserver);
     public:
         FakeImageObserver() : m_lastDecodedSizeChangedDelta(0) { }
 
@@ -77,6 +78,8 @@ public:
     void setCurrentFrame(size_t frame) { m_image->m_currentFrame = frame; }
     size_t frameDecodedSize(size_t frame) { return m_image->m_frames[frame].m_frameBytes; }
     size_t decodedFramesCount() const { return m_image->m_frames.size(); }
+
+    void setFirstFrameNotComplete() { m_image->m_frames[0].m_isComplete = false; }
 
     void loadImage(const char* fileName, bool loadAllFrames = true)
     {
@@ -121,10 +124,11 @@ protected:
     void SetUp() override
     {
         DeferredImageDecoder::setEnabled(m_enableDeferredDecoding);
-        m_image = BitmapImage::create(&m_imageObserver);
+        m_imageObserver = adoptPtrWillBeNoop(new FakeImageObserver);
+        m_image = BitmapImage::create(m_imageObserver.get());
     }
 
-    FakeImageObserver m_imageObserver;
+    OwnPtrWillBePersistent<FakeImageObserver> m_imageObserver;
     RefPtr<BitmapImage> m_image;
 
 private:
@@ -139,8 +143,8 @@ TEST_F(BitmapImageTest, destroyDecodedDataExceptCurrentFrame)
     setCurrentFrame(frame);
     size_t size = frameDecodedSize(frame);
     destroyDecodedData(false);
-    EXPECT_LT(m_imageObserver.m_lastDecodedSizeChangedDelta, 0);
-    EXPECT_GE(m_imageObserver.m_lastDecodedSizeChangedDelta, -static_cast<int>(totalSize - size));
+    EXPECT_LT(m_imageObserver->m_lastDecodedSizeChangedDelta, 0);
+    EXPECT_GE(m_imageObserver->m_lastDecodedSizeChangedDelta, -static_cast<int>(totalSize - size));
 }
 
 TEST_F(BitmapImageTest, destroyAllDecodedData)
@@ -149,7 +153,7 @@ TEST_F(BitmapImageTest, destroyAllDecodedData)
     size_t totalSize = decodedSize();
     EXPECT_GT(totalSize, 0u);
     destroyDecodedData(true);
-    EXPECT_EQ(-static_cast<int>(totalSize), m_imageObserver.m_lastDecodedSizeChangedDelta);
+    EXPECT_EQ(-static_cast<int>(totalSize), m_imageObserver->m_lastDecodedSizeChangedDelta);
     EXPECT_EQ(0u, decodedSize());
 }
 
@@ -230,19 +234,35 @@ TEST_F(BitmapImageTest, icoHasWrongFrameDimensions)
 TEST_F(BitmapImageTest, correctDecodedDataSize)
 {
     // When requesting a frame of a multi-frame GIF causes another frame to be
-    // decoded as well, both frames' sizes should be included in the decoded
-    // size changed notification.
+    // decoded as well, both frames' sizes should be reported by the source and
+    // thus included in the decoded size changed notification.
     loadImage("/LayoutTests/fast/images/resources/anim_none.gif", false);
     frameAtIndex(1);
     int frameSize = static_cast<int>(m_image->size().area() * sizeof(ImageFrame::PixelData));
-    EXPECT_EQ(frameSize * 2, m_imageObserver.m_lastDecodedSizeChangedDelta);
+    EXPECT_EQ(frameSize * 2, m_imageObserver->m_lastDecodedSizeChangedDelta);
 
     // Trying to destroy all data except an undecoded frame should cause the
     // decoder to seek backwards and preserve the most recent previous frame
     // necessary to decode that undecoded frame, and destroy all other frames.
     setCurrentFrame(2);
     destroyDecodedData(false);
-    EXPECT_EQ(-frameSize, m_imageObserver.m_lastDecodedSizeChangedDelta);
+    EXPECT_EQ(-frameSize, m_imageObserver->m_lastDecodedSizeChangedDelta);
+}
+
+TEST_F(BitmapImageTest, recachingFrameAfterDataChanged)
+{
+    loadImage("/LayoutTests/fast/images/resources/green.jpg");
+    setFirstFrameNotComplete();
+    EXPECT_GT(m_imageObserver->m_lastDecodedSizeChangedDelta, 0);
+    m_imageObserver->m_lastDecodedSizeChangedDelta = 0;
+
+    // Calling dataChanged causes the cache to flush, but doesn't affect the
+    // source's decoded frames. It shouldn't affect decoded size.
+    m_image->dataChanged(true);
+    EXPECT_EQ(0, m_imageObserver->m_lastDecodedSizeChangedDelta);
+    // Recaching the first frame also shouldn't affect decoded size.
+    m_image->imageForCurrentFrame();
+    EXPECT_EQ(0, m_imageObserver->m_lastDecodedSizeChangedDelta);
 }
 
 class BitmapImageDeferredDecodingTest : public BitmapImageTest {
@@ -257,14 +277,14 @@ TEST_F(BitmapImageDeferredDecodingTest, correctDecodedDataSize)
     loadImage("/LayoutTests/fast/images/resources/anim_none.gif", false);
     frameAtIndex(1);
     int frameSize = static_cast<int>(m_image->size().area() * sizeof(ImageFrame::PixelData));
-    EXPECT_EQ(frameSize, m_imageObserver.m_lastDecodedSizeChangedDelta);
+    EXPECT_EQ(frameSize, m_imageObserver->m_lastDecodedSizeChangedDelta);
     frameAtIndex(0);
 
     // Trying to destroy all data except an undecoded frame should go ahead and
     // destroy all other frames.
     setCurrentFrame(2);
     destroyDecodedData(false);
-    EXPECT_EQ(-frameSize * 2, m_imageObserver.m_lastDecodedSizeChangedDelta);
+    EXPECT_EQ(-frameSize * 2, m_imageObserver->m_lastDecodedSizeChangedDelta);
 }
 
 } // namespace blink

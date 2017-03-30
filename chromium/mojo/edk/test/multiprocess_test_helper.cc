@@ -4,15 +4,26 @@
 
 #include "mojo/edk/test/multiprocess_test_helper.h"
 
+#include <functional>
+#include <set>
 #include <utility>
 
+#include "base/base_switches.h"
+#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/memory/ref_counted.h"
 #include "base/process/kill.h"
 #include "base/process/process_handle.h"
+#include "base/run_loop.h"
+#include "base/strings/stringprintf.h"
+#include "base/task_runner.h"
+#include "base/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
@@ -22,43 +33,65 @@ namespace mojo {
 namespace edk {
 namespace test {
 
-const char kBrokerHandleSwitch[] = "broker-handle";
+namespace {
 
-MultiprocessTestHelper::MultiprocessTestHelper() {
-  platform_channel_pair_.reset(new PlatformChannelPair());
-  server_platform_handle = platform_channel_pair_->PassServerHandle();
-  broker_platform_channel_pair_.reset(new PlatformChannelPair());
+const char kMojoPrimordialPipeToken[] = "mojo-primordial-pipe-token";
+
+int RunClientFunction(std::function<int(MojoHandle)> handler) {
+  CHECK(!MultiprocessTestHelper::primordial_pipe_token.empty());
+  ScopedMessagePipeHandle pipe = CreateChildMessagePipe(
+      MultiprocessTestHelper::primordial_pipe_token);
+  return handler(pipe.get().value());
 }
+
+}  // namespace
+
+MultiprocessTestHelper::MultiprocessTestHelper() {}
 
 MultiprocessTestHelper::~MultiprocessTestHelper() {
   CHECK(!test_child_.IsValid());
-  server_platform_handle.reset();
-  platform_channel_pair_.reset();
 }
 
-void MultiprocessTestHelper::StartChild(const std::string& test_child_name) {
-  StartChildWithExtraSwitch(test_child_name, std::string(), std::string());
+ScopedMessagePipeHandle MultiprocessTestHelper::StartChild(
+    const std::string& test_child_name) {
+  return StartChildWithExtraSwitch(
+      test_child_name, std::string(), std::string());
 }
 
-void MultiprocessTestHelper::StartChildWithExtraSwitch(
+ScopedMessagePipeHandle MultiprocessTestHelper::StartChildWithExtraSwitch(
     const std::string& test_child_name,
     const std::string& switch_string,
     const std::string& switch_value) {
-  CHECK(platform_channel_pair_);
   CHECK(!test_child_name.empty());
   CHECK(!test_child_.IsValid());
 
   std::string test_child_main = test_child_name + "TestChildMain";
 
+  // Manually construct the new child's commandline to avoid copying unwanted
+  // values.
   base::CommandLine command_line(
-      base::GetMultiProcessTestChildBaseCommandLine());
-  HandlePassingInformation handle_passing_info;
-  platform_channel_pair_->PrepareToPassClientHandleToChildProcess(
-      &command_line, &handle_passing_info);
+      base::GetMultiProcessTestChildBaseCommandLine().GetProgram());
 
-  std::string broker_handle = broker_platform_channel_pair_->
-      PrepareToPassClientHandleToChildProcessAsString(&handle_passing_info);
-  command_line.AppendSwitchASCII(kBrokerHandleSwitch, broker_handle);
+  std::set<std::string> uninherited_args;
+  uninherited_args.insert("mojo-platform-channel-handle");
+  uninherited_args.insert(switches::kTestChildProcess);
+
+  // Copy commandline switches from the parent process, except for the
+  // multiprocess client name and mojo message pipe handle; this allows test
+  // clients to spawn other test clients.
+  for (const auto& entry :
+          base::CommandLine::ForCurrentProcess()->GetSwitches()) {
+    if (uninherited_args.find(entry.first) == uninherited_args.end())
+      command_line.AppendSwitchNative(entry.first, entry.second);
+  }
+
+  PlatformChannelPair channel;
+  HandlePassingInformation handle_passing_info;
+  channel.PrepareToPassClientHandleToChildProcess(&command_line,
+                                                  &handle_passing_info);
+
+  std::string pipe_token = mojo::edk::GenerateRandomToken();
+  command_line.AppendSwitchASCII(kMojoPrimordialPipeToken, pipe_token);
 
   if (!switch_string.empty()) {
     CHECK(!command_line.HasSwitch(switch_string));
@@ -81,15 +114,16 @@ void MultiprocessTestHelper::StartChildWithExtraSwitch(
 #error "Not supported yet."
 #endif
 
+  ScopedMessagePipeHandle pipe = CreateParentMessagePipe(pipe_token);
+
   test_child_ =
       base::SpawnMultiProcessTestChild(test_child_main, command_line, options);
-  platform_channel_pair_->ChildProcessLaunched();
+  channel.ChildProcessLaunched();
 
-  broker_platform_channel_pair_->ChildProcessLaunched();
-  ChildProcessLaunched(test_child_.Handle(),
-                       broker_platform_channel_pair_->PassServerHandle());
-
+  ChildProcessLaunched(test_child_.Handle(), channel.PassServerHandle());
   CHECK(test_child_.IsValid());
+
+  return pipe;
 }
 
 int MultiprocessTestHelper::WaitForChildShutdown() {
@@ -109,21 +143,36 @@ bool MultiprocessTestHelper::WaitForChildTestShutdown() {
 // static
 void MultiprocessTestHelper::ChildSetup() {
   CHECK(base::CommandLine::InitializedForCurrentProcess());
-  client_platform_handle =
-      PlatformChannelPair::PassClientHandleFromParentProcess(
-          *base::CommandLine::ForCurrentProcess());
 
-  std::string broker_handle_str =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          kBrokerHandleSwitch);
-  ScopedPlatformHandle broker_handle =
-      PlatformChannelPair::PassClientHandleFromParentProcessFromString(
-          broker_handle_str);
-  SetParentPipeHandle(std::move(broker_handle));
+  primordial_pipe_token = base::CommandLine::ForCurrentProcess()
+      ->GetSwitchValueASCII(kMojoPrimordialPipeToken);
+  CHECK(!primordial_pipe_token.empty());
+
+  SetParentPipeHandle(
+      PlatformChannelPair::PassClientHandleFromParentProcess(
+          *base::CommandLine::ForCurrentProcess()));
 }
 
 // static
-ScopedPlatformHandle MultiprocessTestHelper::client_platform_handle;
+int MultiprocessTestHelper::RunClientMain(
+    const base::Callback<int(MojoHandle)>& main) {
+  return RunClientFunction([main](MojoHandle handle){
+    return main.Run(handle);
+  });
+}
+
+// static
+int MultiprocessTestHelper::RunClientTestMain(
+    const base::Callback<void(MojoHandle)>& main) {
+  return RunClientFunction([main](MojoHandle handle) {
+    main.Run(handle);
+    return (::testing::Test::HasFatalFailure() ||
+            ::testing::Test::HasNonfatalFailure()) ? 1 : 0;
+  });
+}
+
+// static
+std::string MultiprocessTestHelper::primordial_pipe_token;
 
 }  // namespace test
 }  // namespace edk

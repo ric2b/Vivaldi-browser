@@ -7,12 +7,11 @@
 #include "base/command_line.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/login_manager_test.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/ui/oobe_display.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/common/chrome_constants.h"
@@ -24,6 +23,7 @@
 #include "chromeos/dbus/fake_debug_daemon_client.h"
 #include "chromeos/dbus/fake_power_manager_client.h"
 #include "chromeos/dbus/fake_update_engine_client.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
@@ -193,8 +193,7 @@ class EnableDebuggingTest : public LoginManagerTest {
   }
 
   void WaitUntilJSIsReady() {
-    LoginDisplayHostImpl* host = static_cast<LoginDisplayHostImpl*>(
-        LoginDisplayHostImpl::default_host());
+    LoginDisplayHost* host = LoginDisplayHost::default_host();
     if (!host)
       return;
     chromeos::OobeUI* oobe_ui = host->GetOobeUI();

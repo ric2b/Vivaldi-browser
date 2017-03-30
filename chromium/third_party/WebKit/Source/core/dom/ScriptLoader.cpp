@@ -59,7 +59,6 @@ namespace blink {
 
 ScriptLoader::ScriptLoader(Element* element, bool parserInserted, bool alreadyStarted)
     : m_element(element)
-    , m_resource(0)
     , m_startLineNumber(WTF::OrdinalNumber::beforeFirst())
     , m_parserInserted(parserInserted)
     , m_isExternalScript(false)
@@ -78,12 +77,12 @@ ScriptLoader::ScriptLoader(Element* element, bool parserInserted, bool alreadySt
 
 ScriptLoader::~ScriptLoader()
 {
-    m_pendingScript.stopWatchingForLoad(this);
 }
 
 DEFINE_TRACE(ScriptLoader)
 {
     visitor->trace(m_element);
+    visitor->trace(m_resource);
     visitor->trace(m_pendingScript);
 }
 
@@ -114,8 +113,10 @@ void ScriptLoader::handleAsyncAttribute()
 
 void ScriptLoader::detach()
 {
-    m_pendingScript.stopWatchingForLoad(this);
-    m_pendingScript.releaseElementAndClear();
+    if (!m_pendingScript)
+        return;
+    m_pendingScript->dispose();
+    m_pendingScript = nullptr;
 }
 
 // Helper function
@@ -249,22 +250,22 @@ bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition, Legacy
         m_willBeParserExecuted = true;
         m_readyToBeParserExecuted = true;
     } else if (client->hasSourceAttribute() && !client->asyncAttributeValue() && !m_forceAsync) {
-        m_pendingScript = PendingScript(m_element, m_resource.get());
+        m_pendingScript = PendingScript::create(m_element, m_resource.get());
         m_willExecuteInOrder = true;
         contextDocument->scriptRunner()->queueScriptForExecution(this, ScriptRunner::IN_ORDER_EXECUTION);
         // Note that watchForLoad can immediately call notifyFinished.
-        m_pendingScript.watchForLoad(this);
+        m_pendingScript->watchForLoad(this);
     } else if (client->hasSourceAttribute()) {
-        m_pendingScript = PendingScript(m_element, m_resource.get());
+        m_pendingScript = PendingScript::create(m_element, m_resource.get());
         LocalFrame* frame = m_element->document().frame();
         if (frame) {
             ScriptState* scriptState = ScriptState::forMainWorld(frame);
             if (scriptState)
-                ScriptStreamer::startStreaming(m_pendingScript, PendingScript::Async, frame->settings(), scriptState, frame->frameScheduler()->loadingTaskRunner());
+                ScriptStreamer::startStreaming(m_pendingScript.get(), ScriptStreamer::Async, frame->settings(), scriptState, frame->frameScheduler()->loadingTaskRunner());
         }
         contextDocument->scriptRunner()->queueScriptForExecution(this, ScriptRunner::ASYNC_EXECUTION);
         // Note that watchForLoad can immediately call notifyFinished.
-        m_pendingScript.watchForLoad(this);
+        m_pendingScript->watchForLoad(this);
     } else {
         // Reset line numbering for nested writes.
         TextPosition position = elementDocument.isInDocumentWrite() ? TextPosition() : scriptStartPosition;
@@ -295,7 +296,10 @@ bool ScriptLoader::fetchScript(const String& sourceUrl, FetchRequest::DeferOptio
             request.setCrossOriginAccessControl(elementDocument->securityOrigin(), crossOrigin);
         request.setCharset(scriptCharset());
 
-        bool scriptPassesCSP = elementDocument->contentSecurityPolicy()->allowScriptWithNonce(m_element->fastGetAttribute(HTMLNames::nonceAttr));
+        // Skip fetch-related CSP checks if the script element has a valid nonce, or if dynamically
+        // injected script is whitelisted and this script is not parser-inserted.
+        bool scriptPassesCSP = elementDocument->contentSecurityPolicy()->allowScriptWithNonce(m_element->fastGetAttribute(HTMLNames::nonceAttr)) || (!isParserInserted() && elementDocument->contentSecurityPolicy()->allowDynamic());
+
         if (scriptPassesCSP)
             request.setContentSecurityCheck(DoNotCheckContentSecurityPolicy);
         request.setDefer(defer);
@@ -361,9 +365,10 @@ bool ScriptLoader::executeScript(const ScriptSourceCode& sourceCode, double* com
     const ContentSecurityPolicy* csp = elementDocument->contentSecurityPolicy();
     bool shouldBypassMainWorldCSP = (frame && frame->script().shouldBypassMainWorldCSP())
         || csp->allowScriptWithNonce(m_element->fastGetAttribute(HTMLNames::nonceAttr))
-        || csp->allowScriptWithHash(sourceCode.source());
+        || csp->allowScriptWithHash(sourceCode.source().toString())
+        || (!isParserInserted() && csp->allowDynamic());
 
-    if (!m_isExternalScript && (!shouldBypassMainWorldCSP && !csp->allowInlineScript(elementDocument->url(), m_startLineNumber, sourceCode.source()))) {
+    if (!m_isExternalScript && (!shouldBypassMainWorldCSP && !csp->allowInlineScript(elementDocument->url(), m_startLineNumber, sourceCode.source().toString()))) {
         return false;
     }
 
@@ -371,13 +376,13 @@ bool ScriptLoader::executeScript(const ScriptSourceCode& sourceCode, double* com
         ScriptResource* resource = m_resource ? m_resource.get() : sourceCode.resource();
         if (resource) {
             if (!resource->mimeTypeAllowedByNosniff()) {
-                contextDocument->addConsoleMessage(ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, "Refused to execute script from '" + resource->url().elidedString() + "' because its MIME type ('" + resource->mimeType() + "') is not executable, and strict MIME type checking is enabled."));
+                contextDocument->addConsoleMessage(ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, "Refused to execute script from '" + resource->url().elidedString() + "' because its MIME type ('" + resource->httpContentType() + "') is not executable, and strict MIME type checking is enabled."));
                 return false;
             }
 
-            String mimetype = resource->mimeType();
-            if (mimetype.lower().startsWith("image/")) {
-                contextDocument->addConsoleMessage(ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, "Refused to execute script from '" + resource->url().elidedString() + "' because its MIME type ('" + resource->mimeType() + "') is not executable."));
+            String mimetype = resource->httpContentType();
+            if (mimetype.startsWith("image/")) {
+                contextDocument->addConsoleMessage(ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, "Refused to execute script from '" + resource->url().elidedString() + "' because its MIME type ('" + mimetype + "') is not executable."));
                 UseCounter::count(frame, UseCounter::BlockedSniffingImageToScript);
                 return false;
             }
@@ -429,10 +434,10 @@ bool ScriptLoader::executeScript(const ScriptSourceCode& sourceCode, double* com
 void ScriptLoader::execute()
 {
     ASSERT(!m_willBeParserExecuted);
-    ASSERT(m_pendingScript.resource());
+    ASSERT(m_pendingScript->resource());
     bool errorOccurred = false;
-    ScriptSourceCode source = m_pendingScript.getSource(KURL(), errorOccurred);
-    RefPtrWillBeRawPtr<Element> element = m_pendingScript.releaseElementAndClear();
+    ScriptSourceCode source = m_pendingScript->getSource(KURL(), errorOccurred);
+    RefPtrWillBeRawPtr<Element> element = m_pendingScript->releaseElementAndClear();
     ALLOW_UNUSED_LOCAL(element);
     if (errorOccurred) {
         dispatchErrorEvent();
@@ -442,7 +447,7 @@ void ScriptLoader::execute()
         else
             dispatchErrorEvent();
     }
-    m_resource = 0;
+    m_resource = nullptr;
 }
 
 void ScriptLoader::notifyFinished(Resource* resource)
@@ -464,7 +469,7 @@ void ScriptLoader::notifyFinished(Resource* resource)
         return;
     }
     contextDocument->scriptRunner()->notifyScriptReady(this, runOrder);
-    m_pendingScript.stopWatchingForLoad(this);
+    m_pendingScript->stopWatchingForLoad();
 }
 
 bool ScriptLoader::ignoresLoadRequest() const

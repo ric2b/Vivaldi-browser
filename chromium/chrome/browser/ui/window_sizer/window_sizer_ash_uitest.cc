@@ -61,7 +61,7 @@ void OpenBrowserUsingShelfOnRootWindow(aura::Window* root_window) {
   gfx::Point center =
       GetChromeIconBoundsForRootWindow(root_window).CenterPoint();
   gfx::Display display =
-      ash::Shell::GetScreen()->GetDisplayNearestWindow(root_window);
+      gfx::Screen::GetScreen()->GetDisplayNearestWindow(root_window);
   const gfx::Point& origin = display.bounds().origin();
   center.Offset(- origin.x(), - origin.y());
   generator.MoveMouseTo(center);
@@ -71,11 +71,15 @@ void OpenBrowserUsingShelfOnRootWindow(aura::Window* root_window) {
 }  // namespace
 
 #if !defined(OS_CHROMEOS)
-#define MAYBE_OpenBrowserUsingShelfOnOtherDisplay DISABLED_OpenBrowserUsingShelfOnOtherDisplay
-#define MAYBE_OpenBrowserUsingContextMenuOnOtherDisplay DISABLED_OpenBrowserUsingContextMenuOnOtherDisplay
+#define MAYBE_OpenBrowserUsingShelfOnOtherDisplay \
+  DISABLED_OpenBrowserUsingShelfOnOtherDisplay
+#define MAYBE_OpenBrowserUsingContextMenuOnOtherDisplay \
+  DISABLED_OpenBrowserUsingContextMenuOnOtherDisplay
 #else
-#define MAYBE_OpenBrowserUsingShelfOnOtherDisplay OpenBrowserUsingShelfOnOtherDisplay
-#define MAYBE_OpenBrowserUsingContextMenuOnOtherDisplay OpenBrowserUsingContextMenuOnOtherDisplay
+#define MAYBE_OpenBrowserUsingShelfOnOtherDisplay \
+  OpenBrowserUsingShelfOnOtherDisplay
+#define MAYBE_OpenBrowserUsingContextMenuOnOtherDisplay \
+  OpenBrowserUsingContextMenuOnOtherDisplay
 #endif
 
 IN_PROC_BROWSER_TEST_F(WindowSizerTest,
@@ -85,8 +89,7 @@ IN_PROC_BROWSER_TEST_F(WindowSizerTest,
 
   aura::Window::Windows root_windows = ash::Shell::GetAllRootWindows();
 
-  BrowserList* browser_list =
-      BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_ASH);
+  BrowserList* browser_list = BrowserList::GetInstance();
 
   EXPECT_EQ(1u, browser_list->size());
   // Close the browser window so that clicking icon will create a new window.
@@ -174,8 +177,7 @@ IN_PROC_BROWSER_TEST_F(WindowSizerContextMenuTest,
 
   aura::Window::Windows root_windows = ash::Shell::GetAllRootWindows();
 
-  BrowserList* browser_list =
-      BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_ASH);
+  BrowserList* browser_list = BrowserList::GetInstance();
 
   ASSERT_EQ(1u, browser_list->size());
   EXPECT_EQ(root_windows[0], ash::Shell::GetTargetRootWindow());

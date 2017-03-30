@@ -45,6 +45,12 @@ void StubPasswordManagerClient::NotifyUserAutoSignin(
     ScopedVector<autofill::PasswordForm> local_forms) {
 }
 
+void StubPasswordManagerClient::NotifyUserCouldBeAutoSignedIn(
+    scoped_ptr<autofill::PasswordForm> form) {}
+
+void StubPasswordManagerClient::NotifySuccessfulLoginWithExistingPassword(
+    const autofill::PasswordForm& form) {}
+
 void StubPasswordManagerClient::AutomaticPasswordSave(
     scoped_ptr<PasswordFormManager> saved_manager) {
 }

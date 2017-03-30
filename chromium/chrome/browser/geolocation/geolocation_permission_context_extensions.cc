@@ -50,7 +50,6 @@ bool GeolocationPermissionContextExtensions::DecidePermission(
     const PermissionRequestID& request_id,
     int bridge_id,
     const GURL& requesting_frame,
-    bool user_gesture,
     const base::Callback<void(ContentSetting)>& callback,
     bool* permission_set,
     bool* new_permission) {
@@ -66,7 +65,7 @@ bool GeolocationPermissionContextExtensions::DecidePermission(
   if (web_view_permission_helper &&
       !(guest && vivaldi::IsVivaldiRunning())) {
     web_view_permission_helper->RequestGeolocationPermission(
-        bridge_id, requesting_frame, user_gesture,
+        bridge_id, requesting_frame,
         base::Bind(&CallbackContentSettingWrapper, callback));
     *permission_set = false;
     *new_permission = false;

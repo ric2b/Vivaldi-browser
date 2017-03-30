@@ -21,20 +21,44 @@ namespace media {
 namespace cast {
 
 namespace {
-const int kMaxPacketSize = 1500;
+
+const char kOptionDscp[] = "DSCP";
+#if defined(OS_WIN)
+const char kOptionDisableNonBlockingIO[] = "disable_non_blocking_io";
+#endif
+const char kOptionSendBufferMinSize[] = "send_buffer_min_size";
+const char kOptionPacerMaxBurstSize[] = "pacer_max_burst_size";
 
 bool IsEmpty(const net::IPEndPoint& addr) {
   net::IPAddressNumber empty_addr(addr.address().size());
-  return std::equal(
-             empty_addr.begin(), empty_addr.end(), addr.address().begin()) &&
+  return std::equal(empty_addr.begin(), empty_addr.end(),
+                    addr.address().bytes().begin()) &&
          !addr.port();
 }
 
-bool IsEqual(const net::IPEndPoint& addr1, const net::IPEndPoint& addr2) {
-  return addr1.port() == addr2.port() && std::equal(addr1.address().begin(),
-                                                    addr1.address().end(),
-                                                    addr2.address().begin());
+int LookupOptionWithDefault(const base::DictionaryValue& options,
+                            const std::string& path,
+                            int default_value) {
+  int ret;
+  if (options.GetInteger(path, &ret)) {
+    return ret;
+  } else {
+    return default_value;
+  }
 }
+
+int32_t GetTransportSendBufferSize(const base::DictionaryValue& options) {
+  // Socket send buffer size needs to be at least greater than one burst
+  // size.
+  int32_t max_burst_size =
+      LookupOptionWithDefault(options, kOptionPacerMaxBurstSize,
+                              media::cast::kMaxBurstSize) *
+      media::cast::kMaxIpPacketSize;
+  int32_t min_send_buffer_size =
+      LookupOptionWithDefault(options, kOptionSendBufferMinSize, 0);
+  return std::max(max_burst_size, min_send_buffer_size);
+}
+
 }  // namespace
 
 UdpTransport::UdpTransport(
@@ -42,7 +66,6 @@ UdpTransport::UdpTransport(
     const scoped_refptr<base::SingleThreadTaskRunner>& io_thread_proxy,
     const net::IPEndPoint& local_end_point,
     const net::IPEndPoint& remote_end_point,
-    int32_t send_buffer_size,
     const CastTransportStatusCallback& status_callback)
     : io_thread_proxy_(io_thread_proxy),
       local_addr_(local_end_point),
@@ -55,7 +78,8 @@ UdpTransport::UdpTransport(
       receive_pending_(false),
       client_connected_(false),
       next_dscp_value_(net::DSCP_NO_CHANGE),
-      send_buffer_size_(send_buffer_size),
+      send_buffer_size_(media::cast::kMaxBurstSize *
+                        media::cast::kMaxIpPacketSize),
       status_callback_(status_callback),
       bytes_sent_(0),
       weak_factory_(this) {
@@ -150,15 +174,13 @@ void UdpTransport::ReceiveNextPacket(int length_or_status) {
   // the future when a packet is ready.
   while (true) {
     if (length_or_status == net::ERR_IO_PENDING) {
-      next_packet_.reset(new Packet(kMaxPacketSize));
+      next_packet_.reset(new Packet(media::cast::kMaxIpPacketSize));
       recv_buf_ = new net::WrappedIOBuffer(
           reinterpret_cast<char*>(&next_packet_->front()));
-      length_or_status =
-          udp_socket_->RecvFrom(recv_buf_.get(),
-                                kMaxPacketSize,
-                                &recv_addr_,
-                                base::Bind(&UdpTransport::ReceiveNextPacket,
-                                           weak_factory_.GetWeakPtr()));
+      length_or_status = udp_socket_->RecvFrom(
+          recv_buf_.get(), media::cast::kMaxIpPacketSize, &recv_addr_,
+          base::Bind(&UdpTransport::ReceiveNextPacket,
+                     weak_factory_.GetWeakPtr()));
       if (length_or_status == net::ERR_IO_PENDING) {
         receive_pending_ = true;
         return;
@@ -187,7 +209,7 @@ void UdpTransport::ReceiveNextPacket(int length_or_status) {
         VLOG(1) << "Packet was not valid, resetting remote address.";
         remote_addr_ = net::IPEndPoint();
       }
-    } else if (!IsEqual(remote_addr_, recv_addr_)) {
+    } else if (!(remote_addr_ == recv_addr_)) {
       VLOG(1) << "Ignoring packet received from an unrecognized address: "
               << recv_addr_.ToString() << ".";
     } else {
@@ -278,6 +300,24 @@ void UdpTransport::OnSent(const scoped_refptr<net::IOBuffer>& buf,
   if (!cb.is_null()) {
     cb.Run();
   }
+}
+
+void UdpTransport::SetUdpOptions(const base::DictionaryValue& options) {
+  SetSendBufferSize(GetTransportSendBufferSize(options));
+  if (options.HasKey(kOptionDscp)) {
+    // The default DSCP value for cast is AF41. Which gives it a higher
+    // priority over other traffic.
+    SetDscp(net::DSCP_AF41);
+  }
+#if defined(OS_WIN)
+  if (!options.HasKey(kOptionDisableNonBlockingIO)) {
+    UseNonBlockingIO();
+  }
+#endif
+}
+
+void UdpTransport::SetSendBufferSize(int32_t send_buffer_size) {
+  send_buffer_size_ = send_buffer_size;
 }
 
 }  // namespace cast

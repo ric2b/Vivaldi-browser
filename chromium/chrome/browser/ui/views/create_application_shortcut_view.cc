@@ -11,7 +11,6 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/windows_version.h"
 #include "build/build_config.h"
@@ -28,6 +27,7 @@
 #include "chrome/grit/locale_settings.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/favicon_base/select_favicon_frames.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
@@ -260,6 +260,7 @@ void CreateApplicationShortcutView::InitControls(DialogLayout dialog_layout) {
   create_shortcuts_label_ = new views::Label(
       l10n_util::GetStringUTF16(IDS_CREATE_SHORTCUTS_LABEL));
   create_shortcuts_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  create_shortcuts_label_->SetMultiLine(true);
 
   desktop_check_box_ = AddCheckbox(
       l10n_util::GetStringUTF16(IDS_CREATE_SHORTCUTS_DESKTOP_CHKBOX),
@@ -303,7 +304,7 @@ void CreateApplicationShortcutView::InitControls(DialogLayout dialog_layout) {
 
   static const int kTableColumnSetId = 1;
   column_set = layout->AddColumnSet(kTableColumnSetId);
-  column_set->AddPaddingColumn(0, views::kPanelHorizIndentation);
+  column_set->AddPaddingColumn(0, views::kCheckboxIndent);
   column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL,
                         100.0f, views::GridLayout::USE_PREF, 0, 0);
 

@@ -5,8 +5,6 @@
 #include "chrome/browser/ui/views/chrome_views_delegate.h"
 
 #include "base/memory/scoped_ptr.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -14,6 +12,8 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_window_state.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/context_factory.h"
@@ -44,17 +44,12 @@
 #endif
 
 #if defined(USE_AURA) && !defined(OS_CHROMEOS)
-#include "chrome/browser/ui/host_desktop.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 #include "ui/views/widget/native_widget_aura.h"
 #endif
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 #include "ui/views/linux_ui/linux_ui.h"
-#endif
-
-#if defined(OS_ANDROID)
-#include "ui/views/widget/android/native_widget_android.h"
 #endif
 
 #if defined(USE_ASH)
@@ -131,9 +126,21 @@ bool MonitorHasTopmostAutohideTaskbarForEdge(UINT edge, HMONITOR monitor) {
     if (taskbar_data.uEdge == edge)
       taskbar = taskbar_data.hWnd;
   }
-  return ::IsWindow(taskbar) &&
-      (MonitorFromWindow(taskbar, MONITOR_DEFAULTTONULL) == monitor) &&
-      (GetWindowLong(taskbar, GWL_EXSTYLE) & WS_EX_TOPMOST);
+
+  if (::IsWindow(taskbar) &&
+      (GetWindowLong(taskbar, GWL_EXSTYLE) & WS_EX_TOPMOST)) {
+    if (MonitorFromWindow(taskbar, MONITOR_DEFAULTTONEAREST) == monitor)
+      return true;
+    // In some cases like when the autohide taskbar is on the left of the
+    // secondary monitor, the MonitorFromWindow call above fails to return the
+    // correct monitor the taskbar is on. We fallback to MonitorFromPoint for
+    // the cursor position in that case, which seems to work well.
+    POINT cursor_pos = {0};
+    GetCursorPos(&cursor_pos);
+    if (MonitorFromPoint(cursor_pos, MONITOR_DEFAULTTONEAREST) == monitor)
+      return true;
+  }
+  return false;
 }
 
 int GetAppbarAutohideEdgesOnWorkerThread(HMONITOR monitor) {
@@ -195,8 +202,9 @@ void ChromeViewsDelegate::SaveWindowPlacement(const views::Widget* window,
   window_preferences->SetBoolean("maximized",
                                  show_state == ui::SHOW_STATE_MAXIMIZED);
   window_preferences->SetBoolean("docked", show_state == ui::SHOW_STATE_DOCKED);
-  gfx::Rect work_area(gfx::Screen::GetScreenFor(window->GetNativeView())->
-      GetDisplayNearestWindow(window->GetNativeView()).work_area());
+  gfx::Rect work_area(gfx::Screen::GetScreen()
+                          ->GetDisplayNearestWindow(window->GetNativeView())
+                          .work_area());
   window_preferences->SetInteger("work_area_left", work_area.x());
   window_preferences->SetInteger("work_area_top", work_area.y());
   window_preferences->SetInteger("work_area_right", work_area.right());
@@ -235,13 +243,9 @@ bool ChromeViewsDelegate::GetSavedWindowPlacement(
   // On Ash environment, a window won't span across displays.  Adjust
   // the bounds to fit the work area.
   gfx::NativeView window = widget->GetNativeView();
-  if (chrome::GetHostDesktopTypeForNativeView(window) ==
-      chrome::HOST_DESKTOP_TYPE_ASH) {
-    gfx::Display display = gfx::Screen::GetScreenFor(window)->
-        GetDisplayMatching(*bounds);
-    bounds->AdjustToFit(display.work_area());
-    ash::wm::GetWindowState(window)->set_minimum_visibility(true);
-  }
+  gfx::Display display = gfx::Screen::GetScreen()->GetDisplayMatching(*bounds);
+  bounds->AdjustToFit(display.work_area());
+  ash::wm::GetWindowState(window)->set_minimum_visibility(true);
 #endif
   return true;
 }
@@ -291,10 +295,6 @@ HICON ChromeViewsDelegate::GetSmallWindowIcon() const {
   return GetSmallAppIcon();
 }
 
-bool ChromeViewsDelegate::IsWindowInMetro(gfx::NativeWindow window) const {
-  return chrome::IsNativeViewInAsh(window);
-}
-
 #elif defined(OS_LINUX) && !defined(OS_CHROMEOS)
 gfx::ImageSkia* ChromeViewsDelegate::GetDefaultWindowIcon() const {
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
@@ -330,6 +330,12 @@ void ChromeViewsDelegate::OnBeforeWidgetInit(
   if (params->native_widget)
     return;
 
+  if (!native_widget_factory().is_null()) {
+    params->native_widget = native_widget_factory().Run(*params, delegate);
+    if (params->native_widget)
+      return;
+  }
+
 #if defined(USE_AURA) && !defined(OS_CHROMEOS)
   bool use_non_toplevel_window =
       params->parent &&
@@ -354,10 +360,7 @@ void ChromeViewsDelegate::OnBeforeWidgetInit(
   // the side effects are not as bad as the poor window manager interactions. On
   // Windows however these WM interactions are not an issue, so we open windows
   // requested as top_level as actual top level windows on the desktop.
-  use_non_toplevel_window = use_non_toplevel_window &&
-      (params->child ||
-       chrome::GetHostDesktopTypeForNativeView(params->parent) !=
-          chrome::HOST_DESKTOP_TYPE_NATIVE);
+  use_non_toplevel_window = use_non_toplevel_window && params->child;
 
   if (!ui::win::IsAeroGlassEnabled()) {
     // If we don't have composition (either because Glass is not enabled or
@@ -435,18 +438,7 @@ void ChromeViewsDelegate::OnBeforeWidgetInit(
     }
     params->native_widget = native_widget;
   } else {
-    // TODO(erg): Once we've threaded context to everywhere that needs it, we
-    // should remove this check here.
-    gfx::NativeView to_check =
-        params->context ? params->context : params->parent;
-    if (chrome::GetHostDesktopTypeForNativeView(to_check) ==
-        chrome::HOST_DESKTOP_TYPE_NATIVE) {
-#if defined(OS_ANDROID)
-      params->native_widget = new views::NativeWidgetAndroid(delegate);
-#else
-      params->native_widget = new views::DesktopNativeWidgetAura(delegate);
-#endif
-    }
+    params->native_widget = new views::DesktopNativeWidgetAura(delegate);
   }
 #endif
 }

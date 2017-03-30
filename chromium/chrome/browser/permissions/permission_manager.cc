@@ -34,11 +34,11 @@ PermissionStatus ContentSettingToPermissionStatus(ContentSetting setting) {
   switch (setting) {
     case CONTENT_SETTING_ALLOW:
     case CONTENT_SETTING_SESSION_ONLY:
-      return content::PERMISSION_STATUS_GRANTED;
+      return content::PermissionStatus::GRANTED;
     case CONTENT_SETTING_BLOCK:
-      return content::PERMISSION_STATUS_DENIED;
+      return content::PermissionStatus::DENIED;
     case CONTENT_SETTING_ASK:
-      return content::PERMISSION_STATUS_ASK;
+      return content::PermissionStatus::ASK;
     case CONTENT_SETTING_DETECT_IMPORTANT_CONTENT:
     case CONTENT_SETTING_DEFAULT:
     case CONTENT_SETTING_NUM_SETTINGS:
@@ -46,7 +46,7 @@ PermissionStatus ContentSettingToPermissionStatus(ContentSetting setting) {
   }
 
   NOTREACHED();
-  return content::PERMISSION_STATUS_DENIED;
+  return content::PermissionStatus::DENIED;
 }
 
 // Wrap a callback taking a PermissionStatus to pass it as a callback taking a
@@ -140,15 +140,14 @@ class PermissionManager::PendingRequest {
  public:
   PendingRequest(content::RenderFrameHost* render_frame_host,
                  const std::vector<PermissionType> permissions,
-                 const base::Callback<void(
-                     const std::vector<PermissionStatus>&)>& callback)
-    : render_process_id_(render_frame_host->GetProcess()->GetID()),
-      render_frame_id_(render_frame_host->GetRoutingID()),
-      callback_(callback),
-      permissions_(permissions),
-      results_(permissions.size(), content::PERMISSION_STATUS_DENIED),
-      remaining_results_(permissions.size()) {
-  }
+                 const base::Callback<
+                     void(const std::vector<PermissionStatus>&)>& callback)
+      : render_process_id_(render_frame_host->GetProcess()->GetID()),
+        render_frame_id_(render_frame_host->GetRoutingID()),
+        callback_(callback),
+        permissions_(permissions),
+        results_(permissions.size(), content::PermissionStatus::DENIED),
+        remaining_results_(permissions.size()) {}
 
   void SetPermissionStatus(int permission_id, PermissionStatus status) {
     DCHECK(!IsComplete());
@@ -209,13 +208,11 @@ int PermissionManager::RequestPermission(
     PermissionType permission,
     content::RenderFrameHost* render_frame_host,
     const GURL& requesting_origin,
-    bool user_gesture,
     const base::Callback<void(PermissionStatus)>& callback) {
   return RequestPermissions(
       std::vector<PermissionType>(1, permission),
       render_frame_host,
       requesting_origin,
-      user_gesture,
       base::Bind(&PermissionRequestResponseCallbackWrapper, callback));
 }
 
@@ -223,7 +220,6 @@ int PermissionManager::RequestPermissions(
     const std::vector<PermissionType>& permissions,
     content::RenderFrameHost* render_frame_host,
     const GURL& requesting_origin,
-    bool user_gesture,
     const base::Callback<void(
         const std::vector<PermissionStatus>&)>& callback) {
   if (permissions.empty()) {
@@ -255,7 +251,7 @@ int PermissionManager::RequestPermissions(
     PermissionContextBase* context = PermissionContext::Get(
         profile_, permission);
     context->RequestPermission(
-        web_contents, request, requesting_origin, user_gesture,
+        web_contents, request, requesting_origin,
         base::Bind(&ContentSettingToPermissionStatusCallbackWrapper,
             base::Bind(&PermissionManager::OnPermissionsRequestResponseStatus,
                 weak_ptr_factory_.GetWeakPtr(), request_id, i)));
@@ -328,7 +324,7 @@ PermissionStatus PermissionManager::GetPermissionStatus(
 
   PermissionContextBase* context = PermissionContext::Get(profile_, permission);
   if (!context)
-    return content::PERMISSION_STATUS_DENIED;
+    return content::PermissionStatus::DENIED;
 
   return ContentSettingToPermissionStatus(context->GetPermissionStatus(
       requesting_origin.GetOrigin(), embedding_origin.GetOrigin()));

@@ -56,14 +56,15 @@
 #include "modules/accessibility/AXObject.h"
 #include "platform/Cursor.h"
 #include "platform/FileChooser.h"
+#include "platform/Histogram.h"
 #include "platform/KeyboardCodes.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "public/platform/Platform.h"
 #include "public/platform/WebCursorInfo.h"
+#include "public/platform/WebFloatRect.h"
 #include "public/platform/WebFrameScheduler.h"
 #include "public/platform/WebRect.h"
 #include "public/platform/WebURLRequest.h"
@@ -109,7 +110,7 @@
 
 namespace blink {
 
-class WebCompositorAnimationTimeline;
+class CompositorAnimationTimeline;
 
 // Converts a AXObjectCache::AXNotification to a WebAXEvent
 static WebAXEvent toWebAXEvent(AXObjectCache::AXNotification notification)
@@ -519,6 +520,15 @@ IntRect ChromeClientImpl::viewportToScreen(const IntRect& rectInViewport) const
     return screenRect;
 }
 
+float ChromeClientImpl::windowToViewportScalar(const float scalarValue) const
+{
+    if (!m_webView->client())
+        return scalarValue;
+    WebFloatRect viewportRect(0, 0, scalarValue, 0);
+    m_webView->client()->convertWindowToViewport(&viewportRect);
+    return viewportRect.width;
+}
+
 WebScreenInfo ChromeClientImpl::screenInfo() const
 {
     return m_webView->client() ? m_webView->client()->screenInfo() : WebScreenInfo();
@@ -757,7 +767,7 @@ void ChromeClientImpl::didPaint(const PaintArtifact& paintArtifact)
     m_webView->paintArtifactCompositor().update(paintArtifact);
 }
 
-void ChromeClientImpl::attachCompositorAnimationTimeline(WebCompositorAnimationTimeline* compositorTimeline, LocalFrame* localRoot)
+void ChromeClientImpl::attachCompositorAnimationTimeline(CompositorAnimationTimeline* compositorTimeline, LocalFrame* localRoot)
 {
     // FIXME: For top-level frames we still use the WebView as a WebWidget. This
     // special case will be removed when top-level frames get WebFrameWidgets.
@@ -777,7 +787,7 @@ void ChromeClientImpl::attachCompositorAnimationTimeline(WebCompositorAnimationT
     }
 }
 
-void ChromeClientImpl::detachCompositorAnimationTimeline(WebCompositorAnimationTimeline* compositorTimeline, LocalFrame* localRoot)
+void ChromeClientImpl::detachCompositorAnimationTimeline(CompositorAnimationTimeline* compositorTimeline, LocalFrame* localRoot)
 {
     // FIXME: For top-level frames we still use the WebView as a WebWidget. This
     // special case will be removed when top-level frames get WebFrameWidgets.
@@ -849,17 +859,18 @@ DOMWindow* ChromeClientImpl::pagePopupWindowForTesting() const
 
 bool ChromeClientImpl::shouldOpenModalDialogDuringPageDismissal(const DialogType& dialogType, const String& dialogMessage, Document::PageDismissalType dismissalType) const
 {
-    const char* kDialogs[] = {"alert", "confirm", "prompt"};
+    const char* const kDialogs[] = { "alert", "confirm", "prompt" };
     int dialog = static_cast<int>(dialogType);
     ASSERT_WITH_SECURITY_IMPLICATION(0 <= dialog);
     ASSERT_WITH_SECURITY_IMPLICATION(dialog < static_cast<int>(WTF_ARRAY_LENGTH(kDialogs)));
 
-    const char* kDismissals[] = {"beforeunload", "pagehide", "unload"};
+    const char* const kDismissals[] = { "beforeunload", "pagehide", "unload" };
     int dismissal = static_cast<int>(dismissalType) - 1; // Exclude NoDismissal.
     ASSERT_WITH_SECURITY_IMPLICATION(0 <= dismissal);
     ASSERT_WITH_SECURITY_IMPLICATION(dismissal < static_cast<int>(WTF_ARRAY_LENGTH(kDismissals)));
 
-    Platform::current()->histogramEnumeration("Renderer.ModalDialogsDuringPageDismissal", dismissal * WTF_ARRAY_LENGTH(kDialogs) + dialog, WTF_ARRAY_LENGTH(kDialogs) * WTF_ARRAY_LENGTH(kDismissals));
+    DEFINE_STATIC_LOCAL(EnumerationHistogram, dialogDismissalHistogram, ("Renderer.ModalDialogsDuringPageDismissal", WTF_ARRAY_LENGTH(kDialogs) * WTF_ARRAY_LENGTH(kDismissals)));
+    dialogDismissalHistogram.count(dismissal * WTF_ARRAY_LENGTH(kDialogs) + dialog);
 
     String message = String("Blocked ") + kDialogs[dialog] + "('" + dialogMessage + "') during " + kDismissals[dismissal] + ".";
     m_webView->mainFrame()->addMessageToConsole(WebConsoleMessage(WebConsoleMessage::LevelError, message));
@@ -867,9 +878,33 @@ bool ChromeClientImpl::shouldOpenModalDialogDuringPageDismissal(const DialogType
     return false;
 }
 
-void ChromeClientImpl::needTouchEvents(bool needsTouchEvents)
+void ChromeClientImpl::setEventListenerProperties(WebEventListenerClass eventClass, WebEventListenerProperties properties)
 {
-    m_webView->hasTouchEventHandlers(needsTouchEvents);
+    if (eventClass == WebEventListenerClass::Touch)
+        m_webView->hasTouchEventHandlers(properties != WebEventListenerProperties::Nothing);
+
+    if (WebLayerTreeView* treeView = m_webView->layerTreeView())
+        treeView->setEventListenerProperties(eventClass, properties);
+}
+
+WebEventListenerProperties ChromeClientImpl::eventListenerProperties(WebEventListenerClass eventClass) const
+{
+    if (WebLayerTreeView* treeView = m_webView->layerTreeView())
+        return treeView->eventListenerProperties(eventClass);
+    return WebEventListenerProperties::Nothing;
+}
+
+void ChromeClientImpl::setHaveScrollEventHandlers(bool hasEventHandlers)
+{
+    if (WebLayerTreeView* treeView = m_webView->layerTreeView())
+        treeView->setHaveScrollEventHandlers(hasEventHandlers);
+}
+
+bool ChromeClientImpl::haveScrollEventHandlers() const
+{
+    if (WebLayerTreeView* treeView = m_webView->layerTreeView())
+        return treeView->haveScrollEventHandlers();
+    return false;
 }
 
 void ChromeClientImpl::setTouchAction(TouchAction touchAction)

@@ -68,7 +68,7 @@ PlatformChannelRecvmsg(PlatformHandle h,
                        void* buf,
                        size_t num_bytes,
                        std::deque<PlatformHandle>* platform_handles,
-                       bool should_block = false);
+                       bool block = false);
 
 }  // namespace edk
 }  // namespace mojo

@@ -416,10 +416,15 @@ NET_EXPORT scoped_ptr<base::DictionaryValue> GetNetInfo(
   if (info_sources & NET_INFO_SPDY_STATUS) {
     base::DictionaryValue* status_dict = new base::DictionaryValue();
 
-    status_dict->SetBoolean("spdy_enabled", HttpStreamFactory::spdy_enabled());
+    status_dict->SetBoolean("enable_spdy31",
+                            http_network_session->params().enable_spdy31 &&
+                                HttpStreamFactory::spdy_enabled());
+    status_dict->SetBoolean("enable_http2",
+                            http_network_session->params().enable_http2 &&
+                                HttpStreamFactory::spdy_enabled());
     status_dict->SetBoolean(
         "use_alternative_services",
-        http_network_session->params().use_alternative_services);
+        http_network_session->params().parse_alternative_services);
 
     NextProtoVector alpn_protos;
     http_network_session->GetAlpnProtos(&alpn_protos);
@@ -449,11 +454,11 @@ NET_EXPORT scoped_ptr<base::DictionaryValue> GetNetInfo(
                        status_dict);
   }
 
-  if (info_sources & NET_INFO_SPDY_ALT_SVC_MAPPINGS) {
+  if (info_sources & NET_INFO_ALT_SVC_MAPPINGS) {
     const HttpServerProperties& http_server_properties =
         *context->http_server_properties();
     net_info_dict->Set(
-        NetInfoSourceToString(NET_INFO_SPDY_ALT_SVC_MAPPINGS),
+        NetInfoSourceToString(NET_INFO_ALT_SVC_MAPPINGS),
         http_server_properties.GetAlternativeServiceInfoAsValue());
   }
 

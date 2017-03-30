@@ -13,7 +13,6 @@
 #include "net/udp/udp_server_socket.h"
 
 namespace net {
-namespace tools {
 
 QuicSimpleServerPacketWriter::QuicSimpleServerPacketWriter(
     UDPServerSocket* socket,
@@ -28,12 +27,14 @@ QuicSimpleServerPacketWriter::~QuicSimpleServerPacketWriter() {}
 WriteResult QuicSimpleServerPacketWriter::WritePacketWithCallback(
     const char* buffer,
     size_t buf_len,
-    const IPAddressNumber& self_address,
+    const IPAddress& self_address,
     const IPEndPoint& peer_address,
+    PerPacketOptions* options,
     WriteCallback callback) {
   DCHECK(callback_.is_null());
   callback_ = callback;
-  WriteResult result = WritePacket(buffer, buf_len, self_address, peer_address);
+  WriteResult result =
+      WritePacket(buffer, buf_len, self_address, peer_address, options);
   if (result.status != WRITE_STATUS_BLOCKED) {
     callback_.Reset();
   }
@@ -64,8 +65,9 @@ void QuicSimpleServerPacketWriter::SetWritable() {
 WriteResult QuicSimpleServerPacketWriter::WritePacket(
     const char* buffer,
     size_t buf_len,
-    const IPAddressNumber& self_address,
-    const IPEndPoint& peer_address) {
+    const IPAddress& self_address,
+    const IPEndPoint& peer_address,
+    PerPacketOptions* options) {
   scoped_refptr<StringIOBuffer> buf(
       new StringIOBuffer(std::string(buffer, buf_len)));
   DCHECK(!IsWriteBlocked());
@@ -97,5 +99,4 @@ QuicByteCount QuicSimpleServerPacketWriter::GetMaxPacketSize(
   return kMaxPacketSize;
 }
 
-}  // namespace tools
 }  // namespace net

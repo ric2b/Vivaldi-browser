@@ -60,7 +60,7 @@ SourceMapV3.Offset = function()
 }
 
 /**
- * Implements Source Map V3 model. See http://code.google.com/p/closure-compiler/wiki/SourceMaps
+ * Implements Source Map V3 model. See https://github.com/google/closure-compiler/wiki/Source-Maps
  * for format description.
  * @constructor
  * @param {string} compiledURL
@@ -114,7 +114,7 @@ WebInspector.SourceMap.load = function(sourceMapURL, compiledURL, callback)
             var baseURL = sourceMapURL.startsWith("data:") ? compiledURL : sourceMapURL;
             callback(new WebInspector.SourceMap(compiledURL, baseURL, payload));
         } catch(e) {
-            console.error(e.message);
+            console.error(e);
             WebInspector.console.error("Failed to parse SourceMap: " + sourceMapURL);
             callback(null);
         }
@@ -122,6 +122,14 @@ WebInspector.SourceMap.load = function(sourceMapURL, compiledURL, callback)
 }
 
 WebInspector.SourceMap.prototype = {
+    /**
+     * @return {string}
+     */
+    compiledURL: function()
+    {
+        return this._compiledURL;
+    },
+
     /**
      * @return {string}
      */
@@ -230,6 +238,14 @@ WebInspector.SourceMap.prototype = {
         {
             return lineNumber - mapping.sourceLineNumber;
         }
+    },
+
+    /**
+     * @return {!Array<!WebInspector.SourceMap.Entry>}
+     */
+    mappings: function()
+    {
+        return this._mappings;
     },
 
     /**

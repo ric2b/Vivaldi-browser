@@ -412,13 +412,13 @@ TEST_F(TaskQueueManagerTest, DenyRunning_BeforePosting) {
   Initialize(1u);
 
   std::vector<EnqueueOrder> run_order;
-  runners_[0]->SetQueuePriority(TaskQueue::DISABLED_PRIORITY);
+  runners_[0]->SetQueueEnabled(false);
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
 
   test_task_runner_->RunUntilIdle();
   EXPECT_TRUE(run_order.empty());
 
-  runners_[0]->SetQueuePriority(TaskQueue::NORMAL_PRIORITY);
+  runners_[0]->SetQueueEnabled(true);
   test_task_runner_->RunUntilIdle();
   EXPECT_THAT(run_order, ElementsAre(1));
 }
@@ -428,12 +428,12 @@ TEST_F(TaskQueueManagerTest, DenyRunning_AfterPosting) {
 
   std::vector<EnqueueOrder> run_order;
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
-  runners_[0]->SetQueuePriority(TaskQueue::DISABLED_PRIORITY);
+  runners_[0]->SetQueueEnabled(false);
 
   test_task_runner_->RunUntilIdle();
   EXPECT_TRUE(run_order.empty());
 
-  runners_[0]->SetQueuePriority(TaskQueue::NORMAL_PRIORITY);
+  runners_[0]->SetQueueEnabled(true);
   test_task_runner_->RunUntilIdle();
   EXPECT_THAT(run_order, ElementsAre(1));
 }
@@ -443,14 +443,14 @@ TEST_F(TaskQueueManagerTest, DenyRunning_ManuallyPumpedTransitionsToAuto) {
 
   std::vector<EnqueueOrder> run_order;
   runners_[0]->SetPumpPolicy(TaskQueue::PumpPolicy::MANUAL);
-  runners_[0]->SetQueuePriority(TaskQueue::DISABLED_PRIORITY);
+  runners_[0]->SetQueueEnabled(false);
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
 
   test_task_runner_->RunUntilIdle();
   EXPECT_TRUE(run_order.empty());
 
   runners_[0]->SetPumpPolicy(TaskQueue::PumpPolicy::AUTO);
-  runners_[0]->SetQueuePriority(TaskQueue::NORMAL_PRIORITY);
+  runners_[0]->SetQueueEnabled(true);
   test_task_runner_->RunUntilIdle();
   EXPECT_THAT(run_order, ElementsAre(1));
 }
@@ -1316,6 +1316,26 @@ TEST_F(TaskQueueManagerTest, UnregisterTaskQueue_WithDelayedTasks) {
   ASSERT_THAT(run_order, ElementsAre(1, 3));
 }
 
+namespace {
+void UnregisterQueue(scoped_refptr<internal::TaskQueueImpl> queue) {
+  queue->UnregisterTaskQueue();
+}
+}
+
+TEST_F(TaskQueueManagerTest, UnregisterTaskQueue_InTasks) {
+  Initialize(3u);
+
+  std::vector<EnqueueOrder> run_order;
+  runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
+  runners_[0]->PostTask(FROM_HERE, base::Bind(&UnregisterQueue, runners_[1]));
+  runners_[0]->PostTask(FROM_HERE, base::Bind(&UnregisterQueue, runners_[2]));
+  runners_[1]->PostTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order));
+  runners_[2]->PostTask(FROM_HERE, base::Bind(&TestTask, 3, &run_order));
+
+  test_task_runner_->RunUntilIdle();
+  ASSERT_THAT(run_order, ElementsAre(1));
+}
+
 void PostTestTasksFromNestedMessageLoop(
     base::MessageLoop* message_loop,
     scoped_refptr<base::SingleThreadTaskRunner> main_runner,
@@ -1350,7 +1370,9 @@ namespace {
 class MockObserver : public TaskQueueManager::Observer {
  public:
   MOCK_METHOD1(OnUnregisterTaskQueue,
-               void(const scoped_refptr<internal::TaskQueueImpl>& queue));
+               void(const scoped_refptr<TaskQueue>& queue));
+  MOCK_METHOD2(OnTriedToExecuteBlockedTask,
+               void(const TaskQueue& queue, const base::PendingTask& task));
 };
 
 }  // namespace
@@ -1366,6 +1388,39 @@ TEST_F(TaskQueueManagerTest, OnUnregisterTaskQueue) {
 
   EXPECT_CALL(observer, OnUnregisterTaskQueue(_)).Times(1);
   task_queue->UnregisterTaskQueue();
+
+  manager_->SetObserver(nullptr);
+}
+
+TEST_F(TaskQueueManagerTest, OnTriedToExecuteBlockedTask) {
+  Initialize(0u);
+
+  MockObserver observer;
+  manager_->SetObserver(&observer);
+
+  scoped_refptr<internal::TaskQueueImpl> task_queue = manager_->NewTaskQueue(
+      TaskQueue::Spec("test_queue").SetShouldReportWhenExecutionBlocked(true));
+  task_queue->SetQueueEnabled(false);
+  task_queue->PostTask(FROM_HERE, base::Bind(&NopTask));
+
+  EXPECT_CALL(observer, OnTriedToExecuteBlockedTask(_, _)).Times(1);
+  test_task_runner_->RunPendingTasks();
+
+  manager_->SetObserver(nullptr);
+}
+
+TEST_F(TaskQueueManagerTest, ExecutedNonBlockedTask) {
+  Initialize(0u);
+
+  MockObserver observer;
+  manager_->SetObserver(&observer);
+
+  scoped_refptr<internal::TaskQueueImpl> task_queue = manager_->NewTaskQueue(
+      TaskQueue::Spec("test_queue").SetShouldReportWhenExecutionBlocked(true));
+  task_queue->PostTask(FROM_HERE, base::Bind(&NopTask));
+
+  EXPECT_CALL(observer, OnTriedToExecuteBlockedTask(_, _)).Times(0);
+  test_task_runner_->RunPendingTasks();
 
   manager_->SetObserver(nullptr);
 }
@@ -1456,6 +1511,9 @@ TEST_F(TaskQueueManagerTest, TimeDomainsAreIndependant) {
   test_task_runner_->RunUntilIdle();
   EXPECT_THAT(run_order, ElementsAre(4, 5, 6, 1, 2, 3));
 
+  runners_[0]->UnregisterTaskQueue();
+  runners_[1]->UnregisterTaskQueue();
+
   manager_->UnregisterTimeDomain(domain_a.get());
   manager_->UnregisterTimeDomain(domain_b.get());
 }
@@ -1494,6 +1552,8 @@ TEST_F(TaskQueueManagerTest, TimeDomainMigration) {
 
   test_task_runner_->RunUntilIdle();
   EXPECT_THAT(run_order, ElementsAre(1, 2, 3, 4));
+
+  runners_[0]->UnregisterTaskQueue();
 
   manager_->UnregisterTimeDomain(domain_a.get());
   manager_->UnregisterTimeDomain(domain_b.get());
@@ -1703,6 +1763,83 @@ TEST_F(TaskQueueManagerTest,
   // where by delayed tasks can not skip ahead of non-delayed work.
   EXPECT_GT(ratio, 0.0);
   EXPECT_LT(ratio, 0.1);
+}
+
+TEST_F(TaskQueueManagerTest, CurrentlyExecutingTaskQueue_NoTaskRunning) {
+  Initialize(1u);
+
+  EXPECT_EQ(nullptr, manager_->currently_executing_task_queue());
+}
+
+namespace {
+void CurrentlyExecutingTaskQueueTestTask(TaskQueueManager* task_queue_manager,
+                                      std::vector<TaskQueue*>* task_sources) {
+  task_sources->push_back(task_queue_manager->currently_executing_task_queue());
+}
+}
+
+TEST_F(TaskQueueManagerTest, CurrentlyExecutingTaskQueue_TaskRunning) {
+  Initialize(2u);
+
+  internal::TaskQueueImpl* queue0 = runners_[0].get();
+  internal::TaskQueueImpl* queue1 = runners_[1].get();
+
+  std::vector<TaskQueue*> task_sources;
+  queue0->PostTask(FROM_HERE, base::Bind(&CurrentlyExecutingTaskQueueTestTask,
+                                         manager_.get(), &task_sources));
+  queue1->PostTask(FROM_HERE, base::Bind(&CurrentlyExecutingTaskQueueTestTask,
+                                         manager_.get(), &task_sources));
+  test_task_runner_->RunUntilIdle();
+
+  EXPECT_THAT(task_sources, ElementsAre(queue0, queue1));
+  EXPECT_EQ(nullptr, manager_->currently_executing_task_queue());
+}
+
+namespace {
+void RunloopCurrentlyExecutingTaskQueueTestTask(
+    base::MessageLoop* message_loop,
+    TaskQueueManager* task_queue_manager,
+    std::vector<TaskQueue*>* task_sources,
+    std::vector<std::pair<base::Closure, TaskQueue*>>* tasks) {
+  base::MessageLoop::ScopedNestableTaskAllower allow(message_loop);
+  task_sources->push_back(task_queue_manager->currently_executing_task_queue());
+
+  for (std::pair<base::Closure, TaskQueue*>& pair : *tasks) {
+    pair.second->PostTask(FROM_HERE, pair.first);
+  }
+
+  message_loop->RunUntilIdle();
+  task_sources->push_back(task_queue_manager->currently_executing_task_queue());
+}
+}
+
+TEST_F(TaskQueueManagerTest, CurrentlyExecutingTaskQueue_NestedLoop) {
+  InitializeWithRealMessageLoop(3u);
+
+  TaskQueue* queue0 = runners_[0].get();
+  TaskQueue* queue1 = runners_[1].get();
+  TaskQueue* queue2 = runners_[2].get();
+
+  std::vector<TaskQueue*> task_sources;
+  std::vector<std::pair<base::Closure, TaskQueue*>>
+      tasks_to_post_from_nested_loop;
+  tasks_to_post_from_nested_loop.push_back(
+      std::make_pair(base::Bind(&CurrentlyExecutingTaskQueueTestTask,
+                                manager_.get(), &task_sources),
+                     queue1));
+  tasks_to_post_from_nested_loop.push_back(
+      std::make_pair(base::Bind(&CurrentlyExecutingTaskQueueTestTask,
+                                manager_.get(), &task_sources),
+                     queue2));
+
+  queue0->PostTask(
+      FROM_HERE, base::Bind(&RunloopCurrentlyExecutingTaskQueueTestTask,
+                            message_loop_.get(), manager_.get(), &task_sources,
+                            &tasks_to_post_from_nested_loop));
+
+  message_loop_->RunUntilIdle();
+  EXPECT_THAT(task_sources, ElementsAre(queue0, queue1, queue2, queue0));
+  EXPECT_EQ(nullptr, manager_->currently_executing_task_queue());
 }
 
 }  // namespace scheduler

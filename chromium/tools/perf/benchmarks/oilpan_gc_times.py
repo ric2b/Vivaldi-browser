@@ -27,7 +27,7 @@ class OilpanGCTimesBlinkPerfStress(perf_benchmark.PerfBenchmark):
     return blink_perf.CreateStorySetFromPath(path, blink_perf.SKIPPED_FILE)
 
 
-@benchmark.Disabled('xp')  # crbug.com/527427
+@benchmark.Disabled('android')  # crbug.com/589567
 class OilpanGCTimesSmoothnessAnimation(perf_benchmark.PerfBenchmark):
   test = oilpan_gc_times.OilpanGCTimesForSmoothness
   page_set = page_sets.ToughAnimationCasesPageSet
@@ -52,9 +52,10 @@ class OilpanGCTimesSyncScrollKeyMobileSites(perf_benchmark.PerfBenchmark):
   tag = 'sync_scroll'
   test = oilpan_gc_times.OilpanGCTimesForSmoothness
   page_set = page_sets.KeyMobileSitesSmoothPageSet
+
   def SetExtraBrowserOptions(self, options):
     silk_flags.CustomizeBrowserOptionsForSyncScrolling(options)
+
   @classmethod
   def Name(cls):
     return 'oilpan_gc_times.sync_scroll.key_mobile_sites_smooth'
-

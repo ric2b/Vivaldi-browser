@@ -10,8 +10,6 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -29,6 +27,8 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/version_info/version_info.h"
@@ -50,7 +50,7 @@ using content::MessageLoopRunner;
 
 namespace {
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 void OnProfileDownloadedFail(const base::string16& full_name) {
   ASSERT_TRUE(false) << "Profile download should not have succeeded.";
 }
@@ -209,7 +209,7 @@ TEST_F(SupervisedUserServiceTest, ChangesIncludedSessionOnChangedSettings) {
   EXPECT_FALSE(supervised_user_service_->IncludesSyncSessionsType());
 }
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 // Ensure that the CustodianProfileDownloaderService shuts down cleanly. If no
 // DCHECK is hit when the service is destroyed, this test passed.
 TEST_F(SupervisedUserServiceTest, ShutDownCustodianProfileDownloader) {

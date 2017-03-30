@@ -34,8 +34,6 @@ component("crypto") {
     "encryptor.h",
     "encryptor_nss.cc",
     "encryptor_openssl.cc",
-    "ghash.cc",
-    "ghash.h",
     "hkdf.cc",
     "hkdf.h",
     "hmac.cc",
@@ -228,15 +226,6 @@ if (false && is_win) {
   }
 }
 
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("crypto_unittests_run") {
-  testonly = true
-  deps = [
-    ":crypto_unittests",
-  ]
-}
-
 test("crypto_unittests") {
   sources = [
     "aead_openssl_unittest.cc",
@@ -244,7 +233,6 @@ test("crypto_unittests") {
     "ec_private_key_unittest.cc",
     "ec_signature_creator_unittest.cc",
     "encryptor_unittest.cc",
-    "ghash_unittest.cc",
     "hkdf_unittest.cc",
     "hmac_unittest.cc",
     "nss_key_util_unittest.cc",

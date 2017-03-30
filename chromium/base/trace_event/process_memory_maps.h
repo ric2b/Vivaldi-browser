@@ -25,8 +25,10 @@ class BASE_EXPORT ProcessMemoryMaps {
     static const uint32_t kProtectionFlagsRead;
     static const uint32_t kProtectionFlagsWrite;
     static const uint32_t kProtectionFlagsExec;
+    static const uint32_t kProtectionFlagsMayshare;
 
     VMRegion();
+    VMRegion(const VMRegion& other);
 
     uint64_t start_address;
     uint64_t size_in_bytes;

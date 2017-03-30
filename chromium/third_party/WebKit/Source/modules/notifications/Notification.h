@@ -35,6 +35,7 @@
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/SerializedScriptValue.h"
 #include "core/dom/ActiveDOMObject.h"
+#include "core/dom/DOMTimeStamp.h"
 #include "modules/EventTargetModules.h"
 #include "modules/ModulesExport.h"
 #include "modules/vibration/NavigatorVibration.h"
@@ -65,8 +66,9 @@ public:
     // the notification to be displayed to the user when the developer-provided data is valid.
     static Notification* create(ExecutionContext*, const String& title, const NotificationOptions&, ExceptionState&);
 
-    // Used for embedder-created Notification objects. Will initialize the Notification's state as showing.
-    static Notification* create(ExecutionContext*, int64_t persistentId, const WebNotificationData&);
+    // Used for embedder-created Notification objects. If |showing| is true, will initialize the
+    // Notification's state as showing, or as closed otherwise.
+    static Notification* create(ExecutionContext*, int64_t persistentId, const WebNotificationData&, bool showing);
 
     ~Notification() override;
 
@@ -90,6 +92,8 @@ public:
     String tag() const;
     String icon() const;
     NavigatorVibration::VibrationPattern vibrate(bool& isNull) const;
+    DOMTimeStamp timestamp() const;
+    bool renotify() const;
     bool silent() const;
     bool requireInteraction() const;
     ScriptValue data(ScriptState*);
@@ -114,7 +118,7 @@ public:
 
 protected:
     // EventTarget interface.
-    bool dispatchEventInternal(PassRefPtrWillBeRawPtr<Event>) final;
+    DispatchEventResult dispatchEventInternal(PassRefPtrWillBeRawPtr<Event>) final;
 
 private:
     Notification(ExecutionContext*, const WebNotificationData&);

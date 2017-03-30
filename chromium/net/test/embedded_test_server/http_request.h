@@ -32,6 +32,7 @@ enum HttpMethod {
   METHOD_DELETE,
   METHOD_PATCH,
   METHOD_CONNECT,
+  METHOD_OPTIONS,
 };
 
 // Represents a HTTP request. Since it can be big, use scoped_ptr to pass it
@@ -48,6 +49,7 @@ struct HttpRequest {
       std::map<std::string, std::string, CaseInsensitiveStringComparator>;
 
   HttpRequest();
+  HttpRequest(const HttpRequest& other);
   ~HttpRequest();
 
   // Returns a GURL as a convenience to extract the path and query strings.

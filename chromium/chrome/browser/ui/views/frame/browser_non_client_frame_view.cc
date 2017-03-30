@@ -9,7 +9,6 @@
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
-#include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/themes/theme_properties.h"
@@ -17,9 +16,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/taskbar_decorator.h"
 #include "chrome/browser/ui/views/profiles/avatar_menu_button.h"
-#include "chrome/browser/ui/views/profiles/new_avatar_button.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
-#include "chrome/browser/ui/views/theme_image_mapper.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "grit/theme_resources.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -30,35 +27,22 @@
 #include "ui/views/background.h"
 #include "ui/views/resources/grit/views_resources.h"
 
-#if defined(ENABLE_SUPERVISED_USERS)
-#include "chrome/browser/ui/views/profiles/supervised_user_avatar_label.h"
-#endif
-
 BrowserNonClientFrameView::BrowserNonClientFrameView(BrowserFrame* frame,
                                                      BrowserView* browser_view)
     : frame_(frame),
-      browser_view_(browser_view),
-#if defined(ENABLE_SUPERVISED_USERS)
-      supervised_user_avatar_label_(nullptr),
-#endif
-#if defined(FRAME_AVATAR_BUTTON)
-      new_avatar_button_(nullptr),
-#endif
-      avatar_button_(nullptr) {
+      browser_view_(browser_view) {
   // The profile manager may by null in tests.
   if (g_browser_process->profile_manager()) {
-    ProfileInfoCache& cache =
-        g_browser_process->profile_manager()->GetProfileInfoCache();
-    cache.AddObserver(this);
+    g_browser_process->profile_manager()->
+        GetProfileAttributesStorage().AddObserver(this);
   }
 }
 
 BrowserNonClientFrameView::~BrowserNonClientFrameView() {
   // The profile manager may by null in tests.
   if (g_browser_process->profile_manager()) {
-    ProfileInfoCache& cache =
-        g_browser_process->profile_manager()->GetProfileInfoCache();
-    cache.RemoveObserver(this);
+    g_browser_process->profile_manager()->
+        GetProfileAttributesStorage().RemoveObserver(this);
   }
 }
 
@@ -68,6 +52,10 @@ void BrowserNonClientFrameView::UpdateToolbar() {
 }
 
 views::View* BrowserNonClientFrameView::GetLocationIconView() const {
+  return nullptr;
+}
+
+views::View* BrowserNonClientFrameView::GetProfileSwitcherView() const {
   return nullptr;
 }
 
@@ -98,28 +86,11 @@ void BrowserNonClientFrameView::VisibilityChanged(views::View* starting_from,
 #endif
 }
 
-void BrowserNonClientFrameView::ChildPreferredSizeChanged(View* child) {
-#if defined(FRAME_AVATAR_BUTTON)
-  // Only perform a re-layout if the avatar button has changed, since that
-  // can affect the size of the tabs.
-  if (child == new_avatar_button_) {
-    InvalidateLayout();
-    frame_->GetRootView()->Layout();
-  }
-#endif
-}
-
-#if defined(ENABLE_SUPERVISED_USERS)
-void BrowserNonClientFrameView::OnThemeChanged() {
-  if (supervised_user_avatar_label_)
-    supervised_user_avatar_label_->UpdateLabelStyle();
-}
-#endif
-
 bool BrowserNonClientFrameView::ShouldPaintAsThemed() const {
   return browser_view_->IsBrowserTypeNormal();
 }
 
+#if !defined(OS_CHROMEOS)
 SkColor BrowserNonClientFrameView::GetFrameColor() const {
   ThemeProperties::OverwritableByUserThemeProperty color_id =
       ShouldPaintAsActive() ? ThemeProperties::COLOR_FRAME
@@ -157,10 +128,7 @@ gfx::ImageSkia* BrowserNonClientFrameView::GetFrameImage() const {
 
   // Otherwise, never theme app and popup windows.
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  return rb.GetImageSkiaNamed(
-      chrome::MapThemeImage(chrome::GetHostDesktopTypeForNativeWindow(
-                                browser_view_->GetNativeWindow()),
-                            resource_id));
+  return rb.GetImageSkiaNamed(resource_id);
 }
 
 gfx::ImageSkia* BrowserNonClientFrameView::GetFrameOverlayImage() const {
@@ -173,39 +141,11 @@ gfx::ImageSkia* BrowserNonClientFrameView::GetFrameOverlayImage() const {
   }
   return nullptr;
 }
-
-int BrowserNonClientFrameView::GetTopAreaHeight() const {
-  gfx::ImageSkia* frame_image = GetFrameImage();
-  int top_area_height = frame_image->height();
-  if (browser_view_->IsTabStripVisible()) {
-    top_area_height = std::max(top_area_height,
-      GetBoundsForTabStrip(browser_view_->tabstrip()).bottom());
-  }
-  return top_area_height;
-}
-
-void BrowserNonClientFrameView::UpdateAvatar() {
-#if !defined(OS_CHROMEOS)
-  if (browser_view()->IsRegularOrGuestSession())
-    UpdateNewAvatarButtonImpl();
-  else
-#endif
-    UpdateOldAvatarButton();
-}
+#endif  // !defined(OS_CHROMEOS)
 
 void BrowserNonClientFrameView::UpdateOldAvatarButton() {
   if (browser_view_->ShouldShowAvatar()) {
     if (!avatar_button_) {
-#if defined(ENABLE_SUPERVISED_USERS)
-      Profile* profile = browser_view_->browser()->profile();
-      if (profile->IsSupervised() && !supervised_user_avatar_label_) {
-        supervised_user_avatar_label_ =
-            new SupervisedUserAvatarLabel(browser_view_);
-        supervised_user_avatar_label_->set_id(
-            VIEW_ID_SUPERVISED_USER_AVATAR_LABEL);
-        AddChildView(supervised_user_avatar_label_);
-      }
-#endif
       avatar_button_ = new AvatarMenuButton(browser_view_);
       avatar_button_->set_id(VIEW_ID_AVATAR_BUTTON);
       AddChildView(avatar_button_);
@@ -214,14 +154,6 @@ void BrowserNonClientFrameView::UpdateOldAvatarButton() {
       frame_->GetRootView()->Layout();
     }
   } else if (avatar_button_) {
-#if defined(ENABLE_SUPERVISED_USERS)
-    // The avatar label can just be there if there is also an avatar button.
-    if (supervised_user_avatar_label_) {
-      RemoveChildView(supervised_user_avatar_label_);
-      delete supervised_user_avatar_label_;
-      supervised_user_avatar_label_ = nullptr;
-    }
-#endif
     RemoveChildView(avatar_button_);
     delete avatar_button_;
     avatar_button_ = nullptr;
@@ -248,29 +180,6 @@ void BrowserNonClientFrameView::UpdateOldAvatarButton() {
   if (avatar_button_)
     avatar_button_->SetAvatarIcon(avatar, is_rectangle);
 }
-
-#if defined(FRAME_AVATAR_BUTTON)
-void BrowserNonClientFrameView::UpdateNewAvatarButton(
-    views::ButtonListener* listener,
-    const NewAvatarButton::AvatarButtonStyle style) {
-  // This should never be called in incognito mode.
-  DCHECK(browser_view_->IsRegularOrGuestSession());
-
-  if (browser_view_->ShouldShowAvatar()) {
-    if (!new_avatar_button_) {
-      new_avatar_button_ =
-          new NewAvatarButton(listener, style, browser_view_->browser());
-      new_avatar_button_->set_id(VIEW_ID_NEW_AVATAR_BUTTON);
-      AddChildView(new_avatar_button_);
-      frame_->GetRootView()->Layout();
-    }
-  } else if (new_avatar_button_) {
-    delete new_avatar_button_;
-    new_avatar_button_ = nullptr;
-    frame_->GetRootView()->Layout();
-  }
-}
-#endif
 
 void BrowserNonClientFrameView::OnProfileAdded(
     const base::FilePath& profile_path) {
@@ -320,9 +229,9 @@ void BrowserNonClientFrameView::UpdateTaskbarDecoration() {
     // In tests, make sure that the browser process and profile manager are
     // valid before using.
     if (g_browser_process && g_browser_process->profile_manager()) {
-      const ProfileInfoCache& cache =
-          g_browser_process->profile_manager()->GetProfileInfoCache();
-      show_decoration = show_decoration && cache.GetNumberOfProfiles() > 1;
+      const ProfileAttributesStorage& storage =
+          g_browser_process->profile_manager()->GetProfileAttributesStorage();
+      show_decoration = show_decoration && storage.GetNumberOfProfiles() > 1;
     }
     chrome::DrawTaskbarDecoration(frame_->GetNativeWindow(),
         show_decoration

@@ -12,9 +12,9 @@
 #include "components/printing/common/print_messages.h"
 #include "printing/metafile_skia_wrapper.h"
 #include "printing/page_size_margins.h"
-#include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/platform/WebCanvas.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/skia/include/core/SkCanvas.h"
 
 namespace printing {
 
@@ -42,8 +42,7 @@ void PrintWebViewHelper::PrintPageInternal(
     const PrintMsg_PrintPage_Params& params,
     blink::WebFrame* frame) {
   PdfMetafileSkia metafile;
-  if (!metafile.Init())
-    return;
+  CHECK(metafile.Init());
 
   int page_number = params.page_number;
   gfx::Size page_size_in_dpi;
@@ -82,12 +81,7 @@ bool PrintWebViewHelper::RenderPreviewPage(
 
   if (render_to_draft) {
     draft_metafile.reset(new PdfMetafileSkia());
-    if (!draft_metafile->Init()) {
-      print_preview_context_.set_error(
-          PREVIEW_ERROR_MAC_DRAFT_METAFILE_INIT_FAILED);
-      LOG(ERROR) << "Draft PdfMetafileSkia Init failed";
-      return false;
-    }
+    CHECK(draft_metafile->Init());
     initial_render_metafile = draft_metafile.get();
   }
 
@@ -138,7 +132,7 @@ void PrintWebViewHelper::RenderPage(const PrintMsg_Print_Params& params,
       params.display_header_footer ? gfx::Rect(*page_size) : content_area;
 
   {
-    skia::PlatformCanvas* canvas = metafile->GetVectorCanvasForNewPage(
+    SkCanvas* canvas = metafile->GetVectorCanvasForNewPage(
         *page_size, canvas_area, scale_factor);
     if (!canvas)
       return;

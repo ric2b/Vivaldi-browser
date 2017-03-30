@@ -7,12 +7,13 @@
 
 #include <stdint.h>
 
+#include "ash/display/display_layout.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
 class PrefRegistrySimple;
 
 namespace ash {
-struct DisplayLayout;
+class DisplayLayout;
 }
 
 namespace gfx {
@@ -34,17 +35,13 @@ void StoreDisplayPrefs();
 // current rotation of the internal display. Otherwise no data is stored.
 void StoreDisplayRotationPrefs(bool rotation_lock);
 
-// Sets the display layout for the current displays.
-void SetCurrentDisplayLayout(const ash::DisplayLayout& layout);
-
 // Load display preferences from Local Store. |first_run_after_boot| is used
 // determine if a certain preference should be applied at boot time or
 // restart.
 void LoadDisplayPreferences(bool first_run_after_boot);
 
 // Stores the display layout for given display pairs for tests.
-void StoreDisplayLayoutPrefForTest(int64_t id1,
-                                   int64_t id2,
+void StoreDisplayLayoutPrefForTest(const ash::DisplayIdList& list,
                                    const ash::DisplayLayout& layout);
 
 // Stores the given |power_state| for tests.

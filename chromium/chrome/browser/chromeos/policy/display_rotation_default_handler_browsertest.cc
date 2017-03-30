@@ -13,7 +13,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/policy/device_policy_builder.h"
 #include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
 #include "chrome/browser/chromeos/policy/display_rotation_default_handler.h"
@@ -56,10 +56,10 @@ gfx::Display::Rotation GetRotationOfSecondDisplay() {
         << "Requested rotation of second display while there was only one.";
     return gfx::Display::ROTATE_0;
   }
-  const ash::DisplayIdPair display_id_pair =
-      display_manager->GetCurrentDisplayIdPair();
+  const ash::DisplayIdList display_id_pair =
+      display_manager->GetCurrentDisplayIdList();
   const gfx::Display& second_display =
-      display_manager->GetDisplayForId(display_id_pair.second);
+      display_manager->GetDisplayForId(display_id_pair[1]);
   return second_display.rotation();
 }
 
@@ -86,7 +86,7 @@ class DisplayRotationDefaultTest
 
   void TearDownOnMainThread() override {
     // If the login display is still showing, exit gracefully.
-    if (chromeos::LoginDisplayHostImpl::default_host()) {
+    if (chromeos::LoginDisplayHost::default_host()) {
       base::MessageLoop::current()->PostTask(FROM_HERE,
                                              base::Bind(&chrome::AttemptExit));
       content::RunMessageLoop();

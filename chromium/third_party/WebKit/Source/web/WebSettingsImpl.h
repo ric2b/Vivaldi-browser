@@ -58,6 +58,7 @@ public:
     void setAllowDisplayOfInsecureContent(bool) override;
     void setAllowFileAccessFromFileURLs(bool) override;
     void setAllowCustomScrollbarInMainFrame(bool) override;
+    void setAllowGeolocationOnInsecureOrigins(bool) override;
     void setAllowRunningOfInsecureContent(bool) override;
     void setAllowScriptsToCloseWindows(bool) override;
     void setAllowUniversalAccessFromFileURLs(bool) override;
@@ -114,6 +115,7 @@ public:
     void setMaxTouchPoints(int) override;
     void setMediaControlsOverlayPlayButtonEnabled(bool) override;
     void setMediaPlaybackRequiresUserGesture(bool) override;
+    void setPresentationRequiresUserGesture(bool) override;
     void setMinimumAccelerated2dCanvasSize(int) override;
     void setMinimumFontSize(int) override;
     void setMinimumLogicalFontSize(int) override;
@@ -186,7 +188,6 @@ public:
     void setViewportMetaMergeContentQuirk(bool) override;
     void setViewportMetaNonUserScalableQuirk(bool) override;
     void setViewportMetaZeroValuesQuirk(bool) override;
-    void setWebAudioEnabled(bool) override;
     void setWebGLErrorsToConsoleEnabled(bool) override;
     void setWebSecurityEnabled(bool) override;
     void setWideViewportQuirkEnabled(bool) override;
@@ -229,7 +230,6 @@ private:
     // the Android SDK prior to and including version 18. Presumably, this
     // can be removed any time after 2015. See http://crbug.com/313754.
     bool m_clobberUserAgentInitialScaleQuirk;
-    bool m_mainFrameResizesAreOrientationChanges;
 };
 
 } // namespace blink

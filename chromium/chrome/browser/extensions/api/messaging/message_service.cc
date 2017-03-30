@@ -15,7 +15,6 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/api/messaging/extension_message_port.h"
@@ -28,6 +27,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "components/guest_view/common/guest_view_constants.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -330,7 +330,9 @@ void MessageService::OpenChannelToExtension(
     // Only the tab id is useful to platform apps for internal use. The
     // unnecessary bits will be stripped out in
     // MessagingBindings::DispatchOnConnect().
-    source_tab.reset(ExtensionTabUtil::CreateTabValue(source_contents));
+    source_tab.reset(ExtensionTabUtil::CreateTabObject(source_contents)
+                         ->ToValue()
+                         .release());
 
     content::RenderFrameHost* rfh =
         content::RenderFrameHost::FromID(source_process_id, source_routing_id);

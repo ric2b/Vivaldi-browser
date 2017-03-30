@@ -30,69 +30,16 @@ bool BackgroundSyncRegistration::IsValid() const {
   return id_ != kInvalidRegistrationId;
 }
 
-void BackgroundSyncRegistration::AddFinishedCallback(
-    const StateCallback& callback) {
-  DCHECK(!HasCompleted());
-  notify_finished_callbacks_.push_back(callback);
-}
-
-void BackgroundSyncRegistration::RunFinishedCallbacks() {
-  DCHECK(HasCompleted());
-
-  for (auto& callback : notify_finished_callbacks_) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback, sync_state_));
-  }
-
-  notify_finished_callbacks_.clear();
-}
-
-bool BackgroundSyncRegistration::HasCompleted() const {
-  switch (sync_state_) {
-    case BACKGROUND_SYNC_STATE_PENDING:
-    case BACKGROUND_SYNC_STATE_FIRING:
-    case BACKGROUND_SYNC_STATE_REREGISTERED_WHILE_FIRING:
-    case BACKGROUND_SYNC_STATE_UNREGISTERED_WHILE_FIRING:
-      return false;
-    case BACKGROUND_SYNC_STATE_FAILED:
-    case BACKGROUND_SYNC_STATE_SUCCESS:
-    case BACKGROUND_SYNC_STATE_UNREGISTERED:
-      return true;
-  }
-  NOTREACHED();
-  return false;
-}
-
 bool BackgroundSyncRegistration::IsFiring() const {
   switch (sync_state_) {
-    case BACKGROUND_SYNC_STATE_FIRING:
-    case BACKGROUND_SYNC_STATE_REREGISTERED_WHILE_FIRING:
-    case BACKGROUND_SYNC_STATE_UNREGISTERED_WHILE_FIRING:
+    case BackgroundSyncState::FIRING:
+    case BackgroundSyncState::REREGISTERED_WHILE_FIRING:
       return true;
-    case BACKGROUND_SYNC_STATE_PENDING:
-    case BACKGROUND_SYNC_STATE_FAILED:
-    case BACKGROUND_SYNC_STATE_SUCCESS:
-    case BACKGROUND_SYNC_STATE_UNREGISTERED:
+    case BackgroundSyncState::PENDING:
       return false;
   }
   NOTREACHED();
   return false;
-}
-
-void BackgroundSyncRegistration::SetUnregisteredState() {
-  DCHECK(!HasCompleted());
-
-  bool is_firing = IsFiring();
-
-  sync_state_ = is_firing ? BACKGROUND_SYNC_STATE_UNREGISTERED_WHILE_FIRING
-                          : BACKGROUND_SYNC_STATE_UNREGISTERED;
-
-  if (!is_firing) {
-    // If the registration is currently firing then wait to run
-    // RunFinishedCallbacks until after it has finished as it might
-    // change state to SUCCESS first.
-    RunFinishedCallbacks();
-  }
 }
 
 }  // namespace content

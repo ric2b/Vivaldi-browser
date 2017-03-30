@@ -53,6 +53,7 @@
 #include "content/common/child_process_messages.h"
 #include "content/common/in_process_child_thread_params.h"
 #include "content/common/mojo/mojo_messages.h"
+#include "content/common/mojo/mojo_shell_connection_impl.h"
 #include "content/public/common/content_switches.h"
 #include "ipc/attachment_broker.h"
 #include "ipc/attachment_broker_unprivileged.h"
@@ -62,18 +63,10 @@
 #include "ipc/ipc_sync_channel.h"
 #include "ipc/ipc_sync_message_filter.h"
 #include "ipc/mojo/ipc_channel_mojo.h"
-#include "third_party/mojo/src/mojo/edk/embedder/embedder.h"
-
-#if defined(TCMALLOC_TRACE_MEMORY_SUPPORTED)
-#include "third_party/tcmalloc/chromium/src/gperftools/heap-profiler.h"
-#endif
+#include "mojo/edk/embedder/embedder.h"
 
 #if defined(USE_OZONE)
 #include "ui/ozone/public/client_native_pixmap_factory.h"
-#endif
-
-#if defined(MOJO_SHELL_CLIENT)
-#include "content/common/mojo/mojo_shell_connection_impl.h"
 #endif
 
 using tracked_objects::ThreadData;
@@ -264,6 +257,8 @@ ChildThreadImpl::Options::Options()
       use_mojo_channel(false) {
 }
 
+ChildThreadImpl::Options::Options(const Options& other) = default;
+
 ChildThreadImpl::Options::~Options() {
 }
 
@@ -312,7 +307,7 @@ bool ChildThreadImpl::ChildThreadMessageRouter::Send(IPC::Message* msg) {
 
 bool ChildThreadImpl::ChildThreadMessageRouter::RouteMessage(
     const IPC::Message& msg) {
-  bool handled = MessageRouter::RouteMessage(msg);
+  bool handled = IPC::MessageRouter::RouteMessage(msg);
 #if defined(OS_ANDROID)
   if (!handled && msg.is_sync()) {
     IPC::Message* reply = IPC::SyncMessage::GenerateReply(&msg);
@@ -371,14 +366,7 @@ void ChildThreadImpl::Init(const Options& options) {
   IPC::Logging::GetInstance();
 #endif
 
-#if USE_ATTACHMENT_BROKER
-  // The only reason a global would already exist is if the thread is being run
-  // in the browser process because of a command line switch.
-  if (!IPC::AttachmentBroker::GetGlobal()) {
-    attachment_broker_.reset(
-        IPC::AttachmentBrokerUnprivileged::CreateBroker().release());
-  }
-#endif
+  IPC::AttachmentBrokerUnprivileged::CreateBrokerIfNeeded();
 
   channel_ =
       IPC::SyncChannel::Create(this, ChildProcess::current()->io_task_runner(),
@@ -388,7 +376,11 @@ void ChildThreadImpl::Init(const Options& options) {
     IPC::Logging::GetInstance()->SetIPCSender(this);
 #endif
 
-  mojo_ipc_support_.reset(new IPC::ScopedIPCSupport(GetIOTaskRunner()));
+  if (!IsInBrowserProcess()) {
+    // Don't double-initialize IPC support in single-process mode.
+    mojo_ipc_support_.reset(new IPC::ScopedIPCSupport(GetIOTaskRunner()));
+  }
+
   mojo_application_.reset(new MojoApplication(GetIOTaskRunner()));
 
   sync_message_filter_ = channel_->CreateSyncMessageFilter();
@@ -460,8 +452,9 @@ void ChildThreadImpl::Init(const Options& options) {
   }
 
   ConnectChannel(options.use_mojo_channel);
-  if (attachment_broker_)
-    attachment_broker_->DesignateBrokerCommunicationChannel(channel_.get());
+  IPC::AttachmentBroker* broker = IPC::AttachmentBroker::GetGlobal();
+  if (broker && !broker->IsPrivilegedBroker())
+    broker->RegisterBrokerCommunicationChannel(channel_.get());
 
   int connection_timeout = kConnectionTimeoutS;
   std::string connection_override =
@@ -497,6 +490,10 @@ ChildThreadImpl::~ChildThreadImpl() {
   IPC::Logging::GetInstance()->SetIPCSender(NULL);
 #endif
 
+  IPC::AttachmentBroker* broker = IPC::AttachmentBroker::GetGlobal();
+  if (broker && !broker->IsPrivilegedBroker())
+    broker->DeregisterBrokerCommunicationChannel(channel_.get());
+
   channel_->RemoveFilter(histogram_message_filter_.get());
   channel_->RemoveFilter(sync_message_filter_.get());
 
@@ -518,8 +515,9 @@ void ChildThreadImpl::Shutdown() {
   file_system_dispatcher_.reset();
   quota_dispatcher_.reset();
   WebFileSystemImpl::DeleteThreadSpecificInstance();
-  // ChildDiscardableSharedMemoryManager has to be destroyed while
-  // |thread_safe_sender_| and |message_loop_| are still valid.
+}
+
+void ChildThreadImpl::ShutdownDiscardableSharedMemoryManager() {
   discardable_shared_memory_manager_.reset();
 }
 
@@ -552,7 +550,15 @@ void ChildThreadImpl::ReleaseCachedFonts() {
 }
 #endif
 
-MessageRouter* ChildThreadImpl::GetRouter() {
+void ChildThreadImpl::RecordAction(const base::UserMetricsAction& action) {
+    NOTREACHED();
+}
+
+void ChildThreadImpl::RecordComputedAction(const std::string& action) {
+    NOTREACHED();
+}
+
+IPC::MessageRouter* ChildThreadImpl::GetRouter() {
   DCHECK(base::MessageLoop::current() == message_loop());
   return &router_;
 }
@@ -568,18 +574,11 @@ scoped_ptr<base::SharedMemory> ChildThreadImpl::AllocateSharedMemory(
     size_t buf_size,
     IPC::Sender* sender) {
   scoped_ptr<base::SharedMemory> shared_buf;
-#if defined(OS_WIN)
-  shared_buf.reset(new base::SharedMemory);
-  if (!shared_buf->CreateAnonymous(buf_size)) {
-    NOTREACHED();
-    return nullptr;
-  }
-#else
-  // On POSIX, we need to ask the browser to create the shared memory for us,
-  // since this is blocked by the sandbox.
+  // Ask the browser to create the shared memory, since this is blocked by the
+  // sandbox on most platforms.
   base::SharedMemoryHandle shared_mem_handle;
   if (sender->Send(new ChildProcessHostMsg_SyncAllocateSharedMemory(
-                           buf_size, &shared_mem_handle))) {
+          buf_size, &shared_mem_handle))) {
     if (base::SharedMemory::IsHandleValid(shared_mem_handle)) {
       shared_buf.reset(new base::SharedMemory(shared_mem_handle, false));
     } else {
@@ -590,7 +589,6 @@ scoped_ptr<base::SharedMemory> ChildThreadImpl::AllocateSharedMemory(
     // Send is allowed to fail during shutdown. Return null in this case.
     return nullptr;
   }
-#endif
   return shared_buf;
 }
 
@@ -681,23 +679,22 @@ void ChildThreadImpl::OnProfilingPhaseCompleted(int profiling_phase) {
 
 void ChildThreadImpl::OnBindExternalMojoShellHandle(
     const IPC::PlatformFileForTransit& file) {
-#if defined(MOJO_SHELL_CLIENT)
+  if (!MojoShellConnectionImpl::Get())
+    return;
 #if defined(OS_POSIX)
   base::PlatformFile handle = file.fd;
 #elif defined(OS_WIN)
   base::PlatformFile handle = file;
 #endif
-  mojo::ScopedMessagePipeHandle message_pipe =
+  mojo::ScopedMessagePipeHandle pipe =
       mojo_shell_channel_init_.Init(handle, GetIOTaskRunner());
-  DCHECK(message_pipe.is_valid());
-  MojoShellConnectionImpl::Get()->BindToMessagePipe(std::move(message_pipe));
-#endif  // defined(MOJO_SHELL_CLIENT)
+  MojoShellConnectionImpl::Get()->BindToMessagePipe(std::move(pipe));
 }
 
 void ChildThreadImpl::OnSetMojoParentPipeHandle(
     const IPC::PlatformFileForTransit& file) {
-  mojo::embedder::SetParentPipeHandle(
-      mojo::embedder::ScopedPlatformHandle(mojo::embedder::PlatformHandle(
+  mojo::edk::SetParentPipeHandle(
+      mojo::edk::ScopedPlatformHandle(mojo::edk::PlatformHandle(
           IPC::PlatformFileForTransitToPlatformFile(file))));
 }
 

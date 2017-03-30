@@ -18,11 +18,11 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/process.h"
-#include "cc/layers/delegated_frame_resource_collection.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/surfaces/surface_factory_client.h"
 #include "cc/surfaces/surface_id.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
+#include "content/browser/android/content_view_core_impl_observer.h"
 #include "content/browser/renderer_host/delegated_frame_evictor.h"
 #include "content/browser/renderer_host/ime_adapter_android.h"
 #include "content/browser/renderer_host/input/stylus_text_selector.h"
@@ -42,8 +42,6 @@ struct ViewHostMsg_TextInputState_Params;
 
 namespace cc {
 class CopyOutputResult;
-class DelegatedFrameProvider;
-class DelegatedRendererLayer;
 class Layer;
 class SurfaceFactory;
 class SurfaceIdAllocator;
@@ -58,6 +56,7 @@ class WebMouseEvent;
 
 namespace content {
 class ContentViewCoreImpl;
+class ContentViewCoreObserver;
 class OverscrollControllerAndroid;
 class RenderWidgetHost;
 class RenderWidgetHostImpl;
@@ -70,13 +69,13 @@ struct NativeWebKeyboardEvent;
 // -----------------------------------------------------------------------------
 class CONTENT_EXPORT RenderWidgetHostViewAndroid
     : public RenderWidgetHostViewBase,
-      public cc::DelegatedFrameResourceCollectionClient,
       public cc::SurfaceFactoryClient,
       public ui::GestureProviderClient,
       public ui::WindowAndroidObserver,
       public DelegatedFrameEvictorClient,
       public StylusTextSelectorClient,
-      public ui::TouchSelectionControllerClient {
+      public ui::TouchSelectionControllerClient,
+      public content::ContentViewCoreImplObserver {
  public:
   RenderWidgetHostViewAndroid(RenderWidgetHostImpl* widget,
                               ContentViewCoreImpl* content_view_core);
@@ -170,9 +169,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
                                           size_t end_offset) override;
   void OnDidNavigateMainFrameToNewPage() override;
 
-  // cc::DelegatedFrameResourceCollectionClient implementation.
-  void UnusedResourcesAreAvailable() override;
-
   // cc::SurfaceFactoryClient implementation.
   void ReturnResources(const cc::ReturnedResourceArray& resources) override;
   void SetBeginFrameSource(cc::SurfaceId surface_id,
@@ -191,6 +187,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnAnimate(base::TimeTicks begin_frame_time) override;
   void OnActivityStopped() override;
   void OnActivityStarted() override;
+
+  // content::ContentViewCoreImplObserver implementation.
+  void OnContentViewCoreDestroyed() override;
+  void OnAttachedToWindow() override;
+  void OnDetachedFromWindow() override;
 
   // DelegatedFrameEvictor implementation
   void EvictDelegatedFrame() override;
@@ -352,20 +353,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // ContentViewCoreImpl is our interface to the view system.
   ContentViewCoreImpl* content_view_core_;
 
-  // Cache the WindowAndroid instance exposed by ContentViewCore to avoid
-  // calling into ContentViewCore when it is being detached from the
-  // WebContents during destruction. The WindowAndroid has stronger lifetime
-  // guarantees, and should be safe to use for observer detachment.
-  // This will be non-null iff |content_view_core_| is non-null.
-  ui::WindowAndroid* content_view_core_window_android_;
-
   ImeAdapterAndroid ime_adapter_android_;
 
   // Body background color of the underlying document.
   SkColor cached_background_color_;
 
-  scoped_refptr<cc::DelegatedFrameResourceCollection> resource_collection_;
-  scoped_refptr<cc::DelegatedFrameProvider> frame_provider_;
   scoped_refptr<cc::Layer> layer_;
 
   scoped_ptr<cc::SurfaceIdAllocator> id_allocator_;

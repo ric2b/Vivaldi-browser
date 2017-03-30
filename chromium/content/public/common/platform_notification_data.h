@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/strings/string16.h"
+#include "base/time/time.h"
 #include "content/common/content_export.h"
 #include "url/gurl.h"
 
@@ -26,6 +27,9 @@ struct CONTENT_EXPORT PlatformNotificationAction {
 
   // Title of the button.
   base::string16 title;
+
+  // URL of the icon for the button. May be empty if no url was specified.
+  GURL icon;
 };
 
 // Structure representing the information associated with a Web Notification.
@@ -33,6 +37,7 @@ struct CONTENT_EXPORT PlatformNotificationAction {
 // synchronized with the WebNotificationData structure defined in the Blink API.
 struct CONTENT_EXPORT PlatformNotificationData {
   PlatformNotificationData();
+  PlatformNotificationData(const PlatformNotificationData& other);
   ~PlatformNotificationData();
 
   // The maximum size of developer-provided data to be stored in the |data|
@@ -69,6 +74,13 @@ struct CONTENT_EXPORT PlatformNotificationData {
   // Vibration pattern for the notification, following the syntax of the
   // Vibration API. https://www.w3.org/TR/vibration/
   std::vector<int> vibration_pattern;
+
+  // The time at which the event the notification represents took place.
+  base::Time timestamp;
+
+  // Whether default notification indicators (sound, vibration, light) should
+  // be played again if the notification is replacing an older notification.
+  bool renotify = false;
 
   // Whether default notification indicators (sound, vibration, light) should
   // be suppressed.

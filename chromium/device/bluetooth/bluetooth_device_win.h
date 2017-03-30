@@ -40,6 +40,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceWin : public BluetoothDevice {
   uint16_t GetVendorID() const override;
   uint16_t GetProductID() const override;
   uint16_t GetDeviceID() const override;
+  uint16_t GetAppearance() const override;
   bool IsPaired() const override;
   bool IsConnected() const override;
   bool IsGattConnected() const override;
@@ -106,6 +107,22 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceWin : public BluetoothDevice {
 
   // Updates the services with services stored in |device_state|.
   void UpdateServices(const BluetoothTaskManagerWin::DeviceState& device_state);
+
+  // Checks if GATT service with |uuid| and |attribute_handle| has already been
+  // discovered.
+  bool IsGattServiceDiscovered(BluetoothUUID& uuid, uint16_t attribute_handle);
+
+  // Checks if |service| still exist on device according to newly discovered
+  // |service_state|.
+  bool DoesGattServiceExist(
+      const ScopedVector<BluetoothTaskManagerWin::ServiceRecordState>&
+          service_state,
+      BluetoothGattService* service);
+
+  // Updates the GATT services with the services stored in |service_state|.
+  void UpdateGattServices(
+      const ScopedVector<BluetoothTaskManagerWin::ServiceRecordState>&
+          service_state);
 
   scoped_refptr<base::SequencedTaskRunner> ui_task_runner_;
   scoped_refptr<BluetoothSocketThread> socket_thread_;

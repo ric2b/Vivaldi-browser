@@ -65,7 +65,7 @@ public:
     void preloadRequestVerification(Resource::Type type, const char* url, const char* baseURL, int width, ReferrerPolicy referrerPolicy)
     {
         preloadRequestVerification(type, url, baseURL, width, ClientHintsPreferences());
-        EXPECT_EQ(referrerPolicy, m_preloadRequest->referrerPolicy());
+        EXPECT_EQ(referrerPolicy, m_preloadRequest->getReferrerPolicy());
     }
 
     void preconnectRequestVerification(const String& host, CrossOriginAttributeValue crossOrigin)
@@ -104,7 +104,7 @@ protected:
     {
     }
 
-    PassRefPtrWillBeRawPtr<MediaValues> createMediaValues()
+    MediaValuesCached::MediaValuesCachedData createMediaValuesData()
     {
         MediaValuesCached::MediaValuesCachedData data;
         data.viewportWidth = 500;
@@ -120,7 +120,7 @@ protected:
         data.mediaType = MediaTypeNames::screen;
         data.strictMode = true;
         data.displayMode = WebDisplayModeBrowser;
-        return MediaValuesCached::create(data);
+        return data;
     }
 
     void runSetUp(ViewportState viewportState, PreloadState preloadState = PreloadEnabled)
@@ -130,7 +130,7 @@ protected:
         m_dummyPageHolder->document().settings()->setViewportEnabled(viewportState == ViewportEnabled);
         m_dummyPageHolder->document().settings()->setViewportMetaEnabled(viewportState == ViewportEnabled);
         m_dummyPageHolder->document().settings()->setDoHtmlPreloadScanning(preloadState == PreloadEnabled);
-        m_scanner = HTMLPreloadScanner::create(options, documentURL, CachedDocumentParameters::create(&m_dummyPageHolder->document(), createMediaValues()));
+        m_scanner = HTMLPreloadScanner::create(options, documentURL, CachedDocumentParameters::create(&m_dummyPageHolder->document()), createMediaValuesData());
     }
 
     void SetUp() override
@@ -365,7 +365,7 @@ TEST_F(HTMLPreloadScannerTest, testReferrerPolicy)
 TEST_F(HTMLPreloadScannerTest, testLinkRelPreload)
 {
     TestCase testCases[] = {
-        {"http://example.test", "<link rel=preload href=bla>", "bla", "http://example.test/", Resource::LinkSubresource, 0},
+        {"http://example.test", "<link rel=preload href=bla>", "bla", "http://example.test/", Resource::LinkPreload, 0},
         {"http://example.test", "<link rel=preload href=bla as=script>", "bla", "http://example.test/", Resource::Script, 0},
         {"http://example.test", "<link rel=preload href=bla as=style>", "bla", "http://example.test/", Resource::CSSStyleSheet, 0},
         {"http://example.test", "<link rel=preload href=bla as=image>", "bla", "http://example.test/", Resource::Image, 0},

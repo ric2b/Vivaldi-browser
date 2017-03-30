@@ -4,34 +4,19 @@
 
 #include "bindings/modules/v8/V8ServiceWorkerMessageEvent.h"
 
-#include "bindings/core/v8/SerializedScriptValue.h"
-#include "bindings/core/v8/V8HiddenValue.h"
+#include "bindings/modules/v8/V8ServiceWorkerMessageEventInit.h"
+#include "bindings/modules/v8/V8ServiceWorkerMessageEventInternal.h"
 
 namespace blink {
 
+void V8ServiceWorkerMessageEvent::constructorCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    V8ServiceWorkerMessageEventInternal::constructorCustom<ServiceWorkerMessageEvent, ServiceWorkerMessageEventInit>(info);
+}
+
 void V8ServiceWorkerMessageEvent::dataAttributeGetterCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    ServiceWorkerMessageEvent* event = V8ServiceWorkerMessageEvent::toImpl(info.Holder());
-    v8::Isolate* isolate = info.GetIsolate();
-    ScriptState* scriptState = ScriptState::current(isolate);
-    v8::Local<v8::Value> result = V8HiddenValue::getHiddenValue(scriptState, info.Holder(), V8HiddenValue::data(isolate));
-
-    if (!result.IsEmpty()) {
-        v8SetReturnValue(info, result);
-        return;
-    }
-
-    v8::Local<v8::Value> data;
-    if (SerializedScriptValue* serializedValue = event->serializedData()) {
-        MessagePortArray ports = event->ports();
-        data = serializedValue->deserialize(isolate, &ports);
-    } else {
-        data = event->data().v8ValueFor(scriptState);
-    }
-    if (data.IsEmpty())
-        data = v8::Null(isolate);
-    V8HiddenValue::setHiddenValue(scriptState, info.Holder(), V8HiddenValue::data(isolate), data);
-    v8SetReturnValue(info, data);
+    V8ServiceWorkerMessageEventInternal::dataAttributeGetterCustom<ServiceWorkerMessageEvent>(info);
 }
 
 } // namespace blink

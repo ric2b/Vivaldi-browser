@@ -5,6 +5,7 @@
 #ifndef SYNC_API_ENTITY_DATA_H_
 #define SYNC_API_ENTITY_DATA_H_
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -26,6 +27,7 @@ struct SYNC_EXPORT EntityDataTraits {
 
 typedef syncer::ProtoValuePtr<EntityData, EntityDataTraits> EntityDataPtr;
 typedef std::vector<EntityDataPtr> EntityDataList;
+typedef std::map<std::string, EntityDataPtr> EntityDataMap;
 
 // A light-weight container for sync entity data which represents either
 // local data created on the ModelTypeService side or remote data created
@@ -71,7 +73,7 @@ struct SYNC_EXPORT EntityData {
 
   // Transfers this struct's data to EntityDataPtr.
   // The return value must be assigned into another EntityDataPtr.
-  EntityDataPtr Pass() WARN_UNUSED_RESULT;
+  EntityDataPtr PassToPtr() WARN_UNUSED_RESULT;
 
  private:
   friend struct EntityDataTraits;

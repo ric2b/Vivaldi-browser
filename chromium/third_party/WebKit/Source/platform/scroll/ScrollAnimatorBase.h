@@ -42,9 +42,9 @@
 
 namespace blink {
 
+class CompositorAnimationTimeline;
 class ScrollableArea;
 class Scrollbar;
-class WebCompositorAnimationTimeline;
 
 class PLATFORM_EXPORT ScrollAnimatorBase : public ScrollAnimatorCompositorCoordinator {
 public:
@@ -63,8 +63,6 @@ public:
 
     virtual void scrollToOffsetWithoutAnimation(const FloatPoint&);
 
-    virtual void setIsActive() { }
-
 #if OS(MACOSX)
     virtual void handleWheelEventPhase(PlatformWheelEventPhase) { }
 #endif
@@ -82,10 +80,11 @@ public:
     ScrollableArea* scrollableArea() const override { return m_scrollableArea; }
     void tickAnimation(double monotonicTime) override { };
     void cancelAnimation() override { }
+    void takeoverCompositorAnimation() override { }
     void updateCompositorAnimations() override { };
     void notifyCompositorAnimationFinished(int groupId) override { };
     void notifyCompositorAnimationAborted(int groupId) override { };
-    void layerForCompositedScrollingDidChange(WebCompositorAnimationTimeline*) override { };
+    void layerForCompositedScrollingDidChange(CompositorAnimationTimeline*) override { };
 
     virtual void contentAreaWillPaint() const { }
     virtual void mouseEnteredContentArea() const { }

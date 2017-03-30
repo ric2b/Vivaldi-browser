@@ -40,7 +40,8 @@ class Template;
 // variables. So you should use a non-const containing scope whenever possible.
 class Scope {
  public:
-  typedef base::hash_map<base::StringPiece, Value> KeyValueMap;
+  typedef base::hash_map<base::StringPiece, Value, base::StringPieceHash>
+      KeyValueMap;
   // Holds an owning list of Items.
   typedef ScopedVector<Item> ItemVector;
 
@@ -65,12 +66,8 @@ class Scope {
 
   // Options for configuring scope merges.
   struct MergeOptions {
-    // Defaults to all false, which are the things least likely to cause errors.
-    MergeOptions()
-        : clobber_existing(false),
-          skip_private_vars(false),
-          mark_dest_used(false) {
-    }
+    MergeOptions();
+    ~MergeOptions();
 
     // When set, all existing avlues in the destination scope will be
     // overwritten.
@@ -92,6 +89,9 @@ class Scope {
     // import, for example, or files that don't need a variable from the .gni
     // file will throw an error.
     bool mark_dest_used;
+
+    // When set, those variables are not merged.
+    std::set<std::string> excluded_values;
   };
 
   // Creates an empty toplevel scope.
@@ -330,7 +330,8 @@ class Scope {
   // for more.
   unsigned mode_flags_;
 
-  typedef base::hash_map<base::StringPiece, Record> RecordMap;
+  typedef base::hash_map<base::StringPiece, Record, base::StringPieceHash>
+      RecordMap;
   RecordMap values_;
 
   // Owning pointers. Note that this can't use string pieces since the names

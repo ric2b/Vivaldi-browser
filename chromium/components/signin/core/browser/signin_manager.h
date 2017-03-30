@@ -30,10 +30,10 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
-#include "base/prefs/pref_change_registrar.h"
-#include "base/prefs/pref_member.h"
 #include "build/build_config.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "components/prefs/pref_member.h"
 #include "components/signin/core/browser/account_info.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
@@ -94,7 +94,8 @@ class SigninManager : public SigninManagerBase,
 
   // Sign a user out, removing the preference, erasing all keys
   // associated with the user, and canceling all auth in progress.
-  virtual void SignOut(signin_metrics::ProfileSignout signout_source_metric);
+  virtual void SignOut(signin_metrics::ProfileSignout signout_source_metric,
+                       signin_metrics::SignoutDelete signout_delete_metric);
 
   // On platforms where SigninManager is responsible for dealing with
   // invalid username policy updates, we need to check this during

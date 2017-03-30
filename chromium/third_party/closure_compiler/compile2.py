@@ -236,7 +236,6 @@ class Checker(object):
 
       cwd, tmp_dir = os.getcwd(), tempfile.gettempdir()
       rel_path = lambda f: os.path.join(os.path.relpath(cwd, tmp_dir), f)
-      
       contents = ['<include src="%s">' % rel_path(f) for f in js_args]
       meta_file = self._create_temp_file("\n".join(contents))
       self._log_debug("Meta file: %s" % meta_file)

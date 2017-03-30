@@ -7,6 +7,8 @@ module mus.mojom;
 // Cross platform keyboard codes.
 //
 // Because the web has standardized on Win32 keyboard codes, so does mojo.
+// TODO: shouldn't need extensible, see http://crbug.com/582279
+[Extensible]
 enum KeyboardCode {
   BACK                      = 0x08,
   TAB                       = 0x09,
@@ -42,7 +44,7 @@ enum KeyboardCode {
   EXECUTE                   = 0x2B,
   SNAPSHOT                  = 0x2C,
   INSERT                    = 0x2D,
-  DELETE                    = 0x2E,
+  KEY_DELETE                = 0x2E,
   HELP                      = 0x2F,
   NUM_0                     = 0x30,
   NUM_1                     = 0x31,

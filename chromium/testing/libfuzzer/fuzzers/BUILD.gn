@@ -7,6 +7,11 @@
 import("//build/config/features.gni")
 import("//media/media_options.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
+import("//third_party/pdfium/pdfium.gni")
+
+# root BUILD depenends on this target. Needed for package discovery
+group("fuzzers") {
+}
 
 fuzzer_test("empty_fuzzer") {
   sources = [
@@ -222,6 +227,24 @@ fuzzer_test("pdfium_fuzzer") {
   dict = "dicts/pdf.dict"
 }
 
+if (pdf_enable_xfa) {
+  fuzzer_test("pdf_fm2js_fuzzer") {
+    sources = []
+    deps = [
+      "//third_party/pdfium/testing/libfuzzer:pdf_fm2js_fuzzer",
+    ]
+    dict = "dicts/pdf_fm2js.dict"
+  }
+
+  fuzzer_test("pdf_xml_fuzzer") {
+    sources = []
+    deps = [
+      "//third_party/pdfium/testing/libfuzzer:pdf_xml_fuzzer",
+    ]
+    dict = "dicts/pdf_xml.dict"
+  }
+}
+
 fuzzer_test("websocket_frame_parser_fuzzer") {
   sources = [
     "websocket_frame_parser_fuzzer.cc",
@@ -267,6 +290,7 @@ fuzzer_test("libxml_xml_read_memory_fuzzer") {
   deps = [
     "//third_party/libxml:libxml",
   ]
+  dict = "dicts/xml.dict"
 }
 
 fuzzer_test("unicode_string_codepage_create_fuzzer") {
@@ -278,13 +302,16 @@ fuzzer_test("unicode_string_codepage_create_fuzzer") {
   ]
 }
 
-fuzzer_test("libexif_parser_fuzzer") {
-  sources = [
-    "libexif_parser_fuzzer.cc",
-  ]
-  deps = [
-    "//third_party/libexif:libexif_fuzzers",
-  ]
+if (is_linux) {
+  # libexif_fuzzer is linux only atm
+  fuzzer_test("libexif_parser_fuzzer") {
+    sources = [
+      "libexif_parser_fuzzer.cc",
+    ]
+    deps = [
+      "//third_party/libexif:libexif_fuzzers",
+    ]
+  }
 }
 
 fuzzer_test("libpng_read_fuzzer") {
@@ -295,4 +322,37 @@ fuzzer_test("libpng_read_fuzzer") {
     "//base",
     "//third_party/libpng",
   ]
+}
+
+fuzzer_test("icu_uregex_open_fuzzer") {
+  sources = [
+    "icu_uregex_open_fuzzer.cc",
+  ]
+  deps = [
+    "//third_party/icu",
+  ]
+}
+
+fuzzer_test("v8_script_parser_fuzzer") {
+  sources = []
+  deps = [
+    "//v8:parser_fuzzer",
+  ]
+  dict = "dicts/js.dict"
+  additional_configs = [ "//testing/libfuzzer:no_clusterfuzz" ]
+}
+
+fuzzer_test("v8_json_parser_fuzzer") {
+  sources = []
+  deps = [
+    "//v8:json_fuzzer",
+  ]
+}
+
+fuzzer_test("v8_regexp_parser_fuzzer") {
+  sources = []
+  deps = [
+    "//v8:regexp_fuzzer",
+  ]
+  dict = "dicts/regexp.dict"
 }

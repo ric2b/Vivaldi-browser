@@ -11,8 +11,6 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
@@ -31,6 +29,8 @@
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
 #include "components/policy/core/common/cloud/policy_builder.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/test_utils.h"
 #include "crypto/rsa_private_key.h"
@@ -133,6 +133,11 @@ void LoginUser(const std::string& user_id) {
 void AppendCommandLineSwitchesForLoginManager(base::CommandLine* command_line) {
   command_line->AppendSwitch(chromeos::switches::kLoginManager);
   command_line->AppendSwitch(chromeos::switches::kForceLoginManagerInTests);
+  // LoginManager tests typically don't stand up a policy test server but
+  // instead inject policies directly through a SessionManagerClient. So allow
+  // policy fetches to fail - this is expected.
+  command_line->AppendSwitch(
+      chromeos::switches::kAllowFailedPolicyFetchForTest);
 }
 
 }  // namespace affiliation_test_helper

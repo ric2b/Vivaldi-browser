@@ -28,6 +28,7 @@
 
 #include "WebColor.h"
 #include "WebCommon.h"
+#include "WebEventListenerProperties.h"
 #include "WebFloatPoint.h"
 #include "WebNonCopyable.h"
 #include "WebPrivateOwnPtr.h"
@@ -36,10 +37,13 @@
 
 class SkBitmap;
 
+namespace cc {
+class AnimationTimeline;
+}
+
 namespace blink {
 
 class WebCompositeAndReadbackAsyncCallback;
-class WebCompositorAnimationTimeline;
 class WebLayer;
 class WebLayoutAndPaintAsyncCallback;
 struct WebPoint;
@@ -57,8 +61,9 @@ public:
     virtual void setRootLayer(const WebLayer&) { }
     virtual void clearRootLayer() { }
 
-    virtual void attachCompositorAnimationTimeline(WebCompositorAnimationTimeline*) { }
-    virtual void detachCompositorAnimationTimeline(WebCompositorAnimationTimeline*) { }
+    // TODO(loyso): These should use CompositorAnimationTimeline. crbug.com/584551
+    virtual void attachCompositorAnimationTimeline(cc::AnimationTimeline*) { }
+    virtual void detachCompositorAnimationTimeline(cc::AnimationTimeline*) { }
 
     // View properties ---------------------------------------------------
 
@@ -141,7 +146,14 @@ public:
     virtual void registerSelection(const WebSelection&) { }
     virtual void clearSelection() { }
 
+    // Input properties ---------------------------------------------------
+    virtual void setEventListenerProperties(WebEventListenerClass, WebEventListenerProperties) { };
+    virtual void setHaveScrollEventHandlers(bool) { };
+
     // Debugging / dangerous ---------------------------------------------
+
+    virtual WebEventListenerProperties eventListenerProperties(WebEventListenerClass) const { return WebEventListenerProperties::Nothing; };
+    virtual bool haveScrollEventHandlers() const { return false; };
 
     virtual int layerTreeId() const { return 0; }
 

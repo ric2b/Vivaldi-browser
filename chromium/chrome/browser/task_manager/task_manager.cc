@@ -8,8 +8,7 @@
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/rtl.h"
 #include "base/location.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/pref_service.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/process/process_metrics.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -40,6 +39,8 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/nacl/browser/nacl_browser.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/browser/gpu_data_manager_observer.h"
@@ -211,6 +212,9 @@ TaskManagerModel::PerResourceValues::PerResourceValues()
       v8_memory_allocated(0),
       v8_memory_used(0) {}
 
+TaskManagerModel::PerResourceValues::PerResourceValues(
+    const PerResourceValues& other) = default;
+
 TaskManagerModel::PerResourceValues::~PerResourceValues() {}
 
 TaskManagerModel::PerProcessValues::PerProcessValues()
@@ -234,6 +238,9 @@ TaskManagerModel::PerProcessValues::PerProcessValues()
       user_handles_peak(0),
       is_nacl_debug_stub_port_valid(false),
       nacl_debug_stub_port(0) {}
+
+TaskManagerModel::PerProcessValues::PerProcessValues(
+    const PerProcessValues& other) = default;
 
 TaskManagerModel::PerProcessValues::~PerProcessValues() {}
 
@@ -666,7 +673,9 @@ bool TaskManagerModel::GetVideoMemory(int index,
     if (i == video_memory_usage_stats_.process_map.end())
       return false;
     values.is_video_memory_valid = true;
-    values.video_memory = i->second.video_memory;
+    // If this checked_cast asserts, then need to change this code to use
+    // uint64_t instead of size_t.
+    values.video_memory = base::checked_cast<size_t>(i->second.video_memory);
     values.video_memory_has_duplicates = i->second.has_duplicates;
   }
   *video_memory = values.video_memory;
@@ -1554,7 +1563,7 @@ TaskManager* TaskManager::GetInstance() {
   return base::Singleton<TaskManager>::get();
 }
 
-void TaskManager::OpenAboutMemory(chrome::HostDesktopType desktop_type) {
+void TaskManager::OpenAboutMemory() {
   Profile* profile = ProfileManager::GetLastUsedProfileAllowedByPolicy();
   if (profile->IsGuestSession() && !g_browser_process->local_state()->
       GetBoolean(prefs::kBrowserGuestModeEnabled)) {
@@ -1567,7 +1576,6 @@ void TaskManager::OpenAboutMemory(chrome::HostDesktopType desktop_type) {
   chrome::NavigateParams params(
       profile, GURL(chrome::kChromeUIMemoryURL), ui::PAGE_TRANSITION_LINK);
   params.disposition = NEW_FOREGROUND_TAB;
-  params.host_desktop_type = desktop_type;
   chrome::Navigate(&params);
 }
 

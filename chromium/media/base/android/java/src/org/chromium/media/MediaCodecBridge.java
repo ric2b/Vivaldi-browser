@@ -55,6 +55,9 @@ class MediaCodecBridge {
     // non-decreasing for the remaining frames.
     private static final long MAX_PRESENTATION_TIMESTAMP_SHIFT_US = 100000;
 
+    // We use only one output audio format (PCM16) that has 2 bytes per sample
+    private static final int PCM16_BYTES_PER_SAMPLE = 2;
+
     // TODO(qinmin): Use MediaFormat constants when part of the public API.
     private static final String KEY_CROP_LEFT = "crop-left";
     private static final String KEY_CROP_RIGHT = "crop-right";
@@ -140,6 +143,48 @@ class MediaCodecBridge {
         @CalledByNative("DequeueOutputResult")
         private int numBytes() {
             return mNumBytes;
+        }
+    }
+
+    /** A wrapper around a MediaFormat. */
+    @MainDex
+    private static class GetOutputFormatResult {
+        private final int mStatus;
+        // May be null if mStatus is not MEDIA_CODEC_OK.
+        private final MediaFormat mFormat;
+
+        private GetOutputFormatResult(int status, MediaFormat format) {
+            mStatus = status;
+            mFormat = format;
+        }
+
+        private boolean formatHasCropValues() {
+            return mFormat.containsKey(KEY_CROP_RIGHT) && mFormat.containsKey(KEY_CROP_LEFT)
+                    && mFormat.containsKey(KEY_CROP_BOTTOM) && mFormat.containsKey(KEY_CROP_TOP);
+        }
+
+        @CalledByNative("GetOutputFormatResult")
+        private int status() {
+            return mStatus;
+        }
+
+        @CalledByNative("GetOutputFormatResult")
+        private int width() {
+            return formatHasCropValues()
+                    ? mFormat.getInteger(KEY_CROP_RIGHT) - mFormat.getInteger(KEY_CROP_LEFT) + 1
+                    : mFormat.getInteger(MediaFormat.KEY_WIDTH);
+        }
+
+        @CalledByNative("GetOutputFormatResult")
+        private int height() {
+            return formatHasCropValues()
+                    ? mFormat.getInteger(KEY_CROP_BOTTOM) - mFormat.getInteger(KEY_CROP_TOP) + 1
+                    : mFormat.getInteger(MediaFormat.KEY_HEIGHT);
+        }
+
+        @CalledByNative("GetOutputFormatResult")
+        private int sampleRate() {
+            return mFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE);
         }
     }
 
@@ -255,57 +300,45 @@ class MediaCodecBridge {
         }
     }
 
-    private boolean outputFormatHasCropValues(MediaFormat format) {
-        return format.containsKey(KEY_CROP_RIGHT) && format.containsKey(KEY_CROP_LEFT)
-                && format.containsKey(KEY_CROP_BOTTOM) && format.containsKey(KEY_CROP_TOP);
-    }
-
     @CalledByNative
-    private int getOutputHeight() {
-        MediaFormat format = mMediaCodec.getOutputFormat();
-        return outputFormatHasCropValues(format)
-                ? format.getInteger(KEY_CROP_BOTTOM) - format.getInteger(KEY_CROP_TOP) + 1
-                : format.getInteger(MediaFormat.KEY_HEIGHT);
+    private GetOutputFormatResult getOutputFormat() {
+        MediaFormat format = null;
+        int status = MEDIA_CODEC_OK;
+        try {
+            format = mMediaCodec.getOutputFormat();
+        } catch (IllegalStateException e) {
+            Log.e(TAG, "Failed to get output format", e);
+            status = MEDIA_CODEC_ERROR;
+        }
+        return new GetOutputFormatResult(status, format);
     }
 
-    @CalledByNative
-    private int getOutputWidth() {
-        MediaFormat format = mMediaCodec.getOutputFormat();
-        return outputFormatHasCropValues(format)
-                ? format.getInteger(KEY_CROP_RIGHT) - format.getInteger(KEY_CROP_LEFT) + 1
-                : format.getInteger(MediaFormat.KEY_WIDTH);
-    }
-
-    @CalledByNative
-    private int getOutputSamplingRate() {
-        MediaFormat format = mMediaCodec.getOutputFormat();
-        return format.getInteger(MediaFormat.KEY_SAMPLE_RATE);
-    }
-
+    /** Returns null if MediaCodec throws IllegalStateException. */
     @CalledByNative
     private ByteBuffer getInputBuffer(int index) {
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.KITKAT) {
-            return mMediaCodec.getInputBuffer(index);
+            try {
+                return mMediaCodec.getInputBuffer(index);
+            } catch (IllegalStateException e) {
+                Log.e(TAG, "Failed to get input buffer", e);
+                return null;
+            }
         }
         return mInputBuffers[index];
     }
 
+    /** Returns null if MediaCodec throws IllegalStateException. */
     @CalledByNative
     private ByteBuffer getOutputBuffer(int index) {
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.KITKAT) {
-            return mMediaCodec.getOutputBuffer(index);
+            try {
+                return mMediaCodec.getOutputBuffer(index);
+            } catch (IllegalStateException e) {
+                Log.e(TAG, "Failed to get output buffer", e);
+                return null;
+            }
         }
         return mOutputBuffers[index];
-    }
-
-    @CalledByNative
-    private int getOutputBuffersCount() {
-        return mOutputBuffers != null ? mOutputBuffers.length : -1;
-    }
-
-    @CalledByNative
-    private int getOutputBuffersCapacity() {
-        return mOutputBuffers != null ? mOutputBuffers[0].capacity() : -1;
     }
 
     @CalledByNative
@@ -313,9 +346,6 @@ class MediaCodecBridge {
             int index, int offset, int size, long presentationTimeUs, int flags) {
         resetLastPresentationTimeIfNeeded(presentationTimeUs);
         try {
-            if (Build.VERSION.SDK_INT > Build.VERSION_CODES.KITKAT) {
-                mMediaCodec.getInputBuffer(index);
-            }
             mMediaCodec.queueInputBuffer(index, offset, size, presentationTimeUs, flags);
         } catch (Exception e) {
             Log.e(TAG, "Failed to queue input buffer", e);
@@ -351,12 +381,12 @@ class MediaCodecBridge {
                     keyId, iv, MediaCodec.CRYPTO_MODE_AES_CTR);
             mMediaCodec.queueSecureInputBuffer(index, offset, cryptoInfo, presentationTimeUs, 0);
         } catch (MediaCodec.CryptoException e) {
-            Log.e(TAG, "Failed to queue secure input buffer", e);
             if (e.getErrorCode() == MediaCodec.CryptoException.ERROR_NO_KEY) {
-                Log.e(TAG, "MediaCodec.CryptoException.ERROR_NO_KEY");
+                Log.d(TAG, "Failed to queue secure input buffer: CryptoException.ERROR_NO_KEY");
                 return MEDIA_CODEC_NO_KEY;
             }
-            Log.e(TAG, "MediaCodec.CryptoException with error code " + e.getErrorCode());
+            Log.e(TAG, "Failed to queue secure input buffer, CryptoException with error code "
+                            + e.getErrorCode());
             return MEDIA_CODEC_ERROR;
         } catch (IllegalStateException e) {
             Log.e(TAG, "Failed to queue secure input buffer, IllegalStateException " + e);
@@ -368,9 +398,6 @@ class MediaCodecBridge {
     @CalledByNative
     private void releaseOutputBuffer(int index, boolean render) {
         try {
-            if (Build.VERSION.SDK_INT > Build.VERSION_CODES.KITKAT) {
-                mMediaCodec.getOutputBuffer(index);
-            }
             mMediaCodec.releaseOutputBuffer(index, render);
         } catch (IllegalStateException e) {
             // TODO(qinmin): May need to report the error to the caller. crbug.com/356498.
@@ -398,6 +425,7 @@ class MediaCodecBridge {
                 status = MEDIA_CODEC_OK;
                 index = indexOrStatus;
             } else if (indexOrStatus == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
+                assert Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT;
                 mOutputBuffers = mMediaCodec.getOutputBuffers();
                 status = MEDIA_CODEC_OUTPUT_BUFFERS_CHANGED;
             } else if (indexOrStatus == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
@@ -425,9 +453,9 @@ class MediaCodecBridge {
 
     @CalledByNative
     private boolean configureVideo(MediaFormat format, Surface surface, MediaCrypto crypto,
-            int flags) {
+            int flags, boolean allowAdaptivePlayback) {
         try {
-            if (mAdaptivePlaybackSupported) {
+            if (mAdaptivePlaybackSupported && allowAdaptivePlayback) {
                 format.setInteger(MediaFormat.KEY_MAX_WIDTH, MAX_ADAPTIVE_PLAYBACK_WIDTH);
                 format.setInteger(MediaFormat.KEY_MAX_HEIGHT, MAX_ADAPTIVE_PLAYBACK_HEIGHT);
             }
@@ -515,8 +543,22 @@ class MediaCodecBridge {
                 // kBytesPerAudioOutputSample in media_codec_bridge.cc.
                 int minBufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig,
                         AudioFormat.ENCODING_PCM_16BIT);
+
+                // Set buffer size to be at least 1.5 times the minimum buffer size
+                // (see http://crbug.com/589269).
+                // TODO(timav, qinmin): For MediaSourcePlayer, we starts both audio and
+                // video decoder once we got valid presentation timestamp from the decoder
+                // (prerolling_==false). However, this doesn't guarantee that audiotrack
+                // starts outputing samples, especially with a larger buffersize.
+                // The best solution will be having a large buffer size in AudioTrack, and
+                // sync audio/video start when audiotrack starts output samples
+                // (head position starts progressing).
+                int minBufferSizeInFrames = minBufferSize / PCM16_BYTES_PER_SAMPLE / channelCount;
+                int bufferSize =
+                        (int) (1.5 * minBufferSizeInFrames) * PCM16_BYTES_PER_SAMPLE * channelCount;
+
                 mAudioTrack = new AudioTrack(AudioManager.STREAM_MUSIC, sampleRate, channelConfig,
-                        AudioFormat.ENCODING_PCM_16BIT, minBufferSize, AudioTrack.MODE_STREAM);
+                        AudioFormat.ENCODING_PCM_16BIT, bufferSize, AudioTrack.MODE_STREAM);
                 if (mAudioTrack.getState() == AudioTrack.STATE_UNINITIALIZED) {
                     Log.e(TAG, "Cannot create AudioTrack");
                     mAudioTrack = null;

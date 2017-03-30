@@ -153,7 +153,7 @@ static void AddPepperBasedWidevine(
 #if defined(WIDEVINE_CDM_MIN_GLIBC_VERSION)
   Version glibc_version(gnu_get_libc_version());
   DCHECK(glibc_version.IsValid());
-  if (glibc_version.IsOlderThan(WIDEVINE_CDM_MIN_GLIBC_VERSION))
+  if (glibc_version < base::Version(WIDEVINE_CDM_MIN_GLIBC_VERSION))
     return;
 #endif  // defined(WIDEVINE_CDM_MIN_GLIBC_VERSION)
 
@@ -194,7 +194,7 @@ static void AddPepperBasedWidevine(
   }
 
   cdm::AddWidevineWithCodecs(
-      cdm::WIDEVINE, supported_codecs,
+      supported_codecs,
 #if defined(OS_CHROMEOS)
       media::EmeRobustness::HW_SECURE_ALL,  // Maximum audio robustness.
       media::EmeRobustness::HW_SECURE_ALL,  // Maximim video robustness.

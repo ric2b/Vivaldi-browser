@@ -4,11 +4,11 @@
 
 #include "app/vivaldi_apptools.h"
 #include "base/command_line.h"
-#include "base/prefs/pref_service.h"
 #include "chrome/browser/net/url_info.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/prefs/pref_service.h"
 #include "components/translate/core/common/translate_switches.h"
 #include "content/public/common/content_switches.h"
 #include "notes/notesnode.h"
@@ -22,6 +22,7 @@
 #include "extensions/api/import_data/import_data_api.h"
 #include "extensions/api/show_menu/show_menu_api.h"
 #include "extensions/api/settings/settings_api.h"
+#include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "extensions/api/zoom/zoom_api.h"
 #include "extensions/vivaldi_extensions_init.h"
 
@@ -63,6 +64,7 @@ void VivaldiBrowserMainExtraParts::
   extensions::ShowMenuAPI::GetFactoryInstance();
   extensions::VivaldiExtensionInit::GetFactoryInstance();
   extensions::VivaldiSettingsApiNotificationFactory::GetInstance();
+  extensions::VivaldiUtilitiesAPI::GetFactoryInstance();
   extensions::ZoomAPI::GetFactoryInstance();
 }
 

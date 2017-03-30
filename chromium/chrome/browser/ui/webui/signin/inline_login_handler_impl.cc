@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <string>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -14,7 +15,6 @@
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/user_metrics_action.h"
-#include "base/prefs/pref_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -23,6 +23,8 @@
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_attributes_entry.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/signin/about_signin_internals_factory.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
@@ -41,13 +43,14 @@
 #include "chrome/browser/ui/tab_modal_confirm_dialog_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/user_manager.h"
-#include "chrome/browser/ui/webui/signin/inline_login_ui.h"
+#include "chrome/browser/ui/webui/signin/get_auth_frame.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/about_signin_internals.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
@@ -227,6 +230,14 @@ void ConfirmEmailDialogDelegate::OnLinkClicked(
   web_contents_->OpenURL(params);
 }
 
+void CloseModalSigninIfNeeded(InlineLoginHandlerImpl* handler) {
+  if (handler && switches::UsePasswordSeparatedSigninFlow()) {
+    Browser* browser = handler->GetDesktopBrowser();
+    if (browser)
+      browser->CloseModalSigninWindow();
+  }
+}
+
 }  // namespace
 
 InlineSigninHelper::InlineSigninHelper(
@@ -331,9 +342,8 @@ void InlineSigninHelper::OnClientOAuthSuccess(const ClientOAuthResult& result) {
     if (access_point == signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS ||
         choose_what_to_sync_) {
       bool show_settings_without_configure =
-          error_controller->HasError() &&
-          sync_service &&
-          sync_service->HasSyncSetupCompleted();
+          error_controller->HasError() && sync_service &&
+          sync_service->IsFirstSetupComplete();
       start_mode = show_settings_without_configure ?
           OneClickSigninSyncStarter::SHOW_SETTINGS_WITHOUT_CONFIGURE :
           OneClickSigninSyncStarter::CONFIGURE_SYNC_FIRST;
@@ -387,8 +397,7 @@ bool InlineSigninHelper::HandleCrossAccountError(
     return false;
   }
 
-  Browser* browser = chrome::FindLastActiveWithProfile(
-      profile_, chrome::GetActiveDesktop());
+  Browser* browser = chrome::FindLastActiveWithProfile(profile_);
   content::WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
 
@@ -411,8 +420,7 @@ void InlineSigninHelper::ConfirmEmailAction(
     OneClickSigninSyncStarter::ConfirmationRequired confirmation_required,
     OneClickSigninSyncStarter::StartSyncMode start_mode,
     InlineSigninHelper::Action action) {
-  Browser* browser = chrome::FindLastActiveWithProfile(
-      profile_, chrome::GetActiveDesktop());
+  Browser* browser = chrome::FindLastActiveWithProfile(profile_);
   switch (action) {
     case InlineSigninHelper::CREATE_NEW_USER:
       content::RecordAction(
@@ -471,16 +479,16 @@ void InlineLoginHandlerImpl::DidCommitProvisionalLoadForFrame(
   if (!web_contents())
     return;
 
-  // Returns early if this is not a gaia iframe navigation.
-  const GURL kGaiaExtOrigin(
-      GaiaUrls::GetInstance()->signin_completed_continue_url().GetOrigin());
-  content::RenderFrameHost* gaia_frame = InlineLoginUI::GetAuthFrame(
-      web_contents(), kGaiaExtOrigin, "signin-frame");
+  // Returns early if this is not a gaia webview navigation.
+  content::RenderFrameHost* gaia_frame =
+      signin::GetAuthFrame(web_contents(), "signin-frame");
   if (render_frame_host != gaia_frame)
     return;
 
   // Loading any untrusted (e.g., HTTP) URLs in the privileged sign-in process
   // will require confirmation before the sign in takes effect.
+  const GURL kGaiaExtOrigin(
+      GaiaUrls::GetInstance()->signin_completed_continue_url().GetOrigin());
   if (!url.is_empty()) {
     GURL origin(url.GetOrigin());
     if (url.spec() != url::kAboutBlankURL &&
@@ -548,14 +556,17 @@ bool InlineLoginHandlerImpl::CanOffer(Profile* profile,
     if (g_browser_process && !same_email) {
       ProfileManager* profile_manager = g_browser_process->profile_manager();
       if (profile_manager) {
-        ProfileInfoCache& cache = profile_manager->GetProfileInfoCache();
-        for (size_t i = 0; i < cache.GetNumberOfProfiles(); ++i) {
-          // For backward compatibility, need to also check the username of the
-          // profile, since the GAIA ID may not have been set yet for the
-          // profile cache info.  It will get set once the profile is opened.
-          std::string profile_gaia_id = cache.GetGAIAIdOfProfileAtIndex(i);
-          std::string profile_email =
-              base::UTF16ToUTF8(cache.GetUserNameOfProfileAtIndex(i));
+        std::vector<ProfileAttributesEntry*> entries =
+            profile_manager->GetProfileAttributesStorage().
+                GetAllProfilesAttributes();
+
+        for (const ProfileAttributesEntry* entry : entries) {
+          // For backward compatibility, need to check also the username of the
+          // profile, since the GAIA ID may not have been set yet in the
+          // ProfileAttributesStorage.  It will be set once the profile
+          // is opened.
+          std::string profile_gaia_id = entry->GetGAIAId();
+          std::string profile_email = base::UTF16ToUTF8(entry->GetUserName());
           if (gaia_id == profile_gaia_id ||
               gaia::AreEmailsSame(email, profile_email)) {
             if (error_message) {
@@ -693,8 +704,8 @@ void InlineLoginHandlerImpl::CompleteLogin(const base::ListValue* args) {
                                        auth_code, choose_what_to_sync);
       ProfileManager::CreateCallback callback = base::Bind(
           &InlineLoginHandlerImpl::FinishCompleteLogin, params);
-      profiles::SwitchToProfile(path, chrome::GetActiveDesktop(), true,
-          callback, ProfileMetrics::SWITCH_PROFILE_UNLOCK);
+      profiles::SwitchToProfile(path, true, callback,
+                                ProfileMetrics::SWITCH_PROFILE_UNLOCK);
     }
   } else {
     FinishCompleteLogin(
@@ -731,6 +742,9 @@ InlineLoginHandlerImpl::FinishCompleteLoginParams::FinishCompleteLoginParams(
       auth_code(auth_code),
       choose_what_to_sync(choose_what_to_sync) {}
 
+InlineLoginHandlerImpl::FinishCompleteLoginParams::FinishCompleteLoginParams(
+    const FinishCompleteLoginParams& other) = default;
+
 InlineLoginHandlerImpl::
     FinishCompleteLoginParams::~FinishCompleteLoginParams() {}
 
@@ -739,12 +753,6 @@ void InlineLoginHandlerImpl::FinishCompleteLogin(
     const FinishCompleteLoginParams& params,
     Profile* profile,
     Profile::CreateStatus status) {
-  if (params.handler && switches::UsePasswordSeparatedSigninFlow()) {
-    Browser* browser = params.handler->GetDesktopBrowser();
-    if (browser)
-      browser->window()->CloseModalSigninWindow();
-  }
-
   // When doing a SAML sign in, this email check may result in a false
   // positive.  This happens when the user types one email address in the
   // gaia sign in page, but signs in to a different account in the SAML sign in
@@ -835,8 +843,8 @@ void InlineLoginHandlerImpl::FinishCompleteLogin(
     ProfileManager* profile_manager = g_browser_process->profile_manager();
     if (profile_manager) {
       ProfileAttributesEntry* entry;
-      if (profile_manager->GetProfileInfoCache()
-            .GetProfileAttributesWithPath(params.profile_path, &entry)) {
+      if (profile_manager->GetProfileAttributesStorage()
+              .GetProfileAttributesWithPath(params.profile_path, &entry)) {
         entry->SetIsSigninRequired(false);
       }
     }
@@ -845,9 +853,12 @@ void InlineLoginHandlerImpl::FinishCompleteLogin(
   if (params.handler)
     params.handler->
         web_ui()->CallJavascriptFunction("inline.login.closeDialog");
+
+  CloseModalSigninIfNeeded(params.handler);
 }
 
 void InlineLoginHandlerImpl::HandleLoginError(const std::string& error_msg) {
+  CloseModalSigninIfNeeded(this);
   SyncStarterCallback(OneClickSigninSyncStarter::SYNC_SETUP_FAILURE);
 
   Browser* browser = GetDesktopBrowser();
@@ -860,10 +871,8 @@ void InlineLoginHandlerImpl::HandleLoginError(const std::string& error_msg) {
 Browser* InlineLoginHandlerImpl::GetDesktopBrowser() {
   Browser* browser = chrome::FindBrowserWithWebContents(
       web_ui()->GetWebContents());
-  if (!browser) {
-    browser = chrome::FindLastActiveWithProfile(
-        Profile::FromWebUI(web_ui()), chrome::GetActiveDesktop());
-  }
+  if (!browser)
+    browser = chrome::FindLastActiveWithProfile(Profile::FromWebUI(web_ui()));
   return browser;
 }
 

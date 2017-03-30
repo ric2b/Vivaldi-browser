@@ -32,6 +32,7 @@ import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
+import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
 
@@ -85,8 +86,9 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
 
     private final int mHeaderBackgroundColor;
     private boolean mIsFullscreenModeEntered;
-    private boolean mIsInfobarContainerShown;
+    private boolean mIsInfoBarContainerShown;
     private boolean mIsFindToolbarShowing;
+    private boolean mIsKeyboardShowing;
 
     public ReaderModeManager(TabModelSelector selector, ChromeActivity activity) {
         super(selector);
@@ -103,7 +105,9 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
     /**
      * Clear the status map and references to other objects.
      */
+    @Override
     public void destroy() {
+        super.destroy();
         for (Map.Entry<Integer, ReaderModeTabInfo> e : mTabStatusMap.entrySet()) {
             if (e.getValue().getWebContentsObserver() != null) {
                 e.getValue().getWebContentsObserver().destroy();
@@ -179,7 +183,7 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
         }
 
         // Make sure there is a distillability delegate set on the WebContents.
-        setDistillabilityCallback();
+        setDistillabilityCallback(shownTabId);
 
         requestReaderPanelShow(StateChangeReason.UNKNOWN);
     }
@@ -214,6 +218,7 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
     public void onContentChanged(Tab tab) {
         // Only listen to events on the currently active tab.
         if (tab.getId() != mTabId) return;
+        closeReaderPanel(StateChangeReason.UNKNOWN, false);
 
         if (mTabStatusMap.containsKey(mTabId)) {
             // If the panel was closed using the "x" icon, don't show it again for this tab.
@@ -234,7 +239,7 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
                 closeReaderPanel(StateChangeReason.CONTENT_CHANGED, true);
             }
             // Make sure there is a distillability delegate set on the WebContents.
-            setDistillabilityCallback();
+            setDistillabilityCallback(tab.getId());
         }
 
         if (tab.getInfoBarContainer() != null) tab.getInfoBarContainer().addObserver(this);
@@ -258,7 +263,7 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
     public void onAddInfoBar(InfoBarContainer container, InfoBar infoBar, boolean isFirst) {
         // Temporarily hides the reader mode button while the infobars are shown.
         if (isFirst) {
-            mIsInfobarContainerShown = true;
+            mIsInfoBarContainerShown = true;
             closeReaderPanel(StateChangeReason.INFOBAR_SHOWN, false);
         }
     }
@@ -267,7 +272,17 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
     public void onRemoveInfoBar(InfoBarContainer container, InfoBar infoBar, boolean isLast) {
         // Re-shows the reader mode button if necessary once the infobars are dismissed.
         if (isLast) {
-            mIsInfobarContainerShown = false;
+            mIsInfoBarContainerShown = false;
+            requestReaderPanelShow(StateChangeReason.INFOBAR_HIDDEN);
+        }
+    }
+
+    @Override
+    public void onInfoBarContainerAttachedToWindow(boolean hasInfoBars) {
+        mIsInfoBarContainerShown = hasInfoBars;
+        if (mIsInfoBarContainerShown) {
+            closeReaderPanel(StateChangeReason.INFOBAR_SHOWN, false);
+        } else {
             requestReaderPanelShow(StateChangeReason.INFOBAR_HIDDEN);
         }
     }
@@ -304,8 +319,10 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
         RecordHistogram.recordBooleanHistogram("DomDistiller.BarCloseButtonUsage",
                 mReaderModePanel.getPanelState() == PanelState.EXPANDED
                 || mReaderModePanel.getPanelState() == PanelState.MAXIMIZED);
-        // TODO(mdjones): If it is decided that Reader Mode cannot be permanently dismissed for a
-        // tab, remove that remaining logic from this class.
+
+        int currentTabId = mTabModelSelector.getCurrentTabId();
+        if (!mTabStatusMap.containsKey(currentTabId)) return;
+        mTabStatusMap.get(currentTabId).setIsDismissed(true);
     }
 
     @Override
@@ -328,6 +345,26 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
                 timeMs, TimeUnit.MILLISECONDS);
     }
 
+    @Override
+    public void onSizeChanged() {
+        if (isKeyboardShowing()) {
+            mIsKeyboardShowing = true;
+            closeReaderPanel(StateChangeReason.KEYBOARD_SHOWN, false);
+        } else if (mIsKeyboardShowing) {
+            mIsKeyboardShowing = false;
+            requestReaderPanelShow(StateChangeReason.KEYBOARD_HIDDEN);
+        }
+    }
+
+    /**
+     * @return True if the keyboard might be showing. This is not 100% accurate; see
+     *         UiUtils.isKeyboardShowing(...).
+     */
+    protected boolean isKeyboardShowing() {
+        return mChromeActivity != null && UiUtils.isKeyboardShowing(mChromeActivity,
+                mChromeActivity.findViewById(android.R.id.content));
+    }
+
     protected WebContentsObserver createWebContentsObserver(WebContents webContents) {
         final int readerTabId = mTabModelSelector.getCurrentTabId();
         if (readerTabId == Tab.INVALID_TAB_ID) return null;
@@ -338,6 +375,11 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
                     boolean isMainFrame, String validatedUrl, boolean isErrorPage,
                     boolean isIframeSrcdoc) {
                 if (!isMainFrame) return;
+                // If there is a navigation in the current tab, hide the bar. It will show again
+                // once the distillability test is successful.
+                if (readerTabId == mTabModelSelector.getCurrentTabId()) {
+                    closeReaderPanel(StateChangeReason.TAB_NAVIGATION, false);
+                }
 
                 // Make sure the tab was not destroyed.
                 ReaderModeTabInfo tabInfo = mTabStatusMap.get(readerTabId);
@@ -346,7 +388,6 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
                 tabInfo.setUrl(validatedUrl);
                 if (DomDistillerUrlUtils.isDistilledPage(validatedUrl)) {
                     tabInfo.setStatus(STARTED);
-                    closeReaderPanel(StateChangeReason.UNKNOWN, true);
                     mReaderModePageUrl = validatedUrl;
                 }
             }
@@ -379,6 +420,16 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
                     requestReaderPanelShow(StateChangeReason.UNKNOWN);
                 }
             }
+
+            @Override
+            public void navigationEntryCommitted() {
+                // Make sure the tab was not destroyed.
+                ReaderModeTabInfo tabInfo = mTabStatusMap.get(readerTabId);
+                if (tabInfo == null) return;
+                // Reset closed state of reader mode in this tab once we know a navigation is
+                // happening.
+                tabInfo.setIsDismissed(false);
+            }
         };
     }
 
@@ -388,15 +439,18 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
      * @param reason The reason the panel is requesting to be shown.
      */
     protected void requestReaderPanelShow(StateChangeReason reason) {
+        if (mTabModelSelector == null) return;
+
         int currentTabId = mTabModelSelector.getCurrentTabId();
         if (currentTabId == Tab.INVALID_TAB_ID) return;
 
         if (mReaderModePanel == null || !mTabStatusMap.containsKey(currentTabId)
                 || mTabStatusMap.get(currentTabId).getStatus() != POSSIBLE
                 || mTabStatusMap.get(currentTabId).isDismissed()
-                || mIsInfobarContainerShown
+                || mIsInfoBarContainerShown
                 || mIsFindToolbarShowing
                 || mIsFullscreenModeEntered
+                || mIsKeyboardShowing
                 || DeviceClassManager.isAccessibilityModeEnabled(mChromeActivity)) {
             return;
         }
@@ -438,17 +492,21 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
         return mReaderModePanel.isPanelOpened();
     }
 
-    // Set the callback for updating reader mode status based on whether or not the page should
-    // be viewed in reader mode.
-    private void setDistillabilityCallback() {
-        Tab currentTab = mTabModelSelector.getCurrentTab();
-        if (currentTab == null || currentTab.getWebContents() == null
-                || currentTab.getContentViewCore() == null) {
+    /**
+     * Set the callback for updating reader mode status based on whether or not the page should
+     * be viewed in reader mode.
+     * @param tabId The ID of the tab having its callback set.
+     */
+    private void setDistillabilityCallback(final int tabId) {
+        if (tabId == Tab.INVALID_TAB_ID || mTabStatusMap.get(tabId).isCallbackSet()) {
             return;
         }
 
-        final int readerTabId = currentTab.getId();
-        if (mTabStatusMap.get(readerTabId).isCallbackSet()) {
+        if (mTabModelSelector == null) return;
+
+        Tab currentTab = mTabModelSelector.getTabById(tabId);
+        if (currentTab == null || currentTab.getWebContents() == null
+                || currentTab.getContentViewCore() == null) {
             return;
         }
 
@@ -456,8 +514,10 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
                 new DistillablePageUtils.PageDistillableDelegate() {
                     @Override
                     public void onIsPageDistillableResult(boolean isDistillable, boolean isLast) {
-                        ReaderModeTabInfo tabInfo = mTabStatusMap.get(readerTabId);
-                        Tab readerTab = mTabModelSelector.getTabById(readerTabId);
+                        if (mTabModelSelector == null) return;
+
+                        ReaderModeTabInfo tabInfo = mTabStatusMap.get(tabId);
+                        Tab readerTab = mTabModelSelector.getTabById(tabId);
 
                         // It is possible that the tab was destroyed before this callback happens.
                         // TODO(wychen/mdjones): Remove the callback when a Tab/WebContents is
@@ -470,7 +530,7 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
                         if (isDistillable) {
                             tabInfo.setStatus(POSSIBLE);
                             // The user may have changed tabs.
-                            if (readerTabId == mTabModelSelector.getCurrentTabId()) {
+                            if (tabId == mTabModelSelector.getCurrentTabId()) {
                                 // TODO(mdjones): Add reason DISTILLER_STATE_CHANGE.
                                 requestReaderPanelShow(StateChangeReason.UNKNOWN);
                             }
@@ -485,7 +545,7 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
                         }
                     }
                 });
-        mTabStatusMap.get(readerTabId).setIsCallbackSet(true);
+        mTabStatusMap.get(tabId).setIsCallbackSet(true);
     }
 
     /**

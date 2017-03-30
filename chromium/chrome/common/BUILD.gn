@@ -41,8 +41,11 @@ if (enable_extensions) {
 buildflag_header("features") {
   header = "features.h"
   flags = [
-    "ENABLE_GOOGLE_NOW=$enable_google_now",
     "ANDROID_JAVA_UI=$android_java_ui",
+    "ENABLE_BACKGROUND=$enable_background",
+    "ENABLE_GOOGLE_NOW=$enable_google_now",
+    "ENABLE_ONE_CLICK_SIGNIN=$enable_one_click_signin",
+    "ENABLE_PACKAGE_MASH_SERVICES=$enable_package_mash_services",
     "USE_VULCANIZE=$use_vulcanize",
   ]
 }
@@ -62,7 +65,6 @@ static_library("common") {
     "//base:base",
     "//base:base_static",
     "//base:i18n",
-    "//base:prefs",
     "//chrome:resources",
     "//chrome:strings",
     "//chrome/app/theme:theme_resources",
@@ -88,6 +90,7 @@ static_library("common") {
     "//components/offline_pages:switches",
     "//components/omnibox/common",
     "//components/policy:policy_component_common",
+    "//components/prefs",
     "//components/strings",
     "//components/translate/core/common",
     "//components/url_formatter",

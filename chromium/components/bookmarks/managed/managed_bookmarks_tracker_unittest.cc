@@ -10,8 +10,6 @@
 #include "base/files/file_path.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
-#include "base/prefs/pref_registry_simple.h"
-#include "base/prefs/testing_pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -21,6 +19,8 @@
 #include "components/bookmarks/test/bookmark_test_helpers.h"
 #include "components/bookmarks/test/mock_bookmark_model_observer.h"
 #include "components/bookmarks/test/test_bookmark_client.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/testing_pref_service.h"
 #include "grit/components_strings.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -63,9 +63,11 @@ class ManagedBookmarksTrackerTest : public testing::Test {
 
     BookmarkPermanentNodeList extra_nodes;
     extra_nodes.push_back(managed_node);
-    client_.SetExtraNodesToLoad(std::move(extra_nodes));
 
-    model_.reset(new BookmarkModel(&client_));
+    scoped_ptr<TestBookmarkClient> client(new TestBookmarkClient);
+    client->SetExtraNodesToLoad(std::move(extra_nodes));
+    model_.reset(new BookmarkModel(std::move(client)));
+
     model_->AddObserver(&observer_);
     EXPECT_CALL(observer_, BookmarkModelLoaded(model_.get(), _));
     model_->Load(&prefs_, std::string(), base::FilePath(),
@@ -74,8 +76,10 @@ class ManagedBookmarksTrackerTest : public testing::Test {
     test::WaitForBookmarkModelToLoad(model_.get());
     Mock::VerifyAndClearExpectations(&observer_);
 
-    ASSERT_EQ(1u, client_.extra_nodes().size());
-    managed_node_ = client_.extra_nodes()[0];
+    TestBookmarkClient* client_ptr =
+        static_cast<TestBookmarkClient*>(model_->client());
+    ASSERT_EQ(1u, client_ptr->extra_nodes().size());
+    managed_node_ = client_ptr->extra_nodes()[0];
     ASSERT_EQ(managed_node, managed_node_);
 
     managed_bookmarks_tracker_.reset(new ManagedBookmarksTracker(
@@ -168,7 +172,6 @@ class ManagedBookmarksTrackerTest : public testing::Test {
 
   base::MessageLoop loop_;
   TestingPrefServiceSimple prefs_;
-  TestBookmarkClient client_;
   scoped_ptr<BookmarkModel> model_;
   MockBookmarkModelObserver observer_;
   BookmarkPermanentNode* managed_node_;

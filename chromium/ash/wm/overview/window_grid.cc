@@ -391,7 +391,7 @@ void WindowGrid::OnWindowDestroying(aura::Window* window) {
     if (selected_index_ >= removed_index && selected_index_ != 0)
       selected_index_--;
     if (send_focus_alert)
-      SelectedWindow()->SendFocusAlert();
+      SelectedWindow()->SendAccessibleSelectionEvent();
   }
 
   PositionWindows(true);
@@ -447,8 +447,8 @@ void WindowGrid::InitSelectionWidget(WindowSelector::Direction direction) {
   const gfx::Rect target_bounds = SelectedWindow()->target_bounds();
   gfx::Vector2d fade_out_direction =
           GetSlideVectorForFadeIn(direction, target_bounds);
-  gfx::Display dst_display = gfx::Screen::GetScreenFor(root_window_)->
-      GetDisplayMatching(target_bounds);
+  gfx::Display dst_display =
+      gfx::Screen::GetScreen()->GetDisplayMatching(target_bounds);
   selection_widget_->GetNativeWindow()->SetBoundsInScreen(
       target_bounds - fade_out_direction, dst_display);
 }
@@ -490,7 +490,7 @@ void WindowGrid::MoveSelectionWidget(WindowSelector::Direction direction,
     InitSelectionWidget(direction);
   // Send an a11y alert so that if ChromeVox is enabled, the item label is
   // read.
-  SelectedWindow()->SendFocusAlert();
+  SelectedWindow()->SendAccessibleSelectionEvent();
   // The selection widget is moved to the newly selected item in the same
   // grid.
   MoveSelectionWidgetToTarget(animate);

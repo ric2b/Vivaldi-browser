@@ -72,14 +72,17 @@ BreakBlockquoteCommand::BreakBlockquoteCommand(Document& document)
 {
 }
 
-void BreakBlockquoteCommand::doApply()
+void BreakBlockquoteCommand::doApply(EditingState* editingState)
 {
     if (endingSelection().isNone())
         return;
 
     // Delete the current selection.
-    if (endingSelection().isRange())
-        deleteSelection(false, false);
+    if (endingSelection().isRange()) {
+        deleteSelection(editingState, false, false);
+        if (editingState->isAborted())
+            return;
+    }
 
     // This is a scenario that should never happen, but we want to
     // make sure we don't dereference a null pointer below.
@@ -107,14 +110,18 @@ void BreakBlockquoteCommand::doApply()
     // If the position is at the beginning of the top quoted content, we don't need to break the quote.
     // Instead, insert the break before the blockquote, unless the position is as the end of the the quoted content.
     if (isFirstVisiblePositionInNode(visiblePos, topBlockquote) && !isLastVisPosInNode) {
-        insertNodeBefore(breakElement.get(), topBlockquote);
+        insertNodeBefore(breakElement.get(), topBlockquote, editingState);
+        if (editingState->isAborted())
+            return;
         setEndingSelection(VisibleSelection(positionBeforeNode(breakElement.get()), TextAffinity::Downstream, endingSelection().isDirectional()));
         rebalanceWhitespace();
         return;
     }
 
     // Insert a break after the top blockquote.
-    insertNodeAfter(breakElement.get(), topBlockquote);
+    insertNodeAfter(breakElement.get(), topBlockquote, editingState);
+    if (editingState->isAborted())
+        return;
 
     // If we're inserting the break at the end of the quoted content, we don't need to break the quote.
     if (isLastVisPosInNode) {
@@ -171,7 +178,9 @@ void BreakBlockquoteCommand::doApply()
 
     // Insert a clone of the top blockquote after the break.
     RefPtrWillBeRawPtr<Element> clonedBlockquote = topBlockquote->cloneElementWithoutChildren();
-    insertNodeAfter(clonedBlockquote.get(), breakElement.get());
+    insertNodeAfter(clonedBlockquote.get(), breakElement.get(), editingState);
+    if (editingState->isAborted())
+        return;
 
     // Clone startNode's ancestors into the cloned blockquote.
     // On exiting this loop, clonedAncestor is the lowest ancestor
@@ -191,11 +200,15 @@ void BreakBlockquoteCommand::doApply()
                 setNodeAttribute(clonedChild, startAttr, AtomicString::number(toLayoutListItem(listChildNode->layoutObject())->value()));
         }
 
-        appendNode(clonedChild.get(), clonedAncestor.get());
+        appendNode(clonedChild.get(), clonedAncestor.get(), editingState);
+        if (editingState->isAborted())
+            return;
         clonedAncestor = clonedChild;
     }
 
-    moveRemainingSiblingsToNewParent(startNode, 0, clonedAncestor);
+    moveRemainingSiblingsToNewParent(startNode, 0, clonedAncestor, editingState);
+    if (editingState->isAborted())
+        return;
 
     if (!ancestors.isEmpty()) {
         // Split the tree up the ancestor chain until the topBlockquote
@@ -206,17 +219,25 @@ void BreakBlockquoteCommand::doApply()
         RefPtrWillBeRawPtr<Element> clonedParent = nullptr;
         for (ancestor = ancestors.first(), clonedParent = clonedAncestor->parentElement();
             ancestor && ancestor != topBlockquote;
-            ancestor = ancestor->parentElement(), clonedParent = clonedParent->parentElement())
-            moveRemainingSiblingsToNewParent(ancestor->nextSibling(), 0, clonedParent);
+            ancestor = ancestor->parentElement(), clonedParent = clonedParent->parentElement()) {
+            moveRemainingSiblingsToNewParent(ancestor->nextSibling(), 0, clonedParent, editingState);
+            if (editingState->isAborted())
+                return;
+        }
 
         // If the startNode's original parent is now empty, remove it
         Element* originalParent = ancestors.first().get();
-        if (!originalParent->hasChildren())
-            removeNode(originalParent);
+        if (!originalParent->hasChildren()) {
+            removeNode(originalParent, editingState);
+            if (editingState->isAborted())
+                return;
+        }
     }
 
     // Make sure the cloned block quote renders.
-    addBlockPlaceholderIfNeeded(clonedBlockquote.get());
+    addBlockPlaceholderIfNeeded(clonedBlockquote.get(), editingState);
+    if (editingState->isAborted())
+        return;
 
     // Put the selection right before the break.
     setEndingSelection(VisibleSelection(positionBeforeNode(breakElement.get()), TextAffinity::Downstream, endingSelection().isDirectional()));

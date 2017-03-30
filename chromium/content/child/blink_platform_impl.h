@@ -51,7 +51,6 @@ class ThreadSafeSender;
 class TraceLogObserverAdapter;
 class WebCryptoImpl;
 class WebGeofencingProviderImpl;
-class WebMemoryDumpProviderAdapter;
 
 class CONTENT_EXPORT BlinkPlatformImpl
     : NON_EXPORTED_BASE(public blink::Platform) {
@@ -81,10 +80,7 @@ class CONTENT_EXPORT BlinkPlatformImpl
       const blink::WebString& challenge,
       const blink::WebURL& url,
       const blink::WebURL& top_origin) override;
-  size_t memoryUsageMB() override;
   size_t actualMemoryUsageMB() override;
-  size_t physicalMemoryMB() override;
-  size_t virtualMemoryLimitMB() override;
   size_t numberOfProcessors() override;
 
   blink::WebDiscardableMemory* allocateAndLockDiscardableMemory(
@@ -102,48 +98,7 @@ class CONTENT_EXPORT BlinkPlatformImpl
   bool portAllowed(const blink::WebURL& url) const override;
   blink::WebThread* createThread(const char* name) override;
   blink::WebThread* currentThread() override;
-  void yieldCurrentThread() override;
-  blink::WebWaitableEvent* createWaitableEvent(
-      blink::WebWaitableEvent::ResetPolicy policy,
-      blink::WebWaitableEvent::InitialState state) override;
-  blink::WebWaitableEvent* waitMultipleEvents(
-      const blink::WebVector<blink::WebWaitableEvent*>& events) override;
-  void decrementStatsCounter(const char* name) override;
-  void incrementStatsCounter(const char* name) override;
-  void histogramCustomCounts(const char* name,
-                             int sample,
-                             int min,
-                             int max,
-                             int bucket_count) override;
-  void histogramEnumeration(const char* name,
-                            int sample,
-                            int boundary_value) override;
-  void histogramSparse(const char* name, int sample) override;
-  const unsigned char* getTraceCategoryEnabledFlag(
-      const char* category_name) override;
-  TraceEventAPIAtomicWord* getTraceSamplingState(
-      const unsigned thread_bucket) override;
-  TraceEventHandle addTraceEvent(
-      char phase,
-      const unsigned char* category_group_enabled,
-      const char* name,
-      unsigned long long id,
-      unsigned long long bind_id,
-      double timestamp,
-      int num_args,
-      const char** arg_names,
-      const unsigned char* arg_types,
-      const unsigned long long* arg_values,
-      blink::WebConvertableToTraceFormat* convertable_values,
-      unsigned int flags) override;
-  void updateTraceEventDuration(const unsigned char* category_group_enabled,
-                                const char* name,
-                                TraceEventHandle) override;
-  void registerMemoryDumpProvider(blink::WebMemoryDumpProvider* wmdp,
-                                  const char* name) override;
-  void unregisterMemoryDumpProvider(
-      blink::WebMemoryDumpProvider* wmdp) override;
-  blink::WebProcessMemoryDump* createProcessMemoryDump() override;
+  void recordAction(const blink::UserMetricsAction&) override;
   blink::Platform::WebMemoryAllocatorDumpGuid createWebMemoryAllocatorDumpGuid(
       const blink::WebString& guidStr) override;
   void addTraceLogEnabledStateObserver(
@@ -164,8 +119,6 @@ class CONTENT_EXPORT BlinkPlatformImpl
       const blink::WebString& value1,
       const blink::WebString& value2) override;
   void suddenTerminationChanged(bool enabled) override {}
-  double currentTimeSeconds() override;
-  double monotonicallyIncreasingTimeSeconds() override;
   blink::WebThread* compositorThread() const override;
   blink::WebGestureCurve* createFlingAnimationCurve(
       blink::WebGestureDevice device_source,
@@ -205,9 +158,6 @@ class CONTENT_EXPORT BlinkPlatformImpl
   base::ThreadLocalStorage::Slot current_thread_slot_;
   webcrypto::WebCryptoImpl web_crypto_;
   scoped_ptr<WebGeofencingProviderImpl> geofencing_provider_;
-  base::ScopedPtrHashMap<blink::WebMemoryDumpProvider*,
-                         scoped_ptr<WebMemoryDumpProviderAdapter>>
-      memory_dump_providers_;
   base::ScopedPtrHashMap<blink::Platform::TraceLogEnabledStateObserver*,
                          scoped_ptr<TraceLogObserverAdapter>>
       trace_log_observers_;

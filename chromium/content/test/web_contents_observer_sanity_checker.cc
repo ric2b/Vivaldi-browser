@@ -317,11 +317,9 @@ bool WebContentsObserverSanityChecker::OnMessageReceived(
   // FrameHostMsg_RenderProcessGone is special internal IPC message that
   // should not be leaking outside of RenderFrameHost.
   CHECK(message.type() != FrameHostMsg_RenderProcessGone::ID);
+  CHECK(render_frame_host->IsRenderFrameLive());
 
-#if !defined(OS_MACOSX)
-// TODO(avi): Disabled because of http://crbug.com/445054
   AssertRenderFrameExists(render_frame_host);
-#endif
   return false;
 }
 
@@ -332,10 +330,25 @@ void WebContentsObserverSanityChecker::WebContentsDestroyed() {
   CHECK(active_media_players_.empty());
 }
 
+void WebContentsObserverSanityChecker::DidStartLoading() {
+  // TODO(clamy): add checks for the loading state in the rest of observer
+  // methods.
+  CHECK(!is_loading_);
+  CHECK(web_contents()->IsLoading());
+  is_loading_ = true;
+}
+
+void WebContentsObserverSanityChecker::DidStopLoading() {
+  CHECK(is_loading_);
+  CHECK(!web_contents()->IsLoading());
+  is_loading_ = false;
+}
+
 WebContentsObserverSanityChecker::WebContentsObserverSanityChecker(
     WebContents* web_contents)
-    : WebContentsObserver(web_contents), web_contents_destroyed_(false) {
-}
+    : WebContentsObserver(web_contents),
+      is_loading_(false),
+      web_contents_destroyed_(false) {}
 
 WebContentsObserverSanityChecker::~WebContentsObserverSanityChecker() {
   CHECK(web_contents_destroyed_);

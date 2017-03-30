@@ -121,7 +121,8 @@ net::URLRequestJob* ForeignFetchRequestHandler::MaybeCreateJob(
   ServiceWorkerURLRequestJob* job = new ServiceWorkerURLRequestJob(
       request, network_delegate, std::string(), blob_storage_context_,
       resource_context, request_mode_, credentials_mode_, redirect_mode_, false,
-      request_context_type_, frame_type_, body_, this);
+      request_context_type_, frame_type_, body_,
+      ServiceWorkerFetchType::FOREIGN_FETCH, this);
   job_ = job->GetWeakPtr();
 
   context_->FindReadyRegistrationForDocument(
@@ -179,7 +180,14 @@ void ForeignFetchRequestHandler::DidFindRegistration(
     }
   }
 
-  if (!scope_matches) {
+  const url::Origin& request_origin = job->request()->initiator();
+  bool origin_matches = active_version->foreign_fetch_origins().empty();
+  for (const url::Origin& origin : active_version->foreign_fetch_origins()) {
+    if (request_origin.IsSameOriginWith(origin))
+      origin_matches = true;
+  }
+
+  if (!scope_matches || !origin_matches) {
     job->FallbackToNetwork();
     return;
   }
@@ -212,11 +220,6 @@ ServiceWorkerVersion* ForeignFetchRequestHandler::GetServiceWorkerVersion(
     return nullptr;
   }
   return target_worker_.get();
-}
-
-GURL ForeignFetchRequestHandler::GetRequestingOrigin() {
-  // TODO(mek): Implement this.
-  return GURL();
 }
 
 void ForeignFetchRequestHandler::ClearJob() {

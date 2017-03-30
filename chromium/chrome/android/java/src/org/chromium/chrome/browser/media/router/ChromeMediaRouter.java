@@ -31,16 +31,36 @@ public class ChromeMediaRouter implements MediaRouteManager {
 
     private static final String TAG = "MediaRouter";
 
+    // The pointer to the native object. Can be null only during tests.
     private final long mNativeMediaRouterAndroid;
     private final List<MediaRouteProvider> mRouteProviders = new ArrayList<MediaRouteProvider>();
-    private final Map<String, MediaRouteProvider> mSinkIdsToProviders =
-            new HashMap<String, MediaRouteProvider>();
     private final Map<String, MediaRouteProvider> mRouteIdsToProviders =
             new HashMap<String, MediaRouteProvider>();
     private final Map<String, Map<MediaRouteProvider, List<MediaSink>>> mSinksPerSourcePerProvider =
             new HashMap<String, Map<MediaRouteProvider, List<MediaSink>>>();
     private final Map<String, List<MediaSink>> mSinksPerSource =
             new HashMap<String, List<MediaSink>>();
+
+    @VisibleForTesting
+    protected List<MediaRouteProvider> getRouteProvidersForTest() {
+        return mRouteProviders;
+    }
+
+    @VisibleForTesting
+    protected Map<String, MediaRouteProvider> getRouteIdsToProvidersForTest() {
+        return mRouteIdsToProviders;
+    }
+
+    @VisibleForTesting
+    protected Map<String, Map<MediaRouteProvider, List<MediaSink>>>
+            getSinksPerSourcePerProviderForTest() {
+        return mSinksPerSourcePerProvider;
+    }
+
+    @VisibleForTesting
+    protected Map<String, List<MediaSink>> getSinksPerSourceForTest() {
+        return mSinksPerSource;
+    }
 
     /**
      * Obtains the {@link MediaRouter} instance given the application context.
@@ -78,7 +98,9 @@ public class ChromeMediaRouter implements MediaRouteManager {
         for (List<MediaSink> s : sinksPerProvider.values()) allSinksPerSource.addAll(s);
 
         mSinksPerSource.put(sourceId, allSinksPerSource);
-        nativeOnSinksReceived(mNativeMediaRouterAndroid, sourceId, allSinksPerSource.size());
+        if (mNativeMediaRouterAndroid != 0) {
+            nativeOnSinksReceived(mNativeMediaRouterAndroid, sourceId, allSinksPerSource.size());
+        }
     }
 
     @Override
@@ -86,18 +108,25 @@ public class ChromeMediaRouter implements MediaRouteManager {
             String mediaRouteId, String mediaSinkId, int requestId, MediaRouteProvider provider,
             boolean wasLaunched) {
         mRouteIdsToProviders.put(mediaRouteId, provider);
-        nativeOnRouteCreated(mNativeMediaRouterAndroid, mediaRouteId, mediaSinkId, requestId,
-                wasLaunched);
+        if (mNativeMediaRouterAndroid != 0) {
+            nativeOnRouteCreated(mNativeMediaRouterAndroid, mediaRouteId, mediaSinkId, requestId,
+                    wasLaunched);
+        }
     }
 
     @Override
     public void onRouteRequestError(String errorText, int requestId) {
-        nativeOnRouteRequestError(mNativeMediaRouterAndroid, errorText, requestId);
+        if (mNativeMediaRouterAndroid != 0) {
+            nativeOnRouteRequestError(mNativeMediaRouterAndroid, errorText, requestId);
+        }
     }
 
     @Override
     public void onRouteClosed(String mediaRouteId) {
-        nativeOnRouteClosed(mNativeMediaRouterAndroid, mediaRouteId);
+        if (mNativeMediaRouterAndroid != 0) {
+            nativeOnRouteClosed(mNativeMediaRouterAndroid, mediaRouteId);
+        }
+        mRouteIdsToProviders.remove(mediaRouteId);
     }
 
     @Override
@@ -119,7 +148,11 @@ public class ChromeMediaRouter implements MediaRouteManager {
     @CalledByNative
     public static ChromeMediaRouter create(long nativeMediaRouterAndroid,
             Context applicationContext) {
-        return new ChromeMediaRouter(nativeMediaRouterAndroid, applicationContext);
+        ChromeMediaRouter router = new ChromeMediaRouter(nativeMediaRouterAndroid);
+        MediaRouteProvider provider = CastMediaRouteProvider.create(applicationContext, router);
+        if (provider != null) router.addMediaRouteProvider(provider);
+
+        return router;
     }
 
     /**
@@ -239,7 +272,7 @@ public class ChromeMediaRouter implements MediaRouteManager {
     @CalledByNative
     public void closeRoute(String routeId) {
         MediaRouteProvider provider = mRouteIdsToProviders.get(routeId);
-        assert provider != null;
+        if (provider == null) return;
 
         provider.closeRoute(routeId);
     }
@@ -251,9 +284,10 @@ public class ChromeMediaRouter implements MediaRouteManager {
     @CalledByNative
     public void detachRoute(String routeId) {
         MediaRouteProvider provider = mRouteIdsToProviders.get(routeId);
-        assert provider != null;
+        if (provider == null) return;
 
         provider.detachRoute(routeId);
+        mRouteIdsToProviders.remove(routeId);
     }
 
     /**
@@ -265,7 +299,10 @@ public class ChromeMediaRouter implements MediaRouteManager {
     @CalledByNative
     public void sendStringMessage(String routeId, String message, int callbackId) {
         MediaRouteProvider provider = mRouteIdsToProviders.get(routeId);
-        assert provider != null;
+        if (provider == null) {
+            nativeOnMessageSentResult(mNativeMediaRouterAndroid, false, callbackId);
+            return;
+        }
 
         provider.sendStringMessage(routeId, message, callbackId);
     }
@@ -279,17 +316,22 @@ public class ChromeMediaRouter implements MediaRouteManager {
     @CalledByNative
     public void sendBinaryMessage(String routeId, byte[] data, int callbackId) {
         MediaRouteProvider provider = mRouteIdsToProviders.get(routeId);
-        assert provider != null;
+        if (provider == null) {
+            nativeOnMessageSentResult(mNativeMediaRouterAndroid, false, callbackId);
+            return;
+        }
 
         provider.sendBinaryMessage(routeId, data, callbackId);
     }
 
     @VisibleForTesting
-    ChromeMediaRouter(long nativeMediaRouter, Context applicationContext) {
-        MediaRouteProvider provider = CastMediaRouteProvider.create(applicationContext, this);
-        if (provider != null) mRouteProviders.add(provider);
-
+    protected ChromeMediaRouter(long nativeMediaRouter) {
         mNativeMediaRouterAndroid = nativeMediaRouter;
+    }
+
+    @VisibleForTesting
+    protected void addMediaRouteProvider(MediaRouteProvider provider) {
+        mRouteProviders.add(provider);
     }
 
     private MediaSink getSink(String sourceId, int index) {

@@ -8,10 +8,14 @@ import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//build/config/linux/pkg_config.gni")
 import("//media/media_options.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
 
 source_set("base") {
   # This is part of the media component.
-  visibility = [ "//media" ]
+  visibility = [
+    "//media",
+    "//media/capture",
+  ]
   sources = [
     "audio_block_fifo.cc",
     "audio_block_fifo.h",
@@ -38,6 +42,8 @@ source_set("base") {
     "audio_hash.h",
     "audio_pull_fifo.cc",
     "audio_pull_fifo.h",
+    "audio_push_fifo.cc",
+    "audio_push_fifo.h",
     "audio_renderer.cc",
     "audio_renderer.h",
     "audio_renderer_mixer.cc",
@@ -88,6 +94,8 @@ source_set("base") {
     "decoder_buffer.h",
     "decoder_buffer_queue.cc",
     "decoder_buffer_queue.h",
+    "decoder_factory.cc",
+    "decoder_factory.h",
     "decrypt_config.cc",
     "decrypt_config.h",
     "decryptor.cc",
@@ -106,8 +114,6 @@ source_set("base") {
     "key_systems.cc",
     "key_systems.h",
     "key_systems.h",
-    "key_systems_support_uma.cc",
-    "key_systems_support_uma.h",
     "loopback_audio_converter.cc",
     "loopback_audio_converter.h",
     "media.cc",
@@ -129,6 +135,8 @@ source_set("base") {
     "media_util.h",
     "mime_util.cc",
     "mime_util.h",
+    "mime_util_internal.cc",
+    "mime_util_internal.h",
     "moving_average.cc",
     "moving_average.h",
     "multi_channel_resampler.cc",
@@ -136,8 +144,9 @@ source_set("base") {
     "null_video_sink.cc",
     "null_video_sink.h",
     "output_device.h",
-    "pipeline.cc",
     "pipeline.h",
+    "pipeline_impl.cc",
+    "pipeline_impl.h",
     "pipeline_status.h",
     "player_tracker.cc",
     "player_tracker.h",
@@ -165,6 +174,7 @@ source_set("base") {
     "stream_parser.h",
     "stream_parser_buffer.cc",
     "stream_parser_buffer.h",
+    "surface_manager.h",
     "text_cue.cc",
     "text_cue.h",
     "text_ranges.cc",
@@ -245,9 +255,7 @@ source_set("base") {
   if (is_android) {
     public_deps = [
       "//media/base/android",
-      "//media/base/android:media_java",
       "//media/base/android:media_jni_headers",
-      "//media/base/android:video_capture_jni_headers",
     ]
     allow_circular_includes_from += [ "//media/base/android" ]
   }
@@ -381,6 +389,7 @@ source_set("unittests") {
     "audio_hardware_config_unittest.cc",
     "audio_hash_unittest.cc",
     "audio_pull_fifo_unittest.cc",
+    "audio_push_fifo_unittest.cc",
     "audio_renderer_mixer_input_unittest.cc",
     "audio_renderer_mixer_unittest.cc",
     "audio_shifter_unittest.cc",
@@ -404,7 +413,7 @@ source_set("unittests") {
     "moving_average_unittest.cc",
     "multi_channel_resampler_unittest.cc",
     "null_video_sink_unittest.cc",
-    "pipeline_unittest.cc",
+    "pipeline_impl_unittest.cc",
     "ranges_unittest.cc",
     "run_all_unittests.cc",
     "seekable_buffer_unittest.cc",
@@ -543,4 +552,14 @@ if (current_cpu == "x86" || current_cpu == "x64") {
       }
     }
   }
+}
+
+fuzzer_test("media_container_names_fuzzer") {
+  sources = [
+    "container_names_fuzzertest.cc",
+  ]
+  deps = [
+    "//base",
+    "//media",
+  ]
 }

@@ -8,7 +8,6 @@
 #include "ash/shell.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/wm/power_button_controller.h"
-#include "base/prefs/pref_service.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"

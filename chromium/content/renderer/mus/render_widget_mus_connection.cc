@@ -20,7 +20,7 @@
 #include "content/renderer/render_view_impl.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
 #include "mojo/converters/surfaces/surfaces_utils.h"
-#include "mojo/shell/public/cpp/application_impl.h"
+#include "mojo/shell/public/cpp/connector.h"
 
 namespace content {
 
@@ -49,7 +49,7 @@ scoped_ptr<cc::OutputSurface> RenderWidgetMusConnection::CreateOutputSurface() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!window_surface_binding_);
   mus::mojom::GpuPtr gpu_service;
-  MojoShellConnection::Get()->GetApplication()->ConnectToService("mojo:mus",
+  MojoShellConnection::Get()->GetConnector()->ConnectToInterface("mojo:mus",
                                                                  &gpu_service);
   mus::mojom::CommandBufferPtr cb;
   gpu_service->CreateOffscreenGLES2Context(GetProxy(&cb));
@@ -123,6 +123,11 @@ void RenderWidgetMusConnection::OnInputEventAck(
   pending_ack_.Reset();
 }
 
+void RenderWidgetMusConnection::NonBlockingInputEventHandled(
+    blink::WebInputEvent::Type handled_type) {
+  NOTIMPLEMENTED();
+}
+
 void RenderWidgetMusConnection::SetInputHandler(
     RenderWidgetInputHandler* input_handler) {
   DCHECK(!input_handler_);
@@ -171,7 +176,8 @@ void RenderWidgetMusConnection::OnWindowInputEvent(
   pending_ack_ = ack;
   // TODO(fsamuel, sadrul): Track real latency info.
   ui::LatencyInfo latency_info;
-  input_handler_->HandleInputEvent(*input_event, latency_info);
+  input_handler_->HandleInputEvent(*input_event, latency_info,
+                                   DISPATCH_TYPE_NORMAL);
 }
 
 }  // namespace content

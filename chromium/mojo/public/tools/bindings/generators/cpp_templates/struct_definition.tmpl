@@ -91,6 +91,15 @@
     return false;
 {%- endmacro %}
 
+{#- Validates the specified struct field, which is supposed to be an enum.
+    This macro is expanded by the Validate() method. #}
+{%- macro _validate_enum(struct, packed_field) %}
+{%-   set name = packed_field.field.name %}
+{%-   set kind = packed_field.field.kind %}
+  if (!mojo::internal::ValidateEnum(object->{{name}}))
+    return false;
+{%- endmacro %}
+
 // static
 {{class_name}}* {{class_name}}::New(mojo::internal::Buffer* buf) {
   return new (buf->Allocate(sizeof({{class_name}}))) {{class_name}}();
@@ -146,7 +155,8 @@ bool {{class_name}}::Validate(const void* data,
 {%- for packed_field in struct.packed.packed_fields_in_ordinal_order %}
 {%-   set kind = packed_field.field.kind %}
 {%-   if kind|is_object_kind or kind|is_any_handle_kind or
-         kind|is_interface_kind or kind|is_associated_kind %}
+         kind|is_interface_kind or kind|is_associated_kind or
+         kind|is_enum_kind %}
 {%-     if packed_field.min_version > last_checked_version %}
 {%-       set last_checked_version = packed_field.min_version %}
   if (object->header_.version < {{packed_field.min_version}})
@@ -156,8 +166,10 @@ bool {{class_name}}::Validate(const void* data,
 {{_validate_object(struct, packed_field)}}
 {%-     elif kind|is_any_handle_kind or kind|is_interface_kind %}
 {{_validate_handle(struct, packed_field)}}
-{%-     else %}
+{%-     elif kind|is_associated_kind %}
 {{_validate_associated(struct, packed_field)}}
+{%-     else %}
+{{_validate_enum(struct, packed_field)}}
 {%-     endif %}
 {%-   endif %}
 {%- endfor %}
@@ -167,14 +179,14 @@ bool {{class_name}}::Validate(const void* data,
 
 void {{class_name}}::EncodePointersAndHandles(
     std::vector<mojo::Handle>* handles) {
-  MOJO_CHECK(header_.version == {{struct.versions[-1].version}});
+  CHECK(header_.version == {{struct.versions[-1].version}});
 {%- for pf in struct.packed.packed_fields_in_ordinal_order %}
 {%-   if pf.field.kind|is_union_kind %}
-  {{pf.field.name}}.EncodePointersAndHandles(handles);
+  this->{{pf.field.name}}.EncodePointersAndHandles(handles);
 {%-   elif pf.field.kind|is_object_kind %}
-  mojo::internal::Encode(&{{pf.field.name}}, handles);
+  mojo::internal::Encode(&this->{{pf.field.name}}, handles);
 {%-   elif pf.field.kind|is_any_handle_kind or pf.field.kind|is_interface_kind %}
-  mojo::internal::EncodeHandle(&{{pf.field.name}}, handles);
+  mojo::internal::EncodeHandle(&this->{{pf.field.name}}, handles);
 {%-   endif %}
 {%- endfor %}
 }
@@ -198,11 +210,11 @@ void {{class_name}}::DecodePointersAndHandles(
     return;
 {%-     endif %}
 {%-     if kind|is_union_kind %}
-  {{name}}.DecodePointersAndHandles(handles);
+  this->{{name}}.DecodePointersAndHandles(handles);
 {%-     elif kind|is_object_kind %}
-  mojo::internal::Decode(&{{name}}, handles);
+  mojo::internal::Decode(&this->{{name}}, handles);
 {%-     else %}
-  mojo::internal::DecodeHandle(&{{name}}, handles);
+  mojo::internal::DecodeHandle(&this->{{name}}, handles);
 {%-     endif %}
 {%-   endif %}
 {%- endfor %}

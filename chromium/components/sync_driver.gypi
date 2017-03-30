@@ -18,8 +18,10 @@
         'invalidation_public',
         'os_crypt',
         'signin_core_browser',
-        'sync_driver_features',
         'version_info',
+      ],
+      'export_dependent_settings': [
+        '../third_party/cacheinvalidation/cacheinvalidation.gyp:cacheinvalidation',
       ],
       'include_dirs': [
         '..',
@@ -32,8 +34,6 @@
         'sync_driver/backend_data_type_configurer.h',
         'sync_driver/backend_migrator.cc',
         'sync_driver/backend_migrator.h',
-        'sync_driver/backup_rollback_controller.cc',
-        'sync_driver/backup_rollback_controller.h',
         'sync_driver/change_processor.cc',
         'sync_driver/change_processor.h',
         'sync_driver/data_type_controller.cc',
@@ -52,6 +52,8 @@
         'sync_driver/device_info.h',
         'sync_driver/device_info_data_type_controller.cc',
         'sync_driver/device_info_data_type_controller.h',
+        'sync_driver/device_info_model_type_controller.cc',
+        'sync_driver/device_info_model_type_controller.h',
         'sync_driver/device_info_service.cc',
         'sync_driver/device_info_service.h',
         'sync_driver/device_info_sync_service.cc',
@@ -93,6 +95,8 @@
         'sync_driver/non_blocking_data_type_controller.h',
         'sync_driver/non_ui_data_type_controller.cc',
         'sync_driver/non_ui_data_type_controller.h',
+        'sync_driver/non_ui_model_type_controller.cc',
+        'sync_driver/non_ui_model_type_controller.h',
         'sync_driver/pref_names.cc',
         'sync_driver/pref_names.h',
         'sync_driver/profile_sync_auth_provider.cc',
@@ -135,6 +139,8 @@
         'sync_driver/system_encryptor.h',
         'sync_driver/ui_data_type_controller.cc',
         'sync_driver/ui_data_type_controller.h',
+        'sync_driver/ui_model_type_controller.cc',
+        'sync_driver/ui_model_type_controller.h',
         'sync_driver/user_selectable_sync_type.h',
       ],
       'conditions': [
@@ -149,26 +155,6 @@
           ],
         }],
       ],
-    },
-    {
-      # GN version: //components/sync_driver:features
-      'target_name': 'sync_driver_features',
-      'includes': [ '../build/buildflag_header.gypi' ],
-      'variables': {
-        'buildflag_header_path': 'components/sync_driver/sync_driver_features.h',
-        'variables': {
-          'conditions': [
-            ['OS=="win" or OS=="mac" or (OS=="linux" and chromeos==0)', {
-              'enable_pre_sync_backup%': 1,
-            }, {
-              'enable_pre_sync_backup%': 0,
-            }],
-          ],
-        },
-        'buildflag_flags': [
-          "ENABLE_PRE_SYNC_BACKUP=<(enable_pre_sync_backup)",
-        ],
-      },
     },
     {
       'target_name': 'sync_driver_test_support',

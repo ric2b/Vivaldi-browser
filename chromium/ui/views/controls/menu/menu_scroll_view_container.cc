@@ -76,7 +76,6 @@ class MenuScrollButton : public View {
     // The background.
     gfx::Rect item_bounds(0, 0, width(), height());
     NativeTheme::ExtraParams extra;
-    extra.menu_item.is_selected = false;
     GetNativeTheme()->Paint(canvas->sk_canvas(),
                             NativeTheme::kMenuItemBackground,
                             NativeTheme::kNormal, item_bounds, extra);
@@ -263,9 +262,6 @@ void MenuScrollViewContainer::GetAccessibleState(
 
   // Now change the role.
   state->role = ui::AX_ROLE_MENU_BAR;
-  // Some AT (like NVDA) will not process focus events on menu item children
-  // unless a parent claims to be focused.
-  state->AddStateFlag(ui::AX_STATE_FOCUSED);
 }
 
 void MenuScrollViewContainer::OnBoundsChanged(

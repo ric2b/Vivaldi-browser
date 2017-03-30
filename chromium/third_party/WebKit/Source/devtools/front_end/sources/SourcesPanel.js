@@ -242,11 +242,14 @@ WebInspector.SourcesPanel.prototype = {
         }
 
         /**
-         * @param {!WebInspector.UILocation} uiLocation
+         * @param {!WebInspector.LiveLocation} liveLocation
          * @this {WebInspector.SourcesPanel}
          */
-        function didGetUILocation(uiLocation)
+        function didGetUILocation(liveLocation)
         {
+            var uiLocation = liveLocation.uiLocation();
+            if (!uiLocation)
+                return;
             var breakpoint = WebInspector.breakpointManager.findBreakpointOnLine(uiLocation.uiSourceCode, uiLocation.lineNumber);
             if (!breakpoint)
                 return;
@@ -282,7 +285,7 @@ WebInspector.SourcesPanel.prototype = {
             if (Runtime.experiments.isEnabled("stepIntoAsync")) {
                 var operationId = details.auxData["operationId"];
                 var operation = this.sidebarPanes.asyncOperationBreakpoints.operationById(details.target(), operationId);
-                var description = (operation && operation.description) || WebInspector.UIString("<unknown>");
+                var description = (operation && operation.stack && operation.stack.description) || WebInspector.UIString("<unknown>");
                 this.sidebarPanes.callstack.setStatus(WebInspector.UIString("Paused on a \"%s\" async operation.", description));
                 this.sidebarPanes.asyncOperationBreakpoints.highlightBreakpoint(operationId);
             }
@@ -388,10 +391,13 @@ WebInspector.SourcesPanel.prototype = {
     },
 
     /**
-     * @param {!WebInspector.UILocation} uiLocation
+     * @param {!WebInspector.LiveLocation} liveLocation
      */
-    _executionLineChanged: function(uiLocation)
+    _executionLineChanged: function(liveLocation)
     {
+        var uiLocation = liveLocation.uiLocation();
+        if (!uiLocation)
+            return;
         this._sourcesView.clearCurrentExecutionLine();
         this._sourcesView.setExecutionLocation(uiLocation);
         if (window.performance.now() - this._lastModificationTime < WebInspector.SourcesPanel._lastModificationTimeout)
@@ -925,11 +931,8 @@ WebInspector.SourcesPanel.prototype = {
                 contextMenu.appendItem(WebInspector.UIString.capitalize("Continue to ^here"), this._continueToLocation.bind(this, uiLocation));
         }
 
-        if (contentType.hasScripts() && projectType !== WebInspector.projectTypes.Snippets) {
-            var networkURL = this._networkMapping.networkURL(uiSourceCode);
-            var url = projectType === WebInspector.projectTypes.Formatter ? uiSourceCode.url() : networkURL;
-            this.sidebarPanes.callstack.appendBlackboxURLContextMenuItems(contextMenu, url, projectType === WebInspector.projectTypes.ContentScripts);
-        }
+        if (contentType.hasScripts() && projectType !== WebInspector.projectTypes.Snippets)
+            this.sidebarPanes.callstack.appendBlackboxURLContextMenuItems(contextMenu, uiSourceCode);
     },
 
     /**

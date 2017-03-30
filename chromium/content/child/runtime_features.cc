@@ -31,10 +31,8 @@ namespace content {
 
 static void SetRuntimeFeatureDefaultsForPlatform() {
 #if defined(OS_ANDROID)
-  // MSE/EME implementation needs Android MediaCodec API.
+  // EME implementation needs Android MediaCodec API.
   if (!media::MediaCodecUtil::IsMediaCodecAvailable()) {
-    WebRuntimeFeatures::enableMediaSource(false);
-    WebRuntimeFeatures::enablePrefixedEncryptedMedia(false);
     WebRuntimeFeatures::enableEncryptedMedia(false);
   }
 
@@ -72,8 +70,8 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (command_line.HasSwitch(switches::kEnableExperimentalWebPlatformFeatures))
     WebRuntimeFeatures::enableExperimentalFeatures(true);
 
-  if (base::FeatureList::IsEnabled(features::kExperimentalFramework))
-    WebRuntimeFeatures::enableExperimentalFramework(true);
+  WebRuntimeFeatures::enableExperimentalFramework(
+      base::FeatureList::IsEnabled(features::kExperimentalFramework));
 
   if (command_line.HasSwitch(switches::kEnableWebBluetooth))
     WebRuntimeFeatures::enableWebBluetooth(true);
@@ -93,20 +91,14 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
     WebRuntimeFeatures::enablePushMessaging(false);
   }
 
+  if (command_line.HasSwitch(switches::kEnableNotificationActionIcons))
+    WebRuntimeFeatures::enableNotificationActionIcons(true);
+
   if (command_line.HasSwitch(switches::kDisableSharedWorkers))
     WebRuntimeFeatures::enableSharedWorker(false);
 
-  if (command_line.HasSwitch(switches::kDisableWebAudio))
-    WebRuntimeFeatures::enableWebAudio(false);
-
   if (command_line.HasSwitch(switches::kDisableSpeechAPI))
     WebRuntimeFeatures::enableScriptedSpeech(false);
-
-  if (command_line.HasSwitch(switches::kDisableEncryptedMedia))
-    WebRuntimeFeatures::enableEncryptedMedia(false);
-
-  if (command_line.HasSwitch(switches::kEnablePrefixedEncryptedMedia))
-    WebRuntimeFeatures::enablePrefixedEncryptedMedia(true);
 
   if (command_line.HasSwitch(switches::kDisableFileSystem))
     WebRuntimeFeatures::enableFileSystem(false);
@@ -173,11 +165,20 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (command_line.HasSwitch(switches::kDisablePresentationAPI))
     WebRuntimeFeatures::enablePresentationAPI(false);
 
-  if (base::FeatureList::IsEnabled(features::kWebFontsIntervention))
+  if (base::FeatureList::IsEnabled(features::kWebFontsIntervention)) {
     WebRuntimeFeatures::enableWebFontsIntervention(true);
+    if (command_line.HasSwitch(switches::kEnableWebFontsInterventionTrigger))
+      WebRuntimeFeatures::enableWebFontsInterventionTrigger(true);
+  }
+
+  if (base::FeatureList::IsEnabled(features::kScrollAnchoring))
+    WebRuntimeFeatures::enableScrollAnchoring(true);
 
   if (command_line.HasSwitch(switches::kEnableSlimmingPaintV2))
     WebRuntimeFeatures::enableSlimmingPaintV2(true);
+
+  if (base::FeatureList::IsEnabled(features::kRenderingPipelineThrottling))
+    WebRuntimeFeatures::enableRenderingPipelineThrottling(true);
 
   // Enable explicitly enabled features, and then disable explicitly disabled
   // ones.

@@ -156,8 +156,9 @@ gfx::Size ContentSettingBubbleContents::GetPreferredSize() const {
   gfx::Size preferred_size(views::View::GetPreferredSize());
   int preferred_width =
       (!content_setting_bubble_model_->bubble_content().domain_lists.empty() &&
-       (kMinMultiLineContentsWidth > preferred_size.width())) ?
-      kMinMultiLineContentsWidth : preferred_size.width();
+       (kMinMultiLineContentsWidth > preferred_size.width()))
+          ? kMinMultiLineContentsWidth
+          : preferred_size.width();
   preferred_size.set_width(std::min(preferred_width, kMaxContentsWidth));
   return preferred_size;
 }
@@ -169,6 +170,7 @@ void ContentSettingBubbleContents::UpdateMenuLabel(
        it != media_menus_.end(); ++it) {
     if (it->second->type == type) {
       it->first->SetText(base::UTF8ToUTF16(label));
+      it->first->Layout();
       return;
     }
   }
@@ -304,8 +306,7 @@ void ContentSettingBubbleContents::Init() {
       label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
 
       views::MenuButton* menu_button = new views::MenuButton(
-          NULL, base::UTF8ToUTF16((i->second.selected_device.name)),
-          this, true);
+          base::UTF8ToUTF16((i->second.selected_device.name)), this, true);
       menu_button->SetStyle(views::Button::STYLE_BUTTON);
       menu_button->SetHorizontalAlignment(gfx::ALIGN_LEFT);
       menu_button->set_animate_on_state_change(false);
@@ -449,22 +450,21 @@ void ContentSettingBubbleContents::LinkClicked(views::Link* source,
 }
 
 void ContentSettingBubbleContents::OnMenuButtonClicked(
-    views::View* source,
-    const gfx::Point& point) {
-    MediaMenuPartsMap::iterator j(media_menus_.find(
-        static_cast<views::MenuButton*>(source)));
-    DCHECK(j != media_menus_.end());
-    menu_runner_.reset(new views::MenuRunner(j->second->menu_model.get(),
-                                             views::MenuRunner::HAS_MNEMONICS));
+    views::MenuButton* source,
+    const gfx::Point& point,
+    const ui::Event* event) {
+  MediaMenuPartsMap::iterator j(
+      media_menus_.find(static_cast<views::MenuButton*>(source)));
+  DCHECK(j != media_menus_.end());
+  menu_runner_.reset(new views::MenuRunner(j->second->menu_model.get(),
+                                           views::MenuRunner::HAS_MNEMONICS));
 
-    gfx::Point screen_location;
-    views::View::ConvertPointToScreen(j->first, &screen_location);
-    ignore_result(
-        menu_runner_->RunMenuAt(source->GetWidget(),
-                                j->first,
-                                gfx::Rect(screen_location, j->first->size()),
-                                views::MENU_ANCHOR_TOPLEFT,
-                                ui::MENU_SOURCE_NONE));
+  gfx::Point screen_location;
+  views::View::ConvertPointToScreen(j->first, &screen_location);
+  ignore_result(menu_runner_->RunMenuAt(
+      source->GetWidget(), j->first,
+      gfx::Rect(screen_location, j->first->size()), views::MENU_ANCHOR_TOPLEFT,
+      ui::MENU_SOURCE_NONE));
 }
 
 void ContentSettingBubbleContents::UpdateMenuButtonSizes() {

@@ -23,10 +23,10 @@
 #include "net/cert/ct_verify_result.h"
 #include "net/proxy/proxy_server.h"
 #include "net/quic/quic_chromium_client_stream.h"
+#include "net/quic/quic_chromium_packet_reader.h"
 #include "net/quic/quic_client_session_base.h"
 #include "net/quic/quic_connection_logger.h"
 #include "net/quic/quic_crypto_client_stream.h"
-#include "net/quic/quic_packet_reader.h"
 #include "net/quic/quic_protocol.h"
 #include "net/quic/quic_time.h"
 
@@ -48,7 +48,7 @@ class QuicChromiumClientSessionPeer;
 
 class NET_EXPORT_PRIVATE QuicChromiumClientSession
     : public QuicClientSessionBase,
-      public QuicPacketReader::Visitor {
+      public QuicChromiumPacketReader::Visitor {
  public:
   // Reasons to disable QUIC, that is under certain pathological
   // connection errors.  Note: these values must be kept in sync with
@@ -126,6 +126,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
       QuicCryptoClientConfig* crypto_config,
       const char* const connection_description,
       base::TimeTicks dns_resolution_end_time,
+      QuicClientPushPromiseIndex* push_promise_index,
       base::TaskRunner* task_runner,
       scoped_ptr<SocketPerformanceWatcher> socket_performance_watcher,
       NetLog* net_log);
@@ -152,6 +153,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
   // QuicSession methods:
   void OnStreamFrame(const QuicStreamFrame& frame) override;
+  bool ShouldCreateOutgoingDynamicStream();
   QuicChromiumClientStream* CreateOutgoingDynamicStream(
       SpdyPriority priority) override;
   QuicCryptoClientStream* GetCryptoStream() override;
@@ -173,10 +175,12 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
       const ProofVerifyDetails& verify_details) override;
 
   // QuicConnectionVisitorInterface methods:
-  void OnConnectionClosed(QuicErrorCode error, bool from_peer) override;
+  void OnConnectionClosed(QuicErrorCode error,
+                          ConnectionCloseSource source) override;
   void OnSuccessfulVersionNegotiation(const QuicVersion& version) override;
+  void OnPathDegrading() override;
 
-  // QuicPacketReader::Visitor methods:
+  // QuicChromiumPacketReader::Visitor methods:
   void OnReadError(int result, const DatagramClientSocket* socket) override;
   bool OnPacket(const QuicEncryptedPacket& packet,
                 IPEndPoint local_address,
@@ -232,13 +236,15 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   // Returns false if number of migrations exceeds kMaxReadersPerQuicSession.
   // Takes ownership of |socket|, |reader|, and |writer|.
   bool MigrateToSocket(scoped_ptr<DatagramClientSocket> socket,
-                       scoped_ptr<QuicPacketReader> reader,
+                       scoped_ptr<QuicChromiumPacketReader> reader,
                        scoped_ptr<QuicPacketWriter> writer);
 
   // Returns current default socket. This is the socket over which all
   // QUIC packets are sent. This default socket can change, so do not store the
   // returned socket.
   const DatagramClientSocket* GetDefaultSocket() const;
+
+  bool IsAuthorized(const std::string& hostname) override;
 
  protected:
   // QuicSession methods:
@@ -301,7 +307,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   size_t num_total_streams_;
   base::TaskRunner* task_runner_;
   BoundNetLog net_log_;
-  std::vector<scoped_ptr<QuicPacketReader>> packet_readers_;
+  std::vector<scoped_ptr<QuicChromiumPacketReader>> packet_readers_;
   base::TimeTicks dns_resolution_end_time_;
   base::TimeTicks handshake_start_;  // Time the handshake was started.
   scoped_ptr<QuicConnectionLogger> logger_;

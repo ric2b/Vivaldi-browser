@@ -42,6 +42,7 @@
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
 #include "third_party/skia/include/core/SkStream.h"
+#include "wtf/CurrentTime.h"
 #include "wtf/HexNumber.h"
 #include "wtf/text/Base64.h"
 #include "wtf/text/TextEncoding.h"
@@ -111,6 +112,12 @@ PassOwnPtr<Vector<char>> PictureSnapshot::replay(unsigned fromStep, unsigned toS
     bitmap.eraseARGB(0, 0, 0, 0);
     {
         ReplayingCanvas canvas(bitmap, fromStep, toStep);
+        // Disable LCD text preemptively, because the picture opacity is unknown.
+        // The canonical API involves SkSurface props, but since we're not SkSurface-based
+        // at this point (see TODO above) we (ab)use saveLayer for this purpose.
+        SkAutoCanvasRestore autoRestore(&canvas, false);
+        canvas.saveLayer(nullptr, nullptr);
+
         canvas.scale(scale, scale);
         canvas.resetStepCount();
         m_picture->playback(&canvas, &canvas);
@@ -122,7 +129,7 @@ PassOwnPtr<Vector<char>> PictureSnapshot::replay(unsigned fromStep, unsigned toS
     if (!image)
         return nullptr;
 
-    ImagePixelLocker pixelLocker(image, kUnpremul_SkAlphaType);
+    ImagePixelLocker pixelLocker(image, kUnpremul_SkAlphaType, kRGBA_8888_SkColorType);
     ImageDataBuffer imageData(IntSize(image->width(), image->height()),
         static_cast<const unsigned char*>(pixelLocker.pixels()));
     if (!PNGImageEncoder::encode(imageData, reinterpret_cast<Vector<unsigned char>*>(&encodedImage)))

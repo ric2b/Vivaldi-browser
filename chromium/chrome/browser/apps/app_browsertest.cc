@@ -10,7 +10,6 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -34,6 +33,7 @@
 #include "chrome/test/base/test_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/host_zoom_map.h"
@@ -259,6 +259,7 @@ class PlatformAppWithFileBrowserTest: public PlatformAppBrowserTest {
   }
 };
 
+const char kChromiumURL[] = "http://chromium.org";
 #if !defined(OS_CHROMEOS)
 const char kTestFilePath[] = "platform_apps/launch_files/test.txt";
 #endif
@@ -432,17 +433,34 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, AppWithContextMenuClicked) {
 }
 
 IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, DisallowNavigation) {
-  TabsAddedNotificationObserver observer(2);
+  TabsAddedNotificationObserver observer(1);
 
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunPlatformAppTest("platform_apps/navigation")) << message_;
 
   observer.Wait();
-  ASSERT_EQ(2U, observer.tabs().size());
-  EXPECT_EQ(std::string(chrome::kExtensionInvalidRequestURL),
-            observer.tabs()[0]->GetURL().spec());
-  EXPECT_EQ("http://chromium.org/",
-            observer.tabs()[1]->GetURL().spec());
+  ASSERT_EQ(1U, observer.tabs().size());
+  EXPECT_EQ(GURL(kChromiumURL), observer.tabs()[0]->GetURL());
+}
+
+IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
+                       DisallowBackgroundPageNavigation) {
+  // The test will try to open in app urls and external urls via clicking links
+  // and window.open(). Only the external urls should succeed in opening tabs.
+  // TODO(lazyboy): non-external urls also succeed right now because of
+  // http://crbug.com/585570 not being fixed. Fix the test once the bug is
+  // fixed.
+  // const size_t kExpectedNumberOfTabs = 2u;
+  const size_t kExpectedNumberOfTabs = 6u;
+  TabsAddedNotificationObserver observer(kExpectedNumberOfTabs);
+  ASSERT_TRUE(RunPlatformAppTest("platform_apps/background_page_navigation")) <<
+      message_;
+  observer.Wait();
+  ASSERT_EQ(kExpectedNumberOfTabs, observer.tabs().size());
+  EXPECT_EQ(GURL(kChromiumURL),
+            observer.tabs()[kExpectedNumberOfTabs - 1]->GetURL());
+  EXPECT_EQ(GURL(kChromiumURL),
+            observer.tabs()[kExpectedNumberOfTabs - 2]->GetURL());
 }
 
 // Failing on some Win and Linux buildbots.  See crbug.com/354425.

@@ -134,6 +134,13 @@
 <translation id="1522425503138261032">Dopusti web-lokacijama praćenje fizičke lokacije korisnika</translation>
 <translation id="152657506688053119">Popis zamjenskih URL-ova za zadanog davatelja usluge pretraživanja</translation>
 <translation id="1530812829012954197">Uvijek prikaži sljedeće URL obrasce u pregledniku hosta</translation>
+<translation id="1553684822621013552">Kada je to pravilo postavljeno na "True", ARC će biti omogućen za korisnika
+      (ovisno o dodatnim postavkama pravila – ARC i dalje neće biti
+      dostupan ako su jednokratni način rada ili višestruka prijava omogućeni
+      u trenutačnoj korisničkoj sesiji).
+
+      Ako se ta postavka onemogući ili ne konfigurira, poslovni korisnici
+      ne mogu upotrebljavati ARC.</translation>
 <translation id="1561424797596341174">Nadjačavanja pravila za međuverzije za otklanjanje pogrešaka hosta daljinskog pristupa</translation>
 <translation id="1583248206450240930">Upotrijebi <ph name="PRODUCT_FRAME_NAME" /> kao zadano</translation>
 <translation id="1608755754295374538">URL-ovi koji će dobiti pristup uređajima za snimanje zvuka bez postavljanja upita</translation>
@@ -185,6 +192,13 @@
 
           To se pravilo poštuje samo ako je omogućeno pravilo "DefaultSearchProviderEnabled".</translation>
 <translation id="1859633270756049523">Ograničava duljinu sesije</translation>
+<translation id="1859859319036806634">Upozorenje: rezervni postupak za verziju TLS-a uklonit će se iz preglednika <ph name="PRODUCT_NAME" /> nakon verzije 52 (otprilike u rujnu 2016.) i ovo će pravilo tada prestati funkcionirati.
+
+      U slučaju neuspjelog rukovanja TLS-a <ph name="PRODUCT_NAME" /> prije je ponovo isprobavao vezu sa starijom verzijom TLS-a da bi zaobišao programske pogreške na HTTPS poslužiteljima. Ta postavka konfigurira verziju na kojoj će se rezervni postupak zaustaviti. Ako poslužitelj ispravno dogovori verziju (tj., bez prekidanja veze), ta se postavka neće primijeniti. Neovisno o tome, postignuta veza mora i dalje biti u skladu s pravilom SSLVersionMin.
+
+      Ako se to pravilo ne konfigurira ili se postavi na "tls1.2", <ph name="PRODUCT_NAME" /> više neće izvršavati rezervni postupak. Time se ne onemogućuje podrška za starije verzije TLS-a, već se samo određuje hoće li <ph name="PRODUCT_NAME" /> zaobilaziti poslužitelje s pogreškama koji ne mogu ispravno dogovoriti verzije.
+
+      No ako se mora održati kompatibilnost s poslužiteljem koji sadrži pogreške, pravilo se može postaviti na "tls1.1". To je samo privremena mjera i problem na poslužitelju potrebno je brzo riješiti.</translation>
 <translation id="1861037019115362154">Određuje popis dodataka koji su onemogućeni u proizvodu <ph name="PRODUCT_NAME" /> i sprječava korisnike da promijene tu postavku.
 
       Zamjenski znakovi "*" i "?" mogu se upotrijebiti za podudarne nizove proizvoljnih znakova. "*" odgovara proizvoljnom broju znakova, dok "?" određuje izborni pojedinačni znak, tj. ne odgovara nijednom ili odgovara jednom znaku. Prespojni je znak "\", tako da za podudaranje sa stvarnim znakovima "*", "?" ili "\" ispred njih morate staviti znak "\".
@@ -223,6 +237,7 @@
       Ako je ovo pravilo postavljeno na istinito, sustav <ph name="PRODUCT_OS_NAME" />pokušat će preuzeti podatke automatskog ažuriranja putem HTTP-a. Ako je pravilo postavljeno na neistinito ili nije postavljeno, za preuzimanje podataka automatskog ažuriranja upotrebljavat će se HTTPS.</translation>
 <translation id="2006530844219044261">Upravljanje napajanjem</translation>
 <translation id="201557587962247231">Učestalost učitavanja izvješća o statusu uređaja</translation>
+<translation id="2024476116966025075">Konfiguriraj traženi naziv domene za klijente s daljinskim pristupom</translation>
 <translation id="2030905906517501646">Zadani davatelj usluga pretraživanja</translation>
 <translation id="206623763829450685">Određuje koje sheme HTTP autentifikacije <ph name="PRODUCT_NAME" /> podržava.
 
@@ -438,21 +453,13 @@
       Ako se to pravilo ne postavi, korisnici će moći odlučivati hoće li upotrebljavati značajku proxyja za kompresiju podataka.</translation>
 <translation id="2587719089023392205">Postavi <ph name="PRODUCT_NAME" /> kao zadani preglednik</translation>
 <translation id="2592091433672667839">Trajanje neaktivnosti prije nego što se čuvar zaslona prikaže na zaslonu prijave u prodajnom načinu</translation>
+<translation id="260705825237536216">Konfiguriraj ARC aplikacije</translation>
 <translation id="2623014935069176671">Pričekaj početnu aktivnost korisnika</translation>
 <translation id="262740370354162807">Omogući slanje dokumenata na uslugu <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="2633084400146331575">Omogućavanje govornih povratnih informacija</translation>
 <translation id="2646290749315461919">Omogućuje da postavite smiju li web-lokacije pratiti fizičku lokaciju korisnika. Praćenje fizičke lokacije korisnika može biti dopušteno prema zadanim postavkama, odbijeno prema zadanim postavkama ili se korisniku može postaviti upit svaki puta kada web-lokacija zahtijeva fizičku lokaciju. Ako ovo pravilo nije postavljeno, upotrebljavat će se pravilo "AskGeolocation", a korisnik će to moći promijeniti.</translation>
 <translation id="2650049181907741121">Radnja koja će se izvršiti kada korisnik spusti poklopac</translation>
 <translation id="2660846099862559570">Nikad ne upotrebljavaj proxy</translation>
-<translation id="2665596266623707739">Upozorenje: rezervni postupak za verziju TLS 1.0 uklonit će se iz preglednika <ph name="PRODUCT_NAME" /> nakon verzije 47 (otprilike u siječnju 2016.) i opcija "tls1" tada će prestati funkcionirati.
-
-      U slučaju neuspjelog rukovanja TLS-a <ph name="PRODUCT_NAME" /> ponovo će isprobati vezu sa starijom verzijom TLS-a da bi zaobišao programske pogreške na HTTPS poslužiteljima. Ta postavka konfigurira verziju na kojoj će se rezervni postupak zaustaviti. Ako poslužitelj ispravno dogovori verziju (tj., bez prekidanja veze), ta se postavka neće primijeniti. Neovisno o tome, postignuta veza mora i dalje biti u skladu s pravilom SSLVersionMin.
-
-      Ako se to pravilo ne konfigurira, <ph name="PRODUCT_NAME" /> upotrebljava zadanu minimalnu verziju, a to je TLS 1.0 za <ph name="PRODUCT_NAME" /> 44 i TLS 1.1 za novije verzije. Time se ne onemogućuje podrška za TLS 1.0, već se samo određuje hoće li <ph name="PRODUCT_NAME" /> zaobići poslužitelje s pogreškama koji ne mogu ispravno dogovoriti verzije.
-
-      U protivnom se može postaviti na jednu od sljedećih verzija: "tls1", "tls1.1" ili "tls1.2". Ako se mora održati kompatibilnost s poslužiteljem koji sadrži pogreške, pravilo se može postaviti na "tls1". To je samo privremena mjera i problem na poslužitelju potrebno je brzo riješiti.
-
-      Postavka "tls1.2" onemogućuje sve rezervne postupke, ali to može imati značajan utjecaj na kompatibilnost.</translation>
 <translation id="267596348720209223">Određuje kodiranje znakova koje podržava davatelj usluga pretraživanja. Kodiranja su nazivi kodnih stranica poput UTF-8, GB2312 i ISO-8859-1. Isprobavaju se navedenim redoslijedom. Ovo je pravilo izborno. Ako nije postavljeno, upotrebljavat će se zadana stranica UTF-8. Ovo će se pravilo poštovati samo ako je omogućeno pravilo "DefaultSearchProviderEnabled".</translation>
 <translation id="2682225790874070339">Onemogućuje Disk u aplikaciji Datoteke za <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="268577405881275241">Omogući značajku proxyja za kompresiju podataka</translation>
@@ -469,11 +476,6 @@
       Ako je ova postavka onemogućena, web-stranice ne mogu upotrebljavati JavaScript i korisnik ne može promijeniti tu postavku.
 
       Ako je ova postavka omogućena ili nije postavljena, web-stranice mogu upotrebljavati JavaScript, no korisnik može promijeniti tu postavku.</translation>
-<translation id="2747783890942882652">Konfigurira traženi naziv domene hosta koji će biti nametnut hostovima daljinskog pristupa i sprječava korisnike da ga promijene.
-
-          Ako je ta postavka omogućena, hostovi se mogu dijeliti samo putem računa koji su registrirani na domeni navedenog naziva.
-
-          Ako je ta postavka onemogućena ili nije postavljena, hostovi se mogu dijeliti putem bilo kojeg računa.</translation>
 <translation id="2757054304033424106">Vrste proširenja/aplikacija koje se smiju instalirati</translation>
 <translation id="2759224876420453487">Kontroliraj ponašanje korisnika u sesiji višestrukih profila</translation>
 <translation id="2761483219396643566">Odgoda upozorenja o neaktivnosti dok uređaj nije priključen na struju</translation>
@@ -538,6 +540,7 @@
       Određuje hoće li proširenje TLS certifikata vezanih uz domenu biti omogućeno.
 
       Ta se postavka upotrebljava za omogućivanje proširenja TLS certifikata vezanih uz domenu za testiranje. Ta će se eksperimentalna postavka ukloniti.</translation>
+<translation id="2957506574938329824">Nemoj dopustiti nijednoj web-lokaciji da traži pristup Bluetooth uređajima putem API-ja Web Bluetooth</translation>
 <translation id="2957513448235202597">Vrsta računa za <ph name="HTTP_NEGOTIATE" /> autentifikaciju</translation>
 <translation id="2959898425599642200">Pravila zaobilaženja proxyja</translation>
 <translation id="2960691910306063964">Omogući ili onemogući autentifikaciju bez PIN-a za hostove daljinskog pristupa</translation>
@@ -550,6 +553,8 @@
           Kada nije postavljeno, upotrebljava se zadano vrijeme.
 
           Vrijednost pravila treba navesti u milisekundama. Vrijednosti su ograničene na vrijeme kraće od odgode isključivanja zaslona i odgode neaktivnosti ili jednako tom vremenu (ako je postavljeno).</translation>
+<translation id="2987155890997901449">Omogući ARC</translation>
+<translation id="2987227569419001736">Upravljanje upotrebom API-ja Web Bluetooth</translation>
 <translation id="2998881342848488968">To pravilo omogućuje proizvodu <ph name="PRODUCT_OS_NAME" /> da zaobiđe bilo koji proxy za autentifikaciju zaštitnim portalom.
 
       To pravilo djeluje samo ako je proxy konfiguriran (na primjer, pravilom, korisnički u chrome://settings ili proširenjima).
@@ -828,6 +833,7 @@
 
           To se pravilo poštuje samo ako je omogućeno pravilo "DefaultSearchProviderEnabled".</translation>
 <translation id="4320376026953250541">Microsoft Windows XP SP2 ili noviji</translation>
+<translation id="4322842393287974810">Dopusti kiosk aplikaciji pokrenutoj automatski bez odgode da upravlja verzijom proizvoda <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="4325690621216251241">Dodaj gumb za odjavu na programsku traku</translation>
 <translation id="4347908978527632940">Ako se pravilo postavi na "True" i korisnik je nadzirani korisnik, onda druge Androidove aplikacije mogu postaviti upit za korisnikova ograničenja za web putem davatelja sadržaja.
 
@@ -1078,6 +1084,11 @@
 <translation id="5307432759655324440">Pristupačnost anonimnog načina rada</translation>
 <translation id="5318185076587284965">Omogući hostu za daljinski pristup upotrebu relejnih poslužitelja</translation>
 <translation id="5330684698007383292">Dopusti proizvodu <ph name="PRODUCT_FRAME_NAME" /> rukovanje sljedećim vrstama sadržaja</translation>
+<translation id="5345267406698765263">Navodi pravilo ARC aplikacija kao JSON niz koji se može
+      poslati u trenutačnom obliku u vrijeme izvođenja ARC-a. Ta se postavka
+      trenutačno upotrebljava samo za navođenje prisilne instalacije aplikacija.
+
+      Ako se to pravilo ne postavi, aplikacije se neće instalirati automatski.</translation>
 <translation id="5365946944967967336">Prikaži gumb Početna na alatnoj traci</translation>
 <translation id="5366977351895725771">Ako je postavljeno na netočno, korisnik neće moći izrađivati nadzirane korisnike. Postojeći nadzirani korisnici i dalje će biti dostupni.
 
@@ -1141,6 +1152,13 @@
       Ako pravilo nije postavljeno, korisnici mogu birati treba li se polica automatski skrivati.</translation>
 <translation id="557658534286111200">Omogućuje ili onemogućuje uređivanje knjižnih oznaka</translation>
 <translation id="5586942249556966598">Ne radi ništa</translation>
+<translation id="5613179474872285001">Konfigurira traženi naziv domene klijenta koji će se nametnuti klijentima s daljinskim pristupom i sprječava korisnike da to promijene.
+
+          Ako se ta postavka omogući, s hostom se mogu povezati samo klijenti s navedene domene.
+
+          Ako se ta postavka onemogući ili ne postavi, primjenjuje se zadano pravilo za vrstu veze. U slučaju pružanja pomoći na daljinu to omogućuje klijentima iz bilo koje domene da se povežu s hostom; daljinski pristup u bilo kojem trenutku dostupan je samo vlasniku hosta.
+
+          Pogledajte i RemoteAccessHostDomain.</translation>
 <translation id="5630352020869108293">Vrati posljednju sesiju</translation>
 <translation id="5645779841392247734">Dopusti kolačiće na ovim web-lokacijama</translation>
 <translation id="5677038592630896441">Zahtijeva da se ime lokalnog korisnika i hosta daljinskog pristupa podudaraju.
@@ -1409,6 +1427,9 @@
 
           Ako ne postavite to pravilo, tipkovnica na zaslonu onemogućena je prilikom prvog prikazivanja zaslona za prijavu. Korisnici mogu omogućiti ili onemogućiti tipkovnicu na zaslonu u bilo kojem trenutku i njen status na zaslonu za prijavu zadržava se među korisnicima.</translation>
 <translation id="6598235178374410284">Slika avatara korisnika</translation>
+<translation id="6628646143828354685">Omogućuje vam da odredite smiju li web-lokacije dobivati pristup Bluetooth uređajima u blizini. Pristup se može potpuno blokirati ili se može tražiti dopuštenje korisnika svaki put kad neka web-lokacija želi pristupiti Bluetooth uređajima u blizini.
+
+          Ako se pravilo ne postavi, upotrebljavat će se vrijednost "3" i korisnik će to moći promijeniti.</translation>
 <translation id="6636268606788232221">Konfiguriraj postavke upravljanja napajanjem kada korisnik postane neaktivan.
 
           To pravilo nadzire više postavki za strategiju upravljanja napajanjem kada korisnik postane neaktivan.
@@ -1484,6 +1505,7 @@
           Ako postavite ovo pravilo, korisnici ga ne mogu mijenjati niti nadjačati.
 
           Ako ne postavite to pravilo, opcije pristupačnosti neće se pojaviti u izborniku programske trake, ali ih korisnik može prikazati putem stranice Postavke.</translation>
+<translation id="6766216162565713893">Dopusti web-lokacijama da traže dopuštenje korisnika za pristup Bluetooth uređajima u blizini</translation>
 <translation id="6770454900105963262">Izvješćivanje o informacijama o aktivnim sesijama kioska</translation>
 <translation id="6774533686631353488">Dopusti hostove Lokalnog slanja poruka na razini korisnika (instaliranih bez administratorskih dopuštenja).</translation>
 <translation id="6786747875388722282">Proširenja</translation>
@@ -1523,6 +1545,13 @@
 <translation id="6943577887654905793">Naziv Mac/Linux preferencije:</translation>
 <translation id="69525503251220566">Značajka pretraživanja po slici koja pruža parametre za zadanog davatelja usluge pretraživanja</translation>
 <translation id="6956272732789158625">Nemoj dopustiti nijednoj web-lokaciji da upotrebljava generiranje ključeva</translation>
+<translation id="695891079107014261">Konfigurira traženi naziv domene hosta koji će se nametnuti hostovima s daljinskim pristupom i sprječava korisnike da to promijene.
+
+          Ako se ta postavka omogući, hostovi se mogu dijeliti samo putem računa registriranih na navedenom nazivu domene.
+
+          Ako se ta postavka onemogući ili ne postavi, hostovi se mogu dijeliti putem bilo kojeg računa.
+
+          Pogledajte i RemoteAccessHostClientDomain.</translation>
 <translation id="6997592395211691850">Jesu li potrebne mrežne OCSP/CRL provjere za lokalna pouzdana sidra</translation>
 <translation id="7003334574344702284">Ako je omogućeno, ovo pravilo prisilno uvozi spremljene zaporke iz prethodno zadanog preglednika. Ako je omogućeno, ovo pravilo također utječe na dijaloški okvir za uvoz. Ako je onemogućeno, spremljene se zaporke ne uvoze. Ako nije postavljeno, korisniku može biti postavljen upit želi li uvesti zaporke ili do uvoza može doći automatski.</translation>
 <translation id="7003746348783715221">Postavke za <ph name="PRODUCT_NAME" /></translation>
@@ -1649,6 +1678,13 @@
 <translation id="7340034977315324840">Izvješće o vremenima aktivnosti uređaja</translation>
 <translation id="7381326101471547614">Onemogućuje upotrebe protokola SPDY za uslugu <ph name="PRODUCT_NAME" />. Ako se to pravilo omogućuje, protokol SPDY neće biti dostupan za uslugu <ph name="PRODUCT_NAME" />. Onemogućavanjem ovog pravila dopustit će se upotreba protokola SPDY. Ako se to pravilo ne postavi, SPDY neće biti dostupan.</translation>
 <translation id="7384999953864505698">Omogući QUIC protokol</translation>
+<translation id="7406651467768226499">Određuje hoće li kiosk aplikacija pokrenuta automatski bez odgode upravljati verzijom proizvoda <ph name="PRODUCT_OS_NAME" />.
+
+      To pravilo određuje hoće li kiosk aplikacija pokrenuta automatski bez odgode upravljati verzijom proizvoda <ph name="PRODUCT_OS_NAME" /> tako što u manifestu navodi potrebnu verziju platforme i upotrebljava je kao prefiks verzije koji će se ciljati prilikom automatskog ažuriranja.
+
+      Ako se to pravilo postavi na True, vrijednost potrebne verzije platforme ključa manifesta kiosk aplikacije pokrenute automatski bez odgode upotrebljava se kao prefiks verzije koji će se ciljati prilikom automatskog ažuriranja.
+
+      Ako se to pravilo ne konfigurira ili se postavi na False, ključ manifesta potrebne verzije platforme zanemaruje se i automatsko ažuriranje izvodi se na uobičajen način.</translation>
 <translation id="7417972229667085380">Postotak za skaliranje odgode u stanju mirovanja u načinu prezentacije (obustavljeno)</translation>
 <translation id="7421483919690710988">Postavite veličinu predmemorije medijskog diska u bajtovima</translation>
 <translation id="7424751532654212117">Popis iznimki popisa onemogućenih dodataka</translation>
@@ -1749,6 +1785,7 @@
       Ako se to pravilo ne postavi, <ph name="PRODUCT_NAME" /> upotrebljavat će zadanu vrijednost od 5000 milisekundi.</translation>
 <translation id="7841880500990419427">Minimalna verzija TLS-a za pričuvnu upotrebu</translation>
 <translation id="7842869978353666042">Konfiguracija opcije Google diska</translation>
+<translation id="7843525027689416831">Određuje oznake koje se trebaju primijeniti na <ph name="PRODUCT_NAME" /> prilikom pokretanja. Navedene oznake primjenjuju se samo na zaslonu za prijavu. Oznake postavljene ovim pravilom ne primjenjuju se na korisničke sesije.</translation>
 <translation id="7848840259379156480">Omogućuje konfiguriranje zadanog alata za prikazivanje HTML-a kad je <ph name="PRODUCT_FRAME_NAME" /> instaliran. Zadana postavka je dopuštanje pregledniku hosta da obavi prikazivanje, no ovu postavku možete zaobići i kao zadano postaviti <ph name="PRODUCT_FRAME_NAME" /> da prikazuje HTML stranice.</translation>
 <translation id="7882585827992171421">To je pravilo aktivno samo u prodajnom načinu.
 
@@ -2045,7 +2082,6 @@
           Vrijednost pravila treba navesti u milisekundama. Vrijednosti su ograničene na vrijeme kraće od odgode neaktivnosti.</translation>
 <translation id="891435090623616439">kodirano kao JSON niz, pojedinosti potražite na stranici <ph name="COMPLEX_POLICIES_URL" /></translation>
 <translation id="8947415621777543415">Prijava lokacije uređaja</translation>
-<translation id="89493502583189945">Određuje oznake koje se trebaju primijeniti na <ph name="PRODUCT_NAME" /> prilikom njegova pokretanja. Navedene oznake primjenjuju se prije pokretanja preglednika <ph name="PRODUCT_NAME" /> čak i za zaslon za prijavu.</translation>
 <translation id="8951350807133946005">Postavi direktorij predmemorije na disku</translation>
 <translation id="8955719471735800169">Natrag na vrh</translation>
 <translation id="8960850473856121830">Uzorci na tom popisu usporedit će se sa sigurnosnim izvorištem

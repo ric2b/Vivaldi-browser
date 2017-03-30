@@ -6,8 +6,8 @@
 
 namespace blink {
 
-HTMLIFrameElementSandbox::HTMLIFrameElementSandbox(DOMSettableTokenListObserver* observer)
-    : DOMSettableTokenList(observer)
+HTMLIFrameElementSandbox::HTMLIFrameElementSandbox(DOMTokenListObserver* observer)
+    : DOMTokenList(observer)
 {
 }
 
@@ -39,4 +39,4 @@ bool HTMLIFrameElementSandbox::validateTokenValue(const AtomicString& tokenValue
     return supportedTokens().contains(tokenValue);
 }
 
-}
+} // namespace blink

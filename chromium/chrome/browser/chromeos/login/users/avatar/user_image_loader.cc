@@ -13,6 +13,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
+#include "base/task_runner_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "components/user_manager/user_image/user_image.h"
@@ -22,86 +23,53 @@
 #include "ui/gfx/skbitmap_operations.h"
 
 namespace chromeos {
+namespace user_image_loader {
+namespace {
 
-UserImageLoader::ImageInfo::ImageInfo(const std::string& file_path,
-                                      int pixels_per_side,
-                                      const LoadedCallback& loaded_cb)
-    : file_path(file_path),
-      pixels_per_side(pixels_per_side),
-      loaded_cb(loaded_cb) {
-}
+// Contains attributes we need to know about each image we decode.
+struct ImageInfo {
+  ImageInfo(const base::FilePath& file_path,
+            int pixels_per_side,
+            ImageDecoder::ImageCodec image_codec,
+            const LoadedCallback& loaded_cb)
+      : file_path(file_path),
+        pixels_per_side(pixels_per_side),
+        image_codec(image_codec),
+        loaded_cb(loaded_cb) {}
+  ~ImageInfo() {}
 
-UserImageLoader::ImageInfo::~ImageInfo() {
-}
+  const base::FilePath file_path;
+  const int pixels_per_side;
+  const ImageDecoder::ImageCodec image_codec;
+  const LoadedCallback loaded_cb;
+};
 
-UserImageLoader::UserImageRequest::UserImageRequest(
-    const ImageInfo& image_info,
-    const std::string& image_data,
-    const scoped_refptr<UserImageLoader>& user_image_loader)
-    : ImageRequest(user_image_loader->background_task_runner_),
-      image_info_(image_info),
-      image_data_(image_data.begin(), image_data.end()),
-      user_image_loader_(user_image_loader) {
-}
+// Handles the decoded image returned from ImageDecoder through the
+// ImageRequest interface.
+class UserImageRequest : public ImageDecoder::ImageRequest {
+ public:
+  UserImageRequest(
+      const ImageInfo& image_info,
+      const std::string& image_data,
+      scoped_refptr<base::SequencedTaskRunner> background_task_runner)
+      : ImageRequest(background_task_runner),
+        image_info_(image_info),
+        image_data_(image_data.begin(), image_data.end()),
+        foreground_task_runner_(base::ThreadTaskRunnerHandle::Get()) {}
+  ~UserImageRequest() override {}
 
-UserImageLoader::UserImageRequest::~UserImageRequest() {
-}
+  // ImageDecoder::ImageRequest implementation. These callbacks will only be
+  // invoked via background_task_runner passed to the constructor.
+  void OnImageDecoded(const SkBitmap& decoded_image) override;
+  void OnDecodeImageFailed() override;
 
-UserImageLoader::UserImageLoader(
-    ImageDecoder::ImageCodec image_codec,
-    scoped_refptr<base::SequencedTaskRunner> background_task_runner)
-    : foreground_task_runner_(base::ThreadTaskRunnerHandle::Get()),
-      background_task_runner_(background_task_runner),
-      image_codec_(image_codec) {
-}
+ private:
+  const ImageInfo image_info_;
+  std::vector<unsigned char> image_data_;
+  scoped_refptr<base::SequencedTaskRunner> foreground_task_runner_;
+};
 
-UserImageLoader::~UserImageLoader() {
-}
-
-void UserImageLoader::Start(const std::string& filepath,
-                            int pixels_per_side,
-                            const LoadedCallback& loaded_cb) {
-  background_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&UserImageLoader::ReadAndDecodeImage,
-                 this,
-                 ImageInfo(filepath, pixels_per_side, loaded_cb)));
-}
-
-void UserImageLoader::Start(scoped_ptr<std::string> data,
-                            int pixels_per_side,
-                            const LoadedCallback& loaded_cb) {
-  background_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&UserImageLoader::DecodeImage,
-                 this,
-                 base::Passed(&data),
-                 ImageInfo(std::string(), pixels_per_side, loaded_cb)));
-}
-
-void UserImageLoader::ReadAndDecodeImage(const ImageInfo& image_info) {
-  DCHECK(background_task_runner_->RunsTasksOnCurrentThread());
-
-  scoped_ptr<std::string> data(new std::string);
-  if (!base::ReadFileToString(base::FilePath(image_info.file_path), data.get()))
-    LOG(ERROR) << "Failed to read image " << image_info.file_path;
-
-  // In case ReadFileToString() fails, |data| is empty and DecodeImage() calls
-  // back to OnDecodeImageFailed().
-  DecodeImage(std::move(data), image_info);
-}
-
-void UserImageLoader::DecodeImage(const scoped_ptr<std::string> data,
-                                  const ImageInfo& image_info) {
-  DCHECK(background_task_runner_->RunsTasksOnCurrentThread());
-
-  UserImageRequest* image_request =
-      new UserImageRequest(image_info, *data, this);
-  ImageDecoder::StartWithOptions(image_request, *data, image_codec_, false);
-}
-
-void UserImageLoader::UserImageRequest::OnImageDecoded(
-    const SkBitmap& decoded_image) {
+void UserImageRequest::OnImageDecoded(const SkBitmap& decoded_image) {
   DCHECK(task_runner()->RunsTasksOnCurrentThread());
 
   const int target_size = image_info_.pixels_per_side;
@@ -134,18 +102,72 @@ void UserImageLoader::UserImageRequest::OnImageDecoded(
   final_image_skia.MakeThreadSafe();
   user_manager::UserImage user_image(final_image_skia, image_data_);
   user_image.set_file_path(image_info_.file_path);
-  if (user_image_loader_->image_codec_ == ImageDecoder::ROBUST_JPEG_CODEC)
+  if (image_info_.image_codec == ImageDecoder::ROBUST_JPEG_CODEC)
     user_image.MarkAsSafe();
-  user_image_loader_->foreground_task_runner_->PostTask(
+  // TODO(satorux): Remove the foreground_task_runner_ stuff.
+  foreground_task_runner_->PostTask(
       FROM_HERE, base::Bind(image_info_.loaded_cb, user_image));
-  delete this;
+  foreground_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(base::Bind(&base::DeletePointer<UserImageRequest>, this)));
 }
 
-void UserImageLoader::UserImageRequest::OnDecodeImageFailed() {
+void UserImageRequest::OnDecodeImageFailed() {
   DCHECK(task_runner()->RunsTasksOnCurrentThread());
-  user_image_loader_->foreground_task_runner_->PostTask(
+  // TODO(satorux): Remove the foreground_task_runner_ stuff.
+  foreground_task_runner_->PostTask(
       FROM_HERE, base::Bind(image_info_.loaded_cb, user_manager::UserImage()));
-  delete this;
+  foreground_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(base::Bind(&base::DeletePointer<UserImageRequest>, this)));
 }
 
+// Starts decoding the image with ImageDecoder for the image |data| if
+// |data_is_ready| is true.
+void DecodeImage(
+    const ImageInfo& image_info,
+    scoped_refptr<base::SequencedTaskRunner> background_task_runner,
+    const std::string* data,
+    bool data_is_ready) {
+  if (!data_is_ready) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(image_info.loaded_cb, user_manager::UserImage()));
+    return;
+  }
+
+  UserImageRequest* image_request =
+      new UserImageRequest(image_info, *data, background_task_runner);
+  ImageDecoder::StartWithOptions(image_request, *data, image_info.image_codec,
+                                 false);
+}
+
+}  // namespace
+
+void StartWithFilePath(
+    scoped_refptr<base::SequencedTaskRunner> background_task_runner,
+    const base::FilePath& file_path,
+    ImageDecoder::ImageCodec image_codec,
+    int pixels_per_side,
+    const LoadedCallback& loaded_cb) {
+  std::string* data = new std::string;
+  base::PostTaskAndReplyWithResult(
+      background_task_runner.get(), FROM_HERE,
+      base::Bind(&base::ReadFileToString, file_path, data),
+      base::Bind(&DecodeImage,
+                 ImageInfo(file_path, pixels_per_side, image_codec, loaded_cb),
+                 background_task_runner, base::Owned(data)));
+}
+
+void StartWithData(
+    scoped_refptr<base::SequencedTaskRunner> background_task_runner,
+    scoped_ptr<std::string> data,
+    ImageDecoder::ImageCodec image_codec,
+    int pixels_per_side,
+    const LoadedCallback& loaded_cb) {
+  DecodeImage(
+      ImageInfo(base::FilePath(), pixels_per_side, image_codec, loaded_cb),
+      background_task_runner, data.get(), true /* data_is_ready */);
+}
+
+}  // namespace user_image_loader
 }  // namespace chromeos

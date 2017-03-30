@@ -10,11 +10,8 @@
 #include "bindings/core/v8/V8DOMConfiguration.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
 #include "bindings/core/v8/V8TestInterfaceWillBeGarbageCollected.h"
-#include "core/dom/ContextFeatures.h"
 #include "core/dom/Document.h"
 #include "core/frame/LocalDOMWindow.h"
-#include "platform/RuntimeEnabledFeatures.h"
-#include "platform/TraceEvent.h"
 #include "wtf/GetPtr.h"
 #include "wtf/RefPtr.h"
 
@@ -26,7 +23,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestInterfaceWillBeGarbageCollected::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceWillBeGarbageCollected::domTemplate, V8TestInterfaceWillBeGarbageCollected::refObject, V8TestInterfaceWillBeGarbageCollected::derefObject, V8TestInterfaceWillBeGarbageCollected::trace, 0, 0, V8TestInterfaceWillBeGarbageCollected::preparePrototypeAndInterfaceObject, V8TestInterfaceWillBeGarbageCollected::installConditionallyEnabledProperties, "TestInterfaceWillBeGarbageCollected", &V8EventTarget::wrapperTypeInfo, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::InheritFromEventTarget, WrapperTypeInfo::Independent, WrapperTypeInfo::WillBeGarbageCollectedObject };
+const WrapperTypeInfo V8TestInterfaceWillBeGarbageCollected::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceWillBeGarbageCollected::domTemplate, V8TestInterfaceWillBeGarbageCollected::refObject, V8TestInterfaceWillBeGarbageCollected::derefObject, V8TestInterfaceWillBeGarbageCollected::trace, 0, V8TestInterfaceWillBeGarbageCollected::preparePrototypeAndInterfaceObject, V8TestInterfaceWillBeGarbageCollected::installConditionallyEnabledProperties, "TestInterfaceWillBeGarbageCollected", &V8EventTarget::wrapperTypeInfo, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::InheritFromEventTarget, WrapperTypeInfo::Independent, WrapperTypeInfo::WillBeGarbageCollectedObject };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -47,9 +44,7 @@ static void attr1AttributeGetter(const v8::FunctionCallbackInfo<v8::Value>& info
 
 static void attr1AttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMGetter");
     TestInterfaceWillBeGarbageCollectedV8Internal::attr1AttributeGetter(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void attr1AttributeSetter(v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -69,9 +64,7 @@ static void attr1AttributeSetter(v8::Local<v8::Value> v8Value, const v8::Functio
 static void attr1AttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     v8::Local<v8::Value> v8Value = info[0];
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMSetter");
     TestInterfaceWillBeGarbageCollectedV8Internal::attr1AttributeSetter(v8Value, info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void funcMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -94,9 +87,7 @@ static void funcMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 
 static void funcMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     TestInterfaceWillBeGarbageCollectedV8Internal::funcMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
 static void constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -133,7 +124,7 @@ const V8DOMConfiguration::MethodConfiguration V8TestInterfaceWillBeGarbageCollec
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestInterfaceWillBeGarbageCollectedConstructor::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceWillBeGarbageCollectedConstructor::domTemplate, V8TestInterfaceWillBeGarbageCollected::refObject, V8TestInterfaceWillBeGarbageCollected::derefObject, V8TestInterfaceWillBeGarbageCollected::trace, 0, 0, V8TestInterfaceWillBeGarbageCollected::preparePrototypeAndInterfaceObject, V8TestInterfaceWillBeGarbageCollected::installConditionallyEnabledProperties, "TestInterfaceWillBeGarbageCollected", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::InheritFromEventTarget, WrapperTypeInfo::Independent, WrapperTypeInfo::WillBeGarbageCollectedObject };
+const WrapperTypeInfo V8TestInterfaceWillBeGarbageCollectedConstructor::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceWillBeGarbageCollectedConstructor::domTemplate, V8TestInterfaceWillBeGarbageCollected::refObject, V8TestInterfaceWillBeGarbageCollected::derefObject, V8TestInterfaceWillBeGarbageCollected::trace, 0, V8TestInterfaceWillBeGarbageCollected::preparePrototypeAndInterfaceObject, V8TestInterfaceWillBeGarbageCollected::installConditionallyEnabledProperties, "TestInterfaceWillBeGarbageCollected", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::InheritFromEventTarget, WrapperTypeInfo::Independent, WrapperTypeInfo::WillBeGarbageCollectedObject };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -173,7 +164,6 @@ v8::Local<v8::FunctionTemplate> V8TestInterfaceWillBeGarbageCollectedConstructor
     if (!result.IsEmpty())
         return result;
 
-    TRACE_EVENT_SCOPED_SAMPLING_STATE("blink", "BuildDOMTemplate");
     result = v8::FunctionTemplate::New(isolate, V8TestInterfaceWillBeGarbageCollectedConstructorCallback);
     v8::Local<v8::ObjectTemplate> instanceTemplate = result->InstanceTemplate();
     instanceTemplate->SetInternalFieldCount(V8TestInterfaceWillBeGarbageCollected::internalFieldCount);
@@ -185,7 +175,6 @@ v8::Local<v8::FunctionTemplate> V8TestInterfaceWillBeGarbageCollectedConstructor
 
 void V8TestInterfaceWillBeGarbageCollected::constructorCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    TRACE_EVENT_SCOPED_SAMPLING_STATE("blink", "DOMConstructor");
     if (!info.IsConstructCall()) {
         V8ThrowException::throwTypeError(info.GetIsolate(), ExceptionMessages::constructorNotCallableAsFunction("TestInterfaceWillBeGarbageCollected"));
         return;
@@ -204,7 +193,7 @@ static void installV8TestInterfaceWillBeGarbageCollectedTemplate(v8::Local<v8::F
     functionTemplate->ReadOnlyPrototype();
 
     v8::Local<v8::Signature> defaultSignature;
-    defaultSignature = V8DOMConfiguration::installDOMClassTemplate(isolate, functionTemplate, "TestInterfaceWillBeGarbageCollected", V8EventTarget::domTemplate(isolate), V8TestInterfaceWillBeGarbageCollected::internalFieldCount,
+    defaultSignature = V8DOMConfiguration::installDOMClassTemplate(isolate, functionTemplate, V8TestInterfaceWillBeGarbageCollected::wrapperTypeInfo.interfaceName, V8EventTarget::domTemplate(isolate), V8TestInterfaceWillBeGarbageCollected::internalFieldCount,
         0, 0,
         V8TestInterfaceWillBeGarbageCollectedAccessors, WTF_ARRAY_LENGTH(V8TestInterfaceWillBeGarbageCollectedAccessors),
         V8TestInterfaceWillBeGarbageCollectedMethods, WTF_ARRAY_LENGTH(V8TestInterfaceWillBeGarbageCollectedMethods));
@@ -214,6 +203,7 @@ static void installV8TestInterfaceWillBeGarbageCollectedTemplate(v8::Local<v8::F
     ALLOW_UNUSED_LOCAL(instanceTemplate);
     v8::Local<v8::ObjectTemplate> prototypeTemplate = functionTemplate->PrototypeTemplate();
     ALLOW_UNUSED_LOCAL(prototypeTemplate);
+    V8DOMConfiguration::setClassString(isolate, prototypeTemplate, V8TestInterfaceWillBeGarbageCollected::wrapperTypeInfo.interfaceName);
 }
 
 v8::Local<v8::FunctionTemplate> V8TestInterfaceWillBeGarbageCollected::domTemplate(v8::Isolate* isolate)

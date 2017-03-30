@@ -78,8 +78,11 @@ class CONTENT_EXPORT WebContentsAndroid
 
   void OnHide(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
   void OnShow(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
-  void ReleaseMediaPlayers(JNIEnv* env,
-                           const base::android::JavaParamRef<jobject>& jobj);
+  void SuspendAllMediaPlayers(JNIEnv* env,
+                              const base::android::JavaParamRef<jobject>& jobj);
+  void SetAudioMuted(JNIEnv* env,
+                     const base::android::JavaParamRef<jobject>& jobj,
+                     jboolean mute);
 
   void ShowInterstitialPage(JNIEnv* env,
                             const base::android::JavaParamRef<jobject>& obj,
@@ -177,6 +180,9 @@ class CONTENT_EXPORT WebContentsAndroid
 
   void OnContextMenuClosed(JNIEnv* env,
                            const base::android::JavaParamRef<jobject>& obj);
+
+  void ReloadLoFiImages(JNIEnv* env,
+                        const base::android::JavaParamRef<jobject>& obj);
 
   void set_synchronous_compositor_client(SynchronousCompositorClient* client) {
     synchronous_compositor_client_ = client;

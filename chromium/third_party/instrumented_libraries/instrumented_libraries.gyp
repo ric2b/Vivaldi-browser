@@ -199,6 +199,7 @@
         '<(_sanitizer_type)-libpixman-1-0',
         '<(_sanitizer_type)-brltty',
         '<(_sanitizer_type)-libva1',
+        '<(_sanitizer_type)-libcredentialkit_pkcs11-stub',
       ],
       'conditions': [
         ['"<(_ubuntu_release)"=="precise"', {
@@ -529,7 +530,7 @@
     {
       'package_name': 'nss',
       'dependencies=': [
-        # TODO(earthdok): get rid of this dependency
+        # TODO(eugenis): get rid of this dependency
         '<(_sanitizer_type)-libnspr4',
       ],
       'patch': 'patches/nss.diff',
@@ -629,7 +630,7 @@
           '--disable-static',
           # Without this flag there's a linking step that doesn't honor LDFLAGS
           # and fails.
-          # TODO(earthdok): find a better fix.
+          # TODO(eugenis): find a better fix.
           '--disable-gudev'
       ],
       'pre_build': 'scripts/pre-build/udev.sh',
@@ -725,7 +726,7 @@
           '--enable-gtk-doc',
           # --enable-introspection introduces a build step that attempts to run
           # a just-built binary and crashes. Vala requires introspection.
-          # TODO(earthdok): find a better fix.
+          # TODO(eugenis): find a better fix.
           '--disable-introspection',
           '--disable-vala',
       ],
@@ -856,6 +857,27 @@
       ],
       'pre_build': 'scripts/pre-build/autoreconf.sh',
       'includes': ['standard_instrumented_package_target.gypi'],
+    },
+    {
+      # Creates a stub to convince NSS to not load the system-wide uninstrumented library.
+      # It appears that just an empty file is enough.
+      'package_name': 'libcredentialkit_pkcs11-stub',
+      'target_name': '<(_sanitizer_type)-<(_package_name)',
+      'type': 'none',
+      'actions': [
+        {
+          'action_name': '<(_package_name)',
+          'inputs': [],
+          'outputs': [
+            '<(PRODUCT_DIR)/instrumented_libraries/<(_sanitizer_type)/<(_package_name).txt',
+          ],
+          'action': [
+	    'touch',
+            '<(PRODUCT_DIR)/instrumented_libraries/<(_sanitizer_type)/lib/libcredentialkit_pkcs11.so.0',
+            '<(PRODUCT_DIR)/instrumented_libraries/<(_sanitizer_type)/<(_package_name).txt',
+          ],
+        },
+      ],
     },
   ],
 }

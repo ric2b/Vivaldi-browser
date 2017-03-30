@@ -501,9 +501,7 @@ bool IsTabletDevice(std::string* reason) {
   bool slate_power_profile = (role == PlatformRoleSlate);
 
   bool is_tablet = false;
-  bool is_tablet_pc = false;
   if (mobile_power_profile || slate_power_profile) {
-    is_tablet_pc = !GetSystemMetrics(SM_TABLETPC);
     is_tablet = !GetSystemMetrics(SM_CONVERTIBLESLATEMODE);
     if (!is_tablet) {
       if (reason) {
@@ -521,7 +519,7 @@ bool IsTabletDevice(std::string* reason) {
     if (reason)
       *reason += "Device role is not mobile or slate.\n";
   }
-  return is_tablet && is_tablet_pc;
+  return is_tablet;
 }
 
 bool DisplayVirtualKeyboard() {
@@ -645,29 +643,53 @@ void SetDomainStateForTesting(bool state) {
   g_domain_state = state ? ENROLLED : NOT_ENROLLED;
 }
 
-bool MaybeHasSHA256Support() {
-  const OSInfo* os_info = OSInfo::GetInstance();
-
-  if (os_info->version() == VERSION_PRE_XP)
-    return false;  // Too old to have it and this OS is not supported anyway.
-
-  if (os_info->version() == VERSION_XP)
-    return os_info->service_pack().major >= 3;  // Windows XP SP3 has it.
-
-  // Assume it is missing in this case, although it may not be. This category
-  // includes Windows XP x64, and Windows Server, where a hotfix could be
-  // deployed.
-  if (os_info->version() == VERSION_SERVER_2003)
-    return false;
-
-  DCHECK(os_info->version() >= VERSION_VISTA);
-  return true;  // New enough to have SHA-256 support.
-}
-
 bool IsUser32AndGdi32Available() {
   static base::LazyInstance<LazyIsUser32AndGdi32Available>::Leaky available =
       LAZY_INSTANCE_INITIALIZER;
   return available.Get().value();
+}
+
+bool GetLoadedModulesSnapshot(HANDLE process, std::vector<HMODULE>* snapshot) {
+  DCHECK(snapshot);
+  DCHECK_EQ(0u, snapshot->size());
+  snapshot->resize(128);
+
+  // We will retry at least once after first determining |bytes_required|. If
+  // the list of modules changes after we receive |bytes_required| we may retry
+  // more than once.
+  int retries_remaining = 5;
+  do {
+    DWORD bytes_required = 0;
+    // EnumProcessModules returns 'success' even if the buffer size is too
+    // small.
+    DCHECK_GE(std::numeric_limits<DWORD>::max(),
+              snapshot->size() * sizeof(HMODULE));
+    if (!::EnumProcessModules(
+            process, &(*snapshot)[0],
+            static_cast<DWORD>(snapshot->size() * sizeof(HMODULE)),
+            &bytes_required)) {
+      DPLOG(ERROR) << "::EnumProcessModules failed.";
+      return false;
+    }
+    DCHECK_EQ(0u, bytes_required % sizeof(HMODULE));
+    size_t num_modules = bytes_required / sizeof(HMODULE);
+    if (num_modules <= snapshot->size()) {
+      // Buffer size was too big, presumably because a module was unloaded.
+      snapshot->erase(snapshot->begin() + num_modules, snapshot->end());
+      return true;
+    } else if (num_modules == 0) {
+      DLOG(ERROR) << "Can't determine the module list size.";
+      return false;
+    } else {
+      // Buffer size was too small. Try again with a larger buffer. A little
+      // more room is given to avoid multiple expensive calls to
+      // ::EnumProcessModules() just because one module has been added.
+      snapshot->resize(num_modules + 8, NULL);
+    }
+  } while (--retries_remaining);
+
+  DLOG(ERROR) << "Failed to enumerate modules.";
+  return false;
 }
 
 }  // namespace win

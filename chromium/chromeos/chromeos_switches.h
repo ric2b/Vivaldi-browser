@@ -21,6 +21,7 @@ namespace switches {
 // see chromeos::LoginUtil::GetOffTheRecordCommandLine().)
 
 // Please keep alphabetized.
+CHROMEOS_EXPORT extern const char kAllowFailedPolicyFetchForTest[];
 CHROMEOS_EXPORT extern const char kAllowRAInDevMode[];
 CHROMEOS_EXPORT extern const char kAppOemManifestFile[];
 CHROMEOS_EXPORT extern const char kArtifactsDir[];
@@ -35,6 +36,7 @@ CHROMEOS_EXPORT extern const char kDbusStub[];
 CHROMEOS_EXPORT extern const char kDbusUnstubClients[];
 CHROMEOS_EXPORT extern const char kDerelictDetectionTimeout[];
 CHROMEOS_EXPORT extern const char kDerelictIdleTimeout[];
+CHROMEOS_EXPORT extern const char kDisableArcOptInVerification[];
 CHROMEOS_EXPORT extern const char kDisableBootAnimation[];
 CHROMEOS_EXPORT extern const char kDisableCloudImport[];
 CHROMEOS_EXPORT extern const char kDisableDemoMode[];
@@ -61,6 +63,7 @@ CHROMEOS_EXPORT extern const char kEnableExtensionAssetsSharing[];
 CHROMEOS_EXPORT extern const char kEnableFirstRunUITransitions[];
 CHROMEOS_EXPORT extern const char kEnableImeMenu[];
 CHROMEOS_EXPORT extern const char kEnableKioskMode[];
+CHROMEOS_EXPORT extern const char kEnableMultiDisplayLayout[];
 CHROMEOS_EXPORT extern const char kEnableNetworkPortalNotification[];
 CHROMEOS_EXPORT extern const char kDisableNewKoreanIme[];
 CHROMEOS_EXPORT extern const char kEnablePhysicalKeyboardAutocorrect[];
@@ -92,7 +95,6 @@ CHROMEOS_EXPORT extern const char kAggressiveTabDiscardThreshold[];
 CHROMEOS_EXPORT extern const char kAggressiveThreshold[];
 CHROMEOS_EXPORT extern const char kNaturalScrollDefault[];
 CHROMEOS_EXPORT extern const char kOobeBootstrappingMaster[];
-CHROMEOS_EXPORT extern const char kOobeBootstrappingSlave[];
 CHROMEOS_EXPORT extern const char kOobeGuestSession[];
 CHROMEOS_EXPORT extern const char kOobeSkipPostLogin[];
 CHROMEOS_EXPORT extern const char kOobeTimerInterval[];

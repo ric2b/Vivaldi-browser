@@ -34,6 +34,7 @@ const char* kGpuCompositingFeatureName = "gpu_compositing";
 const char* kWebGLFeatureName = "webgl";
 const char* kRasterizationFeatureName = "rasterization";
 const char* kMultipleRasterThreadsFeatureName = "multiple_raster_threads";
+const char* kNativeGpuMemoryBuffersFeatureName = "native_gpu_memory_buffers";
 
 const int kMinRasterThreads = 1;
 const int kMaxRasterThreads = 4;
@@ -154,6 +155,14 @@ const GpuFeatureInfo GetGpuFeatureInfo(size_t index, bool* eof) {
           "Raster is using a single thread.",
           false
       },
+      {
+          kNativeGpuMemoryBuffersFeatureName,
+          false,
+          !BrowserGpuMemoryBufferManager::IsNativeGpuMemoryBuffersEnabled(),
+          "Native GpuMemoryBuffers have been disabled, either via about:flags"
+          " or command line.",
+          true
+      },
   };
   DCHECK(index < arraysize(kGpuFeatureInfo));
   *eof = (index == arraysize(kGpuFeatureInfo) - 1);
@@ -161,12 +170,6 @@ const GpuFeatureInfo GetGpuFeatureInfo(size_t index, bool* eof) {
 }
 
 }  // namespace
-
-bool IsPropertyTreeVerificationEnabled() {
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  return command_line.HasSwitch(cc::switches::kEnablePropertyTreeVerification);
-}
 
 int NumberOfRendererRasterThreads() {
   int num_processors = base::SysInfo::NumberOfProcessors();
@@ -275,24 +278,6 @@ bool IsForceGpuRasterizationEnabled() {
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
   return command_line.HasSwitch(switches::kForceGpuRasterization);
-}
-
-bool UseSurfacesEnabled() {
-#if defined(OS_ANDROID)
-  return true;
-#endif
-  bool enabled = false;
-#if defined(USE_AURA) || defined(OS_MACOSX)
-  enabled = true;
-#endif
-
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-
-  // Flags override.
-  enabled |= command_line.HasSwitch(switches::kUseSurfaces);
-  enabled &= !command_line.HasSwitch(switches::kDisableSurfaces);
-  return enabled;
 }
 
 int GpuRasterizationMSAASampleCount() {

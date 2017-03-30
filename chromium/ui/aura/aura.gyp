@@ -37,8 +37,6 @@
         '../wm/public/activation_delegate.h',
         '../wm/public/animation_host.cc',
         '../wm/public/animation_host.h',
-        '../wm/public/dispatcher_client.cc',
-        '../wm/public/dispatcher_client.h',
         '../wm/public/drag_drop_client.cc',
         '../wm/public/drag_drop_client.h',
         '../wm/public/drag_drop_delegate.cc',
@@ -88,8 +86,8 @@
         'input_state_lookup_win.h',
         'layout_manager.cc',
         'layout_manager.h',
-        'remote_window_tree_host_win.cc',
-        'remote_window_tree_host_win.h',
+        'mus/mus_util.cc',
+        'mus/mus_util.h',
         'scoped_window_targeter.cc',
         'scoped_window_targeter.h',
         'window.cc',
@@ -138,12 +136,6 @@
           'dependencies': [
             '../ozone/ozone.gyp:ozone',
             '../ozone/ozone.gyp:ozone_base',
-          ],
-        }],
-        ['OS!="win" and OS!="android" and use_ozone==0', {
-          'sources!': [
-            'window_tree_host_platform.cc',
-            'window_tree_host_platform.h',
           ],
         }],
         ['OS=="android"', {
@@ -312,12 +304,6 @@
         ['OS=="linux"', {
           'dependencies': [
             '<(DEPTH)/third_party/mesa/mesa.gyp:osmesa',
-          ],
-        }],
-        ['OS=="linux" and use_allocator!="none"', {
-          'dependencies': [
-           # See http://crbug.com/162998#c4 for why this is needed.
-            '../../base/allocator/allocator.gyp:allocator',
           ],
         }],
       ],

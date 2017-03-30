@@ -38,11 +38,11 @@
       'autofill/core/browser/autofill_metrics_unittest.cc',
       'autofill/core/browser/autofill_profile_unittest.cc',
       'autofill/core/browser/autofill_type_unittest.cc',
-      'autofill/core/browser/autofill_xml_parser_unittest.cc',
       'autofill/core/browser/contact_info_unittest.cc',
       'autofill/core/browser/country_names_unittest.cc',
       'autofill/core/browser/credit_card_field_unittest.cc',
       'autofill/core/browser/credit_card_unittest.cc',
+      'autofill/core/browser/field_candidates_unittest.cc',
       'autofill/core/browser/form_field_unittest.cc',
       'autofill/core/browser/form_structure_unittest.cc',
       'autofill/core/browser/legal_message_line_unittest.cc',
@@ -77,7 +77,11 @@
       'bookmarks/managed/managed_bookmarks_tracker_unittest.cc',
     ],
     'browser_sync_unittest_sources': [
+      'browser_sync/browser/profile_sync_service_autofill_unittest.cc',
+      'browser_sync/browser/profile_sync_service_bookmark_unittest.cc',
+      'browser_sync/browser/profile_sync_service_startup_unittest.cc',
       'browser_sync/browser/profile_sync_service_unittest.cc',
+      'browser_sync/browser/profile_sync_service_typed_url_unittest.cc',
     ],
     'browser_watcher_unittest_sources': [
       'browser_watcher/crash_reporting_metrics_win_unittest.cc',
@@ -140,11 +144,10 @@
       'data_reduction_proxy/core/browser/data_reduction_proxy_bypass_protocol_unittest.cc',
       'data_reduction_proxy/core/browser/data_reduction_proxy_bypass_stats_unittest.cc',
       'data_reduction_proxy/core/browser/data_reduction_proxy_compression_stats_unittest.cc',
-      'data_reduction_proxy/core/browser/data_reduction_proxy_config_retrieval_params_unittest.cc',
       'data_reduction_proxy/core/browser/data_reduction_proxy_config_service_client_unittest.cc',
       'data_reduction_proxy/core/browser/data_reduction_proxy_config_unittest.cc',
       'data_reduction_proxy/core/browser/data_reduction_proxy_configurator_unittest.cc',
-      'data_reduction_proxy/core/browser/data_reduction_proxy_experiments_stats_unittest.cc',
+      'data_reduction_proxy/core/browser/data_reduction_proxy_delegate_unittest.cc',
       'data_reduction_proxy/core/browser/data_reduction_proxy_interceptor_unittest.cc',
       'data_reduction_proxy/core/browser/data_reduction_proxy_io_data_unittest.cc',
       'data_reduction_proxy/core/browser/data_reduction_proxy_metrics_unittest.cc',
@@ -192,6 +195,7 @@
       'domain_reliability/context_unittest.cc',
       'domain_reliability/dispatcher_unittest.cc',
       'domain_reliability/google_configs_unittest.cc',
+      'domain_reliability/header_unittest.cc',
       'domain_reliability/monitor_unittest.cc',
       'domain_reliability/scheduler_unittest.cc',
       'domain_reliability/test_util.cc',
@@ -236,12 +240,6 @@
     ],
     'data_use_measurement_unittest_sources': [
       'data_use_measurement/content/data_use_measurement_unittest.cc',
-    ],
-    'enhanced_bookmarks_unittest_sources': [
-      'enhanced_bookmarks/enhanced_bookmark_model_unittest.cc',
-      'enhanced_bookmarks/image_store_ios_unittest.mm',
-      'enhanced_bookmarks/image_store_unittest.cc',
-      'enhanced_bookmarks/item_position_unittest.cc',
     ],
     'error_page_unittest_sources': [
       'error_page/renderer/net_error_helper_core_unittest.cc',
@@ -295,8 +293,8 @@
       'history/core/browser/url_database_unittest.cc',
       'history/core/browser/url_utils_unittest.cc',
       'history/core/browser/visit_database_unittest.cc',
-      'history/core/browser/visit_filter_unittest.cc',
       'history/core/browser/visit_tracker_unittest.cc',
+      'history/core/browser/web_history_service_unittest.cc',
       'history/core/common/thumbnail_score_unittest.cc',
     ],
     'instance_id_unittest_sources': [
@@ -341,8 +339,10 @@
       'login/screens/screen_context_unittest.cc',
     ],
     'memory_pressure_unittest_sources': [
+      'memory_pressure/direct_memory_pressure_calculator_linux_unittest.cc',
       'memory_pressure/direct_memory_pressure_calculator_win_unittest.cc',
       'memory_pressure/filtered_memory_pressure_calculator_unittest.cc',
+      'memory_pressure/memory_pressure_monitor_unittest.cc',
       'memory_pressure/memory_pressure_stats_collector_unittest.cc',
       'memory_pressure/test_memory_pressure_calculator.cc',
       'memory_pressure/test_memory_pressure_calculator.h',
@@ -352,6 +352,7 @@
       'metrics/cloned_install_detector_unittest.cc',
       'metrics/daily_event_unittest.cc',
       'metrics/drive_metrics_provider_unittest.cc',
+      'metrics/file_metrics_provider_unittest.cc',
       'metrics/histogram_encoder_unittest.cc',
       'metrics/machine_id_provider_win_unittest.cc',
       'metrics/metrics_log_manager_unittest.cc',
@@ -370,6 +371,7 @@
       'metrics/leak_detector/call_stack_manager_unittest.cc',
       'metrics/leak_detector/call_stack_table_unittest.cc',
       'metrics/leak_detector/leak_analyzer_unittest.cc',
+      'metrics/leak_detector/leak_detector_unittest.cc',
       'metrics/leak_detector/leak_detector_impl_unittest.cc',
       'metrics/leak_detector/ranked_list_unittest.cc',
     ],
@@ -410,15 +412,24 @@
       'omnibox/browser/autocomplete_provider_unittest.cc',
       'omnibox/browser/autocomplete_result_unittest.cc',
       'omnibox/browser/base_search_provider_unittest.cc',
+      'omnibox/browser/bookmark_provider_unittest.cc',
+      'omnibox/browser/builtin_provider_unittest.cc',
       'omnibox/browser/clipboard_url_provider_unittest.cc',
+      'omnibox/browser/history_quick_provider_unittest.cc',
+      'omnibox/browser/history_url_provider_unittest.cc',
       'omnibox/browser/in_memory_url_index_types_unittest.cc',
+      'omnibox/browser/in_memory_url_index_unittest.cc',
       'omnibox/browser/keyword_provider_unittest.cc',
+      'omnibox/browser/omnibox_edit_unittest.cc',
       'omnibox/browser/omnibox_field_trial_unittest.cc',
       'omnibox/browser/omnibox_popup_model_unittest.cc',
       'omnibox/browser/omnibox_view_unittest.cc',
       'omnibox/browser/scored_history_match_unittest.cc',
+      'omnibox/browser/shortcuts_backend_unittest.cc',
       'omnibox/browser/shortcuts_database_unittest.cc',
+      'omnibox/browser/shortcuts_provider_unittest.cc',
       'omnibox/browser/suggestion_answer_unittest.cc',
+      'omnibox/browser/zero_suggest_provider_unittest.cc',
     ],
     'open_from_clipboard_unittest_sources': [
       'open_from_clipboard/clipboard_recent_content_ios_unittest.mm',
@@ -587,6 +598,18 @@
       'proxy_config/proxy_config_dictionary_unittest.cc',
       'proxy_config/proxy_prefs_unittest.cc',
     ],
+    'prefs_unittest_sources': [
+      'prefs/default_pref_store_unittest.cc',
+      'prefs/json_pref_store_unittest.cc',
+      'prefs/overlay_user_pref_store_unittest.cc',
+      'prefs/pref_change_registrar_unittest.cc',
+      'prefs/pref_member_unittest.cc',
+      'prefs/pref_notifier_impl_unittest.cc',
+      'prefs/pref_service_unittest.cc',
+      'prefs/pref_value_map_unittest.cc',
+      'prefs/pref_value_store_unittest.cc',
+      'prefs/scoped_user_pref_update_unittest.cc',
+    ],
     'query_parser_unittest_sources': [
       'query_parser/query_parser_unittest.cc',
       'query_parser/snippet_unittest.cc',
@@ -599,14 +622,21 @@
       'rappor/rappor_prefs_unittest.cc',
       'rappor/rappor_service_unittest.cc',
       'rappor/rappor_utils_unittest.cc',
+      'rappor/reports_unittest.cc',
       'rappor/sampler_unittest.cc',
     ],
     'rlz_unittest_sources': [
       'rlz/rlz_tracker_unittest.cc',
     ],
+    'safe_browsing_db_mobile_unittest_sources': [
+      'safe_browsing_db/remote_database_manager_unittest.cc',
+      'safe_browsing_db/safe_browsing_api_handler_unittest.cc',
+    ],
     'safe_browsing_db_unittest_sources': [
       'safe_browsing_db/prefix_set_unittest.cc',
       'safe_browsing_db/util_unittest.cc',
+      'safe_browsing_db/v4_get_hash_protocol_manager_unittest.cc',
+      'safe_browsing_db/v4_protocol_manager_util_unittest.cc',
     ],
     'safe_json_unittest_sources': [
       'safe_json/json_sanitizer_unittest.cc',
@@ -628,9 +658,9 @@
       'scheduler/child/scheduler_tqm_delegate_for_test.cc',
       'scheduler/child/scheduler_tqm_delegate_for_test.h',
       'scheduler/child/scheduler_tqm_delegate_impl_unittest.cc',
-      'scheduler/child/virtual_time_tqm_delegate_unittest.cc',
       'scheduler/child/webthread_impl_for_worker_scheduler_unittest.cc',
       'scheduler/child/worker_scheduler_impl_unittest.cc',
+      'scheduler/renderer/auto_advancing_virtual_time_domain_unittest.cc',
       'scheduler/renderer/deadline_task_runner_unittest.cc',
       'scheduler/renderer/idle_time_estimator_unittest.cc',
       'scheduler/renderer/render_widget_signals_unittest.cpp',
@@ -648,7 +678,7 @@
     'search_engines_unittest_sources': [
       'search_engines/default_search_manager_unittest.cc',
       'search_engines/default_search_pref_migration_unittest.cc',
-      'search_engines/desktop_search_win_unittest.cc',
+      'search_engines/desktop_search_utils_unittest.cc',
       'search_engines/keyword_table_unittest.cc',
       'search_engines/search_engine_data_type_controller_unittest.cc',
       'search_engines/search_host_to_urls_map_unittest.cc',
@@ -669,7 +699,7 @@
       'sessions/core/serialized_navigation_entry_unittest.cc',
       'sessions/core/session_backend_unittest.cc',
       'sessions/core/session_types_unittest.cc',
-      'sessions/ios/ios_serialized_navigation_builder_unittest.cc',
+      'sessions/ios/ios_serialized_navigation_builder_unittest.mm',
       'sessions/ios/ios_serialized_navigation_driver_unittest.cc',
     ],
     'signin_unittest_sources': [
@@ -713,7 +743,6 @@
     'sync_driver_unittest_sources': [
       'sync_driver/about_sync_util_unittest.cc',
       'sync_driver/backend_migrator_unittest.cc',
-      'sync_driver/backup_rollback_controller_unittest.cc',
       'sync_driver/data_type_manager_impl_unittest.cc',
       'sync_driver/device_info_data_type_controller_unittest.cc',
       'sync_driver/device_info_service_unittest.cc',
@@ -726,8 +755,8 @@
       'sync_driver/glue/ui_model_worker_unittest.cc',
       'sync_driver/local_device_info_provider_unittest.cc',
       'sync_driver/model_association_manager_unittest.cc',
-      'sync_driver/non_blocking_data_type_controller_unittest.cc',
       'sync_driver/non_ui_data_type_controller_unittest.cc',
+      'sync_driver/non_ui_model_type_controller_unittest.cc',
       'sync_driver/profile_sync_auth_provider_unittest.cc',
       'sync_driver/shared_change_processor_unittest.cc',
       'sync_driver/startup_controller_unittest.cc',
@@ -736,6 +765,7 @@
       'sync_driver/sync_util_unittest.cc',
       'sync_driver/system_encryptor_unittest.cc',
       'sync_driver/ui_data_type_controller_unittest.cc',
+      'sync_driver/ui_model_type_controller_unittest.cc',
     ],
     'sync_sessions_unittest_sources': [
       'sync_sessions/favicon_cache_unittest.cc',
@@ -747,6 +777,7 @@
       'sync_sessions/revisit/typed_url_page_revisit_task_unittest.cc',
       'sync_sessions/session_data_type_controller_unittest.cc',
       'sync_sessions/synced_session_tracker_unittest.cc',
+      'sync_sessions/sync_sessions_metrics_unittest.cc',
       'sync_sessions/tab_node_pool_unittest.cc',
     ],
     'syncable_prefs_unittest_sources': [
@@ -755,15 +786,18 @@
     ],
     'tracing_unittest_sources': [
       'tracing/graphics_memory_dump_provider_android_unittest.cc',
+      'tracing/process_metrics_memory_dump_provider_unittest.cc',
       'tracing/trace_config_file_unittest.cc',
     ],
     'translate_unittest_sources': [
+      'translate/core/browser/mock_translate_driver.cc',
       'translate/core/browser/language_state_unittest.cc',
       'translate/core/browser/translate_browser_metrics_unittest.cc',
       'translate/core/browser/translate_language_list_unittest.cc',
       'translate/core/browser/translate_manager_unittest.cc',
       'translate/core/browser/translate_prefs_unittest.cc',
       'translate/core/browser/translate_script_unittest.cc',
+      'translate/core/browser/translate_ui_delegate_unittest.cc',
       'translate/core/common/translate_metrics_unittest.cc',
       'translate/core/common/translate_util_unittest.cc',
       'translate/core/language_detection/language_detection_util_unittest.cc',
@@ -776,6 +810,7 @@
     ],
     'update_client_unittest_sources': [
       'update_client/component_patcher_unittest.cc',
+      'update_client/client_update_protocol_ecdsa_unittest.cc',
       'update_client/crx_downloader_unittest.cc',
       'update_client/ping_manager_unittest.cc',
       'update_client/request_sender_unittest.cc',
@@ -783,6 +818,7 @@
       'update_client/update_client_unittest.cc',
       'update_client/update_query_params_unittest.cc',
       'update_client/update_response_unittest.cc',
+      'update_client/utils_unittest.cc',
     ],
     'upload_list_unittest_sources': [
       'upload_list/upload_list_unittest.cc',
@@ -904,7 +940,6 @@
         '<@(bubble_unittest_sources)',
         '<@(captive_portal_unittest_sources)',
         '<@(certificate_reporting_unittest_sources)',
-        '<@(child_trace_message_filter_unittest_sources)',
         '<@(cloud_devices_unittest_sources)',
         '<@(component_updater_unittest_sources)',
         '<@(content_settings_unittest_sources)',
@@ -915,8 +950,6 @@
         '<@(data_use_measurement_unittest_sources)',
         '<@(device_event_log_unittest_sources)',
         '<@(dom_distiller_unittest_sources)',
-        '<@(domain_reliability_unittest_sources)',
-        '<@(enhanced_bookmarks_unittest_sources)',
         '<@(favicon_base_unittest_sources)',
         '<@(favicon_unittest_sources)',
         '<@(flags_ui_unittest_sources)',
@@ -942,6 +975,7 @@
         '<@(password_manager_unittest_sources)',
         '<@(precache_unittest_sources)',
         '<@(proxy_config_unittest_sources)',
+        '<@(prefs_unittest_sources)',
         '<@(query_parser_unittest_sources)',
         '<@(rappor_unittest_sources)',
         '<@(search_engines_unittest_sources)',
@@ -974,7 +1008,6 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
-        '../base/base.gyp:base_prefs_test_support',
         '../base/base.gyp:test_support_base',
         '../google_apis/google_apis.gyp:google_apis_test_support',
         '../jingle/jingle.gyp:notifier_test_util',
@@ -989,7 +1022,6 @@
         '../third_party/libaddressinput/libaddressinput.gyp:libaddressinput_util',
         '../third_party/libjingle/libjingle.gyp:libjingle',
         '../third_party/libphonenumber/libphonenumber.gyp:libphonenumber',
-        '../third_party/libxml/libxml.gyp:libxml',
         '../third_party/protobuf/protobuf.gyp:protobuf_lite',
         '../third_party/re2/re2.gyp:re2',
         '../ui/base/ui_base.gyp:ui_base',
@@ -1007,6 +1039,7 @@
         'components.gyp:bookmarks_managed',
         'components.gyp:bookmarks_test_support',
         'components.gyp:browser_sync_browser',
+        'components.gyp:browser_sync_browser_test_support',
         'components.gyp:bubble',
         'components.gyp:captive_portal_test_support',
         'components.gyp:certificate_reporting',
@@ -1027,9 +1060,6 @@
         'components.gyp:dom_distiller_core',
         'components.gyp:dom_distiller_protos',
         'components.gyp:dom_distiller_test_support',
-        'components.gyp:domain_reliability',
-        'components.gyp:enhanced_bookmarks',
-        'components.gyp:enhanced_bookmarks_test_support',
         'components.gyp:favicon_base',
         'components.gyp:favicon_core',
         'components.gyp:flags_ui',
@@ -1085,15 +1115,15 @@
         'components.gyp:ssl_errors',
         'components.gyp:suggestions',
         'components.gyp:sync_bookmarks',
-        'components.gyp:sync_driver_features',
+        'components.gyp:sync_driver',
         'components.gyp:sync_driver_test_support',
         'components.gyp:sync_sessions',
         'components.gyp:sync_sessions_test_support',
         'components.gyp:syncable_prefs_test_support',
+        'components.gyp:toolbar_test_support',
         'components.gyp:translate_core_browser',
         'components.gyp:translate_core_common',
         'components.gyp:translate_core_language_detection',
-        'components.gyp:ui_zoom',
         'components.gyp:undo_component',
         'components.gyp:update_client',
         'components.gyp:update_client_test_support',
@@ -1105,12 +1135,15 @@
         'components.gyp:variations_net',
         'components.gyp:variations_service',
         'components.gyp:version_info',
+        'components.gyp:webdata_services_test_support',
         'components.gyp:web_resource',
         'components.gyp:web_resource_test_support',
         'components_resources.gyp:components_resources',
         'components_strings.gyp:components_strings',
         'components_tests_pak',
         'mime_util/mime_util.gyp:mime_util',
+        'prefs/prefs.gyp:prefs',
+        'prefs/prefs.gyp:prefs_test_support',
         'url_formatter/url_formatter.gyp:url_formatter',
         '<(VIVALDI)/vivaldi_chromium.gyp:vivaldi_preferences',
         '<(VIVALDI)/extensions/api/vivaldi_chrome_extensions.gyp:vivaldi_chrome_extensions',
@@ -1155,11 +1188,6 @@
             'components.gyp:browser_watcher_client',
           ]
         }],
-        ['OS=="win" and component!="shared_library" and win_use_allocator_shim==1', {
-          'dependencies': [
-            '<(DEPTH)/base/allocator/allocator.gyp:allocator',
-          ],
-        }],
         [ 'cld_version==2', {
           'dependencies': [
             # Unit tests should always use statically-linked CLD data.
@@ -1168,7 +1196,9 @@
         ['OS != "ios"', {
           'sources': [
             '<@(certificate_transparency_unittest_sources)',
+            '<@(child_trace_message_filter_unittest_sources)',
             '<@(devtools_http_handler_unittest_sources)',
+            '<@(domain_reliability_unittest_sources)',
             '<@(error_page_unittest_sources)',
             '<@(guest_view_unittest_sources)',
             '<@(navigation_interception_unittest_sources)',
@@ -1201,6 +1231,7 @@
             'components.gyp:devtools_http_handler',
             'components.gyp:dom_distiller_content_browser',
             'components.gyp:dom_distiller_content_renderer',
+            'components.gyp:domain_reliability',
             'components.gyp:error_page_renderer',
             'components.gyp:favicon_content',
             'components.gyp:guest_view_browser',
@@ -1224,6 +1255,7 @@
             'components.gyp:sessions_content',
             'components.gyp:storage_monitor',
             'components.gyp:storage_monitor_test_support',
+            'components.gyp:ui_zoom',
             'components.gyp:url_matcher',
             'components.gyp:visitedlink_browser',
             'components.gyp:visitedlink_renderer',
@@ -1266,6 +1298,14 @@
                 }],
               ],
             }],
+            ['safe_browsing == 2 and OS != "ios"', {
+              'dependencies': [
+                'components.gyp:safe_browsing_db_mobile',
+              ],
+              'sources': [
+                '<@(safe_browsing_db_mobile_unittest_sources)',
+              ],
+            }],
           ],
         }, { # 'OS == "ios"'
           'sources': [
@@ -1281,7 +1321,6 @@
             '<(PRODUCT_DIR)/ui_test.pak',
           ],
           'dependencies': [
-            '../ios/ios_tests.gyp:test_support_ios',
             '../ios/web/ios_web.gyp:ios_web_test_support',
             '../third_party/ocmock/ocmock.gyp:ocmock',
             'components.gyp:autofill_ios_browser',
@@ -1412,6 +1451,7 @@
         ['chromeos==1', {
           'sources': [
             'arc/arc_bridge_service_unittest.cc',
+            'arc/ime/arc_ime_bridge_unittest.cc',
             'pairing/message_buffer_unittest.cc',
             'timers/alarm_timer_unittest.cc',
             'wifi_sync/wifi_config_delegate_chromeos_unittest.cc',
@@ -1456,19 +1496,6 @@
           'sources/': [
             ['exclude', '^storage_monitor/'],
           ],
-        }],
-        ['OS=="win" and win_use_allocator_shim==1', {
-          'dependencies': [
-            '../base/allocator/allocator.gyp:allocator',
-          ],
-        }],
-        ['OS=="linux" and component=="shared_library" and use_allocator!="none"', {
-          'dependencies': [
-            '<(DEPTH)/base/allocator/allocator.gyp:allocator',
-          ],
-          'link_settings': {
-            'ldflags': ['-rdynamic'],
-          },
         }],
         ['configuration_policy==1', {
           'dependencies': [
@@ -1642,7 +1669,7 @@
             'components.gyp:invalidation_java',
             'components.gyp:policy_java',
             'components.gyp:policy_java_test_support',
-            'components.gyp:web_restriction_java',
+            'components.gyp:web_restrictions_java',
             '../base/base.gyp:base_java',
             '../base/base.gyp:base_java_test_support',
             '../testing/android/junit/junit_test.gyp:junit_test_support',
@@ -1652,8 +1679,9 @@
             'src_paths': [
               'invalidation/impl/android/junit/',
               'policy/android/junit/',
-              'web_restriction/junit/'
+              'web_restrictions/junit/'
             ],
+            'wrapper_script_name': 'helper/<(_target_name)',
           },
           'includes': [ '../build/host_jar.gypi' ],
         },
@@ -1723,11 +1751,6 @@
                '../testing/android/native_test.gyp:native_test_native_code',
              ],
            }],
-           ['OS=="win" and component!="shared_library" and win_use_allocator_shim==1', {
-             'dependencies': [
-               '<(DEPTH)/base/allocator/allocator.gyp:allocator',
-             ],
-           }],
          ],
          # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
          'msvs_disabled_warnings': [ 4267, ],
@@ -1741,6 +1764,7 @@
             '../content/content.gyp:content_gpu',
             '../content/content.gyp:content_plugin',
             '../content/content.gyp:content_renderer',
+            '../content/content_shell_and_tests.gyp:content_browser_test_base',
             '../content/content_shell_and_tests.gyp:content_browser_test_support',
             '../content/content_shell_and_tests.gyp:content_shell_lib',
             '../content/content_shell_and_tests.gyp:content_shell_pak',
@@ -1824,11 +1848,6 @@
               },
               # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
               'msvs_disabled_warnings': [ 4267, ],
-            }],
-            ['OS=="win" and win_use_allocator_shim==1', {
-              'dependencies': [
-                '../base/allocator/allocator.gyp:allocator',
-              ],
             }],
             ['OS=="mac"', {
               'dependencies': [

@@ -56,6 +56,7 @@
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/skia_util.h"
 
 using gpu::gles2::GLES2Interface;
 
@@ -601,7 +602,8 @@ void GLRenderer::DrawDebugBorderQuad(const DrawingFrame* frame,
 static skia::RefPtr<SkImage> ApplyImageFilter(
     scoped_ptr<GLRenderer::ScopedUseGrContext> use_gr_context,
     ResourceProvider* resource_provider,
-    const gfx::Rect& rect,
+    const gfx::RectF& src_rect,
+    const gfx::RectF& dst_rect,
     const gfx::Vector2dF& scale,
     SkImageFilter* filter,
     ScopedResource* source_texture_resource) {
@@ -634,7 +636,7 @@ static skia::RefPtr<SkImage> ApplyImageFilter(
 
   // Create surface to draw into.
   SkImageInfo dst_info =
-      SkImageInfo::MakeN32Premul(srcImage->width(), srcImage->height());
+      SkImageInfo::MakeN32Premul(dst_rect.width(), dst_rect.height());
   skia::RefPtr<SkSurface> surface = skia::AdoptRef(SkSurface::NewRenderTarget(
       use_gr_context->context(), SkSurface::kYes_Budgeted, dst_info, 0));
   if (!surface) {
@@ -643,22 +645,21 @@ static skia::RefPtr<SkImage> ApplyImageFilter(
     return skia::RefPtr<SkImage>();
   }
 
-  // The origin of the filter is top-left and the origin of the source is
-  // bottom-left, but the orientation is the same, so we must translate the
-  // filter so that it renders at the bottom of the texture to avoid
-  // misregistration.
-  int y_translate = source_texture_resource->size().height() - rect.height() -
-                    rect.origin().y();
-  SkMatrix localM;
-  localM.setTranslate(-rect.origin().x(), y_translate);
-  localM.preScale(scale.x(), scale.y());
-  skia::RefPtr<SkImageFilter> localIMF =
-      skia::AdoptRef(filter->newWithLocalMatrix(localM));
+  SkMatrix local_matrix;
+  local_matrix.setScale(scale.x(), scale.y());
+  skia::RefPtr<SkImageFilter> filter_with_local_scale =
+      skia::AdoptRef(filter->newWithLocalMatrix(local_matrix));
 
   SkPaint paint;
-  paint.setImageFilter(localIMF.get());
-  surface->getCanvas()->drawImage(srcImage.get(), 0, 0, &paint);
-
+  paint.setImageFilter(filter_with_local_scale.get());
+  surface->getCanvas()->translate(-dst_rect.x(), -dst_rect.y());
+  surface->getCanvas()->drawImage(srcImage.get(), src_rect.x(), src_rect.y(),
+                                  &paint);
+  // Flush the drawing before source texture read lock goes out of scope.
+  // Skia API does not guarantee that when the SkImage goes out of scope,
+  // its externally referenced resources would force the rendering to be
+  // flushed.
+  surface->getCanvas()->flush();
   skia::RefPtr<SkImage> image = skia::AdoptRef(surface->newImageSnapshot());
   if (!image || !image->isTextureBacked()) {
     return skia::RefPtr<SkImage>();
@@ -822,6 +823,13 @@ gfx::Rect GLRenderer::GetBackdropBoundingBoxForRenderPassQuad(
     backdrop_rect.Inset(-kOutsetForAntialiasing, -kOutsetForAntialiasing);
   }
 
+  if (!quad->filters.IsEmpty()) {
+    // If we have filters, grab an extra one-pixel border around the
+    // background, so texture edge clamping gives us a transparent border
+    // in case the filter expands the result.
+    backdrop_rect.Inset(-1, -1, -1, -1);
+  }
+
   backdrop_rect.Intersect(MoveFromDrawToWindowSpace(
       frame, frame->current_render_pass->output_rect));
   return backdrop_rect;
@@ -846,22 +854,41 @@ scoped_ptr<ScopedResource> GLRenderer::GetBackdropTexture(
 skia::RefPtr<SkImage> GLRenderer::ApplyBackgroundFilters(
     DrawingFrame* frame,
     const RenderPassDrawQuad* quad,
-    ScopedResource* background_texture) {
+    ScopedResource* background_texture,
+    const gfx::RectF& rect) {
   DCHECK(ShouldApplyBackgroundFilters(quad));
   skia::RefPtr<SkImageFilter> filter = RenderSurfaceFilters::BuildImageFilter(
       quad->background_filters, gfx::SizeF(background_texture->size()));
 
   skia::RefPtr<SkImage> background_with_filters = ApplyImageFilter(
-      ScopedUseGrContext::Create(this, frame), resource_provider_, quad->rect,
+      ScopedUseGrContext::Create(this, frame), resource_provider_, rect, rect,
       quad->filters_scale, filter.get(), background_texture);
   return background_with_filters;
+}
+
+// Map device space quad to local space. Device_transform has no 3d
+// component since it was flattened, so we don't need to project.  We should
+// have already checked that the transform was uninvertible before this call.
+gfx::QuadF MapQuadToLocalSpace(const gfx::Transform& device_transform,
+                               const gfx::QuadF& device_quad) {
+  gfx::Transform inverse_device_transform(gfx::Transform::kSkipInitialization);
+  DCHECK(device_transform.IsInvertible());
+  bool did_invert = device_transform.GetInverse(&inverse_device_transform);
+  DCHECK(did_invert);
+  bool clipped = false;
+  gfx::QuadF local_quad =
+      MathUtil::MapQuad(inverse_device_transform, device_quad, &clipped);
+  // We should not DCHECK(!clipped) here, because anti-aliasing inflation may
+  // cause device_quad to become clipped. To our knowledge this scenario does
+  // not need to be handled differently than the unclipped case.
+  return local_quad;
 }
 
 void GLRenderer::DrawRenderPassQuad(DrawingFrame* frame,
                                     const RenderPassDrawQuad* quad,
                                     const gfx::QuadF* clip_region) {
   ScopedResource* contents_texture =
-      render_pass_textures_.get(quad->render_pass_id);
+      render_pass_textures_[quad->render_pass_id].get();
   DCHECK(contents_texture);
   DCHECK(contents_texture->id());
 
@@ -925,8 +952,8 @@ void GLRenderer::DrawRenderPassQuad(DrawingFrame* frame,
       if (ShouldApplyBackgroundFilters(quad) && background_texture) {
         // Apply the background filters to R, so that it is applied in the
         // pixels' coordinate space.
-        background_image =
-            ApplyBackgroundFilters(frame, quad, background_texture.get());
+        background_image = ApplyBackgroundFilters(
+            frame, quad, background_texture.get(), gfx::RectF(background_rect));
         if (background_image)
           background_image_id = background_image->getTextureHandle(true);
         DCHECK(background_image_id);
@@ -963,6 +990,7 @@ void GLRenderer::DrawRenderPassQuad(DrawingFrame* frame,
   GLuint filter_image_id = 0;
   SkScalar color_matrix[20];
   bool use_color_matrix = false;
+  gfx::RectF rect = gfx::RectF(quad->rect);
   if (!quad->filters.IsEmpty()) {
     skia::RefPtr<SkImageFilter> filter = RenderSurfaceFilters::BuildImageFilter(
         quad->filters, gfx::SizeF(contents_texture->size()));
@@ -980,12 +1008,35 @@ void GLRenderer::DrawRenderPassQuad(DrawingFrame* frame,
         // in the compositor.
         use_color_matrix = true;
       } else {
-        filter_image = ApplyImageFilter(
-            ScopedUseGrContext::Create(this, frame), resource_provider_,
-            quad->rect, quad->filters_scale, filter.get(), contents_texture);
+        gfx::Vector2dF scale = quad->filters_scale;
+        SkMatrix scale_matrix;
+        scale_matrix.setScale(scale.x(), scale.y());
+        SkIRect result_rect;
+        filter->filterBounds(gfx::RectToSkIRect(quad->rect), scale_matrix,
+                             &result_rect,
+                             SkImageFilter::kForward_MapDirection);
+        gfx::RectF dst_rect = gfx::SkRectToRectF(SkRect::Make(result_rect));
+        gfx::Rect clip_rect = quad->shared_quad_state->clip_rect;
+        if (clip_rect.IsEmpty()) {
+          clip_rect = current_draw_rect_;
+        }
+        gfx::Transform transform =
+            quad->shared_quad_state->quad_to_target_transform;
+        gfx::QuadF clip_quad = gfx::QuadF(gfx::RectF(clip_rect));
+        gfx::QuadF local_clip = MapQuadToLocalSpace(transform, clip_quad);
+        dst_rect.Intersect(local_clip.BoundingBox());
+        // If we've been fully clipped out (by crop rect or clipping), there's
+        // nothing to draw.
+        if (dst_rect.IsEmpty()) {
+          return;
+        }
+        filter_image = ApplyImageFilter(ScopedUseGrContext::Create(this, frame),
+                                        resource_provider_, rect, dst_rect,
+                                        scale, filter.get(), contents_texture);
         if (filter_image) {
           filter_image_id = filter_image->getTextureHandle(true);
           DCHECK(filter_image_id);
+          rect = dst_rect;
         }
       }
     }
@@ -1096,10 +1147,16 @@ void GLRenderer::DrawRenderPassQuad(DrawingFrame* frame,
     program->fragment_shader().FillLocations(&locations);
     gl_->Uniform1i(locations.sampler, 0);
   }
-  float tex_scale_x =
-      quad->rect.width() / static_cast<float>(contents_texture->size().width());
-  float tex_scale_y = quad->rect.height() /
-                      static_cast<float>(contents_texture->size().height());
+  float tex_scale_x, tex_scale_y;
+  if (filter_image) {
+    // Skia filters always return SkImages with snug textures.
+    tex_scale_x = tex_scale_y = 1.0f;
+  } else {
+    tex_scale_x = quad->rect.width() /
+                  static_cast<float>(contents_texture->size().width());
+    tex_scale_y = quad->rect.height() /
+                  static_cast<float>(contents_texture->size().height());
+  }
   DCHECK_LE(tex_scale_x, 1.0f);
   DCHECK_LE(tex_scale_y, 1.0f);
 
@@ -1107,7 +1164,7 @@ void GLRenderer::DrawRenderPassQuad(DrawingFrame* frame,
   // Flip the content vertically in the shader, as the RenderPass input
   // texture is already oriented the same way as the framebuffer, but the
   // projection transform does a flip.
-  gl_->Uniform4f(locations.tex_transform, 0.0f, tex_scale_y, tex_scale_x,
+  gl_->Uniform4f(locations.tex_transform, 0.0f, 1.0f, tex_scale_x,
                  -tex_scale_y);
 
   GLint last_texture_unit = 0;
@@ -1126,7 +1183,7 @@ void GLRenderer::DrawRenderPassQuad(DrawingFrame* frame,
     // and the RenderPass contents texture, so we flip the tex coords from the
     // RenderPass texture to find the mask texture coords.
     gl_->Uniform2f(locations.mask_tex_coord_offset, mask_uv_rect.x(),
-                   mask_uv_rect.bottom());
+                   mask_uv_rect.height() / tex_scale_y + mask_uv_rect.y());
     gl_->Uniform2f(locations.mask_tex_coord_scale,
                    mask_uv_rect.width() / tex_scale_x,
                    -mask_uv_rect.height() / tex_scale_y);
@@ -1197,7 +1254,7 @@ void GLRenderer::DrawRenderPassQuad(DrawingFrame* frame,
   SetShaderOpacity(quad->shared_quad_state->opacity, locations.alpha);
   SetShaderQuadF(surface_quad, locations.quad);
   DrawQuadGeometry(frame, quad->shared_quad_state->quad_to_target_transform,
-                   gfx::RectF(quad->rect), locations.matrix);
+                   rect, locations.matrix);
 
   // Flush the compositor context before the filter bitmap goes out of
   // scope, so the draw gets processed before the filter texture gets deleted.
@@ -1361,24 +1418,6 @@ void AlignQuadToBoundingBox(gfx::QuadF* clipped_quad) {
     }
   }
   *clipped_quad = best_rotation;
-}
-
-// Map device space quad to local space. Device_transform has no 3d
-// component since it was flattened, so we don't need to project.  We should
-// have already checked that the transform was uninvertible before this call.
-gfx::QuadF MapQuadToLocalSpace(const gfx::Transform& device_transform,
-                               const gfx::QuadF& device_quad) {
-  gfx::Transform inverse_device_transform(gfx::Transform::kSkipInitialization);
-  DCHECK(device_transform.IsInvertible());
-  bool did_invert = device_transform.GetInverse(&inverse_device_transform);
-  DCHECK(did_invert);
-  bool clipped = false;
-  gfx::QuadF local_quad =
-      MathUtil::MapQuad(inverse_device_transform, device_quad, &clipped);
-  // We should not DCHECK(!clipped) here, because anti-aliasing inflation may
-  // cause device_quad to become clipped. To our knowledge this scenario does
-  // not need to be handled differently than the unclipped case.
-  return local_quad;
 }
 
 void InflateAntiAliasingDistances(const gfx::QuadF& quad,
@@ -2101,13 +2140,23 @@ void GLRenderer::DrawYUVVideoQuad(const DrawingFrame* frame,
       break;
   }
 
+  float yuv_to_rgb_multiplied[9];
+  float yuv_adjust_with_offset[3];
+
+  for (int i = 0; i < 9; ++i)
+    yuv_to_rgb_multiplied[i] = yuv_to_rgb[i] * quad->resource_multiplier;
+
+  for (int i = 0; i < 3; ++i)
+    yuv_adjust_with_offset[i] =
+        yuv_adjust[i] / quad->resource_multiplier - quad->resource_offset;
+
   // The transform and vertex data are used to figure out the extents that the
   // un-antialiased quad should have and which vertex this is and the float
   // quad passed in via uniform is the actual geometry that gets used to draw
   // it. This is why this centered rect is used and not the original quad_rect.
   auto tile_rect = gfx::RectF(quad->rect);
-  gl_->UniformMatrix3fv(yuv_matrix_location, 1, 0, yuv_to_rgb);
-  gl_->Uniform3fv(yuv_adj_location, 1, yuv_adjust);
+  gl_->UniformMatrix3fv(yuv_matrix_location, 1, 0, yuv_to_rgb_multiplied);
+  gl_->Uniform3fv(yuv_adj_location, 1, yuv_adjust_with_offset);
 
   SetShaderOpacity(quad->shared_quad_state->opacity, alpha_location);
   if (!clip_region) {
@@ -2143,13 +2192,22 @@ void GLRenderer::DrawStreamVideoQuad(const DrawingFrame* frame,
   SetUseProgram(program->program());
 
   ToGLMatrix(&gl_matrix[0], quad->matrix);
-  gl_->UniformMatrix4fv(program->vertex_shader().tex_matrix_location(), 1,
-                        false, gl_matrix);
 
   ResourceProvider::ScopedReadLockGL lock(resource_provider_,
                                           quad->resource_id());
+
   DCHECK_EQ(GL_TEXTURE0, GetActiveTextureUnit(gl_));
   gl_->BindTexture(GL_TEXTURE_EXTERNAL_OES, lock.texture_id());
+
+  // TODO(liberato): stream_texture_android should stop sending |gl_matrix| to
+  // the video frame provider with this change (and to us), but it should
+  // start reporting the current matrix via
+  // GLStreamTextureImage::GetTextureMatrix.  Until then, though, this will use
+  // the matrix that we provide to it, unless the GLStreamTextureImage
+  // overrides it.  This lets it also work with AVDACodecImage, which provides
+  // the correct custom matrix and supplies a default one to us.
+  gl_->UniformMatrix4fvStreamTextureMatrixCHROMIUM(
+      program->vertex_shader().tex_matrix_location(), false, gl_matrix);
 
   gl_->Uniform1i(program->fragment_shader().sampler_location(), 0);
 
@@ -2910,16 +2968,6 @@ void GLRenderer::GetFramebufferTexture(unsigned texture_id,
   gl_->BindTexture(GL_TEXTURE_2D, 0);
 }
 
-bool GLRenderer::UseScopedTexture(DrawingFrame* frame,
-                                  const ScopedResource* texture,
-                                  const gfx::Rect& viewport_rect) {
-  DCHECK(texture->id());
-  frame->current_render_pass = NULL;
-  frame->current_texture = texture;
-
-  return BindFramebufferToTexture(frame, texture, viewport_rect);
-}
-
 void GLRenderer::BindFramebufferToOutputSurface(DrawingFrame* frame) {
   current_framebuffer_lock_ = nullptr;
   output_surface_->BindFramebuffer();
@@ -2933,8 +2981,7 @@ void GLRenderer::BindFramebufferToOutputSurface(DrawingFrame* frame) {
 }
 
 bool GLRenderer::BindFramebufferToTexture(DrawingFrame* frame,
-                                          const ScopedResource* texture,
-                                          const gfx::Rect& target_rect) {
+                                          const ScopedResource* texture) {
   DCHECK(texture->id());
 
   // Explicitly release lock, otherwise we can crash when try to lock

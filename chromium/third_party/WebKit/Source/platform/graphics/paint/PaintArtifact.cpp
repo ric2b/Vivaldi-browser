@@ -6,16 +6,70 @@
 
 #include "platform/TraceEvent.h"
 #include "platform/geometry/IntRect.h"
+#include "platform/graphics/GraphicsLayer.h"
+#include "platform/graphics/paint/DrawingDisplayItem.h"
+#include "third_party/skia/include/core/SkRegion.h"
 
 namespace blink {
+
+namespace {
+
+void computeChunkBoundsAndOpaqueness(const DisplayItemList& displayItems, Vector<PaintChunk>& paintChunks)
+{
+    for (PaintChunk& chunk : paintChunks) {
+        FloatRect bounds;
+        SkRegion knownToBeOpaqueRegion;
+        for (const DisplayItem& item : displayItems.itemsInPaintChunk(chunk)) {
+            if (!item.isDrawing())
+                continue;
+            const auto& drawing = static_cast<const DrawingDisplayItem&>(item);
+            if (const SkPicture* picture = drawing.picture()) {
+                const SkRect& pictureRect = picture->cullRect();
+                bounds.unite(pictureRect);
+                if (drawing.knownToBeOpaque()) {
+                    // TODO(pdr): This may be too conservative and fail due to
+                    // floating point precision issues.
+                    SkIRect conservativelyRoundedPictureRect;
+                    pictureRect.roundIn(&conservativelyRoundedPictureRect);
+                    knownToBeOpaqueRegion.op(conservativelyRoundedPictureRect, SkRegion::kUnion_Op);
+                }
+            }
+        }
+        chunk.bounds = bounds;
+        if (knownToBeOpaqueRegion.contains(enclosingIntRect(bounds)))
+            chunk.knownToBeOpaque = true;
+    }
+}
+
+} // namespace
 
 PaintArtifact::PaintArtifact()
     : m_displayItemList(0)
 {
 }
 
+PaintArtifact::PaintArtifact(DisplayItemList displayItems, Vector<PaintChunk> paintChunks)
+    : m_displayItemList(std::move(displayItems))
+    , m_paintChunks(std::move(paintChunks))
+{
+    computeChunkBoundsAndOpaqueness(m_displayItemList, m_paintChunks);
+}
+
+PaintArtifact::PaintArtifact(PaintArtifact&& source)
+    : m_displayItemList(std::move(source.m_displayItemList))
+    , m_paintChunks(std::move(source.m_paintChunks))
+{
+}
+
 PaintArtifact::~PaintArtifact()
 {
+}
+
+PaintArtifact& PaintArtifact::operator=(PaintArtifact&& source)
+{
+    m_displayItemList = std::move(source.m_displayItemList);
+    m_paintChunks = std::move(source.m_paintChunks);
+    return *this;
 }
 
 void PaintArtifact::reset()
@@ -43,9 +97,10 @@ void PaintArtifact::appendToWebDisplayItemList(WebDisplayItemList* list) const
 #if ENABLE(ASSERT)
     m_displayItemList.assertDisplayItemClientsAreAlive();
 #endif
+    unsigned visualRectIndex = 0;
     for (const DisplayItem& displayItem : m_displayItemList) {
-        // TODO(wkorman): Pass the actual visual rect for the display item.
-        displayItem.appendToWebDisplayItemList(IntRect(), list);
+        displayItem.appendToWebDisplayItemList(m_displayItemList.visualRect(visualRectIndex), list);
+        visualRectIndex++;
     }
 }
 

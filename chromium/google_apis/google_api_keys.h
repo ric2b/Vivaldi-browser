@@ -68,7 +68,7 @@ bool HasKeysConfigured();
 // e.g. URL-escaped if you use it in a URL.
 std::string GetAPIKey();
 
-std::string GetSafeSitesAPIKey();
+std::string GetRemotingAPIKey();
 
 // Represents the different sets of client IDs and secrets in use.
 enum OAuth2Client {

@@ -49,6 +49,7 @@ TEST_F(CorePageLoadMetricsObserverTest, SamePageNoTriggerUntilTrueNavCommit) {
   page_load_metrics::PageLoadTiming timing;
   timing.navigation_start = base::Time::FromDoubleT(1);
   timing.first_layout = first_layout;
+  PopulateRequiredTimingFields(&timing);
 
   NavigateAndCommit(GURL(kDefaultTestUrl));
   SimulateTimingUpdate(timing);
@@ -75,6 +76,7 @@ TEST_F(CorePageLoadMetricsObserverTest, SingleMetricAfterCommit) {
   page_load_metrics::PageLoadTiming timing;
   timing.navigation_start = base::Time::FromDoubleT(1);
   timing.first_layout = first_layout;
+  PopulateRequiredTimingFields(&timing);
 
   NavigateAndCommit(GURL(kDefaultTestUrl));
   SimulateTimingUpdate(timing);
@@ -94,7 +96,7 @@ TEST_F(CorePageLoadMetricsObserverTest, SingleMetricAfterCommit) {
 }
 
 TEST_F(CorePageLoadMetricsObserverTest, MultipleMetricsAfterCommits) {
-  base::TimeDelta first_layout_1 = base::TimeDelta::FromMilliseconds(1);
+  base::TimeDelta first_layout_1 = base::TimeDelta::FromMilliseconds(10);
   base::TimeDelta first_layout_2 = base::TimeDelta::FromMilliseconds(20);
   base::TimeDelta response = base::TimeDelta::FromMilliseconds(10);
   base::TimeDelta first_text_paint = base::TimeDelta::FromMilliseconds(30);
@@ -108,6 +110,7 @@ TEST_F(CorePageLoadMetricsObserverTest, MultipleMetricsAfterCommits) {
   timing.first_text_paint = first_text_paint;
   timing.dom_content_loaded_event_start = dom_content;
   timing.load_event_start = load;
+  PopulateRequiredTimingFields(&timing);
 
   NavigateAndCommit(GURL(kDefaultTestUrl));
   SimulateTimingUpdate(timing);
@@ -117,6 +120,7 @@ TEST_F(CorePageLoadMetricsObserverTest, MultipleMetricsAfterCommits) {
   page_load_metrics::PageLoadTiming timing2;
   timing2.navigation_start = base::Time::FromDoubleT(200);
   timing2.first_layout = first_layout_2;
+  PopulateRequiredTimingFields(&timing2);
 
   SimulateTimingUpdate(timing2);
 
@@ -150,6 +154,7 @@ TEST_F(CorePageLoadMetricsObserverTest, BackgroundDifferentHistogram) {
   page_load_metrics::PageLoadTiming timing;
   timing.navigation_start = base::Time::FromDoubleT(1);
   timing.first_layout = first_layout;
+  PopulateRequiredTimingFields(&timing);
 
   // Simulate "Open link in new tab."
   web_contents()->WasHidden();
@@ -198,6 +203,7 @@ TEST_F(CorePageLoadMetricsObserverTest, OnlyBackgroundLaterEvents) {
   web_contents()->WasShown();
   timing.first_layout = base::TimeDelta::FromSeconds(3);
   timing.first_text_paint = base::TimeDelta::FromSeconds(4);
+  PopulateRequiredTimingFields(&timing);
   SimulateTimingUpdate(timing);
 
   // Navigate again to force histogram recording.
@@ -236,6 +242,7 @@ TEST_F(CorePageLoadMetricsObserverTest, DontBackgroundQuickerLoad) {
   page_load_metrics::PageLoadTiming timing;
   timing.navigation_start = base::Time::FromDoubleT(1);
   timing.first_layout = first_layout;
+  PopulateRequiredTimingFields(&timing);
 
   web_contents()->WasHidden();
 
@@ -265,10 +272,43 @@ TEST_F(CorePageLoadMetricsObserverTest, DontBackgroundQuickerLoad) {
   histogram_tester().ExpectTotalCount(internal::kHistogramFirstTextPaint, 0);
 }
 
+TEST_F(CorePageLoadMetricsObserverTest, FailedProvisionalLoad) {
+  GURL url(kDefaultTestUrl);
+  content::RenderFrameHostTester* rfh_tester =
+      content::RenderFrameHostTester::For(main_rfh());
+  rfh_tester->SimulateNavigationStart(url);
+  rfh_tester->SimulateNavigationError(url, net::ERR_TIMED_OUT);
+  rfh_tester->SimulateNavigationStop();
+
+  histogram_tester().ExpectTotalCount(internal::kHistogramCommit, 0);
+  histogram_tester().ExpectTotalCount(internal::kHistogramDomContentLoaded, 0);
+  histogram_tester().ExpectTotalCount(internal::kHistogramLoad, 0);
+  histogram_tester().ExpectTotalCount(internal::kHistogramFirstLayout, 0);
+  histogram_tester().ExpectTotalCount(internal::kHistogramFirstTextPaint, 0);
+  histogram_tester().ExpectTotalCount(internal::kHistogramFailedProvisionalLoad,
+                                      1);
+}
+
+TEST_F(CorePageLoadMetricsObserverTest, FailedBackgroundProvisionalLoad) {
+  // Test that failed provisional event does not get logged in the
+  // histogram if it happened in the background
+  GURL url(kDefaultTestUrl);
+  content::RenderFrameHostTester* rfh_tester =
+      content::RenderFrameHostTester::For(main_rfh());
+  rfh_tester->SimulateNavigationStart(url);
+  web_contents()->WasHidden();
+  rfh_tester->SimulateNavigationError(url, net::ERR_TIMED_OUT);
+  rfh_tester->SimulateNavigationStop();
+
+  histogram_tester().ExpectTotalCount(internal::kHistogramFailedProvisionalLoad,
+                                      0);
+}
+
 TEST_F(CorePageLoadMetricsObserverTest, BackgroundBeforePaint) {
   page_load_metrics::PageLoadTiming timing;
   timing.navigation_start = base::Time::FromDoubleT(1);
   timing.first_paint = base::TimeDelta::FromSeconds(10);
+  PopulateRequiredTimingFields(&timing);
   NavigateAndCommit(GURL(kDefaultTestUrl));
   // Background the tab and go for a coffee or something.
   web_contents()->WasHidden();
@@ -291,7 +331,8 @@ TEST_F(CorePageLoadMetricsObserverTest, NoRappor) {
 TEST_F(CorePageLoadMetricsObserverTest, RapporLongPageLoad) {
   page_load_metrics::PageLoadTiming timing;
   timing.navigation_start = base::Time::FromDoubleT(1);
-  timing.first_image_paint = base::TimeDelta::FromSeconds(40);
+  timing.first_contentful_paint = base::TimeDelta::FromSeconds(40);
+  PopulateRequiredTimingFields(&timing);
   NavigateAndCommit(GURL(kDefaultTestUrl));
   SimulateTimingUpdate(timing);
 
@@ -313,7 +354,8 @@ TEST_F(CorePageLoadMetricsObserverTest, RapporLongPageLoad) {
 TEST_F(CorePageLoadMetricsObserverTest, RapporQuickPageLoad) {
   page_load_metrics::PageLoadTiming timing;
   timing.navigation_start = base::Time::FromDoubleT(1);
-  timing.first_text_paint = base::TimeDelta::FromSeconds(1);
+  timing.first_contentful_paint = base::TimeDelta::FromSeconds(1);
+  PopulateRequiredTimingFields(&timing);
 
   NavigateAndCommit(GURL(kDefaultTestUrl));
   SimulateTimingUpdate(timing);

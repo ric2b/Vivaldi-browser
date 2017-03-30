@@ -547,18 +547,14 @@ void FileAPIMessageFilter::OnAppendBlobDataItemToBlob(
 void FileAPIMessageFilter::OnAppendSharedMemoryToBlob(
     const std::string& uuid,
     base::SharedMemoryHandle handle,
-    size_t buffer_size) {
+    uint32_t buffer_size) {
   DCHECK(base::SharedMemory::IsHandleValid(handle));
   if (!buffer_size) {
     bad_message::ReceivedBadMessage(
         this, bad_message::FAMF_APPEND_SHARED_MEMORY_TO_BLOB);
     return;
   }
-#if defined(OS_WIN)
-  base::SharedMemory shared_memory(handle, true, PeerHandle());
-#else
   base::SharedMemory shared_memory(handle, true);
-#endif
   if (!shared_memory.Map(buffer_size)) {
     ignore_result(blob_storage_host_->CancelBuildingBlob(uuid));
     return;
@@ -638,18 +634,15 @@ void FileAPIMessageFilter::OnAppendBlobDataItemToStream(
 }
 
 void FileAPIMessageFilter::OnAppendSharedMemoryToStream(
-    const GURL& url, base::SharedMemoryHandle handle, size_t buffer_size) {
+    const GURL& url, base::SharedMemoryHandle handle,
+    uint32_t buffer_size) {
   DCHECK(base::SharedMemory::IsHandleValid(handle));
   if (!buffer_size) {
     bad_message::ReceivedBadMessage(
         this, bad_message::FAMF_APPEND_SHARED_MEMORY_TO_STREAM);
     return;
   }
-#if defined(OS_WIN)
-  base::SharedMemory shared_memory(handle, true, PeerHandle());
-#else
   base::SharedMemory shared_memory(handle, true);
-#endif
   if (!shared_memory.Map(buffer_size)) {
     OnRemoveStream(url);
     return;

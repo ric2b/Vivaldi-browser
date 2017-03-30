@@ -95,6 +95,7 @@
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_ev_whitelist.h"
 #include "net/cert/ct_policy_enforcer.h"
+#include "net/cert/ct_policy_status.h"
 #include "net/cert/ct_verifier.h"
 #include "net/cert/ct_verify_result.h"
 #include "net/cert/scoped_nss_types.h"
@@ -519,6 +520,10 @@ class SSLClientSocketNSS::Core : public base::RefCountedThreadSafe<Core> {
   // This should only be called after the server's certificate has been
   // verified, and may not be called within an NSS callback.
   void CacheSessionIfNecessary();
+
+  crypto::ECPrivateKey* GetChannelIDKey() const {
+    return channel_id_key_.get();
+  }
 
  private:
   friend class base::RefCountedThreadSafe<Core>;
@@ -2410,7 +2415,7 @@ bool SSLClientSocketNSS::GetSSLInfo(SSLInfo* ssl_info) {
   ssl_info->cert = server_cert_verify_result_.verified_cert;
   ssl_info->unverified_cert = core_->state().server_cert;
 
-  AddSCTInfoToSSLInfo(ssl_info);
+  AddCTInfoToSSLInfo(ssl_info);
 
   ssl_info->connection_status =
       core_->state().ssl_connection_status;
@@ -3126,22 +3131,38 @@ void SSLClientSocketNSS::VerifyCT() {
   // TODO(ekasper): wipe stapled_ocsp_response and sct_list_from_tls_extension
   // from the state after verification is complete, to conserve memory.
 
-  if (policy_enforcer_ &&
-      (server_cert_verify_result_.cert_status & CERT_STATUS_IS_EV)) {
-    scoped_refptr<ct::EVCertsWhitelist> ev_whitelist =
-        SSLConfigService::GetEVCertsWhitelist();
-    if (!policy_enforcer_->DoesConformToCTEVPolicy(
-            server_cert_verify_result_.verified_cert.get(), ev_whitelist.get(),
-            ct_verify_result_, net_log_)) {
-      // TODO(eranm): Log via the BoundNetLog, see crbug.com/437766
-      VLOG(1) << "EV certificate for "
-              << server_cert_verify_result_.verified_cert->subject()
-                     .GetDisplayName()
-              << " does not conform to CT policy, removing EV status.";
-      server_cert_verify_result_.cert_status |=
-          CERT_STATUS_CT_COMPLIANCE_FAILED;
-      server_cert_verify_result_.cert_status &= ~CERT_STATUS_IS_EV;
+  ct_verify_result_.ct_policies_applied = (policy_enforcer_ != nullptr);
+  ct_verify_result_.ev_policy_compliance =
+      ct::EVPolicyCompliance::EV_POLICY_DOES_NOT_APPLY;
+  if (policy_enforcer_) {
+    if ((server_cert_verify_result_.cert_status & CERT_STATUS_IS_EV)) {
+      scoped_refptr<ct::EVCertsWhitelist> ev_whitelist =
+          SSLConfigService::GetEVCertsWhitelist();
+      ct::EVPolicyCompliance ev_policy_compliance =
+          policy_enforcer_->DoesConformToCTEVPolicy(
+              server_cert_verify_result_.verified_cert.get(),
+              ev_whitelist.get(), ct_verify_result_.verified_scts, net_log_);
+      ct_verify_result_.ev_policy_compliance = ev_policy_compliance;
+      if (ev_policy_compliance !=
+              ct::EVPolicyCompliance::EV_POLICY_DOES_NOT_APPLY &&
+          ev_policy_compliance !=
+              ct::EVPolicyCompliance::EV_POLICY_COMPLIES_VIA_WHITELIST &&
+          ev_policy_compliance !=
+              ct::EVPolicyCompliance::EV_POLICY_COMPLIES_VIA_SCTS) {
+        // TODO(eranm): Log via the BoundNetLog, see crbug.com/437766
+        VLOG(1) << "EV certificate for "
+                << server_cert_verify_result_.verified_cert->subject()
+                       .GetDisplayName()
+                << " does not conform to CT policy, removing EV status.";
+        server_cert_verify_result_.cert_status |=
+            CERT_STATUS_CT_COMPLIANCE_FAILED;
+        server_cert_verify_result_.cert_status &= ~CERT_STATUS_IS_EV;
+      }
     }
+    ct_verify_result_.cert_policy_compliance =
+        policy_enforcer_->DoesConformToCertPolicy(
+            server_cert_verify_result_.verified_cert.get(),
+            ct_verify_result_.verified_scts, net_log_);
   }
 }
 
@@ -3158,8 +3179,8 @@ bool SSLClientSocketNSS::CalledOnValidThread() const {
   return valid_thread_id_ == base::PlatformThread::CurrentId();
 }
 
-void SSLClientSocketNSS::AddSCTInfoToSSLInfo(SSLInfo* ssl_info) const {
-  ssl_info->UpdateSignedCertificateTimestamps(ct_verify_result_);
+void SSLClientSocketNSS::AddCTInfoToSSLInfo(SSLInfo* ssl_info) const {
+  ssl_info->UpdateCertificateTransparencyInfo(ct_verify_result_);
 }
 
 // static
@@ -3177,6 +3198,17 @@ void SSLClientSocketNSS::ReorderNextProtos(NextProtoVector* next_protos) {
 
 ChannelIDService* SSLClientSocketNSS::GetChannelIDService() const {
   return channel_id_service_;
+}
+
+Error SSLClientSocketNSS::GetSignedEKMForTokenBinding(
+    crypto::ECPrivateKey* key,
+    std::vector<uint8_t>* out) {
+  NOTREACHED();
+  return ERR_NOT_IMPLEMENTED;
+}
+
+crypto::ECPrivateKey* SSLClientSocketNSS::GetChannelIDKey() const {
+  return core_->GetChannelIDKey();
 }
 
 SSLFailureState SSLClientSocketNSS::GetSSLFailureState() const {

@@ -31,7 +31,6 @@
 #include "chromecast/browser/service/cast_service_simple.h"
 #include "chromecast/browser/url_request_context_factory.h"
 #include "chromecast/common/global_descriptors.h"
-#include "chromecast/media/audio/cast_audio_manager_factory.h"
 #include "chromecast/media/base/media_message_loop.h"
 #include "chromecast/public/cast_media_shlib.h"
 #include "chromecast/public/media/media_pipeline_backend.h"
@@ -48,10 +47,15 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/web_preferences.h"
-#include "media/audio/audio_manager_factory.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "ui/gl/gl_switches.h"
+
+#if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+#include "chromecast/browser/media/cast_mojo_media_client.h"
+// nogncheck because of conditional dependency.
+#include "media/mojo/services/mojo_media_application.h"  // nogncheck
+#endif  // ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS
 
 #if defined(OS_ANDROID)
 #include "components/crash/content/browser/crash_dump_manager_android.h"
@@ -62,6 +66,19 @@
 
 namespace chromecast {
 namespace shell {
+
+namespace {
+#if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+static scoped_ptr<mojo::ShellClient> CreateCastMojoMediaApplication(
+    CastContentBrowserClient* browser_client) {
+  scoped_ptr<::media::MojoMediaClient> mojo_media_client(
+      new media::CastMojoMediaClient(
+          browser_client->GetCmaMediaPipelineClient()));
+  return scoped_ptr<mojo::ShellClient>(
+      new ::media::MojoMediaApplication(std::move(mojo_media_client)));
+}
+#endif  // ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS
+}  // namespace
 
 CastContentBrowserClient::CastContentBrowserClient()
     : url_request_context_factory_(new URLRequestContextFactory()) {
@@ -78,6 +95,9 @@ void CastContentBrowserClient::AppendExtraCommandLineSwitches(
     base::CommandLine* command_line) {
 }
 
+void CastContentBrowserClient::PreCreateThreads() {
+}
+
 scoped_ptr<CastService> CastContentBrowserClient::CreateCastService(
     content::BrowserContext* browser_context,
     PrefService* pref_service,
@@ -86,14 +106,11 @@ scoped_ptr<CastService> CastContentBrowserClient::CreateCastService(
 }
 
 #if !defined(OS_ANDROID)
-scoped_ptr<::media::AudioManagerFactory>
-CastContentBrowserClient::CreateAudioManagerFactory() {
-  return make_scoped_ptr(new media::CastAudioManagerFactory());
-}
-
 scoped_refptr<media::CmaMediaPipelineClient>
-CastContentBrowserClient::CreateCmaMediaPipelineClient() {
-  return make_scoped_refptr(new media::CmaMediaPipelineClient());
+CastContentBrowserClient::GetCmaMediaPipelineClient() {
+  if (!cma_media_pipeline_client_.get())
+    cma_media_pipeline_client_ = CreateCmaMediaPipelineClient();
+  return cma_media_pipeline_client_;
 }
 #endif  // OS_ANDROID
 
@@ -129,7 +146,7 @@ void CastContentBrowserClient::RenderProcessWillLaunch(
 #if !defined(OS_ANDROID)
   scoped_refptr<media::CmaMessageFilterHost> cma_message_filter(
       new media::CmaMessageFilterHost(host->GetID(),
-                                      CreateCmaMediaPipelineClient()));
+                                      GetCmaMediaPipelineClient()));
   host->AddFilter(cma_message_filter.get());
 #endif  // !defined(OS_ANDROID)
 
@@ -143,6 +160,13 @@ void CastContentBrowserClient::RenderProcessWillLaunch(
       base::Bind(&CastContentBrowserClient::AddNetworkHintsMessageFilter,
                  base::Unretained(this), host->GetID()));
 }
+
+#if !defined(OS_ANDROID)
+scoped_refptr<media::CmaMediaPipelineClient>
+CastContentBrowserClient::CreateCmaMediaPipelineClient() {
+  return make_scoped_refptr(new media::CmaMediaPipelineClient());
+}
+#endif  // OS_ANDROID
 
 void CastContentBrowserClient::AddNetworkHintsMessageFilter(
     int render_process_id, net::URLRequestContext* context) {
@@ -353,11 +377,12 @@ bool CastContentBrowserClient::CanCreateWindow(
   return false;
 }
 
-void CastContentBrowserClient::RegisterUnsandboxedOutOfProcessMojoApplications(
-    std::map<GURL, base::string16>* apps) {
-#if defined(ENABLE_MOJO_MEDIA_IN_UTILITY_PROCESS)
-  apps->insert(std::make_pair(GURL("mojo:media"),
-                              base::ASCIIToUTF16("Media App")));
+void CastContentBrowserClient::RegisterInProcessMojoApplications(
+    StaticMojoApplicationMap* apps) {
+#if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+  apps->insert(std::make_pair(
+      GURL("mojo:media"),
+      base::Bind(&CreateCastMojoMediaApplication, base::Unretained(this))));
 #endif
 }
 

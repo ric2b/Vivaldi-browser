@@ -92,12 +92,13 @@
 #include "ppapi/shared_impl/var.h"
 #include "ppapi/thunk/enter.h"
 #include "ppapi/thunk/ppb_buffer_api.h"
-#include "printing/metafile_skia_wrapper.h"
-#include "printing/pdf_metafile_skia.h"
 #include "skia/ext/platform_canvas.h"
+#include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebCursorInfo.h"
+#include "third_party/WebKit/public/platform/WebFloatRect.h"
 #include "third_party/WebKit/public/platform/WebGamepads.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
@@ -115,15 +116,22 @@
 #include "third_party/WebKit/public/web/WebPrintScalingOption.h"
 #include "third_party/WebKit/public/web/WebScopedUserGesture.h"
 #include "third_party/WebKit/public/web/WebScriptSource.h"
-#include "third_party/WebKit/public/web/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "third_party/khronos/GLES2/gl2.h"
+#include "ui/events/blink/blink_event_util.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/range/range.h"
 #include "url/origin.h"
 #include "v8/include/v8.h"
+
+#if defined(ENABLE_PRINTING)
+// nogncheck because dependency on //printing is conditional upon
+// enable_basic_printing or enable_print_preview flags.
+#include "printing/metafile_skia_wrapper.h"  // nogncheck
+#include "printing/pdf_metafile_skia.h"  // nogncheck
+#endif
 
 #if defined(OS_CHROMEOS)
 #include "ui/events/keycodes/keyboard_codes_posix.h"
@@ -176,27 +184,19 @@ namespace content {
 
 namespace {
 
-#define STATIC_ASSERT_PP_MATCHING_ENUM(a, b)                \
+#define STATIC_ASSERT_ENUM(a, b)                            \
   static_assert(static_cast<int>(a) == static_cast<int>(b), \
                 "mismatching enums: " #a)
 
 // Check PP_TextInput_Type and ui::TextInputType are kept in sync.
-STATIC_ASSERT_PP_MATCHING_ENUM(ui::TEXT_INPUT_TYPE_NONE,
-                               PP_TEXTINPUT_TYPE_NONE);
-STATIC_ASSERT_PP_MATCHING_ENUM(ui::TEXT_INPUT_TYPE_TEXT,
-                               PP_TEXTINPUT_TYPE_TEXT);
-STATIC_ASSERT_PP_MATCHING_ENUM(ui::TEXT_INPUT_TYPE_PASSWORD,
-                               PP_TEXTINPUT_TYPE_PASSWORD);
-STATIC_ASSERT_PP_MATCHING_ENUM(ui::TEXT_INPUT_TYPE_SEARCH,
-                               PP_TEXTINPUT_TYPE_SEARCH);
-STATIC_ASSERT_PP_MATCHING_ENUM(ui::TEXT_INPUT_TYPE_EMAIL,
-                               PP_TEXTINPUT_TYPE_EMAIL);
-STATIC_ASSERT_PP_MATCHING_ENUM(ui::TEXT_INPUT_TYPE_NUMBER,
-                               PP_TEXTINPUT_TYPE_NUMBER);
-STATIC_ASSERT_PP_MATCHING_ENUM(ui::TEXT_INPUT_TYPE_TELEPHONE,
-                               PP_TEXTINPUT_TYPE_TELEPHONE);
-STATIC_ASSERT_PP_MATCHING_ENUM(ui::TEXT_INPUT_TYPE_URL,
-                               PP_TEXTINPUT_TYPE_URL);
+STATIC_ASSERT_ENUM(ui::TEXT_INPUT_TYPE_NONE, PP_TEXTINPUT_TYPE_NONE);
+STATIC_ASSERT_ENUM(ui::TEXT_INPUT_TYPE_TEXT, PP_TEXTINPUT_TYPE_TEXT);
+STATIC_ASSERT_ENUM(ui::TEXT_INPUT_TYPE_PASSWORD, PP_TEXTINPUT_TYPE_PASSWORD);
+STATIC_ASSERT_ENUM(ui::TEXT_INPUT_TYPE_SEARCH, PP_TEXTINPUT_TYPE_SEARCH);
+STATIC_ASSERT_ENUM(ui::TEXT_INPUT_TYPE_EMAIL, PP_TEXTINPUT_TYPE_EMAIL);
+STATIC_ASSERT_ENUM(ui::TEXT_INPUT_TYPE_NUMBER, PP_TEXTINPUT_TYPE_NUMBER);
+STATIC_ASSERT_ENUM(ui::TEXT_INPUT_TYPE_TELEPHONE, PP_TEXTINPUT_TYPE_TELEPHONE);
+STATIC_ASSERT_ENUM(ui::TEXT_INPUT_TYPE_URL, PP_TEXTINPUT_TYPE_URL);
 
 // The default text input type is to regard the plugin always accept text input.
 // This is for allowing users to use input methods even on completely-IME-
@@ -279,14 +279,12 @@ STATIC_ASSERT_MATCHING_ENUM(TypeGrabbing, PP_MOUSECURSOR_TYPE_GRABBING);
 // Do not assert WebCursorInfo::TypeCustom == PP_CURSORTYPE_CUSTOM;
 // PP_CURSORTYPE_CUSTOM is pinned to allow new cursor types.
 
-STATIC_ASSERT_PP_MATCHING_ENUM(blink::WebPrintScalingOptionNone,
-                                           PP_PRINTSCALINGOPTION_NONE);
-STATIC_ASSERT_PP_MATCHING_ENUM(
-    blink::WebPrintScalingOptionFitToPrintableArea,
-    PP_PRINTSCALINGOPTION_FIT_TO_PRINTABLE_AREA);
-STATIC_ASSERT_PP_MATCHING_ENUM(
-    blink::WebPrintScalingOptionSourceSize,
-    PP_PRINTSCALINGOPTION_SOURCE_SIZE);
+STATIC_ASSERT_ENUM(blink::WebPrintScalingOptionNone,
+                   PP_PRINTSCALINGOPTION_NONE);
+STATIC_ASSERT_ENUM(blink::WebPrintScalingOptionFitToPrintableArea,
+                   PP_PRINTSCALINGOPTION_FIT_TO_PRINTABLE_AREA);
+STATIC_ASSERT_ENUM(blink::WebPrintScalingOptionSourceSize,
+                   PP_PRINTSCALINGOPTION_SOURCE_SIZE);
 
 // Sets |*security_origin| to be the WebKit security origin associated with the
 // document containing the given plugin instance. On success, returns true. If
@@ -493,6 +491,7 @@ PepperPluginInstanceImpl::PepperPluginInstanceImpl(
       has_been_clicked_(false),
       javascript_used_(false),
       full_frame_(false),
+      viewport_to_dip_scale_(1.0f),
       sent_initial_did_change_view_(false),
       bound_graphics_2d_platform_(NULL),
       bound_compositor_(NULL),
@@ -667,9 +666,8 @@ v8::Local<v8::Context> PepperPluginInstanceImpl::GetMainWorldContext() {
 void PepperPluginInstanceImpl::Delete() {
   is_deleted_ = true;
 
-  if (render_frame_ && render_frame_->render_view() &&
-      render_frame_->render_view()->plugin_find_handler() == this) {
-    render_frame_->render_view()->set_plugin_find_handler(NULL);
+  if (render_frame_ && render_frame_->plugin_find_handler() == this) {
+    render_frame_->set_plugin_find_handler(nullptr);
   }
 
   // Keep a reference on the stack. See NOTE above.
@@ -1078,19 +1076,22 @@ bool PepperPluginInstanceImpl::IsPluginAcceptingCompositionEvents() const {
 gfx::Rect PepperPluginInstanceImpl::GetCaretBounds() const {
   if (!text_input_caret_set_) {
     // If it is never set by the plugin, use the bottom left corner.
-    return gfx::Rect(view_data_.rect.point.x,
-                     view_data_.rect.point.y + view_data_.rect.size.height,
-                     0,
-                     0);
+    gfx::Rect rect(view_data_.rect.point.x,
+                   view_data_.rect.point.y + view_data_.rect.size.height,
+                   0, 0);
+    ConvertDIPToViewport(&rect);
+    return rect;
   }
 
-  // TODO(kinaba) Take CSS transformation into accont.
-  // TODO(kinaba) Take bounding_box into account. On some platforms, an
-  // "exclude rectangle" where candidate window must avoid the region can be
-  // passed to IME. Currently, we pass only the caret rectangle because
-  // it is the only information supported uniformly in Chromium.
+  // TODO(kinaba) Take CSS transformation into account.
+  // TODO(kinaba) Take |text_input_caret_bounds_| into account. On
+  // some platforms, an "exclude rectangle" where candidate window
+  // must avoid the region can be passed to IME. Currently, we pass
+  // only the caret rectangle because it is the only information
+  // supported uniformly in Chromium.
   gfx::Rect caret(text_input_caret_);
   caret.Offset(view_data_.rect.point.x, view_data_.rect.point.y);
+  ConvertDIPToViewport(&caret);
   return caret;
 }
 
@@ -1104,6 +1105,7 @@ bool PepperPluginInstanceImpl::HandleInputEvent(
       (event.modifiers & blink::WebInputEvent::LeftButtonDown)) {
     has_been_clicked_ = true;
     blink::WebRect bounds = container()->element().boundsInViewport();
+    render_frame()->GetRenderWidget()->convertViewportToWindow(&bounds);
     RecordFlashClickSizeMetric(bounds.width, bounds.height);
   }
 
@@ -1137,7 +1139,12 @@ bool PepperPluginInstanceImpl::HandleInputEvent(
         (input_event_mask_ & event_class)) {
       // Actually send the event.
       std::vector<ppapi::InputEventData> events;
-      CreateInputEventData(event, &events);
+      scoped_ptr<const WebInputEvent> event_in_dip(
+          ui::ScaleWebInputEvent(event, viewport_to_dip_scale_));
+      if (event_in_dip)
+        CreateInputEventData(*event_in_dip.get(), &events);
+      else
+        CreateInputEventData(event, &events);
 
       // Allow the user gesture to be pending after the plugin handles the
       // event. This allows out-of-process plugins to respond to the user
@@ -1254,6 +1261,14 @@ void PepperPluginInstanceImpl::ViewChanged(
   view_data_.device_scale = container_->deviceScaleFactor();
   view_data_.css_scale =
       container_->pageZoomFactor() * container_->pageScaleFactor();
+  blink::WebFloatRect windowToViewportScale(0, 0, 1.0f, 0);
+  render_frame()->GetRenderWidget()->convertWindowToViewport(
+      &windowToViewportScale);
+  viewport_to_dip_scale_ = 1.0f / windowToViewportScale.width;
+  ConvertRectToDIP(&view_data_.rect);
+  ConvertRectToDIP(&view_data_.clip_rect);
+  view_data_.css_scale *= viewport_to_dip_scale_;
+  view_data_.device_scale /= viewport_to_dip_scale_;
 
   gfx::Size scroll_offset =
       container_->element().document().frame()->scrollOffset();
@@ -2531,7 +2546,7 @@ void PepperPluginInstanceImpl::SetPluginToHandleFindRequests(
       render_frame_->GetRenderView()->GetMainRenderFrame() == render_frame_;
   if (!is_main_frame)
     return;
-  render_frame_->render_view()->set_plugin_find_handler(this);
+  render_frame_->set_plugin_find_handler(this);
 }
 
 void PepperPluginInstanceImpl::NumberOfFindResultsChanged(
@@ -2568,7 +2583,7 @@ void PepperPluginInstanceImpl::SetTickmarks(PP_Instance instance,
                                             tickmarks[i].size.width,
                                             tickmarks[i].size.height);
   }
-  blink::WebFrame* frame = render_frame_->GetWebFrame();
+  blink::WebLocalFrame* frame = render_frame_->GetWebFrame();
   frame->setTickmarks(tickmarks_converted);
 }
 
@@ -2865,8 +2880,8 @@ PP_Var PepperPluginInstanceImpl::GetPluginReferrerURL(
   WebString referer = request.httpHeaderField("Referer");
   if (referer.isEmpty())
     return PP_MakeUndefined();
-  return ppapi::PPB_URLUtil_Shared::GenerateURLReturn(GURL(referer),
-                                                      components);
+  return ppapi::PPB_URLUtil_Shared::GenerateURLReturn(
+      blink::WebStringToGURL(referer), components);
 }
 
 PP_ExternalPluginResult PepperPluginInstanceImpl::ResetAsProxied(
@@ -2979,7 +2994,7 @@ PP_Resource PepperPluginInstanceImpl::CreateImage(gfx::ImageSkia* source_image,
   if (!mapper.is_valid())
     return 0;
 
-  skia::PlatformCanvas* canvas = image_data->GetPlatformCanvas();
+  SkCanvas* canvas = image_data->GetPlatformCanvas();
   // Note: Do not SkBitmap::copyTo the canvas bitmap directly because it will
   // ignore the allocated pixels in shared memory and re-allocate a new buffer.
   canvas->writePixels(image_skia_rep.sk_bitmap(), 0, 0);
@@ -3296,6 +3311,20 @@ void PepperPluginInstanceImpl::RecordFlashJavaScriptUse() {
     RenderThread::Get()->RecordAction(
         base::UserMetricsAction("Flash.JavaScriptUsed"));
   }
+}
+
+void PepperPluginInstanceImpl::ConvertRectToDIP(PP_Rect* rect) const {
+  rect->point.x *= viewport_to_dip_scale_;
+  rect->point.y *= viewport_to_dip_scale_;
+  rect->size.width *= viewport_to_dip_scale_;
+  rect->size.height *= viewport_to_dip_scale_;
+}
+
+void PepperPluginInstanceImpl::ConvertDIPToViewport(gfx::Rect* rect) const {
+  rect->set_x(rect->x() / viewport_to_dip_scale_);
+  rect->set_y(rect->y() / viewport_to_dip_scale_);
+  rect->set_width(rect->width() / viewport_to_dip_scale_);
+  rect->set_height(rect->height() / viewport_to_dip_scale_);
 }
 
 }  // namespace content

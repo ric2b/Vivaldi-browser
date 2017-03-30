@@ -80,9 +80,6 @@
     ],
     # The unit test cases for the webapp
     'remoting_webapp_unittests_js_files': [
-      # TODO(jrw): Move spy_promise to base.
-      'webapp/unittests/spy_promise.js',
-      'webapp/unittests/spy_promise_unittest.js',
       'webapp/base/js/base_unittest.js',
       'webapp/base/js/base_event_hook_unittest.js',
       'webapp/base/js/base_inherits_unittest.js',
@@ -116,6 +113,7 @@
       'webapp/crd/js/combined_host_list_api_unittest.js',
       'webapp/crd/js/gcd_client_unittest.js',
       'webapp/crd/js/gcd_client_with_mock_xhr_unittest.js',
+      "webapp/crd/js/gnubby_auth_handler_unittest.js",
       'webapp/crd/js/host_controller_unittest.js',
       'webapp/crd/js/host_daemon_facade_unittest.js',
       'webapp/crd/js/host_table_entry_unittest.js',

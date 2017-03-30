@@ -91,7 +91,7 @@ public:
     void onNavigationStarted() override { }
 
 private:
-    Deque<OwnPtr<WebTaskRunner::Task>> m_tasks;
+    WTF::Deque<OwnPtr<WebTaskRunner::Task>> m_tasks;
     OwnPtr<TestingPlatformMockWebTaskRunner> m_mockWebTaskRunner;
 };
 
@@ -114,11 +114,13 @@ public:
 
     // Platform:
     WebDiscardableMemory* allocateAndLockDiscardableMemory(size_t bytes) override;
-    const unsigned char* getTraceCategoryEnabledFlag(const char* categoryName) override;
     WebString defaultLocale() override;
     WebCompositorSupport* compositorSupport() override;
     WebThread* currentThread() override;
     WebUnitTestSupport* unitTestSupport() override;
+    void registerMemoryDumpProvider(blink::WebMemoryDumpProvider*, const char* name) override {}
+    void unregisterMemoryDumpProvider(blink::WebMemoryDumpProvider*) override {}
+    void connectToRemoteService(const char* name, mojo::ScopedMessagePipeHandle) override;
 
 protected:
     const Config m_config;

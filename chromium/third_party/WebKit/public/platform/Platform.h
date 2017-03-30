@@ -35,8 +35,8 @@
 #include <windows.h>
 #endif
 
+#include "UserMetricsAction.h"
 #include "WebAudioDevice.h"
-#include "WebBatteryStatusListener.h"
 #include "WebCommon.h"
 #include "WebData.h"
 #include "WebDeviceLightListener.h"
@@ -53,7 +53,10 @@
 #include "WebString.h"
 #include "WebURLError.h"
 #include "WebVector.h"
-#include "WebWaitableEvent.h"
+#include "base/metrics/user_metrics_action.h"
+
+#include "mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/public/cpp/system/core.h"
 
 class GrContext;
 
@@ -64,7 +67,6 @@ class WebBlobRegistry;
 class WebCanvasCaptureHandler;
 class WebClipboard;
 class WebCompositorSupport;
-class WebConvertableToTraceFormat;
 class WebCookieJar;
 class WebCrypto;
 class WebDatabaseObserver;
@@ -80,7 +82,9 @@ class WebGraphicsContext3DProvider;
 class WebIDBFactory;
 class WebMIDIAccessor;
 class WebMIDIAccessorClient;
+class WebMediaPlayer;
 class WebMediaRecorderHandler;
+class WebMediaStream;
 class WebMediaStreamCenter;
 class WebMediaStreamCenterClient;
 class WebMediaStreamTrack;
@@ -112,6 +116,7 @@ class WebSyncProvider;
 struct WebFloatPoint;
 class WebThemeEngine;
 class WebThread;
+class WebTrialTokenValidator;
 class WebURL;
 class WebURLLoader;
 class WebUnitTestSupport;
@@ -164,7 +169,7 @@ public:
 
     // Creates a device for audio I/O.
     // Pass in (numberOfInputChannels > 0) if live/local audio input is desired.
-    virtual WebAudioDevice* createAudioDevice(size_t bufferSize, unsigned numberOfInputChannels, unsigned numberOfChannels, double sampleRate, WebAudioDevice::RenderCallback*, const WebString& deviceId) { return nullptr; }
+    virtual WebAudioDevice* createAudioDevice(size_t bufferSize, unsigned numberOfInputChannels, unsigned numberOfChannels, double sampleRate, WebAudioDevice::RenderCallback*, const WebString& deviceId, const WebSecurityOrigin&) { return nullptr; }
 
 
     // MIDI ----------------------------------------------------------------
@@ -257,21 +262,8 @@ public:
         return WebString();
     }
 
-    // Memory --------------------------------------------------------------
-
-    // Returns the current space allocated for the pagefile, in MB.
-    // That is committed size for Windows and virtual memory size for POSIX
-    virtual size_t memoryUsageMB() { return 0; }
-
     // Same as above, but always returns actual value, without any caches.
     virtual size_t actualMemoryUsageMB() { return 0; }
-
-    // Return the physical memory of the current machine, in MB.
-    virtual size_t physicalMemoryMB() { return 0; }
-
-    // Return the available virtual memory of the current machine, in MB. Or
-    // zero, if there is no limit.
-    virtual size_t virtualMemoryLimitMB() { return 0; }
 
     // Return the number of of processors of the current machine.
     virtual size_t numberOfProcessors() { return 0; }
@@ -359,28 +351,6 @@ public:
     // embedder.
     virtual WebThread* currentThread() { return nullptr; }
 
-    // Yield the current thread so another thread can be scheduled.
-    virtual void yieldCurrentThread() { }
-
-    // WaitableEvent -------------------------------------------------------
-
-    // Creates an embedder-defined waitable event object.
-    WebWaitableEvent* createWaitableEvent() { return createWaitableEvent(WebWaitableEvent::ResetPolicy::Auto, WebWaitableEvent::InitialState::NonSignaled); }
-    virtual WebWaitableEvent* createWaitableEvent(WebWaitableEvent::ResetPolicy, WebWaitableEvent::InitialState) { return nullptr; }
-
-    // Waits on multiple events and returns the event object that has been
-    // signaled. This may return nullptr if it fails to wait events.
-    // Any event objects given to this method must not deleted while this
-    // wait is happening.
-    virtual WebWaitableEvent* waitMultipleEvents(const WebVector<WebWaitableEvent*>& events) { return nullptr; }
-
-
-    // Profiling -----------------------------------------------------------
-
-    virtual void decrementStatsCounter(const char* name) { }
-    virtual void incrementStatsCounter(const char* name) { }
-
-
     // Resources -----------------------------------------------------------
 
     // Returns a blob of data corresponding to the named resource.
@@ -416,14 +386,6 @@ public:
     // Returns a value such as "en-US".
     virtual WebString defaultLocale() { return WebString(); }
 
-    // Wall clock time in seconds since the epoch.
-    virtual double currentTimeSeconds() { return 0; }
-
-    // Monotonically increasing time in seconds from an arbitrary fixed point in the past.
-    // This function is expected to return at least millisecond-precision values. For this reason,
-    // it is recommended that the fixed point be no further in the past than the epoch.
-    virtual double monotonicallyIncreasingTimeSeconds() { return 0; }
-
     // Returns an interface to the main thread. Can be null if blink was initialized on a thread without a message loop.
     BLINK_PLATFORM_EXPORT WebThread* mainThread() const;
 
@@ -446,129 +408,26 @@ public:
     // Get a pointer to testing support interfaces. Will not be available in production builds.
     virtual WebUnitTestSupport* unitTestSupport() { return nullptr; }
 
-
-    // Tracing -------------------------------------------------------------
-
-    // Get a pointer to the enabled state of the given trace category. The
-    // embedder can dynamically change the enabled state as trace event
-    // recording is started and stopped by the application. Only long-lived
-    // literal strings should be given as the category name. The implementation
-    // expects the returned pointer to be held permanently in a local static. If
-    // the unsigned char is non-zero, tracing is enabled. If tracing is enabled,
-    // addTraceEvent is expected to be called by the trace event macros.
-    virtual const unsigned char* getTraceCategoryEnabledFlag(const char* categoryName) { return nullptr; }
-
-    typedef intptr_t TraceEventAPIAtomicWord;
-
-    // Get a pointer to a global state of the given thread. An embedder is
-    // expected to update the global state as the state of the embedder changes.
-    // A sampling thread in the Chromium side reads the global state periodically
-    // and reflects the sampling profiled results into about:tracing.
-    virtual TraceEventAPIAtomicWord* getTraceSamplingState(const unsigned bucketName) { return nullptr; }
-
-    typedef uint64_t TraceEventHandle;
-
-    // Add a trace event to the platform tracing system. Depending on the actual
-    // enabled state, this event may be recorded or dropped.
-    // - phase specifies the type of event:
-    //   - BEGIN ('B'): Marks the beginning of a scoped event.
-    //   - END ('E'): Marks the end of a scoped event.
-    //   - COMPLETE ('X'): Marks the beginning of a scoped event, but doesn't
-    //     need a matching END event. Instead, at the end of the scope,
-    //     updateTraceEventDuration() must be called with the TraceEventHandle
-    //     returned from addTraceEvent().
-    //   - INSTANT ('I'): Standalone, instantaneous event.
-    //   - START ('S'): Marks the beginning of an asynchronous event (the end
-    //     event can occur in a different scope or thread). The id parameter is
-    //     used to match START/FINISH pairs.
-    //   - FINISH ('F'): Marks the end of an asynchronous event.
-    //   - COUNTER ('C'): Used to trace integer quantities that change over
-    //     time. The argument values are expected to be of type int.
-    //   - METADATA ('M'): Reserved for internal use.
-    // - categoryEnabled is the pointer returned by getTraceCategoryEnabledFlag.
-    // - name is the name of the event. Also used to match BEGIN/END and
-    //   START/FINISH pairs.
-    // - id optionally allows events of the same name to be distinguished from
-    //   each other. For example, to trace the consutruction and destruction of
-    //   objects, specify the pointer as the id parameter.
-    // - numArgs specifies the number of elements in argNames, argTypes, and
-    //   argValues.
-    // - argNames is the array of argument names. Use long-lived literal strings
-    //   or specify the COPY flag.
-    // - argTypes is the array of argument types:
-    //   - BOOL (1): bool
-    //   - UINT (2): unsigned long long
-    //   - INT (3): long long
-    //   - DOUBLE (4): double
-    //   - POINTER (5): void*
-    //   - STRING (6): char* (long-lived null-terminated char* string)
-    //   - COPY_STRING (7): char* (temporary null-terminated char* string)
-    //   - CONVERTABLE (8): WebConvertableToTraceFormat
-    // - argValues is the array of argument values. Each value is the unsigned
-    //   long long member of a union of all supported types.
-    // - convertableValues is the array of WebConvertableToTraceFormat classes
-    //   that may be converted to trace format by calling asTraceFormat method.
-    //   ConvertableToTraceFormat interface.
-    //   convertableValues can be moved to another object by
-    //   WebConvertableToTraceFormat::moveFrom() in addTraceEvent(), and thus
-    //   should not be dereferenced (e.g. asTraceFormat() should not be called)
-    //   after return from addTraceEvent().
-    // - thresholdBeginId optionally specifies the value returned by a previous
-    //   call to addTraceEvent with a BEGIN phase.
-    // - threshold is used on an END phase event in conjunction with the
-    //   thresholdBeginId of a prior BEGIN event. The threshold is the minimum
-    //   number of microseconds that must have passed since the BEGIN event. If
-    //   less than threshold microseconds has passed, the BEGIN/END pair is
-    //   dropped.
-    // - flags can be 0 or one or more of the following, ORed together:
-    //   - COPY (0x1): treat all strings (name, argNames and argValues of type
-    //     string) as temporary so that they will be copied by addTraceEvent.
-    //   - HAS_ID (0x2): use the id argument to uniquely identify the event for
-    //     matching with other events of the same name.
-    //   - MANGLE_ID (0x4): specify this flag if the id parameter is the value
-    //     of a pointer.
-    virtual TraceEventHandle addTraceEvent(
-        char phase,
-        const unsigned char* categoryEnabledFlag,
-        const char* name,
-        unsigned long long id,
-        unsigned long long bindId,
-        double timestamp,
-        int numArgs,
-        const char** argNames,
-        const unsigned char* argTypes,
-        const unsigned long long* argValues,
-        WebConvertableToTraceFormat* convertableValues,
-        unsigned flags)
-    {
-        return 0;
-    }
-
-    // Set the duration field of a COMPLETE trace event.
-    virtual void updateTraceEventDuration(const unsigned char* categoryEnabledFlag, const char* name, TraceEventHandle) { }
-
-    // Callbacks for reporting histogram data.
-    // CustomCounts histogram has exponential bucket sizes, so that min=1, max=1000000, bucketCount=50 would do.
-    virtual void histogramCustomCounts(const char* name, int sample, int min, int max, int bucketCount) { }
-    // Enumeration histogram buckets are linear, boundaryValue should be larger than any possible sample value.
-    virtual void histogramEnumeration(const char* name, int sample, int boundaryValue) { }
-    // Unlike enumeration histograms, sparse histograms only allocate memory for non-empty buckets.
-    virtual void histogramSparse(const char* name, int sample) { }
-
     // Record to a RAPPOR privacy-preserving metric, see: https://www.chromium.org/developers/design-documents/rappor.
     // recordRappor records a sample string, while recordRapporURL records the domain and registry of a url.
     virtual void recordRappor(const char* metric, const WebString& sample) { }
     virtual void recordRapporURL(const char* metric, const blink::WebURL& url) { }
+
+    // Record a UMA sequence action.  The UserMetricsAction construction must
+    // be on a single line for extract_actions.py to find it.  Please see
+    // that script for more details.  Intended use is:
+    // recordAction(UserMetricsAction("MyAction"))
+    virtual void recordAction(const UserMetricsAction&) { }
 
     // Registers a memory dump provider. The WebMemoryDumpProvider::onMemoryDump
     // method will be called on the same thread that called the
     // registerMemoryDumpProvider() method. |name| is used for debugging
     // (duplicates are allowed) and must be a long-lived C string.
     // See crbug.com/458295 for design docs.
-    virtual void registerMemoryDumpProvider(blink::WebMemoryDumpProvider*, const char* name) { }
+    BLINK_PLATFORM_EXPORT virtual void registerMemoryDumpProvider(blink::WebMemoryDumpProvider*, const char* name);
 
     // Must be called on the thread that called registerMemoryDumpProvider().
-    virtual void unregisterMemoryDumpProvider(blink::WebMemoryDumpProvider*) { }
+    BLINK_PLATFORM_EXPORT virtual void unregisterMemoryDumpProvider(blink::WebMemoryDumpProvider*);
 
     class TraceLogEnabledStateObserver {
     public:
@@ -580,9 +439,6 @@ public:
     // Register or unregister a trace log state observer. Does not take ownership.
     virtual void addTraceLogEnabledStateObserver(TraceLogEnabledStateObserver*) {}
     virtual void removeTraceLogEnabledStateObserver(TraceLogEnabledStateObserver*) {}
-
-    // Returns a newly allocated WebProcessMemoryDump instance.
-    virtual blink::WebProcessMemoryDump* createProcessMemoryDump() { return nullptr; }
 
     typedef uint64_t WebMemoryAllocatorDumpGuid;
 
@@ -631,14 +487,19 @@ public:
     // May return null if the functionality is not available or out of resources.
     virtual WebMediaRecorderHandler* createMediaRecorderHandler() { return nullptr; }
 
-    // May return null if WebRTC functionality is not avaliable or out of resources.
+    // May return null if WebRTC functionality is not available or out of resources.
     virtual WebRTCCertificateGenerator* createRTCCertificateGenerator() { return nullptr; }
 
-    // May return null if WebRTC functionality is not avaliable or out of resources.
+    // May return null if WebRTC functionality is not available or out of resources.
     virtual WebMediaStreamCenter* createMediaStreamCenter(WebMediaStreamCenterClient*) { return nullptr; }
 
     // Creates an WebCanvasCaptureHandler to capture Canvas output.
     virtual WebCanvasCaptureHandler* createCanvasCaptureHandler(const WebSize&, double, WebMediaStreamTrack*) { return nullptr; }
+
+    // Fills in the WebMediaStream to capture from the WebMediaPlayer identified
+    // by the second parameter.
+    virtual void createHTMLVideoElementCapturer(WebMediaStream*, WebMediaPlayer*) {}
+
     // WebWorker ----------------------------------------------------------
 
     virtual void didStartWorkerThread() { }
@@ -651,6 +512,14 @@ public:
 
     // Platform events -----------------------------------------------------
     // Device Orientation, Device Motion, Device Light, Battery, Gamepad.
+
+    // Connects the mojo handle to the remote service provider.
+    template <typename Interface>
+    void connectToRemoteService(mojo::InterfaceRequest<Interface> ptr)
+    {
+        connectToRemoteService(Interface::Name_, ptr.PassMessagePipe());
+    }
+    virtual void connectToRemoteService(const char* name, mojo::ScopedMessagePipeHandle handle) { }
 
     // Request the platform to start listening to the events of the specified
     // type and notify the given listener (if not null) when there is an update.
@@ -734,6 +603,10 @@ public:
     // Background Sync API------------------------------------------------------------
 
     virtual WebSyncProvider* backgroundSyncProvider() { return nullptr; }
+
+    // Experimental Framework ----------------------------------------------
+
+    virtual WebTrialTokenValidator* trialTokenValidator() { return nullptr; }
 
 protected:
     BLINK_PLATFORM_EXPORT Platform();

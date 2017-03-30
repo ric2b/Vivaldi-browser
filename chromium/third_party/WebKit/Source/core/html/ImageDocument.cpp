@@ -146,9 +146,7 @@ void ImageDocumentParser::appendBytes(const char* data, size_t length)
         document()->cachedImage()->appendData(data, length);
     }
 
-    // TODO(esprehn): These null checks on Document don't make sense, document()
-    // will ASSERT if it was null. Do these want to check isDetached() ?
-    if (document())
+    if (!isDetached())
         document()->imageUpdated();
 }
 
@@ -171,14 +169,14 @@ void ImageDocumentParser::finish()
             if (fileName.isEmpty())
                 fileName = document()->url().host();
             document()->setTitle(imageTitle(fileName, size));
+            if (isDetached())
+                return;
         }
 
         document()->imageUpdated();
     }
 
-    // TODO(esprehn): These null checks on Document don't make sense, document()
-    // will ASSERT if it was null. Do these want to check isDetached() ?
-    if (document())
+    if (!isDetached())
         document()->finishedParsing();
 }
 
@@ -207,8 +205,10 @@ void ImageDocument::createDocumentStructure(bool loadingMultipartContent)
     appendChild(rootElement);
     rootElement->insertedByParser();
 
-    if (frame())
-        frame()->loader().dispatchDocumentElementAvailable();
+    frame()->loader().dispatchDocumentElementAvailable();
+    frame()->loader().runScriptsAtDocumentElementAvailable();
+    if (isStopped())
+        return; // runScriptsAtDocumentElementAvailable can detach the frame.
     // Normally, ImageDocument creates an HTMLImageElement that doesn't actually load
     // anything, and the ImageDocument routes the main resource data into the HTMLImageElement's
     // ImageResource. However, the main resource pipeline doesn't know how to handle multipart content.
@@ -226,8 +226,7 @@ void ImageDocument::createDocumentStructure(bool loadingMultipartContent)
     RefPtrWillBeRawPtr<HTMLBodyElement> body = HTMLBodyElement::create(*this);
     body->setAttribute(styleAttr, "margin: 0px;");
 
-    if (frame())
-        frame()->loader().client()->dispatchWillInsertBody();
+    frame()->loader().client()->dispatchWillInsertBody();
 
     m_imageElement = HTMLImageElement::create(*this);
     m_imageElement->setAttribute(styleAttr, "-webkit-user-select: none;\
@@ -336,7 +335,7 @@ void ImageDocument::imageUpdated()
     if (m_imageSizeIsKnown)
         return;
 
-    updateLayoutTreeIfNeeded();
+    updateLayoutTree();
     if (!m_imageElement->cachedImage() || m_imageElement->cachedImage()->imageSize(LayoutObject::shouldRespectImageOrientation(m_imageElement->layoutObject()), pageZoomFactor(this)).isEmpty())
         return;
 
@@ -433,8 +432,13 @@ void ImageDocument::windowSizeChanged(ScaleType type)
 ImageResource* ImageDocument::cachedImage()
 {
     bool loadingMultipartContent = loader() && loader()->loadingMultipartContent();
-    if (!m_imageElement)
+    if (!m_imageElement) {
         createDocumentStructure(loadingMultipartContent);
+        if (isStopped()) {
+            m_imageElement = nullptr;
+            return nullptr;
+        }
+    }
 
     return loadingMultipartContent ? nullptr : m_imageElement->cachedImage();
 }
@@ -477,4 +481,4 @@ bool ImageEventListener::operator==(const EventListener& listener) const
     return false;
 }
 
-}
+} // namespace blink

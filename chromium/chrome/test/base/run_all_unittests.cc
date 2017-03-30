@@ -3,10 +3,11 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/test/launcher/unit_test_launcher.h"
 #include "chrome/test/base/chrome_unit_test_suite.h"
 #include "content/public/test/unittest_test_suite.h"
-#include "third_party/mojo/src/mojo/edk/embedder/embedder.h"
+#include "mojo/edk/embedder/embedder.h"
 
 #if defined(VIVALDI_BUILD)
 #include "extraparts/vivaldi_unit_test_suite.h"
@@ -21,7 +22,7 @@ int main(int argc, char **argv) {
 #endif
         );
 
-  mojo::embedder::Init();
+  mojo::edk::Init();
   return base::LaunchUnitTests(
       argc, argv, base::Bind(&content::UnitTestTestSuite::Run,
                              base::Unretained(&test_suite)));

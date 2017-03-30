@@ -142,7 +142,6 @@
       'dependencies': [
         '../base/base.gyp:base',
         '../base/base.gyp:base_i18n',
-        '../base/base.gyp:base_prefs_test_support',
         '../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
         '../crypto/crypto.gyp:crypto',
         '../crypto/crypto.gyp:crypto_test_support',
@@ -222,15 +221,6 @@
             }],
           ],
         }],
-        [ 'os_posix == 1 and OS != "mac" and OS != "android" and OS != "ios"', {
-          'conditions': [
-            ['use_allocator!="none"', {
-              'dependencies': [
-                '../base/allocator/allocator.gyp:allocator',
-              ],
-            }],
-          ],
-        }],
         [ 'use_kerberos==1', {
           'defines': [
             'USE_KERBEROS',
@@ -264,7 +254,6 @@
           }, {  # else !use_openssl: remove the unneeded files and pull in NSS.
             'sources!': [
               'quic/test_tools/crypto_test_utils_openssl.cc',
-              'socket/ssl_client_socket_openssl_unittest.cc',
               'ssl/ssl_client_session_cache_openssl_unittest.cc',
             ],
           },
@@ -287,6 +276,7 @@
           'sources!': [
             'base/directory_lister_unittest.cc',
             'base/directory_listing_unittest.cc',
+	    'url_request/url_request_file_dir_job_unittest.cc',
             'url_request/url_request_file_job_unittest.cc',
           ],
         }],
@@ -330,7 +320,7 @@
               'net_with_v8',
               'net_browser_services',
               'net_utility_services',
-              '../third_party/mojo/mojo_edk.gyp:mojo_system_impl',
+              '../mojo/mojo_edk.gyp:mojo_system_impl',
             ],
           }, {  # else
             'sources!': [
@@ -539,6 +529,8 @@
         'base/test_data_directory.h',
         'cert/mock_cert_verifier.cc',
         'cert/mock_cert_verifier.h',
+        'cert/mock_client_cert_verifier.cc',
+        'cert/mock_client_cert_verifier.h',
         'cookies/cookie_monster_store_test.cc',
         'cookies/cookie_monster_store_test.h',
         'cookies/cookie_store_test_callbacks.cc',
@@ -644,15 +636,6 @@
                 '../third_party/nss/nss.gyp:nspr',
                 '../third_party/nss/nss.gyp:nss',
                 'third_party/nss/ssl.gyp:libssl',
-              ],
-            }],
-          ],
-        }],
-        ['os_posix == 1 and OS != "mac" and OS != "android" and OS != "ios"', {
-          'conditions': [
-            ['use_allocator!="none"', {
-              'dependencies': [
-                '../base/allocator/allocator.gyp:allocator',
               ],
             }],
           ],
@@ -802,11 +785,21 @@
         'tools/balsa/noop_balsa_visitor.h',
         'tools/balsa/simple_buffer.cc',
         'tools/balsa/simple_buffer.h',
-        'tools/balsa/split.cc',
-        'tools/balsa/split.h',
         'tools/balsa/string_piece_utils.h',
         'tools/quic/spdy_balsa_utils.cc',
         'tools/quic/spdy_balsa_utils.h',
+      ],
+    },
+    {
+      'target_name': 'cachetool',
+      'type': 'executable',
+      'dependencies': [
+        '../base/base.gyp:base',
+        'net',
+        'net_test_support',
+      ],
+      'sources': [
+        'tools/cachetool/cachetool.cc',
       ],
     },
     {
@@ -926,7 +919,7 @@
             'interfaces/proxy_resolver_service.mojom',
           ],
           'includes': [
-            '../third_party/mojo/mojom_bindings_generator.gypi',
+            '../mojo/mojom_bindings_generator.gypi',
           ],
         },
         {
@@ -951,7 +944,7 @@
             '../mojo/mojo_base.gyp:mojo_common_lib',
             '../mojo/mojo_base.gyp:mojo_environment_chromium',
             '../mojo/mojo_base.gyp:mojo_url_type_converters',
-            '../third_party/mojo/mojo_public.gyp:mojo_cpp_bindings',
+            '../mojo/mojo_public.gyp:mojo_cpp_bindings',
 
             # NOTE(amistry): As long as we support in-process Mojo v8 PAC, we
             # need this dependency since in_process_mojo_proxy_resolver_factory
@@ -979,7 +972,7 @@
             'net_interfaces',
             'net_with_v8',
             '../mojo/mojo_base.gyp:mojo_url_type_converters',
-            '../third_party/mojo/mojo_public.gyp:mojo_cpp_bindings',
+            '../mojo/mojo_public.gyp:mojo_cpp_bindings',
           ],
         },
         {
@@ -995,7 +988,7 @@
           'dependencies': [
             'net',
             'net_interfaces',
-            '../third_party/mojo/mojo_public.gyp:mojo_cpp_bindings',
+            '../mojo/mojo_public.gyp:mojo_cpp_bindings',
           ],
         },
       ],
@@ -1231,8 +1224,6 @@
             'tools/flip_server/acceptor_thread.cc',
             'tools/flip_server/acceptor_thread.h',
             'tools/flip_server/constants.h',
-            'tools/flip_server/create_listener.cc',
-            'tools/flip_server/create_listener.h',
             'tools/flip_server/flip_config.cc',
             'tools/flip_server/flip_config.h',
             'tools/flip_server/http_interface.cc',
@@ -1254,6 +1245,8 @@
             'tools/flip_server/spdy_util.h',
             'tools/flip_server/streamer_interface.cc',
             'tools/flip_server/streamer_interface.h',
+            'tools/flip_server/tcp_socket_util.cc',
+            'tools/flip_server/tcp_socket_util.h',
             'tools/flip_server/url_to_filename_encoder.cc',
             'tools/flip_server/url_to_filename_encoder.h',
             'tools/flip_server/url_utilities.cc',
@@ -1322,6 +1315,7 @@
             'tools/quic/quic_packet_reader.h',
             'tools/quic/quic_packet_writer_wrapper.cc',
             'tools/quic/quic_packet_writer_wrapper.h',
+            'tools/quic/quic_process_packet_interface.h',
             'tools/quic/quic_server.cc',
             'tools/quic/quic_server.h',
             'tools/quic/quic_socket_utils.cc',
@@ -1664,8 +1658,11 @@
             'src_paths': [
               'android/junit/',
             ],
+            'test_type': 'junit',
+            'wrapper_script_name': 'helper/<(_target_name)',
           },
           'includes': [
+            '../build/android/test_runner.gypi',
             '../build/host_jar.gypi',
           ],
         },

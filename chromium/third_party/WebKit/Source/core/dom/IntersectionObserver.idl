@@ -9,6 +9,7 @@ callback IntersectionObserverCallback = void (sequence<IntersectionObserverEntry
 // https://github.com/slightlyoff/IntersectionObserver
 [
     CustomConstructor(IntersectionObserverCallback callback, IntersectionObserverInit options),
+    Custom=VisitDOMWrapper,
     GarbageCollected,
     RuntimeEnabled=IntersectionObserver,
 ] interface IntersectionObserver {
@@ -16,4 +17,7 @@ callback IntersectionObserverCallback = void (sequence<IntersectionObserverEntry
     [RaisesException] void unobserve(Element target);
     void disconnect();
     sequence<IntersectionObserverEntry> takeRecords();
+    readonly attribute Element? root;
+    readonly attribute DOMString rootMargin;
+    readonly attribute double[] thresholds;
 };

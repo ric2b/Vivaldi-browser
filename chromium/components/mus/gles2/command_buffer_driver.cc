@@ -21,6 +21,7 @@
 #include "gpu/command_buffer/service/image_factory.h"
 #include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
+#include "gpu/command_buffer/service/query_manager.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
 #include "gpu/command_buffer/service/valuebuffer_manager.h"
@@ -52,7 +53,7 @@ CommandBufferDriver::Client::~Client() {}
 
 CommandBufferDriver::CommandBufferDriver(
     gpu::CommandBufferNamespace command_buffer_namespace,
-    uint64_t command_buffer_id,
+    gpu::CommandBufferId command_buffer_id,
     gfx::AcceleratedWidget widget,
     scoped_refptr<GpuState> gpu_state)
     : command_buffer_namespace_(command_buffer_namespace),
@@ -127,8 +128,6 @@ bool CommandBufferDriver::Initialize(
   sync_point_client_ = gpu_state_->sync_point_manager()->CreateSyncPointClient(
       sync_point_order_data_, GetNamespaceID(), command_buffer_id_);
   decoder_->set_engine(scheduler_.get());
-  decoder_->SetWaitSyncPointCallback(base::Bind(
-      &CommandBufferDriver::OnWaitSyncPoint, base::Unretained(this)));
   decoder_->SetFenceSyncReleaseCallback(base::Bind(
       &CommandBufferDriver::OnFenceSyncRelease, base::Unretained(this)));
   decoder_->SetWaitFenceSyncCallback(base::Bind(
@@ -443,19 +442,6 @@ void CommandBufferDriver::OnUpdateVSyncParameters(
   }
 }
 
-bool CommandBufferDriver::OnWaitSyncPoint(uint32_t sync_point) {
-  DCHECK(CalledOnValidThread());
-  DCHECK(scheduler_->scheduled());
-  if (!sync_point)
-    return true;
-
-  scheduler_->SetScheduled(false);
-  gpu_state_->sync_point_manager()->AddSyncPointCallback(
-      sync_point, base::Bind(&gpu::GpuScheduler::SetScheduled,
-                             scheduler_->AsWeakPtr(), true));
-  return scheduler_->scheduled();
-}
-
 void CommandBufferDriver::OnFenceSyncRelease(uint64_t release) {
   DCHECK(CalledOnValidThread());
   if (!sync_point_client_->client_state()->IsFenceSyncReleased(release))
@@ -464,7 +450,7 @@ void CommandBufferDriver::OnFenceSyncRelease(uint64_t release) {
 
 bool CommandBufferDriver::OnWaitFenceSync(
     gpu::CommandBufferNamespace namespace_id,
-    uint64_t command_buffer_id,
+    gpu::CommandBufferId command_buffer_id,
     uint64_t release) {
   DCHECK(CalledOnValidThread());
   DCHECK(IsScheduled());
@@ -497,6 +483,18 @@ void CommandBufferDriver::OnContextLost(uint32_t reason) {
   DCHECK(CalledOnValidThread());
   if (client_)
     client_->DidLoseContext(reason);
+}
+
+void CommandBufferDriver::SignalQuery(uint32_t query_id,
+                                      const base::Closure& callback) {
+  DCHECK(CalledOnValidThread());
+
+  gpu::gles2::QueryManager* query_manager = decoder_->GetQueryManager();
+  gpu::gles2::QueryManager::Query* query = query_manager->GetQuery(query_id);
+  if (query)
+    query->AddCallback(callback);
+  else
+    callback.Run();
 }
 
 }  // namespace mus

@@ -12,6 +12,9 @@ MetricsProvider::MetricsProvider() {
 MetricsProvider::~MetricsProvider() {
 }
 
+void MetricsProvider::Init() {
+}
+
 void MetricsProvider::OnDidCreateMetricsLog() {
 }
 
@@ -42,6 +45,10 @@ void MetricsProvider::ClearSavedStabilityMetrics() {
 
 void MetricsProvider::ProvideGeneralMetrics(
     ChromeUserMetricsExtension* uma_proto) {
+}
+
+void MetricsProvider::RecordHistogramSnapshots(
+    base::HistogramSnapshotManager* snapshot_manager) {
 }
 
 }  // namespace metrics

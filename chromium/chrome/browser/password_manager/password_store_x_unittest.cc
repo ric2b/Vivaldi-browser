@@ -12,7 +12,6 @@
 #include "base/bind_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/prefs/pref_service.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
@@ -24,7 +23,9 @@
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/password_store_change.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
+#include "components/password_manager/core/browser/password_store_origin_unittest.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -81,6 +82,11 @@ class FailingBackend : public PasswordStoreX::NativeBackend {
     return false;
   }
 
+  bool DisableAutoSignInForAllLogins(
+      password_manager::PasswordStoreChangeList* changes) override {
+    return false;
+  }
+
   // Use this as a landmine to check whether results of failed Get*Logins calls
   // get ignored.
   static ScopedVector<autofill::PasswordForm> CreateTrashForms() {
@@ -108,8 +114,14 @@ class FailingBackend : public PasswordStoreX::NativeBackend {
     *forms = CreateTrashForms();
     return false;
   }
+
   bool GetBlacklistLogins(
       ScopedVector<autofill::PasswordForm>* forms) override {
+    *forms = CreateTrashForms();
+    return false;
+  }
+
+  bool GetAllLogins(ScopedVector<autofill::PasswordForm>* forms) override {
     *forms = CreateTrashForms();
     return false;
   }
@@ -177,6 +189,11 @@ class MockBackend : public PasswordStoreX::NativeBackend {
     return true;
   }
 
+  bool DisableAutoSignInForAllLogins(
+      password_manager::PasswordStoreChangeList* changes) override {
+    return true;
+  }
+
   bool GetLogins(const PasswordForm& form,
                  ScopedVector<autofill::PasswordForm>* forms) override {
     for (size_t i = 0; i < all_forms_.size(); ++i)
@@ -198,6 +215,12 @@ class MockBackend : public PasswordStoreX::NativeBackend {
     for (size_t i = 0; i < all_forms_.size(); ++i)
       if (all_forms_[i].blacklisted_by_user)
         forms->push_back(new PasswordForm(all_forms_[i]));
+    return true;
+  }
+
+  bool GetAllLogins(ScopedVector<autofill::PasswordForm>* forms) override {
+    for (size_t i = 0; i < all_forms_.size(); ++i)
+      forms->push_back(new PasswordForm(all_forms_[i]));
     return true;
   }
 
@@ -261,13 +284,99 @@ PasswordStoreChangeList AddChangeForForm(const PasswordForm& form) {
       1, PasswordStoreChange(PasswordStoreChange::ADD, form));
 }
 
-}  // anonymous namespace
-
 enum BackendType {
   NO_BACKEND,
   FAILING_BACKEND,
   WORKING_BACKEND
 };
+
+PasswordStoreX::NativeBackend* GetBackend(BackendType backend_type) {
+  switch (backend_type) {
+    case FAILING_BACKEND:
+      return new FailingBackend;
+    case WORKING_BACKEND:
+      return new MockBackend;
+    default:
+      return nullptr;
+  }
+}
+
+class PasswordStoreXTestDelegate {
+ public:
+  PasswordStoreX* store() { return store_.get(); }
+
+  static void FinishAsyncProcessing();
+
+ protected:
+  explicit PasswordStoreXTestDelegate(BackendType backend_type);
+  ~PasswordStoreXTestDelegate();
+
+ private:
+  void SetupTempDir();
+
+  base::FilePath test_login_db_file_path() const;
+
+  content::TestBrowserThreadBundle thread_bundle_;
+  base::ScopedTempDir temp_dir_;
+  BackendType backend_type_;
+  scoped_refptr<PasswordStoreX> store_;
+
+  DISALLOW_COPY_AND_ASSIGN(PasswordStoreXTestDelegate);
+};
+
+PasswordStoreXTestDelegate::PasswordStoreXTestDelegate(BackendType backend_type)
+    : backend_type_(backend_type) {
+  SetupTempDir();
+  store_ = new PasswordStoreX(
+      base::ThreadTaskRunnerHandle::Get(), base::ThreadTaskRunnerHandle::Get(),
+      make_scoped_ptr(
+          new password_manager::LoginDatabase(test_login_db_file_path())),
+      GetBackend(backend_type_));
+  store_->Init(syncer::SyncableService::StartSyncFlare());
+}
+
+PasswordStoreXTestDelegate::~PasswordStoreXTestDelegate() {
+  store_->ShutdownOnUIThread();
+  FinishAsyncProcessing();
+}
+
+void PasswordStoreXTestDelegate::FinishAsyncProcessing() {
+  base::MessageLoop::current()->RunUntilIdle();
+}
+
+void PasswordStoreXTestDelegate::SetupTempDir() {
+  ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
+}
+
+base::FilePath PasswordStoreXTestDelegate::test_login_db_file_path() const {
+  return temp_dir_.path().Append(FILE_PATH_LITERAL("login_test"));
+}
+
+class PasswordStoreXNoBackendTestDelegate : public PasswordStoreXTestDelegate {
+ public:
+  PasswordStoreXNoBackendTestDelegate()
+      : PasswordStoreXTestDelegate(NO_BACKEND) {}
+};
+
+class PasswordStoreXWorkingBackendTestDelegate
+    : public PasswordStoreXTestDelegate {
+ public:
+  PasswordStoreXWorkingBackendTestDelegate()
+      : PasswordStoreXTestDelegate(WORKING_BACKEND) {}
+};
+
+}  // namespace
+
+namespace password_manager {
+
+INSTANTIATE_TYPED_TEST_CASE_P(XNoBackend,
+                              PasswordStoreOriginTest,
+                              PasswordStoreXNoBackendTestDelegate);
+
+INSTANTIATE_TYPED_TEST_CASE_P(XWorkingBackend,
+                              PasswordStoreOriginTest,
+                              PasswordStoreXWorkingBackendTestDelegate);
+}
 
 class PasswordStoreXTest : public testing::TestWithParam<BackendType> {
  protected:
@@ -279,17 +388,6 @@ class PasswordStoreXTest : public testing::TestWithParam<BackendType> {
 
   base::FilePath test_login_db_file_path() const {
     return temp_dir_.path().Append(FILE_PATH_LITERAL("login_test"));
-  }
-
-  PasswordStoreX::NativeBackend* GetBackend() {
-    switch (GetParam()) {
-      case FAILING_BACKEND:
-        return new FailingBackend();
-      case WORKING_BACKEND:
-        return new MockBackend();
-      default:
-        return nullptr;
-    }
   }
 
   content::TestBrowserThreadBundle thread_bundle_;
@@ -306,7 +404,7 @@ TEST_P(PasswordStoreXTest, Notifications) {
       new password_manager::LoginDatabase(test_login_db_file_path()));
   scoped_refptr<PasswordStoreX> store(new PasswordStoreX(
       base::ThreadTaskRunnerHandle::Get(), base::ThreadTaskRunnerHandle::Get(),
-      std::move(login_db), GetBackend()));
+      std::move(login_db), GetBackend(GetParam())));
   store->Init(syncer::SyncableService::StartSyncFlare());
 
   password_manager::PasswordFormData form_data = {
@@ -407,7 +505,7 @@ TEST_P(PasswordStoreXTest, NativeMigration) {
   login_db.reset(new password_manager::LoginDatabase(login_db_file));
   scoped_refptr<PasswordStoreX> store(new PasswordStoreX(
       base::ThreadTaskRunnerHandle::Get(), base::ThreadTaskRunnerHandle::Get(),
-      std::move(login_db), GetBackend()));
+      std::move(login_db), GetBackend(GetParam())));
   store->Init(syncer::SyncableService::StartSyncFlare());
 
   MockPasswordStoreConsumer consumer;

@@ -36,7 +36,12 @@ ArcBridgeService::~ArcBridgeService() {
 
 // static
 ArcBridgeService* ArcBridgeService::Get() {
-  DCHECK(g_arc_bridge_service);
+  if (!g_arc_bridge_service) {
+    // ArcBridgeService may be indirectly referenced in unit tests where
+    // ArcBridgeService is optional.
+    LOG(ERROR) << "ArcBridgeService is not ready.";
+    return nullptr;
+  }
   DCHECK(g_arc_bridge_service->CalledOnValidThread());
   return g_arc_bridge_service;
 }
@@ -49,6 +54,30 @@ bool ArcBridgeService::GetEnabled(const base::CommandLine* command_line) {
 void ArcBridgeService::AddObserver(Observer* observer) {
   DCHECK(CalledOnValidThread());
   observer_list_.AddObserver(observer);
+
+  // If any of the instances were ready before the call to AddObserver(), the
+  // |observer| won't get any readiness events. For such cases, we have to call
+  // them explicitly now to avoid a race.
+  if (app_instance())
+    observer->OnAppInstanceReady();
+  if (auth_instance())
+    observer->OnAuthInstanceReady();
+  if (clipboard_instance())
+    observer->OnClipboardInstanceReady();
+  if (ime_instance())
+    observer->OnImeInstanceReady();
+  if (input_instance())
+    observer->OnInputInstanceReady();
+  if (net_instance())
+    observer->OnNetInstanceReady();
+  if (notifications_instance())
+    observer->OnNotificationsInstanceReady();
+  if (power_instance())
+    observer->OnPowerInstanceReady();
+  if (process_instance())
+    observer->OnProcessInstanceReady();
+  if (video_instance())
+    observer->OnVideoInstanceReady();
 }
 
 void ArcBridgeService::RemoveObserver(Observer* observer) {
@@ -97,7 +126,7 @@ void ArcBridgeService::OnAuthVersionReady(int32_t version) {
 
 void ArcBridgeService::CloseAuthChannel() {
   DCHECK(CalledOnValidThread());
-  if (!input_ptr_)
+  if (!auth_ptr_)
     return;
 
   auth_ptr_.reset();
@@ -177,6 +206,56 @@ void ArcBridgeService::CloseInputChannel() {
   FOR_EACH_OBSERVER(Observer, observer_list(), OnInputInstanceClosed());
 }
 
+void ArcBridgeService::OnIntentHelperInstanceReady(
+    IntentHelperInstancePtr intent_helper_ptr) {
+  DCHECK(CalledOnValidThread());
+  temporary_intent_helper_ptr_ = std::move(intent_helper_ptr);
+  temporary_intent_helper_ptr_.QueryVersion(
+      base::Bind(&ArcBridgeService::OnIntentHelperVersionReady,
+                 weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::OnIntentHelperVersionReady(int32_t version) {
+  DCHECK(CalledOnValidThread());
+  intent_helper_ptr_ = std::move(temporary_intent_helper_ptr_);
+  intent_helper_ptr_.set_connection_error_handler(base::Bind(
+      &ArcBridgeService::CloseIntentHelperChannel, weak_factory_.GetWeakPtr()));
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnIntentHelperInstanceReady());
+}
+
+void ArcBridgeService::CloseIntentHelperChannel() {
+  DCHECK(CalledOnValidThread());
+  if (!intent_helper_ptr_)
+    return;
+
+  intent_helper_ptr_.reset();
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnIntentHelperInstanceClosed());
+}
+
+void ArcBridgeService::OnNetInstanceReady(NetInstancePtr net_ptr) {
+  DCHECK(CalledOnValidThread());
+  temporary_net_ptr_ = std::move(net_ptr);
+  temporary_net_ptr_.QueryVersion(base::Bind(
+      &ArcBridgeService::OnNetVersionReady, weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::OnNetVersionReady(int32_t version) {
+  DCHECK(CalledOnValidThread());
+  net_ptr_ = std::move(temporary_net_ptr_);
+  net_ptr_.set_connection_error_handler(base::Bind(
+      &ArcBridgeService::CloseNetChannel, weak_factory_.GetWeakPtr()));
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnNetInstanceReady());
+}
+
+void ArcBridgeService::CloseNetChannel() {
+  DCHECK(CalledOnValidThread());
+  if (!net_ptr_)
+    return;
+
+  net_ptr_.reset();
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnNetInstanceClosed());
+}
+
 void ArcBridgeService::OnNotificationsInstanceReady(
     NotificationsInstancePtr notifications_ptr) {
   DCHECK(CalledOnValidThread());
@@ -252,31 +331,6 @@ void ArcBridgeService::CloseProcessChannel() {
   FOR_EACH_OBSERVER(Observer, observer_list(), OnProcessInstanceClosed());
 }
 
-void ArcBridgeService::OnSettingsInstanceReady(
-    SettingsInstancePtr settings_ptr) {
-  DCHECK(CalledOnValidThread());
-  temporary_settings_ptr_ = std::move(settings_ptr);
-  temporary_settings_ptr_.QueryVersion(base::Bind(
-      &ArcBridgeService::OnSettingsVersionReady, weak_factory_.GetWeakPtr()));
-}
-
-void ArcBridgeService::OnSettingsVersionReady(int32_t version) {
-  DCHECK(CalledOnValidThread());
-  settings_ptr_ = std::move(temporary_settings_ptr_);
-  settings_ptr_.set_connection_error_handler(base::Bind(
-      &ArcBridgeService::CloseSettingsChannel, weak_factory_.GetWeakPtr()));
-  FOR_EACH_OBSERVER(Observer, observer_list(), OnSettingsInstanceReady());
-}
-
-void ArcBridgeService::CloseSettingsChannel() {
-  DCHECK(CalledOnValidThread());
-  if (!settings_ptr_)
-    return;
-
-  settings_ptr_.reset();
-  FOR_EACH_OBSERVER(Observer, observer_list(), OnSettingsInstanceClosed());
-}
-
 void ArcBridgeService::OnVideoInstanceReady(VideoInstancePtr video_ptr) {
   DCHECK(CalledOnValidThread());
   temporary_video_ptr_ = std::move(video_ptr);
@@ -328,10 +382,11 @@ void ArcBridgeService::CloseAllChannels() {
   CloseClipboardChannel();
   CloseImeChannel();
   CloseInputChannel();
+  CloseIntentHelperChannel();
+  CloseNetChannel();
   CloseNotificationsChannel();
   ClosePowerChannel();
   CloseProcessChannel();
-  CloseSettingsChannel();
   CloseVideoChannel();
 }
 

@@ -27,7 +27,6 @@
 #define StyleFetchedImageSet_h
 
 #include "core/fetch/ImageResourceClient.h"
-#include "core/fetch/ResourcePtr.h"
 #include "core/style/StyleImage.h"
 #include "platform/geometry/LayoutSize.h"
 
@@ -64,9 +63,8 @@ public:
     bool isLoaded() const override;
     bool errorOccurred() const override;
     LayoutSize imageSize(const LayoutObject*, float multiplier) const override;
-    bool imageHasRelativeWidth() const override;
-    bool imageHasRelativeHeight() const override;
-    void computeIntrinsicDimensions(const LayoutObject*, Length& intrinsicWidth, Length& intrinsicHeight, FloatSize& intrinsicRatio) override;
+    bool imageHasRelativeSize() const override;
+    void computeIntrinsicDimensions(const LayoutObject*, FloatSize& intrinsicSize, FloatSize& intrinsicRatio) override;
     bool usesImageContainerSize() const override;
     void addClient(LayoutObject*) override;
     void removeClient(LayoutObject*) override;
@@ -84,7 +82,7 @@ private:
 
     String debugName() const override { return "StyleFetchedImageSet"; }
 
-    ResourcePtr<ImageResource> m_bestFitImage;
+    RefPtrWillBeMember<ImageResource> m_bestFitImage;
     float m_imageScaleFactor;
 
     RawPtrWillBeMember<CSSImageSetValue> m_imageSetValue; // Not retained; it owns us.

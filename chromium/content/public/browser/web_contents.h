@@ -89,6 +89,7 @@ class WebContents : public PageNavigator,
  public:
   struct CONTENT_EXPORT CreateParams {
     explicit CreateParams(BrowserContext* context);
+    CreateParams(const CreateParams& other);
     ~CreateParams();
     CreateParams(BrowserContext* context, SiteInstance* site);
 
@@ -227,6 +228,10 @@ class WebContents : public PageNavigator,
   // silently.
   virtual void ForEachFrame(
       const base::Callback<void(RenderFrameHost*)>& on_frame) = 0;
+
+  // Returns a vector of all RenderFrameHosts in the currently active view in
+  // breadth-first traversal order.
+  virtual std::vector<RenderFrameHost*> GetAllFrames() = 0;
 
   // Sends the given IPC to all frames in the currently active view and returns
   // the number of sent messages (i.e. the number of processed frames). This is
@@ -419,6 +424,10 @@ class WebContents : public PageNavigator,
 
   // Reloads the focused frame.
   virtual void ReloadFocusedFrame(bool ignore_cache) = 0;
+
+  // Reloads all the Lo-Fi images in this WebContents. Ignores the cache and
+  // reloads from the network.
+  virtual void ReloadLoFiImages() = 0;
 
   // Editing commands ----------------------------------------------------------
 
@@ -680,7 +689,10 @@ class WebContents : public PageNavigator,
   virtual void HasManifest(const HasManifestCallback& callback) = 0;
 
   // Requests the renderer to exit fullscreen.
-  virtual void ExitFullscreen() = 0;
+  // |will_cause_resize| indicates whether the fullscreen change causes a
+  // view resize. e.g. This will be false when going from tab fullscreen to
+  // browser fullscreen.
+  virtual void ExitFullscreen(bool will_cause_resize) = 0;
 
   // Unblocks requests from renderer for a newly created window. This is
   // used in showCreatedWindow() or sometimes later in cases where
@@ -696,11 +708,10 @@ class WebContents : public PageNavigator,
   virtual void SuspendMediaSession() = 0;
   // Requests to stop the current media session.
   virtual void StopMediaSession() = 0;
-#if !defined(USE_AURA)
+
   CONTENT_EXPORT static WebContents* FromJavaWebContents(
       jobject jweb_contents_android);
   virtual base::android::ScopedJavaLocalRef<jobject> GetJavaWebContents() = 0;
-#endif  // !USE_AURA
 #elif defined(OS_MACOSX)
   // Allowing other views disables optimizations which assume that only a single
   // WebContents is present.
@@ -710,7 +721,10 @@ class WebContents : public PageNavigator,
   virtual bool GetAllowOtherViews() = 0;
 #endif  // OS_ANDROID
 
+  // NOTE(andre@vivaldi.com) : These are used to navigate pages that is
+  //                         normally navigated in chrome::LoadURLInContents().
   virtual scoped_ptr<std::string> delayed_open_url() = 0;
+  virtual void set_delayed_open_url(std::string* url) = 0;
 
  private:
   // This interface should only be implemented inside content.

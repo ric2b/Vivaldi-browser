@@ -27,8 +27,8 @@ TestConfigurator::TestConfigurator(
     : worker_task_runner_(worker_task_runner),
       initial_time_(0),
       ondemand_time_(0),
-      context_(new net::TestURLRequestContextGetter(network_task_runner)) {
-}
+      use_cup_signing_(false),
+      context_(new net::TestURLRequestContextGetter(network_task_runner)) {}
 
 TestConfigurator::~TestConfigurator() {
 }
@@ -82,6 +82,10 @@ std::string TestConfigurator::ExtraRequestParams() const {
   return "extra=\"foo\"";
 }
 
+std::string TestConfigurator::GetDownloadPreference() const {
+  return download_preference_;
+}
+
 net::URLRequestContextGetter* TestConfigurator::RequestContext() const {
   return context_.get();
 }
@@ -99,12 +103,25 @@ bool TestConfigurator::UseBackgroundDownloader() const {
   return false;
 }
 
+bool TestConfigurator::UseCupSigning() const {
+  return use_cup_signing_;
+}
+
 void TestConfigurator::SetOnDemandTime(int seconds) {
   ondemand_time_ = seconds;
 }
 
 void TestConfigurator::SetInitialDelay(int seconds) {
   initial_time_ = seconds;
+}
+
+void TestConfigurator::SetUseCupSigning(bool use_cup_signing) {
+  use_cup_signing_ = use_cup_signing;
+}
+
+void TestConfigurator::SetDownloadPreference(
+    const std::string& download_preference) {
+  download_preference_ = download_preference;
 }
 
 scoped_refptr<base::SequencedTaskRunner>

@@ -4,7 +4,6 @@
 
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_delegate_impl.h"
 
-#include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
@@ -12,6 +11,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/password_manager/core/browser/affiliation_utils.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -171,11 +171,10 @@ void PasswordsPrivateDelegateImpl::SetPasswordList(
     entry->login_pair.username = base::UTF16ToUTF8(form->username_value);
     entry->num_characters_in_password = form->password_value.length();
 
-    const GURL& federation_url = form->federation_url;
-    if (!federation_url.is_empty()) {
+    if (!form->federation_origin.unique()) {
       entry->federation_text.reset(new std::string(l10n_util::GetStringFUTF8(
           IDS_PASSWORDS_VIA_FEDERATION,
-          base::UTF8ToUTF16(federation_url.host()))));
+          base::UTF8ToUTF16(form->federation_origin.host()))));
     }
 
     current_entries_.push_back(entry);

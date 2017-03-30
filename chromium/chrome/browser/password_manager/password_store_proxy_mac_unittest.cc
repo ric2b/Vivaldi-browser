@@ -25,6 +25,7 @@
 #include "crypto/mock_apple_keychain.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/origin.h"
 
 namespace {
 
@@ -175,8 +176,7 @@ void PasswordStoreProxyMacTest::FinishAsyncProcessing() {
   // Do a store-level query to wait for all the previously enqueued operations
   // to finish.
   MockPasswordStoreConsumer consumer;
-  store_->GetLogins(PasswordForm(),
-                    password_manager::PasswordStore::ALLOW_PROMPT, &consumer);
+  store_->GetLogins(PasswordForm(), &consumer);
   EXPECT_CALL(consumer, OnGetPasswordStoreResultsConstRef(_))
       .WillOnce(QuitUIMessageLoop());
   base::MessageLoop::current()->Run();
@@ -224,7 +224,8 @@ void PasswordStoreProxyMacTest::CheckRemoveLoginsBetween(bool check_created) {
   old_form.origin = GURL("http://accounts.google.com/LoginAuth");
   old_form.signon_realm = "http://accounts.google.com/";
   old_form.username_value = base::ASCIIToUTF16("my_username");
-  old_form.federation_url = GURL("http://accounts.google.com/federation");
+  old_form.federation_origin =
+      url::Origin(GURL("http://accounts.google.com/federation"));
 
   PasswordForm new_form = old_form;
   new_form.origin = GURL("http://accounts.google2.com/LoginAuth");
@@ -311,8 +312,7 @@ TEST_P(PasswordStoreProxyMacTest, FillLogins) {
   AddForm(blacklisted_form);
 
   MockPasswordStoreConsumer mock_consumer;
-  store()->GetLogins(password_form, PasswordStoreProxyMac::ALLOW_PROMPT,
-                     &mock_consumer);
+  store()->GetLogins(password_form, &mock_consumer);
   EXPECT_CALL(mock_consumer, OnGetPasswordStoreResultsConstRef(
                                  ElementsAre(Pointee(password_form))))
       .WillOnce(QuitUIMessageLoop());
@@ -363,8 +363,7 @@ TEST_P(PasswordStoreProxyMacTest, OperationsOnABadDatabaseSilentlyFail) {
 
   // Get all logins; autofillable logins; blacklisted logins.
   MockPasswordStoreConsumer mock_consumer;
-  store()->GetLogins(*form, password_manager::PasswordStore::DISALLOW_PROMPT,
-                     &mock_consumer);
+  store()->GetLogins(*form, &mock_consumer);
   ON_CALL(mock_consumer, OnGetPasswordStoreResultsConstRef(_))
       .WillByDefault(QuitUIMessageLoop());
   EXPECT_CALL(mock_consumer, OnGetPasswordStoreResultsConstRef(IsEmpty()));
@@ -457,7 +456,7 @@ void PasswordStoreProxyMacMigrationTest::TestMigration(bool lock_keychain) {
         store_->password_store_mac()->keychain())->set_locked(false);
   }
   MockPasswordStoreConsumer mock_consumer;
-  store()->GetLogins(form, PasswordStoreProxyMac::ALLOW_PROMPT, &mock_consumer);
+  store()->GetLogins(form, &mock_consumer);
   EXPECT_CALL(mock_consumer,
               OnGetPasswordStoreResultsConstRef(ElementsAre(Pointee(form))))
       .WillOnce(QuitUIMessageLoop());

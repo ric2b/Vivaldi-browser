@@ -41,8 +41,6 @@ public class UndoBarPopupController implements SnackbarManager.SnackbarControlle
     private static final int TAB_CLOSE_UNDO_TOAST_SHOWN_COLD = 0;
     private static final int TAB_CLOSE_UNDO_TOAST_SHOWN_WARM = 1;
     private static final int TAB_CLOSE_UNDO_TOAST_PRESSED = 2;
-    private static final int TAB_CLOSE_UNDO_TOAST_DISMISSED_TIMEOUT = 3;
-    private static final int TAB_CLOSE_UNDO_TOAST_DISMISSED_ACTION = 4;
     private static final int TAB_CLOSE_UNDO_TOAST_COUNT = 5;
 
     private final TabModelSelector mTabModelSelector;
@@ -129,9 +127,9 @@ public class UndoBarPopupController implements SnackbarManager.SnackbarControlle
                 mSnackbarManager.isShowing() ? TAB_CLOSE_UNDO_TOAST_SHOWN_WARM
                                              : TAB_CLOSE_UNDO_TOAST_SHOWN_COLD,
                 TAB_CLOSE_UNDO_TOAST_COUNT);
-        mSnackbarManager.showSnackbar(Snackbar.make(content, this)
+        mSnackbarManager.showSnackbar(Snackbar.make(content, this, Snackbar.TYPE_ACTION)
                 .setTemplateText(mContext.getString(R.string.undo_bar_close_message))
-                .setAction(mContext.getString(R.string.undo_bar_button_text), tabId));
+                .setAction(mContext.getString(R.string.undo), tabId));
     }
 
     /**
@@ -144,9 +142,9 @@ public class UndoBarPopupController implements SnackbarManager.SnackbarControlle
      */
     private void showUndoCloseAllBar(List<Integer> closedTabIds) {
         String content = String.format(Locale.getDefault(), "%d", closedTabIds.size());
-        mSnackbarManager.showSnackbar(Snackbar.make(content, this)
+        mSnackbarManager.showSnackbar(Snackbar.make(content, this, Snackbar.TYPE_ACTION)
                 .setTemplateText(mContext.getString(R.string.undo_bar_close_all_message))
-                .setAction(mContext.getString(R.string.undo_bar_button_text), closedTabIds));
+                .setAction(mContext.getString(R.string.undo), closedTabIds));
 
     }
 
@@ -192,13 +190,5 @@ public class UndoBarPopupController implements SnackbarManager.SnackbarControlle
     private void commitTabClosure(int tabId) {
         TabModel model = mTabModelSelector.getModelForTabId(tabId);
         if (model != null) model.commitTabClosure(tabId);
-    }
-
-    @Override
-    public void onDismissForEachType(boolean isTimeout) {
-        RecordHistogram.recordEnumeratedHistogram("AndroidTabCloseUndo.Toast",
-                isTimeout ? TAB_CLOSE_UNDO_TOAST_DISMISSED_TIMEOUT
-                          : TAB_CLOSE_UNDO_TOAST_DISMISSED_ACTION,
-                TAB_CLOSE_UNDO_TOAST_COUNT);
     }
 }

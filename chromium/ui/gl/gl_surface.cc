@@ -96,6 +96,10 @@ bool GLSurface::InitializeOneOffImplementation(GLImplementation impl,
 GLSurface::GLSurface() {}
 
 bool GLSurface::Initialize() {
+  return Initialize(SURFACE_DEFAULT);
+}
+
+bool GLSurface::Initialize(GLSurface::Format format) {
   return true;
 }
 
@@ -186,9 +190,9 @@ void* GLSurface::GetConfig() {
   return NULL;
 }
 
-unsigned GLSurface::GetFormat() {
+GLSurface::Format GLSurface::GetFormat() {
   NOTIMPLEMENTED();
-  return 0;
+  return SURFACE_DEFAULT;
 }
 
 VSyncProvider* GLSurface::GetVSyncProvider() {
@@ -226,6 +230,10 @@ bool GLSurface::FlipsVertically() const {
   return false;
 }
 
+bool GLSurface::BuffersFlipped() const {
+  return false;
+}
+
 GLSurface* GLSurface::GetCurrent() {
   return current_surface_.Pointer()->Get();
 }
@@ -257,8 +265,8 @@ void GLSurface::OnSetSwapInterval(int interval) {
 
 GLSurfaceAdapter::GLSurfaceAdapter(GLSurface* surface) : surface_(surface) {}
 
-bool GLSurfaceAdapter::Initialize() {
-  return surface_->Initialize();
+bool GLSurfaceAdapter::Initialize(GLSurface::Format format) {
+  return surface_->Initialize(format);
 }
 
 void GLSurfaceAdapter::Destroy() {
@@ -365,7 +373,7 @@ void* GLSurfaceAdapter::GetConfig() {
   return surface_->GetConfig();
 }
 
-unsigned GLSurfaceAdapter::GetFormat() {
+GLSurface::Format GLSurfaceAdapter::GetFormat() {
   return surface_->GetFormat();
 }
 
@@ -388,6 +396,10 @@ bool GLSurfaceAdapter::IsSurfaceless() const {
 
 bool GLSurfaceAdapter::FlipsVertically() const {
   return surface_->FlipsVertically();
+}
+
+bool GLSurfaceAdapter::BuffersFlipped() const {
+  return surface_->BuffersFlipped();
 }
 
 GLSurfaceAdapter::~GLSurfaceAdapter() {}

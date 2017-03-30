@@ -40,6 +40,11 @@ public class StandardNotificationBuilderTest extends InstrumentationTestCase {
 
         Bitmap largeIcon = Bitmap.createBitmap(
                 new int[] {Color.RED}, 1 /* width */, 1 /* height */, Bitmap.Config.ARGB_8888);
+        largeIcon = largeIcon.copy(Bitmap.Config.ARGB_8888, true /* isMutable */);
+
+        Bitmap actionIcon = Bitmap.createBitmap(
+                new int[] {Color.GRAY}, 1 /* width */, 1 /* height */, Bitmap.Config.ARGB_8888);
+        actionIcon = actionIcon.copy(Bitmap.Config.ARGB_8888, true /* isMutable */);
 
         Notification notification =
                 new StandardNotificationBuilder(context)
@@ -53,7 +58,8 @@ public class StandardNotificationBuilderTest extends InstrumentationTestCase {
                         .setVibrate(new long[] {100L})
                         .setContentIntent(pendingContentIntent)
                         .setDeleteIntent(pendingDeleteIntent)
-                        .addAction(0 /* iconId */, "button", null /* intent */)
+                        .addAction(actionIcon, "button 1", null /* intent */)
+                        .addAction(actionIcon, "button 2", null /* intent */)
                         .addSettingsAction(0 /* iconId */, "settings", null /* intent */)
                         .build();
 
@@ -68,8 +74,9 @@ public class StandardNotificationBuilderTest extends InstrumentationTestCase {
         assertEquals(100L, notification.vibrate[0]);
         assertEquals(pendingContentIntent, notification.contentIntent);
         assertEquals(pendingDeleteIntent, notification.deleteIntent);
-        assertEquals(2, notification.actions.length);
-        assertEquals("button", notification.actions[0].title);
-        assertEquals("settings", notification.actions[1].title);
+        assertEquals(3, notification.actions.length);
+        assertEquals("button 1", notification.actions[0].title);
+        assertEquals("button 2", notification.actions[1].title);
+        assertEquals("settings", notification.actions[2].title);
     }
 }

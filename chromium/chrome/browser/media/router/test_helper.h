@@ -75,6 +75,11 @@ MATCHER_P(EqualsIssue, other, "") {
   return true;
 }
 
+MATCHER_P(StateChageInfoEquals, other, "") {
+  return arg.state == other.state && arg.close_reason == other.close_reason &&
+         arg.message == other.message;
+}
+
 class MockIssuesObserver : public IssuesObserver {
  public:
   explicit MockIssuesObserver(MediaRouter* router);
@@ -88,25 +93,30 @@ class MockMediaRouteProvider : public interfaces::MediaRouteProvider {
   MockMediaRouteProvider();
   ~MockMediaRouteProvider() override;
 
-  MOCK_METHOD6(CreateRoute,
+  MOCK_METHOD8(CreateRoute,
                void(const mojo::String& source_urn,
                     const mojo::String& sink_id,
                     const mojo::String& presentation_id,
                     const mojo::String& origin,
                     int tab_id,
+                    int64_t timeout_secs,
+                    bool off_the_record,
                     const CreateRouteCallback& callback));
-  MOCK_METHOD5(JoinRoute,
+  MOCK_METHOD7(JoinRoute,
                void(const mojo::String& source_urn,
                     const mojo::String& presentation_id,
                     const mojo::String& origin,
                     int tab_id,
+                    int64_t timeout_secs,
+                    bool off_the_record,
                     const JoinRouteCallback& callback));
-  MOCK_METHOD6(ConnectRouteByRouteId,
+  MOCK_METHOD7(ConnectRouteByRouteId,
                void(const mojo::String& source_urn,
                     const mojo::String& route_id,
                     const mojo::String& presentation_id,
                     const mojo::String& origin,
                     int tab_id,
+                    int64_t timeout_secs,
                     const JoinRouteCallback& callback));
   MOCK_METHOD1(DetachRoute, void(const mojo::String& route_id));
   MOCK_METHOD1(TerminateRoute, void(const mojo::String& route_id));
@@ -135,6 +145,7 @@ class MockMediaRouteProvider : public interfaces::MediaRouteProvider {
                void(const mojo::String& route_id));
   MOCK_METHOD1(StartObservingMediaRoutes, void(const mojo::String& source));
   MOCK_METHOD1(StopObservingMediaRoutes, void(const mojo::String& source));
+  MOCK_METHOD0(EnableMdnsDiscovery, void());
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockMediaRouteProvider);
@@ -142,7 +153,9 @@ class MockMediaRouteProvider : public interfaces::MediaRouteProvider {
 
 class MockMediaSinksObserver : public MediaSinksObserver {
  public:
-  MockMediaSinksObserver(MediaRouter* router, const MediaSource& source);
+  MockMediaSinksObserver(MediaRouter* router,
+                         const MediaSource& source,
+                         const GURL& origin);
   ~MockMediaSinksObserver() override;
 
   MOCK_METHOD1(OnSinksReceived, void(const std::vector<MediaSink>& sinks));
@@ -173,7 +186,8 @@ class MockPresentationConnectionStateChangedCallback {
  public:
   MockPresentationConnectionStateChangedCallback();
   ~MockPresentationConnectionStateChangedCallback();
-  MOCK_METHOD1(Run, void(content::PresentationConnectionState));
+  MOCK_METHOD1(Run,
+               void(const content::PresentationConnectionStateChangeInfo&));
 };
 
 }  // namespace media_router

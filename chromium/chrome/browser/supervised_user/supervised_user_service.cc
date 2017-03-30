@@ -11,7 +11,6 @@
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner_util.h"
@@ -42,6 +41,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_manager_base.h"
@@ -50,7 +50,7 @@
 #include "content/public/browser/user_metrics.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 #include "chrome/browser/supervised_user/legacy/custodian_profile_downloader_service.h"
 #include "chrome/browser/supervised_user/legacy/custodian_profile_downloader_service_factory.h"
 #include "chrome/browser/supervised_user/legacy/permission_request_creator_sync.h"
@@ -326,7 +326,7 @@ base::string16 SupervisedUserService::GetExtensionsLockedMessage() const {
                                     base::UTF8ToUTF16(GetCustodianName()));
 }
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 void SupervisedUserService::InitSync(const std::string& refresh_token) {
   StartSetupSync();
 
@@ -367,7 +367,7 @@ void SupervisedUserService::RegisterAndInitSync(
       base::Bind(&SupervisedUserService::OnCustodianProfileDownloaded,
                  weak_ptr_factory_.GetWeakPtr()));
 }
-#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
+#endif  // !defined(OS_ANDROID)
 
 void SupervisedUserService::AddNavigationBlockedCallback(
     const NavigationBlockedCallback& callback) {
@@ -516,7 +516,7 @@ void SupervisedUserService::SetActive(bool active) {
 
   if (!delegate_ || !delegate_->SetActive(active_)) {
     if (active_) {
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
       SupervisedUserPrefMappingServiceFactory::GetForBrowserContext(profile_)
           ->Init();
 
@@ -593,7 +593,7 @@ void SupervisedUserService::SetActive(bool active) {
     UpdateManualHosts();
     UpdateManualURLs();
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
     // TODO(bauerb): Get rid of the platform-specific #ifdef here.
     // http://crbug.com/313377
     BrowserList::AddObserver(this);
@@ -613,7 +613,7 @@ void SupervisedUserService::SetActive(bool active) {
     FOR_EACH_OBSERVER(
         SupervisedUserServiceObserver, observer_list_, OnURLFilterChanged());
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
     if (waiting_for_sync_initialization_)
       ProfileSyncServiceFactory::GetForProfile(profile_)->RemoveObserver(this);
 
@@ -624,7 +624,7 @@ void SupervisedUserService::SetActive(bool active) {
   }
 }
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 void SupervisedUserService::OnCustodianProfileDownloaded(
     const base::string16& full_name) {
   profile_->GetPrefs()->SetString(prefs::kSupervisedUserCustodianName,
@@ -674,8 +674,7 @@ void SupervisedUserService::FinishSetupSyncWhenReady() {
   // Continue in FinishSetupSync() once the Sync backend has been initialized.
   ProfileSyncService* service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
-  if (service->IsBackendInitialized() &&
-      service->backend_mode() == ProfileSyncService::SYNC) {
+  if (service->IsBackendInitialized()) {
     FinishSetupSync();
   } else {
     service->AddObserver(this);
@@ -687,7 +686,6 @@ void SupervisedUserService::FinishSetupSync() {
   ProfileSyncService* service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
   DCHECK(service->IsBackendInitialized());
-  DCHECK(service->backend_mode() == ProfileSyncService::SYNC);
 
   // Sync nothing (except types which are set via GetPreferredDataTypes).
   bool sync_everything = false;
@@ -696,7 +694,7 @@ void SupervisedUserService::FinishSetupSync() {
 
   // Notify ProfileSyncService that we are done with configuration.
   service->SetSetupInProgress(false);
-  service->SetSyncSetupCompleted();
+  service->SetFirstSetupComplete();
 }
 #endif
 
@@ -795,6 +793,7 @@ void SupervisedUserService::OnSafeSitesSettingChanged() {
 
 void SupervisedUserService::OnSiteListsChanged(
     const std::vector<scoped_refptr<SupervisedUserSiteList> >& site_lists) {
+  whitelists_ = site_lists;
   url_filter_context_.LoadWhitelists(site_lists);
 }
 
@@ -1019,12 +1018,11 @@ syncer::ModelTypeSet SupervisedUserService::GetPreferredDataTypes() const {
   return result;
 }
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 void SupervisedUserService::OnStateChanged() {
   ProfileSyncService* service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
-  if (waiting_for_sync_initialization_ && service->IsBackendInitialized() &&
-      service->backend_mode() == ProfileSyncService::SYNC) {
+  if (waiting_for_sync_initialization_ && service->IsBackendInitialized()) {
     waiting_for_sync_initialization_ = false;
     service->RemoveObserver(this);
     FinishSetupSync();
@@ -1045,7 +1043,7 @@ void SupervisedUserService::OnBrowserSetLastActive(Browser* browser) {
 
   is_profile_active_ = profile_became_active;
 }
-#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
+#endif  // !defined(OS_ANDROID)
 
 void SupervisedUserService::OnSiteListUpdated() {
   FOR_EACH_OBSERVER(

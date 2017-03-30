@@ -122,16 +122,14 @@ if (!is_nacl) {
   net_shared_sources += gypi_values.net_non_nacl_sources
 
   net_shared_deps += [
-    "//base:prefs",
     "//base/third_party/dynamic_annotations",
+    "//components/prefs",
     "//sdch",
     "//third_party/zlib",
   ]
 
   if (!use_kerberos) {
     net_shared_sources -= [
-      "http/http_auth_gssapi_posix.cc",
-      "http/http_auth_gssapi_posix.h",
       "http/http_auth_handler_negotiate.cc",
       "http/http_auth_handler_negotiate.h",
     ]
@@ -180,6 +178,7 @@ if (!is_nacl) {
       "socket/ssl_client_socket_nss.h",
       "socket/ssl_server_socket_nss.cc",
       "socket/ssl_server_socket_nss.h",
+      "ssl/token_binding_nss.cc",
     ]
     if (is_ios) {
       # Always removed for !ios below.
@@ -224,8 +223,11 @@ if (!is_nacl) {
       "ssl/ssl_platform_key.h",
       "ssl/ssl_platform_key_task_runner.cc",
       "ssl/ssl_platform_key_task_runner.h",
+      "ssl/test_ssl_private_key.cc",
+      "ssl/test_ssl_private_key.h",
       "ssl/threaded_ssl_private_key.cc",
       "ssl/threaded_ssl_private_key.h",
+      "ssl/token_binding_openssl.cc",
     ]
   }
 
@@ -254,10 +256,15 @@ if (!is_nacl) {
         "cert/cert_database_openssl.cc",
         "cert/cert_verify_proc_openssl.cc",
         "cert/test_root_certs_openssl.cc",
-        "http/http_auth_gssapi_posix.cc",
-        "http/http_auth_gssapi_posix.h",
       ]
     }
+  }
+
+  if (!use_kerberos || is_android) {
+    net_shared_sources -= [
+      "http/http_auth_gssapi_posix.cc",
+      "http/http_auth_gssapi_posix.h",
+    ]
   }
 
   if (use_glib && use_gconf && !is_chromeos) {
@@ -317,6 +324,11 @@ if (!is_nacl) {
     # libssl, but our bundled copy is not built in OpenSSL ports. Pull that file
     # in directly.
     net_shared_sources += [ "third_party/nss/ssl/cmpcert.c" ]
+  }
+
+  if (is_chromecast && use_nss_certs) {
+    net_shared_sources += [ "ssl/ssl_platform_key_chromecast.cc" ]
+    net_shared_sources -= [ "ssl/ssl_platform_key_nss.cc" ]
   }
 
   if (!enable_mdns) {
@@ -593,6 +605,8 @@ source_set("test_support") {
     "base/test_data_directory.h",
     "cert/mock_cert_verifier.cc",
     "cert/mock_cert_verifier.h",
+    "cert/mock_client_cert_verifier.cc",
+    "cert/mock_client_cert_verifier.h",
     "cookies/cookie_monster_store_test.cc",
     "cookies/cookie_monster_store_test.h",
     "cookies/cookie_store_test_callbacks.cc",
@@ -751,8 +765,6 @@ source_set("balsa") {
     "tools/balsa/noop_balsa_visitor.h",
     "tools/balsa/simple_buffer.cc",
     "tools/balsa/simple_buffer.h",
-    "tools/balsa/split.cc",
-    "tools/balsa/split.h",
     "tools/balsa/string_piece_utils.h",
     "tools/quic/spdy_balsa_utils.cc",
     "tools/quic/spdy_balsa_utils.h",
@@ -1078,8 +1090,6 @@ if (is_linux) {
       "tools/flip_server/acceptor_thread.cc",
       "tools/flip_server/acceptor_thread.h",
       "tools/flip_server/constants.h",
-      "tools/flip_server/create_listener.cc",
-      "tools/flip_server/create_listener.h",
       "tools/flip_server/flip_config.cc",
       "tools/flip_server/flip_config.h",
       "tools/flip_server/http_interface.cc",
@@ -1101,6 +1111,8 @@ if (is_linux) {
       "tools/flip_server/spdy_util.h",
       "tools/flip_server/streamer_interface.cc",
       "tools/flip_server/streamer_interface.h",
+      "tools/flip_server/tcp_socket_util.cc",
+      "tools/flip_server/tcp_socket_util.h",
       "tools/flip_server/url_to_filename_encoder.cc",
       "tools/flip_server/url_to_filename_encoder.h",
       "tools/flip_server/url_utilities.cc",
@@ -1167,6 +1179,7 @@ if (is_linux) {
       "tools/quic/quic_packet_reader.h",
       "tools/quic/quic_packet_writer_wrapper.cc",
       "tools/quic/quic_packet_writer_wrapper.h",
+      "tools/quic/quic_process_packet_interface.h",
       "tools/quic/quic_server.cc",
       "tools/quic/quic_server.h",
       "tools/quic/quic_socket_utils.cc",
@@ -1356,15 +1369,6 @@ if (!is_ios) {
   }
 }
 
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("net_unittests_run") {
-  testonly = true
-  deps = [
-    ":net_unittests",
-  ]
-}
-
 test("net_unittests") {
   sources = gypi_values.net_test_sources
 
@@ -1394,8 +1398,6 @@ test("net_unittests") {
     ":test_support",
     "//base",
     "//base:i18n",
-    "//base:prefs_test_support",
-    "//base/allocator",
     "//base/third_party/dynamic_annotations",
     "//crypto",
     "//crypto:platform",
@@ -1411,6 +1413,11 @@ test("net_unittests") {
   data = [
     "data/",
   ]
+  data_deps = []
+
+  if (!is_ios) {
+    data_deps += [ "third_party/nist-pkits/" ]
+  }
 
   if (is_linux || is_mac || is_win) {
     deps += [
@@ -1418,7 +1425,7 @@ test("net_unittests") {
       "//third_party/pywebsocket/",
       "//third_party/tlslite/",
     ]
-    data_deps = [
+    data_deps += [
       "//third_party/pyftpdlib/",
       "//third_party/pywebsocket/",
       "//third_party/tlslite/",
@@ -1474,7 +1481,6 @@ test("net_unittests") {
   } else {
     sources -= [
       "quic/test_tools/crypto_test_utils_openssl.cc",
-      "socket/ssl_client_socket_openssl_unittest.cc",
       "ssl/ssl_client_session_cache_openssl_unittest.cc",
     ]
   }
@@ -1538,6 +1544,7 @@ test("net_unittests") {
     sources -= [
       "base/directory_lister_unittest.cc",
       "base/directory_listing_unittest.cc",
+      "url_request/url_request_file_dir_job_unittest.cc",
       "url_request/url_request_file_job_unittest.cc",
     ]
   }
@@ -1581,8 +1588,8 @@ test("net_unittests") {
     deps += [
       ":net_browser_services",
       ":net_utility_services",
+      "//mojo/edk/system",
       "//mojo/environment:chromium",
-      "//third_party/mojo/src/mojo/edk/system",
     ]
   } else {
     sources -= [

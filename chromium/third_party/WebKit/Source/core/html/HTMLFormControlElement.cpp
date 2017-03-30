@@ -474,7 +474,6 @@ void HTMLFormControlElement::setNeedsWillValidateCheck()
 
 void HTMLFormControlElement::findCustomValidationMessageTextDirection(const String& message, TextDirection &messageDir, String& subMessage, TextDirection &subMessageDir)
 {
-    subMessage = fastGetAttribute(titleAttr);
     messageDir = determineDirectionality(message);
     if (!subMessage.isEmpty())
         subMessageDir = layoutObject()->style()->direction();
@@ -493,7 +492,7 @@ void HTMLFormControlElement::updateVisibleValidationMessage()
     ValidationMessageClient* client = &page->validationMessageClient();
     TextDirection messageDir = LTR;
     TextDirection subMessageDir = LTR;
-    String subMessage = String();
+    String subMessage = validationSubMessage().stripWhiteSpace();
     if (message.isEmpty())
         client->hideValidationMessage(*this);
     else
@@ -540,8 +539,8 @@ bool HTMLFormControlElement::checkValidity(WillBeHeapVector<RefPtrWillBeMember<H
     // An event handler can deref this object.
     RefPtrWillBeRawPtr<HTMLFormControlElement> protector(this);
     RefPtrWillBeRawPtr<Document> originalDocument(document());
-    bool needsDefaultAction = dispatchEvent(Event::createCancelable(EventTypeNames::invalid));
-    if (needsDefaultAction && unhandledInvalidControls && inDocument() && originalDocument == document())
+    DispatchEventResult dispatchResult = dispatchEvent(Event::createCancelable(EventTypeNames::invalid));
+    if (dispatchResult == DispatchEventResult::NotCanceled && unhandledInvalidControls && inDocument() && originalDocument == document())
         unhandledInvalidControls->append(this);
     return false;
 }

@@ -12,11 +12,11 @@
 #include "jingle/glue/thread_wrapper.h"
 #include "net/base/io_buffer.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "remoting/protocol/chromium_port_allocator.h"
 #include "remoting/protocol/connection_tester.h"
 #include "remoting/protocol/fake_authenticator.h"
+#include "remoting/protocol/message_channel_factory.h"
+#include "remoting/protocol/message_pipe.h"
 #include "remoting/protocol/network_settings.h"
-#include "remoting/protocol/p2p_stream_socket.h"
 #include "remoting/protocol/transport_context.h"
 #include "remoting/signaling/fake_signal_strategy.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -60,6 +60,10 @@ class TestTransportEventHandler : public WebrtcTransport::EventHandler {
   void OnWebrtcTransportError(ErrorCode error) override {
     error_callback_.Run(error);
   }
+  void OnWebrtcTransportMediaStreamAdded(
+      scoped_refptr<webrtc::MediaStreamInterface> stream) override {}
+  void OnWebrtcTransportMediaStreamRemoved(
+      scoped_refptr<webrtc::MediaStreamInterface> stream) override {}
 
  private:
   base::Closure connecting_callback_;
@@ -81,9 +85,9 @@ class WebrtcTransportTest : public testing::Test {
 
   void TearDown() override {
     run_loop_.reset();
-    client_socket_.reset();
+    client_message_pipe_.reset();
     client_transport_.reset();
-    host_socket_.reset();
+    host_message_pipe_.reset();
     host_transport_.reset();
     base::RunLoop().RunUntilIdle();
   }
@@ -115,10 +119,12 @@ class WebrtcTransportTest : public testing::Test {
     host_event_handler_.set_connected_callback(base::Bind(&base::DoNothing));
     client_event_handler_.set_connected_callback(base::Bind(&base::DoNothing));
 
-    host_event_handler_.set_error_callback(base::Bind(
-        &WebrtcTransportTest::OnSessionError, base::Unretained(this)));
-    client_event_handler_.set_error_callback(base::Bind(
-        &WebrtcTransportTest::OnSessionError, base::Unretained(this)));
+    host_event_handler_.set_error_callback(
+        base::Bind(&WebrtcTransportTest::OnSessionError, base::Unretained(this),
+                   TransportRole::SERVER));
+    client_event_handler_.set_error_callback(
+        base::Bind(&WebrtcTransportTest::OnSessionError, base::Unretained(this),
+                   TransportRole::CLIENT));
 
     // Start both transports.
     host_transport_->Start(
@@ -146,7 +152,8 @@ class WebrtcTransportTest : public testing::Test {
     host_event_handler_.set_connected_callback(base::Closure());
     client_event_handler_.set_connected_callback(base::Closure());
 
-    EXPECT_EQ(OK, error_);
+    EXPECT_EQ(OK, client_error_);
+    EXPECT_EQ(OK, host_error_);
   }
 
   void CreateClientDataStream() {
@@ -161,20 +168,33 @@ class WebrtcTransportTest : public testing::Test {
                                  base::Unretained(this)));
   }
 
-  void OnClientChannelCreated(scoped_ptr<P2PStreamSocket> socket) {
-    client_socket_ = std::move(socket);
-    if (run_loop_ && host_socket_)
+  void OnClientChannelCreated(scoped_ptr<MessagePipe> pipe) {
+    client_message_pipe_ = std::move(pipe);
+    if (run_loop_ && host_message_pipe_)
       run_loop_->Quit();
   }
 
-  void OnHostChannelCreated(scoped_ptr<P2PStreamSocket> socket) {
-    host_socket_ = std::move(socket);
-    if (run_loop_ && client_socket_)
+  void OnHostChannelCreated(scoped_ptr<MessagePipe> pipe) {
+    host_message_pipe_ = std::move(pipe);
+    if (run_loop_ && client_message_pipe_)
       run_loop_->Quit();
   }
 
-  void OnSessionError(ErrorCode error) {
-    error_ = error;
+  void OnSessionError(TransportRole role, ErrorCode error) {
+    if (role == TransportRole::SERVER) {
+      host_error_ = error;
+      if (destroy_on_error_) {
+        host_message_pipe_.reset();
+        host_transport_.reset();
+      }
+    } else {
+      CHECK(role == TransportRole::CLIENT);
+      client_error_ = error;
+      if (destroy_on_error_) {
+        client_message_pipe_.reset();
+        client_transport_.reset();
+      }
+    }
     run_loop_->Quit();
   }
 
@@ -198,10 +218,13 @@ class WebrtcTransportTest : public testing::Test {
   TestTransportEventHandler client_event_handler_;
   scoped_ptr<FakeAuthenticator> client_authenticator_;
 
-  scoped_ptr<P2PStreamSocket> client_socket_;
-  scoped_ptr<P2PStreamSocket> host_socket_;
+  scoped_ptr<MessagePipe> client_message_pipe_;
+  scoped_ptr<MessagePipe> host_message_pipe_;
 
-  ErrorCode error_ = OK;
+  ErrorCode client_error_ = OK;
+  ErrorCode host_error_ = OK;
+
+  bool destroy_on_error_ = false;
 };
 
 TEST_F(WebrtcTransportTest, Connects) {
@@ -222,16 +245,15 @@ TEST_F(WebrtcTransportTest, DataStream) {
   run_loop_.reset(new base::RunLoop());
   run_loop_->Run();
 
-  EXPECT_TRUE(client_socket_);
-  EXPECT_TRUE(host_socket_);
+  EXPECT_TRUE(client_message_pipe_);
+  EXPECT_TRUE(host_message_pipe_);
 
   const int kMessageSize = 1024;
   const int kMessages = 100;
-  StreamConnectionTester tester(host_socket_.get(), client_socket_.get(),
-                                kMessageSize, kMessages);
-  tester.Start();
-  message_loop_.Run();
-  tester.CheckResults();
+  MessagePipeConnectionTester tester(host_message_pipe_.get(),
+                                     client_message_pipe_.get(), kMessageSize,
+                                     kMessages);
+  tester.RunAndCheckResults();
 }
 
 // Verify that data streams can be created after connection has been initiated.
@@ -246,8 +268,36 @@ TEST_F(WebrtcTransportTest, DataStreamLate) {
   run_loop_.reset(new base::RunLoop());
   run_loop_->Run();
 
-  EXPECT_TRUE(client_socket_);
-  EXPECT_TRUE(host_socket_);
+  EXPECT_TRUE(client_message_pipe_);
+  EXPECT_TRUE(host_message_pipe_);
+}
+
+TEST_F(WebrtcTransportTest, TerminateDataChannel) {
+  InitializeConnection();
+  StartConnection();
+  WaitUntilConnected();
+
+  CreateClientDataStream();
+  CreateHostDataStream();
+
+  run_loop_.reset(new base::RunLoop());
+  run_loop_->Run();
+
+  EXPECT_TRUE(client_message_pipe_);
+  EXPECT_TRUE(host_message_pipe_);
+
+  destroy_on_error_ = true;
+
+  // Destroy pipe on one side of the of the connection. It should get closed on
+  // the other side.
+  client_message_pipe_.reset();
+
+  run_loop_.reset(new base::RunLoop());
+  run_loop_->Run();
+
+  // Check that OnSessionError() has been called.
+  EXPECT_EQ(CHANNEL_CONNECTION_ERROR, host_error_);
+  EXPECT_FALSE(host_transport_);
 }
 
 }  // namespace protocol

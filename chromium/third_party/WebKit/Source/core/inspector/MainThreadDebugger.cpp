@@ -30,12 +30,16 @@
 
 #include "core/inspector/MainThreadDebugger.h"
 
+#include "bindings/core/v8/BindingSecurity.h"
 #include "bindings/core/v8/DOMWrapperWorld.h"
+#include "bindings/core/v8/V8Window.h"
+#include "core/frame/FrameConsole.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
-#include "core/inspector/DebuggerScript.h"
+#include "core/frame/UseCounter.h"
 #include "core/inspector/InspectorTaskRunner.h"
-#include "core/inspector/v8/V8Debugger.h"
 #include "platform/UserGestureIndicator.h"
+#include "platform/v8_inspector/public/V8Debugger.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/ThreadingPrimitives.h"
@@ -57,8 +61,7 @@ int frameId(LocalFrame* frame)
 MainThreadDebugger* MainThreadDebugger::s_instance = nullptr;
 
 MainThreadDebugger::MainThreadDebugger(PassOwnPtr<ClientMessageLoop> clientMessageLoop, v8::Isolate* isolate)
-    : m_isolate(isolate)
-    , m_debugger(V8Debugger::create(isolate, this))
+    : ThreadDebugger(isolate)
     , m_clientMessageLoop(clientMessageLoop)
     , m_taskRunner(adoptPtr(new InspectorTaskRunner(isolate)))
 {
@@ -105,11 +108,6 @@ void MainThreadDebugger::interruptMainThreadAndRun(PassOwnPtr<InspectorTaskRunne
         s_instance->m_taskRunner->interruptAndRun(task);
 }
 
-v8::Local<v8::Object> MainThreadDebugger::compileDebuggerScript()
-{
-    return blink::compileDebuggerScript(m_isolate);
-}
-
 void MainThreadDebugger::runMessageLoopOnPause(int contextGroupId)
 {
     LocalFrame* pausedFrame = WeakIdentifierMap<LocalFrame>::lookup(contextGroupId);
@@ -127,6 +125,24 @@ void MainThreadDebugger::runMessageLoopOnPause(int contextGroupId)
 void MainThreadDebugger::quitMessageLoopOnPause()
 {
     m_clientMessageLoop->quitNow();
+}
+
+void MainThreadDebugger::muteWarningsAndDeprecations()
+{
+    FrameConsole::mute();
+    UseCounter::muteForInspector();
+}
+
+void MainThreadDebugger::unmuteWarningsAndDeprecations()
+{
+    FrameConsole::unmute();
+    UseCounter::unmuteForInspector();
+}
+
+bool MainThreadDebugger::callingContextCanAccessContext(v8::Local<v8::Context> calling, v8::Local<v8::Context> target)
+{
+    DOMWindow* window = toDOMWindow(target);
+    return window && BindingSecurity::shouldAllowAccessTo(m_isolate, toLocalDOMWindow(toDOMWindow(calling)), window, DoNotReportSecurityError);
 }
 
 } // namespace blink

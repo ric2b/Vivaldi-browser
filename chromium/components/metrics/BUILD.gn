@@ -22,6 +22,8 @@ source_set("metrics") {
     "drive_metrics_provider_linux.cc",
     "drive_metrics_provider_mac.mm",
     "drive_metrics_provider_win.cc",
+    "file_metrics_provider.cc",
+    "file_metrics_provider.h",
     "histogram_encoder.cc",
     "histogram_encoder.h",
     "machine_id_provider.h",
@@ -65,8 +67,9 @@ source_set("metrics") {
   ]
   deps = [
     "//base",
+    "//base:base_static",
     "//base:i18n",
-    "//base:prefs",
+    "//components/prefs",
     "//components/variations",
     "//third_party/zlib:compression_utils",
   ]
@@ -121,6 +124,8 @@ if (is_chromeos) {
       "leak_detector/custom_allocator.h",
       "leak_detector/leak_analyzer.cc",
       "leak_detector/leak_analyzer.h",
+      "leak_detector/leak_detector.cc",
+      "leak_detector/leak_detector.h",
       "leak_detector/leak_detector_impl.cc",
       "leak_detector/leak_detector_impl.h",
       "leak_detector/leak_detector_value_type.cc",
@@ -131,6 +136,7 @@ if (is_chromeos) {
 
     deps = [
       "//base",
+      "//content/public/browser",
     ]
   }
 }
@@ -283,12 +289,14 @@ if (is_chromeos) {
       "leak_detector/call_stack_table_unittest.cc",
       "leak_detector/leak_analyzer_unittest.cc",
       "leak_detector/leak_detector_impl_unittest.cc",
+      "leak_detector/leak_detector_unittest.cc",
       "leak_detector/ranked_list_unittest.cc",
     ]
 
     deps = [
       ":leak_detector",
       "//base",
+      "//content/test:test_support",
       "//testing/gtest",
     ]
   }
@@ -322,8 +330,8 @@ source_set("unit_tests") {
     ":profiler",
     ":test_support",
     ":ui",
-    "//base:prefs_test_support",
     "//base/test:test_support",
+    "//components/prefs:test_support",
     "//components/variations",
     "//net:test_support",
     "//testing/gtest",

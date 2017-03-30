@@ -58,6 +58,7 @@
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "platform/FontFamilyNames.h"
+#include "platform/Histogram.h"
 #include "platform/SharedBuffer.h"
 
 namespace blink {
@@ -326,7 +327,7 @@ String FontFace::status() const
     return emptyString();
 }
 
-void FontFace::setLoadStatus(LoadStatus status)
+void FontFace::setLoadStatus(LoadStatusType status)
 {
     m_status = status;
     ASSERT(m_status != Error || m_error);
@@ -587,10 +588,10 @@ void FontFace::initCSSFontFace(Document* document, PassRefPtrWillBeRawPtr<CSSVal
             const Settings* settings = document ? document->settings() : nullptr;
             bool allowDownloading = settings && settings->downloadableBinaryFontsEnabled();
             if (allowDownloading && item->isSupportedFormat() && document) {
-                FontResource* fetched = item->fetch(document);
+                RefPtrWillBeRawPtr<FontResource> fetched = item->fetch(document);
                 if (fetched) {
                     FontLoader* fontLoader = document->styleEngine().fontSelector()->fontLoader();
-                    source = adoptPtrWillBeNoop(new RemoteFontFaceSource(fetched, fontLoader, CSSValueToFontDisplay(m_display.get())));
+                    source = adoptPtrWillBeNoop(new RemoteFontFaceSource(fetched.release(), fontLoader, CSSValueToFontDisplay(m_display.get())));
                 }
             }
         } else {
@@ -599,6 +600,11 @@ void FontFace::initCSSFontFace(Document* document, PassRefPtrWillBeRawPtr<CSSVal
 
         if (source)
             m_cssFontFace->addSource(source.release());
+    }
+
+    if (m_display) {
+        DEFINE_STATIC_LOCAL(EnumerationHistogram, fontDisplayHistogram, ("WebFont.FontDisplayValue", FontDisplayEnumMax));
+        fontDisplayHistogram.count(CSSValueToFontDisplay(m_display.get()));
     }
 }
 

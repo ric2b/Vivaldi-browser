@@ -49,6 +49,7 @@ public:
     static PassOwnPtrWillBeRawPtr<ServiceWorkerGlobalScopeClient> create(WebServiceWorkerContextClient&);
     ~ServiceWorkerGlobalScopeClientImpl() override;
 
+    void getClient(const WebString&, WebServiceWorkerClientCallbacks*) override;
     void getClients(const WebServiceWorkerClientQueryOptions&, WebServiceWorkerClientsCallbacks*) override;
     void openWindow(const WebURL&, WebServiceWorkerClientCallbacks*) override;
     void setCachedMetadata(const WebURL&, const char*, size_t) override;
@@ -57,10 +58,12 @@ public:
     WebURL scope() const override;
 
     void didHandleActivateEvent(int eventID, WebServiceWorkerEventResult) override;
+    void didHandleExtendableMessageEvent(int eventID, WebServiceWorkerEventResult) override;
     void didHandleFetchEvent(int fetchEventID) override;
     void didHandleFetchEvent(int fetchEventID, const WebServiceWorkerResponse&) override;
     void didHandleInstallEvent(int installEventID, WebServiceWorkerEventResult) override;
     void didHandleNotificationClickEvent(int eventID, WebServiceWorkerEventResult) override;
+    void didHandleNotificationCloseEvent(int eventID, WebServiceWorkerEventResult) override;
     void didHandlePushEvent(int pushEventID, WebServiceWorkerEventResult) override;
     void didHandleSyncEvent(int syncEventID, WebServiceWorkerEventResult) override;
     void postMessageToClient(const WebString& clientUUID, const WebString& message, PassOwnPtr<WebMessagePortChannelArray>) override;
@@ -69,7 +72,7 @@ public:
     void claim(WebServiceWorkerClientsClaimCallbacks*) override;
     void focus(const WebString& clientUUID, WebServiceWorkerClientCallbacks*) override;
     void navigate(const WebString& clientUUID, const WebURL&, WebServiceWorkerClientCallbacks*) override;
-    void registerForeignFetchScopes(const WebVector<WebURL>& subScopes) override;
+    void registerForeignFetchScopes(const WebVector<WebURL>& subScopes, const WebVector<WebSecurityOrigin>&) override;
 
     DEFINE_INLINE_VIRTUAL_TRACE() { ServiceWorkerGlobalScopeClient::trace(visitor); }
 

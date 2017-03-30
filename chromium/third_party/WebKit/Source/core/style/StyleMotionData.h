@@ -5,8 +5,8 @@
 #ifndef StyleMotionData_h
 #define StyleMotionData_h
 
-#include "core/style/ComputedStyleConstants.h"
-#include "core/style/StyleMotionPath.h"
+#include "core/style/StyleMotionRotation.h"
+#include "core/style/StylePath.h"
 #include "platform/Length.h"
 #include "wtf/Allocator.h"
 
@@ -15,11 +15,10 @@ namespace blink {
 class StyleMotionData {
     DISALLOW_NEW();
 public:
-    StyleMotionData(StyleMotionPath* path, const Length& offset, float rotation, MotionRotationType rotationType)
+    StyleMotionData(StylePath* path, const Length& offset, StyleMotionRotation rotation)
         : m_path(path)
         , m_offset(offset)
         , m_rotation(rotation)
-        , m_rotationType(rotationType)
     {
     }
 
@@ -28,10 +27,9 @@ public:
     bool operator!=(const StyleMotionData& o) const { return !(*this == o); }
 
     // Must be public for SET_VAR in ComputedStyle.h
-    RefPtr<StyleMotionPath> m_path; // nullptr indicates path is 'none'
+    RefPtr<StylePath> m_path; // nullptr indicates path is 'none'
     Length m_offset;
-    float m_rotation;
-    MotionRotationType m_rotationType;
+    StyleMotionRotation m_rotation;
 };
 
 } // namespace blink

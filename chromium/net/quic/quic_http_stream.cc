@@ -72,6 +72,10 @@ int QuicHttpStream::InitializeStream(const HttpRequestInfo* request_info,
   request_time_ = base::Time::Now();
   priority_ = priority;
 
+  bool success = session_->GetSSLInfo(&ssl_info_);
+  DCHECK(success);
+  DCHECK(ssl_info_.cert.get());
+
   int rv = stream_request_.StartRequest(
       session_, &stream_,
       base::Bind(&QuicHttpStream::OnStreamReady, weak_factory_.GetWeakPtr()));
@@ -94,7 +98,7 @@ void QuicHttpStream::OnStreamReady(int rv) {
     rv = ERR_QUIC_HANDSHAKE_FAILED;
   }
 
-  ResetAndReturn(&callback_).Run(rv);
+  base::ResetAndReturn(&callback_).Run(rv);
 }
 
 int QuicHttpStream::SendRequest(const HttpRequestHeaders& request_headers,
@@ -110,12 +114,8 @@ int QuicHttpStream::SendRequest(const HttpRequestHeaders& request_headers,
   HostPortPair origin = HostPortPair::FromURL(request_info_->url);
   if (origin.Equals(HostPortPair("accounts.google.com", 443)) &&
       request_headers.HasHeader(HttpRequestHeaders::kCookie)) {
-    SSLInfo ssl_info;
-    bool secure_session =
-        session_->GetSSLInfo(&ssl_info) && ssl_info.cert.get();
-    DCHECK(secure_session);
     UMA_HISTOGRAM_BOOLEAN("Net.QuicSession.CookieSentToAccountsOverChannelId",
-                          ssl_info.channel_id_sent);
+                          ssl_info_.channel_id_sent);
   }
   if (!stream_) {
     return ERR_CONNECTION_CLOSED;
@@ -263,8 +263,7 @@ bool QuicHttpStream::GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const {
 }
 
 void QuicHttpStream::GetSSLInfo(SSLInfo* ssl_info) {
-  DCHECK(stream_);
-  session_->GetSSLInfo(ssl_info);
+  *ssl_info = ssl_info_;
 }
 
 void QuicHttpStream::GetSSLCertRequestInfo(
@@ -281,6 +280,12 @@ bool QuicHttpStream::GetRemoteEndpoint(IPEndPoint* endpoint) {
   return true;
 }
 
+Error QuicHttpStream::GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
+                                                  std::vector<uint8_t>* out) {
+  NOTREACHED();
+  return ERR_NOT_IMPLEMENTED;
+}
+
 void QuicHttpStream::Drain(HttpNetworkSession* session) {
   NOTREACHED();
   Close(false);
@@ -288,6 +293,7 @@ void QuicHttpStream::Drain(HttpNetworkSession* session) {
 }
 
 void QuicHttpStream::PopulateNetErrorDetails(NetErrorDetails* details) {
+  details->connection_info = HttpResponseInfo::CONNECTION_INFO_QUIC1_SPDY3;
   if (was_handshake_confirmed_)
     details->quic_connection_error = quic_connection_error_;
 }

@@ -8,6 +8,7 @@
 #ifndef NET_TOOLS_QUIC_QUIC_DISPATCHER_H_
 #define NET_TOOLS_QUIC_QUIC_DISPATCHER_H_
 
+#include <unordered_map>
 #include <vector>
 
 #include "base/containers/hash_tables.h"
@@ -18,6 +19,7 @@
 #include "net/quic/quic_blocked_writer_interface.h"
 #include "net/quic/quic_connection.h"
 #include "net/quic/quic_protocol.h"
+#include "net/tools/quic/quic_process_packet_interface.h"
 #include "net/tools/quic/quic_server_session_base.h"
 #include "net/tools/quic/quic_time_wait_list_manager.h"
 
@@ -27,26 +29,20 @@ class QuicConfig;
 class QuicCryptoServerConfig;
 class QuicServerSessionBase;
 
-namespace tools {
-
 namespace test {
 class QuicDispatcherPeer;
 }  // namespace test
 
-class ProcessPacketInterface {
- public:
-  virtual ~ProcessPacketInterface() {}
-  virtual void ProcessPacket(const IPEndPoint& server_address,
-                             const IPEndPoint& client_address,
-                             const QuicEncryptedPacket& packet) = 0;
-};
-
 class QuicDispatcher : public QuicServerSessionVisitor,
                        public ProcessPacketInterface,
-                       public QuicBlockedWriterInterface {
+                       public QuicBlockedWriterInterface,
+                       public QuicFramerVisitorInterface {
  public:
   // Ideally we'd have a linked_hash_set: the  boolean is unused.
-  typedef linked_hash_map<QuicBlockedWriterInterface*, bool> WriteBlockedList;
+  typedef linked_hash_map<QuicBlockedWriterInterface*,
+                          bool,
+                          QuicBlockedWriterInterfacePtrHash>
+      WriteBlockedList;
 
   // Due to the way delete_sessions_closure_ is registered, the Dispatcher must
   // live until server Shutdown. |supported_versions| specifies the std::list
@@ -94,7 +90,8 @@ class QuicDispatcher : public QuicServerSessionVisitor,
   void OnConnectionRemovedFromTimeWaitList(
       QuicConnectionId connection_id) override;
 
-  typedef base::hash_map<QuicConnectionId, QuicServerSessionBase*> SessionMap;
+  typedef std::unordered_map<QuicConnectionId, QuicServerSessionBase*>
+      SessionMap;
 
   const SessionMap& session_map() const { return session_map_; }
 
@@ -112,14 +109,47 @@ class QuicDispatcher : public QuicServerSessionVisitor,
                 "kMaxReasonableInitialPacketNumber is unreasonably small "
                 "relative to kInitialCongestionWindow.");
 
+  // QuicFramerVisitorInterface implementation. Not expected to be called
+  // outside of this class.
+  void OnPacket() override;
+  // Called when the public header has been parsed.
+  bool OnUnauthenticatedPublicHeader(
+      const QuicPacketPublicHeader& header) override;
+  // Called when the private header has been parsed of a data packet that is
+  // destined for the time wait manager.
+  bool OnUnauthenticatedHeader(const QuicPacketHeader& header) override;
+  void OnError(QuicFramer* framer) override;
+  bool OnProtocolVersionMismatch(QuicVersion received_version) override;
+
+  // The following methods should never get called because
+  // OnUnauthenticatedPublicHeader() or OnUnauthenticatedHeader() (whichever
+  // was called last), will return false and prevent a subsequent invocation
+  // of these methods. Thus, the payload of the packet is never processed in
+  // the dispatcher.
+  void OnPublicResetPacket(const QuicPublicResetPacket& packet) override;
+  void OnVersionNegotiationPacket(
+      const QuicVersionNegotiationPacket& packet) override;
+  void OnDecryptedPacket(EncryptionLevel level) override;
+  bool OnPacketHeader(const QuicPacketHeader& header) override;
+  void OnRevivedPacket() override;
+  void OnFecProtectedPayload(base::StringPiece payload) override;
+  bool OnStreamFrame(const QuicStreamFrame& frame) override;
+  bool OnAckFrame(const QuicAckFrame& frame) override;
+  bool OnStopWaitingFrame(const QuicStopWaitingFrame& frame) override;
+  bool OnPingFrame(const QuicPingFrame& frame) override;
+  bool OnRstStreamFrame(const QuicRstStreamFrame& frame) override;
+  bool OnConnectionCloseFrame(const QuicConnectionCloseFrame& frame) override;
+  bool OnGoAwayFrame(const QuicGoAwayFrame& frame) override;
+  bool OnWindowUpdateFrame(const QuicWindowUpdateFrame& frame) override;
+  bool OnBlockedFrame(const QuicBlockedFrame& frame) override;
+  bool OnPathCloseFrame(const QuicPathCloseFrame& frame) override;
+  void OnFecData(base::StringPiece redundancy) override;
+  void OnPacketComplete() override;
+
  protected:
   virtual QuicServerSessionBase* CreateQuicSession(
       QuicConnectionId connection_id,
       const IPEndPoint& client_address);
-
-  // Called by |framer_visitor_| when the public header has been parsed.
-  virtual bool OnUnauthenticatedPublicHeader(
-      const QuicPacketPublicHeader& header);
 
   // Values to be returned by ValidityChecks() to indicate what should be done
   // with a packet.  Fates with greater values are considered to be higher
@@ -176,12 +206,7 @@ class QuicDispatcher : public QuicServerSessionVisitor,
   void SetLastError(QuicErrorCode error);
 
  private:
-  class QuicFramerVisitor;
-  friend class net::tools::test::QuicDispatcherPeer;
-
-  // Called by |framer_visitor_| when the private header has been parsed
-  // of a data packet that is destined for the time wait manager.
-  void OnUnauthenticatedHeader(const QuicPacketHeader& header);
+  friend class net::test::QuicDispatcherPeer;
 
   // Removes the session from the session map and write blocked list, and adds
   // the ConnectionId to the time-wait list.  If |session_closed_statelessly| is
@@ -214,9 +239,6 @@ class QuicDispatcher : public QuicServerSessionVisitor,
   // The writer to write to the socket with.
   scoped_ptr<QuicPacketWriter> writer_;
 
-  // A per-connection writer that is passed to the time wait list manager.
-  scoped_ptr<QuicPacketWriter> time_wait_list_writer_;
-
   // This vector contains QUIC versions which we currently support.
   // This should be ordered such that the highest supported version is the first
   // element, with subsequent elements in descending order (versions can be
@@ -229,7 +251,6 @@ class QuicDispatcher : public QuicServerSessionVisitor,
   const QuicEncryptedPacket* current_packet_;
 
   QuicFramer framer_;
-  scoped_ptr<QuicFramerVisitor> framer_visitor_;
 
   // The last error set by SetLastError(), which is called by
   // framer_visitor_->OnError().
@@ -238,7 +259,6 @@ class QuicDispatcher : public QuicServerSessionVisitor,
   DISALLOW_COPY_AND_ASSIGN(QuicDispatcher);
 };
 
-}  // namespace tools
 }  // namespace net
 
 #endif  // NET_TOOLS_QUIC_QUIC_DISPATCHER_H_

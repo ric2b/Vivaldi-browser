@@ -151,6 +151,7 @@ public class ImageCarousel extends FrameLayout implements GestureDetector.OnGest
     private float mPosition = 0f;
 
     private ImageCarouselPositionChangeListener mListener;
+    private ImageView mCheckmark;
     private int mLastPosition = 0;
     private boolean mNeedsPositionUpdates = true;
 
@@ -221,24 +222,33 @@ public class ImageCarousel extends FrameLayout implements GestureDetector.OnGest
     }
 
     /**
-     * Sets the ImageCarousel to signed in mode that disables scrolling, animates away the
-     * background images, and displays a checkmark next to the account image that was chosen.
+     * Sets whether the ImageCarousel is in signed in mode. This mode disables scrolling, animates
+     * away the background images, and displays a checkmark next to the chosen account image.
+     * @param isSignedIn Whether the ImageCarousel should in signed in mode or not.
      */
-    public void setSignedInMode() {
-        mScrollingDisabled = true;
-        mAccountSelected = true;
+    public void setSignedInMode(boolean isSignedIn) {
+        if (isSignedIn == mAccountSelected) return;
+
+        mScrollingDisabled = isSignedIn;
+        mAccountSelected = isSignedIn;
         setPosition(getCenterPosition());
 
-        ImageView checkmark = new ImageView(getContext());
-        checkmark.setImageResource(R.drawable.verify_checkmark);
-        setLayoutParamsForCheckmark(checkmark);
-        addView(checkmark);
+        if (mCheckmark == null) {
+            mCheckmark = new ImageView(getContext());
+            mCheckmark.setImageResource(R.drawable.verify_checkmark);
+            setLayoutParamsForCheckmark(mCheckmark);
+            addView(mCheckmark);
+        }
 
         if (mFadeInOutAnimator != null) mFadeInOutAnimator.cancel();
         AnimatorSet animatorSet = new AnimatorSet();
-        animatorSet.playTogether(
-                ObjectAnimator.ofFloat(this, BACKGROUND_IMAGE_ALPHA, 0),
-                ObjectAnimator.ofFloat(checkmark, View.ALPHA, 0.0f, 1.0f));
+        if (isSignedIn) {
+            animatorSet.playTogether(ObjectAnimator.ofFloat(this, BACKGROUND_IMAGE_ALPHA, 0),
+                    ObjectAnimator.ofFloat(mCheckmark, View.ALPHA, 0.0f, 1.0f));
+        } else {
+            animatorSet.playTogether(ObjectAnimator.ofFloat(this, BACKGROUND_IMAGE_ALPHA, 1),
+                    ObjectAnimator.ofFloat(mCheckmark, View.ALPHA, 1.0f, 0.0f));
+        }
         mFadeInOutAnimator = animatorSet;
         mFadeInOutAnimator.setDuration(ACCOUNT_SIGNED_IN_ANIMATION_DURATION_MS);
         mFadeInOutAnimator.start();
@@ -248,7 +258,7 @@ public class ImageCarousel extends FrameLayout implements GestureDetector.OnGest
     public void onFinishInflate() {
         super.onFinishInflate();
 
-        mImageWidth = getResources().getDimensionPixelSize(R.dimen.fre_image_carousel_height);
+        mImageWidth = getResources().getDimensionPixelSize(R.dimen.fre_image_height);
         for (int i = 0; i < VIEW_COUNT; ++i) {
             ImageView view = new ImageView(getContext());
             FrameLayout.LayoutParams params =
@@ -259,7 +269,7 @@ public class ImageCarousel extends FrameLayout implements GestureDetector.OnGest
             addView(view);
         }
 
-        mCarouselWidth = getResources().getDimensionPixelSize(R.dimen.fre_image_carousel_width);
+        mCarouselWidth = getResources().getDimensionPixelSize(R.dimen.signin_image_carousel_width);
         mScrollScalingFactor = SCROLL_FACTOR * mCarouselWidth;
         mFlingScalingFactor = FLING_FACTOR * mCarouselWidth;
         mTranslationFactor = TRANSLATION_FACTOR * mImageWidth;
@@ -416,7 +426,7 @@ public class ImageCarousel extends FrameLayout implements GestureDetector.OnGest
     }
 
     private void setLayoutParamsForCheckmark(View view) {
-        int size = getResources().getDimensionPixelSize(R.dimen.fre_checkmark_size);
+        int size = getResources().getDimensionPixelSize(R.dimen.signin_checkmark_size);
         FrameLayout.LayoutParams params =
                 new FrameLayout.LayoutParams(size, size);
         params.gravity = Gravity.CENTER;

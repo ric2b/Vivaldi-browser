@@ -21,28 +21,30 @@ class Layer;
 
 namespace views {
 
-// Pure virtual base class that manages an ink drop animation's lifetime and
-// state.
+// Pure virtual base class that manages the lifetime and state of an ink drop
+// animation as well as visual hover state feedback.
 class VIEWS_EXPORT InkDropAnimationController {
  public:
   virtual ~InkDropAnimationController() {}
 
-  // Gets the current state of the ink drop.
-  virtual InkDropState GetInkDropState() const = 0;
+  // Gets the target state of the ink drop.
+  virtual InkDropState GetTargetInkDropState() const = 0;
+
+  // Returns true when the ripple is visible, including when animating to
+  // HIDDEN.
+  virtual bool IsVisible() const = 0;
 
   // Animates from the current InkDropState to |ink_drop_state|.
   virtual void AnimateToState(InkDropState ink_drop_state) = 0;
 
-  virtual gfx::Size GetInkDropLargeSize() const = 0;
+  // Immediately snaps the InkDropState to ACTIVATED. This more specific
+  // implementation of the non-existent SnapToState(InkDropState) function is
+  // the only one available because it was the only InkDropState that clients
+  // needed to skip animations for.
+  virtual void SnapToActivated() = 0;
 
-  // Sets the different sizes of the ink drop.
-  virtual void SetInkDropSize(const gfx::Size& large_size,
-                              int large_corner_radius,
-                              const gfx::Size& small_size,
-                              int small_corner_radius) = 0;
-
-  // Sets the |center_point| of the ink drop relative to its parent Layer.
-  virtual void SetInkDropCenter(const gfx::Point& center_point) = 0;
+  // Enables or disables the hover state.
+  virtual void SetHovered(bool is_hovered) = 0;
 
  protected:
   InkDropAnimationController() {}

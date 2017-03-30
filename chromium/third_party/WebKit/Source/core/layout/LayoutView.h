@@ -109,7 +109,7 @@ public:
         IsFixedPosition,
     };
 
-    static ViewportConstrainedPosition viewportConstrainedPosition(EPosition position) { return position == FixedPosition ? IsFixedPosition : IsNotFixedPosition; }
+    static ViewportConstrainedPosition toViewportConstrainedPosition(EPosition position) { return position == FixedPosition ? IsFixedPosition : IsNotFixedPosition; }
     void mapToVisibleRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect&, ViewportConstrainedPosition, const PaintInvalidationState*) const;
     void mapToVisibleRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect&, const PaintInvalidationState*) const override;
     void adjustViewportConstrainedOffset(LayoutRect&, ViewportConstrainedPosition) const;
@@ -183,8 +183,8 @@ public:
 
     bool backgroundIsKnownToBeOpaqueInRect(const LayoutRect& localRect) const override;
 
-    double layoutViewportWidth() const;
-    double layoutViewportHeight() const;
+    // Returns the viewport size in (CSS pixels) that vh and vw units are calculated from.
+    FloatSize viewportSizeForViewportUnits() const;
 
     void pushLayoutState(LayoutState& layoutState) { m_layoutState = &layoutState; }
     void popLayoutState() { ASSERT(m_layoutState); m_layoutState = m_layoutState->next(); }
@@ -229,8 +229,7 @@ private:
     int viewLogicalWidthForBoxSizing() const;
     int viewLogicalHeightForBoxSizing() const;
 
-    GC_PLUGIN_IGNORE("http://crbug.com/509911")
-    FrameView* m_frameView;
+    RawPtrWillBeUntracedMember<FrameView> m_frameView;
 
     // The current selection represented as 2 boundaries.
     // Selection boundaries are represented in LayoutView by a tuple

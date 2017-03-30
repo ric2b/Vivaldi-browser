@@ -10,7 +10,6 @@
 #import "chrome/browser/ui/cocoa/info_bubble_view.h"
 #import "chrome/browser/ui/cocoa/info_bubble_window.h"
 #include "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
-#import "chrome/browser/ui/cocoa/passwords/account_chooser_view_controller.h"
 #import "chrome/browser/ui/cocoa/passwords/auto_signin_view_controller.h"
 #import "chrome/browser/ui/cocoa/passwords/confirmation_password_saved_view_controller.h"
 #import "chrome/browser/ui/cocoa/passwords/manage_passwords_view_controller.h"
@@ -69,26 +68,14 @@
     currentController_.reset([[UpdatePendingPasswordViewController alloc]
         initWithDelegate:self]);
   } else if (model_->state() == password_manager::ui::CONFIRMATION_STATE) {
-    currentController_.reset(
-        [[ManagePasswordsBubbleConfirmationViewController alloc]
-            initWithModel:model_
-                 delegate:self]);
+    currentController_.reset([[ConfirmationPasswordSavedViewController alloc]
+        initWithDelegate:self]);
   } else if (model_->state() == password_manager::ui::MANAGE_STATE) {
     currentController_.reset(
-        [[ManagePasswordsBubbleManageViewController alloc]
-            initWithModel:model_
-                 delegate:self]);
+        [[ManagePasswordsViewController alloc] initWithDelegate:self]);
   } else if (model_->state() == password_manager::ui::AUTO_SIGNIN_STATE) {
     currentController_.reset(
-        [[ManagePasswordsBubbleAutoSigninViewController alloc]
-            initWithModel:model_
-                 delegate:self]);
-  } else if (model_->state() ==
-             password_manager::ui::CREDENTIAL_REQUEST_STATE) {
-    currentController_.reset(
-        [[ManagePasswordsBubbleAccountChooserViewController alloc]
-            initWithModel:model_
-                 delegate:self]);
+        [[AutoSigninViewController alloc] initWithDelegate:self]);
   } else {
     NOTREACHED();
   }
@@ -155,7 +142,7 @@
            animate:[window isVisible]];
 }
 
-#pragma mark ManagePasswordsBubbleContentViewDelegate
+#pragma mark BasePasswordsContentViewDelegate
 
 - (void)viewShouldDismiss {
   [self close];

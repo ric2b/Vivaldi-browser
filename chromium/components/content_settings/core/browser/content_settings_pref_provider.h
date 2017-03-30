@@ -12,9 +12,9 @@
 
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/prefs/pref_change_registrar.h"
 #include "components/content_settings/core/browser/content_settings_observable_provider.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
+#include "components/prefs/pref_change_registrar.h"
 
 class PrefService;
 
@@ -55,6 +55,8 @@ class PrefProvider : public ObservableProvider {
   void ClearAllContentSettingsRules(ContentSettingsType content_type) override;
 
   void ShutdownOnUIThread() override;
+
+  void ClearPrefs();
 
   // Records the last time the given pattern has used a certain content setting.
   void UpdateLastUsage(const ContentSettingsPattern& primary_pattern,

@@ -5,7 +5,6 @@
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/statistics_recorder.h"
-#include "base/prefs/pref_service.h"
 #include "chrome/browser/net/prediction_options.h"
 #include "chrome/browser/predictors/resource_prefetch_common.h"
 #include "chrome/browser/predictors/resource_prefetch_predictor.h"
@@ -13,11 +12,12 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/prefs/pref_service.h"
 #include "components/variations/entropy_provider.h"
 #include "content/public/test/test_browser_thread.h"
 #include "net/base/network_change_notifier.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 using chrome_browser_net::NetworkPredictionOptions;
 using net::NetworkChangeNotifier;
@@ -303,17 +303,6 @@ TEST_F(ResourcePrefetchCommonTest, FieldTrialPrefetchingDisabledByNetwork) {
   {
     scoped_ptr<NetworkChangeNotifier> mock(new MockNetworkChangeNotifier4G);
     TestIsPrefetchLearning(config);
-  }
-
-  // Set preference to ALWAYS: always prefetch.
-  SetPreference(NetworkPredictionOptions::NETWORK_PREDICTION_ALWAYS);
-  {
-    scoped_ptr<NetworkChangeNotifier> mock(new MockNetworkChangeNotifierWIFI);
-    TestIsPrefetchEnabled(config);
-  }
-  {
-    scoped_ptr<NetworkChangeNotifier> mock(new MockNetworkChangeNotifier4G);
-    TestIsPrefetchEnabled(config);
   }
 
   // Set preference to NEVER: never prefetch.

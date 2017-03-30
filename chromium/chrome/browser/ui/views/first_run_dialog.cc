@@ -30,8 +30,8 @@
 #include "ui/views/window/dialog_delegate.h"
 
 #if defined(GOOGLE_CHROME_BUILD)
-#include "base/prefs/pref_service.h"
 #include "chrome/browser/browser_process.h"
+#include "components/prefs/pref_service.h"
 #endif
 
 using views::GridLayout;
@@ -111,11 +111,6 @@ views::View* FirstRunDialog::CreateExtraView() {
   return link;
 }
 
-void FirstRunDialog::OnClosed() {
-  first_run::SetShouldShowWelcomePage();
-  Done();
-}
-
 bool FirstRunDialog::Accept() {
   GetWidget()->Hide();
 
@@ -127,7 +122,7 @@ bool FirstRunDialog::Accept() {
   }
 
   if (make_default_ && make_default_->checked())
-    ShellIntegration::SetAsDefaultBrowser();
+    shell_integration::SetAsDefaultBrowser();
 
   Done();
   return true;
@@ -135,6 +130,11 @@ bool FirstRunDialog::Accept() {
 
 int FirstRunDialog::GetDialogButtons() const {
   return ui::DIALOG_BUTTON_OK;
+}
+
+void FirstRunDialog::WindowClosing() {
+  first_run::SetShouldShowWelcomePage();
+  Done();
 }
 
 void FirstRunDialog::LinkClicked(views::Link* source, int event_flags) {

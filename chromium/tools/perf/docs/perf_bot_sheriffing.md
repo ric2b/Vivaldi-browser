@@ -20,13 +20,16 @@ chromium.perf waterfall green.
 
 Everyone can view the chromium.perf waterfall at
 https://build.chromium.org/p/chromium.perf/, but for Googlers it is recommended
-that you use the url
-**https://uberchromegw.corp.google.com/i/chromium.perf/** instead. The reason
+that you use the url **[https://uberchromegw.corp.google.com/i/chromium.perf/]
+(https://uberchromegw.corp.google.com/i/chromium.perf/)** instead. The reason
 for this is that in order to make the performance tests as realistic as
 possible, the chromium.perf waterfall runs release official builds of Chrome.
 But the logs from release official builds may leak info from our partners that
 we do not have permission to share outside of Google. So the logs are available
-to Googlers only.
+to Googlers only. To avoid manually rewriting the URL when switching between
+the upstream and downstream views of the waterfall and bots, you can install the
+[Chromium Waterfall View Switcher extension](https://chrome.google.com/webstore/a/google.com/detail/chromium-waterfall-view-s/hnnplblfkmfaadpjdpkepbkdjhjpjbdp),
+which adds a switching button to Chrome's URL bar.
 
 Note that there are four different views:
 
@@ -77,7 +80,7 @@ be investigated. When a test fails:
      run the test on the
      [perf trybots](https://www.chromium.org/developers/telemetry/performance-try-bots).
    * You can run a return code bisect to narrow down the culprit CL:
-      1. Open up the graph in the [perf dashboard](chromeperf.appspot.com/report)
+      1. Open up the graph in the [perf dashboard](https://chromeperf.appspot.com/report)
          on one of the failing platforms.
       2. Hover over a data point and click the "Bisect" button on the tooltip.
       3. Type the **Bug ID** from step 1, the **Good Revision** the last commit
@@ -165,22 +168,8 @@ There are two types of device failures:
 For both types of failures, please file a bug with [this template](https://code.google.com/p/chromium/issues/entry?labels=Pri-1,Performance-BotHealth,Infra-Labs,OS-Android&comment=Link+to+buildbot+status+page:&summary=Device+offline+on+chromium.perf)
 which will add an issue to the infra labs queue.
 
-####<a name="followup"></a> Follow up on failures
-
-**[Pri-0 bugs](https://code.google.com/p/chromium/issues/list?can=2&q=label%3APerformance-BotHealth+label%3APri-0)**
-should have an owner or contact on speed infra team and be worked on as top
-priority. Pri-0 generally implies an entire waterfall is down.
-
-**[Pri-1 bugs](https://code.google.com/p/chromium/issues/list?can=2&q=label%3APerformance-BotHealth+label%3APri-1)**
-should be pinged daily, and checked to make sure someone is following up. Pri-1
-bugs are for a red test (not yet disabled), purple bot, or failing device.
-
-**[Pri-2 bugs](https://code.google.com/p/chromium/issues/list?can=2&q=label%3APerformance-BotHealth+label%3APri-2)**
-are for disabled tests. These should be pinged weekly, and work towards fixing
-should be ongoing when the sheriff is not working on a Pri-1 issue. Here is the
-[list of Pri-2 bugs that have not been pinged in a week](https://code.google.com/p/chromium/issues/list?can=2&q=label:Performance-BotHealth%20label:Pri-2%20modified-before:today-7&sort=modified)
-
 If you need help triaging, here are the common labels you should use:
+
    * **Performance-BotHealth** should go on all bugs you file about the bots;
      it's the label we use to track all the issues.
    * **Infra-Troopers** adds the bug to the trooper queue. This is for high
@@ -200,6 +189,21 @@ If you need help triaging, here are the common labels you should use:
    * **Cr-Tests-AutoBisect** for bisect and perf try job failures.
 
  If you still need help, ask the speed infra chat, or escalate to sullivan@.
+
+####<a name="followup"></a> Follow up on failures
+
+**[Pri-0 bugs](https://code.google.com/p/chromium/issues/list?can=2&q=label%3APerformance-BotHealth+label%3APri-0)**
+should have an owner or contact on speed infra team and be worked on as top
+priority. Pri-0 generally implies an entire waterfall is down.
+
+**[Pri-1 bugs](https://code.google.com/p/chromium/issues/list?can=2&q=label%3APerformance-BotHealth+label%3APri-1)**
+should be pinged daily, and checked to make sure someone is following up. Pri-1
+bugs are for a red test (not yet disabled), purple bot, or failing device.
+
+**[Pri-2 bugs](https://code.google.com/p/chromium/issues/list?can=2&q=label%3APerformance-BotHealth+label%3APri-2)**
+are for disabled tests. These should be pinged weekly, and work towards fixing
+should be ongoing when the sheriff is not working on a Pri-1 issue. Here is the
+[list of Pri-2 bugs that have not been pinged in a week](https://code.google.com/p/chromium/issues/list?can=2&q=label:Performance-BotHealth%20label:Pri-2%20modified-before:today-7&sort=modified)
 
 ###<a name="datastoppage"></a> Triaging data stoppage alerts
 

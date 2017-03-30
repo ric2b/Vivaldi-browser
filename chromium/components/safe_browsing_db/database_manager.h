@@ -20,7 +20,14 @@
 #include "content/public/common/resource_type.h"
 #include "url/gurl.h"
 
+namespace net {
+class URLRequestContextGetter;
+}  // namespace net
+
 namespace safe_browsing {
+
+struct V4ProtocolConfig;
+class V4GetHashProtocolManager;
 
 // Base class to either the locally-managed or a remotely-managed database.
 class SafeBrowsingDatabaseManager
@@ -49,6 +56,11 @@ class SafeBrowsingDatabaseManager
     // Called when the result of checking the API blacklist is known.
     virtual void OnCheckApiBlacklistUrlResult(const GURL& url,
                                               const std::string& metadata) {}
+
+    // Called when the result of checking the resource blacklist is known.
+    virtual void OnCheckResourceUrlResult(const GURL& url,
+                                          SBThreatType threat_type,
+                                          const std::string& threat_hash) {}
   };
 
 
@@ -90,6 +102,11 @@ class SafeBrowsingDatabaseManager
   virtual bool CheckExtensionIDs(const std::set<std::string>& extension_ids,
                                  Client* client) = 0;
 
+  // Check if |url| is in the resources blacklist. Returns true if not, false
+  // if further checks need to be made in which case the result will be passed
+  // to callback in |client|.
+  virtual bool CheckResourceUrl(const GURL& url, Client* client) = 0;
+
   // Check if the |url| matches any of the full-length hashes from the client-
   // side phishing detection whitelist.  Returns true if there was a match and
   // false otherwise.  To make sure we are conservative we will return true if
@@ -118,6 +135,12 @@ class SafeBrowsingDatabaseManager
   // error occurs.  This method must be called on the IO thread.
   virtual bool MatchInclusionWhitelistUrl(const GURL& url) = 0;
 
+  // Check if |str|, a lowercase DLL file name, matches any of the full-length
+  // hashes from the module whitelist.  Returns true if there was a match and
+  // false otherwise.  To make sure we are conservative we will return true if
+  // an error occurs.  This method must be called on the IO thread.
+  virtual bool MatchModuleWhitelistString(const std::string& str) = 0;
+
   // Check if the CSD malware IP matching kill switch is turned on.
   virtual bool IsMalwareKillSwitchOn() = 0;
 
@@ -135,20 +158,25 @@ class SafeBrowsingDatabaseManager
   // accessing the database at all.
   virtual void CheckApiBlacklistUrl(const GURL& url, Client* client);
 
-  // Called to initialize objects that are used on the io_thread.  This may be
-  // called multiple times during the life of the DatabaseManager. Must be
-  // called on IO thread.
-  virtual void StartOnIOThread() = 0;
+  // Called to initialize objects that are used on the io_thread, such as the
+  // v4 protocol manager.  This may be called multiple times during the life of
+  // the DatabaseManager. Must be called on IO thread.
+  virtual void StartOnIOThread(
+      net::URLRequestContextGetter* request_context_getter,
+      const V4ProtocolConfig& config);
 
-  // Called to stop or shutdown operations on the io_thread. This may be called
-  // multiple times during the life of the DatabaseManager. Must be called
-  // on IO thread. If shutdown is true, the manager is disabled permanently.
-  virtual void StopOnIOThread(bool shutdown) = 0;
+  // Called to stop or shutdown operations on the io_thread.
+  virtual void StopOnIOThread(bool shutdown);
 
  protected:
-  virtual ~SafeBrowsingDatabaseManager() {}
+  SafeBrowsingDatabaseManager();
+
+  virtual ~SafeBrowsingDatabaseManager();
 
   friend class base::RefCountedThreadSafe<SafeBrowsingDatabaseManager>;
+
+  // Created and destroyed via StartonIOThread/StopOnIOThread.
+  V4GetHashProtocolManager* v4_get_hash_protocol_manager_;
 };  // class SafeBrowsingDatabaseManager
 
 }  // namespace safe_browsing

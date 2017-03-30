@@ -17,5 +17,16 @@ addEventListener('notificationclick', function (event) {
   if (event.notification.title == 'action_close')
     event.notification.close();
 
-  messagePort.postMessage(event.notification.title);
+  var message = event.notification.title;
+
+  if (message == 'action_button_click')
+    message += ' ' + event.action;
+
+  messagePort.postMessage(message);
+});
+
+// The notificationclose event will be invoked when a persistent notification
+// has been closed by the user.
+addEventListener('notificationclose', function (event) {
+  messagePort.postMessage('closing notification: ' + event.notification.title);
 });

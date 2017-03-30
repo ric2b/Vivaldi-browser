@@ -51,7 +51,7 @@ const int kPrunedPaths[] = {
   base::DIR_PROGRAM_FILESX86,
   base::DIR_WINDOWS,
 #endif
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MACOSX)
   chrome::DIR_USER_APPLICATIONS,
   chrome::DIR_USER_LIBRARY,
 #endif
@@ -60,9 +60,6 @@ const int kPrunedPaths[] = {
 #endif
 #if defined(OS_WIN) || defined(OS_LINUX)
   base::DIR_TEMP,
-#endif
-#if defined(OS_ANDROID)
-  base::DIR_ANDROID_APP_DATA,
 #endif
 };
 
@@ -173,6 +170,8 @@ void GetDefaultScanRoots(const DefaultScanRootsCallback& callback,
 }  // namespace
 
 MediaFolderFinder::WorkerReply::WorkerReply() {}
+
+MediaFolderFinder::WorkerReply::WorkerReply(const WorkerReply& other) = default;
 
 MediaFolderFinder::WorkerReply::~WorkerReply() {}
 

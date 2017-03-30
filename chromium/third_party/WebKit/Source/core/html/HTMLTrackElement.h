@@ -38,6 +38,7 @@ class LoadableTextTrack;
 
 class HTMLTrackElement final : public HTMLElement, private TextTrackLoaderClient {
     DEFINE_WRAPPERTYPEINFO();
+    USING_GARBAGE_COLLECTED_MIXIN(HTMLTrackElement);
 public:
     DECLARE_NODE_FACTORY(HTMLTrackElement);
 
@@ -50,7 +51,7 @@ public:
         LOADED = 2,
         TRACK_ERROR = 3
     };
-    ReadyState readyState();
+    ReadyState getReadyState();
     void scheduleLoad();
 
     TextTrack* track();

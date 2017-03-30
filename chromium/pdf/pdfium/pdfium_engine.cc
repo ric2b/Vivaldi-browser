@@ -156,14 +156,14 @@ void* MapFont(struct _FPDF_SYSFONTINFO*, int weight, int italic,
   // printing).
   // TODO(noamsml): Real font substitution (http://crbug.com/391978)
   if (!pp::Module::Get())
-    return NULL;
+    return nullptr;
 
   pp::BrowserFontDescription description;
 
   // Pretend the system does not have the Symbol font to force a fallback to
   // the built in Symbol font in CFX_FontMapper::FindSubstFont().
   if (strcmp(face, "Symbol") == 0)
-    return NULL;
+    return nullptr;
 
   if (pitch_family & FXFONT_FF_FIXEDPITCH) {
     description.set_family(PP_BROWSERFONT_TRUSTED_FAMILY_MONOSPACE);
@@ -254,7 +254,7 @@ void* MapFont(struct _FPDF_SYSFONTINFO*, int weight, int italic,
 
   if (!pp::PDF::IsAvailable()) {
     NOTREACHED();
-    return NULL;
+    return nullptr;
   }
 
   PP_Resource font_resource = pp::PDF::GetFontFileWithFallback(
@@ -406,14 +406,14 @@ void FormatStringForOS(base::string16* text) {
 
 // Returns a VarDictionary (representing a bookmark), which in turn contains
 // child VarDictionaries (representing the child bookmarks).
-// If NULL is passed in as the bookmark then we traverse from the "root".
+// If nullptr is passed in as the bookmark then we traverse from the "root".
 // Note that the "root" bookmark contains no useful information.
 pp::VarDictionary TraverseBookmarks(FPDF_DOCUMENT doc,
                                     FPDF_BOOKMARK bookmark,
                                     unsigned int depth) {
   pp::VarDictionary dict;
   base::string16 title;
-  unsigned long buffer_size = FPDFBookmark_GetTitle(bookmark, NULL, 0);
+  unsigned long buffer_size = FPDFBookmark_GetTitle(bookmark, nullptr, 0);
   if (buffer_size > 0) {
     PDFiumAPIStringBufferSizeInBytesAdapter<base::string16> api_string_adapter(
         &title, buffer_size, true);
@@ -427,6 +427,18 @@ pp::VarDictionary TraverseBookmarks(FPDF_DOCUMENT doc,
   if (dest) {
     int page_index = FPDFDest_GetPageIndex(doc, dest);
     dict.Set(pp::Var("page"), pp::Var(page_index));
+  } else {
+    // Extract URI for bookmarks linking to an external page.
+    FPDF_ACTION action = FPDFBookmark_GetAction(bookmark);
+    buffer_size = FPDFAction_GetURIPath(doc, action, nullptr, 0);
+    if (buffer_size > 0) {
+      std::string uri;
+      PDFiumAPIStringBufferAdapter<std::string>
+          api_string_adapter(&uri, buffer_size, true);
+      api_string_adapter.Close(FPDFAction_GetURIPath(
+          doc, action, api_string_adapter.GetData(), buffer_size));
+      dict.Set(pp::Var("uri"), pp::Var(uri));
+    }
   }
 
   pp::VarArray children;
@@ -506,8 +518,8 @@ bool InitializeSDK() {
 }
 
 void ShutdownSDK() {
-  TearDownV8();
   FPDF_DestroyLibrary();
+  TearDownV8();
 }
 
 PDFEngine* PDFEngine::Create(PDFEngine::Client* client) {
@@ -520,8 +532,8 @@ PDFiumEngine::PDFiumEngine(PDFEngine::Client* client)
       current_rotation_(0),
       doc_loader_(this),
       password_tries_remaining_(0),
-      doc_(NULL),
-      form_(NULL),
+      doc_(nullptr),
+      form_(nullptr),
       defer_page_unload_(false),
       selecting_(false),
       mouse_down_state_(PDFiumPage::NONSELECTABLE_AREA,
@@ -531,7 +543,7 @@ PDFiumEngine::PDFiumEngine(PDFEngine::Client* client)
       last_character_index_to_search_(-1),
       permissions_(0),
       permissions_handler_revision_(-1),
-      fpdf_availability_(NULL),
+      fpdf_availability_(nullptr),
       next_timer_id_(0),
       last_page_mouse_down_(-1),
       most_visible_page_(-1),
@@ -560,7 +572,7 @@ PDFiumEngine::PDFiumEngine(PDFEngine::Client* client)
   // PDFiumEngine.
   FPDF_FORMFILLINFO::version = 1;
   FPDF_FORMFILLINFO::m_pJsPlatform = this;
-  FPDF_FORMFILLINFO::Release = NULL;
+  FPDF_FORMFILLINFO::Release = nullptr;
   FPDF_FORMFILLINFO::FFI_Invalidate = Form_Invalidate;
   FPDF_FORMFILLINFO::FFI_OutputSelectedRect = Form_OutputSelectedRect;
   FPDF_FORMFILLINFO::FFI_SetCursor = Form_SetCursor;
@@ -583,6 +595,7 @@ PDFiumEngine::PDFiumEngine(PDFEngine::Client* client)
   FPDF_FORMFILLINFO::FFI_GetCurrentPageIndex = Form_GetCurrentPageIndex;
   FPDF_FORMFILLINFO::FFI_GetPageViewRect = Form_GetPageViewRect;
   FPDF_FORMFILLINFO::FFI_GetPlatform = Form_GetPlatform;
+  FPDF_FORMFILLINFO::FFI_PageEvent = nullptr;
   FPDF_FORMFILLINFO::FFI_PopupMenu = Form_PopupMenu;
   FPDF_FORMFILLINFO::FFI_PostRequestURL = Form_PostRequestURL;
   FPDF_FORMFILLINFO::FFI_PutRequestURL = Form_PutRequestURL;
@@ -604,8 +617,15 @@ PDFiumEngine::PDFiumEngine(PDFEngine::Client* client)
   IPDF_JSPLATFORM::Field_browse = Form_Browse;
 
   IFSDK_PAUSE::version = 1;
-  IFSDK_PAUSE::user = NULL;
+  IFSDK_PAUSE::user = nullptr;
   IFSDK_PAUSE::NeedToPauseNow = Pause_NeedToPauseNow;
+
+#if defined(OS_LINUX)
+  // PreviewModeClient does not know its pp::Instance.
+  pp::Instance* instance = client_->GetPluginInstance();
+  if (instance)
+    g_last_instance_id = instance->pp_instance();
+#endif
 }
 
 PDFiumEngine::~PDFiumEngine() {
@@ -631,79 +651,6 @@ PDFiumEngine::~PDFiumEngine() {
 }
 
 #ifdef PDF_USE_XFA
-
-//  This is just for testing, needs to be removed later
-#if defined(WIN32)
-#define XFA_TESTFILE(filename) "E:/"#filename
-#else
-#define XFA_TESTFILE(filename) "/home/"#filename
-#endif
-
-struct FPDF_FILE {
-  FPDF_FILEHANDLER file_handler;
-  FILE* file;
-};
-
-void Sample_Release(FPDF_LPVOID client_data) {
-  if (!client_data)
-    return;
-  FPDF_FILE* file_wrapper = (FPDF_FILE*)client_data;
-  fclose(file_wrapper->file);
-  delete file_wrapper;
-}
-
-FPDF_DWORD Sample_GetSize(FPDF_LPVOID client_data) {
-  if (!client_data)
-    return 0;
-  FPDF_FILE* file_wrapper = (FPDF_FILE*)client_data;
-  long cur_pos = ftell(file_wrapper->file);
-  if (cur_pos == -1)
-    return 0;
-  if (fseek(file_wrapper->file, 0, SEEK_END))
-    return 0;
-  long size = ftell(file_wrapper->file);
-  fseek(file_wrapper->file, cur_pos, SEEK_SET);
-  return (FPDF_DWORD)size;
-}
-
-FPDF_RESULT Sample_ReadBlock(FPDF_LPVOID client_data,
-                             FPDF_DWORD offset,
-                             FPDF_LPVOID buffer,
-                             FPDF_DWORD size) {
-  if (!client_data)
-    return -1;
-  FPDF_FILE* file_wrapper = (FPDF_FILE*)client_data;
-  if (fseek(file_wrapper->file, (long)offset, SEEK_SET))
-    return -1;
-  size_t read_size = fread(buffer, 1, size, file_wrapper->file);
-  return read_size == size ? 0 : -1;
-}
-
-FPDF_RESULT Sample_WriteBlock(FPDF_LPVOID client_data,
-                              FPDF_DWORD offset,
-                              FPDF_LPCVOID buffer,
-                              FPDF_DWORD size) {
-  if (!client_data)
-    return -1;
-  FPDF_FILE* file_wrapper = (FPDF_FILE*)client_data;
-  if (fseek(file_wrapper->file, (long)offset, SEEK_SET))
-    return -1;
-  // Write data
-  size_t write_size = fwrite(buffer, 1, size, file_wrapper->file);
-  return write_size == size ? 0 : -1;
-}
-
-FPDF_RESULT Sample_Flush(FPDF_LPVOID client_data) {
-  if (!client_data)
-    return -1;
-  // Flush file
-  fflush(((FPDF_FILE*)client_data)->file);
-  return 0;
-}
-
-FPDF_RESULT Sample_Truncate(FPDF_LPVOID client_data, FPDF_DWORD size) {
-  return 0;
-}
 
 void PDFiumEngine::Form_EmailTo(FPDF_FORMFILLINFO* param,
                                 FPDF_FILEHANDLER* file_handler,
@@ -857,47 +804,18 @@ void PDFiumEngine::Form_UploadTo(FPDF_FORMFILLINFO* param,
 
 FPDF_LPFILEHANDLER PDFiumEngine::Form_DownloadFromURL(FPDF_FORMFILLINFO* param,
                                                       FPDF_WIDESTRING url) {
-  std::string url_str =
-      base::UTF16ToUTF8(reinterpret_cast<const base::char16*>(url));
-
-  // Now should get data from url.
-  // For testing purpose, use data read from file
-  // TODO: needs the full implementation here
-  FILE* file = fopen(XFA_TESTFILE("downloadtest.tem"), "w");
-
-  FPDF_FILE* file_wrapper = new FPDF_FILE;
-  file_wrapper->file = file;
-  file_wrapper->file_handler.clientData = file_wrapper;
-  file_wrapper->file_handler.Flush = Sample_Flush;
-  file_wrapper->file_handler.GetSize = Sample_GetSize;
-  file_wrapper->file_handler.ReadBlock = Sample_ReadBlock;
-  file_wrapper->file_handler.Release = Sample_Release;
-  file_wrapper->file_handler.Truncate = Sample_Truncate;
-  file_wrapper->file_handler.WriteBlock = Sample_WriteBlock;
-
-  return &file_wrapper->file_handler;
+  // NOTE: Think hard about the security implications before allowing
+  // a PDF file to perform this action.
+  return nullptr;
 }
 
 FPDF_FILEHANDLER* PDFiumEngine::Form_OpenFile(FPDF_FORMFILLINFO* param,
                                               int file_flag,
                                               FPDF_WIDESTRING url,
                                               const char* mode) {
-  std::string url_str = url ?
-      base::UTF16ToUTF8(reinterpret_cast<const base::char16*>(url)) : "NULL";
-
-  // TODO: need to implement open file from the url
-  // Use a file path for the ease of testing
-  FILE* file = fopen(XFA_TESTFILE("tem.txt"), mode);
-  FPDF_FILE* file_wrapper = new FPDF_FILE;
-  file_wrapper->file = file;
-  file_wrapper->file_handler.clientData = file_wrapper;
-  file_wrapper->file_handler.Flush = Sample_Flush;
-  file_wrapper->file_handler.GetSize = Sample_GetSize;
-  file_wrapper->file_handler.ReadBlock = Sample_ReadBlock;
-  file_wrapper->file_handler.Release = Sample_Release;
-  file_wrapper->file_handler.Truncate = Sample_Truncate;
-  file_wrapper->file_handler.WriteBlock = Sample_WriteBlock;
-  return &file_wrapper->file_handler;
+  // NOTE: Think hard about the security implications before allowing
+  // a PDF file to perform this action.
+  return nullptr;
 }
 
 void PDFiumEngine::Form_GotoURL(FPDF_FORMFILLINFO* param,
@@ -1113,8 +1031,10 @@ std::string PDFiumEngine::GetMetadata(const std::string& key) {
 
 void PDFiumEngine::OnPartialDocumentLoaded() {
   file_access_.m_FileLen = doc_loader_.document_size();
-  fpdf_availability_ = FPDFAvail_Create(&file_availability_, &file_access_);
-  DCHECK(fpdf_availability_);
+  if (!fpdf_availability_) {
+    fpdf_availability_ = FPDFAvail_Create(&file_availability_, &file_access_);
+    DCHECK(fpdf_availability_);
+  }
 
   // Currently engine does not deal efficiently with some non-linearized files.
   // See http://code.google.com/p/chromium/issues/detail?id=59400
@@ -1157,6 +1077,10 @@ void PDFiumEngine::OnNewDataAvailable() {
 void PDFiumEngine::OnDocumentComplete() {
   if (!doc_ || !form_) {
     file_access_.m_FileLen = doc_loader_.document_size();
+    if (!fpdf_availability_) {
+      fpdf_availability_ = FPDFAvail_Create(&file_availability_, &file_access_);
+      DCHECK(fpdf_availability_);
+    }
     LoadDocument();
     return;
   }
@@ -1428,7 +1352,7 @@ pp::Buffer_Dev PDFiumEngine::PrintPagesAsRasterPDF(
     FPDF_CloseDocument(temp_doc);
 
     PDFiumMemBufferFileRead file_read(buffer.data(), buffer.size());
-    temp_doc = FPDF_LoadCustomDocument(&file_read, NULL);
+    temp_doc = FPDF_LoadCustomDocument(&file_read, nullptr);
 
     FPDF_BOOL imported = FPDF_ImportPages(output_doc, temp_doc, "1", i);
     FPDF_CloseDocument(temp_doc);
@@ -2313,7 +2237,7 @@ int PDFiumEngine::GetNumberOfPages() {
 }
 
 pp::VarArray PDFiumEngine::GetBookmarks() {
-  pp::VarDictionary dict = TraverseBookmarks(doc_, NULL, 0);
+  pp::VarDictionary dict = TraverseBookmarks(doc_, nullptr, 0);
   // The root bookmark contains no useful information.
   return pp::VarArray(dict.Get(pp::Var("children")));
 }
@@ -2501,10 +2425,12 @@ bool PDFiumEngine::TryLoadingDoc(bool with_password,
     password_cstr = password.c_str();
     password_tries_remaining_--;
   }
-  if (doc_loader_.IsDocumentComplete())
+  if (doc_loader_.IsDocumentComplete() &&
+      !FPDFAvail_IsLinearized(fpdf_availability_)) {
     doc_ = FPDF_LoadCustomDocument(&file_access_, password_cstr);
-  else
+  } else {
     doc_ = FPDFAvail_GetDocument(fpdf_availability_, password_cstr);
+  }
 
   if (!doc_ && FPDF_GetLastError() == FPDF_ERR_PASSWORD)
     *needs_password = true;
@@ -2701,7 +2627,8 @@ bool PDFiumEngine::CheckPageAvailable(int index, std::vector<int>* pending) {
   if (!doc_ || !form_)
     return false;
 
-  if (static_cast<int>(pages_.size()) > index && pages_[index]->available())
+  const int num_pages = static_cast<int>(pages_.size());
+  if (index < num_pages && pages_[index]->available())
     return true;
 
   if (!FPDFAvail_IsPageAvail(fpdf_availability_, index, &download_hints_)) {
@@ -2716,7 +2643,7 @@ bool PDFiumEngine::CheckPageAvailable(int index, std::vector<int>* pending) {
     return false;
   }
 
-  if (static_cast<int>(pages_.size()) > index)
+  if (index < num_pages)
     pages_[index]->set_available(true);
   if (!default_page_size_.GetArea())
     default_page_size_ = GetPageSize(index);
@@ -2749,7 +2676,7 @@ int PDFiumEngine::StartPaint(int page_index, const pp::Rect& dirty) {
   ProgressivePaint progressive;
   progressive.rect = dirty;
   progressive.page_index = page_index;
-  progressive.bitmap = NULL;
+  progressive.bitmap = nullptr;
   progressive.painted_ = false;
   progressive_paints_.push_back(progressive);
   return progressive_paints_.size() - 1;
@@ -2915,7 +2842,7 @@ void PDFiumEngine::DrawSelections(int progressive_index,
   int page_index = progressive_paints_[progressive_index].page_index;
   pp::Rect dirty_in_screen = progressive_paints_[progressive_index].rect;
 
-  void* region = NULL;
+  void* region = nullptr;
   int stride;
   GetRegion(dirty_in_screen.point(), image_data, &region, &stride);
 
@@ -2980,7 +2907,7 @@ FPDF_BITMAP PDFiumEngine::CreateBitmap(const pp::Rect& rect,
   int stride;
   GetRegion(rect.point(), image_data, &region, &stride);
   if (!region)
-    return NULL;
+    return nullptr;
   return FPDFBitmap_CreateEx(
       rect.width(), rect.height(), FPDFBitmap_BGRx, region, stride);
 }
@@ -3359,7 +3286,7 @@ void PDFiumEngine::GetRegion(const pp::Point& location,
   if (image_data->is_null()) {
     DCHECK(plugin_size_.IsEmpty());
     *stride = 0;
-    *region = NULL;
+    *region = nullptr;
     return;
   }
   char* buffer = static_cast<char*>(image_data->data());
@@ -3369,7 +3296,7 @@ void PDFiumEngine::GetRegion(const pp::Point& location,
   // TODO: update this when we support BIDI and scrollbars can be on the left.
   if (!buffer ||
       !pp::Rect(page_offset_, plugin_size_).Contains(offset_location)) {
-    *region = NULL;
+    *region = nullptr;
     return;
   }
 
@@ -3491,7 +3418,7 @@ FPDF_PAGE PDFiumEngine::Form_GetPage(FPDF_FORMFILLINFO* param,
                                      int page_index) {
   PDFiumEngine* engine = static_cast<PDFiumEngine*>(param);
   if (page_index < 0 || page_index >= static_cast<int>(engine->pages_.size()))
-    return NULL;
+    return nullptr;
   return engine->pages_[page_index]->GetPage();
 }
 
@@ -3504,7 +3431,7 @@ FPDF_PAGE PDFiumEngine::Form_GetCurrentPage(FPDF_FORMFILLINFO* param,
     index = engine->GetMostVisiblePage();
     if (index == -1) {
       NOTREACHED();
-      return NULL;
+      return nullptr;
     }
   }
 
@@ -3808,7 +3735,7 @@ bool PDFiumEngineExports::RenderPDFPageToDC(const void* pdf_buffer,
                                             int page_number,
                                             const RenderingSettings& settings,
                                             HDC dc) {
-  FPDF_DOCUMENT doc = FPDF_LoadMemDocument(pdf_buffer, buffer_size, NULL);
+  FPDF_DOCUMENT doc = FPDF_LoadMemDocument(pdf_buffer, buffer_size, nullptr);
   if (!doc)
     return false;
   FPDF_PAGE page = FPDF_LoadPage(doc, page_number);
@@ -3880,7 +3807,8 @@ bool PDFiumEngineExports::RenderPDFPageToBitmap(
     int page_number,
     const RenderingSettings& settings,
     void* bitmap_buffer) {
-  FPDF_DOCUMENT doc = FPDF_LoadMemDocument(pdf_buffer, pdf_buffer_size, NULL);
+  FPDF_DOCUMENT doc =
+      FPDF_LoadMemDocument(pdf_buffer, pdf_buffer_size, nullptr);
   if (!doc)
     return false;
   FPDF_PAGE page = FPDF_LoadPage(doc, page_number);
@@ -3914,7 +3842,7 @@ bool PDFiumEngineExports::GetPDFDocInfo(const void* pdf_buffer,
                                         int buffer_size,
                                         int* page_count,
                                         double* max_page_width) {
-  FPDF_DOCUMENT doc = FPDF_LoadMemDocument(pdf_buffer, buffer_size, NULL);
+  FPDF_DOCUMENT doc = FPDF_LoadMemDocument(pdf_buffer, buffer_size, nullptr);
   if (!doc)
     return false;
   int page_count_local = FPDF_GetPageCount(doc);
@@ -3942,7 +3870,8 @@ bool PDFiumEngineExports::GetPDFPageSizeByIndex(
     int page_number,
     double* width,
     double* height) {
-  FPDF_DOCUMENT doc = FPDF_LoadMemDocument(pdf_buffer, pdf_buffer_size, NULL);
+  FPDF_DOCUMENT doc =
+      FPDF_LoadMemDocument(pdf_buffer, pdf_buffer_size, nullptr);
   if (!doc)
     return false;
   bool success = FPDF_GetPageSizeByIndex(doc, page_number, width, height) != 0;

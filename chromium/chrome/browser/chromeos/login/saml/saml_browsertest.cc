@@ -42,7 +42,7 @@
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/policy/test/local_policy_test_server.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/webui/signin/inline_login_ui.h"
+#include "chrome/browser/ui/webui/signin/get_auth_frame.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -82,7 +82,6 @@
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/base/url_util.h"
 #include "net/cookies/canonical_cookie.h"
-#include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_store.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -318,6 +317,8 @@ class SamlTest : public OobeBaseTest {
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(switches::kOobeSkipPostLogin);
+    command_line->AppendSwitch(
+        chromeos::switches::kAllowFailedPolicyFetchForTest);
 
     const GURL gaia_url = gaia_https_forwarder_.GetURLForSSLHost("");
     const GURL saml_idp_url = saml_https_forwarder_.GetURLForSSLHost("SAML");
@@ -867,8 +868,8 @@ guest_view::TestGuestViewManager* SAMLEnrollmentTest::GetGuestViewManager() {
 }
 
 content::WebContents* SAMLEnrollmentTest::GetEnrollmentContents() {
-  content::RenderFrameHost* frame_host = InlineLoginUI::GetAuthFrame(
-      GetLoginUI()->GetWebContents(), GURL(), gaia_frame_parent_);
+  content::RenderFrameHost* frame_host =
+      signin::GetAuthFrame(GetLoginUI()->GetWebContents(), gaia_frame_parent_);
   if (!frame_host)
     return nullptr;
   return content::WebContents::FromRenderFrameHost(frame_host);
@@ -1092,11 +1093,9 @@ void SAMLPolicyTest::GetCookies() {
 void SAMLPolicyTest::GetCookiesOnIOThread(
     const scoped_refptr<net::URLRequestContextGetter>& request_context,
     const base::Closure& callback) {
-  request_context->GetURLRequestContext()->cookie_store()->
-      GetCookieMonster()->GetAllCookiesAsync(base::Bind(
-          &SAMLPolicyTest::StoreCookieList,
-          base::Unretained(this),
-          callback));
+  request_context->GetURLRequestContext()->cookie_store()->GetAllCookiesAsync(
+      base::Bind(&SAMLPolicyTest::StoreCookieList, base::Unretained(this),
+                 callback));
 }
 
 void SAMLPolicyTest::StoreCookieList(

@@ -10,7 +10,9 @@ group("all") {
 
   deps = [
     ":tests",
+    "//components/leveldb",
     "//mash/example",
+    "//mash/screenlock",
     "//mash/shell",
     "//mash/task_viewer",
   ]

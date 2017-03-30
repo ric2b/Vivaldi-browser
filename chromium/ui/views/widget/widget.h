@@ -202,6 +202,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
     InitParams();
     explicit InitParams(Type type);
+    InitParams(const InitParams& other);
     ~InitParams();
 
     Type type;
@@ -209,13 +210,12 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
     WidgetDelegate* delegate;
     bool child;
     // If TRANSLUCENT_WINDOW, the widget may be fully or partially transparent.
-    // Translucent windows may not always be supported. Use
-    // IsTranslucentWindowOpacitySupported to determine if translucent windows
-    // are supported.
     // If OPAQUE_WINDOW, we can perform optimizations based on the widget being
-    // fully opaque.  Defaults to TRANSLUCENT_WINDOW if
-    // ViewsDelegate::UseTransparentWindows().  Defaults to OPAQUE_WINDOW for
-    // non-window widgets.
+    // fully opaque.
+    // Default is based on ViewsDelegate::GetOpacityForInitParams().  Defaults
+    // to OPAQUE_WINDOW for non-window widgets.
+    // Translucent windows may not always be supported. Use
+    // IsTranslucentWindowOpacitySupported to determine whether they are.
     WindowOpacity opacity;
     bool accept_events;
     Activatable activatable;
@@ -242,8 +242,6 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
     // When set, this value is used as the Widget's NativeWidget implementation.
     // The Widget will not construct a default one. Default is NULL.
     NativeWidget* native_widget;
-    // If provided, sets the native theme for this widget.
-    ui::NativeTheme* native_theme;
     // Aura-only. Provides a DesktopWindowTreeHost implementation to use instead
     // of the default one.
     // TODO(beng): Figure out if there's a better way to expose this, e.g. get
@@ -276,6 +274,10 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
     // If true then the widget uses software compositing. Defaults to false.
     // Only used on Windows.
     bool force_software_compositing;
+
+    // Used if widget is not activatable to do determine if mouse events should
+    // be sent to the widget.
+    bool wants_mouse_events_when_inactive = false;
   };
 
   Widget();
@@ -568,7 +570,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
     return const_cast<ui::NativeTheme*>(
         const_cast<const Widget*>(this)->GetNativeTheme());
   }
-  const ui::NativeTheme* GetNativeTheme() const;
+  virtual const ui::NativeTheme* GetNativeTheme() const;
 
   // Returns the FocusManager for this widget.
   // Note that all widgets in a widget hierarchy share the same focus manager.
@@ -843,6 +845,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
  private:
   friend class ComboboxTest;
+  friend class CustomButtonTest;
   friend class TextfieldTest;
 
   // Sets the value of |disable_inactive_rendering_|. If the value changes,
@@ -870,10 +873,6 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
                                ui::WindowShowState* show_state);
 
   internal::NativeWidgetPrivate* native_widget_;
-
-  // If non-null, the native theme for this widget. Otherwise the native theme
-  // comes from |native_widget_|.
-  ui::NativeTheme* native_theme_;
 
   base::ObserverList<WidgetObserver> observers_;
 

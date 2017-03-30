@@ -144,7 +144,7 @@ void SliderThumbElement::setPositionFromPoint(const LayoutPoint& point)
         position -= isLeftToRightDirection ? layoutBox()->marginLeft() : layoutBox()->marginRight();
         currentPosition = absoluteThumbOrigin.x() - absoluteSliderContentOrigin.x();
     }
-    position = std::max<LayoutUnit>(0, std::min(position, trackSize));
+    position = std::min(position, trackSize).clampNegativeToZero();
     const Decimal ratio = Decimal::fromDouble(static_cast<double>(position) / trackSize);
     const Decimal fraction = isVertical || !isLeftToRightDirection ? Decimal(1) - ratio : ratio;
     StepRange stepRange(input->createStepRange(RejectAny));
@@ -154,8 +154,8 @@ void SliderThumbElement::setPositionFromPoint(const LayoutPoint& point)
     if (closest.isFinite()) {
         double closestFraction = stepRange.proportionFromValue(closest).toDouble();
         double closestRatio = isVertical || !isLeftToRightDirection ? 1.0 - closestFraction : closestFraction;
-        LayoutUnit closestPosition = trackSize * closestRatio;
-        const LayoutUnit snappingThreshold = 5;
+        LayoutUnit closestPosition(trackSize * closestRatio);
+        const LayoutUnit snappingThreshold(5);
         if ((closestPosition - position).abs() <= snappingThreshold)
             value = closest;
     }
@@ -332,4 +332,4 @@ const AtomicString& SliderContainerElement::shadowPseudoId() const
     }
 }
 
-}
+} // namespace blink

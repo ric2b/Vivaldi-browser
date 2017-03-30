@@ -204,6 +204,19 @@ PlatformGestureEventBuilder::PlatformGestureEventBuilder(Widget* widget, const W
         m_data.m_scroll.m_velocityY = e.data.scrollUpdate.velocityY;
         m_data.m_scroll.m_preventPropagation = e.data.scrollUpdate.preventPropagation;
         m_data.m_scroll.m_inertial = e.data.scrollUpdate.inertial;
+        switch (e.data.scrollUpdate.deltaUnits) {
+        case WebGestureEvent::ScrollUnits::PrecisePixels:
+            m_data.m_scroll.m_deltaUnits = ScrollGranularity::ScrollByPrecisePixel;
+            break;
+        case WebGestureEvent::ScrollUnits::Pixels:
+            m_data.m_scroll.m_deltaUnits = ScrollGranularity::ScrollByPixel;
+            break;
+        case WebGestureEvent::ScrollUnits::Page:
+            m_data.m_scroll.m_deltaUnits = ScrollGranularity::ScrollByPage;
+            break;
+        default:
+            ASSERT_NOT_REACHED();
+        }
         break;
     case WebInputEvent::GestureTap:
         m_type = PlatformEvent::GestureTap;
@@ -410,7 +423,7 @@ PlatformTouchEventBuilder::PlatformTouchEventBuilder(Widget* widget, const WebTo
     m_type = toPlatformTouchEventType(event.type);
     m_modifiers = event.modifiers;
     m_timestamp = event.timeStampSeconds;
-    m_causesScrollingIfUncanceled = event.causesScrollingIfUncanceled;
+    m_causesScrollingIfUncanceled = event.movedBeyondSlopRegion;
 
     for (unsigned i = 0; i < event.touchesLength; ++i)
         m_touchPoints.append(PlatformTouchPointBuilder(widget, event.touches[i]));
@@ -559,7 +572,7 @@ WebMouseWheelEventBuilder::WebMouseWheelEventBuilder(const Widget* widget, const
     scrollByPage = event.deltaMode() == WheelEvent::DOM_DELTA_PAGE;
     canScroll = event.canScroll();
     resendingPluginId = event.resendingPluginId();
-    railsMode = static_cast<RailsMode>(event.railsMode());
+    railsMode = static_cast<RailsMode>(event.getRailsMode());
     hasPreciseScrollingDeltas = event.hasPreciseScrollingDeltas();
 }
 
@@ -671,7 +684,7 @@ WebTouchEventBuilder::WebTouchEventBuilder(const LayoutObject* layoutObject, con
     timeStampSeconds = event.platformTimeStamp();
     modifiers = event.modifiers();
     cancelable = event.cancelable();
-    causesScrollingIfUncanceled = event.causesScrollingIfUncanceled();
+    movedBeyondSlopRegion = event.causesScrollingIfUncanceled();
 
     // Currently touches[] is empty, add stationary points as-is.
     for (unsigned i = 0; i < event.touches()->length() && i < static_cast<unsigned>(WebTouchEvent::touchesLengthCap); ++i) {

@@ -1,0 +1,142 @@
+<link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-checkbox/paper-checkbox.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/shadow.html">
+<link rel="import" href="chrome://resources/html/util.html">
+<link rel="import" href="chrome://history/shared_style.html">
+
+<dom-module id="history-item">
+  <template>
+    <style include="shared-style"></style>
+    <style>
+      :host {
+        @apply(--layout-center);
+        @apply(--layout-vertical);
+        padding: 0 24px;
+      }
+
+      #main-container {
+        background: #fff;
+        border-color: var(--card-border-color);
+        border-style: solid;
+        border-width: 0 1px;
+        max-width: var(--card-max-width);
+        min-width: var(--card-min-width);
+        width: 100%;
+      }
+
+      :host([is-card-start]) #main-container {
+        border-top-width: 1px;
+        margin-top: 20px;
+      }
+
+      :host([is-card-end]) #main-container {
+        border-bottom-width: 2px;
+      }
+
+      #date-accessed {
+        display: none;
+      }
+
+      :host([is-card-start]) #date-accessed {
+        display: flex;
+      }
+
+      #item-container {
+        @apply(--layout-center);
+        @apply(--layout-horizontal);
+        min-height: 40px;
+      }
+
+      :host([is-card-start]) #item-container {
+        padding-top: 8px;
+      }
+
+      :host([is-card-end]) #item-container {
+        padding-bottom: 8px;
+      }
+
+      #title-and-domain {
+        @apply(--layout-center);
+        @apply(--layout-flex);
+        @apply(--layout-horizontal);
+        min-height: 40px;
+        overflow: hidden;
+      }
+
+      paper-checkbox {
+        --paper-checkbox-checked-color: rgb(68, 136, 255);
+        --paper-checkbox-size: 16px;
+        --paper-checkbox-unchecked-color: #969696;
+        height: 16px;
+        margin: 0 16px 0 20px;
+        padding: 2px;
+        width: 16px;
+      }
+
+      #time-accessed {
+        color: #646464;
+        min-width: 96px;
+      }
+
+      #domain {
+        -webkit-margin-start: 16px;
+        color: #969696;
+        flex-shrink: 0;
+      }
+
+      #menu-button {
+        -webkit-margin-end: 12px;
+        -webkit-margin-start: 2px;
+        color: #969696;
+        height: 36px;
+        min-width: 36px;
+        width: 36px;
+      }
+
+      #bookmark-star {
+        --iron-icon-height: 16px;
+        --iron-icon-width: 16px;
+        -webkit-margin-end: 10px;
+        -webkit-margin-start: 20px;
+        color: rgb(68, 136, 255);
+        min-width: 16px;
+        visibility: hidden;
+      }
+
+      #time-gap-separator {
+        -webkit-border-start: 1px solid #888;
+        -webkit-margin-start: 77px;
+        height: 15px;
+      }
+    </style>
+    <div id="main-container">
+      <div id="date-accessed" class="card-title">[[historyDate]]</div>
+      <div id="item-container">
+        <paper-checkbox id="checkbox" on-tap="onCheckboxSelected_"
+            checked="{{selected}}" disabled="[[selectionNotAllowed_()]]">
+        </paper-checkbox>
+        <span id="time-accessed">{{timeAccessed}}</span>
+        <div class="website-icon" id="icon"></div>
+        <div id="title-and-domain">
+          <a href$="{{websiteUrl}}" id="title" class="website-title">
+            {{websiteTitle}}
+          </a>
+          <span id="domain">{{websiteDomain}}</span>
+        </div>
+        <iron-icon icon="star" id="bookmark-star"></iron-icon>
+        <paper-icon-button icon="more-vert" id="menu-button"
+            on-tap="onMenuButtonTap_">
+        </paper-icon-button>
+      </div>
+      <template is="dom-if" if="{{hasTimeGap}}">
+        <div id="time-gap-separator"></div>
+      </template>
+    </div>
+  </template>
+  <script src="chrome://history/history_item.js"></script>
+</dom-module>

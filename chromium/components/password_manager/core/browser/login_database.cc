@@ -31,6 +31,7 @@
 #include "sql/connection.h"
 #include "sql/statement.h"
 #include "sql/transaction.h"
+#include "url/origin.h"
 #include "url/url_constants.h"
 
 using autofill::PasswordForm;
@@ -38,7 +39,7 @@ using autofill::PasswordForm;
 namespace password_manager {
 
 // The current version number of the login database schema.
-const int kCurrentVersionNumber = 16;
+const int kCurrentVersionNumber = 17;
 // The oldest version of the schema such that a legacy Chrome client using that
 // version can still read/write the current database.
 const int kCompatibleVersionNumber = 14;
@@ -140,7 +141,11 @@ void BindAddStatement(const PasswordForm& form,
   s->BindInt64(COLUMN_DATE_SYNCED, form.date_synced.ToInternalValue());
   s->BindString16(COLUMN_DISPLAY_NAME, form.display_name);
   s->BindString(COLUMN_ICON_URL, form.icon_url.spec());
-  s->BindString(COLUMN_FEDERATION_URL, form.federation_url.spec());
+  // An empty Origin serializes as "null" which would be strange to store here.
+  s->BindString(COLUMN_FEDERATION_URL,
+                form.federation_origin.unique()
+                    ? std::string()
+                    : form.federation_origin.Serialize());
   s->BindInt(COLUMN_SKIP_ZERO_CLICK, form.skip_zero_click);
   s->BindInt(COLUMN_GENERATION_UPLOAD_STATUS, form.generation_upload_status);
 }
@@ -618,6 +623,13 @@ bool LoginDatabase::MigrateOldVersionsAsNeeded() {
       // Recreate the statistics.
       if (!stats_table_.MigrateToVersion(16))
         return false;
+    case 16: {
+      // No change in scheme: just disable auto sign-in by default in
+      // preparation to launch the credential management API.
+      if (!db_.Execute("UPDATE logins SET skip_zero_click = 1"))
+        return false;
+      // Fall through.
+    }
 
     // -------------------------------------------------------------------------
     // DO NOT FORGET to update |kCompatibleVersionNumber| if you add a migration
@@ -933,7 +945,10 @@ PasswordStoreChangeList LoginDatabase::UpdateLogin(const PasswordForm& form) {
   s.BindInt(11, form.type);
   s.BindString16(12, form.display_name);
   s.BindString(13, form.icon_url.spec());
-  s.BindString(14, form.federation_url.spec());
+  // An empty Origin serializes as "null" which would be strange to store here.
+  s.BindString(14, form.federation_origin.unique()
+                       ? std::string()
+                       : form.federation_origin.Serialize());
   s.BindInt(15, form.skip_zero_click);
   s.BindInt(16, form.generation_upload_status);
 
@@ -1016,6 +1031,29 @@ bool LoginDatabase::RemoveLoginsSyncedBetween(base::Time delete_begin,
   return s.Run();
 }
 
+bool LoginDatabase::GetAutoSignInLogins(
+    ScopedVector<autofill::PasswordForm>* forms) const {
+  DCHECK(forms);
+  sql::Statement s(db_.GetCachedStatement(
+      SQL_FROM_HERE,
+      "SELECT origin_url, action_url, username_element, username_value, "
+      "password_element, password_value, submit_element, signon_realm, "
+      "ssl_valid, preferred, date_created, blacklisted_by_user, "
+      "scheme, password_type, possible_usernames, times_used, form_data, "
+      "date_synced, display_name, icon_url, "
+      "federation_url, skip_zero_click, generation_upload_status FROM logins "
+      "WHERE skip_zero_click = 0 ORDER BY origin_url"));
+
+  return StatementToForms(&s, nullptr, forms);
+}
+
+bool LoginDatabase::DisableAutoSignInForAllLogins() {
+  sql::Statement s(db_.GetCachedStatement(
+      SQL_FROM_HERE, "UPDATE logins SET skip_zero_click = 1;"));
+
+  return s.Run();
+}
+
 // static
 LoginDatabase::EncryptionResult LoginDatabase::InitPasswordFormFromStatement(
     PasswordForm* form,
@@ -1049,7 +1087,7 @@ LoginDatabase::EncryptionResult LoginDatabase::InitPasswordFormFromStatement(
   DCHECK_GE(PasswordForm::SCHEME_LAST, scheme_int);
   form->scheme = static_cast<PasswordForm::Scheme>(scheme_int);
   int type_int = s.ColumnInt(COLUMN_PASSWORD_TYPE);
-  DCHECK(type_int >= 0 && type_int <= PasswordForm::TYPE_GENERATED);
+  DCHECK(type_int >= 0 && type_int <= PasswordForm::TYPE_LAST) << type_int;
   form->type = static_cast<PasswordForm::Type>(type_int);
   if (s.ColumnByteLength(COLUMN_POSSIBLE_USERNAMES)) {
     base::Pickle pickle(
@@ -1074,7 +1112,8 @@ LoginDatabase::EncryptionResult LoginDatabase::InitPasswordFormFromStatement(
       base::Time::FromInternalValue(s.ColumnInt64(COLUMN_DATE_SYNCED));
   form->display_name = s.ColumnString16(COLUMN_DISPLAY_NAME);
   form->icon_url = GURL(s.ColumnString(COLUMN_ICON_URL));
-  form->federation_url = GURL(s.ColumnString(COLUMN_FEDERATION_URL));
+  form->federation_origin =
+      url::Origin(GURL(s.ColumnString(COLUMN_FEDERATION_URL)));
   form->skip_zero_click = (s.ColumnInt(COLUMN_SKIP_ZERO_CLICK) > 0);
   int generation_upload_status_int =
       s.ColumnInt(COLUMN_GENERATION_UPLOAD_STATUS);
@@ -1091,7 +1130,7 @@ bool LoginDatabase::GetLogins(
     ScopedVector<autofill::PasswordForm>* forms) const {
   DCHECK(forms);
   // You *must* change LoginTableColumns if this query changes.
-  const std::string sql_query =
+  std::string sql_query =
       "SELECT origin_url, action_url, "
       "username_element, username_value, "
       "password_element, password_value, submit_element, "
@@ -1100,12 +1139,23 @@ bool LoginDatabase::GetLogins(
       "date_synced, display_name, icon_url, "
       "federation_url, skip_zero_click, generation_upload_status "
       "FROM logins WHERE signon_realm == ? ";
-  sql::Statement s;
   const GURL signon_realm(form.signon_realm);
   std::string registered_domain = GetRegistryControlledDomain(signon_realm);
   const bool should_PSL_matching_apply =
       form.scheme == PasswordForm::SCHEME_HTML &&
       ShouldPSLDomainMatchingApply(registered_domain);
+  const bool should_federated_apply = form.scheme == PasswordForm::SCHEME_HTML;
+  if (should_PSL_matching_apply)
+    sql_query += "OR signon_realm REGEXP ? ";
+  if (should_federated_apply)
+    sql_query += "OR (signon_realm LIKE ? AND password_type == 2) ";
+
+  // TODO(nyquist) Consider usage of GetCachedStatement when
+  // http://crbug.com/248608 is fixed.
+  sql::Statement s(db_.GetUniqueStatement(sql_query.c_str()));
+  s.BindString(0, form.signon_realm);
+  int placeholder = 1;
+
   // PSL matching only applies to HTML forms.
   if (should_PSL_matching_apply) {
     // We are extending the original SQL query with one that includes more
@@ -1114,11 +1164,6 @@ bool LoginDatabase::GetLogins(
     // in the |logins| table. The result (scheme, domain and port) is verified
     // further down using GURL. See the functions SchemeMatches,
     // RegistryControlledDomainMatches and PortMatches.
-    const std::string extended_sql_query =
-        sql_query + "OR signon_realm REGEXP ? ";
-    // TODO(nyquist) Re-enable usage of GetCachedStatement when
-    // http://crbug.com/248608 is fixed.
-    s.Assign(db_.GetUniqueStatement(extended_sql_query.c_str()));
     // We need to escape . in the domain. Since the domain has already been
     // sanitized using GURL, we do not need to escape any other characters.
     base::ReplaceChars(registered_domain, ".", "\\.", &registered_domain);
@@ -1134,18 +1179,24 @@ bool LoginDatabase::GetLogins(
     // The scheme and port has to be the same as the observed form.
     std::string regexp = "^(" + scheme + ":\\/\\/)([\\w-]+\\.)*" +
                          registered_domain + "(:" + port + ")?\\/$";
-    s.BindString(0, form.signon_realm);
-    s.BindString(1, regexp);
-  } else {
+    s.BindString(placeholder++, regexp);
+  }
+  if (should_federated_apply) {
+    std::string expression =
+        base::StringPrintf("federation://%s/%%", form.origin.host().c_str());
+    s.BindString(placeholder++, expression);
+  }
+
+  if (!should_PSL_matching_apply && !should_federated_apply) {
+    // Otherwise the histogram is reported in StatementToForms.
     UMA_HISTOGRAM_ENUMERATION("PasswordManager.PslDomainMatchTriggering",
                               PSL_DOMAIN_MATCH_NOT_USED,
                               PSL_DOMAIN_MATCH_COUNT);
-    s.Assign(db_.GetCachedStatement(SQL_FROM_HERE, sql_query.c_str()));
-    s.BindString(0, form.signon_realm);
   }
 
-  return StatementToForms(&s, should_PSL_matching_apply ? &form : nullptr,
-                          forms);
+  return StatementToForms(
+      &s, should_PSL_matching_apply || should_federated_apply ? &form : nullptr,
+      forms);
 }
 
 bool LoginDatabase::GetLoginsCreatedBetween(
@@ -1261,7 +1312,7 @@ std::string LoginDatabase::GetEncryptedPassword(
 // static
 bool LoginDatabase::StatementToForms(
     sql::Statement* statement,
-    const autofill::PasswordForm* psl_match,
+    const autofill::PasswordForm* matched_form,
     ScopedVector<autofill::PasswordForm>* forms) {
   PSLDomainMatchMetric psl_domain_match_metric = PSL_DOMAIN_MATCH_NONE;
 
@@ -1274,23 +1325,26 @@ bool LoginDatabase::StatementToForms(
       return false;
     if (result == ENCRYPTION_RESULT_ITEM_FAILURE)
       continue;
-    DCHECK(result == ENCRYPTION_RESULT_SUCCESS);
-    if (psl_match && psl_match->signon_realm != new_form->signon_realm) {
+    DCHECK_EQ(ENCRYPTION_RESULT_SUCCESS, result);
+    if (matched_form && matched_form->signon_realm != new_form->signon_realm) {
       if (new_form->scheme != PasswordForm::SCHEME_HTML)
         continue;  // Ignore non-HTML matches.
 
-      if (!IsPublicSuffixDomainMatch(new_form->signon_realm,
-                                     psl_match->signon_realm)) {
+      if (IsPublicSuffixDomainMatch(new_form->signon_realm,
+                                    matched_form->signon_realm)) {
+        psl_domain_match_metric = PSL_DOMAIN_MATCH_FOUND;
+        new_form->is_public_suffix_match = true;
+      } else if (!new_form->federation_origin.unique() &&
+                 IsFederatedMatch(new_form->signon_realm,
+                                  matched_form->origin)) {
+      } else {
         continue;
       }
-
-      psl_domain_match_metric = PSL_DOMAIN_MATCH_FOUND;
-      new_form->is_public_suffix_match = true;
     }
     forms->push_back(std::move(new_form));
   }
 
-  if (psl_match) {
+  if (matched_form) {
     UMA_HISTOGRAM_ENUMERATION("PasswordManager.PslDomainMatchTriggering",
                               psl_domain_match_metric, PSL_DOMAIN_MATCH_COUNT);
   }

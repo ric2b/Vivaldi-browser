@@ -613,7 +613,6 @@ void SchedulerStateMachine::WillCommit(bool commit_has_no_updates) {
       forced_redraw_state_ == FORCED_REDRAW_STATE_WAITING_FOR_DRAW) {
     DCHECK(!has_pending_tree_);
     needs_redraw_ = true;
-    active_tree_needs_first_draw_ = true;
   }
 
   // This post-commit work is common to both completed and aborted commits.
@@ -643,6 +642,13 @@ void SchedulerStateMachine::WillActivate() {
 }
 
 void SchedulerStateMachine::WillDrawInternal() {
+  // If a new active tree is pending after the one we are about to draw,
+  // the main thread is in a high latency mode.
+  // main_thread_missed_last_deadline_ is here in addition to
+  // OnBeginImplFrameIdle for cases where the scheduler aborts draws outside
+  // of the deadline.
+  main_thread_missed_last_deadline_ = CommitPending() || has_pending_tree_;
+
   // We need to reset needs_redraw_ before we draw since the
   // draw itself might request another draw.
   needs_redraw_ = false;
@@ -953,10 +959,6 @@ bool SchedulerStateMachine::ShouldTriggerBeginImplFrameDeadlineImmediately()
   return false;
 }
 
-bool SchedulerStateMachine::main_thread_missed_last_deadline() const {
-  return main_thread_missed_last_deadline_;
-}
-
 bool SchedulerStateMachine::SwapThrottled() const {
   return pending_swaps_ >= kMaxPendingSwaps;
 }
@@ -1003,7 +1005,8 @@ void SchedulerStateMachine::SetNeedsPrepareTiles() {
   }
 }
 void SchedulerStateMachine::DidSwapBuffers() {
-  TRACE_EVENT_ASYNC_BEGIN0("cc", "Scheduler:pending_swaps", this);
+  TRACE_EVENT_ASYNC_BEGIN1("cc", "Scheduler:pending_swaps", this,
+                           "pending_frames", pending_swaps_);
   DCHECK_LT(pending_swaps_, kMaxPendingSwaps);
 
   pending_swaps_++;
@@ -1014,7 +1017,8 @@ void SchedulerStateMachine::DidSwapBuffers() {
 }
 
 void SchedulerStateMachine::DidSwapBuffersComplete() {
-  TRACE_EVENT_ASYNC_END0("cc", "Scheduler:pending_swaps", this);
+  TRACE_EVENT_ASYNC_END1("cc", "Scheduler:pending_swaps", this,
+                         "pending_frames", pending_swaps_);
   pending_swaps_--;
 }
 
@@ -1066,6 +1070,11 @@ void SchedulerStateMachine::NotifyReadyToCommit() {
 
 void SchedulerStateMachine::BeginMainFrameAborted(CommitEarlyOutReason reason) {
   DCHECK_EQ(begin_main_frame_state_, BEGIN_MAIN_FRAME_STATE_STARTED);
+
+  // If the main thread aborted, it doesn't matter if the  main thread missed
+  // the last deadline since it didn't have an update anyway.
+  main_thread_missed_last_deadline_ = false;
+
   switch (reason) {
     case CommitEarlyOutReason::ABORTED_OUTPUT_SURFACE_LOST:
     case CommitEarlyOutReason::ABORTED_NOT_VISIBLE:

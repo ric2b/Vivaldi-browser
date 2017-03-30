@@ -166,20 +166,23 @@ _BANNED_CPP_FUNCTIONS = (
       (
         r"^base[\\\/]process[\\\/]process_linux\.cc$",
         r"^base[\\\/]process[\\\/]process_metrics_linux\.cc$",
-        r"^blimp[\\\/]engine[\\\/]browser[\\\/]blimp_browser_main_parts\.cc$",
+        r"^blimp[\\\/]engine[\\\/]app[\\\/]blimp_browser_main_parts\.cc$",
         r"^chrome[\\\/]browser[\\\/]chromeos[\\\/]boot_times_recorder\.cc$",
         r"^chrome[\\\/]browser[\\\/]chromeos[\\\/]"
             "customization_document_browsertest\.cc$",
         r"^components[\\\/]crash[\\\/]app[\\\/]breakpad_mac\.mm$",
+        r"^content[\\\/]shell[\\\/]browser[\\\/]layout_test[\\\/]" +
+            r"test_info_extractor\.cc$",
         r"^content[\\\/]shell[\\\/]browser[\\\/]shell_browser_main\.cc$",
         r"^content[\\\/]shell[\\\/]browser[\\\/]shell_message_filter\.cc$",
         r"^mojo[\\\/]edk[\\\/]embedder[\\\/]" +
             r"simple_platform_shared_buffer_posix\.cc$",
         r"^net[\\\/]disk_cache[\\\/]cache_util\.cc$",
         r"^net[\\\/]url_request[\\\/]test_url_fetcher_factory\.cc$",
-        r"^remoting[\\\/]host[\\\/]gnubby_auth_handler_posix\.cc$",
+        r"^remoting[\\\/]host[\\\/]security_key[\\\/]"
+            "gnubby_auth_handler_linux\.cc$",
         r"^ui[\\\/]ozone[\\\/]platform[\\\/]drm[\\\/]host[\\\/]"
-            "drm_display_host_manager_core\.cc$",
+            "drm_display_host_manager\.cc$",
       ),
     ),
     (
@@ -982,7 +985,11 @@ def _CheckAddedDepsHaveTargetApprovals(input_api, output_api):
   introduced. This check verifies that this happens.
   """
   changed_lines = set()
-  for f in input_api.AffectedFiles():
+
+  file_filter = lambda f: not input_api.re.match(
+      r"^third_party[\\\/]WebKit[\\\/].*", f.LocalPath())
+  for f in input_api.AffectedFiles(include_deletes=False,
+                                   file_filter=file_filter):
     filename = input_api.os_path.basename(f.LocalPath())
     if filename == 'DEPS':
       changed_lines |= set(line.strip()
@@ -1081,6 +1088,7 @@ def _CheckSpamLogging(input_api, output_api):
                  r"^sandbox[\\\/]linux[\\\/].*",
                  r"^tools[\\\/]",
                  r"^ui[\\\/]aura[\\\/]bench[\\\/]bench_main\.cc$",
+                 r"^ui[\\\/]ozone[\\\/]platform[\\\/]cast[\\\/]",
                  r"^storage[\\\/]browser[\\\/]fileapi[\\\/]" +
                      r"dump_file_system.cc$",))
   source_file_filter = lambda x: input_api.FilterSourceFile(
@@ -1539,6 +1547,26 @@ def _CheckSingletonInHeaders(input_api, output_api):
   return []
 
 
+def _CheckNoDeprecatedCompiledResourcesGYP(input_api, output_api):
+  """Checks for old style compiled_resources.gyp files."""
+  is_compiled_resource = lambda fp: fp.endswith('compiled_resources.gyp')
+
+  added_compiled_resources = filter(is_compiled_resource, [
+    f.LocalPath() for f in input_api.AffectedFiles() if f.Action() == 'A'
+  ])
+
+  if not added_compiled_resources:
+    return []
+
+  return [output_api.PresubmitError(
+      "Found new compiled_resources.gyp files:\n%s\n\n"
+      "compiled_resources.gyp files are deprecated,\n"
+      "please use compiled_resources2.gyp instead:\n"
+      "https://chromium.googlesource.com/chromium/src/+/master/docs/closure_compilation.md"
+      %
+      "\n".join(added_compiled_resources))]
+
+
 _DEPRECATED_CSS = [
   # Values
   ( "-webkit-box", "flex" ),
@@ -1578,6 +1606,7 @@ def _CheckNoDeprecatedCSS(input_api, output_api):
                  r"^chrome/docs",
                  r"^components/dom_distiller/core/css/distilledpage_ios.css",
                  r"^components/flags_ui/resources/apple_flags.css",
+                 r"^components/neterror/resources/neterror.css",
                  r"^native_client_sdk"))
   file_filter = lambda f: input_api.FilterSourceFile(
       f, white_list=file_inclusion_pattern, black_list=black_list)
@@ -1670,6 +1699,7 @@ def _CommonChecks(input_api, output_api):
   results.extend(_CheckForCopyrightedCode(input_api, output_api))
   results.extend(_CheckForWindowsLineEndings(input_api, output_api))
   results.extend(_CheckSingletonInHeaders(input_api, output_api))
+  results.extend(_CheckNoDeprecatedCompiledResourcesGYP(input_api, output_api))
 
   if any('PRESUBMIT.py' == f.LocalPath() for f in input_api.AffectedFiles()):
     results.extend(input_api.canned_checks.RunUnitTestsInDirectory(
@@ -1951,30 +1981,3 @@ def CheckChangeOnCommit(input_api, output_api):
   results.extend(input_api.canned_checks.CheckChangeHasDescription(
       input_api, output_api))
   return results
-
-
-def GetPreferredTryMasters(project, change):
-  import json
-  import os.path
-  import platform
-  import subprocess
-
-  cq_config_path = os.path.join(
-      change.RepositoryRoot(), 'infra', 'config', 'cq.cfg')
-  # commit_queue.py below is a script in depot_tools directory, which has a
-  # 'builders' command to retrieve a list of CQ builders from the CQ config.
-  is_win = platform.system() == 'Windows'
-  masters = json.loads(subprocess.check_output(
-      ['commit_queue', 'builders', cq_config_path], shell=is_win))
-
-  try_config = {}
-  for master in masters:
-    try_config.setdefault(master, {})
-    for builder in masters[master]:
-      # Do not trigger presubmit builders, since they're likely to fail
-      # (e.g. OWNERS checks before finished code review), and we're
-      # running local presubmit anyway.
-      if 'presubmit' not in builder:
-        try_config[master][builder] = ['defaulttests']
-
-  return try_config

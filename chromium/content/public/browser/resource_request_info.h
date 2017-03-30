@@ -52,6 +52,10 @@ class ResourceRequestInfo {
       int* render_process_id,
       int* render_frame_id);
 
+  // Returns true if the request originated from a Service Worker.
+  CONTENT_EXPORT static bool OriginatedFromServiceWorker(
+      const net::URLRequest* request);
+
   // A callback that returns a pointer to a WebContents. The callback can
   // always be used, but it may return nullptr: if the info used to
   // instantiate the callback can no longer be used to return a WebContents,
@@ -78,6 +82,7 @@ class ResourceRequestInfo {
   // The IPC route identifier for this request (this identifies the RenderView
   // or like-thing in the renderer that the request gets routed to).
   // To get a WebContents, use GetWebContentsGetterForRequest instead.
+  // Don't use this method for new code, as RenderViews are going away.
   virtual int GetRouteID() const = 0;
 
   // The pid of the originating process, if the request is sent on behalf of a

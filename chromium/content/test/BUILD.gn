@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/chrome_build.gni")
+import("//build/config/compiler/compiler.gni")
 import("//build/config/crypto.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
@@ -43,6 +44,7 @@ source_set("test_support") {
     "//ui/accessibility:ax_gen",
     "//ui/base",
     "//ui/base:test_support",
+    "//ui/base:ui_data_pack",
     "//ui/base/ime",
     "//ui/events:dom_keycode_converter",
     "//ui/events:events_base",
@@ -98,11 +100,11 @@ source_set("test_support") {
       "//ipc:test_support",
       "//ipc/mojo",
       "//media",
+      "//mojo/edk/test:test_support",
       "//mojo/environment:chromium",
       "//mojo/shell/public/cpp:cpp_for_chromium",
       "//storage/browser",
       "//storage/common",
-      "//third_party/mojo/src/mojo/edk/test:test_support",
       "//ui/compositor:test_support",
       "//ui/surface",
       "//v8",
@@ -178,7 +180,7 @@ source_set("test_support") {
     ]
   }
 
-  if (is_android && !use_aura) {
+  if (is_android) {
     deps += [
       "//ui/android",
       "//ui/shell_dialogs",
@@ -194,6 +196,8 @@ source_set("test_support") {
   }
 }
 
+# browsertest_support can be used by targets that run content_shell based
+# browser tests.
 source_set("browsertest_support") {
   testonly = true
 
@@ -224,6 +228,39 @@ source_set("browsertest_support") {
   configs += [ "//v8:external_startup_data" ]
 }
 
+# browsertest_base can be used by any browser test target.
+source_set("browsertest_base") {
+  testonly = true
+
+  sources = [
+    "../public/test/browser_test.h",
+    "../public/test/browser_test_base.cc",
+    "../public/test/browser_test_base.h",
+    "../public/test/browser_test_utils.cc",
+    "../public/test/browser_test_utils.h",
+  ]
+
+  public_deps = [
+    "//content/public/browser",
+    "//content/public/common",
+  ]
+  deps = [
+    "//base:base",
+    "//net:test_support",
+    "//testing/gtest",
+    "//ui/base",
+    "//ui/base:test_support",
+    "//ui/base/ime",
+    "//ui/events:dom_keycode_converter",
+    "//ui/events:events_base",
+    "//ui/events:gesture_detection",
+    "//ui/resources",
+  ]
+  if (!is_ios) {
+    public_deps += [ "//third_party/WebKit/public:blink" ]
+  }
+}
+
 mojom("content_test_mojo_bindings") {
   sources = [
     "../public/test/test_mojo_service.mojom",
@@ -251,8 +288,8 @@ if (!is_ios) {
       "//cc/blink",
       "//components/test_runner:test_runner",
       "//content/public/common",
+      "//mojo/edk/test:test_support",
       "//skia",
-      "//third_party/mojo/src/mojo/edk/test:test_support",
       "//ui/accessibility:ax_gen",
       "//v8",
     ]
@@ -306,9 +343,19 @@ if (is_android) {
 
 # TODO(GYP): Delete this after we've converted everything to GN.
 # The _run targets exist only for compatibility w/ GYP.
-group("content_browsertests_run") {
+group("content_site_isolation_browsertests_run") {
   testonly = true
   deps = [
+    ":content_browsertests",
+  ]
+}
+
+group("content_site_isolation_browsertests") {
+  testonly = true
+  data = [
+    "//testing/buildbot/filters/site-per-process.content_browsertests.filter",
+  ]
+  data_deps = [
     ":content_browsertests",
   ]
 }
@@ -320,16 +367,14 @@ test("content_browsertests") {
 
   if (is_android || is_linux || is_mac || is_win) {
     data = [
+      "$root_out_dir/content_shell.pak",
       "data/",
       "//net/data/",
       "//media/test/data/",
     ]
 
-    if (is_android) {
-      data += [ "$root_out_dir/content_shell_assets/content_shell.pak" ]
-    } else {
+    if (!is_android) {
       data += [
-        "$root_out_dir/content_shell.pak",
         "//net/tools/testserver/",
         "//ppapi/tests/test_case.html",
         "//ppapi/tests/test_page.css",
@@ -345,7 +390,13 @@ test("content_browsertests") {
         ]
       }
       if (is_win) {
-        data += [ "$root_out_dir/plugins/np_test_netscape_plugin.dll" ]
+        # TODO(GYP): Add this once //content/shell:copy_test_netscape_plugin
+        # exists.
+        #data += [ "$root_out_dir/plugins/np_test_netscape_plugin.dll" ]
+
+        if (symbol_level != 0) {
+          data += [ "$root_out_dir/content_browsertests.exe.pdb" ]
+        }
       }
     }
   }
@@ -358,9 +409,9 @@ test("content_browsertests") {
   ]
 
   deps = [
+    ":browsertest_base",
     ":browsertest_support",
     ":web_ui_test_mojo_bindings",
-    "//base/allocator",
     "//base/test:test_support",
     "//content:resources",
     "//content/browser/background_sync:background_sync_proto",
@@ -383,6 +434,8 @@ test("content_browsertests") {
     "//media:test_support",
     "//media/audio:test_support",
     "//media/base:test_support",
+    "//mojo/edk/system",
+    "//mojo/edk/test:test_support",
     "//mojo/environment:chromium",
     "//mojo/public/cpp/bindings",
     "//mojo/public/js",
@@ -394,8 +447,6 @@ test("content_browsertests") {
     "//third_party/WebKit/public:blink",
     "//third_party/leveldatabase",
     "//third_party/mesa:osmesa",
-    "//third_party/mojo/src/mojo/edk/system",
-    "//third_party/mojo/src/mojo/edk/test:test_support",
     "//third_party/zlib",
     "//ui/accessibility",
     "//ui/accessibility:ax_gen",
@@ -525,15 +576,6 @@ test("content_browsertests") {
   }
 }
 
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("content_unittests_run") {
-  testonly = true
-  deps = [
-    ":content_unittests",
-  ]
-}
-
 test("content_unittests") {
   defines = []
   sources = rebase_path(content_tests_gypi_values.content_unittests_sources,
@@ -542,23 +584,17 @@ test("content_unittests") {
 
   if (is_android || is_linux || is_mac || is_win) {
     data = [
+      "$root_out_dir/content_shell.pak",
       "data/",
       "//net/data/ssl/certificates/",
       "//media/test/data/",
     ]
-
-    if (is_android) {
-      data += [ "$root_out_dir/content_shell_assets/content_shell.pak" ]
-    } else {
-      data += [ "$root_out_dir/content_shell.pak" ]
-    }
   }
 
   configs += [ "//build/config:precompiled_headers" ]
 
   deps = [
     ":test_support",
-    "//base/allocator",
     "//base/test:test_support",
     "//content/browser/background_sync:background_sync_proto",
     "//content/browser/cache_storage:cache_storage_proto",
@@ -572,6 +608,8 @@ test("content_unittests") {
     "//crypto",
     "//device/battery",
     "//device/battery:mojo_bindings",
+    "//device/bluetooth",
+    "//mojo/edk/test:test_support",
     "//mojo/environment:chromium",
     "//mojo/public/cpp/bindings",
     "//net:extras",
@@ -581,7 +619,6 @@ test("content_unittests") {
     "//sql:test_support",
     "//testing/gmock",
     "//testing/gtest",
-    "//third_party/mojo/src/mojo/edk/test:test_support",
     "//third_party/re2",
     "//ui/accessibility",
     "//ui/base",
@@ -648,6 +685,7 @@ test("content_unittests") {
       "//third_party/libjingle:libjingle_webrtc",
       "//third_party/libjingle:libpeerconnection",
       "//third_party/webrtc/modules/video_capture",
+      "//ui/shell_dialogs:shell_dialogs",
     ]
 
     if (is_linux || is_mac || is_win) {
@@ -762,10 +800,7 @@ test("content_unittests") {
   }
 
   if (use_ozone) {
-    deps += [
-      "//ui/ozone",
-      "//ui/ozone:ozone_base",
-    ]
+    deps += [ "//ui/ozone" ]
   } else {
     sources -=
         [ "../browser/compositor/software_output_device_ozone_unittest.cc" ]
@@ -783,7 +818,6 @@ test("content_perftests") {
     "../test/run_all_perftests.cc",
   ]
   deps = [
-    "//base/allocator",
     "//base/test:test_support",
     "//cc",
     "//content/public/browser",
@@ -801,24 +835,15 @@ test("content_perftests") {
   }
 }
 
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("content_gl_tests_run") {
-  testonly = true
-  deps = [
-    ":content_gl_tests",
-  ]
-}
-
 test("content_gl_tests") {
   sources = [
     "../common/gpu/client/gl_helper_unittest.cc",
     "../common/gpu/client/gpu_in_process_context_tests.cc",
+    "run_all_gl_tests.cc",
   ]
 
   deps = [
     ":test_support",
-    "//base/allocator",
     "//base/test:test_support",
     "//content/public/common",
     "//gpu/blink",
@@ -850,11 +875,11 @@ test("content_gl_tests") {
 test("content_gl_benchmark") {
   sources = [
     "../common/gpu/client/gl_helper_benchmark.cc",
+    "run_gl_benchmark.cc",
   ]
 
   deps = [
     ":test_support",
-    "//base/allocator",
     "//base/test:test_support",
     "//content/public/common",
     "//gpu/blink",
@@ -902,6 +927,7 @@ if (is_android) {
         "//gpu:test_support",
         "//media/base/android",
         "//media/base/android:media_java",
+        "//media/capture/video/android:capture_java",
         "//testing/gmock",
         "//ui/android:ui_java",
       ]

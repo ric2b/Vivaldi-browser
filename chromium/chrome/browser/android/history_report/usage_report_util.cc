@@ -9,7 +9,7 @@
 #include <sstream>
 
 #include "chrome/browser/android/proto/delta_file.pb.h"
-#include "net/base/net_util.h"
+#include "net/base/url_util.h"
 #include "url/gurl.h"
 
 namespace history_report {
@@ -41,7 +41,7 @@ bool ShouldIgnoreUrl(const GURL& url) {
     return true;
 
   // Ignore localhost URLs.
-  if (net::IsLocalhost(url.host()))
+  if (net::IsLocalhost(url.host_piece()))
     return true;
 
   return false;

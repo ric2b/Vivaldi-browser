@@ -187,4 +187,8 @@ UIView* GetFirstResponderSubview(UIView* view) {
       setKeyboardDisplayRequiresUserAction:keyboardDisplayRequiresUserAction];
 }
 
+- (BOOL)becomeFirstResponder {
+  return [_contentView becomeFirstResponder];
+}
+
 @end

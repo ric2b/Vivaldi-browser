@@ -22,12 +22,12 @@ class SingleThreadTaskRunner;
 namespace content {
 
 // The BackgroundSyncProvider is called by the SyncManager and SyncRegistration
-// objects (and their Periodic counterparts) and communicates with the
-// BackgroundSyncManager object in the browser process. Each thread will have
-// its own instance (e.g. main thread, worker threads), instantiated as needed
-// by BlinkPlatformImpl.  Each instance of the provider creates a new mojo
-// connection to a new BackgroundSyncManagerImpl, which then talks to the
-// BackgroundSyncManager object.
+// objects and communicates with the BackgroundSyncManager object in the browser
+// process. Each thread will have its own instance (e.g. main thread, worker
+// threads), instantiated as needed by BlinkPlatformImpl.  Each instance of
+// the provider creates a new mojo connection to a new
+// BackgroundSyncManagerImpl, which then talks to the BackgroundSyncManager
+// object.
 class BackgroundSyncProvider : public blink::WebSyncProvider,
                                public WorkerThread::Observer {
  public:
@@ -50,28 +50,11 @@ class BackgroundSyncProvider : public blink::WebSyncProvider,
       blink::WebServiceWorkerRegistration* service_worker_registration,
       bool requested_from_service_worker,
       blink::WebSyncRegistrationCallbacks* callbacks) override;
-  void unregisterBackgroundSync(
-      int64_t handle_id,
-      blink::WebServiceWorkerRegistration* service_worker_registration,
-      blink::WebSyncUnregistrationCallbacks* callbacks) override;
-  void getRegistration(
-      blink::WebSyncRegistration::Periodicity,
-      const blink::WebString& tag,
-      blink::WebServiceWorkerRegistration* service_worker_registration,
-      blink::WebSyncRegistrationCallbacks* callbacks) override;
   void getRegistrations(
-      blink::WebSyncRegistration::Periodicity periodicity,
       blink::WebServiceWorkerRegistration* service_worker_registration,
       blink::WebSyncGetRegistrationsCallbacks* callbacks) override;
-  void getPermissionStatus(
-      blink::WebSyncRegistration::Periodicity periodicity,
-      blink::WebServiceWorkerRegistration* service_worker_registration,
-      blink::WebSyncGetPermissionStatusCallbacks* callbacks) override;
   // TODO(jkarlin): Rename to releaseRegistrationHandle.
   void releaseRegistration(int64_t handle_id) override;
-  void notifyWhenFinished(
-      int64_t handle_id,
-      blink::WebSyncNotifyWhenFinishedCallbacks* callbacks) override;
 
   void DuplicateRegistrationHandle(
       int64_t handle_id,
@@ -87,25 +70,10 @@ class BackgroundSyncProvider : public blink::WebSyncProvider,
       scoped_ptr<blink::WebSyncRegistrationCallbacks> callbacks,
       BackgroundSyncError error,
       const SyncRegistrationPtr& options);
-  void UnregisterCallback(
-      scoped_ptr<blink::WebSyncUnregistrationCallbacks> callbacks,
-      BackgroundSyncError error);
-  void GetRegistrationCallback(
-      scoped_ptr<blink::WebSyncRegistrationCallbacks> callbacks,
-      BackgroundSyncError error,
-      const SyncRegistrationPtr& options);
   void GetRegistrationsCallback(
       scoped_ptr<blink::WebSyncGetRegistrationsCallbacks> callbacks,
       BackgroundSyncError error,
       const mojo::Array<SyncRegistrationPtr>& registrations);
-  void GetPermissionStatusCallback(
-      scoped_ptr<blink::WebSyncGetPermissionStatusCallbacks> callbacks,
-      BackgroundSyncError error,
-      PermissionStatus status);
-  void NotifyWhenFinishedCallback(
-      scoped_ptr<blink::WebSyncNotifyWhenFinishedCallbacks> callbacks,
-      BackgroundSyncError error,
-      BackgroundSyncState state);
 
   // Helper method that returns an initialized BackgroundSyncServicePtr.
   BackgroundSyncServicePtr& GetBackgroundSyncServicePtr();

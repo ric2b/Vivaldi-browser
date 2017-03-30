@@ -11,7 +11,6 @@
 #include "content/child/npapi/npobject_proxy.h"
 #include "content/child/npapi/npobject_util.h"
 #include "content/child/npapi/webplugin_delegate_impl.h"
-#include "content/child/npapi/webplugin_resource_client.h"
 #include "content/child/plugin_messages.h"
 #include "content/plugin/plugin_channel.h"
 #include "content/plugin/plugin_thread.h"
@@ -107,11 +106,6 @@ void WebPluginProxy::SetWindowlessData(
       route_id_, pump_messages_event_for_renderer, dummy_activation_window));
 }
 #endif
-
-void WebPluginProxy::CancelResource(unsigned long id) {
-  Send(new PluginHostMsg_CancelResource(route_id_, id));
-  resource_clients_.erase(id);
-}
 
 void WebPluginProxy::Invalidate() {
   gfx::Rect rect(0, 0,
@@ -237,18 +231,6 @@ std::string WebPluginProxy::GetCookies(const GURL& url,
   return cookies;
 }
 
-WebPluginResourceClient* WebPluginProxy::GetResourceClient(int id) {
-  ResourceClientMap::iterator iterator = resource_clients_.find(id);
-  // The IPC messages which deal with streams are now asynchronous. It is
-  // now possible to receive stream messages from the renderer for streams
-  // which may have been cancelled by the plugin.
-  if (iterator == resource_clients_.end()) {
-    return NULL;
-  }
-
-  return iterator->second;
-}
-
 int WebPluginProxy::GetRendererId() {
   if (channel_.get())
     return channel_->renderer_id();
@@ -261,12 +243,6 @@ void WebPluginProxy::DidPaint() {
   waiting_for_paint_ = false;
   if (!damaged_rect_.IsEmpty())
     InvalidateRect(damaged_rect_);
-}
-
-void WebPluginProxy::OnResourceCreated(int resource_id,
-                                       WebPluginResourceClient* client) {
-  DCHECK(resource_clients_.find(resource_id) == resource_clients_.end());
-  resource_clients_[resource_id] = client;
 }
 
 void WebPluginProxy::Paint(const gfx::Rect& rect) {
@@ -305,7 +281,7 @@ void WebPluginProxy::Paint(const gfx::Rect& rect) {
 #else
   // See above comment about windowless_context_ changing.
   // http::/crbug.com/139462
-  skia::RefPtr<skia::PlatformCanvas> saved_canvas = windowless_canvas();
+  skia::RefPtr<SkCanvas> saved_canvas = windowless_canvas();
 
   saved_canvas->save();
 
@@ -376,7 +352,7 @@ void WebPluginProxy::UpdateGeometry(
 void WebPluginProxy::CreateCanvasFromHandle(
     const TransportDIB::Handle& dib_handle,
     const gfx::Rect& window_rect,
-    skia::RefPtr<skia::PlatformCanvas>* canvas) {
+    skia::RefPtr<SkCanvas>* canvas) {
   *canvas = skia::AdoptRef(skia::CreatePlatformCanvas(
       window_rect.width(), window_rect.height(), true, dib_handle.GetHandle(),
       skia::RETURN_NULL_ON_FAILURE));
@@ -468,11 +444,6 @@ void WebPluginProxy::DidStopLoading() {
   Send(new PluginHostMsg_DidStopLoading(route_id_));
 }
 
-void WebPluginProxy::SetDeferResourceLoading(unsigned long resource_id,
-                                             bool defer) {
-  Send(new PluginHostMsg_DeferResourceLoading(route_id_, resource_id, defer));
-}
-
 #if defined(OS_MACOSX)
 void WebPluginProxy::FocusChanged(bool focused) {
   IPC::Message* msg = new PluginHostMsg_FocusChanged(route_id_, focused);
@@ -521,33 +492,6 @@ void WebPluginProxy::OnPaint(const gfx::Rect& damaged_rect) {
 
 bool WebPluginProxy::IsOffTheRecord() {
   return channel_->incognito();
-}
-
-void WebPluginProxy::ResourceClientDeleted(
-    WebPluginResourceClient* resource_client) {
-  // resource_client->ResourceId() is 0 at this point, so can't use it as an
-  // index into the map.
-  ResourceClientMap::iterator index = resource_clients_.begin();
-  while (index != resource_clients_.end()) {
-    WebPluginResourceClient* client = (*index).second;
-    if (client == resource_client) {
-      resource_clients_.erase(index);
-      return;
-    } else {
-      index++;
-    }
-  }
-}
-
-void WebPluginProxy::URLRedirectResponse(bool allow, int resource_id) {
-  Send(new PluginHostMsg_URLRedirectResponse(route_id_, allow, resource_id));
-}
-
-bool WebPluginProxy::CheckIfRunInsecureContent(const GURL& url) {
-  bool result = true;
-  Send(new PluginHostMsg_CheckIfRunInsecureContent(
-      route_id_, url, &result));
-  return result;
 }
 
 #if defined(OS_WIN) && !defined(USE_AURA)

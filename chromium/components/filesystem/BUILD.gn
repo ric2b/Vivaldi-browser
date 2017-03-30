@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//mojo/public/mojo_application.gni")
+import("//mojo/public/mojo_application_manifest.gni")
 
 source_set("lib") {
   sources = [
@@ -10,10 +11,10 @@ source_set("lib") {
     "directory_impl.h",
     "file_impl.cc",
     "file_impl.h",
-    "file_system_app.cc",
-    "file_system_app.h",
     "file_system_impl.cc",
     "file_system_impl.h",
+    "lock_table.cc",
+    "lock_table.h",
     "util.cc",
     "util.h",
   ]
@@ -24,27 +25,37 @@ source_set("lib") {
     "//mojo/common",
     "//mojo/common:common_base",
     "//mojo/platform_handle",
-    "//mojo/services/tracing/public/cpp",
     "//mojo/shell/public/cpp",
+    "//mojo/shell/public/interfaces",
     "//url",
   ]
 }
 
 mojo_native_application("filesystem") {
   sources = [
+    "file_system_app.cc",
+    "file_system_app.h",
     "main.cc",
   ]
 
   deps = [
     ":lib",
+    ":manifest",
     "//base",
+    "//components/filesystem/public/interfaces",
     "//mojo/common",
     "//mojo/environment:chromium",
     "//mojo/platform_handle:for_shared_library",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
+    "//mojo/services/tracing/public/cpp",
     "//mojo/shell/public/cpp",
   ]
+}
+
+mojo_application_manifest("manifest") {
+  application_name = "filesystem"
+  source = "manifest.json"
 }
 
 mojo_native_application("apptests") {
@@ -60,8 +71,10 @@ mojo_native_application("apptests") {
   ]
 
   deps = [
+    ":apptest_manifest",
     "//base",
     "//components/filesystem/public/interfaces",
+    "//mojo/common",
     "//mojo/platform_handle:for_shared_library",
     "//mojo/public/cpp/bindings",
     "//mojo/shell/public/cpp:test_support",
@@ -70,4 +83,9 @@ mojo_native_application("apptests") {
   data_deps = [
     ":filesystem",
   ]
+}
+
+mojo_application_manifest("apptest_manifest") {
+  application_name = "filesystem_apptests"
+  source = "apptest_manifest.json"
 }

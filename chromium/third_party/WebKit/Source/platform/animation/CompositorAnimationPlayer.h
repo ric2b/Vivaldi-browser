@@ -1,0 +1,60 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef CompositorAnimationPlayer_h
+#define CompositorAnimationPlayer_h
+
+#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
+#include "cc/animation/animation.h"
+#include "cc/animation/animation_curve.h"
+#include "cc/animation/animation_delegate.h"
+#include "cc/animation/animation_player.h"
+#include "platform/PlatformExport.h"
+#include "wtf/Noncopyable.h"
+
+namespace blink {
+
+class CompositorAnimation;
+class WebCompositorAnimationDelegate;
+class WebLayer;
+
+// A compositor representation for AnimationPlayer.
+class PLATFORM_EXPORT CompositorAnimationPlayer : public cc::AnimationDelegate {
+    WTF_MAKE_NONCOPYABLE(CompositorAnimationPlayer);
+public:
+    CompositorAnimationPlayer();
+    ~CompositorAnimationPlayer();
+
+    cc::AnimationPlayer* animationPlayer() const;
+
+    // An animation delegate is notified when animations are started and
+    // stopped. The CompositorAnimationPlayer does not take ownership of the delegate, and it is
+    // the responsibility of the client to reset the layer's delegate before
+    // deleting the delegate.
+    void setAnimationDelegate(WebCompositorAnimationDelegate*);
+
+    void attachLayer(WebLayer*);
+    void detachLayer();
+    bool isLayerAttached() const;
+
+    void addAnimation(CompositorAnimation*);
+    void removeAnimation(int animationId);
+    void pauseAnimation(int animationId, double timeOffset);
+    void abortAnimation(int animationId);
+
+private:
+    // cc::AnimationDelegate implementation.
+    void NotifyAnimationStarted(base::TimeTicks monotonicTime, cc::TargetProperty::Type, int group) override;
+    void NotifyAnimationFinished(base::TimeTicks monotonicTime, cc::TargetProperty::Type, int group) override;
+    void NotifyAnimationAborted(base::TimeTicks monotonicTime, cc::TargetProperty::Type, int group) override;
+    void NotifyAnimationTakeover(base::TimeTicks monotonicTime, cc::TargetProperty::Type, double animationStartTime, scoped_ptr<cc::AnimationCurve>) override;
+
+    scoped_refptr<cc::AnimationPlayer> m_animationPlayer;
+    WebCompositorAnimationDelegate* m_delegate;
+};
+
+} // namespace blink
+
+#endif // CompositorAnimationPlayer_h

@@ -49,7 +49,7 @@ namespace blink {
 class Attribute;
 class ClassCollection;
 class ContainerNode;
-class DOMSettableTokenList;
+class DOMTokenList;
 class Document;
 class Element;
 class ElementShadow;
@@ -204,7 +204,7 @@ public:
     virtual String nodeName() const = 0;
     virtual String nodeValue() const;
     virtual void setNodeValue(const String&);
-    virtual NodeType nodeType() const = 0;
+    virtual NodeType getNodeType() const = 0;
     ContainerNode* parentNode() const;
     Element* parentElement() const;
     ContainerNode* parentElementOrShadowRoot() const;
@@ -214,6 +214,7 @@ public:
     PassRefPtrWillBeRawPtr<NodeList> childNodes();
     Node* firstChild() const;
     Node* lastChild() const;
+    Node& treeRoot() const;
 
     void remove(ExceptionState& = ASSERT_NO_EXCEPTION);
 
@@ -233,7 +234,9 @@ public:
     virtual PassRefPtrWillBeRawPtr<Node> cloneNode(bool deep) = 0;
     void normalize();
 
-    bool isSameNode(Node* other) const { return this == other; }
+    // TODO(yosin): Once we drop |Node.prototype.isSameNode()|, we should
+    // get rid of |isSameNodeDeprecated()|.
+    bool isSameNodeDeprecated(Node* other) const { return this == other; }
     bool isEqualNode(Node*) const;
     bool isDefaultNamespace(const AtomicString& namespaceURI) const;
     const AtomicString& lookupPrefix(const AtomicString& namespaceURI) const;
@@ -252,11 +255,11 @@ public:
     bool isHTMLElement() const { return getFlag(IsHTMLFlag); }
     bool isSVGElement() const { return getFlag(IsSVGFlag); }
 
-    bool isPseudoElement() const { return pseudoId() != NOPSEUDO; }
-    bool isBeforePseudoElement() const { return pseudoId() == BEFORE; }
-    bool isAfterPseudoElement() const { return pseudoId() == AFTER; }
-    bool isFirstLetterPseudoElement() const { return pseudoId() == FIRST_LETTER; }
-    virtual PseudoId pseudoId() const { return NOPSEUDO; }
+    bool isPseudoElement() const { return getPseudoId() != NOPSEUDO; }
+    bool isBeforePseudoElement() const { return getPseudoId() == BEFORE; }
+    bool isAfterPseudoElement() const { return getPseudoId() == AFTER; }
+    bool isFirstLetterPseudoElement() const { return getPseudoId() == FIRST_LETTER; }
+    virtual PseudoId getPseudoId() const { return NOPSEUDO; }
 
     bool isCustomElement() const { return getFlag(CustomElementFlag); }
     enum CustomElementState {
@@ -296,7 +299,7 @@ public:
     bool isShadowRoot() const { return isDocumentFragment() && isTreeScope(); }
     bool isInsertionPoint() const { return getFlag(IsInsertionPointFlag); }
 
-    bool canParticipateInComposedTree() const;
+    bool canParticipateInFlatTree() const;
     bool isSlotOrActiveInsertionPoint() const;
 
     bool hasCustomStyleCallbacks() const { return getFlag(HasCustomStyleCallbacksFlag); }
@@ -361,9 +364,9 @@ public:
     // to check which element is exactly focused.
     bool focused() const { return isUserActionElement() && isUserActionElementFocused(); }
 
-    bool needsAttach() const { return styleChangeType() == NeedsReattachStyleChange; }
-    bool needsStyleRecalc() const { return styleChangeType() != NoStyleChange; }
-    StyleChangeType styleChangeType() const { return static_cast<StyleChangeType>(m_nodeFlags & StyleChangeMask); }
+    bool needsAttach() const { return getStyleChangeType() == NeedsReattachStyleChange; }
+    bool needsStyleRecalc() const { return getStyleChangeType() != NoStyleChange; }
+    StyleChangeType getStyleChangeType() const { return static_cast<StyleChangeType>(m_nodeFlags & StyleChangeMask); }
     bool childNeedsStyleRecalc() const { return getFlag(ChildNeedsStyleRecalcFlag); }
     bool isLink() const { return getFlag(IsLinkFlag); }
     bool isEditingText() const { ASSERT(isTextNode()); return getFlag(HasNameOrIsEditingTextFlag); }
@@ -489,8 +492,9 @@ public:
     bool isInV0ShadowTree() const;
     bool isChildOfV1ShadowHost() const;
     bool isChildOfV0ShadowHost() const;
+    bool isSlotAssignable() const { return isTextNode() || isElementNode(); }
 
-    bool isDocumentTypeNode() const { return nodeType() == DOCUMENT_TYPE_NODE; }
+    bool isDocumentTypeNode() const { return getNodeType() == DOCUMENT_TYPE_NODE; }
     virtual bool childTypeAllowed(NodeType) const { return false; }
     unsigned countChildren() const;
 
@@ -600,10 +604,10 @@ public:
 
     void showNode(const char* prefix = "") const;
     void showTreeForThis() const;
-    void showTreeForThisInComposedTree() const;
+    void showTreeForThisInFlatTree() const;
     void showNodePathForThis() const;
     void showTreeAndMark(const Node* markedNode1, const char* markedLabel1, const Node* markedNode2 = nullptr, const char* markedLabel2 = nullptr) const;
-    void showTreeAndMarkInComposedTree(const Node* markedNode1, const char* markedLabel1, const Node* markedNode2 = nullptr, const char* markedLabel2 = nullptr) const;
+    void showTreeAndMarkInFlatTree(const Node* markedNode1, const char* markedLabel1, const Node* markedNode2 = nullptr, const char* markedLabel2 = nullptr) const;
     void showTreeForThisAcrossFrame() const;
 #endif
 
@@ -639,9 +643,9 @@ public:
     virtual void handleLocalEvents(Event&);
 
     void dispatchSubtreeModifiedEvent();
-    bool dispatchDOMActivateEvent(int detail, PassRefPtrWillBeRawPtr<Event> underlyingEvent);
+    DispatchEventResult dispatchDOMActivateEvent(int detail, PassRefPtrWillBeRawPtr<Event> underlyingEvent);
 
-    bool dispatchMouseEvent(const PlatformMouseEvent&, const AtomicString& eventType, int clickCount = 0, Node* relatedTarget = nullptr);
+    DispatchEventResult dispatchMouseEvent(const PlatformMouseEvent&, const AtomicString& eventType, int clickCount = 0, Node* relatedTarget = nullptr);
 
     void dispatchSimulatedClick(Event* underlyingEvent, SimulatedClickMouseEventOptions = SendNoEvents, SimulatedClickCreationScope = SimulatedClickCreationScope::FromUserAgent);
 
@@ -759,7 +763,7 @@ protected:
 
     bool addEventListenerInternal(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener>, const EventListenerOptions&) override;
     bool removeEventListenerInternal(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener>, const EventListenerOptions&) override;
-    bool dispatchEventInternal(PassRefPtrWillBeRawPtr<Event>) override;
+    DispatchEventResult dispatchEventInternal(PassRefPtrWillBeRawPtr<Event>) override;
 
     static void reattachWhitespaceSiblingsIfNeeded(Text* start);
 
@@ -863,7 +867,7 @@ inline ContainerNode* Node::parentNode() const
 
 inline void Node::lazyReattachIfAttached()
 {
-    if (styleChangeType() == NeedsReattachStyleChange)
+    if (getStyleChangeType() == NeedsReattachStyleChange)
         return;
     if (!inActiveDocument())
         return;

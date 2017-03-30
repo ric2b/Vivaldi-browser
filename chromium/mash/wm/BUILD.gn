@@ -4,6 +4,7 @@
 
 import("//build/config/ui.gni")
 import("//mojo/public/mojo_application.gni")
+import("//mojo/public/mojo_application_manifest.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//tools/grit/repack.gni")
 
@@ -20,6 +21,8 @@ source_set("lib") {
     "accelerator_registrar_impl.h",
     "background_layout.cc",
     "background_layout.h",
+    "fill_layout.cc",
+    "fill_layout.h",
     "frame/caption_buttons/caption_button_types.h",
     "frame/caption_buttons/frame_caption_button.cc",
     "frame/caption_buttons/frame_caption_button.h",
@@ -44,6 +47,11 @@ source_set("lib") {
     "non_client_frame_controller.h",
     "property_util.cc",
     "property_util.h",
+    "root_window_controller.cc",
+    "root_window_controller.h",
+    "root_windows_observer.h",
+    "screenlock_layout.cc",
+    "screenlock_layout.h",
     "shadow.cc",
     "shadow.h",
     "shadow_controller.cc",
@@ -54,10 +62,10 @@ source_set("lib") {
     "user_window_controller_impl.h",
     "window_layout.cc",
     "window_layout.h",
+    "window_manager.cc",
+    "window_manager.h",
     "window_manager_application.cc",
     "window_manager_application.h",
-    "window_manager_impl.cc",
-    "window_manager_impl.h",
   ]
 
   deps = [
@@ -65,6 +73,7 @@ source_set("lib") {
     "//components/mus/common",
     "//components/mus/public/cpp",
     "//components/mus/public/interfaces",
+    "//mash/shell/public/interfaces",
     "//mash/wm/public/interfaces",
     "//mash/wm/resources",
     "//mojo/common:common_base",
@@ -94,15 +103,23 @@ mojo_native_application("wm") {
 
   deps = [
     ":lib",
+    ":manifest",
     ":resources",
     "//mojo/shell/public/cpp",
   ]
 
+  # TODO(beng): This target relies on //mash/shell, but there is a cycle so we
+  #             can't state that dependency here.
   data_deps = [
     "//components/mus",
   ]
 
   resources = [ "$root_out_dir/mash_wm_resources.pak" ]
+}
+
+mojo_application_manifest("manifest") {
+  application_name = "desktop_wm"
+  source = "manifest.json"
 }
 
 repack("resources") {
@@ -133,6 +150,7 @@ mojo_native_application("apptests") {
   ]
 
   deps = [
+    ":apptest_manifest",
     "//base",
     "//base/test:test_config",
     "//components/mus/public/cpp",
@@ -149,6 +167,15 @@ mojo_native_application("apptests") {
   data_deps = [
     ":wm",
   ]
+
+  if (use_x11) {
+    deps += [ "//tools/xdisplaycheck" ]
+  }
+}
+
+mojo_application_manifest("apptest_manifest") {
+  application_name = "mash_wm_apptests"
+  source = "apptest_manifest.json"
 }
 
 source_set("unittests") {
@@ -167,11 +194,11 @@ source_set("unittests") {
     "//components/mus/public/cpp/tests:unittest_support",
     "//mojo/converters/geometry",
     "//mojo/converters/input_events",
+    "//mojo/edk/system",
     "//mojo/gles2",
     "//mojo/platform_handle",
     "//mojo/public/cpp/system",
     "//testing/gtest",
-    "//third_party/mojo/src/mojo/edk/system",
     "//ui/base",
     "//ui/events",
     "//ui/gfx:test_support",

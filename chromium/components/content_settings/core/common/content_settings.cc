@@ -53,6 +53,7 @@ ContentSettingsType kHistogramOrder[] = {
     CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT,
     CONTENT_SETTINGS_TYPE_DURABLE_STORAGE,
     CONTENT_SETTINGS_TYPE_KEYGEN,
+    CONTENT_SETTINGS_TYPE_BLUETOOTH_GUARD,
 };
 
 int ContentSettingTypeToHistogramValue(ContentSettingsType content_setting,
@@ -87,6 +88,9 @@ ContentSettingPatternSource::ContentSettingPatternSource(
 ContentSettingPatternSource::ContentSettingPatternSource()
     : setting(CONTENT_SETTING_DEFAULT), incognito(false) {
 }
+
+ContentSettingPatternSource::ContentSettingPatternSource(
+    const ContentSettingPatternSource& other) = default;
 
 RendererContentSettingRules::RendererContentSettingRules() {}
 

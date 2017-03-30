@@ -14,6 +14,7 @@
 #include "build/build_config.h"
 #include "content/common/gpu/gpu_channel.h"
 #include "content/common/gpu/gpu_channel_manager.h"
+#include "content/common/gpu/gpu_channel_manager_delegate.h"
 #include "content/common/gpu/gpu_command_buffer_stub.h"
 #include "content/common/gpu/gpu_messages.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
@@ -21,6 +22,11 @@
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
+
+#if defined(OS_MACOSX)
+#include "content/common/gpu/accelerated_surface_buffers_swapped_params_mac.h"
+#include "ui/accelerated_widget_mac/accelerated_widget_mac.h"
+#endif
 
 namespace content {
 
@@ -31,13 +37,14 @@ ImageTransportSurface::~ImageTransportSurface() {}
 scoped_refptr<gfx::GLSurface> ImageTransportSurface::CreateSurface(
     GpuChannelManager* manager,
     GpuCommandBufferStub* stub,
-    const gfx::GLSurfaceHandle& handle) {
+    const gfx::GLSurfaceHandle& handle,
+    gfx::GLSurface::Format format) {
   scoped_refptr<gfx::GLSurface> surface;
   if (handle.transport_type == gfx::NULL_TRANSPORT) {
     surface = manager->GetDefaultOffscreenSurface();
   } else {
-    surface = CreateNativeSurface(manager, stub, handle);
-    if (!surface.get() || !surface->Initialize())
+    surface = CreateNativeSurface(manager, stub, handle, format);
+    if (!surface.get() || !surface->Initialize(format))
       return NULL;
   }
 
@@ -52,8 +59,9 @@ ImageTransportHelper::ImageTransportHelper(ImageTransportSurface* surface,
       manager_(manager),
       stub_(stub->AsWeakPtr()),
       handle_(handle) {
-  route_id_ = manager_->GenerateRouteID();
-  manager_->AddRoute(route_id_, this);
+#if defined(OS_MACOSX)
+  manager_->AddImageTransportSurface(handle_, this);
+#endif
 }
 
 ImageTransportHelper::~ImageTransportHelper() {
@@ -61,10 +69,12 @@ ImageTransportHelper::~ImageTransportHelper() {
     stub_->SetLatencyInfoCallback(
         base::Callback<void(const std::vector<ui::LatencyInfo>&)>());
   }
-  manager_->RemoveRoute(route_id_);
+#if defined(OS_MACOSX)
+  manager_->RemoveImageTransportSurface(handle_);
+#endif
 }
 
-bool ImageTransportHelper::Initialize() {
+bool ImageTransportHelper::Initialize(gfx::GLSurface::Format format) {
   gpu::gles2::GLES2Decoder* decoder = Decoder();
 
   if (!decoder)
@@ -77,24 +87,14 @@ bool ImageTransportHelper::Initialize() {
   return true;
 }
 
-bool ImageTransportHelper::OnMessageReceived(const IPC::Message& message) {
 #if defined(OS_MACOSX)
-  bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP(ImageTransportHelper, message)
-    IPC_MESSAGE_HANDLER(AcceleratedSurfaceMsg_BufferPresented,
-                        OnBufferPresented)
-    IPC_MESSAGE_UNHANDLED(handled = false)
-  IPC_END_MESSAGE_MAP()
-  return handled;
-#else
-  NOTREACHED();
-  return false;
-#endif
+void ImageTransportHelper::BufferPresented(
+    const BufferPresentedParams& params) {
+  surface_->BufferPresented(params);
 }
 
-#if defined(OS_MACOSX)
 void ImageTransportHelper::SendAcceleratedSurfaceBuffersSwapped(
-    GpuHostMsg_AcceleratedSurfaceBuffersSwapped_Params params) {
+    AcceleratedSurfaceBuffersSwappedParams params) {
   // TRACE_EVENT for gpu tests:
   TRACE_EVENT_INSTANT2("test_gpu", "SwapBuffers",
                        TRACE_EVENT_SCOPE_THREAD,
@@ -103,8 +103,7 @@ void ImageTransportHelper::SendAcceleratedSurfaceBuffersSwapped(
   // On mac, handle_ is a surface id. See
   // GpuProcessTransportFactory::CreatePerCompositorData
   params.surface_id = handle_;
-  params.route_id = route_id_;
-  manager_->Send(new GpuHostMsg_AcceleratedSurfaceBuffersSwapped(params));
+  manager_->delegate()->SendAcceleratedSurfaceBuffersSwapped(params);
 }
 #endif
 
@@ -129,13 +128,6 @@ gpu::gles2::GLES2Decoder* ImageTransportHelper::Decoder() {
   return stub_->decoder();
 }
 
-#if defined(OS_MACOSX)
-void ImageTransportHelper::OnBufferPresented(
-    const AcceleratedSurfaceMsg_BufferPresented_Params& params) {
-  surface_->OnBufferPresented(params);
-}
-#endif
-
 void ImageTransportHelper::SetLatencyInfo(
     const std::vector<ui::LatencyInfo>& latency_info) {
   surface_->SetLatencyInfo(latency_info);
@@ -154,9 +146,10 @@ PassThroughImageTransportSurface::PassThroughImageTransportSurface(
                                          gfx::kNullPluginWindow));
 }
 
-bool PassThroughImageTransportSurface::Initialize() {
+bool PassThroughImageTransportSurface::Initialize(
+    gfx::GLSurface::Format format) {
   // The surface is assumed to have already been initialized.
-  return helper_->Initialize();
+  return helper_->Initialize(format);
 }
 
 void PassThroughImageTransportSurface::Destroy() {
@@ -238,8 +231,8 @@ bool PassThroughImageTransportSurface::OnMakeCurrent(gfx::GLContext* context) {
 }
 
 #if defined(OS_MACOSX)
-void PassThroughImageTransportSurface::OnBufferPresented(
-    const AcceleratedSurfaceMsg_BufferPresented_Params& /* params */) {
+void PassThroughImageTransportSurface::BufferPresented(
+    const BufferPresentedParams& /* params */) {
   NOTREACHED();
 }
 #endif

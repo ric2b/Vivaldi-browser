@@ -21,10 +21,9 @@ class UI_BASE_IME_EXPORT InputMethodWin : public InputMethodBase {
  public:
   InputMethodWin(internal::InputMethodDelegate* delegate,
                  HWND toplevel_window_handle);
+  ~InputMethodWin() override;
 
   // Overridden from InputMethod:
-  void OnFocus() override;
-  void OnBlur() override;
   bool OnUntranslatedIMEMessage(const base::NativeEvent& event,
                                 NativeEventResult* result) override;
   void DispatchKeyEvent(ui::KeyEvent* event) override;
@@ -101,6 +100,11 @@ class UI_BASE_IME_EXPORT InputMethodWin : public InputMethodBase {
   // Enables or disables the IME according to the current text input type.
   void UpdateIMEState();
 
+  // Callback function for IMEEngineHandlerInterface::ProcessKeyEvent.
+  void ProcessKeyEventDone(ui::KeyEvent* event,
+                           const std::vector<MSG>* char_msgs,
+                           bool is_handled);
+
   // Windows IMM32 wrapper.
   // (See "ui/base/ime/win/ime_input.h" for its details.)
   ui::IMM32Manager imm32_manager_;
@@ -129,6 +133,9 @@ class UI_BASE_IME_EXPORT InputMethodWin : public InputMethodBase {
   // Window handle where composition is on-going. NULL when there is no
   // composition.
   HWND composing_window_handle_;
+
+  // Used for making callbacks.
+  base::WeakPtrFactory<InputMethodWin> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(InputMethodWin);
 };

@@ -42,6 +42,8 @@ component("gfx") {
     "animation/animation_container_element.h",
     "animation/animation_container_observer.h",
     "animation/animation_delegate.h",
+    "animation/animation_mac.mm",
+    "animation/animation_win.cc",
     "animation/linear_animation.cc",
     "animation/linear_animation.h",
     "animation/multi_animation.cc",
@@ -72,6 +74,8 @@ component("gfx") {
     "display.h",
     "display_change_notifier.cc",
     "display_change_notifier.h",
+    "display_finder.cc",
+    "display_finder.h",
     "display_observer.cc",
     "display_observer.h",
     "favicon_size.cc",
@@ -141,6 +145,8 @@ component("gfx") {
     "nine_image_painter.h",
     "path.cc",
     "path.h",
+    "path_mac.h",
+    "path_mac.mm",
     "path_win.cc",
     "path_win.h",
     "path_x11.cc",
@@ -210,11 +216,19 @@ component("gfx") {
     "win/direct_manipulation.h",
     "win/direct_write.cc",
     "win/direct_write.h",
+    "win/display_info.cc",
+    "win/display_info.h",
     "win/dpi.cc",
     "win/dpi.h",
     "win/hwnd_util.cc",
     "win/hwnd_util.h",
+    "win/physical_size.cc",
+    "win/physical_size.h",
+    "win/rendering_window_manager.cc",
+    "win/rendering_window_manager.h",
     "win/scoped_set_map_mode.h",
+    "win/screen_win_display.cc",
+    "win/screen_win_display.h",
     "win/singleton_hwnd.cc",
     "win/singleton_hwnd.h",
     "win/singleton_hwnd_observer.cc",
@@ -365,6 +379,8 @@ component("gfx") {
   if (is_win) {
     cflags = [ "/wd4324" ]  # Structure was padded due to __declspec(align()), which is
                             # uninteresting.
+
+    libs = [ "setupapi.lib" ]
   } else {
     sources -= [
       "gdi_util.cc",
@@ -488,6 +504,8 @@ action("aggregate_vector_icons") {
     "vector_icons/location_on.icon",
     "vector_icons/menu_check.1x.icon",
     "vector_icons/menu_check.icon",
+    "vector_icons/menu_radio_empty.icon",
+    "vector_icons/menu_radio_selected.icon",
     "vector_icons/midi.icon",
     "vector_icons/mixed_content.icon",
     "vector_icons/mode_edit.icon",
@@ -537,6 +555,7 @@ action("aggregate_vector_icons") {
     "vector_icons/tab_media_recording.icon",
     "vector_icons/tablet.icon",
     "vector_icons/translate.icon",
+    "vector_icons/upgrade_menu_item.icon",
     "vector_icons/warning.icon",
     "vector_icons/warning_badge.icon",
     "vector_icons/web.icon",
@@ -563,6 +582,11 @@ action("aggregate_vector_icons") {
   ]
 
   args = [
+    # TODO(brettw) bug 535386: This should not take a directory as an input,
+    # but rather a response file listing the inputs or sometimes the build will
+    # be incorrect. In this case, Ninja won't be able to do proper dependency
+    # tracking since if a file is deleted, the command line will be the same
+    # and the action will not be re-run.
     "--working_directory=" + rebase_path("vector_icons/"),
     "--output_cc=" + rebase_path(vector_icons_cc_file, root_build_dir),
     "--output_h=" + rebase_path(vector_icons_h_file, root_build_dir),
@@ -578,6 +602,7 @@ source_set("test_support") {
     "image/image_unittest_util.h",
     "image/image_unittest_util_ios.mm",
     "image/image_unittest_util_mac.mm",
+    "test/display_util.h",
     "test/fontconfig_util_linux.cc",
     "test/fontconfig_util_linux.h",
     "test/gfx_util.cc",
@@ -610,15 +635,6 @@ source_set("test_support") {
   if (is_linux) {
     deps += [ "//build/linux:fontconfig" ]
   }
-}
-
-# TODO(GYP): Delete this after we've converted everything to GN.
-# The _run targets exist only for compatibility w/ GYP.
-group("gfx_unittests_run") {
-  testonly = true
-  deps = [
-    ":gfx_unittests",
-  ]
 }
 
 test("gfx_unittests") {
@@ -680,6 +696,7 @@ test("gfx_unittests") {
       "image/image_util_unittest.cc",
       "mac/coordinate_conversion_unittest.mm",
       "nine_image_painter_unittest.cc",
+      "path_mac_unittest.mm",
       "platform_font_mac_unittest.mm",
       "range/range_mac_unittest.mm",
       "range/range_unittest.cc",

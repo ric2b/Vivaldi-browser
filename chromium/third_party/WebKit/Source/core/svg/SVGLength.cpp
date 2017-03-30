@@ -63,8 +63,7 @@ PassRefPtrWillBeRawPtr<SVGPropertyBase> SVGLength::cloneForAnimation(const Strin
     RefPtrWillBeRawPtr<SVGLength> length = create();
     length->m_unitMode = m_unitMode;
 
-    SVGParsingError status = length->setValueAsString(value);
-    if (status != NoError)
+    if (length->setValueAsString(value) != SVGParseStatus::NoError)
         length->m_value = cssValuePool().createValue(0, CSSPrimitiveValue::UnitType::UserUnits);
 
     return length.release();
@@ -90,11 +89,8 @@ void SVGLength::setValue(float value, const SVGLengthContext& context)
 
 bool isSupportedCSSUnitType(CSSPrimitiveValue::UnitType type)
 {
-    return type != CSSPrimitiveValue::UnitType::Unknown
-        && (type <= CSSPrimitiveValue::UnitType::UserUnits
-            || type == CSSPrimitiveValue::UnitType::Chs
-            || type == CSSPrimitiveValue::UnitType::Rems
-            || (type >= CSSPrimitiveValue::UnitType::ViewportWidth && type <= CSSPrimitiveValue::UnitType::ViewportMax));
+    return (CSSPrimitiveValue::isLength(type) || type == CSSPrimitiveValue::UnitType::Number || type == CSSPrimitiveValue::UnitType::Percentage)
+        && type != CSSPrimitiveValue::UnitType::QuirkyEms;
 }
 
 void SVGLength::setUnitType(CSSPrimitiveValue::UnitType type)
@@ -137,21 +133,21 @@ SVGParsingError SVGLength::setValueAsString(const String& string)
 {
     if (string.isEmpty()) {
         m_value = cssValuePool().createValue(0, CSSPrimitiveValue::UnitType::UserUnits);
-        return NoError;
+        return SVGParseStatus::NoError;
     }
 
     CSSParserContext svgParserContext(SVGAttributeMode, 0);
     RefPtrWillBeRawPtr<CSSValue> parsed = CSSParser::parseSingleValue(CSSPropertyX, string, svgParserContext);
     if (!parsed || !parsed->isPrimitiveValue())
-        return ParsingAttributeFailedError;
+        return SVGParseStatus::ExpectedLength;
 
     CSSPrimitiveValue* newValue = toCSSPrimitiveValue(parsed.get());
     // TODO(fs): Enable calc for SVG lengths
     if (newValue->isCalculated() || !isSupportedCSSUnitType(newValue->typeWithCalcResolved()))
-        return ParsingAttributeFailedError;
+        return SVGParseStatus::ExpectedLength;
 
     m_value = newValue;
-    return NoError;
+    return SVGParseStatus::NoError;
 }
 
 String SVGLength::valueAsString() const
@@ -269,4 +265,4 @@ float SVGLength::calculateDistance(PassRefPtrWillBeRawPtr<SVGPropertyBase> toVal
     return fabsf(toLength->value(lengthContext) - value(lengthContext));
 }
 
-}
+} // namespace blink

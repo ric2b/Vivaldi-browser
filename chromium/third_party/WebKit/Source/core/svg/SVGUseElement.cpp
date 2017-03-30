@@ -66,6 +66,10 @@ inline SVGUseElement::SVGUseElement(Document& document)
     addToPropertyMap(m_y);
     addToPropertyMap(m_width);
     addToPropertyMap(m_height);
+
+#if ENABLE(OILPAN)
+    ThreadState::current()->registerPreFinalizer(this);
+#endif
 }
 
 PassRefPtrWillBeRawPtr<SVGUseElement> SVGUseElement::create(Document& document)
@@ -78,12 +82,17 @@ PassRefPtrWillBeRawPtr<SVGUseElement> SVGUseElement::create(Document& document)
 
 SVGUseElement::~SVGUseElement()
 {
-    setDocumentResource(0);
 #if !ENABLE(OILPAN)
     clearShadowTree();
     cancelShadowTreeRecreation();
     svgUseLoadEventSender().cancelEvent(this);
+    dispose();
 #endif
+}
+
+void SVGUseElement::dispose()
+{
+    setDocumentResource(nullptr);
 }
 
 DEFINE_TRACE(SVGUseElement)
@@ -93,6 +102,7 @@ DEFINE_TRACE(SVGUseElement)
     visitor->trace(m_width);
     visitor->trace(m_height);
     visitor->trace(m_targetElementInstance);
+    visitor->trace(m_resource);
     SVGGraphicsElement::trace(visitor);
     SVGURIReference::trace(visitor);
 }
@@ -136,14 +146,11 @@ TreeScope* SVGUseElement::referencedScope() const
 
 Document* SVGUseElement::externalDocument() const
 {
-    if (m_resource && m_resource->isLoaded()) {
-        // Gracefully handle error condition.
-        if (m_resource->errorOccurred())
-            return nullptr;
-        ASSERT(m_resource->document());
-        return m_resource->document();
-    }
-    return nullptr;
+    // Gracefully handle error condition.
+    if (!resourceIsValid())
+        return nullptr;
+    ASSERT(m_resource->document());
+    return m_resource->document();
 }
 
 void transferUseWidthAndHeightIfNeeded(const SVGUseElement& use, SVGElement* shadowElement, const SVGElement& originalElement)
@@ -233,7 +240,7 @@ void SVGUseElement::svgAttributeChanged(const QualifiedName& attrName)
                 setDocumentResource(DocumentResource::fetchSVGDocument(request, document().fetcher()));
             }
         } else {
-            setDocumentResource(0);
+            setDocumentResource(nullptr);
         }
 
         invalidateShadowTree();
@@ -689,6 +696,8 @@ void SVGUseElement::expandSymbolElementsInShadowTree(SVGElement* element)
         // Expand the siblings because the *element* is replaced and we will
         // lose the sibling chain when we are back from recursion.
         element = replacingElement.get();
+        for (RefPtrWillBeRawPtr<SVGElement> sibling = Traversal<SVGElement>::nextSibling(*element); sibling; sibling = Traversal<SVGElement>::nextSibling(*sibling))
+            expandSymbolElementsInShadowTree(sibling.get());
     }
 
     for (RefPtrWillBeRawPtr<SVGElement> child = Traversal<SVGElement>::firstChild(*element); child; child = Traversal<SVGElement>::nextSibling(*child))
@@ -729,6 +738,7 @@ void SVGUseElement::transferUseAttributesToReplacedElement(SVGElement* from, SVG
     to->removeAttribute(SVGNames::yAttr);
     to->removeAttribute(SVGNames::widthAttr);
     to->removeAttribute(SVGNames::heightAttr);
+    to->removeAttribute(SVGNames::hrefAttr);
     to->removeAttribute(XLinkNames::hrefAttr);
 }
 
@@ -778,11 +788,12 @@ void SVGUseElement::dispatchPendingEvent(SVGUseEventSender* eventSender)
 
 void SVGUseElement::notifyFinished(Resource* resource)
 {
+    ASSERT(m_resource == resource);
     if (!inDocument())
         return;
 
     invalidateShadowTree();
-    if (resource->errorOccurred()) {
+    if (!resourceIsValid()) {
         dispatchEvent(Event::create(EventTypeNames::error));
     } else if (!resource->wasCanceled()) {
         if (m_haveFiredLoadEvent)
@@ -800,6 +811,14 @@ bool SVGUseElement::resourceIsStillLoading() const
     return m_resource && m_resource->isLoading();
 }
 
+bool SVGUseElement::resourceIsValid() const
+{
+    return m_resource
+        && m_resource->isLoaded()
+        && !m_resource->errorOccurred()
+        && m_resource->document();
+}
+
 bool SVGUseElement::instanceTreeIsLoading(const SVGElement* targetInstance)
 {
     for (const SVGElement* element = targetInstance; element; element = Traversal<SVGElement>::next(*element, targetInstance)) {
@@ -809,7 +828,7 @@ bool SVGUseElement::instanceTreeIsLoading(const SVGElement* targetInstance)
     return false;
 }
 
-void SVGUseElement::setDocumentResource(ResourcePtr<DocumentResource> resource)
+void SVGUseElement::setDocumentResource(PassRefPtrWillBeRawPtr<DocumentResource> resource)
 {
     if (m_resource == resource)
         return;
@@ -822,4 +841,4 @@ void SVGUseElement::setDocumentResource(ResourcePtr<DocumentResource> resource)
         m_resource->addClient(this);
 }
 
-}
+} // namespace blink

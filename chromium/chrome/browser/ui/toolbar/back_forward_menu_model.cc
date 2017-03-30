@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
@@ -20,14 +19,15 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/grit/generated_resources.h"
 #include "components/favicon_base/favicon_types.h"
+#include "components/prefs/pref_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/favicon_status.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
-#include "grit/theme_resources.h"
+#include "grit/components_scaled_resources.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -95,7 +95,7 @@ int BackForwardMenuModel::GetCommandIdAt(int index) const {
 base::string16 BackForwardMenuModel::GetLabelAt(int index) const {
   // Return label "Show Full History" for the last item of the menu.
   if (index == GetItemCount() - 1)
-    return l10n_util::GetStringUTF16(IDS_SHOWFULLHISTORY_LINK);
+    return l10n_util::GetStringUTF16(IDS_HISTORY_SHOWFULLHISTORY_LINK);
 
   // Return an empty string for a separator.
   if (IsSeparator(index))
@@ -417,7 +417,7 @@ bool BackForwardMenuModel::ItemHasIcon(int index) const {
 }
 
 base::string16 BackForwardMenuModel::GetShowFullHistoryLabel() const {
-  return l10n_util::GetStringUTF16(IDS_SHOWFULLHISTORY_LINK);
+  return l10n_util::GetStringUTF16(IDS_HISTORY_SHOWFULLHISTORY_LINK);
 }
 
 WebContents* BackForwardMenuModel::GetWebContents() const {

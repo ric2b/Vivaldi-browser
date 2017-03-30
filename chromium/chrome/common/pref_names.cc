@@ -14,8 +14,10 @@ namespace prefs {
 // These are attached to the user profile
 
 #if defined(OS_CHROMEOS) && defined(ENABLE_APP_LIST)
-// A preference to keep list of ARC apps and its state.
+// A preference to keep list of Android apps and their state.
 const char kArcApps[] = "arc.apps";
+// A preference to keep Android apps enabled state.
+const char kArcEnabled[] = "arc.enabled";
 #endif
 
 // A bool pref that keeps whether the child status for this profile was already
@@ -412,7 +414,7 @@ const char kDisableSpdy[] = "spdy.disabled";
 // Prefs for persisting HttpServerProperties.
 const char kHttpServerProperties[] = "net.http_server_properties";
 
-#if defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_ANDROID)
 // Last time that a check for cloud policy management was done. This time is
 // recorded on Android so that retries aren't attempted on every startup.
 // Instead the cloud policy registration is retried at least 1 or 3 days later.
@@ -510,7 +512,7 @@ const char kLanguageEnabledExtensionImesSyncable[] =
     "settings.language.enabled_extension_imes_syncable";
 
 // A boolean pref set to true if the IME menu is activated.
-const char kLangugaeImeMenuActivated[] = "settings.language.ime_menu_activated";
+const char kLanguageImeMenuActivated[] = "settings.language.ime_menu_activated";
 
 // A boolean pref to indicate whether we still need to add the globally synced
 // input methods. False after the initial post-OOBE sync.
@@ -1346,8 +1348,7 @@ const char kDownloadDefaultDirectory[] = "download.default_directory";
 // upgrade a unsafe location to a safe location.
 const char kDownloadDirUpgraded[] = "download.directory_upgrade";
 
-#if defined(OS_WIN) || defined(OS_LINUX) || \
-    (defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MACOSX)
 const char kOpenPdfDownloadInSystemReader[] =
     "download.open_pdf_in_system_reader";
 #endif
@@ -1423,7 +1424,7 @@ const char kShutdownNumProcessesSlow[] = "shutdown.num_processes_slow";
 // before shutting everything down.
 const char kRestartLastSessionOnShutdown[] = "restart.last.session.on.shutdown";
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 // Set before autorestarting Chrome, cleared on clean exit.
 const char kWasRestarted[] = "was.restarted";
 #endif
@@ -1517,7 +1518,7 @@ const char kDevToolsRemoteEnabled[] = "devtools.remote_enabled";
 // when on-line authentication is not available.
 const char kGoogleServicesPasswordHash[] = "google.services.password_hash";
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 // Tracks the number of times that we have shown the sign in promo at startup.
 const char kSignInPromoStartupCount[] = "sync_promo.startup_count";
 
@@ -1535,7 +1536,7 @@ const char kSignInPromoShowOnFirstRunAllowed[] =
 const char kSignInPromoShowNTPBubble[] = "sync_promo.show_ntp_bubble";
 #endif
 
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
 // Boolean tracking whether the user chose to opt out of the x-device promo.
 const char kCrossDevicePromoOptedOut[] = "x_device_promo.opted_out";
 
@@ -1777,6 +1778,12 @@ const char kOobeComplete[] = "OobeComplete";
 // The name of the screen that has to be shown if OOBE has been interrupted.
 const char kOobeScreenPending[] = "OobeScreenPending";
 
+// A boolean pref to indicate if an eligible controller (either a Chrome OS
+// device, or an Android device) is detected during bootstrapping or
+// shark/remora setup process. A controller can help the device go through OOBE
+// and get enrolled into a domain automatically.
+const char kOobeControllerDetected[] = "OobeControllerDetected";
+
 // A boolean pref for whether the Goodies promotion webpage has been displayed,
 // or otherwise disqualified for auto-display, on this device.
 const char kCanShowOobeGoodiesPage[] = "CanShowOobeGoodiesPage";
@@ -1951,7 +1958,7 @@ const char kCustomHandlersEnabled[] = "custom_handlers.enabled";
 // by the cloud policy subsystem.
 const char kDevicePolicyRefreshRate[] = "policy.device_refresh_rate";
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 // A boolean where true means that the browser has previously attempted to
 // enable autoupdate and failed, so the next out-of-date browser start should
 // not prompt the user to enable autoupdate, it should offer to reinstall Chrome
@@ -1969,7 +1976,7 @@ const char kMediaGalleriesRememberedGalleries[] =
 
 // The last time a media scan completed.
 const char kMediaGalleriesLastScanTime[] = "media_galleries.last_scan_time";
-#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
+#endif  // !defined(OS_ANDROID)
 
 #if defined(USE_ASH)
 // |kShelfAlignment| and |kShelfAutoHideBehavior| have a local variant. The
@@ -2166,6 +2173,15 @@ const char kClickedUpdateMenuItem[] = "omaha.clicked_update_menu_item";
 #endif
 
 #if defined(ENABLE_MEDIA_ROUTER)
+#if defined(GOOGLE_CHROME_BUILD)
+// Whether or not the user has explicitly set the cloud services preference
+// through the first run flow.
+const char kMediaRouterCloudServicesPrefSet[] =
+    "media_router.cloudservices.prefset";
+// Whether or not the user has enabled cloud services with Media Router.
+const char kMediaRouterEnableCloudServices[] =
+    "media_router.cloudservices.enabled";
+#endif  // defined(GOOGLE_CHROME_BUILD)
 // Whether or not the Media Router first run flow has been acknowledged by the
 // user.
 const char kMediaRouterFirstRunFlowAcknowledged[] =

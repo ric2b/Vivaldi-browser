@@ -14,6 +14,7 @@
 namespace blink {
 
 class CSSParserTokenRange;
+class CSSVariableData;
 class CSSVariableReferenceValue;
 class StyleResolverState;
 class StyleVariableData;
@@ -28,27 +29,29 @@ public:
 
 private:
     CSSVariableResolver(StyleVariableData*);
-    CSSVariableResolver(StyleVariableData*, AtomicString& variable);
 
-    struct ResolutionState {
-        bool success;
-        // Resolution doesn't finish when a cycle is detected. Fallbacks still
-        // need to be tracked for additional cycles, and invalidation only
-        // applies back to cycle starts. This context member tracks all
-        // detected cycle start points.
-        HashSet<AtomicString> cycleStartPoints;
+    // These return false if we encounter a reference to an invalid variable with no fallback
 
-        ResolutionState()
-            : success(true)
-        { };
-    };
+    // Resolves a range which may contain var() references
+    bool resolveTokenRange(CSSParserTokenRange, Vector<CSSParserToken>& result);
+    // Resolves the fallback (if present) of a var() reference, starting from the comma
+    bool resolveFallback(CSSParserTokenRange, Vector<CSSParserToken>& result);
+    // Resolves the contents of a var() reference
+    bool resolveVariableReference(CSSParserTokenRange, Vector<CSSParserToken>& result);
 
-    void resolveFallback(CSSParserTokenRange, Vector<CSSParserToken>& result, ResolutionState& context);
-    void resolveVariableTokensRecursive(CSSParserTokenRange, Vector<CSSParserToken>& result, ResolutionState& context);
-    void resolveVariableReferencesFromTokens(CSSParserTokenRange tokens, Vector<CSSParserToken>& result, ResolutionState& context);
+    // These return null if the custom property is invalid
+
+    // Returns the CSSVariableData for a custom property, resolving and storing it if necessary
+    CSSVariableData* valueForCustomProperty(AtomicString name);
+    // Resolves the CSSVariableData from a custom property declaration
+    PassRefPtr<CSSVariableData> resolveCustomProperty(AtomicString name, const CSSVariableData&);
 
     StyleVariableData* m_styleVariableData;
     HashSet<AtomicString> m_variablesSeen;
+    // Resolution doesn't finish when a cycle is detected. Fallbacks still
+    // need to be tracked for additional cycles, and invalidation only
+    // applies back to cycle starts.
+    HashSet<AtomicString> m_cycleStartPoints;
 };
 
 } // namespace blink

@@ -49,6 +49,7 @@
 #include "third_party/WebKit/public/web/WebSettings.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "third_party/WebKit/public/web/WebViewClient.h"
+#include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/base/resource/resource_bundle.h"
 
 using content::WebPreferences;
@@ -57,16 +58,15 @@ namespace printing {
 
 namespace {
 
-#define STATIC_ASSERT_PP_MATCHING_ENUM(a, b)                  \
-    static_assert(static_cast<int>(a) == static_cast<int>(b), \
-                  "mismatching enums: " #a)
+#define STATIC_ASSERT_ENUM(a, b)                            \
+  static_assert(static_cast<int>(a) == static_cast<int>(b), \
+                "mismatching enums: " #a)
 
-// Check blink::WebDuplexMode and printing::DuplexMode are kept in sync.
-STATIC_ASSERT_PP_MATCHING_ENUM(blink::WebUnknownDuplexMode,
-                               UNKNOWN_DUPLEX_MODE);
-STATIC_ASSERT_PP_MATCHING_ENUM(blink::WebSimplex, SIMPLEX);
-STATIC_ASSERT_PP_MATCHING_ENUM(blink::WebLongEdge, LONG_EDGE);
-STATIC_ASSERT_PP_MATCHING_ENUM(blink::WebShortEdge, SHORT_EDGE);
+// Check blink and printing enums are kept in sync.
+STATIC_ASSERT_ENUM(blink::WebUnknownDuplexMode, UNKNOWN_DUPLEX_MODE);
+STATIC_ASSERT_ENUM(blink::WebSimplex, SIMPLEX);
+STATIC_ASSERT_ENUM(blink::WebLongEdge, LONG_EDGE);
+STATIC_ASSERT_ENUM(blink::WebShortEdge, SHORT_EDGE);
 
 enum PrintPreviewHelperEvents {
   PREVIEW_EVENT_REQUESTED,
@@ -111,9 +111,9 @@ int GetDPI(const PrintMsg_Print_Params* print_params) {
 bool PrintMsg_Print_Params_IsValid(const PrintMsg_Print_Params& params) {
   return !params.content_size.IsEmpty() && !params.page_size.IsEmpty() &&
          !params.printable_area.IsEmpty() && params.document_cookie &&
-         params.desired_dpi && params.max_shrink && params.min_shrink &&
-         params.dpi && (params.margin_top >= 0) && (params.margin_left >= 0) &&
-         params.dpi > kMinDpi && params.document_cookie != 0;
+         params.desired_dpi && params.dpi && params.margin_top >= 0 &&
+         params.margin_left >= 0 && params.dpi > kMinDpi &&
+         params.document_cookie != 0;
 }
 
 PrintMsg_Print_Params GetCssPrintParams(
@@ -616,8 +616,9 @@ class PrepareFrameAndViewForPrint : public blink::WebViewClient,
       blink::WebLocalFrame* parent,
       blink::WebTreeScopeType scope,
       const blink::WebString& name,
-      blink::WebSandboxFlags sandboxFlags,
-      const blink::WebFrameOwnerProperties& frameOwnerProperties) override;
+      const blink::WebString& unique_name,
+      blink::WebSandboxFlags sandbox_flags,
+      const blink::WebFrameOwnerProperties& frame_owner_properties) override;
   void frameDetached(blink::WebFrame* frame, DetachType type) override;
 
   void CallOnReady();
@@ -680,6 +681,7 @@ void PrepareFrameAndViewForPrint::ResizeForPrinting() {
   // think the page is 125% larger so the size of the page is correct for
   // minimum (default) scaling.
   // This is important for sites that try to fill the page.
+  // The 1.25 value is |printingMinimumShrinkFactor|.
   gfx::Size print_layout_size(web_print_params_.printContentArea.width,
                               web_print_params_.printContentArea.height);
   print_layout_size.set_height(
@@ -760,8 +762,9 @@ blink::WebFrame* PrepareFrameAndViewForPrint::createChildFrame(
     blink::WebLocalFrame* parent,
     blink::WebTreeScopeType scope,
     const blink::WebString& name,
-    blink::WebSandboxFlags sandboxFlags,
-    const blink::WebFrameOwnerProperties& frameOwnerProperties) {
+    const blink::WebString& unique_name,
+    blink::WebSandboxFlags sandbox_flags,
+    const blink::WebFrameOwnerProperties& frame_owner_properties) {
   blink::WebFrame* frame = blink::WebLocalFrame::create(scope, this);
   parent->appendChild(frame);
   return frame;
@@ -1759,21 +1762,17 @@ void PrintWebViewHelper::PrintPageInternal(
   gfx::Rect canvas_area =
       params.params.display_header_footer ? gfx::Rect(page_size) : content_area;
 
-#if defined(OS_WIN) || defined(ENABLE_PRINT_PREVIEW)
+  // TODO(thestig): Figure out why Linux is different.
+#if defined(OS_WIN)
   float webkit_page_shrink_factor =
       frame->getPrintPageShrink(params.page_number);
   float scale_factor = css_scale_factor * webkit_page_shrink_factor;
-#endif
-  // TODO(thestig) GetVectorCanvasForNewPage() and RenderPageContent() take a
-  // different scale factor vs Windows. Figure out why and combine the two.
-#if defined(OS_WIN)
-  float platform_scale_factor = scale_factor;
 #else
-  float platform_scale_factor = css_scale_factor;
-#endif  // defined(OS_WIN)
+  float scale_factor = css_scale_factor;
+#endif
 
-  skia::PlatformCanvas* canvas = metafile->GetVectorCanvasForNewPage(
-      page_size, canvas_area, platform_scale_factor);
+  SkCanvas* canvas = metafile->GetVectorCanvasForNewPage(
+      page_size, canvas_area, scale_factor);
   if (!canvas)
     return;
 
@@ -1781,16 +1780,24 @@ void PrintWebViewHelper::PrintPageInternal(
 
 #if defined(ENABLE_PRINT_PREVIEW)
   if (params.params.display_header_footer) {
+    // TODO(thestig): Figure out why Linux needs this. The value may be
+    // |printingMinimumShrinkFactor|.
+#if defined(OS_WIN)
+    const float fudge_factor = 1;
+#else
+    const float fudge_factor = 1.25;
+#endif
     // |page_number| is 0-based, so 1 is added.
     PrintHeaderAndFooter(canvas, params.page_number + 1,
                          print_preview_context_.total_page_count(), *frame,
-                         scale_factor, page_layout_in_points, params.params);
+                         scale_factor / fudge_factor, page_layout_in_points,
+                         params.params);
   }
 #endif  // defined(ENABLE_PRINT_PREVIEW)
 
   float webkit_scale_factor =
       RenderPageContent(frame, params.page_number, canvas_area, content_area,
-                        platform_scale_factor, canvas);
+                        scale_factor, canvas);
   DCHECK_GT(webkit_scale_factor, 0.0f);
 
   // Done printing. Close the canvas to retrieve the compiled metafile.
@@ -1806,25 +1813,6 @@ bool PrintWebViewHelper::CopyMetafileDataToSharedMem(
   if (buf_size == 0)
     return false;
 
-#if defined(OS_WIN)
-  base::SharedMemory shared_buf;
-  // Allocate a shared memory buffer to hold the generated metafile data.
-  if (!shared_buf.CreateAndMapAnonymous(buf_size))
-    return false;
-
-  // Copy the bits into shared memory.
-  if (!metafile.GetData(shared_buf.memory(), buf_size))
-    return false;
-
-  if (!shared_buf.GiveToProcess(base::GetCurrentProcessHandle(),
-                                shared_mem_handle)) {
-    return false;
-  }
-
-  Send(new PrintHostMsg_DuplicateSection(routing_id(), *shared_mem_handle,
-                                         shared_mem_handle));
-  return true;
-#else
   scoped_ptr<base::SharedMemory> shared_buf(
       content::RenderThread::Get()->HostAllocateSharedMemoryBuffer(buf_size));
   if (!shared_buf)
@@ -1836,9 +1824,9 @@ bool PrintWebViewHelper::CopyMetafileDataToSharedMem(
   if (!metafile.GetData(shared_buf->memory(), buf_size))
     return false;
 
-  return shared_buf->GiveToProcess(base::GetCurrentProcessHandle(),
-                                   shared_mem_handle);
-#endif  // defined(OS_WIN)
+  *shared_mem_handle =
+      base::SharedMemory::DuplicateHandle(shared_buf->handle());
+  return true;
 }
 
 #if defined(ENABLE_PRINT_PREVIEW)
@@ -2025,11 +2013,7 @@ bool PrintWebViewHelper::PrintPreviewContext::CreatePreviewDocument(
   }
 
   metafile_.reset(new PdfMetafileSkia);
-  if (!metafile_->Init()) {
-    set_error(PREVIEW_ERROR_METAFILE_INIT_FAILED);
-    LOG(ERROR) << "PdfMetafileSkia Init failed";
-    return false;
-  }
+  CHECK(metafile_->Init());
 
   current_page_index_ = 0;
   pages_to_render_ = pages;

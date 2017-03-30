@@ -15,6 +15,7 @@
 namespace base {
 class Pickle;
 class PickleIterator;
+class PickleSizer;
 }
 
 namespace mojo {
@@ -34,9 +35,14 @@ class PickledStructChromium {
   int bar() const { return bar_; }
   void set_bar(int bar) { bar_ = bar; }
 
+  // The |baz| field should never be serialized.
+  int baz() const { return baz_; }
+  void set_baz(int baz) { baz_ = baz; }
+
  private:
   int foo_ = 0;
   int bar_ = 0;
+  int baz_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(PickledStructChromium);
 };
@@ -50,7 +56,7 @@ template <>
 struct ParamTraits<mojo::test::PickledStructChromium> {
   using param_type = mojo::test::PickledStructChromium;
 
-  static size_t GetSize(const param_type& p) { return 8; }
+  static void GetSize(base::PickleSizer* sizer, const param_type& p);
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,

@@ -8,7 +8,7 @@
 
 namespace cc {
 
-scoped_ptr<ThreadedChannel> ThreadedChannelForTest::Create(
+scoped_ptr<ThreadedChannelForTest> ThreadedChannelForTest::Create(
     TestHooks* test_hooks,
     ProxyMain* proxy_main,
     TaskRunnerProvider* task_runner_provider) {
@@ -21,16 +21,19 @@ ThreadedChannelForTest::ThreadedChannelForTest(
     ProxyMain* proxy_main,
     TaskRunnerProvider* task_runner_provider)
     : ThreadedChannel(proxy_main, task_runner_provider),
-      test_hooks_(test_hooks) {}
+      test_hooks_(test_hooks),
+      proxy_impl_for_test_(nullptr) {}
 
 scoped_ptr<ProxyImpl> ThreadedChannelForTest::CreateProxyImpl(
     ChannelImpl* channel_impl,
     LayerTreeHost* layer_tree_host,
     TaskRunnerProvider* task_runner_provider,
     scoped_ptr<BeginFrameSource> external_begin_frame_source) {
-  return ProxyImplForTest::Create(test_hooks_, channel_impl, layer_tree_host,
-                                  task_runner_provider,
-                                  std::move(external_begin_frame_source));
+  scoped_ptr<ProxyImplForTest> proxy_impl = ProxyImplForTest::Create(
+      test_hooks_, channel_impl, layer_tree_host, task_runner_provider,
+      std::move(external_begin_frame_source));
+  proxy_impl_for_test_ = proxy_impl.get();
+  return std::move(proxy_impl);
 }
 
 }  // namespace cc

@@ -6,9 +6,10 @@
 
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "mash/shell/public/interfaces/shell.mojom.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
-#include "mojo/shell/public/cpp/application_connection.h"
-#include "mojo/shell/public/cpp/application_impl.h"
+#include "mojo/shell/public/cpp/connection.h"
+#include "mojo/shell/public/cpp/connector.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/compositor/layer.h"
@@ -163,8 +164,9 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
                                public views::MenuDelegate,
                                public views::ContextMenuController {
  public:
-  WindowTypeLauncherView()
-      : create_button_(new views::LabelButton(
+  explicit WindowTypeLauncherView(mojo::Connector* connector)
+      : connector_(connector),
+        create_button_(new views::LabelButton(
             this, base::ASCIIToUTF16("Create Window"))),
         panel_button_(new views::LabelButton(
             this, base::ASCIIToUTF16("Create Panel"))),
@@ -271,7 +273,9 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
       NOTIMPLEMENTED();
     }
     else if (sender == lock_button_) {
-      NOTIMPLEMENTED();
+      mash::shell::mojom::ShellPtr shell;
+      connector_->ConnectToInterface("mojo:mash_shell", &shell);
+      shell->LockScreen();
     }
     else if (sender == widgets_button_) {
       NOTIMPLEMENTED();
@@ -327,6 +331,7 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
     }
   }
 
+  mojo::Connector* connector_;
   views::LabelButton* create_button_;
   views::LabelButton* panel_button_;
   views::LabelButton* create_nonresizable_button_;
@@ -350,19 +355,16 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
 WindowTypeLauncher::WindowTypeLauncher() {}
 WindowTypeLauncher::~WindowTypeLauncher() {}
 
-bool WindowTypeLauncher::ConfigureIncomingConnection(
-    mojo::ApplicationConnection* connection) {
-  return false;
-}
+void WindowTypeLauncher::Initialize(mojo::Connector* connector,
+                                    const std::string& url,
+                                    uint32_t id, uint32_t user_id) {
+  aura_init_.reset(new views::AuraInit(connector, "views_mus_resources.pak"));
 
-void WindowTypeLauncher::Initialize(mojo::ApplicationImpl* app) {
-  aura_init_.reset(new views::AuraInit(app, "views_mus_resources.pak"));
-
-  views::WindowManagerConnection::Create(app);
+  views::WindowManagerConnection::Create(connector);
 
   views::Widget* widget = new views::Widget;
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
-  params.delegate = new WindowTypeLauncherView;
+  params.delegate = new WindowTypeLauncherView(connector);
   widget->Init(params);
   widget->Show();
 }

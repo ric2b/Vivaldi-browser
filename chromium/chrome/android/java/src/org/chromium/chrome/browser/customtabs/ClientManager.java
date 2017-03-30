@@ -21,6 +21,7 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.content_public.common.Referrer;
 
 import java.util.ArrayList;
@@ -34,9 +35,9 @@ import java.util.concurrent.TimeUnit;
 @SuppressFBWarnings("CHROMIUM_SYNCHRONIZED_METHOD")
 class ClientManager {
     // Values for the "CustomTabs.PredictionStatus" UMA histogram. Append-only.
-    private static final int NO_PREDICTION = 0;
-    private static final int GOOD_PREDICTION = 1;
-    private static final int BAD_PREDICTION = 2;
+    @VisibleForTesting static final int NO_PREDICTION = 0;
+    @VisibleForTesting static final int GOOD_PREDICTION = 1;
+    @VisibleForTesting static final int BAD_PREDICTION = 2;
     private static final int PREDICTION_STATUS_COUNT = 3;
     // Values for the "CustomTabs.CalledWarmup" UMA histogram. Append-only.
     @VisibleForTesting static final int NO_SESSION_NO_WARMUP = 0;
@@ -52,9 +53,12 @@ class ClientManager {
         public final String packageName;
         public final ICustomTabsCallback callback;
         public final IBinder.DeathRecipient deathRecipient;
-        private ServiceConnection mKeepAliveConnection = null;
-        private String mPredictedUrl = null;
-        private long mLastMayLaunchUrlTimestamp = 0;
+        public boolean mIgnoreFragments;
+        private boolean mShouldHideDomain;
+        private boolean mShouldPrerenderOnCellular;
+        private ServiceConnection mKeepAliveConnection;
+        private String mPredictedUrl;
+        private long mLastMayLaunchUrlTimestamp;
 
         public SessionParams(Context context, int uid, ICustomTabsCallback callback,
                 IBinder.DeathRecipient deathRecipient) {
@@ -185,33 +189,40 @@ class ClientManager {
         return result;
     }
 
+    @VisibleForTesting
+    synchronized int getPredictionOutcome(IBinder session, String url) {
+        SessionParams params = mSessionParams.get(session);
+        if (params == null) return NO_PREDICTION;
+
+        String predictedUrl = params.getPredictedUrl();
+        if (predictedUrl == null) return NO_PREDICTION;
+
+        boolean urlsMatch = TextUtils.equals(predictedUrl, url)
+                || (params.mIgnoreFragments
+                        && UrlUtilities.urlsMatchIgnoringFragments(predictedUrl, url));
+        return urlsMatch ? GOOD_PREDICTION : BAD_PREDICTION;
+    }
+
     /**
      * Registers that a client has launched a URL inside a Custom Tab.
      */
     public synchronized void registerLaunch(IBinder session, String url) {
-        int outcome = NO_PREDICTION;
-        long elapsedTimeMs = -1;
-        SessionParams params = mSessionParams.get(session);
-        if (params != null) {
-            String predictedUrl = params.getPredictedUrl();
-            outcome = predictedUrl == null ? NO_PREDICTION : predictedUrl.equals(url)
-                            ? GOOD_PREDICTION
-                            : BAD_PREDICTION;
-            long now = SystemClock.elapsedRealtime();
-            elapsedTimeMs = now - params.getLastMayLaunchUrlTimestamp();
-            params.setPredictionMetrics(null, 0);
-            if (outcome == GOOD_PREDICTION) {
-                RequestThrottler.getForUid(mContext, params.uid).registerSuccess(url);
-            }
-        }
+        int outcome = getPredictionOutcome(session, url);
         RecordHistogram.recordEnumeratedHistogram(
                 "CustomTabs.PredictionStatus", outcome, PREDICTION_STATUS_COUNT);
+
+        SessionParams params = mSessionParams.get(session);
         if (outcome == GOOD_PREDICTION) {
+            long elapsedTimeMs = SystemClock.elapsedRealtime()
+                    - params.getLastMayLaunchUrlTimestamp();
+            RequestThrottler.getForUid(mContext, params.uid).registerSuccess(
+                    params.mPredictedUrl);
             RecordHistogram.recordCustomTimesHistogram("CustomTabs.PredictionToLaunch",
                     elapsedTimeMs, 1, TimeUnit.MINUTES.toMillis(3), TimeUnit.MILLISECONDS, 100);
         }
         RecordHistogram.recordEnumeratedHistogram(
                 "CustomTabs.WarmupStateOnLaunch", getWarmupState(session), SESSION_WARMUP_COUNT);
+        if (params != null) params.setPredictionMetrics(null, 0);
     }
 
     /**
@@ -238,6 +249,53 @@ class ClientManager {
     public synchronized ICustomTabsCallback getCallbackForSession(IBinder session) {
         SessionParams params = mSessionParams.get(session);
         return params != null ? params.callback : null;
+    }
+
+    /**
+     * @return Whether the urlbar should be hidden for the session on first page load. Urls are
+     *         foced to show up after the user navigates away.
+     */
+    public synchronized boolean shouldHideDomainForSession(IBinder session) {
+        SessionParams params = mSessionParams.get(session);
+        return params != null ? params.mShouldHideDomain : false;
+    }
+
+    /**
+     * Sets whether the urlbar should be hidden for a given session.
+     */
+    public synchronized void setHideDomainForSession(IBinder session, boolean hide) {
+        SessionParams params = mSessionParams.get(session);
+        if (params != null) params.mShouldHideDomain = hide;
+    }
+
+    /**
+     * @return Whether the fragment should be ignored for prerender matching.
+     */
+    public synchronized boolean getIgnoreFragmentsForSession(IBinder session) {
+        SessionParams params = mSessionParams.get(session);
+        return params == null ? false : params.mIgnoreFragments;
+    }
+
+    /** Sets whether the fragment should be ignored for prerender matching. */
+    public synchronized void setIgnoreFragmentsForSession(IBinder session, boolean value) {
+        SessionParams params = mSessionParams.get(session);
+        if (params != null) params.mIgnoreFragments = value;
+    }
+
+    /**
+     * @return Whether prerender should be turned on for cellular networks for given session.
+     */
+    public synchronized boolean shouldPrerenderOnCellularForSession(IBinder session) {
+        SessionParams params = mSessionParams.get(session);
+        return params != null ? params.mShouldPrerenderOnCellular : false;
+    }
+
+    /**
+     * Sets whether prerender should be turned on for mobile networks for given session.
+     */
+    public synchronized void setPrerenderCellularForSession(IBinder session, boolean prerender) {
+        SessionParams params = mSessionParams.get(session);
+        if (params != null) params.mShouldPrerenderOnCellular = prerender;
     }
 
     /** Tries to bind to a client to keep it alive, and returns true for success. */

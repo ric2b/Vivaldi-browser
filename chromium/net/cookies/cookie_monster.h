@@ -51,10 +51,8 @@ class ParsedCookie;
 // This class IS thread-safe. Normally, it is only used on the I/O thread, but
 // is also accessed directly through Automation for UI testing.
 //
-// All cookie tasks are handled asynchronously. Tasks may be deferred if
-// all affected cookies are not yet loaded from the backing store. Otherwise,
-// the callback may be invoked immediately (prior to return of the asynchronous
-// function).
+// Tasks may be deferred if all affected cookies are not yet loaded from the
+// backing store. Otherwise, callbacks may be invoked immediately.
 //
 // A cookie task is either pending loading of the entire cookie store, or
 // loading of cookies for a specfic domain key(eTLD+1). In the former case, the
@@ -148,147 +146,63 @@ class NET_EXPORT CookieMonster : public CookieStore {
                 CookieMonsterDelegate* delegate,
                 int last_access_threshold_milliseconds);
 
-  // Helper function that adds all cookies from |list| into this instance,
-  // overwriting any equivalent cookies.
-  bool ImportCookies(const CookieList& list);
-
-  typedef base::Callback<void(const CookieList& cookies)> GetCookieListCallback;
-  typedef base::Callback<void(bool success)> DeleteCookieCallback;
-
-  // Sets a cookie given explicit user-provided cookie attributes. The cookie
-  // name, value, domain, etc. are each provided as separate strings. This
-  // function expects each attribute to be well-formed. It will check for
-  // disallowed characters (e.g. the ';' character is disallowed within the
-  // cookie value attribute) and will return false without setting the cookie
-  // if such characters are found.
-  void SetCookieWithDetailsAsync(const GURL& url,
-                                 const std::string& name,
-                                 const std::string& value,
-                                 const std::string& domain,
-                                 const std::string& path,
-                                 const base::Time& expiration_time,
-                                 bool secure,
-                                 bool http_only,
-                                 bool first_party,
-                                 bool enforce_prefixes,
-                                 bool enforce_strict_secure,
-                                 CookiePriority priority,
-                                 const SetCookiesCallback& callback);
-
-  // Returns all the cookies, for use in management UI, etc. This does not mark
-  // the cookies as having been accessed.
-  // The returned cookies are ordered by longest path, then by earliest
-  // creation date.
-  void GetAllCookiesAsync(const GetCookieListCallback& callback);
-
-  // Returns all the cookies, for use in management UI, etc. Filters results
-  // using given url scheme, host / domain and path and options. This does not
-  // mark the cookies as having been accessed.
-  // The returned cookies are ordered by longest path, then earliest
-  // creation date.
-  void GetAllCookiesForURLWithOptionsAsync(
-      const GURL& url,
-      const CookieOptions& options,
-      const GetCookieListCallback& callback);
-
-  // Deletes all of the cookies.
-  void DeleteAllAsync(const DeleteCallback& callback);
-
-  // Deletes all cookies that match the host of the given URL
-  // regardless of path.  This includes all http_only and secure cookies,
-  // but does not include any domain cookies that may apply to this host.
-  // Returns the number of cookies deleted.
-  void DeleteAllForHostAsync(const GURL& url, const DeleteCallback& callback);
-
-  // Deletes one specific cookie.
-  void DeleteCanonicalCookieAsync(const CanonicalCookie& cookie,
-                                  const DeleteCookieCallback& callback);
-
-  // Resets the list of cookieable schemes to the supplied schemes. Does
-  // nothing if called after first use of the instance (i.e. after the
-  // instance initialization process).
-  void SetCookieableSchemes(const char* const schemes[], size_t num_schemes);
-
-  // Instructs the cookie monster to not delete expired cookies. This is used
-  // in cases where the cookie monster is used as a data structure to keep
-  // arbitrary cookies.
-  void SetKeepExpiredCookies();
-
-  // Protects session cookies from deletion on shutdown.
-  void SetForceKeepSessionState();
-
-  // Flush the backing store (if any) to disk and post the given callback when
-  // done.
-  // WARNING: THE CALLBACK WILL RUN ON A RANDOM THREAD. IT MUST BE THREAD SAFE.
-  // It may be posted to the current thread, or it may run on the thread that
-  // actually does the flushing. Your Task should generally post a notification
-  // to the thread you actually want to be notified on.
-  void FlushStore(const base::Closure& callback);
-
   // Replaces all the cookies by |list|. This method does not flush the backend.
   void SetAllCookiesAsync(const CookieList& list,
                           const SetCookiesCallback& callback);
 
   // CookieStore implementation.
-
-  // Sets the cookies specified by |cookie_list| returned from |url|
-  // with options |options| in effect.
   void SetCookieWithOptionsAsync(const GURL& url,
                                  const std::string& cookie_line,
                                  const CookieOptions& options,
                                  const SetCookiesCallback& callback) override;
-
-  // Gets all cookies that apply to |url| given |options|.
-  // The returned cookies are ordered by longest path, then earliest
-  // creation date.
+  void SetCookieWithDetailsAsync(const GURL& url,
+                                 const std::string& name,
+                                 const std::string& value,
+                                 const std::string& domain,
+                                 const std::string& path,
+                                 base::Time creation_time,
+                                 base::Time expiration_time,
+                                 base::Time last_access_time,
+                                 bool secure,
+                                 bool http_only,
+                                 bool same_site,
+                                 bool enforce_strict_secure,
+                                 CookiePriority priority,
+                                 const SetCookiesCallback& callback) override;
   void GetCookiesWithOptionsAsync(const GURL& url,
                                   const CookieOptions& options,
                                   const GetCookiesCallback& callback) override;
-
-  // Invokes GetAllCookiesForURLWithOptions with options set to include HTTP
-  // only cookies.
-  void GetAllCookiesForURLAsync(const GURL& url,
-                                const GetCookieListCallback& callback) override;
-
-  // Deletes all cookies with that might apply to |url| that has |cookie_name|.
+  void GetCookieListWithOptionsAsync(
+      const GURL& url,
+      const CookieOptions& options,
+      const GetCookieListCallback& callback) override;
+  void GetAllCookiesAsync(const GetCookieListCallback& callback) override;
   void DeleteCookieAsync(const GURL& url,
                          const std::string& cookie_name,
                          const base::Closure& callback) override;
-
-  // Deletes all of the cookies that have a creation_date greater than or equal
-  // to |delete_begin| and less than |delete_end|.
-  // Returns the number of cookies that have been deleted.
+  void DeleteCanonicalCookieAsync(const CanonicalCookie& cookie,
+                                  const DeleteCallback& callback) override;
   void DeleteAllCreatedBetweenAsync(const base::Time& delete_begin,
                                     const base::Time& delete_end,
                                     const DeleteCallback& callback) override;
-
-  // Deletes all of the cookies that match the host of the given URL
-  // regardless of path and that have a creation_date greater than or
-  // equal to |delete_begin| and less then |delete_end|. This includes
-  // all http_only and secure cookies, but does not include any domain
-  // cookies that may apply to this host.
-  // Returns the number of cookies deleted.
   void DeleteAllCreatedBetweenForHostAsync(
       const base::Time delete_begin,
       const base::Time delete_end,
       const GURL& url,
       const DeleteCallback& callback) override;
-
   void DeleteSessionCookiesAsync(const DeleteCallback&) override;
+  void FlushStore(const base::Closure& callback) override;
+  void SetForceKeepSessionState() override;
 
-  CookieMonster* GetCookieMonster() override;
+  // Resets the list of cookieable schemes to the supplied schemes. Does
+  // nothing if called after first use of the instance (i.e. after the
+  // instance initialization process).
+  void SetCookieableSchemes(const std::vector<std::string>& schemes);
 
   // Enables writing session cookies into the cookie database. If this this
   // method is called, it must be called before first use of the instance
   // (i.e. as part of the instance initialization process).
   void SetPersistSessionCookies(bool persist_session_cookies);
-
-  // Debugging method to perform various validation checks on the map.
-  // Currently just checking that there are no null CanonicalCookie pointers
-  // in the map.
-  // Argument |arg| is to allow retaining of arbitrary data if the CHECKs
-  // in the function trip.  TODO(rdsmith):Remove hack.
-  void ValidateMap(int arg);
 
   // Determines if the scheme of the URL is a scheme that cookies will be
   // stored for.
@@ -303,22 +217,6 @@ class NET_EXPORT CookieMonster : public CookieStore {
       const std::string& name,
       const CookieChangedCallback& callback) override;
 
-#if defined(OS_ANDROID)
-  // Resets the list of cookieable schemes to kDefaultCookieableSchemes with or
-  // without 'file' being included.
-  //
-  // There are some unknowns about how to correctly handle file:// cookies,
-  // and our implementation for this is not robust enough (Bug 1157243).
-  // This allows you to enable support, and is exposed as a public WebView
-  // API ('CookieManager::setAcceptFileSchemeCookies').
-  //
-  // TODO(mkwst): This method will be removed once we can deprecate and remove
-  // the Android WebView 'CookieManager::setAcceptFileSchemeCookies' method.
-  // Until then, this method only has effect on Android, and must not be used
-  // outside a WebView context.
-  void SetEnableFileScheme(bool accept);
-#endif
-
  private:
   // For queueing the cookie monster calls.
   class CookieMonsterTask;
@@ -326,13 +224,12 @@ class NET_EXPORT CookieMonster : public CookieStore {
   class DeleteTask;
   class DeleteAllCreatedBetweenTask;
   class DeleteAllCreatedBetweenForHostTask;
-  class DeleteAllForHostTask;
-  class DeleteAllTask;
   class DeleteCookieTask;
   class DeleteCanonicalCookieTask;
-  class GetAllCookiesForURLWithOptionsTask;
+  class GetCookieListForURLWithOptionsTask;
   class GetAllCookiesTask;
   class GetCookiesWithOptionsTask;
+  class GetCookieListWithOptionsTask;
   class SetAllCookiesTask;
   class SetCookieWithDetailsTask;
   class SetCookieWithOptionsTask;
@@ -424,7 +321,7 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // New items MUST be added at the end of the list, just before
   // COOKIE_TYPE_LAST_ENTRY;
   enum CookieType {
-    COOKIE_TYPE_FIRSTPARTYONLY = 0,
+    COOKIE_TYPE_SAME_SITE = 0,
     COOKIE_TYPE_HTTPONLY,
     COOKIE_TYPE_SECURE,
     COOKIE_TYPE_LAST_ENTRY
@@ -497,30 +394,26 @@ class NET_EXPORT CookieMonster : public CookieStore {
                             const std::string& value,
                             const std::string& domain,
                             const std::string& path,
-                            const base::Time& expiration_time,
+                            base::Time creation_time,
+                            base::Time expiration_time,
+                            base::Time last_access_time,
                             bool secure,
                             bool http_only,
-                            bool first_party,
-                            bool enforce_prefixes,
+                            bool same_site,
                             bool enforce_strict_secure,
                             CookiePriority priority);
 
   CookieList GetAllCookies();
 
-  CookieList GetAllCookiesForURLWithOptions(const GURL& url,
-                                            const CookieOptions& options);
-
-  int DeleteAll(bool sync_to_store);
+  CookieList GetCookieListWithOptions(const GURL& url,
+                                      const CookieOptions& options);
 
   int DeleteAllCreatedBetween(const base::Time& delete_begin,
                               const base::Time& delete_end);
 
-  int DeleteAllForHost(const GURL& url);
   int DeleteAllCreatedBetweenForHost(const base::Time delete_begin,
                                      const base::Time delete_end,
                                      const GURL& url);
-
-  bool DeleteCanonicalCookie(const CanonicalCookie& cookie);
 
   bool SetCookieWithOptions(const GURL& url,
                             const std::string& cookie_line,
@@ -530,6 +423,8 @@ class NET_EXPORT CookieMonster : public CookieStore {
                                     const CookieOptions& options);
 
   void DeleteCookie(const GURL& url, const std::string& cookie_name);
+
+  int DeleteCanonicalCookie(const CanonicalCookie& cookie);
 
   bool SetCookieWithCreationTime(const GURL& url,
                                  const std::string& cookie_line,
@@ -588,14 +483,12 @@ class NET_EXPORT CookieMonster : public CookieStore {
 
   void FindCookiesForHostAndDomain(const GURL& url,
                                    const CookieOptions& options,
-                                   bool update_access_time,
                                    std::vector<CanonicalCookie*>* cookies);
 
   void FindCookiesForKey(const std::string& key,
                          const GURL& url,
                          const CookieOptions& options,
                          const base::Time& current,
-                         bool update_access_time,
                          std::vector<CanonicalCookie*>* cookies);
 
   // Delete any cookies that are equivalent to |ecc| (same path, domain, etc).
@@ -628,8 +521,7 @@ class NET_EXPORT CookieMonster : public CookieStore {
 
   // Helper function that sets a canonical cookie, deleting equivalents and
   // performing garbage collection.
-  bool SetCanonicalCookie(scoped_ptr<CanonicalCookie>* cc,
-                          const base::Time& creation_time,
+  bool SetCanonicalCookie(scoped_ptr<CanonicalCookie> cc,
                           const CookieOptions& options);
 
   // Helper function calling SetCanonicalCookie() for all cookies in |list|.
@@ -801,13 +693,7 @@ class NET_EXPORT CookieMonster : public CookieStore {
 
   base::Time last_statistic_record_time_;
 
-  bool keep_expired_cookies_;
   bool persist_session_cookies_;
-
-  // Static setting for whether or not file scheme cookies are allows when
-  // a new CookieMonster is created, or the accepted schemes on a CookieMonster
-  // instance are reset back to defaults.
-  static bool default_enable_file_scheme_;
 
   typedef std::map<std::pair<GURL, std::string>,
                    linked_ptr<CookieChangedCallbackList>> CookieChangedHookMap;

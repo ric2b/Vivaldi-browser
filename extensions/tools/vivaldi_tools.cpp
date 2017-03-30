@@ -15,7 +15,7 @@ namespace vivaldi {
 
 Browser* FindVivaldiBrowser() {
   BrowserList* browser_list_impl =
-      BrowserList::GetInstance(chrome::HOST_DESKTOP_TYPE_FIRST);
+      BrowserList::GetInstance();
   if (browser_list_impl && browser_list_impl->size() > 0)
     return browser_list_impl->get(0);
   return NULL;
@@ -25,7 +25,7 @@ namespace spoof {
 // True if |url| is a valid whatsapp.<TLD> URL.
 bool IsWhatsappDomainUrl(const GURL& url) {
   return IsValidURL(url, DISALLOW_NON_STANDARD_PORTS) &&
-      IsValidHostName(url.host(), "whatsapp", ALLOW_SUBDOMAIN);
+      IsValidHostName(url.host_piece(), "whatsapp", ALLOW_SUBDOMAIN);
 }
 
 void ForceWhatsappMode(const net::URLRequest* request,

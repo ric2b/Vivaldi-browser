@@ -110,6 +110,7 @@ public:
     virtual void setAllowDisplayOfInsecureContent(bool) = 0;
     virtual void setAllowFileAccessFromFileURLs(bool) = 0;
     virtual void setAllowCustomScrollbarInMainFrame(bool) = 0;
+    virtual void setAllowGeolocationOnInsecureOrigins(bool) = 0;
     // If set to true, allows frames with an https origin to run active
     // contents at an insecure URL. This includes WebSockets. Otherwise,
     // disallows it. The FrameLoaderClient set to the frame may override the
@@ -169,6 +170,7 @@ public:
     virtual void setMaxTouchPoints(int) = 0;
     virtual void setMediaControlsOverlayPlayButtonEnabled(bool) = 0;
     virtual void setMediaPlaybackRequiresUserGesture(bool) = 0;
+    virtual void setPresentationRequiresUserGesture(bool) = 0;
     virtual void setMinimumAccelerated2dCanvasSize(int) = 0;
     virtual void setMinimumFontSize(int) = 0;
     virtual void setMinimumLogicalFontSize(int) = 0;
@@ -248,7 +250,6 @@ public:
     virtual void setViewportMetaMergeContentQuirk(bool) = 0;
     virtual void setViewportMetaNonUserScalableQuirk(bool) = 0;
     virtual void setViewportMetaZeroValuesQuirk(bool) = 0;
-    virtual void setWebAudioEnabled(bool) = 0;
     virtual void setWebGLErrorsToConsoleEnabled(bool) = 0;
     virtual void setWebSecurityEnabled(bool) = 0;
     virtual void setWideViewportQuirkEnabled(bool) = 0;

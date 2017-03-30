@@ -11,6 +11,7 @@
 
 #include "base/macros.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/input_method/input_method_engine_base.h"
 #include "ui/base/ime/ime_engine_handler_interface.h"
 
 namespace extensions {
@@ -20,25 +21,13 @@ class InputImeEventRouterBase {
   explicit InputImeEventRouterBase(Profile* profile);
   virtual ~InputImeEventRouterBase();
 
-  // Called when a key event was handled.
-  void OnKeyEventHandled(const std::string& extension_id,
-                         const std::string& request_id,
-                         bool handled);
-
-  std::string AddRequest(
-      const std::string& component_id,
-      ui::IMEEngineHandlerInterface::KeyEventDoneCallback& key_data);
+  // Gets the input method engine if the extension is active.
+  virtual input_method::InputMethodEngineBase* GetActiveEngine(
+      const std::string& extension_id) = 0;
 
   Profile* profile() const { return profile_; }
 
  private:
-  using RequestMap =
-      std::map<std::string,
-               std::pair<std::string,
-                         ui::IMEEngineHandlerInterface::KeyEventDoneCallback>>;
-
-  unsigned int next_request_id_;
-  RequestMap request_map_;
   Profile* profile_;
 
   DISALLOW_COPY_AND_ASSIGN(InputImeEventRouterBase);

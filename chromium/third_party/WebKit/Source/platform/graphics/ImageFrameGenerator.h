@@ -114,9 +114,9 @@ private:
 
     bool m_isMultiFrame;
     bool m_decodeFailed;
+    bool m_yuvDecodingFailed;
     size_t m_frameCount;
     Vector<bool> m_hasAlpha;
-    Vector<bool> m_frameComplete;
 
     class ExternalMemoryAllocator;
     OwnPtr<ExternalMemoryAllocator> m_externalAllocator;

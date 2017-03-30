@@ -30,9 +30,7 @@
 
 #include "core/inspector/InspectorWorkerAgent.h"
 
-#include "core/InspectorFrontend.h"
 #include "core/inspector/IdentifiersFactory.h"
-#include "core/inspector/InspectorState.h"
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/inspector/PageConsoleAgent.h"
 #include "platform/weborigin/KURL.h"
@@ -53,7 +51,7 @@ PassOwnPtrWillBeRawPtr<InspectorWorkerAgent> InspectorWorkerAgent::create(PageCo
 }
 
 InspectorWorkerAgent::InspectorWorkerAgent(PageConsoleAgent* consoleAgent)
-    : InspectorBaseAgent<InspectorWorkerAgent, InspectorFrontend::Worker>("Worker")
+    : InspectorBaseAgent<InspectorWorkerAgent, protocol::Frontend::Worker>("Worker")
     , m_consoleAgent(consoleAgent)
 {
 }
@@ -72,7 +70,7 @@ void InspectorWorkerAgent::init()
 
 void InspectorWorkerAgent::restore()
 {
-    if (m_state->getBoolean(WorkerAgentState::workerInspectionEnabled))
+    if (m_state->booleanProperty(WorkerAgentState::workerInspectionEnabled, false))
         createWorkerAgentClientsForExistingWorkers();
 }
 
@@ -132,14 +130,14 @@ void InspectorWorkerAgent::setTracingSessionId(const String& sessionId)
 
 bool InspectorWorkerAgent::shouldPauseDedicatedWorkerOnStart()
 {
-    return m_state->getBoolean(WorkerAgentState::autoconnectToWorkers);
+    return m_state->booleanProperty(WorkerAgentState::autoconnectToWorkers, false);
 }
 
 void InspectorWorkerAgent::didStartWorker(WorkerInspectorProxy* workerInspectorProxy, const KURL& url)
 {
     String id = "dedicated:" + IdentifiersFactory::createIdentifier();
     m_workerInfos.set(workerInspectorProxy, WorkerInfo(url.string(), id));
-    if (frontend() && m_state->getBoolean(WorkerAgentState::workerInspectionEnabled))
+    if (frontend() && m_state->booleanProperty(WorkerAgentState::workerInspectionEnabled, false))
         createWorkerAgentClient(workerInspectorProxy, url.string(), id);
     if (!m_tracingSessionId.isEmpty())
         workerInspectorProxy->writeTimelineStartedEvent(m_tracingSessionId, id);
@@ -178,7 +176,7 @@ void InspectorWorkerAgent::createWorkerAgentClient(WorkerInspectorProxy* workerI
     m_idToClient.set(id, client.release());
 
     ASSERT(frontend());
-    bool autoconnectToWorkers = m_state->getBoolean(WorkerAgentState::autoconnectToWorkers);
+    bool autoconnectToWorkers = m_state->booleanProperty(WorkerAgentState::autoconnectToWorkers, false);
     if (autoconnectToWorkers)
         rawClient->connectToWorker();
     frontend()->workerCreated(id, url, autoconnectToWorkers);
@@ -191,15 +189,15 @@ DEFINE_TRACE(InspectorWorkerAgent)
     visitor->trace(m_consoleAgent);
     visitor->trace(m_workerInfos);
 #endif
-    InspectorBaseAgent<InspectorWorkerAgent, InspectorFrontend::Worker>::trace(visitor);
+    InspectorBaseAgent<InspectorWorkerAgent, protocol::Frontend::Worker>::trace(visitor);
 }
 
-PassOwnPtrWillBeRawPtr<InspectorWorkerAgent::WorkerAgentClient> InspectorWorkerAgent::WorkerAgentClient::create(InspectorFrontend::Worker* frontend, WorkerInspectorProxy* proxy, const String& id, PageConsoleAgent* consoleAgent)
+PassOwnPtrWillBeRawPtr<InspectorWorkerAgent::WorkerAgentClient> InspectorWorkerAgent::WorkerAgentClient::create(protocol::Frontend::Worker* frontend, WorkerInspectorProxy* proxy, const String& id, PageConsoleAgent* consoleAgent)
 {
     return adoptPtrWillBeNoop(new InspectorWorkerAgent::WorkerAgentClient(frontend, proxy, id, consoleAgent));
 }
 
-InspectorWorkerAgent::WorkerAgentClient::WorkerAgentClient(InspectorFrontend::Worker* frontend, WorkerInspectorProxy* proxy, const String& id, PageConsoleAgent* consoleAgent)
+InspectorWorkerAgent::WorkerAgentClient::WorkerAgentClient(protocol::Frontend::Worker* frontend, WorkerInspectorProxy* proxy, const String& id, PageConsoleAgent* consoleAgent)
     : m_frontend(frontend)
     , m_proxy(proxy)
     , m_id(id)

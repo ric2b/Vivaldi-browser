@@ -131,11 +131,11 @@ public:
     bool hasSelectorForAttributeInShadow(Element* host, const AtomicString& attributeName, ExceptionState&);
     unsigned short compareTreeScopePosition(const Node*, const Node*, ExceptionState&) const;
 
-    Node* nextSiblingInComposedTree(Node*, ExceptionState&);
-    Node* firstChildInComposedTree(Node*, ExceptionState&);
-    Node* lastChildInComposedTree(Node*, ExceptionState&);
-    Node* nextInComposedTree(Node*, ExceptionState&);
-    Node* previousInComposedTree(Node*, ExceptionState&);
+    Node* nextSiblingInFlatTree(Node*, ExceptionState&);
+    Node* firstChildInFlatTree(Node*, ExceptionState&);
+    Node* lastChildInFlatTree(Node*, ExceptionState&);
+    Node* nextInFlatTree(Node*, ExceptionState&);
+    Node* previousInFlatTree(Node*, ExceptionState&);
 
     unsigned updateStyleAndReturnAffectedElementCount(ExceptionState&) const;
     unsigned needsLayoutCount(ExceptionState&) const;
@@ -258,7 +258,6 @@ public:
     String pageProperty(String, int, ExceptionState& = ASSERT_NO_EXCEPTION) const;
     String pageSizeAndMarginsInPixels(int, int, int, int, int, int, int, ExceptionState& = ASSERT_NO_EXCEPTION) const;
 
-    void setDeviceScaleFactor(float scaleFactor, ExceptionState&);
     void setPageScaleFactor(float scaleFactor, ExceptionState&);
     void setPageScaleFactorLimits(float minScaleFactor, float maxScaleFactor, ExceptionState&);
 
@@ -375,6 +374,7 @@ public:
     // Return true if the given use counter exists for the given document.
     // |useCounterId| must be one of the values from the UseCounter::Feature enum.
     bool isUseCounted(Document*, int useCounterId);
+    bool isCSSPropertyUseCounted(Document*, const String&);
 
     String unscopeableAttribute();
     String unscopeableMethod();
@@ -383,8 +383,6 @@ public:
     ClientRectList* outlineRects(Element*);
 
     void setCapsLockState(bool enabled);
-
-    void setSelectionPaintingWithoutSelectionGapsEnabled(bool);
 
     bool setScrollbarVisibilityInScrollableArea(Node*, bool visible);
 

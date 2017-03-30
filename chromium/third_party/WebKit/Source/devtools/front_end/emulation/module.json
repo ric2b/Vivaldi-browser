@@ -1,47 +1,16 @@
 {
     "extensions": [
         {
-            "type": "drawer-view",
-            "name": "emulation",
-            "title": "Emulation",
-            "experiment": "!deviceMode",
-            "order": 10,
-            "persistence": "closeable",
-            "className": "WebInspector.OverridesView"
-        },
-        {
-            "type": "@WebInspector.ToolbarItem.Provider",
-            "className": "WebInspector.DeviceModeButtonProvider",
+            "type": "@WebInspector.AppProvider",
             "condition": "can_dock",
-            "experiment": "!deviceMode",
-            "order": 1,
-            "location": "main-toolbar-left"
+            "className": "WebInspector.AdvancedAppProvider",
+            "order": 0
         },
         {
             "type": "@WebInspector.ActionDelegate",
             "actionId": "emulation.toggle-device-mode",
-            "className": "WebInspector.ToggleDeviceModeActionDelegate",
-            "iconClass": "emulation-toolbar-item",
-            "title": "Toggle device mode",
+            "className": "WebInspector.DeviceModeWrapper.ActionDelegate",
             "condition": "can_dock",
-            "experiment": "!deviceMode",
-            "bindings": [
-                {
-                    "platform": "windows,linux",
-                    "shortcut": "Shift+Ctrl+M"
-                },
-                {
-                    "platform": "mac",
-                    "shortcut": "Shift+Meta+M"
-                }
-            ]
-        },
-        {
-            "type": "@WebInspector.ActionDelegate",
-            "actionId": "emulation.toggle-device-mode",
-            "className": "WebInspector.DeviceModeView.ActionDelegate",
-            "condition": "can_dock",
-            "experiment": "deviceMode",
             "title": "Toggle device mode",
             "iconClass": "phone-toolbar-item",
             "bindings": [
@@ -61,11 +30,6 @@
             "condition": "can_dock",
             "location": "main-toolbar-left",
             "order": 1
-        },
-        {
-            "type": "@WebInspector.Revealer",
-            "contextTypes": ["WebInspector.OverridesSupport"],
-            "className": "WebInspector.OverridesView.Revealer"
         },
         {
             "type": "settings-view",
@@ -97,6 +61,19 @@
             "persistence": "closeable",
             "order": 100,
             "className": "WebInspector.SensorsView"
+        },
+        {
+            "type": "@WebInspector.ActionDelegate",
+            "actionId": "emulation.request-app-banner",
+            "className": "WebInspector.DeviceModeWrapper.ActionDelegate",
+            "title": "Request app banner\u2026"
+        },
+        {
+            "type": "context-menu-item",
+            "location": "deviceModeMenu/tools",
+            "experiment": "appBanner",
+            "order": 10,
+            "actionId": "emulation.request-app-banner"
         }
     ],
     "dependencies": [
@@ -106,26 +83,24 @@
         "ui"
     ],
     "scripts": [
-        "OverridesSupport.js",
+        "AdvancedApp.js",
         "EmulatedDevices.js",
         "DevicesSettingsTab.js",
-        "DeviceModeButton.js",
-        "OverridesUI.js",
+        "DeviceOrientation.js",
+        "Geolocation.js",
         "InspectedPagePlaceholder.js",
         "MediaQueryInspector.js",
-        "ResponsiveDesignView.js",
-        "OverridesView.js",
         "SensorsView.js",
         "DeviceModeModel.js",
-        "DeviceModeView.js"
+        "DeviceModeToolbar.js",
+        "DeviceModeView.js",
+        "DeviceModeWrapper.js"
     ],
     "resources": [
         "devicesSettingsTab.css",
         "deviceModeToolbar.css",
         "deviceModeView.css",
         "mediaQueryInspector.css",
-        "responsiveDesignView.css",
-        "overrides.css",
         "sensors.css"
     ]
 }

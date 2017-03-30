@@ -8,6 +8,7 @@
 #include "platform/geometry/DoublePoint.h"
 #include "platform/geometry/DoubleSize.h"
 #include "wtf/Allocator.h"
+#include "wtf/Forward.h"
 
 namespace blink {
 
@@ -59,6 +60,11 @@ public:
 
     void scale(float s) { scale(s, s); }
     void scale(float sx, float sy);
+
+#ifndef NDEBUG
+    String toString() const;
+#endif
+
 private:
     DoublePoint m_location;
     DoubleSize m_size;
@@ -71,6 +77,6 @@ PLATFORM_EXPORT IntRect enclosedIntRect(const DoubleRect&);
 
 PLATFORM_EXPORT IntRect roundedIntRect(const DoubleRect&);
 
-}
+} // namespace blink
 
 #endif

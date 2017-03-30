@@ -14,7 +14,6 @@
 #include "base/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "content/public/common/content_client.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
@@ -54,6 +53,10 @@ class WebURLRequest;
 class WebWorkerContentSettingsClientProxy;
 struct WebPluginParams;
 struct WebURLError;
+}
+
+namespace cc {
+class ImageSerializationProcessor;
 }
 
 namespace media {
@@ -239,10 +242,6 @@ class CONTENT_EXPORT ContentRendererClient {
       const RenderFrame* render_frame,
       blink::WebPageVisibilityState* override_state);
 
-  // Allows an embedder to return custom PPAPI interfaces.
-  virtual const void* CreatePPAPIInterface(
-      const std::string& interface_name);
-
   // Returns true if the given Pepper plugin is external (requiring special
   // startup steps).
   virtual bool IsExternalPepperPlugin(const std::string& module_name);
@@ -259,6 +258,9 @@ class CONTENT_EXPORT ContentRendererClient {
   // Allows an embedder to provide a MediaStreamRendererFactory.
   virtual scoped_ptr<MediaStreamRendererFactory>
   CreateMediaStreamRendererFactory();
+
+  // Allows an embedder to provde a cc::ImageSerializationProcessor.
+  virtual cc::ImageSerializationProcessor* GetImageSerializationProcessor();
 
   // Gives the embedder a chance to register the key system(s) it supports by
   // populating |key_systems|.
@@ -309,6 +311,15 @@ class CONTENT_EXPORT ContentRendererClient {
       const blink::WebURLResponse& response,
       std::map<std::string, std::string>* properties) {}
 
+  // Notifies that a document element has been inserted in the frame's document.
+  // This may be called multiple times for the same document. This method may
+  // invalidate the frame.
+  virtual void RunScriptsAtDocumentStart(RenderFrame* render_frame) {}
+
+  // Notifies that the DOM is ready in the frame's document.
+  // This method may invalidate the frame.
+  virtual void RunScriptsAtDocumentEnd(RenderFrame* render_frame) {}
+
   // Notifies that a service worker context has been created. This function
   // is called from the worker thread.
   virtual void DidInitializeServiceWorkerContextOnWorkerThread(
@@ -324,6 +335,10 @@ class CONTENT_EXPORT ContentRendererClient {
   // Whether this renderer should enforce preferences related to the WebRTC
   // routing logic, i.e. allowing multiple routes and non-proxied UDP.
   virtual bool ShouldEnforceWebRTCRoutingPreferences();
+
+  // Returns the public key to be used for origin trials, or an empty string if
+  // origin trials are not enabled in this context.
+  virtual base::StringPiece GetOriginTrialPublicKey();
 };
 
 }  // namespace content

@@ -407,6 +407,7 @@ body.platform-linux {
 .element-description {
     flex: 1 1;
     word-wrap: break-word;
+    word-break: break-all;
 }
 
 .dimensions {
@@ -600,6 +601,26 @@ function _drawGrid(context, rulerAtRight, rulerAtBottom)
     context.restore();
 }
 
+function drawViewSize()
+{
+    var text = viewportSize.width + "px \u00D7 " + viewportSize.height + "px";
+    context.save();
+    context.font = "20px ";
+    switch (platform) {
+    case "windows": context.font = "14px Consolas, Lucida Console"; break;
+    case "mac": context.font = "14px Menlo, Monaco"; break;
+    case "linux": context.font = "14px dejavu sans mono"; break;
+    }
+
+    var frameWidth = canvasWidth;
+    var textWidth = context.measureText(text).width;
+    context.fillStyle = gridBackgroundColor;
+    context.fillRect(frameWidth - textWidth - 12, 0, frameWidth, 25);
+    context.fillStyle = darkGridColor;
+    context.fillText(text, frameWidth - textWidth - 6, 18);
+    context.restore();
+}
+
 function resetCanvas(canvasElement)
 {
     canvasElement.width = deviceScaleFactor * viewportSize.width;
@@ -747,13 +768,12 @@ function _createMaterialTooltip(parentElement, bounds, contentElement, withArrow
     var arrowRadius = 8;
     var pageMargin = 2;
 
-    var boxX = Math.max(pageMargin, bounds.minX + (bounds.maxX - bounds.minX) / 2 - titleWidth / 2);
-    boxX = Math.min(boxX, canvasWidth - titleWidth - pageMargin);
+    var boxX = Math.min(bounds.minX, canvasWidth - titleWidth - pageMargin);
 
     var boxY = bounds.minY - arrowRadius - titleHeight;
     var onTop = true;
     if (boxY < 0) {
-        boxY = bounds.maxY + arrowRadius;
+        boxY = Math.min(canvasHeight - titleHeight, bounds.maxY + arrowRadius);
         onTop = false;
     } else if (bounds.minY > canvasHeight) {
         boxY = canvasHeight - arrowRadius - titleHeight;
@@ -765,13 +785,11 @@ function _createMaterialTooltip(parentElement, bounds, contentElement, withArrow
         return;
 
     var tooltipArrow = tooltipContainer.createChild("div", "material-tooltip-arrow");
-    // Center arrow if possible. Otherwise, try the bounds of the element.
-    var arrowX = bounds.minX + (bounds.maxX - bounds.minX) / 2 - arrowRadius;
+    // Left align arrow to the tooltip but ensure it is pointing to the element.
     var tooltipBorderRadius = 2;
-    if (arrowX < pageMargin + tooltipBorderRadius)
-        arrowX = bounds.maxX - arrowRadius * 2;
-    else if (arrowX + arrowRadius * 2 > canvasWidth - pageMargin - tooltipBorderRadius)
-        arrowX = bounds.minX;
+    var arrowX = boxX + arrowRadius + tooltipBorderRadius;
+    if (arrowX < bounds.minX)
+        arrowX = bounds.minX + arrowRadius;
     // Hide arrow if element is completely off the sides of the page.
     var arrowHidden = arrowX < pageMargin + tooltipBorderRadius || arrowX + arrowRadius * 2 > canvasWidth - pageMargin - tooltipBorderRadius;
     tooltipArrow.classList.toggle("hidden", arrowHidden);

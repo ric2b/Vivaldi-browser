@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/memory/weak_ptr.h"
 #include "sync/api/data_batch.h"
 #include "sync/api/entity_change.h"
 #include "sync/api/metadata_batch.h"
@@ -17,7 +18,9 @@ namespace syncer_v2 {
 
 // A non-functional implementation of ModelTypeService for
 // testing purposes.
-class FakeModelTypeService : public ModelTypeService {
+class FakeModelTypeService
+    : public ModelTypeService,
+      public base::SupportsWeakPtr<FakeModelTypeService> {
  public:
   FakeModelTypeService();
   ~FakeModelTypeService() override;
@@ -26,19 +29,19 @@ class FakeModelTypeService : public ModelTypeService {
 
   syncer::SyncError MergeSyncData(
       scoped_ptr<MetadataChangeList> metadata_change_list,
-      EntityDataList entity_data_list) override;
+      EntityDataMap entity_data_map) override;
 
   syncer::SyncError ApplySyncChanges(
       scoped_ptr<MetadataChangeList> metadata_change_list,
       EntityChangeList entity_changes) override;
 
-  void LoadMetadata(MetadataCallback callback) override;
-
-  void GetData(ClientKeyList client_keys, DataCallback callback) override;
+  void GetData(ClientTagList client_tags, DataCallback callback) override;
 
   void GetAllData(DataCallback callback) override;
 
   std::string GetClientTag(const EntityData& entity_data) override;
+
+  void OnChangeProcessorSet() override;
 };
 
 }  // namespace syncer_v2

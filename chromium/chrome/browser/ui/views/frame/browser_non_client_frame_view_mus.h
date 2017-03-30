@@ -5,12 +5,16 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_NON_CLIENT_FRAME_VIEW_MUS_H_
 #define CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_NON_CLIENT_FRAME_VIEW_MUS_H_
 
+#include "build/build_config.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "chrome/browser/ui/views/tab_icon_view_model.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_observer.h"
-#include "ui/views/controls/button/button.h"
+
+#if !defined(OS_CHROMEOS)
+#include "chrome/browser/ui/views/frame/avatar_button_manager.h"
+#endif
 
 class TabIconView;
 class WebAppLeftHeaderView;
@@ -26,7 +30,6 @@ class ToggleImageButton;
 
 class BrowserNonClientFrameViewMus : public BrowserNonClientFrameView,
                                      public TabIconViewModel,
-                                     public views::ButtonListener,
                                      public TabStripObserver {
  public:
   static const char kViewClassName[];
@@ -44,6 +47,7 @@ class BrowserNonClientFrameViewMus : public BrowserNonClientFrameView,
   void UpdateThrobber(bool running) override;
   void UpdateToolbar() override;
   views::View* GetLocationIconView() const override;
+  views::View* GetProfileSwitcherView() const override;
 
   // views::NonClientFrameView:
   gfx::Rect GetBoundsForClientView() const override;
@@ -62,18 +66,14 @@ class BrowserNonClientFrameViewMus : public BrowserNonClientFrameView,
   const char* GetClassName() const override;
   void GetAccessibleState(ui::AXViewState* state) override;
   gfx::Size GetMinimumSize() const override;
-  void ChildPreferredSizeChanged(views::View* child) override;
 
   // TabIconViewModel:
   bool ShouldTabIconViewAnimate() const override;
   gfx::ImageSkia GetFaviconForTabIconView() override;
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
  protected:
   // BrowserNonClientFrameView:
-  void UpdateNewAvatarButtonImpl() override;
+  void UpdateAvatar() override;
 
  private:
   mus::Window* mus_window();
@@ -111,11 +111,11 @@ class BrowserNonClientFrameViewMus : public BrowserNonClientFrameView,
   // accoutrements.
   bool UseWebAppHeaderStyle() const;
 
-  // Layout the avatar button.
-  void LayoutAvatar();
-#if defined(FRAME_AVATAR_BUTTON)
-  void LayoutNewStyleAvatar();
-#endif
+  // Layout the incognito button.
+  void LayoutIncognitoButton();
+
+  // Layout the profile switcher (if there is one).
+  void LayoutProfileSwitcher();
 
   // Returns true if there is anything to paint. Some fullscreen windows do not
   // need their frames painted.
@@ -131,12 +131,15 @@ class BrowserNonClientFrameViewMus : public BrowserNonClientFrameView,
   // the packaged app header style.
   void PaintContentEdge(gfx::Canvas* canvas);
 
-  // The holder for the buttons on the left side of the header. This is included
-  // for web app style frames, and includes a back button and location icon.
-  WebAppLeftHeaderView* web_app_left_header_view_;
+  // TODO(sky): Figure out how to support WebAppLeftHeaderView.
 
   // For popups, the window icon.
   TabIconView* window_icon_;
+
+#if !defined(OS_CHROMEOS)
+  // Wrapper around the in-frame avatar switcher.
+  AvatarButtonManager profile_switcher_;
+#endif
 
   TabStrip* tab_strip_;
 

@@ -75,8 +75,6 @@ const char kImeWindowMustBeImeWindowOrPanel[] =
 }  // namespace app_window_constants
 
 const char kNoneFrameOption[] = "none";
-  // TODO(benwells): Remove HTML titlebar injection.
-const char kHtmlFrameOption[] = "experimental-html";
 
 namespace {
 
@@ -124,8 +122,7 @@ void CopyBoundsSpec(const app_window::BoundsSpecification* input_spec,
 
 }  // namespace
 
-AppWindowCreateFunction::AppWindowCreateFunction()
-    : inject_html_titlebar_(false) {}
+AppWindowCreateFunction::AppWindowCreateFunction() {}
 
 bool AppWindowCreateFunction::RunAsync() {
   // Don't create app window if the system is shutting down.
@@ -201,8 +198,6 @@ bool AppWindowCreateFunction::RunAsync() {
           result->Set("frameId", new base::FundamentalValue(frame_id));
           existing_window->GetSerializedState(result);
           result->SetBoolean("existingWindow", true);
-          // TODO(benwells): Remove HTML titlebar injection.
-          result->SetBoolean("injectTitlebar", false);
 
           if (options->ext_data.get()) {
             result->Set("extData",
@@ -369,8 +364,6 @@ bool AppWindowCreateFunction::RunAsync() {
 
   base::DictionaryValue* result = new base::DictionaryValue;
   result->Set("frameId", new base::FundamentalValue(frame_id));
-  result->Set("injectTitlebar",
-      new base::FundamentalValue(inject_html_titlebar_));
   result->Set("id", new base::StringValue(app_window->window_key()));
   app_window->GetSerializedState(result);
   SetResult(result);
@@ -516,15 +509,6 @@ bool AppWindowCreateFunction::GetBoundsSpec(
 
 AppWindow::Frame AppWindowCreateFunction::GetFrameFromString(
     const std::string& frame_string) {
-  if (frame_string == kHtmlFrameOption &&
-      (extension()->permissions_data()->HasAPIPermission(
-           APIPermission::kExperimental) ||
-       base::CommandLine::ForCurrentProcess()->HasSwitch(
-           switches::kEnableExperimentalExtensionApis))) {
-     inject_html_titlebar_ = true;
-     return AppWindow::FRAME_NONE;
-  }
-
   if (frame_string == kNoneFrameOption)
     return AppWindow::FRAME_NONE;
 

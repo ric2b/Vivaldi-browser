@@ -13,6 +13,7 @@
 #include "base/logging.h"
 #include "jingle/glue/thread_wrapper.h"
 #include "net/socket/client_socket_factory.h"
+#include "remoting/base/chromium_url_request.h"
 #include "remoting/base/service_urls.h"
 #include "remoting/client/audio_player.h"
 #include "remoting/client/client_status_logger.h"
@@ -21,7 +22,7 @@
 #include "remoting/client/jni/jni_frame_consumer.h"
 #include "remoting/client/software_video_renderer.h"
 #include "remoting/client/token_fetcher_proxy.h"
-#include "remoting/protocol/chromium_port_allocator.h"
+#include "remoting/protocol/chromium_port_allocator_factory.h"
 #include "remoting/protocol/chromium_socket_factory.h"
 #include "remoting/protocol/host_stub.h"
 #include "remoting/protocol/negotiating_client_authenticator.h"
@@ -46,24 +47,26 @@ const int kPerfStatsIntervalMs = 60000;
 }
 
 ChromotingJniInstance::ChromotingJniInstance(ChromotingJniRuntime* jni_runtime,
-                                             const char* username,
-                                             const char* auth_token,
-                                             const char* host_jid,
-                                             const char* host_id,
-                                             const char* host_pubkey,
-                                             const char* pairing_id,
-                                             const char* pairing_secret,
-                                             const char* capabilities)
+                                             const std::string& username,
+                                             const std::string& auth_token,
+                                             const std::string& host_jid,
+                                             const std::string& host_id,
+                                             const std::string& host_pubkey,
+                                             const std::string& pairing_id,
+                                             const std::string& pairing_secret,
+                                             const std::string& capabilities,
+                                             const std::string& flags)
     : jni_runtime_(jni_runtime),
       host_id_(host_id),
       host_jid_(host_jid),
+      flags_(flags),
       create_pairing_(false),
       stats_logging_enabled_(false),
       capabilities_(capabilities),
       weak_factory_(this) {
   DCHECK(jni_runtime_->ui_task_runner()->BelongsToCurrentThread());
 
-  // Intialize XMPP config.
+  // Initialize XMPP config.
   xmpp_config_.host = kXmppServer;
   xmpp_config_.port = kXmppPort;
   xmpp_config_.use_tls = kXmppUseTls;
@@ -422,18 +425,24 @@ void ChromotingJniInstance::ConnectToHostOnNetworkThread() {
                              signaling_.get(),
                              ServiceUrls::GetInstance()->directory_bot_jid()));
 
-  protocol::NetworkSettings network_settings(
-      protocol::NetworkSettings::NAT_TRAVERSAL_FULL);
-
-  // Use Chrome's network stack to allocate ports for peer-to-peer channels.
-  scoped_ptr<protocol::ChromiumPortAllocatorFactory> port_allocator_factory(
-      new protocol::ChromiumPortAllocatorFactory(
-          jni_runtime_->url_requester()));
-
   scoped_refptr<protocol::TransportContext> transport_context =
       new protocol::TransportContext(
-          signaling_.get(), std::move(port_allocator_factory), network_settings,
+          signaling_.get(),
+          make_scoped_ptr(new protocol::ChromiumPortAllocatorFactory()),
+          make_scoped_ptr(
+              new ChromiumUrlRequestFactory(jni_runtime_->url_requester())),
+          protocol::NetworkSettings(
+              protocol::NetworkSettings::NAT_TRAVERSAL_FULL),
           protocol::TransportRole::CLIENT);
+
+  if (flags_.find("useWebrtc") != std::string::npos) {
+    VLOG(0) << "Attempting to connect using WebRTC.";
+    scoped_ptr<protocol::CandidateSessionConfig> protocol_config =
+        protocol::CandidateSessionConfig::CreateEmpty();
+    protocol_config->set_webrtc_supported(true);
+    protocol_config->set_ice_supported(false);
+    client_->set_protocol_config(std::move(protocol_config));
+  }
 
   client_->Start(signaling_.get(), std::move(authenticator_), transport_context,
                  host_jid_, capabilities_);

@@ -37,6 +37,7 @@
 #include "platform/geometry/FloatPoint.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/GraphicsLayer.h"
+#include "platform/scroll/MainThreadScrollingReason.h"
 #include "platform/scroll/ProgrammaticScrollAnimator.h"
 #include "platform/scroll/ScrollbarTheme.h"
 #include "wtf/PassOwnPtr.h"
@@ -60,9 +61,11 @@ struct SameSizeAsScrollableArea {
 
 static_assert(sizeof(ScrollableArea) == sizeof(SameSizeAsScrollableArea), "ScrollableArea should stay small");
 
-int ScrollableArea::pixelsPerLineStep()
+int ScrollableArea::pixelsPerLineStep(HostWindow* host)
 {
-    return kPixelsPerLineStep;
+    if (!host)
+        return kPixelsPerLineStep;
+    return host->windowToViewportScalar(kPixelsPerLineStep);
 }
 
 float ScrollableArea::minFractionToStepWhenPaging()
@@ -93,6 +96,8 @@ ScrollableArea::~ScrollableArea()
 void ScrollableArea::clearScrollAnimators()
 {
 #if OS(MACOSX) && ENABLE(OILPAN)
+    // TODO(ymalik): Let oilpan decide when to call dispose rather than
+    // explicitly calling it here to cleanup.
     if (m_scrollAnimator)
         m_scrollAnimator->dispose();
 #endif
@@ -173,14 +178,20 @@ void ScrollableArea::setScrollPosition(const DoublePoint& position, ScrollType s
     if (behavior == ScrollBehaviorAuto)
         behavior = scrollBehaviorStyle();
 
-    if (scrollType == CompositorScroll)
-        scrollPositionChanged(clampScrollPosition(position), CompositorScroll);
-    else if (scrollType == ProgrammaticScroll)
+    switch (scrollType) {
+    case CompositorScroll:
+    case AnchoringScroll:
+        scrollPositionChanged(clampScrollPosition(position), scrollType);
+        break;
+    case ProgrammaticScroll:
         programmaticScrollHelper(position, behavior);
-    else if (scrollType == UserScroll)
+        break;
+    case UserScroll:
         userScrollHelper(position, behavior);
-    else
+        break;
+    default:
         ASSERT_NOT_REACHED();
+    }
 }
 
 void ScrollableArea::scrollBy(const DoubleSize& delta, ScrollType type, ScrollBehavior behavior)
@@ -244,19 +255,14 @@ void ScrollableArea::scrollPositionChanged(const DoublePoint& position, ScrollTy
     // Tell the derived class to scroll its contents.
     setScrollOffset(truncatedPosition, scrollType);
 
-    Scrollbar* verticalScrollbar = this->verticalScrollbar();
-
     // Tell the scrollbars to update their thumb postions.
-    if (Scrollbar* horizontalScrollbar = this->horizontalScrollbar()) {
+    // If the scrollbar does not have its own layer, it must always be
+    // invalidated to reflect the new thumb position, even if the theme did not
+    // invalidate any individual part.
+    if (Scrollbar* horizontalScrollbar = this->horizontalScrollbar())
         horizontalScrollbar->offsetDidChange();
-        if (horizontalScrollbar->isOverlayScrollbar() && !hasLayerForHorizontalScrollbar())
-            setScrollbarNeedsPaintInvalidation(HorizontalScrollbar);
-    }
-    if (verticalScrollbar) {
+    if (Scrollbar* verticalScrollbar = this->verticalScrollbar())
         verticalScrollbar->offsetDidChange();
-        if (verticalScrollbar->isOverlayScrollbar() && !hasLayerForVerticalScrollbar())
-            setScrollbarNeedsPaintInvalidation(VerticalScrollbar);
-    }
 
     if (scrollPositionDouble() != oldPosition) {
         // FIXME: Pass in DoubleSize. crbug.com/414283.
@@ -396,13 +402,30 @@ void ScrollableArea::setScrollbarOverlayStyle(ScrollbarOverlayStyle overlayStyle
 
     if (Scrollbar* scrollbar = horizontalScrollbar()) {
         ScrollbarTheme::theme().updateScrollbarOverlayStyle(*scrollbar);
-        setScrollbarNeedsPaintInvalidation(HorizontalScrollbar);
+        scrollbar->setNeedsPaintInvalidation(AllParts);
     }
 
     if (Scrollbar* scrollbar = verticalScrollbar()) {
         ScrollbarTheme::theme().updateScrollbarOverlayStyle(*scrollbar);
-        setScrollbarNeedsPaintInvalidation(VerticalScrollbar);
+        scrollbar->setNeedsPaintInvalidation(AllParts);
     }
+}
+
+void ScrollableArea::recalculateScrollbarOverlayStyle(Color backgroundColor)
+{
+    ScrollbarOverlayStyle oldOverlayStyle = scrollbarOverlayStyle();
+    ScrollbarOverlayStyle overlayStyle = ScrollbarOverlayStyleDefault;
+
+    // Reduce the background color from RGB to a lightness value
+    // and determine which scrollbar style to use based on a lightness
+    // heuristic.
+    double hue, saturation, lightness;
+    backgroundColor.getHSL(hue, saturation, lightness);
+    if (lightness <= .5)
+        overlayStyle = ScrollbarOverlayStyleLight;
+
+    if (oldOverlayStyle != overlayStyle)
+        setScrollbarOverlayStyle(overlayStyle);
 }
 
 void ScrollableArea::setScrollbarNeedsPaintInvalidation(ScrollbarOrientation orientation)
@@ -449,7 +472,7 @@ bool ScrollableArea::hasLayerForScrollCorner() const
     return layerForScrollCorner();
 }
 
-void ScrollableArea::layerForScrollingDidChange(WebCompositorAnimationTimeline* timeline)
+void ScrollableArea::layerForScrollingDidChange(CompositorAnimationTimeline* timeline)
 {
     if (ProgrammaticScrollAnimator* programmaticScrollAnimator = existingProgrammaticScrollAnimator())
         programmaticScrollAnimator->layerForCompositedScrollingDidChange(timeline);
@@ -525,7 +548,14 @@ void ScrollableArea::cancelProgrammaticScrollAnimation()
 bool ScrollableArea::shouldScrollOnMainThread() const
 {
     if (GraphicsLayer* layer = layerForScrolling()) {
-        return layer->platformLayer()->shouldScrollOnMainThread();
+        uint32_t reasons = layer->platformLayer()->mainThreadScrollingReasons();
+        // Should scroll on main thread unless the reason is the one that is set
+        // by the ScrollAnimator, in which case, the animation can still be
+        // scheduled on the compositor.
+        // TODO(ymalik): We have a non-transient "main thread scrolling reason"
+        // that doesn't actually cause shouldScrollOnMainThread() to be true.
+        // This is confusing and should be cleaned up.
+        return !!(reasons & ~MainThreadScrollingReason::kAnimatingScrollOnMainThread);
     }
     return true;
 }
@@ -565,7 +595,7 @@ DoublePoint ScrollableArea::clampScrollPosition(const DoublePoint& scrollPositio
 
 int ScrollableArea::lineStep(ScrollbarOrientation) const
 {
-    return pixelsPerLineStep();
+    return pixelsPerLineStep(hostWindow());
 }
 
 int ScrollableArea::pageStep(ScrollbarOrientation orientation) const

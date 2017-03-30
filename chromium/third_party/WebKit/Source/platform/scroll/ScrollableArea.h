@@ -29,6 +29,7 @@
 #include "platform/PlatformExport.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/DoublePoint.h"
+#include "platform/graphics/Color.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollAnimatorBase.h"
 #include "platform/scroll/ScrollTypes.h"
@@ -47,7 +48,7 @@ class PlatformWheelEvent;
 class ProgrammaticScrollAnimator;
 struct ScrollAlignment;
 class ScrollAnimatorBase;
-class WebCompositorAnimationTimeline;
+class CompositorAnimationTimeline;
 class Widget;
 
 enum ScrollBehavior {
@@ -73,7 +74,7 @@ class PLATFORM_EXPORT ScrollableArea {
 #endif
     WTF_MAKE_NONCOPYABLE(ScrollableArea);
 public:
-    static int pixelsPerLineStep();
+    static int pixelsPerLineStep(HostWindow*);
     static float minFractionToStepWhenPaging();
     static int maxOverlapBetweenPages();
 
@@ -122,6 +123,7 @@ public:
 
     bool hasOverlayScrollbars() const;
     void setScrollbarOverlayStyle(ScrollbarOverlayStyle);
+    void recalculateScrollbarOverlayStyle(Color);
     ScrollbarOverlayStyle scrollbarOverlayStyle() const { return static_cast<ScrollbarOverlayStyle>(m_scrollbarOverlayStyle); }
 
     // This getter will create a ScrollAnimatorBase if it doesn't already exist.
@@ -245,7 +247,7 @@ public:
     bool hasLayerForVerticalScrollbar() const;
     bool hasLayerForScrollCorner() const;
 
-    void layerForScrollingDidChange(WebCompositorAnimationTimeline*);
+    void layerForScrollingDidChange(CompositorAnimationTimeline*);
 
     void cancelScrollAnimation();
     virtual void cancelProgrammaticScrollAnimation();
@@ -279,6 +281,9 @@ public:
 
     // Returns the widget associated with this ScrollableArea.
     virtual Widget* widget() { return nullptr; }
+
+    virtual bool isFrameView() const { return false; }
+    virtual bool isPaintLayerScrollableArea() const { return false; }
 
     // Need to promptly let go of owned animator objects.
     EAGERLY_FINALIZE();

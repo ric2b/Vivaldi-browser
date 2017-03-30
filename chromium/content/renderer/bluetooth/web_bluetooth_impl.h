@@ -16,7 +16,7 @@
 #include "third_party/WebKit/public/platform/modules/bluetooth/WebBluetooth.h"
 
 namespace blink {
-class WebBluetoothGATTCharacteristic;
+class WebBluetoothRemoteGATTCharacteristic;
 }
 
 namespace content {
@@ -37,8 +37,10 @@ class CONTENT_EXPORT WebBluetoothImpl
   void requestDevice(
       const blink::WebRequestDeviceOptions& options,
       blink::WebBluetoothRequestDeviceCallbacks* callbacks) override;
-  void connectGATT(const blink::WebString& device_id,
-                   blink::WebBluetoothConnectGATTCallbacks* callbacks) override;
+  void connect(
+      const blink::WebString& device_id,
+      blink::WebBluetoothRemoteGATTServerConnectCallbacks* callbacks) override;
+  void disconnect(const blink::WebString& device_id) override;
   void getPrimaryService(
       const blink::WebString& device_id,
       const blink::WebString& service_uuid,
@@ -47,23 +49,30 @@ class CONTENT_EXPORT WebBluetoothImpl
       const blink::WebString& service_instance_id,
       const blink::WebString& characteristic_uuid,
       blink::WebBluetoothGetCharacteristicCallbacks* callbacks) override;
+  void getCharacteristics(
+      const blink::WebString& service_instance_id,
+      const blink::WebString& characteristics_uuid,
+      blink::WebBluetoothGetCharacteristicsCallbacks* callbacks) override;
+
   void readValue(const blink::WebString& characteristic_instance_id,
                  blink::WebBluetoothReadValueCallbacks* callbacks) override;
   void writeValue(const blink::WebString& characteristic_instance_id,
                   const blink::WebVector<uint8_t>& value,
                   blink::WebBluetoothWriteValueCallbacks*) override;
-  void startNotifications(const blink::WebString& characteristic_instance_id,
-                          blink::WebBluetoothGATTCharacteristic* characteristic,
-                          blink::WebBluetoothNotificationsCallbacks*) override;
-  void stopNotifications(const blink::WebString& characteristic_instance_id,
-                         blink::WebBluetoothGATTCharacteristic* characteristic,
-                         blink::WebBluetoothNotificationsCallbacks*) override;
+  void startNotifications(
+      const blink::WebString& characteristic_instance_id,
+      blink::WebBluetoothRemoteGATTCharacteristic* characteristic,
+      blink::WebBluetoothNotificationsCallbacks*) override;
+  void stopNotifications(
+      const blink::WebString& characteristic_instance_id,
+      blink::WebBluetoothRemoteGATTCharacteristic* characteristic,
+      blink::WebBluetoothNotificationsCallbacks*) override;
   void characteristicObjectRemoved(
       const blink::WebString& characteristic_instance_id,
-      blink::WebBluetoothGATTCharacteristic* characteristic) override;
+      blink::WebBluetoothRemoteGATTCharacteristic* characteristic) override;
   void registerCharacteristicObject(
       const blink::WebString& characteristic_instance_id,
-      blink::WebBluetoothGATTCharacteristic* characteristic) override;
+      blink::WebBluetoothRemoteGATTCharacteristic* characteristic) override;
 
  private:
   BluetoothDispatcher* GetDispatcher();

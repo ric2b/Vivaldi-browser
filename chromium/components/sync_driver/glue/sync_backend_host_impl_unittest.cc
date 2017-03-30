@@ -120,8 +120,7 @@ class MockSyncFrontend : public sync_driver::SyncFrontend {
 class FakeSyncManagerFactory : public syncer::SyncManagerFactory {
  public:
   explicit FakeSyncManagerFactory(FakeSyncManager** fake_manager)
-     : SyncManagerFactory(NORMAL),
-       fake_manager_(fake_manager) {
+     : fake_manager_(fake_manager) {
     *fake_manager_ = NULL;
   }
   ~FakeSyncManagerFactory() override {}
@@ -347,7 +346,7 @@ TEST_F(SyncBackendHostTest, FirstTimeSync) {
 // Test the restart after setting up sync scenario. No enabled types should be
 // downloaded or cleaned.
 TEST_F(SyncBackendHostTest, Restart) {
-  sync_prefs_->SetSyncSetupCompleted();
+  sync_prefs_->SetFirstSetupComplete();
   syncer::ModelTypeSet all_but_nigori = enabled_types_;
   fake_manager_factory_->set_progress_marker_types(enabled_types_);
   fake_manager_factory_->set_initial_sync_ended_types(enabled_types_);
@@ -375,7 +374,7 @@ TEST_F(SyncBackendHostTest, Restart) {
 // Test a sync restart scenario where some types had never finished configuring.
 // The partial types should be purged, then reconfigured properly.
 TEST_F(SyncBackendHostTest, PartialTypes) {
-  sync_prefs_->SetSyncSetupCompleted();
+  sync_prefs_->SetFirstSetupComplete();
   // Set sync manager behavior before passing it down. All types have progress
   // markers, but nigori and bookmarks are missing initial sync ended.
   syncer::ModelTypeSet partial_types(syncer::NIGORI, syncer::BOOKMARKS);
@@ -414,7 +413,7 @@ TEST_F(SyncBackendHostTest, PartialTypes) {
 // Test the behavior when we lose the sync db. Although we already have types
 // enabled, we should re-download all of them because we lost their data.
 TEST_F(SyncBackendHostTest, LostDB) {
-  sync_prefs_->SetSyncSetupCompleted();
+  sync_prefs_->SetFirstSetupComplete();
   // Initialization should fetch the Nigori node.  Everything else should be
   // left untouched.
   InitializeBackend(true);
@@ -578,7 +577,7 @@ TEST_F(SyncBackendHostTest, AddDisableTypes) {
 // Test restarting the browser to newly supported datatypes. The new datatypes
 // should be downloaded on the configuration after backend initialization.
 TEST_F(SyncBackendHostTest, NewlySupportedTypes) {
-  sync_prefs_->SetSyncSetupCompleted();
+  sync_prefs_->SetFirstSetupComplete();
   // Set sync manager behavior before passing it down. All types have progress
   // markers and initial sync ended except the new types.
   syncer::ModelTypeSet old_types = enabled_types_;
@@ -618,7 +617,7 @@ TEST_F(SyncBackendHostTest, NewlySupportedTypes) {
 // types as well. Both partial and newly supported types should be downloaded
 // the configuration.
 TEST_F(SyncBackendHostTest, NewlySupportedTypesWithPartialTypes) {
-  sync_prefs_->SetSyncSetupCompleted();
+  sync_prefs_->SetFirstSetupComplete();
   // Set sync manager behavior before passing it down. All types have progress
   // markers and initial sync ended except the new types.
   syncer::ModelTypeSet old_types = enabled_types_;
@@ -662,7 +661,7 @@ TEST_F(SyncBackendHostTest, NewlySupportedTypesWithPartialTypes) {
 // Verify that downloading control types only downloads those types that do
 // not have initial sync ended set.
 TEST_F(SyncBackendHostTest, DownloadControlTypes) {
-  sync_prefs_->SetSyncSetupCompleted();
+  sync_prefs_->SetFirstSetupComplete();
   // Set sync manager behavior before passing it down. Experiments and device
   // info are new types without progress markers or initial sync ended, while
   // all other types have been fully downloaded and applied.
@@ -720,7 +719,7 @@ TEST_F(SyncBackendHostTest, DownloadControlTypesNewClient) {
 
 // Test that configuration on restart sends the proper GU source.
 TEST_F(SyncBackendHostTest, DownloadControlTypesRestart) {
-  sync_prefs_->SetSyncSetupCompleted();
+  sync_prefs_->SetFirstSetupComplete();
   fake_manager_factory_->set_progress_marker_types(enabled_types_);
   fake_manager_factory_->set_initial_sync_ended_types(enabled_types_);
   InitializeBackend(true);

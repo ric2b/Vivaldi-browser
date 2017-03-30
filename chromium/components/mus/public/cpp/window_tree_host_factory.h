@@ -6,13 +6,12 @@
 #define COMPONENTS_MUS_PUBLIC_CPP_WINDOW_TREE_HOST_FACTORY_H_
 
 #include "base/memory/scoped_ptr.h"
-#include "components/mus/public/interfaces/window_manager.mojom.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "components/mus/public/interfaces/window_tree_host.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
 namespace mojo {
-class ApplicationImpl;
+class Connector;
 }
 
 namespace mus {
@@ -20,23 +19,17 @@ namespace mus {
 class WindowManagerDelegate;
 class WindowTreeDelegate;
 
-// Uses |factory| to create a new |host|, providing the supplied |host_client|
-// which may be null. |delegate| must not be null.
+// The following create a new window tree host. Supply a |factory| if you have
+// already connected to mus, otherwise supply |shell|, which contacts mus and
+// obtains a WindowTreeHostFactory.
 void CreateWindowTreeHost(mojom::WindowTreeHostFactory* factory,
-                          mojom::WindowTreeHostClientPtr host_client,
                           WindowTreeDelegate* delegate,
                           mojom::WindowTreeHostPtr* host,
-                          mojom::WindowManagerPtr window_manager,
                           WindowManagerDelegate* window_manager_delegate);
-
-// Creates a single host with no client by connecting to the window manager
-// application. Useful only for tests and trivial UIs.
-void CreateSingleWindowTreeHost(mojo::ApplicationImpl* app,
-                                mojom::WindowTreeHostClientPtr host_client,
-                                WindowTreeDelegate* delegate,
-                                mojom::WindowTreeHostPtr* host,
-                                mojom::WindowManagerPtr window_manager,
-                                WindowManagerDelegate* window_manager_delegate);
+void CreateWindowTreeHost(mojo::Connector* connector,
+                          WindowTreeDelegate* delegate,
+                          mojom::WindowTreeHostPtr* host,
+                          WindowManagerDelegate* window_manager_delegate);
 
 }  // namespace mus
 

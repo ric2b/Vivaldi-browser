@@ -30,7 +30,7 @@ void LineBreaker::skipLeadingWhitespace(InlineBidiResolver& resolver, LineInfo& 
     FloatingObject* lastFloatFromPreviousLine, LineWidth& width)
 {
     while (!resolver.position().atEnd() && !requiresLineBox(resolver.position(), lineInfo, LeadingWhitespace)) {
-        LayoutObject* object = resolver.position().object();
+        LayoutObject* object = resolver.position().getLineLayoutItem();
         if (object->isOutOfFlowPositioned()) {
             setStaticPositions(m_block, LineLayoutBox(toLayoutBox(object)), width.indentText());
             if (object->style()->isOriginalDisplayInlineType()) {
@@ -71,19 +71,19 @@ InlineIterator LineBreaker::nextLineBreak(InlineBidiResolver& resolver, LineInfo
 
     BreakingContext context(resolver, lineInfo, width, layoutTextInfo, lastFloatFromPreviousLine, appliedStartWidth, m_block);
 
-    while (context.currentObject()) {
+    while (context.currentItem()) {
         context.initializeForCurrentObject();
-        if (context.currentObject()->isBR()) {
+        if (context.currentItem().isBR()) {
             context.handleBR(m_clear);
-        } else if (context.currentObject()->isOutOfFlowPositioned()) {
+        } else if (context.currentItem().isOutOfFlowPositioned()) {
             context.handleOutOfFlowPositioned(m_positionedObjects);
-        } else if (context.currentObject()->isFloating()) {
+        } else if (context.currentItem().isFloating()) {
             context.handleFloat();
-        } else if (context.currentObject()->isLayoutInline()) {
+        } else if (context.currentItem().isLayoutInline()) {
             context.handleEmptyInline();
-        } else if (context.currentObject()->isAtomicInlineLevel()) {
+        } else if (context.currentItem().isAtomicInlineLevel()) {
             context.handleReplaced();
-        } else if (context.currentObject()->isText()) {
+        } else if (context.currentItem().isText()) {
             if (context.handleText(wordMeasurements, m_hyphenated)) {
                 // We've hit a hard text line break. Our line break iterator is updated, so go ahead and early return.
                 return context.lineBreak();
@@ -108,4 +108,4 @@ InlineIterator LineBreaker::nextLineBreak(InlineBidiResolver& resolver, LineInfo
     return context.handleEndOfLine();
 }
 
-}
+} // namespace blink

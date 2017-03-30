@@ -11,6 +11,7 @@
 #include "core/css/CSSRuleList.h"
 #include "core/dom/Element.h"
 #include "platform/heap/Handle.h"
+#include "platform/inspector_protocol/Values.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/RefPtr.h"
 #include "wtf/text/WTFString.h"
@@ -20,8 +21,6 @@ namespace blink {
 class CSSPrimitiveValue;
 class InspectorCSSAgent;
 class InspectorDOMAgent;
-class JSONArray;
-class JSONObject;
 class ScriptController;
 
 class CORE_EXPORT LayoutEditor final : public NoBaseWillBeGarbageCollectedFinalized<LayoutEditor> {
@@ -48,12 +47,12 @@ public:
 private:
     LayoutEditor(Element*, InspectorCSSAgent*, InspectorDOMAgent*, ScriptController*);
     RefPtrWillBeRawPtr<CSSPrimitiveValue> getPropertyCSSValue(CSSPropertyID) const;
-    PassRefPtr<JSONObject> createValueDescription(const String&);
-    void appendAnchorFor(JSONArray*, const String&, const String&);
+    PassRefPtr<protocol::DictionaryValue> createValueDescription(const String&);
+    void appendAnchorFor(protocol::ListValue*, const String&, const String&);
     bool setCSSPropertyValueInCurrentRule(const String&);
     void editableSelectorUpdated(bool hasChanged) const;
-    void evaluateInOverlay(const String&, PassRefPtr<JSONValue>) const;
-    PassRefPtr<JSONObject> currentSelectorInfo(CSSStyleDeclaration*) const;
+    void evaluateInOverlay(const String&, PassRefPtr<protocol::Value>) const;
+    PassRefPtr<protocol::DictionaryValue> currentSelectorInfo(CSSStyleDeclaration*) const;
     bool growInside(String propertyName, CSSPrimitiveValue*);
 
     RefPtrWillBeMember<Element> m_element;

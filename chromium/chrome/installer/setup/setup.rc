@@ -151,7 +151,7 @@ BEGIN
     EDITTEXT        IDC_EDIT_DEST_FOLDER, 25, 140, 235, 14, ES_AUTOHSCROLL | WS_TABSTOP
     PUSHBUTTON      "Browse...", IDC_BTN_BROWSE, 268, 140, 70, 14, WS_TABSTOP
     CONTROL         "Set Vivaldi as default browser", IDC_CHECK_DEFAULT, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 25, 160, 312, 15
-    LTEXT           "This is a Beta release of Vivaldi, a brand new web browser with powerful feature sets. \
+    LTEXT           "This is Vivaldi, a brand new web browser with powerful feature sets. \
                      Vivaldi provides flexibility and customisation for your best Web experience.", IDC_STATIC_INFO, 32, 185, 305, 25, SS_LEFT
     CONTROL         "<>", IDC_SYSLINK_TOS, "SysLink", WS_TABSTOP, 32, 205, 305, 15
     LTEXT           "Note: If updating a running Vivaldi browser, that instance will be closed and relaunched.", IDC_STATIC_WARN, 25, 220, 305, 25, SS_CENTER

@@ -5,28 +5,65 @@
 #include "mash/shell/shell_application_delegate.h"
 
 #include "base/bind.h"
-#include "mojo/shell/public/cpp/application_connection.h"
-#include "mojo/shell/public/cpp/application_impl.h"
+#include "base/command_line.h"
+#include "mojo/shell/public/cpp/connection.h"
+#include "mojo/shell/public/cpp/connector.h"
 
 namespace mash {
 namespace shell {
 
-ShellApplicationDelegate::ShellApplicationDelegate() : app_(nullptr) {}
+ShellApplicationDelegate::ShellApplicationDelegate()
+    : connector_(nullptr), screen_locked_(false) {}
 
 ShellApplicationDelegate::~ShellApplicationDelegate() {}
 
-void ShellApplicationDelegate::Initialize(mojo::ApplicationImpl* app) {
-  app_ = app;
+void ShellApplicationDelegate::Initialize(mojo::Connector* connector,
+                                          const std::string& url,
+                                          uint32_t id,
+                                          uint32_t user_id) {
+  connector_ = connector;
   StartBrowserDriver();
   StartWindowManager();
-  StartWallpaper();
-  StartShelf();
+  StartSystemUI();
   StartQuickLaunch();
 }
 
-bool ShellApplicationDelegate::ConfigureIncomingConnection(
-    mojo::ApplicationConnection* connection) {
-  return false;
+bool ShellApplicationDelegate::AcceptConnection(mojo::Connection* connection) {
+  connection->AddInterface<mash::shell::mojom::Shell>(this);
+  return true;
+}
+
+void ShellApplicationDelegate::AddScreenlockStateListener(
+    mojom::ScreenlockStateListenerPtr listener) {
+  listener->ScreenlockStateChanged(screen_locked_);
+  screenlock_listeners_.AddInterfacePtr(std::move(listener));
+}
+
+void ShellApplicationDelegate::LockScreen() {
+  if (screen_locked_)
+    return;
+  screen_locked_ = true;
+  screenlock_listeners_.ForAllPtrs(
+      [](mojom::ScreenlockStateListener* listener) {
+        listener->ScreenlockStateChanged(true);
+      });
+  StartScreenlock();
+}
+void ShellApplicationDelegate::UnlockScreen() {
+  if (!screen_locked_)
+    return;
+  screen_locked_ = false;
+  screenlock_listeners_.ForAllPtrs(
+      [](mojom::ScreenlockStateListener* listener) {
+        listener->ScreenlockStateChanged(false);
+      });
+  StopScreenlock();
+}
+
+void ShellApplicationDelegate::Create(
+    mojo::Connection* connection,
+    mojo::InterfaceRequest<mash::shell::mojom::Shell> r) {
+  bindings_.AddBinding(this, std::move(r));
 }
 
 void ShellApplicationDelegate::StartWindowManager() {
@@ -36,15 +73,9 @@ void ShellApplicationDelegate::StartWindowManager() {
                  base::Unretained(this)));
 }
 
-void ShellApplicationDelegate::StartWallpaper() {
-  StartRestartableService("mojo:wallpaper",
-                          base::Bind(&ShellApplicationDelegate::StartWallpaper,
-                                     base::Unretained(this)));
-}
-
-void ShellApplicationDelegate::StartShelf() {
-  StartRestartableService("mojo:shelf",
-                          base::Bind(&ShellApplicationDelegate::StartShelf,
+void ShellApplicationDelegate::StartSystemUI() {
+  StartRestartableService("mojo:ash_sysui",
+                          base::Bind(&ShellApplicationDelegate::StartSystemUI,
                                      base::Unretained(this)));
 }
 
@@ -62,15 +93,31 @@ void ShellApplicationDelegate::StartQuickLaunch() {
                  base::Unretained(this)));
 }
 
+void ShellApplicationDelegate::StartScreenlock() {
+  StartRestartableService(
+      "mojo:screenlock",
+      base::Bind(&ShellApplicationDelegate::StartScreenlock,
+                 base::Unretained(this)));
+}
+
+void ShellApplicationDelegate::StopScreenlock() {
+  auto connection = connections_.find("mojo:screenlock");
+  DCHECK(connections_.end() != connection);
+  connections_.erase(connection);
+}
+
 void ShellApplicationDelegate::StartRestartableService(
     const std::string& url,
     const base::Closure& restart_callback) {
   // TODO(beng): This would be the place to insert logic that counted restarts
   //             to avoid infinite crash-restart loops.
-  scoped_ptr<mojo::ApplicationConnection> connection =
-      app_->ConnectToApplication(url);
-  connection->SetRemoteServiceProviderConnectionErrorHandler(restart_callback);
-  connections_[url] = std::move(connection);
+  scoped_ptr<mojo::Connection> connection = connector_->Connect(url);
+  // Note: |connection| may be null if we've lost our connection to the shell.
+  if (connection) {
+    connection->SetRemoteInterfaceProviderConnectionErrorHandler(
+        restart_callback);
+    connections_[url] = std::move(connection);
+  }
 }
 
 }  // namespace shell

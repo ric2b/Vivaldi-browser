@@ -30,6 +30,7 @@
 #include "content/public/renderer/navigation_state.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/web/WebAutofillClient.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
@@ -38,7 +39,6 @@
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebNode.h"
-#include "third_party/WebKit/public/web/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "ui/base/page_transition_types.h"
@@ -733,7 +733,14 @@ void PasswordAutofillAgent::UpdateStateForTextChange(
     password_info_iter->second.username_was_edited = true;
   }
 
-  DCHECK_EQ(element.document().frame(), render_frame()->GetWebFrame());
+  blink::WebFrame* const element_frame = element.document().frame();
+  // The element's frame might have been detached in the meantime (see
+  // http://crbug.com/585363, comments 5 and 6), in which case frame() will
+  // return null. This was hardly caused by form submission (unless the user
+  // is supernaturally quick), so it is OK to drop the ball here.
+  if (!element_frame)
+    return;
+  DCHECK_EQ(element_frame, render_frame()->GetWebFrame());
 
   // Some login forms have event handlers that put a hash of the password into
   // a hidden field and then clear the password (http://crbug.com/28910,
@@ -744,8 +751,7 @@ void PasswordAutofillAgent::UpdateStateForTextChange(
   scoped_ptr<PasswordForm> password_form;
   if (element.form().isNull()) {
     password_form = CreatePasswordFormFromUnownedInputElements(
-        *element.document().frame(), &nonscript_modified_values_,
-        &form_predictions_);
+        *element_frame, &nonscript_modified_values_, &form_predictions_);
   } else {
     password_form = CreatePasswordFormFromWebForm(
         element.form(), &nonscript_modified_values_, &form_predictions_);

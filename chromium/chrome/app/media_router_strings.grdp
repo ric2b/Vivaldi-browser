@@ -41,6 +41,11 @@
   <message name="IDS_MEDIA_ROUTER_ABOUT" desc="Title of a menu item which, on click, opens a page with product information about Chromecast.">
    About
   </message>
+  <if expr="_google_chrome">
+    <message name="IDS_MEDIA_ROUTER_CLOUD_SERVICES_TOGGLE" desc="Title of a menu item which, on click, toggles the preference to opt in or out of cloud services.">
+     Enable Cloud Services
+    </message>
+  </if>
   <message name="IDS_MEDIA_ROUTER_HELP" desc="Title of a menu item which, on click, opens a page to the Chromecast help center.">
    Help
   </message>
@@ -50,11 +55,8 @@
 
   <!-- First Run Flow -->
   <if expr="_google_chrome">
-    <message name="IDS_MEDIA_ROUTER_FIRST_RUN_FLOW_CLOUD_OPT_IN_TEXT" desc="Text of the cloud services opt in text in the first run flow, which is shown to the user if they are currently signed in and have enabled sync.">
+    <message name="IDS_MEDIA_ROUTER_FIRST_RUN_FLOW_CLOUD_PREF_TEXT" desc="Text of the cloud services preferences text in the first run flow, which is shown to the user if they are currently signed in and have enabled sync.">
       Enable casting to cloud-based services like Google Hangouts.
-    </message>
-    <message name="IDS_MEDIA_ROUTER_FIRST_RUN_FLOW_CLOUD_LEARN_MORE" desc="Text of the learn more link, which, on click, opens a page with more details about cloud-based services.">
-      Learn More
     </message>
     <message name="IDS_MEDIA_ROUTER_FIRST_RUN_FLOW_TITLE" desc="Title of the first run flow, which is shown to the user the first time they use Media Router, until they acknowledge the message. This is a welcome message that introduces Media Router to the user.">
       Welcome to the Cast experience in Chrome!
@@ -98,15 +100,23 @@
   <message name="IDS_MEDIA_ROUTER_CASTING_ACTIVITY_STATUS" desc="Label of activity status, which describes the media that is currently being casted.">
     Casting: <ph name="routeTitle">$1<ex>Video</ex></ph>
   </message>
-  <message name="IDS_MEDIA_ROUTER_JOIN_BUTTON" desc="Join button, which, on click, will join the current route.">
-    Join
+  <message name="IDS_MEDIA_ROUTER_START_CASTING_BUTTON" desc="Start casting button, which, on click, will start casting to the current route.">
+    Cast
   </message>
   <message name="IDS_MEDIA_ROUTER_STOP_CASTING_BUTTON" desc="Stop casting button, which, on click, will stop the current route.">
-    Stop casting
+    Stop
   </message>
 
   <!-- Sink List -->
   <message name="IDS_MEDIA_ROUTER_DEVICE_MISSING" desc="Link to display when no devices are found which, on click, opens a page to the Chromecast help center explaining possible reasons why no devices are detected.">
     Device missing?
+  </message>
+
+  <!-- Sink Search -->
+  <message name="IDS_MEDIA_ROUTER_SEARCH_LABEL" desc="Label for search input in sink list.">
+    Search
+  </message>
+  <message name="IDS_MEDIA_ROUTER_SEARCH_NO_MATCHES" desc="Text to display when there are no sinks matching the user input search text.">
+    No matches
   </message>
 </grit-part>

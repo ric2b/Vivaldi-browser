@@ -8,6 +8,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "sync/base/sync_export.h"
 #include "sync/internal_api/public/non_blocking_sync_common.h"
+#include "sync/protocol/data_type_state.pb.h"
 
 namespace syncer_v2 {
 class CommitQueue;
@@ -18,21 +19,23 @@ class SYNC_EXPORT ModelTypeProcessor {
   ModelTypeProcessor();
   virtual ~ModelTypeProcessor();
 
-  // Callback used to process the handshake response from the worker.
-  virtual void OnConnect(scoped_ptr<CommitQueue> commit_queue) = 0;
+  // Connect this processor to the sync engine via |commit_queue|. Once called,
+  // the processor will send any pending and future commits via this channel.
+  // This can only be called multiple times if the processor is disconnected
+  // (via the DataTypeController) in between.
+  virtual void ConnectSync(scoped_ptr<CommitQueue> commit_queue) = 0;
 
   // Informs this object that some of its commit requests have been
   // successfully serviced.
   virtual void OnCommitCompleted(
-      const DataTypeState& type_state,
+      const sync_pb::DataTypeState& type_state,
       const CommitResponseDataList& response_list) = 0;
 
   // Informs this object that there are some incoming updates is should
   // handle.
   virtual void OnUpdateReceived(
-      const DataTypeState& type_state,
-      const UpdateResponseDataList& response_list,
-      const UpdateResponseDataList& pending_updates) = 0;
+      const sync_pb::DataTypeState& type_state,
+      const UpdateResponseDataList& updates) = 0;
 };
 
 }  // namespace syncer_v2

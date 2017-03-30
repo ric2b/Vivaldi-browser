@@ -23,7 +23,6 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeBrowserProviderClient;
 import org.chromium.chrome.browser.TabLoadStatus;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.WindowDelegate;
@@ -31,7 +30,7 @@ import org.chromium.chrome.browser.appmenu.AppMenuButtonHelper;
 import org.chromium.chrome.browser.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.appmenu.AppMenuObserver;
 import org.chromium.chrome.browser.appmenu.AppMenuPropertiesDelegate;
-import org.chromium.chrome.browser.bookmark.BookmarksBridge;
+import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.compositor.Invalidator;
 import org.chromium.chrome.browser.compositor.layouts.EmptyOverviewModeObserver;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
@@ -68,6 +67,7 @@ import org.chromium.chrome.browser.widget.findinpage.FindToolbarManager;
 import org.chromium.chrome.browser.widget.findinpage.FindToolbarObserver;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationController;
+import org.chromium.content_public.browser.NavigationEntry;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
@@ -107,7 +107,7 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
      * The minimum load progress that can be shown when a page is loading.  This is not 0 so that
      * it's obvious to the user that something is attempting to load.
      */
-    public static final float MINIMUM_LOAD_PROGRESS = 0.05f;
+    public static final int MINIMUM_LOAD_PROGRESS = 5;
 
     private final ToolbarLayout mToolbar;
     private final ToolbarControlContainer mControlContainer;
@@ -118,14 +118,14 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
     private MenuDelegatePhone mMenuDelegatePhone;
     private final ToolbarModelImpl mToolbarModel;
     private Profile mCurrentProfile;
-    private BookmarksBridge mBookmarksBridge;
+    private BookmarkBridge mBookmarkBridge;
     private TemplateUrlServiceObserver mTemplateUrlObserver;
     private final LocationBar mLocationBar;
     private FindToolbarManager mFindToolbarManager;
     private final AppMenuPropertiesDelegate mAppMenuPropertiesDelegate;
 
     private final TabObserver mTabObserver;
-    private final BookmarksBridge.BookmarkModelObserver mBookmarksObserver;
+    private final BookmarkBridge.BookmarkModelObserver mBookmarksObserver;
     private final List<FindToolbarObserver> mFindToolbarObservers;
     private final OverviewModeObserver mOverviewModeObserver;
     private final SceneChangeObserver mSceneChangeObserver;
@@ -290,6 +290,8 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
         };
 
         mTabObserver = new EmptyTabObserver() {
+            private boolean mIsLoadingNativePage;
+
             @Override
             public void onSSLStateUpdated(Tab tab) {
                 super.onSSLStateUpdated(tab);
@@ -313,8 +315,20 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
 
             @Override
             public void onPageLoadStarted(Tab tab, String url) {
-                if (NativePageFactory.isNativePageUrl(url, tab.isIncognito())) {
+                // Recheck the URL to determine if it is a native page or not.  This was done using
+                // the pending URL in onLoadStarted, but we sanity check the URL here to ensure
+                // the final URL is in the same state.  If the state has changed, update the
+                // progress bar to reflect the correct state.
+                boolean isNativePage = NativePageFactory.isNativePageUrl(url, tab.isIncognito());
+
+                if (isNativePage == mIsLoadingNativePage) return;
+                mIsLoadingNativePage = isNativePage;
+
+                if (mIsLoadingNativePage) {
                     finishLoadProgress(false);
+                } else {
+                    mToolbar.startLoadProgress();
+                    updateLoadProgress(tab.getProgress());
                 }
             }
 
@@ -348,8 +362,24 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
                 updateTabLoadingState(true);
                 mLoadProgressSimulator.cancel();
 
-                mToolbar.startLoadProgress();
-                setLoadProgress(0.0f);
+                mIsLoadingNativePage = false;
+
+                NavigationEntry pendingEntry =
+                        tab.getWebContents().getNavigationController().getPendingEntry();
+                // At this point, the URL on the tab is not guaranteed to be correct, so we peek at
+                // the pending URL.  We only use this as a signal for starting the progress bar,
+                // and can not use it for anything security related.
+                if (pendingEntry != null) {
+                    mIsLoadingNativePage = NativePageFactory.isNativePageUrl(
+                            pendingEntry.getUrl(), tab.isIncognito());
+                }
+
+                if (mIsLoadingNativePage) {
+                    finishLoadProgress(false);
+                } else {
+                    mToolbar.startLoadProgress();
+                    updateLoadProgress(0);
+                }
             }
 
             @Override
@@ -359,16 +389,18 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
 
                 // If we made some progress, fast-forward to complete, otherwise just dismiss any
                 // MINIMUM_LOAD_PROGRESS that had been set.
-                if (tab.getProgress() > MINIMUM_LOAD_PROGRESS && tab.getProgress() < 1.0f) {
-                    setLoadProgress(1.0f);
+                if (tab.getProgress() > MINIMUM_LOAD_PROGRESS && tab.getProgress() < 100) {
+                    updateLoadProgress(100);
                 }
                 finishLoadProgress(true);
             }
 
             @Override
             public void onLoadProgressChanged(Tab tab, int progress) {
+                if (mIsLoadingNativePage) return;
+
                 // TODO(kkimlabs): Investigate using float progress all the way up to Blink.
-                setLoadProgress(progress / 100.0f);
+                updateLoadProgress(progress);
             }
 
             @Override
@@ -438,7 +470,7 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
             }
         };
 
-        mBookmarksObserver = new BookmarksBridge.BookmarkModelObserver() {
+        mBookmarksObserver = new BookmarkBridge.BookmarkModelObserver() {
             @Override
             public void bookmarkModelChanged() {
                 updateBookmarkButtonStatus();
@@ -504,7 +536,7 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
             }
         };
 
-        mLoadProgressSimulator = new LoadProgressSimulator(mToolbar);
+        mLoadProgressSimulator = new LoadProgressSimulator(this);
     }
 
     /**
@@ -572,9 +604,9 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
                 for (TabModel model : mTabModelSelector.getModels()) {
                     model.removeObserver(mTabModelObserver);
                 }
-                if (mBookmarksBridge != null) {
-                    mBookmarksBridge.destroy();
-                    mBookmarksBridge = null;
+                if (mBookmarkBridge != null) {
+                    mBookmarkBridge.destroy();
+                    mBookmarkBridge = null;
                 }
                 if (mTemplateUrlObserver != null) {
                     TemplateUrlService.getInstance().removeObserver(mTemplateUrlObserver);
@@ -631,8 +663,8 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
     /**
      * @return The bookmarks bridge.
      */
-    public BookmarksBridge getBookmarksBridge() {
-        return mBookmarksBridge;
+    public BookmarkBridge getBookmarkBridge() {
+        return mBookmarkBridge;
     }
 
     /**
@@ -904,6 +936,20 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
     }
 
     /**
+     * @see ToolbarLayout#setUrlBarHidden(boolean)
+     */
+    public void setUrlBarHidden(boolean hidden) {
+        mToolbar.setUrlBarHidden(hidden);
+    }
+
+    /**
+     * @see ToolbarLayout#getContentPublisher()
+     */
+    public String getContentPublisher() {
+        return mToolbar.getContentPublisher();
+    }
+
+    /**
      * Focuses or unfocuses the URL bar.
      * @param focused Whether URL bar should be focused.
      */
@@ -972,6 +1018,7 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
         Tab currentTab = mToolbarModel.getTab();
         boolean tabCrashed = currentTab != null && currentTab.isShowingSadTab();
 
+        mToolbar.updateButtonVisibility();
         mToolbar.updateBackButtonVisibility(currentTab != null && currentTab.canGoBack());
         mToolbar.updateForwardButtonVisibility(currentTab != null && currentTab.canGoForward());
         updateReloadState(tabCrashed);
@@ -984,9 +1031,9 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
     private void updateBookmarkButtonStatus() {
         Tab currentTab = mToolbarModel.getTab();
         boolean isBookmarked = currentTab != null
-                && currentTab.getBookmarkId() != ChromeBrowserProviderClient.INVALID_BOOKMARK_ID;
-        boolean editingAllowed = currentTab == null || mBookmarksBridge == null
-                || mBookmarksBridge.isEditBookmarksEnabled();
+                && currentTab.getBookmarkId() != Tab.INVALID_BOOKMARK_ID;
+        boolean editingAllowed = currentTab == null || mBookmarkBridge == null
+                || mBookmarkBridge.isEditBookmarksEnabled();
         mToolbar.updateBookmarkButton(isBookmarked, editingAllowed);
     }
 
@@ -1020,7 +1067,10 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
         updateCurrentTabDisplayStatus();
         if (previousTab != tab || wasIncognito != isIncognito) {
             if (previousTab != tab) {
-                if (previousTab != null) previousTab.removeObserver(mTabObserver);
+                if (previousTab != null) {
+                    previousTab.removeObserver(mTabObserver);
+                    previousTab.setIsAllowedToReturnToExternalApp(false);
+                }
                 if (tab != null) tab.addObserver(mTabObserver);
             }
             int defaultPrimaryColor = isIncognito
@@ -1041,13 +1091,15 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
 
         Profile profile = mTabModelSelector.getModel(isIncognito).getProfile();
         if (mCurrentProfile != profile) {
-            if (mBookmarksBridge != null) mBookmarksBridge.destroy();
-            mBookmarksBridge = new BookmarksBridge(profile);
-            mBookmarksBridge.addObserver(mBookmarksObserver);
-            mAppMenuPropertiesDelegate.setBookmarksBridge(mBookmarksBridge);
+            if (mBookmarkBridge != null) mBookmarkBridge.destroy();
+            mBookmarkBridge = new BookmarkBridge(profile);
+            mBookmarkBridge.addObserver(mBookmarksObserver);
+            mAppMenuPropertiesDelegate.setBookmarkBridge(mBookmarkBridge);
             mLocationBar.setAutocompleteProfile(profile);
             mCurrentProfile = profile;
         }
+
+        updateButtonStatus();
     }
 
     private void updateCurrentTabDisplayStatus() {
@@ -1068,7 +1120,7 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
                 finishLoadProgress(false);
             } else {
                 mToolbar.startLoadProgress();
-                setLoadProgress(tab.getProgress() / 100.0f);
+                updateLoadProgress(tab.getProgress());
             }
         } else {
             finishLoadProgress(false);
@@ -1080,7 +1132,7 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
         if (updateUrl) updateButtonStatus();
     }
 
-    private void setLoadProgress(float progress) {
+    private void updateLoadProgress(int progress) {
         // If it's a native page, progress bar is already hidden or being hidden, so don't update
         // the value.
         // TODO(kkimlabs): Investigate back/forward navigation with native page & web content and
@@ -1088,7 +1140,8 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
         Tab tab = mToolbarModel.getTab();
         if (NativePageFactory.isNativePageUrl(tab.getUrl(), tab.isIncognito())) return;
 
-        mToolbar.setLoadProgress(Math.max(progress, MINIMUM_LOAD_PROGRESS));
+        progress = Math.max(progress, MINIMUM_LOAD_PROGRESS);
+        mToolbar.setLoadProgress(progress / 100f);
     }
 
     private void finishLoadProgress(boolean delayed) {
@@ -1099,25 +1152,25 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
     private static class LoadProgressSimulator {
         private static final int MSG_ID_UPDATE_PROGRESS = 1;
 
-        private static final float PROGRESS_INCREMENT = 0.1f;
+        private static final int PROGRESS_INCREMENT = 10;
         private static final int PROGRESS_INCREMENT_DELAY_MS = 10;
 
-        private final ToolbarLayout mToolbar;
+        private final ToolbarManager mToolbarManager;
         private final Handler mHandler;
 
-        private float mProgress;
+        private int mProgress;
 
-        public LoadProgressSimulator(ToolbarLayout toolbar) {
-            mToolbar = toolbar;
+        public LoadProgressSimulator(ToolbarManager toolbar) {
+            mToolbarManager = toolbar;
             mHandler = new Handler(Looper.getMainLooper()) {
                 @Override
                 public void handleMessage(Message msg) {
                     assert msg.what == MSG_ID_UPDATE_PROGRESS;
-                    mProgress = Math.min(1.0f, mProgress += PROGRESS_INCREMENT);
-                    mToolbar.setLoadProgress(mProgress);
+                    mProgress = Math.min(100, mProgress += PROGRESS_INCREMENT);
+                    mToolbarManager.updateLoadProgress(mProgress);
 
-                    if (mProgress == 1.0f) {
-                        mToolbar.finishLoadProgress(true);
+                    if (mProgress == 100) {
+                        mToolbarManager.mToolbar.finishLoadProgress(true);
                         return;
                     }
                     sendEmptyMessageDelayed(MSG_ID_UPDATE_PROGRESS, PROGRESS_INCREMENT_DELAY_MS);
@@ -1129,9 +1182,9 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
          * Start simulating load progress from a baseline of 0.
          */
         public void start() {
-            mProgress = 0.0f;
-            mToolbar.startLoadProgress();
-            mToolbar.setLoadProgress(mProgress);
+            mProgress = 0;
+            mToolbarManager.mToolbar.startLoadProgress();
+            mToolbarManager.updateLoadProgress(mProgress);
             mHandler.sendEmptyMessage(MSG_ID_UPDATE_PROGRESS);
         }
 

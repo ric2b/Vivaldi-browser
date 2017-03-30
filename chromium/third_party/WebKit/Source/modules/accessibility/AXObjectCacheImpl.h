@@ -43,7 +43,6 @@ namespace blink {
 class AbstractInlineTextBox;
 class HTMLAreaElement;
 class FrameView;
-class Widget;
 
 // This class should only be used from inside the accessibility directory.
 class MODULES_EXPORT AXObjectCacheImpl : public AXObjectCache {
@@ -55,7 +54,7 @@ public:
     ~AXObjectCacheImpl();
     DECLARE_VIRTUAL_TRACE();
 
-    AXObject* focusedUIElementForPage(const Page*);
+    AXObject* focusedObject();
 
     void dispose() override;
 
@@ -69,7 +68,6 @@ public:
 
     void remove(LayoutObject*) override;
     void remove(Node*) override;
-    void remove(Widget*) override;
     void remove(AbstractInlineTextBox*) override;
 
     const Element* rootAXEditableElement(const Node*) override;
@@ -90,6 +88,7 @@ public:
     void didHideMenuListPopup(LayoutMenuList*) override;
     void handleLoadComplete(Document*) override;
     void handleLayoutComplete(Document*) override;
+    void handleClicked(Node*) override;
 
     void setCanvasObjectBounds(Element*, const LayoutRect&) override;
 
@@ -100,7 +99,6 @@ public:
     void handleScrollPositionChanged(LayoutObject*) override;
 
     // Called when scroll bars are added / removed (as the view resizes).
-    void handleScrollbarUpdate(FrameView*) override;
     void handleLayoutComplete(LayoutObject*) override;
     void handleScrolledToAnchor(const Node* anchorNode) override;
 
@@ -118,14 +116,12 @@ public:
     // used for objects without backing elements
     AXObject* getOrCreate(AccessibilityRole);
     AXObject* getOrCreate(LayoutObject*);
-    AXObject* getOrCreate(Widget*);
     AXObject* getOrCreate(Node*);
     AXObject* getOrCreate(AbstractInlineTextBox*);
 
     // will only return the AXObject if it already exists
     AXObject* get(Node*);
     AXObject* get(LayoutObject*);
-    AXObject* get(Widget*);
     AXObject* get(AbstractInlineTextBox*);
 
     AXObject* firstAccessibleObjectFromNode(const Node*);
@@ -195,7 +191,6 @@ private:
     // LayoutObject and AbstractInlineTextBox are not on the Oilpan heap so we
     // do not use HeapHashMap for those mappings.
     HashMap<LayoutObject*, AXID> m_layoutObjectMapping;
-    WillBeHeapHashMap<RawPtrWillBeMember<Widget>, AXID> m_widgetObjectMapping;
     WillBeHeapHashMap<RawPtrWillBeMember<Node>, AXID> m_nodeObjectMapping;
     HashMap<AbstractInlineTextBox*, AXID> m_inlineTextBoxObjectMapping;
     int m_modificationCount;
@@ -255,6 +250,6 @@ bool nodeHasRole(Node*, const String& role);
 // This will let you know if aria-hidden was explicitly set to false.
 bool isNodeAriaVisible(Node*);
 
-}
+} // namespace blink
 
 #endif

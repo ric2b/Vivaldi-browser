@@ -36,6 +36,7 @@
 #include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/omnibox/common/omnibox_focus_state.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
@@ -60,7 +61,7 @@ class MockSearchIPCRouterDelegate : public SearchIPCRouter::Delegate {
 
   MOCK_METHOD1(OnInstantSupportDetermined, void(bool supports_instant));
   MOCK_METHOD1(FocusOmnibox, void(OmniboxFocusState state));
-  MOCK_METHOD3(NavigateToURL, void(const GURL&, WindowOpenDisposition, bool));
+  MOCK_METHOD2(NavigateToURL, void(const GURL&, WindowOpenDisposition));
   MOCK_METHOD1(OnDeleteMostVisitedItem, void(const GURL& url));
   MOCK_METHOD1(OnUndoMostVisitedDeletion, void(const GURL& url));
   MOCK_METHOD0(OnUndoAllMostVisitedDeletions, void());

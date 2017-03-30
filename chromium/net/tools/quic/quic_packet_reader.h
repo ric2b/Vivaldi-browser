@@ -12,22 +12,24 @@
 
 #include "base/macros.h"
 #include "net/quic/quic_protocol.h"
+#include "net/tools/quic/quic_process_packet_interface.h"
+
+#define MMSG_MORE 0
 
 namespace net {
 
-namespace tools {
-
+#if MMSG_MORE
 // Read in larger batches to minimize recvmmsg overhead.
 const int kNumPacketsPerReadMmsgCall = 16;
 // Allocate space for in6_pktinfo as it's larger than in_pktinfo
 const int kSpaceForOverflowAndIp =
     CMSG_SPACE(sizeof(int)) + CMSG_SPACE(sizeof(in6_pktinfo));
+#endif
 
 namespace test {
 class QuicServerPeer;
 }  // namespace test
 
-class ProcessPacketInterface;
 class QuicDispatcher;
 
 class QuicPacketReader {
@@ -58,23 +60,29 @@ class QuicPacketReader {
 
   // Storage only used when recvmmsg is available.
 
-  // cbuf_ is used for ancillary data from the kernel on recvmmsg.
-  char cbuf_[kSpaceForOverflowAndIp * kNumPacketsPerReadMmsgCall];
-  // buf_ is used for the data read from the kernel on recvmmsg.
+#if MMSG_MORE
   // TODO(danzh): change it to be a pointer to avoid the allocation on the stack
   // from exceeding maximum allowed frame size.
-  char buf_[kMaxPacketSize * kNumPacketsPerReadMmsgCall];
-  // iov_ and mmsg_hdr_ are used to supply cbuf and buf to the recvmmsg call.
-  iovec iov_[kNumPacketsPerReadMmsgCall];
+  // packets_ and mmsg_hdr_ are used to supply cbuf and buf to the recvmmsg
+  // call.
+
+  struct PacketData {
+    iovec iov;
+    // raw_address is used for address information provided by the recvmmsg
+    // call on the packets.
+    struct sockaddr_storage raw_address;
+    // cbuf is used for ancillary data from the kernel on recvmmsg.
+    char cbuf[kSpaceForOverflowAndIp];
+    // buf is used for the data read from the kernel on recvmmsg.
+    char buf[kMaxPacketSize];
+  };
+  PacketData packets_[kNumPacketsPerReadMmsgCall];
   mmsghdr mmsg_hdr_[kNumPacketsPerReadMmsgCall];
-  // raw_address_ is used for address information provided by the recvmmsg
-  // call on the packets.
-  struct sockaddr_storage raw_address_[kNumPacketsPerReadMmsgCall];
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(QuicPacketReader);
 };
 
-}  // namespace tools
 }  // namespace net
 
 #endif  // NET_TOOLS_QUIC_QUIC_PACKET_READER_H_

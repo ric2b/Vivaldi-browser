@@ -57,8 +57,11 @@ cr.define('media_router_container', function() {
         'container-header',
         'device-missing',
         'first-run-flow',
+        'first-run-flow-cloud-pref',
         'issue-banner',
+        'no-search-matches',
         'route-details',
+        'search-results',
         'sink-list',
         'sink-list-view',
       ];
@@ -153,6 +156,10 @@ cr.define('media_router_container', function() {
               media_router.SinkStatus.PENDING, castModeBitset),
         ];
 
+        searchTextAll = 'sink';
+        searchTextNone = 'abc';
+        searchTextOne = 'sink 1';
+
         fakeBlockingIssue = new media_router.Issue(
             'issue id 1', 'Issue Title 1', 'Issue Message 1', 0, 1,
             'route id 1', true, 1234);
@@ -168,14 +175,56 @@ cr.define('media_router_container', function() {
       });
 
       // Tests for 'acknowledge-first-run-flow' event firing when the
-      // 'first-run-button' button is clicked.
+      // 'first-run-button' button is clicked and the cloud preference checkbox
+      // is not shown.
       test('first run button click', function(done) {
         container.showFirstRunFlow = true;
 
         setTimeout(function() {
-          container.addEventListener('acknowledge-first-run-flow', function() {
+          container.addEventListener('acknowledge-first-run-flow',
+              function(data) {
+            assertEquals(undefined, data.detail.optedIntoCloudServices);
             done();
           });
+          MockInteractions.tap(container.shadowRoot.getElementById(
+              'first-run-button'));
+        });
+      });
+
+      // Tests for 'acknowledge-first-run-flow' event firing when the
+      // 'first-run-button' button is clicked and the cloud preference checkbox
+      // is also shown.
+      test('first run button with cloud pref click', function(done) {
+        container.showFirstRunFlow = true;
+        container.showFirstRunFlowCloudPref = true;
+
+        setTimeout(function() {
+          container.addEventListener('acknowledge-first-run-flow',
+              function(data) {
+            assertTrue(data.detail.optedIntoCloudServices);
+            done();
+          });
+          MockInteractions.tap(container.shadowRoot.getElementById(
+              'first-run-button'));
+        });
+      });
+
+      // Tests for 'acknowledge-first-run-flow' event firing when the
+      // 'first-run-button' button is clicked after the cloud preference
+      // checkbox is deselected.
+      test('first run button with cloud pref deselected click',
+          function(done) {
+        container.showFirstRunFlow = true;
+        container.showFirstRunFlowCloudPref = true;
+
+        setTimeout(function() {
+          container.addEventListener('acknowledge-first-run-flow',
+              function(data) {
+            assertFalse(data.detail.optedIntoCloudServices);
+            done();
+          });
+          MockInteractions.tap(container.shadowRoot.getElementById(
+              'first-run-cloud-checkbox'));
           MockInteractions.tap(container.shadowRoot.getElementById(
               'first-run-button'));
         });
@@ -357,6 +406,8 @@ cr.define('media_router_container', function() {
                 media_router.SinkStatus.ACTIVE, [1, 2, 3]),
         ];
 
+        container.showDomain = true;
+
         setTimeout(function() {
           var sinkList =
               container.$['sink-list'].querySelectorAll('paper-item');
@@ -369,6 +420,37 @@ cr.define('media_router_container', function() {
               container.allSinks[1].name.trim()));
           assertTrue(sinkList[1].textContent.trim().indexOf(
               container.allSinks[1].domain.trim()) != -1);
+          done();
+        });
+      });
+
+      // Tests that domain text is not shown when |showDomain| is false.
+      test('sink with domain text', function(done) {
+        // Sink 1 - sink, no domain -> text = name
+        // Sink 2 - sink, domain -> text = sink + domain
+        container.allSinks = [
+            new media_router.Sink('sink id 1', 'Sink 1', null, null,
+                media_router.SinkIconType.HANGOUT,
+                media_router.SinkStatus.ACTIVE, [1, 2, 3]),
+            new media_router.Sink('sink id 2', 'Sink 2',
+                null, 'example.com',
+                media_router.SinkIconType.HANGOUT,
+                media_router.SinkStatus.ACTIVE, [1, 2, 3]),
+        ];
+
+        container.showDomain = false;
+
+        setTimeout(function() {
+          var sinkList =
+              container.$['sink-list'].querySelectorAll('paper-item');
+          assertEquals(2, sinkList.length);
+
+          // |sinkList[0]| has sink name only.
+          checkElementText(container.allSinks[0].name, sinkList[0]);
+          // |sinkList[1]| has sink name but domain should be hidden.
+          checkElementText(container.allSinks[1].name, sinkList[1]);
+          assertTrue(sinkList[1].textContent.trim().indexOf(
+              container.allSinks[1].domain.trim()) == -1);
           done();
         });
       });
@@ -470,7 +552,7 @@ cr.define('media_router_container', function() {
                                       'container-header',
                                       'device-missing']);
 
-          // Sc.et a non-blocking issue. The issue should stay hidden.
+          // Set a non-blocking issue. The issue should stay hidden.
           container.issue = fakeNonBlockingIssue;
           setTimeout(function() {
             checkElementsVisibleWithId(['cast-mode-list',
@@ -501,6 +583,30 @@ cr.define('media_router_container', function() {
 
           setTimeout(function() {
             checkElementVisibleWithId(false, 'first-run-flow');
+            done();
+          });
+        });
+      });
+
+      // Tests for the expected visible UI when interacting with the first run
+      // flow with cloud services preference.
+      test('first run button visibility', function(done) {
+        container.showFirstRunFlow = true;
+        container.showFirstRunFlowCloudPref = true;
+
+        setTimeout(function() {
+          checkElementsVisibleWithId(['container-header',
+                                      'device-missing',
+                                      'first-run-flow',
+                                      'first-run-flow-cloud-pref',
+                                      'sink-list-view']);
+          MockInteractions.tap(container.shadowRoot.getElementById(
+              'first-run-button'));
+
+          setTimeout(function() {
+            checkElementsVisibleWithId(['container-header',
+                                        'device-missing',
+                                        'sink-list-view']);
             done();
           });
         });

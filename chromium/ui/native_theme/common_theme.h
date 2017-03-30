@@ -37,7 +37,8 @@ void NATIVE_THEME_EXPORT CommonThemePaintMenuItemBackground(
     const NativeTheme* theme,
     SkCanvas* canvas,
     NativeTheme::State state,
-    const gfx::Rect& rect);
+    const gfx::Rect& rect,
+    const NativeTheme::MenuItemExtraParams& menu_item);
 
 // Creates a gfx::Canvas wrapping an SkCanvas.
 scoped_ptr<gfx::Canvas> NATIVE_THEME_EXPORT CommonThemeCreateCanvas(

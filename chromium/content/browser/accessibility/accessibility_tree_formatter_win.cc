@@ -167,8 +167,13 @@ void AccessibilityTreeFormatterWin::AddProperties(
   dict->SetString("role", IAccessible2RoleToString(ax_object->ia2_role()));
 
   base::win::ScopedBstr temp_bstr;
-  if (SUCCEEDED(ax_object->get_accName(variant_self, temp_bstr.Receive())))
-    dict->SetString("name", base::string16(temp_bstr, temp_bstr.Length()));
+  if (SUCCEEDED(ax_object->get_accName(variant_self, temp_bstr.Receive()))) {
+    base::string16 name = base::string16(temp_bstr, temp_bstr.Length());
+
+    // Ignore a JAWS workaround where the name of a document is " ".
+    if (name != L" " || ax_object->ia2_role() != ROLE_SYSTEM_DOCUMENT)
+      dict->SetString("name", name);
+  }
   temp_bstr.Reset();
 
   if (SUCCEEDED(ax_object->get_accValue(variant_self, temp_bstr.Receive())))
@@ -237,7 +242,7 @@ void AccessibilityTreeFormatterWin::AddProperties(
     dict->SetString("help", base::string16(temp_bstr, temp_bstr.Length()));
   temp_bstr.Reset();
 
-  BrowserAccessibility* root = node.manager()->GetRoot();
+  BrowserAccessibility* root = node.manager()->GetRootManager()->GetRoot();
   LONG left, top, width, height;
   LONG root_left, root_top, root_width, root_height;
   if (SUCCEEDED(ax_object->accLocation(

@@ -151,6 +151,13 @@
 <translation id="1522425503138261032">Atļaut vietnēm izsekot lietotāju fizisko atrašanās vietu</translation>
 <translation id="152657506688053119">Noklusējuma meklētājprogrammas alternatīvo vietrāžu URL saraksts</translation>
 <translation id="1530812829012954197">Norādītās URL struktūras vienmēr tiek renderētas ar saimniekdatora pārlūku</translation>
+<translation id="1553684822621013552">Ja šai politikai ir iestatīta vērtība “Patiesa”, lietotājam tiks iespējots ARC
+      (var tikt veiktas papildu politikas iestatījumu pārbaudes — ARC joprojām nebūs
+      pieejams, ja pašreizējā lietotāja sesijā būs iespējots īslaicīgais režīms vai
+      vairākkārtēja pierakstīšanās).
+
+      Ja šis iestatījums ir atspējots vai nav konfigurēts, korporatīvie lietotāji
+      nevar izmantot ARC.</translation>
 <translation id="1561424797596341174">Politikas ignorēšana attālās piekļuves saimniekdatora atkļūdošanas versijām</translation>
 <translation id="1583248206450240930">Pēc noklusējuma lietot <ph name="PRODUCT_FRAME_NAME" /></translation>
 <translation id="1608755754295374538">Vietrāži URL, kuriem tiks nodrošināta piekļuve audio tveršanas ierīcēm bez uzvednes parādīšanas.</translation>
@@ -202,6 +209,13 @@
 
           Šī politika ir spēkā tikai tad, ja ir iespējota politika “DefaultSearchProviderEnabled”.</translation>
 <translation id="1859633270756049523">Sesijas ilguma ierobežošana</translation>
+<translation id="1859859319036806634">Brīdinājums: TLS versijas atkāpšanās protokols tiks noņemts no pārlūka <ph name="PRODUCT_NAME" /> pēc 52. versijas izlaišanas (ap 2016. gada septembri), un pēc tam šī politika vairs nedarbosies.
+
+      Ja neizdodas izveidot TLS savienojumu, iepriekš <ph name="PRODUCT_NAME" /> mēģinātu atkārtoti izveidot savienojumu ar vecāku TLS versiju, lai apietu kļūdas HTTPS serveros. Ar šo iestatījumu tiek konfigurēta versija, kurā tiks pārtraukts šis atkāpšanās process. Ja serverī tiek pareizi veikta versiju saskaņošana (proti, nepārtraucot savienojumu), šis iestatījums netiek izmantots. Neatkarīgi no šī iestatījuma izveidotajam savienojumam joprojām ir jāatbilst politikai SSLVersionMin.
+
+      Ja šī politika nav konfigurēta vai ir iestatīta uz “tls1.2”, pārlūkā <ph name="PRODUCT_NAME" /> vairs netiek veikts šis atkāpšanās process. Ņemiet vērā, ka šādi netiek atspējots vecāku TLS versiju atbalsts, bet tikai tas, vai <ph name="PRODUCT_NAME" /> apies kļūdainos serverus, kuri nevar pareizi saskaņot versijas.
+
+      Pretējā gadījumā, ja ir jāuztur saderība ar kļūdainu serveri, šo politiku var iestatīt uz “tls1.1”. Tas ir pagaidu risinājums, un serveris ir steidzami jālabo.</translation>
 <translation id="1861037019115362154">Norāda atspējoto spraudņu sarakstu pārlūkā <ph name="PRODUCT_NAME" /> un neļauj lietotājiem mainīt šo iestatījumu.
 
       Var lietot aizstājējzīmes “*” un “?”, lai aizstātu dažādas rakstzīmes. Rakstzīme “*” atbilst vairāku rakstzīmju virknei, bet rakstzīme “?” var norādīt vienu noteiktu rakstzīmi, t.i., var atbilst vienai rakstzīmei vai neatbilst nevienai. Atsoļa rakstzīme ir “\”, tādējādi, lai veidotu atbilstību faktiskajām rakstzīmēm “*”, “?” un “\”, pirms tām jāievieto rakstzīme “\”.
@@ -252,6 +266,7 @@
       Ja šai politikai ir iestatīta vērtība Patiesa, <ph name="PRODUCT_OS_NAME" /> mēģinās lejupielādēt automātiskās atjaunināšanas vērtumus, izmantojot HTTP. Ja šai politikai ir iestatīta vērtība Nepatiesa vai politika nav iestatīta, automātiskās atjaunināšanas vērtumu lejupielādei tiks izmantots HTTPS.</translation>
 <translation id="2006530844219044261">Barošanas pārvaldība</translation>
 <translation id="201557587962247231">Ierīces statusa pārskatu augšupielādes biežums</translation>
+<translation id="2024476116966025075">Nepieciešamā domēna nosaukuma konfigurēšana attālās piekļuves klientiem</translation>
 <translation id="2030905906517501646">Noklusējuma meklētājprogrammas atslēgvārds</translation>
 <translation id="206623763829450685">Norāda <ph name="PRODUCT_NAME" /> atbalstītās HTTP autentifikācijas shēmas.
 
@@ -489,6 +504,7 @@
       Ja šī politika nav iestatīta, lietotājs varēs izvēlēties, izmantot vai neizmantot datu saspiešanas starpniekservera funkciju.</translation>
 <translation id="2587719089023392205">Iestatīt <ph name="PRODUCT_NAME" /> kā noklusējuma pārlūku</translation>
 <translation id="2592091433672667839">Neaktivitātes ilgums, pirms ekrānsaudzētājs tiek parādīts mazumtirdzniecības režīma pierakstīšanās ekrānā</translation>
+<translation id="260705825237536216">ARC lietotņu konfigurēšana</translation>
 <translation id="2623014935069176671">Gaidīt sākotnējo lietotāja darbību</translation>
 <translation id="262740370354162807">Iespējo dokumentu iesniegšanu pakalpojumā <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="2633084400146331575">Iespējot izrunu</translation>
@@ -497,15 +513,6 @@
           Ja šī politika nav iestatīta, tiks lietota politika AskGeolocation un lietotājs to varēs mainīt.</translation>
 <translation id="2650049181907741121">Pēc vāka aizvēršanas veicamā darbība</translation>
 <translation id="2660846099862559570">Nekad nelietot starpniekserveri</translation>
-<translation id="2665596266623707739">Brīdinājums! TLS 1.0. versijas atkāpšanās protokols tiks noņemts no pārlūka <ph name="PRODUCT_NAME" /> pēc 47. versijas izlaišanas (ap 2016. gada janvāri), un tad vairs nedarbosies opcija “tls1”.
-
-      Ja neizdodas izveidot TLS savienojumu, <ph name="PRODUCT_NAME" /> atkārtoti mēģina izveidot savienojumu ar vecāku TLS versiju, lai apietu kļūdas HTTPS serveros. Ar šo iestatījumu tiek konfigurēta versija, kurā beigsies šis atkāpšanās process. Ja versijas serverī tiek saskaņotas pareizi (t.i., nepārtraucot savienojumu), šis iestatījums netiek izmantots. Neatkarīgi no šī iestatījuma izveidotajam savienojumam joprojām ir jāatbilst politikai SSLVersionMin.
-
-      Ja šī politika nav konfigurēta, pārlūkā <ph name="PRODUCT_NAME" /> tiek izmantota noklusējuma minimālā versija, kas ir TLS 1.0 <ph name="PRODUCT_NAME" /> 44. versijā un TLS 1.1 jaunākās versijās. Ņemiet vērā, ka šādi netiek atspējots TLS 1.0 atbalsts, bet gan tikai tas, vai <ph name="PRODUCT_NAME" /> apies kļūdainos serverus, kuros nevar pareizi saskaņot versijas.
-
-      Pretējā gadījumā var tikt iestatīta kāda no šīm vērtībām: “tls1”, “tls1.1” vai “tls1.2”. Ja ir jāuztur saderība ar kļūdainu serveri, var tikt iestatīta vērtība “tls1”. Šis ir pagaidu risinājums, un serverī drīzumā ir jāveic labojumi.
-
-      Iestatot vērtību “tls1.2”, tiek atspējots viss atkāpšanās process, taču tas var būtiski ietekmēt saderību.</translation>
 <translation id="267596348720209223">Norāda meklētājprogrammas atbalstītos rakstzīmju kodējumus. Kodējumi ir kodu lapu nosaukumi, piemēram, UTF-8, GB2312 un ISO-8859-1. Tie tiek izmēģināti ievadītajā secībā.
 
           Šī politika ir neobligāta. Ja tā nav iestatīta, tiks lietots noklusējums: UTF-8.
@@ -526,11 +533,6 @@
       Ja šis iestatījums ir atspējots, tīmekļa lapās nevar lietot valodu JavaScript un lietotājs nevar mainīt šo iestatījumu.
 
       Ja šis iestatījums ir iespējots vai nav iestatīts, tīmekļa lapās var lietot valodu JavaScript, taču lietotājs var mainīt šo iestatījumu.</translation>
-<translation id="2747783890942882652">Konfigurē obligāto domēna nosaukumu, kas tiks izmantots attālās piekļuves saimniekdatoriem, un neļauj lietotājiem to mainīt.
-
-          Ja šis iestatījums ir iespējots, saimniekdatorus var koplietot, izmantojot tikai kontus, kas reģistrēti domēnā ar konkrēto nosaukumu.
-
-          Ja šis iestatījums ir atspējots vai nav iestatīts, saimniekdatorus var koplietot, izmantojot jebkuru kontu.</translation>
 <translation id="2757054304033424106">Paplašinājumu/lietotņu veidi, kurus var instalēt</translation>
 <translation id="2759224876420453487">Noteikt lietotāju rīcību vairākprofilu sesijā</translation>
 <translation id="2761483219396643566">Aizkave līdz dīkstāves brīdinājumam, ja ierīce darbojas ar akumulatora jaudu</translation>
@@ -602,6 +604,7 @@
       Norāda, vai jāiespējo TLS domēnam piesaistītais sertifikātu paplašinājums.
 
       Šis iestatījums tiek izmantots, lai testēšanai iespējotu TLS domēnam piesaistītos sertifikātu paplašinājumus. Šis eksperimentālais iestatījums vēlāk tiks noņemts.</translation>
+<translation id="2957506574938329824">Neatļaut neviena vietnei pieprasīt piekļuvi Bluetooth ierīcēm, izmantojot Web Bluetooth API</translation>
 <translation id="2957513448235202597">Konta veids <ph name="HTTP_NEGOTIATE" /> autentifikācijas saskaņošanai</translation>
 <translation id="2959898425599642200">Starpniekserveru apiešanas kārtulas</translation>
 <translation id="2960691910306063964">Autentifikācijas bez PIN iespējošana vai atspējošana attālās piekļuves saimniekdatoriem</translation>
@@ -614,6 +617,8 @@
           Ja šīs politikas vērtība nav iestatīta, tiek izmantots noklusējuma laika periods.
 
           Politikas vērtību nedrīkst norādīt milisekundēs. Ir jānorāda vērtības, kas ir mazākas par aizkavi līdz ekrāna izslēgšanai (ja tāda ir iestatīta) un dīkstāvei vai kas ir vienādas ar to.</translation>
+<translation id="2987155890997901449">ARC iespējošana</translation>
+<translation id="2987227569419001736">Web Bluetooth API lietošanas pārvaldība</translation>
 <translation id="2998881342848488968">Šī politika ļauj operētājsistēmai <ph name="PRODUCT_OS_NAME" /> apiet visus caurlaides lapu autentifikācijas starpniekserverus.
 
       Šī politika ir spēkā tikai tad, ja ir konfigurēts starpniekserveris (piemēram, izmantojot politiku, lietotāja iestatījumus lapā chrome://settings vai paplašinājumus).
@@ -935,6 +940,7 @@
 
           Šī politika ir spēkā tikai tad, ja ir iespējota politika “DefaultSearchProviderEnabled”.</translation>
 <translation id="4320376026953250541">Microsoft Windows XP SP2 vai jaunāka versija</translation>
+<translation id="4322842393287974810">Atļaut kioska lietotnei, kas tiek automātiski palaista ar nulles aizkavi, kontrolēt <ph name="PRODUCT_OS_NAME" /> versiju</translation>
 <translation id="4325690621216251241">Atteikšanās pogas pievienošana sistēmas teknei</translation>
 <translation id="4347908978527632940">Ja ir iestatīta vērtība “true” un lietotājs ir uzraudzīts lietotājs, citas Android lietotnes var nosūtīt vaicājumus par lietotāja tīmekļa ierobežojumiem, izmantojot satura nodrošinātāju.
 
@@ -1223,6 +1229,11 @@
 <translation id="5307432759655324440">Inkognito režīma pieejamība</translation>
 <translation id="5318185076587284965">Pārraides serveru iespējošana attālās piekļuves saimniekdatoram</translation>
 <translation id="5330684698007383292">Atļauja produktam <ph name="PRODUCT_FRAME_NAME" /> apstrādāt tālāk norādītos satura veidus</translation>
+<translation id="5345267406698765263">Norāda ARC lietojumprogrammu politiku kā JSON virkni, kuru
+      ARC izpildlaikam var pārsūtīt tādu, kāda tā ir. Pašlaik šis iestatījums tiek izmantots
+      tikai lietotņu piespiedu instalēšanas norādīšanai.
+
+      Ja šī politika nav iestatīta, neviena lietotne netiek instalēta automātiski.</translation>
 <translation id="5365946944967967336">Rīkjoslā parāda pogu Sākums</translation>
 <translation id="5366977351895725771">Iestatot vērtību uz “false”, šim lietotājam tiks atspējota iespēja veidot uzraudzītos lietotāju kontus. Visi esošie uzraudzītie lietotāju konti joprojām būs pieejami.
 
@@ -1295,6 +1306,13 @@
       Ja politika netiks iestatīta, lietotāji varēs izvēlēties, vai automātiski slēpt plauktu.</translation>
 <translation id="557658534286111200">Iespējo vai atspējo grāmatzīmju rediģēšanu</translation>
 <translation id="5586942249556966598">Nedarīt neko</translation>
+<translation id="5613179474872285001">Konfigurē nepieciešamo klienta domēna nosaukumu, kas tiks izmantots attālās piekļuves klientiem, un lietotāji to nevarēs mainīt.
+
+          Ja šis iestatījums ir iespējots, savienojumu ar saimniekdatoru var izveidot tikai klienti no norādītā domēna.
+
+          Ja šis iestatījums ir atspējots vai nav iestatīts, tiek lietota savienojuma veida noklusējuma politika. Lai sniegtu attālu palīdzību, klienti no jebkura domēna var izveidot savienojumu ar saimniekdatoru. Attālai piekļuvei jebkurā laikā savienojumu var izveidot tikai saimniekdatora īpašnieks.
+
+          Skatiet arī politiku RemoteAccessHostDomain.</translation>
 <translation id="5630352020869108293">Atjaunot pēdējo sesiju</translation>
 <translation id="5645779841392247734">Atļauj sīkfailus šajās vietnēs</translation>
 <translation id="5677038592630896441">Pieprasa, lai sakristu lokālā lietotāja vārds un attālās piekļuves saimniekdatora īpašnieka vārds.
@@ -1597,6 +1615,9 @@
 
           Ja šī politika netiek iestatīta, ekrāna tastatūra ir atspējota, pirmoreiz atverot pieteikšanās ekrānu. Lietotāji jebkurā laikā var iespējot vai atspējot ekrāna tastatūru, un tastatūras statuss pieteikšanās ekrānā tiek saglabāts arī citiem lietotājiem.</translation>
 <translation id="6598235178374410284">Lietotāja iemiesojuma attēls</translation>
+<translation id="6628646143828354685">Ļauj iestatīt, vai vietnēm ir atļauts iegūt piekļuvi tuvumā esošām Bluetooth ierīcēm. Piekļuvi var pilnībā bloķēt, vai lietotājam var tikt parādīta uzvedne ar jautājumu katru reizi, kad vietne vēlas iegūt piekļuvi tuvumā esošām Bluetooth ierīcēm.
+
+          Ja šī politika nav iestatīta, tiks izmantota vērtība “3”, un lietotājs to varēs mainīt.</translation>
 <translation id="6636268606788232221">Konfigurējiet barošanas pārvaldības iestatījumus gadījumiem, kad lietotājs kļūst neaktīvs.
 
           Šī politika nosaka vairākus iestatījumus barošanas pārvaldības stratēģijai, kura tiek iespējota pēc tam, kad lietotājs ir kļuvis neaktīvs.
@@ -1689,6 +1710,7 @@
           Ja iestatīsiet šo politiku, lietotāji to nevarēs mainīt vai ignorēt.
 
           Ja šī politika netiek iestatīta, pieejamības opcijas netiks rādītas sistēmas teknes izvēlnē, taču lietotājs varēs skatīt pieejamības opcijas, izmantojot lapu Iestatījumi.</translation>
+<translation id="6766216162565713893">Ļaut vietnēm pieprasīt, lai lietotājs piešķirtu piekļuvi tuvumā esošai Bluetooth ierīcei</translation>
 <translation id="6770454900105963262">Ziņošana par aktīvām kioska sesijām</translation>
 <translation id="6774533686631353488">Atļaut izmantot lietotāja līmeņa vietējās ziņojumapmaiņas saimniekdatorus (tiks instalēti bez administratora atļaujas).</translation>
 <translation id="6786747875388722282">Paplašinājumi</translation>
@@ -1732,6 +1754,13 @@
 <translation id="6943577887654905793">Mac/Linux preferences nosaukums:</translation>
 <translation id="69525503251220566">Parametrs, kas noklusējuma meklēšanas pakalpojumu sniedzējam nodrošina funkciju Meklēšana pēc attēla</translation>
 <translation id="6956272732789158625">Neatļaut izmantot atslēgu ģenerēšanu nevienā vietnē</translation>
+<translation id="695891079107014261">Konfigurē nepieciešamo klienta domēna nosaukumu, kas tiks izmantots attālās piekļuves klientiem, un lietotāji to nevarēs mainīt.
+
+          Ja šis iestatījums ir iespējots, saimniekdatorus var koplietot, tikai izmantojot kontus, kas reģistrēti norādītajā domēna nosaukumā.
+
+          Ja šī politika ir atspējota vai nav iestatīta, saimniekdatorus var koplietot, izmantojot jebkuru kontu.
+
+          Skatiet arī politiku RemoteAccessHostClientDomain.</translation>
 <translation id="6997592395211691850">Vai lokāliem uzticamības enkuriem ir nepieciešama OCSP/CRL pārbaude</translation>
 <translation id="7003334574344702284">Šī politika (ja tā ir iespējota) liek importēt saglabātās paroles no iepriekšējā noklusējuma pārlūka. Ja šī politika ir iespējota, tā arī maina importēšanas dialoglodziņu.
 
@@ -1879,6 +1908,13 @@
 
       Ja šī politika nav iestatīta, SPDY būs pieejams.</translation>
 <translation id="7384999953864505698">Atļauja lietot QUIC protokolu</translation>
+<translation id="7406651467768226499">Atļauja kioska lietotnei, kas tiek automātiski palaista ar nulles aizkavi, kontrolēt <ph name="PRODUCT_OS_NAME" /> versiju.
+
+      Šī politika nosaka, vai atļaut kioska lietotnei, kas tiek automātiski palaista ar nulles aizkavi, kontrolēt <ph name="PRODUCT_OS_NAME" /> versiju, manifestā norādot parametru required_platform_version, un izmantot to kā automātiskās atjaunināšanas mērķa versijas prefiksu.
+
+      Ja politikai ir iestatīta vērtība “Patiesa”, tās kioska lietotnes, kura tiek automātiski palaista ar nulles aizkavi, manifesta atslēgas required_platform_version vērtība tiek izmantota kā automātiskās atjaunināšanas mērķa versijas prefikss.
+
+      Ja politika nav konfigurēta vai tai ir iestatīta vērtība “Nepatiesa”, manifesta atslēga required_platform_version tiek ignorēta un automātiskā atjaunināšana tiek veikta kā parasti.</translation>
 <translation id="7417972229667085380">Aizkaves līdz dīkstāvei norādīšana procentos (prezentācijas režīmā; pārtraukta)</translation>
 <translation id="7421483919690710988">Iestatīt datu nesēja kešatmiņas lielumu baitos</translation>
 <translation id="7424751532654212117">Atspējoto spraudņu saraksta izņēmumu saraksts</translation>
@@ -1989,6 +2025,7 @@
       Neiestatot šo politiku, <ph name="PRODUCT_NAME" /> izmantos noklusējuma vērtību (5000 milisekundes).</translation>
 <translation id="7841880500990419427">Minimālā TLS versija, uz kuru atkāpties</translation>
 <translation id="7842869978353666042">Pakalpojuma Google disks opciju konfigurēšana</translation>
+<translation id="7843525027689416831">Tiek norādītas atzīmes, kas jāizmanto pārlūkā <ph name="PRODUCT_NAME" />, kad tas tiek startēts. Norādītās atzīmes tiek izmantotas tikai pieteikšanās ekrānā. Šīs politikas ietvaros iestatītās atzīmes netiek izmantotas lietotāju sesijās.</translation>
 <translation id="7848840259379156480">Ļauj konfigurēt noklusējuma HTML renderētāju, ja ir instalēts produkts <ph name="PRODUCT_FRAME_NAME" />.
       Atbilstoši noklusējuma iestatījumam renderēšanu izpilda saimniekdatora pārlūks, taču
       pēc izvēles šo iestatījumu var ignorēt un likt, lai HTML lappuses pēc noklusējuma tiktu renderētas produktā <ph name="PRODUCT_FRAME_NAME" />.</translation>
@@ -2323,7 +2360,6 @@
           Politikas vērtību nedrīkst norādīt milisekundēs. Ir jānorāda vērtības, kas ir mazākas par aizkavi līdz dīkstāvei.</translation>
 <translation id="891435090623616439">kodēts kā JSON virkne, detalizētu informāciju skatiet vietnē <ph name="COMPLEX_POLICIES_URL" /></translation>
 <translation id="8947415621777543415">Ziņot par ierīces atrašanās vietu</translation>
-<translation id="89493502583189945">Tiek norādītas atzīmes, kas jāizmanto pārlūkā <ph name="PRODUCT_NAME" />, kad tas tiek startēts. Norādītās atzīmes tiek izmantotas pirms pārlūka <ph name="PRODUCT_NAME" /> startēšanas, pat attiecībā uz pierakstīšanās ekrānu.</translation>
 <translation id="8951350807133946005">Iestatīt diska kešatmiņas direktoriju</translation>
 <translation id="8955719471735800169">Augšup</translation>
 <translation id="8960850473856121830">Šajā sarakstā pieejamajiem šabloniem tiek meklēta atbilstība pieprasītā URL

@@ -25,6 +25,18 @@
     margin-left: -13px;
 }
 
+.elements-disclosure li.selected:after {
+    font-style: italic;
+    content: " == $0";
+    color: black;
+    opacity: 0.6;
+    position: absolute;
+}
+
+.elements-disclosure ol:focus li.selected:after {
+    color: white;
+}
+
 .elements-disclosure li.parent::before {
     box-sizing: border-box;
 }
@@ -164,7 +176,6 @@
 }
 
 .CodeMirror {
-    /* Consistent with the .editing class in inspector.css */
     box-shadow: rgba(0, 0, 0, .5) 3px 3px 4px;
     outline: 1px solid rgb(66%, 66%, 66%) !important;
     background-color: white;

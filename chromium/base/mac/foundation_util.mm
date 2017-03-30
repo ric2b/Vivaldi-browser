@@ -165,7 +165,7 @@ FilePath GetAppBundlePath(const FilePath& exec_name) {
 
   // The first component may be "/" or "//", etc. Only append '/' if it doesn't
   // already end in '/'.
-  if (bundle_name[bundle_name.length() - 1] != '/')
+  if (bundle_name.back() != '/')
     bundle_name += '/';
 
   // Go through the remaining components.
@@ -239,7 +239,9 @@ const char* BaseBundleID() {
     return base_bundle_id;
   }
 
-#if defined(GOOGLE_CHROME_BUILD)
+#if defined(VIVALDI_BUILD)
+  return "com.vivaldi.Vivaldi";
+#elif defined(GOOGLE_CHROME_BUILD)
   return "com.google.Chrome";
 #else
   return "org.chromium.Chromium";

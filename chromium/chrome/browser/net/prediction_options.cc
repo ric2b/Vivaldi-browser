@@ -5,10 +5,10 @@
 #include "chrome/browser/net/prediction_options.h"
 
 #include "base/logging.h"
-#include "base/prefs/pref_service.h"
 #include "chrome/browser/profiles/profile_io_data.h"
 #include "chrome/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/network_change_notifier.h"
 
@@ -22,17 +22,17 @@ NetworkPredictionStatus CanPrefetchAndPrerender(
     int network_prediction_options) {
   switch (network_prediction_options) {
     case NETWORK_PREDICTION_ALWAYS:
-      break;
-    case NETWORK_PREDICTION_NEVER:
-      return NetworkPredictionStatus::DISABLED_ALWAYS;
-    default:
-      DCHECK_EQ(NETWORK_PREDICTION_WIFI_ONLY, network_prediction_options);
+    case NETWORK_PREDICTION_WIFI_ONLY:
       if (net::NetworkChangeNotifier::IsConnectionCellular(
                  net::NetworkChangeNotifier::GetConnectionType())) {
         return NetworkPredictionStatus::DISABLED_DUE_TO_NETWORK;
+      } else {
+        return NetworkPredictionStatus::ENABLED;
       }
+    default:
+      DCHECK_EQ(NETWORK_PREDICTION_NEVER, network_prediction_options);
+      return NetworkPredictionStatus::DISABLED_ALWAYS;
   }
-  return NetworkPredictionStatus::ENABLED;
 }
 
 bool CanPreresolveAndPreconnect(int network_prediction_options) {

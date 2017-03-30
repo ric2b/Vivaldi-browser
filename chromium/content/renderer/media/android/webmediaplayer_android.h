@@ -18,7 +18,6 @@
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
 #include "cc/layers/video_frame_provider.h"
-#include "content/public/renderer/render_frame_observer.h"
 #include "content/renderer/media/android/media_info_loader.h"
 #include "content/renderer/media/android/media_source_delegate.h"
 #include "content/renderer/media/android/renderer_media_player_manager.h"
@@ -29,8 +28,8 @@
 #include "media/base/demuxer_stream.h"
 #include "media/base/media_keys.h"
 #include "media/base/time_delta_interpolator.h"
+#include "media/blink/webmediaplayer_delegate.h"
 #include "media/blink/webmediaplayer_params.h"
-#include "media/cdm/proxy_decryptor.h"
 #include "third_party/WebKit/public/platform/WebGraphicsContext3D.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayer.h"
 #include "third_party/WebKit/public/platform/WebSetSinkIdCallbacks.h"
@@ -62,33 +61,30 @@ struct MailboxHolder;
 
 namespace media {
 class CdmContext;
-class CdmFactory;
 class MediaLog;
-class MediaPermission;
 class WebContentDecryptionModuleImpl;
-class WebMediaPlayerDelegate;
 }
 
 namespace content {
 
-class RendererCdmManager;
 class RendererMediaPlayerManager;
 
 // This class implements blink::WebMediaPlayer by keeping the android
 // media player in the browser process. It listens to all the status changes
 // sent from the browser process and sends playback controls to the media
 // player.
-class WebMediaPlayerAndroid : public blink::WebMediaPlayer,
-                              public cc::VideoFrameProvider,
-                              public RenderFrameObserver,
-                              public StreamTextureFactoryContextObserver,
-                              public media::RendererMediaPlayerInterface {
+class WebMediaPlayerAndroid
+    : public blink::WebMediaPlayer,
+      public cc::VideoFrameProvider,
+      public StreamTextureFactoryContextObserver,
+      public media::RendererMediaPlayerInterface,
+      public NON_EXPORTED_BASE(media::WebMediaPlayerDelegate::Observer) {
  public:
   // Construct a WebMediaPlayerAndroid object. This class communicates with the
   // MediaPlayerAndroid object in the browser process through |proxy|.
   // TODO(qinmin): |frame| argument is used to determine whether the current
   // player can enter fullscreen. This logic should probably be moved into
-  // blink, so that enterFullscreen() will not be called if another video is
+  // blink, so that enteredFullscreen() will not be called if another video is
   // already in fullscreen.
   WebMediaPlayerAndroid(
       blink::WebFrame* frame,
@@ -96,7 +92,6 @@ class WebMediaPlayerAndroid : public blink::WebMediaPlayer,
       blink::WebMediaPlayerEncryptedMediaClient* encrypted_client,
       base::WeakPtr<media::WebMediaPlayerDelegate> delegate,
       RendererMediaPlayerManager* player_manager,
-      media::CdmFactory* cdm_factory,
       scoped_refptr<StreamTextureFactory> factory,
       int frame_id,
       bool enable_texture_copy,
@@ -105,7 +100,7 @@ class WebMediaPlayerAndroid : public blink::WebMediaPlayer,
 
   // blink::WebMediaPlayer implementation.
   bool supportsOverlayFullscreenVideo() override;
-  void enterFullscreen() override;
+  void enteredFullscreen() override;
 
   // Resource loading.
   void load(LoadType load_type,
@@ -167,8 +162,8 @@ class WebMediaPlayerAndroid : public blink::WebMediaPlayer,
   bool didLoadingProgress() override;
 
   // Internal states of loading and network.
-  blink::WebMediaPlayer::NetworkState networkState() const override;
-  blink::WebMediaPlayer::ReadyState readyState() const override;
+  blink::WebMediaPlayer::NetworkState getNetworkState() const override;
+  blink::WebMediaPlayer::ReadyState getReadyState() const override;
 
   bool hasSingleSecurityOrigin() const override;
   bool didPassCORSAccessCheck() const override;
@@ -226,9 +221,6 @@ class WebMediaPlayerAndroid : public blink::WebMediaPlayer,
   // However, the actual GlTexture is not released to keep the video screenshot.
   void SuspendAndReleaseResources() override;
 
-  // RenderFrameObserver implementation.
-  void OnDestruct() override;
-
 #if defined(VIDEO_HOLE)
   // Calculate the boundary rectangle of the media player (i.e. location and
   // size of the video frame).
@@ -238,30 +230,9 @@ class WebMediaPlayerAndroid : public blink::WebMediaPlayer,
   const gfx::RectF GetBoundaryRectangle() override;
 #endif  // defined(VIDEO_HOLE)
 
-  MediaKeyException generateKeyRequest(const blink::WebString& key_system,
-                                       const unsigned char* init_data,
-                                       unsigned init_data_length) override;
-  MediaKeyException addKey(const blink::WebString& key_system,
-                           const unsigned char* key,
-                           unsigned key_length,
-                           const unsigned char* init_data,
-                           unsigned init_data_length,
-                           const blink::WebString& session_id) override;
-  MediaKeyException cancelKeyRequest(
-      const blink::WebString& key_system,
-      const blink::WebString& session_id) override;
-
   void setContentDecryptionModule(
       blink::WebContentDecryptionModule* cdm,
       blink::WebContentDecryptionModuleResult result) override;
-
-  void OnKeyAdded(const std::string& session_id);
-  void OnKeyError(const std::string& session_id,
-                  media::MediaKeys::KeyError error_code,
-                  uint32_t system_code);
-  void OnKeyMessage(const std::string& session_id,
-                    const std::vector<uint8_t>& message,
-                    const GURL& destination_url);
 
   void OnMediaSourceOpened(blink::WebMediaSource* web_media_source);
 
@@ -271,6 +242,13 @@ class WebMediaPlayerAndroid : public blink::WebMediaPlayer,
   // Called when a decoder detects that the key needed to decrypt the stream
   // is not available.
   void OnWaitingForDecryptionKey() override;
+
+  // WebMediaPlayerDelegate::Observer implementation.
+  void OnHidden(bool must_suspend) override;
+  void OnShown() override;
+  void OnPlay() override;
+  void OnPause() override;
+  void OnVolumeMultiplierUpdate(double multiplier) override;
 
  protected:
   // Helper method to update the playing state.
@@ -306,20 +284,6 @@ class WebMediaPlayerAndroid : public blink::WebMediaPlayer,
   bool IsKeySystemSupported(const std::string& key_system);
   bool IsLocalResource();
 
-  // Actually do the work for generateKeyRequest/addKey so they can easily
-  // report results to UMA.
-  MediaKeyException GenerateKeyRequestInternal(const std::string& key_system,
-                                               const unsigned char* init_data,
-                                               unsigned init_data_length);
-  MediaKeyException AddKeyInternal(const std::string& key_system,
-                                   const unsigned char* key,
-                                   unsigned key_length,
-                                   const unsigned char* init_data,
-                                   unsigned init_data_length,
-                                   const std::string& session_id);
-  MediaKeyException CancelKeyRequestInternal(const std::string& key_system,
-                                             const std::string& session_id);
-
   // Called when |cdm_context| is ready.
   void OnCdmContextReady(media::CdmContext* cdm_context);
 
@@ -335,7 +299,7 @@ class WebMediaPlayerAndroid : public blink::WebMediaPlayer,
   // |cdm_ready_cb| provided.
   // If |cdm_ready_cb| is null, the existing callback will be fired with
   // NULL immediately and reset.
-  void SetCdmReadyCB(const media::CdmReadyCB& cdm_ready_cb);
+  void SetCdmReadyCB(const MediaSourceDelegate::CdmReadyCB& cdm_ready_cb);
 
   // Called when the ContentDecryptionModule has been attached to the
   // pipeline/decoders.
@@ -357,12 +321,12 @@ class WebMediaPlayerAndroid : public blink::WebMediaPlayer,
   blink::WebMediaPlayerClient* const client_;
   blink::WebMediaPlayerEncryptedMediaClient* const encrypted_client_;
 
-  // |delegate_| is used to notify the browser process of the player status, so
-  // that the browser process can control screen locks.
-  // TODO(qinmin): Currently android mediaplayer takes care of the screen
-  // lock. So this is only used for media source. Will apply this to regular
-  // media tag once http://crbug.com/247892 is fixed.
+  // WebMediaPlayer notifies the |delegate_| of playback state changes using
+  // |delegate_id_|; an id provided after registering with the delegate.  The
+  // WebMediaPlayer may also receive directives (play, pause) from the delegate
+  // via the WebMediaPlayerDelegate::Observer interface after registration.
   base::WeakPtr<media::WebMediaPlayerDelegate> delegate_;
+  int delegate_id_;
 
   // Callback responsible for determining if loading of media should be deferred
   // for external reasons; called during load().
@@ -416,12 +380,6 @@ class WebMediaPlayerAndroid : public blink::WebMediaPlayer,
   // Manages this object and delegates player calls to the browser process.
   // Owned by RenderFrameImpl.
   RendererMediaPlayerManager* const player_manager_;
-
-  // TODO(xhwang): Remove |cdm_factory_| when prefixed EME is deprecated. See
-  // http://crbug.com/249976
-  media::CdmFactory* const cdm_factory_;
-
-  media::MediaPermission* media_permission_;
 
   // Player ID assigned by the |player_manager_|.
   int player_id_;
@@ -497,17 +455,6 @@ class WebMediaPlayerAndroid : public blink::WebMediaPlayer,
 
   scoped_ptr<MediaInfoLoader> info_loader_;
 
-  // The currently selected key system. Empty string means that no key system
-  // has been selected.
-  std::string current_key_system_;
-
-  // Temporary for EME v0.1. Not needed for unprefixed EME, and can be removed
-  // when prefixed EME is removed.
-  media::EmeInitDataType init_data_type_;
-
-  // Manages decryption keys and decrypts encrypted frames.
-  scoped_ptr<media::ProxyDecryptor> proxy_decryptor_;
-
   // Non-owned pointer to the CdmContext. Updated in the constructor,
   // generateKeyRequest() or setContentDecryptionModule().
   media::CdmContext* cdm_context_;
@@ -516,7 +463,7 @@ class WebMediaPlayerAndroid : public blink::WebMediaPlayer,
   // side CDM will be used. This is similar to WebMediaPlayerImpl. For other key
   // systems, a browser side CDM will be used and we set CDM by calling
   // player_manager_->SetCdm() directly.
-  media::CdmReadyCB cdm_ready_cb_;
+  MediaSourceDelegate::CdmReadyCB cdm_ready_cb_;
 
   SkBitmap bitmap_;
 
@@ -543,6 +490,16 @@ class WebMediaPlayerAndroid : public blink::WebMediaPlayer,
 
   // Whether to delete the existing texture and re-create it.
   bool suppress_deleting_texture_;
+
+  // Whether OnPlaybackComplete() has been called since the last playback.
+  bool playback_completed_;
+
+  // The last volume received by setVolume() and the last volume multiplier from
+  // OnVolumeMultiplierUpdate().  The multiplier is typical 1.0, but may be less
+  // if the WebMediaPlayerDelegate has requested a volume reduction (ducking)
+  // for a transient sound.  Playout volume is derived by volume * multiplier.
+  double volume_;
+  double volume_multiplier_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   base::WeakPtrFactory<WebMediaPlayerAndroid> weak_factory_;

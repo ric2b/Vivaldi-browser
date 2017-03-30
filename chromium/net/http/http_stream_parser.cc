@@ -24,6 +24,7 @@
 #include "net/http/http_util.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/ssl_client_socket.h"
+#include "net/ssl/token_binding.h"
 
 namespace net {
 
@@ -66,7 +67,7 @@ std::string GetResponseHeaderLines(const HttpResponseHeaders& headers) {
 // values.
 bool HeadersContainMultipleCopiesOfField(const HttpResponseHeaders& headers,
                                          const std::string& field_name) {
-  void* it = NULL;
+  size_t it = 0;
   std::string field_value;
   if (!headers.EnumerateHeader(&it, field_name, &field_value))
     return false;
@@ -1098,6 +1099,17 @@ void HttpStreamParser::GetSSLCertRequestInfo(
         static_cast<SSLClientSocket*>(connection_->socket());
     ssl_socket->GetSSLCertRequestInfo(cert_request_info);
   }
+}
+
+Error HttpStreamParser::GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
+                                                    std::vector<uint8_t>* out) {
+  if (!request_->url.SchemeIsCryptographic() || !connection_->socket()) {
+    NOTREACHED();
+    return ERR_FAILED;
+  }
+  SSLClientSocket* ssl_socket =
+      static_cast<SSLClientSocket*>(connection_->socket());
+  return ssl_socket->GetSignedEKMForTokenBinding(key, out);
 }
 
 int HttpStreamParser::EncodeChunk(const base::StringPiece& payload,

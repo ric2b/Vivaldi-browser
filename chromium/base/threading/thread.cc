@@ -52,6 +52,8 @@ Thread::Options::Options(MessageLoop::Type type,
       priority(ThreadPriority::NORMAL) {
 }
 
+Thread::Options::Options(const Options& other) = default;
+
 Thread::Options::~Options() {
 }
 
@@ -68,7 +70,7 @@ Thread::Thread(const std::string& name)
       message_loop_(nullptr),
       message_loop_timer_slack_(TIMER_SLACK_NONE),
       name_(name),
-      start_event_(false, false) {
+      start_event_(true, false) {
 }
 
 Thread::~Thread() {

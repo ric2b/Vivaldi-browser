@@ -10,12 +10,10 @@
 #include <sstream>
 
 #include "base/logging.h"
+#include "base/time/time.h"
 #include "components/nacl/renderer/plugin/plugin.h"
 #include "components/nacl/renderer/plugin/plugin_error.h"
-#include "components/nacl/renderer/plugin/temporary_file.h"
-#include "components/nacl/renderer/plugin/utility.h"
 #include "content/public/common/sandbox_init.h"
-#include "native_client/src/shared/platform/nacl_sync_raii.h"
 #include "ppapi/c/ppb_file_io.h"
 #include "ppapi/cpp/var.h"
 #include "ppapi/proxy/ppapi_messages.h"
@@ -65,6 +63,7 @@ PnaclTranslateThread::PnaclTranslateThread()
       ld_subprocess_(NULL),
       compiler_subprocess_active_(false),
       ld_subprocess_active_(false),
+      buffer_cond_(&cond_mu_),
       done_(false),
       compile_time_(0),
       obj_files_(NULL),
@@ -74,23 +73,19 @@ PnaclTranslateThread::PnaclTranslateThread()
       coordinator_(NULL),
       compiler_channel_peer_pid_(base::kNullProcessId),
       ld_channel_peer_pid_(base::kNullProcessId) {
-  NaClXMutexCtor(&subprocess_mu_);
-  NaClXMutexCtor(&cond_mu_);
-  NaClXCondVarCtor(&buffer_cond_);
 }
 
 void PnaclTranslateThread::SetupState(
     const pp::CompletionCallback& finish_callback,
     NaClSubprocess* compiler_subprocess,
     NaClSubprocess* ld_subprocess,
-    const std::vector<TempFile*>* obj_files,
+    std::vector<base::File>* obj_files,
     int num_threads,
-    TempFile* nexe_file,
+    base::File* nexe_file,
     ErrorInfo* error_info,
     PP_PNaClOptions* pnacl_options,
     const std::string& architecture_attributes,
     PnaclCoordinator* coordinator) {
-  PLUGIN_PRINTF(("PnaclTranslateThread::SetupState)\n"));
   compiler_subprocess_ = compiler_subprocess;
   ld_subprocess_ = ld_subprocess;
   obj_files_ = obj_files;
@@ -106,7 +101,6 @@ void PnaclTranslateThread::SetupState(
 
 void PnaclTranslateThread::RunCompile(
     const pp::CompletionCallback& compile_finished_callback) {
-  PLUGIN_PRINTF(("PnaclTranslateThread::RunCompile)\n"));
   DCHECK(started());
   DCHECK(compiler_subprocess_->service_runtime());
   compiler_subprocess_active_ = true;
@@ -125,23 +119,11 @@ void PnaclTranslateThread::RunCompile(
       compiler_subprocess_->service_runtime()->get_process_id();
 
   compile_finished_callback_ = compile_finished_callback;
-  translate_thread_.reset(new NaClThread);
-  if (translate_thread_ == NULL) {
-    TranslateFailed(PP_NACL_ERROR_PNACL_THREAD_CREATE,
-                    "could not allocate thread struct.");
-    return;
-  }
-  const int32_t kArbitraryStackSize = 128 * 1024;
-  if (!NaClThreadCreateJoinable(translate_thread_.get(), DoCompileThread, this,
-                                kArbitraryStackSize)) {
-    TranslateFailed(PP_NACL_ERROR_PNACL_THREAD_CREATE,
-                    "could not create thread.");
-    translate_thread_.reset(NULL);
-  }
+  translate_thread_.reset(new CompileThread(this));
+  translate_thread_->Start();
 }
 
 void PnaclTranslateThread::RunLink() {
-  PLUGIN_PRINTF(("PnaclTranslateThread::RunLink)\n"));
   DCHECK(started());
   DCHECK(ld_subprocess_->service_runtime());
   ld_subprocess_active_ = true;
@@ -158,50 +140,36 @@ void PnaclTranslateThread::RunLink() {
   ld_channel_peer_pid_ = ld_subprocess_->service_runtime()->get_process_id();
 
   // Tear down the previous thread.
-  // TODO(jvoung): Use base/threading or something where we can have a
-  // persistent thread and easily post tasks to that persistent thread.
-  NaClThreadJoin(translate_thread_.get());
-  translate_thread_.reset(new NaClThread);
-  if (translate_thread_ == NULL) {
-    TranslateFailed(PP_NACL_ERROR_PNACL_THREAD_CREATE,
-                    "could not allocate thread struct.");
-    return;
-  }
-  const int32_t kArbitraryStackSize = 128 * 1024;
-  if (!NaClThreadCreateJoinable(translate_thread_.get(), DoLinkThread, this,
-                                kArbitraryStackSize)) {
-    TranslateFailed(PP_NACL_ERROR_PNACL_THREAD_CREATE,
-                    "could not create thread.");
-    translate_thread_.reset(NULL);
-  }
+  translate_thread_->Join();
+  translate_thread_.reset(new LinkThread(this));
+  translate_thread_->Start();
 }
 
 // Called from main thread to send bytes to the translator.
 void PnaclTranslateThread::PutBytes(const void* bytes, int32_t count) {
   CHECK(bytes != NULL);
-  NaClXMutexLock(&cond_mu_);
+  base::AutoLock lock(cond_mu_);
   data_buffers_.push_back(std::string());
   data_buffers_.back().insert(data_buffers_.back().end(),
                               static_cast<const char*>(bytes),
                               static_cast<const char*>(bytes) + count);
-  NaClXCondVarSignal(&buffer_cond_);
-  NaClXMutexUnlock(&cond_mu_);
+  buffer_cond_.Signal();
 }
 
 void PnaclTranslateThread::EndStream() {
-  NaClXMutexLock(&cond_mu_);
+  base::AutoLock lock(cond_mu_);
   done_ = true;
-  NaClXCondVarSignal(&buffer_cond_);
-  NaClXMutexUnlock(&cond_mu_);
+  buffer_cond_.Signal();
 }
 
 ppapi::proxy::SerializedHandle PnaclTranslateThread::GetHandleForSubprocess(
-    TempFile* file, int32_t open_flags, base::ProcessId peer_pid) {
+    base::File* file, int32_t open_flags, base::ProcessId peer_pid) {
   IPC::PlatformFileForTransit file_for_transit;
 
+  DCHECK(file->IsValid());
 #if defined(OS_WIN)
   if (!content::BrokerDuplicateHandle(
-          file->GetFileHandle(),
+          file->GetPlatformFile(),
           peer_pid,
           &file_for_transit,
           0,  // desired_access is 0 since we're using DUPLICATE_SAME_ACCESS.
@@ -209,7 +177,7 @@ ppapi::proxy::SerializedHandle PnaclTranslateThread::GetHandleForSubprocess(
     return ppapi::proxy::SerializedHandle();
   }
 #else
-  file_for_transit = base::FileDescriptor(dup(file->GetFileHandle()), true);
+  file_for_transit = base::FileDescriptor(dup(file->GetPlatformFile()), true);
 #endif
 
   // Using 0 disables any use of quota enforcement for this file handle.
@@ -220,15 +188,13 @@ ppapi::proxy::SerializedHandle PnaclTranslateThread::GetHandleForSubprocess(
   return handle;
 }
 
-void WINAPI PnaclTranslateThread::DoCompileThread(void* arg) {
-  PnaclTranslateThread* translator =
-      reinterpret_cast<PnaclTranslateThread*>(arg);
-  translator->DoCompile();
+void PnaclTranslateThread::CompileThread::Run() {
+  pnacl_translate_thread_->DoCompile();
 }
 
 void PnaclTranslateThread::DoCompile() {
   {
-    nacl::MutexLocker ml(&subprocess_mu_);
+    base::AutoLock lock(subprocess_mu_);
     // If the main thread asked us to exit in between starting the thread
     // and now, just leave now.
     if (!compiler_subprocess_active_)
@@ -236,16 +202,14 @@ void PnaclTranslateThread::DoCompile() {
   }
 
   std::vector<ppapi::proxy::SerializedHandle> compiler_output_files;
-  for (TempFile* obj_file : *obj_files_) {
+  for (base::File& obj_file : *obj_files_) {
     compiler_output_files.push_back(
-        GetHandleForSubprocess(obj_file, PP_FILEOPENFLAG_WRITE,
+        GetHandleForSubprocess(&obj_file, PP_FILEOPENFLAG_WRITE,
                                compiler_channel_peer_pid_));
   }
 
-  PLUGIN_PRINTF(("DoCompile using subzero: %d\n", pnacl_options_->use_subzero));
-
   pp::Core* core = pp::Module::Get()->core();
-  int64_t do_compile_start_time = NaClGetTimeOfDayMicroseconds();
+  base::TimeTicks do_compile_start_time = base::TimeTicks::Now();
 
   std::vector<std::string> args;
   if (pnacl_options_->use_subzero) {
@@ -275,23 +239,18 @@ void PnaclTranslateThread::DoCompile() {
                     std::string("Stream init failed: ") + error_str);
     return;
   }
-  PLUGIN_PRINTF(("PnaclCoordinator: StreamInit successful\n"));
 
   // llc process is started.
   while(!done_ || data_buffers_.size() > 0) {
-    NaClXMutexLock(&cond_mu_);
+    cond_mu_.Acquire();
     while(!done_ && data_buffers_.size() == 0) {
-      NaClXCondVarWait(&buffer_cond_, &cond_mu_);
+      buffer_cond_.Wait();
     }
-    PLUGIN_PRINTF(("PnaclTranslateThread awake (done=%d, size=%" NACL_PRIuS
-                   ")\n",
-                   done_, data_buffers_.size()));
     if (data_buffers_.size() > 0) {
       std::string data;
       data.swap(data_buffers_.front());
       data_buffers_.pop_front();
-      NaClXMutexUnlock(&cond_mu_);
-      PLUGIN_PRINTF(("StreamChunk\n"));
+      cond_mu_.Release();
 
       if (!compiler_channel_filter_->Send(
               new PpapiMsg_PnaclTranslatorCompileChunk(data, &success))) {
@@ -308,16 +267,14 @@ void PnaclTranslateThread::DoCompile() {
         // console.
         break;
       }
-      PLUGIN_PRINTF(("StreamChunk Successful\n"));
       core->CallOnMainThread(
           0,
           coordinator_->GetCompileProgressCallback(data.size()),
           PP_OK);
     } else {
-      NaClXMutexUnlock(&cond_mu_);
+      cond_mu_.Release();
     }
   }
-  PLUGIN_PRINTF(("PnaclTranslateThread done with chunks\n"));
   // Finish llc.
   if (!compiler_channel_filter_->Send(
           new PpapiMsg_PnaclTranslatorCompileEnd(&success, &error_str))) {
@@ -331,33 +288,33 @@ void PnaclTranslateThread::DoCompile() {
     TranslateFailed(PP_NACL_ERROR_PNACL_LLC_INTERNAL, error_str);
     return;
   }
-  compile_time_ = NaClGetTimeOfDayMicroseconds() - do_compile_start_time;
-  GetNaClInterface()->LogTranslateTime("NaCl.Perf.PNaClLoadTime.CompileTime",
-                                       compile_time_);
-  GetNaClInterface()->LogTranslateTime(
+  compile_time_ =
+    (base::TimeTicks::Now() - do_compile_start_time).InMicroseconds();
+  nacl::PPBNaClPrivate::LogTranslateTime("NaCl.Perf.PNaClLoadTime.CompileTime",
+                                         compile_time_);
+  nacl::PPBNaClPrivate::LogTranslateTime(
       pnacl_options_->use_subzero
           ? "NaCl.Perf.PNaClLoadTime.CompileTime.Subzero"
           : "NaCl.Perf.PNaClLoadTime.CompileTime.LLC",
       compile_time_);
 
   // Shut down the compiler subprocess.
-  NaClXMutexLock(&subprocess_mu_);
-  compiler_subprocess_active_ = false;
-  compiler_subprocess_->Shutdown();
-  NaClXMutexUnlock(&subprocess_mu_);
+  {
+    base::AutoLock lock(subprocess_mu_);
+    compiler_subprocess_active_ = false;
+    compiler_subprocess_->Shutdown();
+  }
 
   core->CallOnMainThread(0, compile_finished_callback_, PP_OK);
 }
 
-void WINAPI PnaclTranslateThread::DoLinkThread(void* arg) {
-  PnaclTranslateThread* translator =
-      reinterpret_cast<PnaclTranslateThread*>(arg);
-  translator->DoLink();
+void PnaclTranslateThread::LinkThread::Run() {
+  pnacl_translate_thread_->DoLink();
 }
 
 void PnaclTranslateThread::DoLink() {
   {
-    nacl::MutexLocker ml(&subprocess_mu_);
+    base::AutoLock lock(subprocess_mu_);
     // If the main thread asked us to exit in between starting the thread
     // and now, just leave now.
     if (!ld_subprocess_active_)
@@ -365,10 +322,10 @@ void PnaclTranslateThread::DoLink() {
   }
 
   // Reset object files for reading first.  We do this before duplicating
-  // handles/FDs to prevent any handle/FD leaks in case any of the Reset()
+  // handles/FDs to prevent any handle/FD leaks in case any of the Seek()
   // calls fail.
-  for (TempFile* obj_file : *obj_files_) {
-    if (!obj_file->Reset()) {
+  for (base::File& obj_file : *obj_files_) {
+    if (obj_file.Seek(base::File::FROM_BEGIN, 0) != 0) {
       TranslateFailed(PP_NACL_ERROR_PNACL_LD_SETUP,
                       "Link process could not reset object file");
       return;
@@ -379,13 +336,13 @@ void PnaclTranslateThread::DoLink() {
       GetHandleForSubprocess(nexe_file_, PP_FILEOPENFLAG_WRITE,
                              ld_channel_peer_pid_);
   std::vector<ppapi::proxy::SerializedHandle> ld_input_files;
-  for (TempFile* obj_file : *obj_files_) {
+  for (base::File& obj_file : *obj_files_) {
     ld_input_files.push_back(
-        GetHandleForSubprocess(obj_file, PP_FILEOPENFLAG_READ,
+        GetHandleForSubprocess(&obj_file, PP_FILEOPENFLAG_READ,
                                ld_channel_peer_pid_));
   }
 
-  int64_t link_start_time = NaClGetTimeOfDayMicroseconds();
+  base::TimeTicks link_start_time = base::TimeTicks::Now();
   bool success = false;
   bool sent = ld_channel_filter_->Send(
       new PpapiMsg_PnaclTranslatorLink(ld_input_files, nexe_file, &success));
@@ -400,17 +357,16 @@ void PnaclTranslateThread::DoLink() {
     return;
   }
 
-  GetNaClInterface()->LogTranslateTime(
+  nacl::PPBNaClPrivate::LogTranslateTime(
       "NaCl.Perf.PNaClLoadTime.LinkTime",
-      NaClGetTimeOfDayMicroseconds() - link_start_time);
-  PLUGIN_PRINTF(("PnaclCoordinator: link (translator=%p) succeeded\n",
-                 this));
+      (base::TimeTicks::Now() - link_start_time).InMicroseconds());
 
   // Shut down the ld subprocess.
-  NaClXMutexLock(&subprocess_mu_);
-  ld_subprocess_active_ = false;
-  ld_subprocess_->Shutdown();
-  NaClXMutexUnlock(&subprocess_mu_);
+  {
+    base::AutoLock lock(subprocess_mu_);
+    ld_subprocess_active_ = false;
+    ld_subprocess_->Shutdown();
+  }
 
   pp::Core* core = pp::Module::Get()->core();
   core->CallOnMainThread(0, report_translate_finished_, PP_OK);
@@ -419,8 +375,6 @@ void PnaclTranslateThread::DoLink() {
 void PnaclTranslateThread::TranslateFailed(
     PP_NaClError err_code,
     const std::string& error_string) {
-  PLUGIN_PRINTF(("PnaclTranslateThread::TranslateFailed (error_string='%s')\n",
-                 error_string.c_str()));
   pp::Core* core = pp::Module::Get()->core();
   if (coordinator_error_info_->message().empty()) {
     // Only use our message if one hasn't already been set by the coordinator
@@ -433,36 +387,31 @@ void PnaclTranslateThread::TranslateFailed(
 }
 
 void PnaclTranslateThread::AbortSubprocesses() {
-  PLUGIN_PRINTF(("PnaclTranslateThread::AbortSubprocesses\n"));
-  NaClXMutexLock(&subprocess_mu_);
-  if (compiler_subprocess_ != NULL && compiler_subprocess_active_) {
-    // We only run the service_runtime's Shutdown and do not run the
-    // NaClSubprocess Shutdown, which would otherwise nullify some
-    // pointers that could still be in use (srpc_client, etc.).
-    compiler_subprocess_->service_runtime()->Shutdown();
-    compiler_subprocess_active_ = false;
+  {
+    base::AutoLock lock(subprocess_mu_);
+    if (compiler_subprocess_ != NULL && compiler_subprocess_active_) {
+      // We only run the service_runtime's Shutdown and do not run the
+      // NaClSubprocess Shutdown, which would otherwise nullify some
+      // pointers that could still be in use (srpc_client, etc.).
+      compiler_subprocess_->service_runtime()->Shutdown();
+      compiler_subprocess_active_ = false;
+    }
+    if (ld_subprocess_ != NULL && ld_subprocess_active_) {
+      ld_subprocess_->service_runtime()->Shutdown();
+      ld_subprocess_active_ = false;
+    }
   }
-  if (ld_subprocess_ != NULL && ld_subprocess_active_) {
-    ld_subprocess_->service_runtime()->Shutdown();
-    ld_subprocess_active_ = false;
-  }
-  NaClXMutexUnlock(&subprocess_mu_);
-  nacl::MutexLocker ml(&cond_mu_);
+  base::AutoLock lock(cond_mu_);
   done_ = true;
   // Free all buffered bitcode chunks
   data_buffers_.clear();
-  NaClXCondVarSignal(&buffer_cond_);
+  buffer_cond_.Signal();
 }
 
 PnaclTranslateThread::~PnaclTranslateThread() {
-  PLUGIN_PRINTF(("~PnaclTranslateThread (translate_thread=%p)\n", this));
   AbortSubprocesses();
-  if (translate_thread_ != NULL)
-    NaClThreadJoin(translate_thread_.get());
-  PLUGIN_PRINTF(("~PnaclTranslateThread joined\n"));
-  NaClCondVarDtor(&buffer_cond_);
-  NaClMutexDtor(&cond_mu_);
-  NaClMutexDtor(&subprocess_mu_);
+  if (translate_thread_)
+    translate_thread_->Join();
 }
 
 } // namespace plugin

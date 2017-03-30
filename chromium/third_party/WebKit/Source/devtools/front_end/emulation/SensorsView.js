@@ -11,20 +11,26 @@ WebInspector.SensorsView = function()
     WebInspector.VBox.call(this, true);
     this.registerRequiredCSS("emulation/sensors.css");
     this.contentElement.classList.add("sensors-view");
+
+    this._geolocationSetting = WebInspector.settings.createSetting("emulation.geolocationOverride", "");
+    this._geolocation = WebInspector.Geolocation.parseSetting(this._geolocationSetting.get());
+    this._geolocationEnabled = false;
     this._appendGeolocationOverrideControl();
+
+    this._deviceOrientationSetting = WebInspector.settings.createSetting("emulation.deviceOrientationOverride", "");
+    this._deviceOrientation = WebInspector.DeviceOrientation.parseSetting(this._deviceOrientationSetting.get());
+    this._deviceOrientationEnabled = false;
     this._appendDeviceOrientationOverrideControl();
 }
 
 WebInspector.SensorsView.prototype = {
     _appendGeolocationOverrideControl: function()
     {
-        const geolocationSetting = WebInspector.overridesSupport.settings.geolocationOverride.get();
-        var geolocation = WebInspector.OverridesSupport.GeolocationPosition.parseSetting(geolocationSetting);
         var checkboxLabel = createCheckboxLabel(WebInspector.UIString("Emulate geolocation coordinates"));
         this._geolocationOverrideCheckbox = checkboxLabel.checkboxElement;
         this._geolocationOverrideCheckbox.addEventListener("click", this._geolocationOverrideCheckboxClicked.bind(this));
         this.contentElement.appendChild(checkboxLabel);
-        this._geolocationFieldset = this._createGeolocationOverrideElement(geolocation);
+        this._geolocationFieldset = this._createGeolocationOverrideElement(this._geolocation);
         this._geolocationFieldset.disabled = true;
         this.contentElement.appendChild(this._geolocationFieldset);
     },
@@ -32,7 +38,10 @@ WebInspector.SensorsView.prototype = {
     _geolocationOverrideCheckboxClicked: function()
     {
         var enabled = this._geolocationOverrideCheckbox.checked;
-        WebInspector.overridesSupport.setGeolocationOverrideEnabled(enabled);
+
+        this._geolocationEnabled = enabled;
+        this._applyGeolocation();
+
         if (enabled && !this._latitudeElement.value)
             this._latitudeElement.focus();
         this._geolocationFieldset.disabled = !enabled;
@@ -40,29 +49,26 @@ WebInspector.SensorsView.prototype = {
 
     _applyGeolocationUserInput: function()
     {
-        this._setGeolocationPosition(WebInspector.OverridesSupport.GeolocationPosition.parseUserInput(this._latitudeElement.value.trim(), this._longitudeElement.value.trim(), this._geolocationErrorElement.checked), true);
-    },
-
-    /**
-     * @param {?WebInspector.OverridesSupport.GeolocationPosition} geolocation
-     * @param {boolean} userInputModified
-     */
-    _setGeolocationPosition: function(geolocation, userInputModified)
-    {
+        var geolocation = WebInspector.Geolocation.parseUserInput(this._latitudeElement.value.trim(), this._longitudeElement.value.trim(), this._geolocationErrorElement.checked);
         if (!geolocation)
             return;
 
-        if (!userInputModified) {
-            this._latitudeElement.value = geolocation.latitude;
-            this._longitudeElement.value = geolocation.longitude;
-        }
+        this._geolocation = geolocation;
+        this._applyGeolocation();
+    },
 
-        var value = geolocation.toSetting();
-        WebInspector.overridesSupport.settings.geolocationOverride.set(value);
+    _applyGeolocation: function()
+    {
+        if (this._geolocationEnabled) {
+            this._geolocationSetting.set(this._geolocation.toSetting());
+            this._geolocation.apply();
+        } else {
+            this._geolocation.clear();
+        }
     },
 
     /**
-     * @param {!WebInspector.OverridesSupport.GeolocationPosition} geolocation
+     * @param {!WebInspector.Geolocation} geolocation
      * @return {!Element}
      */
     _createGeolocationOverrideElement: function(geolocation)
@@ -75,10 +81,14 @@ WebInspector.SensorsView.prototype = {
         var cellElement = rowElement.createChild("td");
         cellElement = rowElement.createChild("td");
         cellElement.createTextChild(WebInspector.UIString("Lat = "));
-        this._latitudeElement = WebInspector.SettingsUI.createInput(cellElement, "geolocation-override-latitude", String(geolocation.latitude), this._applyGeolocationUserInput.bind(this), true);
+        this._latitudeElement = cellElement.createChild("input");
+        this._latitudeElement.type = "text";
+        WebInspector.bindInput(this._latitudeElement, this._applyGeolocationUserInput.bind(this), WebInspector.Geolocation.latitudeValidator, true)(String(geolocation.latitude));
         cellElement.createTextChild(" , ");
         cellElement.createTextChild(WebInspector.UIString("Lon = "));
-        this._longitudeElement = WebInspector.SettingsUI.createInput(cellElement, "geolocation-override-longitude", String(geolocation.longitude), this._applyGeolocationUserInput.bind(this), true);
+        this._longitudeElement = cellElement.createChild("input");
+        this._longitudeElement.type = "text";
+        WebInspector.bindInput(this._longitudeElement, this._applyGeolocationUserInput.bind(this), WebInspector.Geolocation.longitudeValidator, true)(String(geolocation.longitude));
         rowElement = tableElement.createChild("tr");
         cellElement = rowElement.createChild("td");
         cellElement.colSpan = 2;
@@ -94,13 +104,11 @@ WebInspector.SensorsView.prototype = {
 
     _appendDeviceOrientationOverrideControl: function()
     {
-        const deviceOrientationSetting = WebInspector.overridesSupport.settings.deviceOrientationOverride.get();
-        var deviceOrientation = WebInspector.OverridesSupport.DeviceOrientation.parseSetting(deviceOrientationSetting);
-        var checkboxLabel = createCheckboxLabel(WebInspector.UIString("Emulate accelerometer"));
+        var checkboxLabel = createCheckboxLabel(WebInspector.UIString("Emulate device orientation"));
         this._overrideDeviceOrientationCheckbox = checkboxLabel.checkboxElement;
         this._overrideDeviceOrientationCheckbox.addEventListener("click", this._deviceOrientationOverrideCheckboxClicked.bind(this));
         this.contentElement.appendChild(checkboxLabel);
-        this._deviceOrientationFieldset = this._createDeviceOrientationOverrideElement(deviceOrientation);
+        this._deviceOrientationFieldset = this._createDeviceOrientationOverrideElement(this._deviceOrientation);
         this._deviceOrientationFieldset.disabled = true;
         this.contentElement.appendChild(this._deviceOrientationFieldset);
     },
@@ -108,24 +116,37 @@ WebInspector.SensorsView.prototype = {
     _deviceOrientationOverrideCheckboxClicked: function()
     {
         var enabled = this._overrideDeviceOrientationCheckbox.checked;
-        WebInspector.overridesSupport.setDeviceOrientationOverrideEnabled(enabled);
+
+        this._deviceOrientationEnabled = enabled;
+        this._applyDeviceOrientation();
+
         if (enabled && !this._alphaElement.value)
             this._alphaElement.focus();
         this._deviceOrientationFieldset.disabled = !enabled;
     },
 
+    _applyDeviceOrientation: function()
+    {
+        if (this._deviceOrientationEnabled) {
+            this._deviceOrientationSetting.set(this._deviceOrientation.toSetting());
+            this._deviceOrientation.apply();
+        } else {
+            this._deviceOrientation.clear();
+        }
+    },
+
     _applyDeviceOrientationUserInput: function()
     {
-        this._setDeviceOrientation(WebInspector.OverridesSupport.DeviceOrientation.parseUserInput(this._alphaElement.value.trim(), this._betaElement.value.trim(), this._gammaElement.value.trim()), WebInspector.SensorsView.DeviceOrientationModificationSource.UserInput);
+        this._setDeviceOrientation(WebInspector.DeviceOrientation.parseUserInput(this._alphaElement.value.trim(), this._betaElement.value.trim(), this._gammaElement.value.trim()), WebInspector.SensorsView.DeviceOrientationModificationSource.UserInput);
     },
 
     _resetDeviceOrientation: function()
     {
-        this._setDeviceOrientation(new WebInspector.OverridesSupport.DeviceOrientation(0, 0, 0), WebInspector.SensorsView.DeviceOrientationModificationSource.ResetButton);
+        this._setDeviceOrientation(new WebInspector.DeviceOrientation(0, 0, 0), WebInspector.SensorsView.DeviceOrientationModificationSource.ResetButton);
     },
 
     /**
-     * @param {?WebInspector.OverridesSupport.DeviceOrientation} deviceOrientation
+     * @param {?WebInspector.DeviceOrientation} deviceOrientation
      * @param {!WebInspector.SensorsView.DeviceOrientationModificationSource} modificationSource
      */
     _setDeviceOrientation: function(deviceOrientation, modificationSource)
@@ -134,34 +155,35 @@ WebInspector.SensorsView.prototype = {
             return;
 
         if (modificationSource != WebInspector.SensorsView.DeviceOrientationModificationSource.UserInput) {
-            this._alphaElement.value = deviceOrientation.alpha;
-            this._betaElement.value = deviceOrientation.beta;
-            this._gammaElement.value = deviceOrientation.gamma;
+            this._alphaSetter(deviceOrientation.alpha);
+            this._betaSetter(deviceOrientation.beta);
+            this._gammaSetter(deviceOrientation.gamma);
         }
 
         if (modificationSource != WebInspector.SensorsView.DeviceOrientationModificationSource.UserDrag)
             this._setBoxOrientation(deviceOrientation);
 
-        var value = deviceOrientation.toSetting();
-        WebInspector.overridesSupport.settings.deviceOrientationOverride.set(value);
+        this._deviceOrientation = deviceOrientation;
+        this._applyDeviceOrientation();
     },
 
     /**
      * @param {!Element} parentElement
-     * @param {string} id
+     * @param {!Element} input
      * @param {string} label
-     * @param {string} defaultText
-     * @return {!Element}
+     * @return {function(string)}
      */
-    _createAxisInput: function(parentElement, id, label, defaultText)
+    _createAxisInput: function(parentElement, input, label)
     {
         var div = parentElement.createChild("div", "accelerometer-axis-input-container");
         div.createTextChild(label);
-        return WebInspector.SettingsUI.createInput(div, id, defaultText, this._applyDeviceOrientationUserInput.bind(this), true);
+        div.appendChild(input);
+        input.type = "text";
+        return WebInspector.bindInput(input, this._applyDeviceOrientationUserInput.bind(this), WebInspector.DeviceOrientation.validator, true);
     },
 
     /**
-     * @param {!WebInspector.OverridesSupport.DeviceOrientation} deviceOrientation
+     * @param {!WebInspector.DeviceOrientation} deviceOrientation
      */
     _createDeviceOrientationOverrideElement: function(deviceOrientation)
     {
@@ -171,9 +193,17 @@ WebInspector.SensorsView.prototype = {
         var rowElement = tableElement.createChild("tr");
         var cellElement = rowElement.createChild("td", "accelerometer-inputs-cell");
 
-        this._alphaElement = this._createAxisInput(cellElement, "device-orientation-override-alpha", "\u03B1: ", String(deviceOrientation.alpha));
-        this._betaElement = this._createAxisInput(cellElement, "device-orientation-override-beta", "\u03B2: ", String(deviceOrientation.beta));
-        this._gammaElement = this._createAxisInput(cellElement, "device-orientation-override-gamma", "\u03B3: ", String(deviceOrientation.gamma));
+        this._alphaElement = createElement("input");
+        this._alphaSetter = this._createAxisInput(cellElement, this._alphaElement, "\u03B1: ");
+        this._alphaSetter(String(deviceOrientation.alpha));
+
+        this._betaElement = createElement("input");
+        this._betaSetter = this._createAxisInput(cellElement, this._betaElement, "\u03B2: ");
+        this._betaSetter(String(deviceOrientation.beta));
+
+        this._gammaElement = createElement("input");
+        this._gammaSetter = this._createAxisInput(cellElement, this._gammaElement, "\u03B3: ");
+        this._gammaSetter(String(deviceOrientation.gamma));
 
         cellElement.appendChild(createTextButton(WebInspector.UIString("Reset"), this._resetDeviceOrientation.bind(this), "accelerometer-reset-button"));
 
@@ -193,7 +223,7 @@ WebInspector.SensorsView.prototype = {
     },
 
     /**
-     * @param {!WebInspector.OverridesSupport.DeviceOrientation} deviceOrientation
+     * @param {!WebInspector.DeviceOrientation} deviceOrientation
      */
     _setBoxOrientation: function(deviceOrientation)
     {
@@ -221,7 +251,7 @@ WebInspector.SensorsView.prototype = {
         this._currentMatrix = rotationMatrix.multiply(this._boxMatrix);
         this._boxElement.style.webkitTransform = this._currentMatrix;
         var eulerAngles = WebInspector.Geometry.EulerAngles.fromRotationMatrix(this._currentMatrix);
-        var newOrientation = new WebInspector.OverridesSupport.DeviceOrientation(-eulerAngles.alpha, -eulerAngles.beta, eulerAngles.gamma);
+        var newOrientation = new WebInspector.DeviceOrientation(-eulerAngles.alpha, -eulerAngles.beta, eulerAngles.gamma);
         this._setDeviceOrientation(newOrientation, WebInspector.SensorsView.DeviceOrientationModificationSource.UserDrag);
         return false;
     },

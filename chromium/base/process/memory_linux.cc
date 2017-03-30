@@ -16,19 +16,7 @@
 #include "build/build_config.h"
 
 #if defined(USE_TCMALLOC)
-// Used by UncheckedMalloc. If tcmalloc is linked to the executable
-// this will be replaced by a strong symbol that actually implement
-// the semantics and don't call new handler in case the allocation fails.
-extern "C" {
-
-__attribute__((weak, visibility("default")))
-void* tc_malloc_skip_new_handler_weak(size_t size);
-
-void* tc_malloc_skip_new_handler_weak(size_t size) {
-  return malloc(size);
-}
-
-}
+#include "third_party/tcmalloc/chromium/src/gperftools/tcmalloc.h"
 #endif
 
 namespace base {
@@ -162,6 +150,10 @@ void EnableTerminationOnOutOfMemory() {
   // If we're using glibc's allocator, the above functions will override
   // malloc and friends and make them die on out of memory.
 #endif
+#if defined(USE_TCMALLOC)
+  // For tcmalloc, we need to tell it to behave like new.
+  tc_set_new_mode(1);
+#endif
 }
 
 // NOTE: This is not the only version of this function in the source:
@@ -208,9 +200,37 @@ bool UncheckedMalloc(size_t size, void** result) {
 #elif defined(LIBC_GLIBC) && !defined(USE_TCMALLOC)
   *result = __libc_malloc(size);
 #elif defined(USE_TCMALLOC)
-  *result = tc_malloc_skip_new_handler_weak(size);
+  *result = tc_malloc_skip_new_handler(size);
 #endif
   return *result != NULL;
 }
 
 }  // namespace base
+
+// This is a workaround for crbug.com/598075. This code never existed in trunk.
+// The problem is that some x86 Android device vendors forgot to provide the
+// posix_memalign symbol in libc even though it is mandated by the NDK.
+// This causes Chrome to crash at load-time, due to the unresolved dependency.
+// Fortunately it is farily easy to reimplement ourselves posix_memalign on
+// top of memalign.
+// This is not a problem in trunk after http://crrev.com/1875043003.
+#if defined(OS_ANDROID) && defined(ARCH_CPU_X86)
+#include <errno.h>
+#include <malloc.h>
+
+extern "C" {
+__attribute__((visibility("default"))) int posix_memalign(void** res,
+                                                          size_t alignment,
+                                                          size_t size) {
+  // posix_memalign is supposed to check the arguments. See tc_posix_memalign()
+  // in tc_malloc.cc.
+  if (((alignment % sizeof(void*)) != 0) ||
+      ((alignment & (alignment - 1)) != 0) || (alignment == 0)) {
+    return EINVAL;
+  }
+  void* ptr = memalign(alignment, size);
+  *res = ptr;
+  return ptr ? 0 : ENOMEM;
+}
+}  // extern "C"
+#endif

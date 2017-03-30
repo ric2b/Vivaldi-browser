@@ -132,9 +132,12 @@ ImageEditor.Mode.Adjust.prototype.updatePreviewImage_ = function(options) {
       this.canvas_ = this.getImageView().createOverlayCanvas();
 
     this.getImageView().setupDeviceBuffer(this.canvas_);
-    this.originalImageData_ = this.getImageView().getScreenImageDataWith(
+    var canvas = this.getImageView().getImageCanvasWith(
         this.canvas_.width, this.canvas_.height);
-    this.previewImageData_ = this.getImageView().getScreenImageDataWith(
+    var context = canvas.getContext('2d');
+    this.originalImageData_ = context.getImageData(0, 0,
+        this.canvas_.width, this.canvas_.height);
+    this.previewImageData_ = context.getImageData(0, 0,
         this.canvas_.width, this.canvas_.height);
 
     isPreviewImageInvalidated = true;
@@ -262,42 +265,4 @@ ImageEditor.Mode.InstantAutofix.prototype =
 ImageEditor.Mode.InstantAutofix.prototype.setUp = function() {
   ImageEditor.Mode.Autofix.prototype.setUp.apply(this, arguments);
   this.apply();
-};
-
-/**
- * Blur filter.
- * @constructor
- * @extends {ImageEditor.Mode.Adjust}
- * @struct
- */
-ImageEditor.Mode.Blur = function() {
-  ImageEditor.Mode.Adjust.call(this, 'blur', 'blur');
-};
-
-ImageEditor.Mode.Blur.prototype =
-    {__proto__: ImageEditor.Mode.Adjust.prototype};
-
-/** @override */
-ImageEditor.Mode.Blur.prototype.createTools = function(toolbar) {
-  toolbar.addRange('strength', 'GALLERY_STRENGTH', 0, 0, 1, 100);
-  toolbar.addRange('radius', 'GALLERY_RADIUS', 1, 1, 3);
-};
-
-/**
- * Sharpen filter.
- * @constructor
- * @extends {ImageEditor.Mode.Adjust}
- * @struct
- */
-ImageEditor.Mode.Sharpen = function() {
-  ImageEditor.Mode.Adjust.call(this, 'sharpen', 'sharpen');
-};
-
-ImageEditor.Mode.Sharpen.prototype =
-    {__proto__: ImageEditor.Mode.Adjust.prototype};
-
-/** @override */
-ImageEditor.Mode.Sharpen.prototype.createTools = function(toolbar) {
-  toolbar.addRange('strength', 'GALLERY_STRENGTH', 0, 0, 1, 100);
-  toolbar.addRange('radius', 'GALLERY_RADIUS', 1, 1, 3);
 };

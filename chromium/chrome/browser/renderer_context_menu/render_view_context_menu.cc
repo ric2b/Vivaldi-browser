@@ -14,8 +14,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_member.h"
-#include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -71,12 +69,15 @@
 #include "chrome/common/spellcheck_common.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/autofill/core/common/password_generation_util.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/metrics/proto/omnibox_input_type.pb.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/password_manager/core/common/experiments.h"
+#include "components/prefs/pref_member.h"
+#include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/translate/core/browser/translate_download_manager.h"
@@ -119,6 +120,10 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/path.h"
 #include "ui/gfx/text_elider.h"
+
+#if !defined(USE_BROWSER_SPELLCHECKER)
+#include "chrome/browser/renderer_context_menu/spelling_options_submenu_observer.h"
+#endif
 
 #if defined(ENABLE_EXTENSIONS)
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
@@ -275,9 +280,11 @@ const struct UmaEnumCommandIdPair {
     {69, -1, IDC_CONTENT_CONTEXT_COPYLINKTEXT},
     {70, -1, IDC_CONTENT_CONTEXT_OPENLINKINPROFILE},
     {71, -1, IDC_OPEN_LINK_IN_PROFILE_FIRST},
+    {72, -1, IDC_CONTENT_CONTEXT_GENERATEPASSWORD},
+    {73, -1, IDC_SPELLCHECK_MULTI_LINGUAL},
     // Add new items here and use |enum_id| from the next line.
     // Also, add new items to RenderViewContextMenuItem enum in histograms.xml.
-    {72, -1, 0},  // Must be the last. Increment |enum_id| when new IDC
+    {74, -1, 0},  // Must be the last. Increment |enum_id| when new IDC
                   // was added.
 };
 
@@ -437,13 +444,12 @@ void AddIconToLastMenuItem(gfx::Image icon, ui::SimpleMenuModel* menu) {
 }
 #endif  // !defined(OS_CHROMEOS)
 
-void OnProfileCreated(chrome::HostDesktopType desktop_type,
-                      const GURL& link_url,
+void OnProfileCreated(const GURL& link_url,
                       const content::Referrer& referrer,
                       Profile* profile,
                       Profile::CreateStatus status) {
   if (status == Profile::CREATE_STATUS_INITIALIZED) {
-    Browser* browser = chrome::FindLastActiveWithProfile(profile, desktop_type);
+    Browser* browser = chrome::FindLastActiveWithProfile(profile);
     chrome::NavigateParams nav_params(browser, link_url,
                                       ui::PAGE_TRANSITION_LINK);
     nav_params.disposition = NEW_FOREGROUND_TAB;
@@ -743,8 +749,8 @@ void RenderViewContextMenu::InitMenu() {
   if (content_type_->SupportsGroup(
           ContextMenuContentType::ITEM_GROUP_EDITABLE)) {
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
-    AppendPlatformEditableItems();
     AppendLanguageSettings();
+    AppendPlatformEditableItems();
   }
 
   if (content_type_->SupportsGroup(
@@ -922,9 +928,6 @@ void RenderViewContextMenu::AppendLinkItems() {
       ProfileManager* profile_manager = g_browser_process->profile_manager();
       const ProfileInfoCache& profile_info_cache =
           profile_manager->GetProfileInfoCache();
-      chrome::HostDesktopType desktop_type =
-          chrome::GetHostDesktopTypeForNativeView(
-              source_web_contents_->GetNativeView());
 
       // Find all regular profiles other than the current one which have at
       // least one open window.
@@ -939,7 +942,7 @@ void RenderViewContextMenu::AppendLinkItems() {
             !profile_info_cache.IsOmittedProfileAtIndex(profile_index) &&
             !profile_info_cache.ProfileIsSigninRequiredAtIndex(profile_index)) {
           target_profiles.push_back(profile_index);
-          if (chrome::FindLastActiveWithProfile(profile, desktop_type))
+          if (chrome::FindLastActiveWithProfile(profile))
             multiple_profiles_open_ = true;
         }
       }
@@ -1216,10 +1219,9 @@ void RenderViewContextMenu::AppendSearchProvider() {
 }
 
 void RenderViewContextMenu::AppendEditableItems() {
-  const bool use_spellcheck_and_search = !chrome::IsRunningInForcedAppMode();
-
-  if (use_spellcheck_and_search)
-    AppendSpellingSuggestionsSubMenu();
+  const bool use_spelling = !chrome::IsRunningInForcedAppMode();
+  if (use_spelling)
+    AppendSpellingSuggestionItems();
 
 // 'Undo' and 'Redo' for text input with no suggestions and no text selected.
 // We make an exception for OS X as context clicking will select the closest
@@ -1258,18 +1260,30 @@ void RenderViewContextMenu::AppendEditableItems() {
 }
 
 void RenderViewContextMenu::AppendLanguageSettings() {
-  const bool use_spellcheck_and_search = !chrome::IsRunningInForcedAppMode();
+  const bool use_spelling = !chrome::IsRunningInForcedAppMode();
+  if (!use_spelling)
+    return;
 
-  if (use_spellcheck_and_search)
-    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_LANGUAGE_SETTINGS,
-                                    IDS_CONTENT_CONTEXT_LANGUAGE_SETTINGS);
+#if defined(OS_MACOSX)
+  menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_LANGUAGE_SETTINGS,
+                                  IDS_CONTENT_CONTEXT_LANGUAGE_SETTINGS);
+#else
+  if (!spelling_options_submenu_observer_) {
+    const int kLanguageRadioGroup = 1;
+    spelling_options_submenu_observer_.reset(
+        new SpellingOptionsSubMenuObserver(this, this, kLanguageRadioGroup));
+  }
+
+  spelling_options_submenu_observer_->InitMenu(params_);
+  observers_.AddObserver(spelling_options_submenu_observer_.get());
+#endif
 }
 
-void RenderViewContextMenu::AppendSpellingSuggestionsSubMenu() {
-  if (!spelling_menu_observer_.get())
-    spelling_menu_observer_.reset(new SpellingMenuObserver(this));
-  observers_.AddObserver(spelling_menu_observer_.get());
-  spelling_menu_observer_->InitMenu(params_);
+void RenderViewContextMenu::AppendSpellingSuggestionItems() {
+  if (!spelling_suggestions_menu_observer_)
+    spelling_suggestions_menu_observer_.reset(new SpellingMenuObserver(this));
+  observers_.AddObserver(spelling_suggestions_menu_observer_.get());
+  spelling_suggestions_menu_observer_->InitMenu(params_);
 }
 
 void RenderViewContextMenu::AppendProtocolHandlerSubMenu() {
@@ -1296,12 +1310,19 @@ void RenderViewContextMenu::AppendProtocolHandlerSubMenu() {
 }
 
 void RenderViewContextMenu::AppendPasswordItems() {
-  if (!password_manager::ForceSavingExperimentEnabled())
-    return;
-
-  menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
-  menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_FORCESAVEPASSWORD,
-                                  IDS_CONTENT_CONTEXT_FORCESAVEPASSWORD);
+  bool separator_added = false;
+  if (password_manager::ForceSavingExperimentEnabled()) {
+    menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
+    separator_added = true;
+    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_FORCESAVEPASSWORD,
+                                    IDS_CONTENT_CONTEXT_FORCESAVEPASSWORD);
+  }
+  if (password_manager::ManualPasswordGenerationEnabled()) {
+    if (!separator_added)
+      menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
+    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_GENERATEPASSWORD,
+                                    IDS_CONTENT_CONTEXT_GENERATEPASSWORD);
+  }
 }
 
 // Menu delegate functions -----------------------------------------------------
@@ -1611,6 +1632,7 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
     case IDC_CONTENT_CONTEXT_OPENLINKWITH:
     case IDC_CONTENT_CONTEXT_PROTOCOL_HANDLER_SETTINGS:
     case IDC_CONTENT_CONTEXT_FORCESAVEPASSWORD:
+    case IDC_CONTENT_CONTEXT_GENERATEPASSWORD:
       return true;
 
     case IDC_ROUTE_MEDIA: {
@@ -1707,13 +1729,10 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
 
     base::FilePath profile_path = profile_info_cache.GetPathOfProfileAtIndex(
         id - IDC_OPEN_LINK_IN_PROFILE_FIRST);
-    chrome::HostDesktopType desktop_type =
-        chrome::GetHostDesktopTypeForNativeView(
-            source_web_contents_->GetNativeView());
 
     Profile* profile = profile_manager->GetProfileByPath(profile_path);
     UmaEnumOpenLinkAsUser profile_state;
-    if (chrome::FindLastActiveWithProfile(profile, desktop_type)) {
+    if (chrome::FindLastActiveWithProfile(profile)) {
       profile_state = OPEN_LINK_AS_USER_ACTIVE_PROFILE_ENUM_ID;
     } else if (multiple_profiles_open_) {
       profile_state =
@@ -1726,8 +1745,8 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
                               profile_state, OPEN_LINK_AS_USER_LAST_ENUM_ID);
 
     profiles::SwitchToProfile(
-        profile_path, desktop_type, false,
-        base::Bind(OnProfileCreated, desktop_type, params_.link_url,
+        profile_path, false,
+        base::Bind(OnProfileCreated, params_.link_url,
                    CreateReferrer(params_.link_url, params_)),
         ProfileMetrics::SWITCH_PROFILE_CONTEXT_MENU);
     return;
@@ -2118,6 +2137,11 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
     case IDC_CONTENT_CONTEXT_FORCESAVEPASSWORD:
       ChromePasswordManagerClient::FromWebContents(source_web_contents_)->
           ForceSavePassword();
+      break;
+
+    case IDC_CONTENT_CONTEXT_GENERATEPASSWORD:
+      ChromePasswordManagerClient::FromWebContents(source_web_contents_)->
+          GeneratePassword();
       break;
 
     default:

@@ -36,17 +36,18 @@
 #include "core/frame/FrameConsole.h"
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/IdentifiersFactory.h"
-#include "core/inspector/InjectedScript.h"
-#include "core/inspector/InjectedScriptManager.h"
 #include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/page/Page.h"
+#include "platform/v8_inspector/public/V8RuntimeAgent.h"
 #include "platform/weborigin/SecurityOrigin.h"
+
+using blink::protocol::Runtime::ExceptionDetails;
 
 namespace blink {
 
-PageRuntimeAgent::PageRuntimeAgent(InjectedScriptManager* injectedScriptManager, Client* client, V8Debugger* debugger, InspectedFrames* inspectedFrames)
-    : InspectorRuntimeAgent(injectedScriptManager, debugger, client)
+PageRuntimeAgent::PageRuntimeAgent(Client* client, V8Debugger* debugger, InspectedFrames* inspectedFrames)
+    : InspectorRuntimeAgent(debugger, client)
     , m_inspectedFrames(inspectedFrames)
     , m_mainWorldContextCreated(false)
 {
@@ -100,6 +101,8 @@ void PageRuntimeAgent::didClearDocumentOfWindowObject(LocalFrame* frame)
         return;
     ASSERT(frontend());
 
+    if (frame == m_inspectedFrames->root())
+        m_v8RuntimeAgent->clearInspectedObjects();
     frame->script().initializeMainWorld();
 }
 

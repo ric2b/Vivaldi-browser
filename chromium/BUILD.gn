@@ -12,7 +12,6 @@ import("//build/config/features.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
 import("//build_overrides/v8.gni")
-import("//build_overrides/webrtc.gni")
 import("//media/media_options.gni")
 import("//third_party/openh264/openh264_args.gni")
 
@@ -148,6 +147,8 @@ group("both_gn_and_gyp") {
       "//third_party/cacheinvalidation:cacheinvalidation_unittests",
       "//third_party/codesighs",
       "//third_party/pdfium/samples:pdfium_test",
+      "//tools/battor_agent",
+      "//tools/battor_agent:battor_agent_unittests",
       "//tools/gn",
       "//tools/gn:gn_unittests",
       "//tools/perf/clear_system_cache",
@@ -176,27 +177,20 @@ group("both_gn_and_gyp") {
       "//media/midi:midi_unittests",
       "//mojo",
       "//mojo/common:mojo_common_unittests",
+      "//mojo/edk/system:mojo_system_unittests",
+      "//mojo/edk/test:mojo_public_bindings_unittests",
+      "//mojo/edk/test:mojo_public_environment_unittests",
+      "//mojo/edk/test:mojo_public_system_unittests",
+      "//mojo/edk/test:mojo_public_utility_unittests",
       "//mojo/shell/public/cpp",
       "//net:net_perftests",
-
-      # TODO(use-new-edk):
-      #"//mojo/edk/system:mojo_system_unittests",
-      #"//mojo/edk/test:mojo_public_bindings_unittests",
-      #"//mojo/edk/test:mojo_public_environment_unittests",
-      #"//mojo/edk/test:mojo_public_system_unittests",
-      #"//mojo/edk/test:mojo_public_utility_unittests",
       "//third_party/WebKit/Source/platform:blink_heap_unittests",
       "//third_party/WebKit/Source/platform:blink_platform_unittests",
       "//third_party/WebKit/Source/web:webkit_unit_tests",
       "//third_party/WebKit/Source/wtf:wtf_unittests",
-      "//third_party/mojo/src/mojo/edk/system:mojo_system_unittests",
-      "//third_party/mojo/src/mojo/edk/test:mojo_public_bindings_unittests",
-      "//third_party/mojo/src/mojo/edk/test:mojo_public_environment_unittests",
-      "//third_party/mojo/src/mojo/edk/test:mojo_public_system_unittests",
-      "//third_party/mojo/src/mojo/edk/test:mojo_public_utility_unittests",
+      "//third_party/catapult/telemetry:bitmaptools($host_toolchain)",
       "//third_party/smhasher:pmurhash",
       "//tools/imagediff($host_toolchain)",
-      "//tools/telemetry:bitmaptools($host_toolchain)",
       "//ui/display:display_unittests",
       "//ui/events:events_unittests",
       "//ui/gl:gl_unittests",
@@ -204,26 +198,19 @@ group("both_gn_and_gyp") {
     ]
   } else {
     deps += [
+      #"//ios/chrome:ios_chrome_unittests", TODO(GYP)
+      #"//ios/chrome/app", TODO(GYP)
+      #"//ios/chrome/browser", TODO(GYP)
+      "//ios/chrome/common",
       "//ios/net:ios_net_unittests",
+      "//ios/public/provider/chrome/browser",
       "//ios/public/provider/web",
       "//ios/testing:ocmock_support_unittest",
+      "//ios/third_party/fishhook",
+      "//ios/third_party/ochamcrest",
       "//ios/web:ios_web_unittests",
       "//ios/web/shell:ios_web_shell",
     ]
-
-    if (ios_use_webrtc) {
-      deps += [
-        "//ios/chrome:ios_chrome_unittests",
-        "//ios/chrome/app",
-        "//ios/chrome/browser",
-        "//ios/chrome/common",
-        "//ios/public/provider/chrome/browser",
-      ]
-    }
-  }
-
-  if (is_mac || is_win || is_linux) {
-    deps += [ "//tools/battor_agent" ]
   }
 
   deps += root_extra_deps
@@ -245,7 +232,14 @@ group("both_gn_and_gyp") {
   }
 
   if (use_aura) {
-    deps += [ "//ui/wm:wm_unittests" ]
+    deps += [
+      "//ash:ash_shell_with_content",
+      "//ash:ash_unittests",
+      "//ui/aura:aura_unittests",
+      "//ui/aura:bench",
+      "//ui/aura:demo",
+      "//ui/wm:wm_unittests",
+    ]
   }
 
   if (use_ozone) {
@@ -293,6 +287,7 @@ group("both_gn_and_gyp") {
       "//tools/android/kerberos/SpnegoAuthenticator:spnego_authenticator_apk",
       "//tools/cygprofile:cygprofile_unittests",
       "//tools/imagediff($host_toolchain)",
+      "//ui/android:ui_junit_tests",
     ]
     deps -= [
       "//net:net_perftests",
@@ -463,29 +458,14 @@ group("both_gn_and_gyp") {
         # TODO(dpranke): Figure out what platforms should actually have this.
         deps += [
           "//components/nacl/loader:helper_nonsfi",
-          "//components/nacl/loader:helper_nonsfi_unittests",
           "//components/nacl/loader:nacl_helper",
+          "//components/nacl/loader:nacl_helper_nonsfi_unittests",
         ]
       }
     }
 
     if (media_use_ffmpeg && !is_android) {
       deps += [ "//media:ffmpeg_regression_tests" ]
-    }
-
-    if (use_ash) {
-      deps += [
-        "//ash:ash_shell_with_content",
-        "//ash:ash_unittests",
-      ]
-    }
-
-    if (use_aura) {
-      deps += [
-        "//ui/aura:aura_unittests",
-        "//ui/aura:bench",
-        "//ui/aura:demo",
-      ]
     }
   }
 
@@ -497,7 +477,6 @@ group("both_gn_and_gyp") {
       "//breakpad:microdump_stackwalk($host_toolchain)",
       "//breakpad:minidump_dump($host_toolchain)",
       "//breakpad:minidump_stackwalk($host_toolchain)",
-      "//cloud_print:cloud_print_unittests",
       "//components/network_hints/browser",
       "//content/public/app:browser",
       "//content/public/app:child",
@@ -505,13 +484,10 @@ group("both_gn_and_gyp") {
       # TODO(GYP): Remove this when the gles2 tests work
       "//gpu/command_buffer/client:gles2_implementation_no_check",
       "//gpu/khronos_glcts_support:khronos_glcts_test",  # TODO(GYP) crbug.com/471903 to make this complete.
+      "//mojo/edk/test:mojo_public_system_perftests",
       "//mojo/shell/public/cpp",
       "//testing/gmock:gmock_main",
-
-      # TODO(use-new-edk):
-      #"//mojo/edk/test:mojo_public_system_perftests",
       "//third_party/codesighs:nm2tsv",
-      "//third_party/mojo/src/mojo/edk/test:mojo_public_system_perftests",
     ]
 
     if (!is_android) {
@@ -567,8 +543,6 @@ group("both_gn_and_gyp") {
       "//chrome/installer/setup:setup_unittests",
       "//chrome_elf:chrome_elf_unittests",
       "//chrome_elf:dll_hash_main",
-      "//cloud_print:cloud_print_unittests",
-      "//cloud_print/service/win:cloud_print_service",
       "//components/wifi:wifi_test",
       "//net:quic_client",
       "//net:quic_server",
@@ -606,6 +580,28 @@ group("both_gn_and_gyp") {
   }
 }
 
+# This group contains all the targets needed to run mojo's apptest_runner.
+group("mojo_apptests") {
+  testonly = true
+
+  deps = []
+
+  if (is_win || is_linux) {
+    deps += [
+      "//components/filesystem:apptests",
+      "//components/leveldb:apptests",
+      "//components/mus/ws:tests",
+      "//components/resource_provider:apptests",
+      "//components/resource_provider:resource_provider_unittests",
+      "//mash/wm:tests",
+      "//media/mojo/services:tests",
+      "//mojo/services/network:apptests",
+      "//mojo/shell/tests:apptests",
+      "//ui/views/mus:tests",
+    ]
+  }
+}
+
 group("gn_only") {
   testonly = true
 
@@ -615,18 +611,23 @@ group("gn_only") {
     deps += [ "//mojo/common:mojo_common_perftests" ]
   }
 
-  if (!is_mac && !is_ios && !is_chromecast) {
-    deps += [ "//mandoline:all" ]
-  }
-
   if (!is_android && !is_ios && !is_chromeos) {
     deps += [ "//components/proximity_auth:proximity_auth_unittests" ]
   }
 
   if (is_win || is_linux) {
     deps += [
+      ":mojo_apptests",
       "//mash:all",
-      "//ui/views/mus:tests",
+      "//mojo",
+    ]
+  }
+
+  if (is_win && use_drfuzz) {
+    # build libfuzzer fuzzers on Windows to run with Dr. Fuzz
+    deps += [
+      "//testing/libfuzzer/fuzzers",
+      "//testing/libfuzzer/tests:libfuzzer_tests",
     ]
   }
 
@@ -639,7 +640,6 @@ group("gn_only") {
       "//chrome/installer/util:strings",
       "//chrome/tools/convert_dict",
       "//components/constrained_window:unit_tests",
-      "//components/enhanced_bookmarks:test_support",
       "//components/metrics:serialization",
       "//components/password_manager/content/renderer:browser_tests",
       "//components/rappor:unit_tests",
@@ -648,6 +648,8 @@ group("gn_only") {
       "//media/cast:udp_proxy",
       "//native_client/src/trusted/debug_stub:gdb_rsp_unittest",
       "//storage/browser:dump_file_system",
+      "//testing/libfuzzer/fuzzers",
+      "//testing/libfuzzer/tests:libfuzzer_tests",
       "//third_party/angle:libANGLE",
       "//third_party/angle:libEGL",
       "//third_party/angle:libGLESv2",
@@ -706,9 +708,6 @@ group("gn_only") {
         "//third_party/libjpeg_turbo:simd_asm",
       ]
     }
-    if (enable_nacl) {
-      deps += [ "//native_client/src/trusted/service_runtime:sel_ldr" ]
-    }
     if (use_ozone) {
       deps += [ "//ui/ozone/demo" ]
     }
@@ -718,6 +717,10 @@ group("gn_only") {
     }
   }
 
+  if (enable_nacl) {
+    deps += [ "//native_client_sdk/src:nacl_core_sdk" ]
+  }
+
   if (is_android) {
     deps += [
       "//build/android/gyp/test:hello_world",
@@ -725,19 +728,17 @@ group("gn_only") {
     ]
   }
 
+  if (is_linux && use_ozone) {
+    deps += [
+      "//headless",
+      "//headless:headless_tests",
+    ]
+  }
+
   if (!is_chromecast && (is_android || is_linux || is_chromeos)) {
     deps += [
       "//blimp",
       "//blimp:blimp_tests",
-    ]
-  }
-
-  if (use_libfuzzer || use_drfuzz) {
-    # these are needed only for gn to discover build files.
-    deps += [
-      "//testing/libfuzzer:libfuzzer_main",
-      "//testing/libfuzzer/fuzzers:string_to_int_fuzzer",
-      "//testing/libfuzzer/tests:libfuzzer_tests",
     ]
   }
 }
@@ -752,9 +753,6 @@ group("gn_mojo_targets") {
       "//media/mojo:tests",
       "//media/mojo/services:cdm_service",
       "//mojo:tests",
-
-      # TODO(use-new-edk):
-      #"//mojo/edk/js/tests:js_to_cpp_bindings_python",
     ]
   }
 }
@@ -849,7 +847,7 @@ group("chromium_builder_perf") {
       "//gpu:gpu_perftests",
       "//media:media_perftests",
       "//media/midi:midi_unittests",
-      "//tools/telemetry:bitmaptools",
+      "//third_party/catapult/telemetry:bitmaptools",
     ]
 
     if (!is_chromeos) {

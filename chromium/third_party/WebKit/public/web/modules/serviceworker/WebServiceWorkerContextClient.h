@@ -108,6 +108,10 @@ public:
     // ServiceWorker specific method.
     virtual void didHandleActivateEvent(int eventID, WebServiceWorkerEventResult result) { }
 
+    // Called after ExtendableMessageEvent is handled by the ServiceWorker's
+    // script context.
+    virtual void didHandleExtendableMessageEvent(int eventID, WebServiceWorkerEventResult result) { }
+
     // ServiceWorker specific methods. Called after FetchEvent is handled by the
     // ServiceWorker's script context. When no response is provided, the browser
     // should fallback to native fetch.
@@ -123,6 +127,11 @@ public:
     // (dispatched via WebServiceWorkerContextProxy) is handled by the
     // ServiceWorker's script context.
     virtual void didHandleNotificationClickEvent(int eventID, WebServiceWorkerEventResult result) { }
+
+    // ServiceWorker specific method. Called after NotificationCloseEvent
+    // (dispatched via WebServiceWorkerContextProxy) is handled by the
+    // ServiceWorker's script context.
+    virtual void didHandleNotificationCloseEvent(int eventID, WebServiceWorkerEventResult result) { }
 
     // ServiceWorker specific method. Called after PushEvent (dispatched via
     // WebServiceWorkerContextProxy) is handled by the ServiceWorker's script
@@ -141,6 +150,12 @@ public:
     // Ownership of the returned object is transferred to the caller.
     // This is called on the main thread.
     virtual WebServiceWorkerProvider* createServiceWorkerProvider() { return nullptr; }
+
+    // Ownership of the passed callbacks is transferred to the callee, callee
+    // should delete the callbacks after calling either onSuccess or onError.
+    // WebServiceWorkerClientInfo and WebServiceWorkerError ownerships are
+    // passed to the WebServiceWorkerClientCallbacks implementation.
+    virtual void getClient(const WebString&, WebServiceWorkerClientCallbacks* callbacks) { BLINK_ASSERT_NOT_REACHED(); }
 
     // Ownership of the passed callbacks is transferred to the callee, callee
     // should delete the callbacks after calling either onSuccess or onError.
@@ -188,7 +203,7 @@ public:
 
     // Called when the worker wants to register subscopes to handle via foreign
     // fetch. Will only be called while an install event is in progress.
-    virtual void registerForeignFetchScopes(const WebVector<WebURL>& subScopes) { BLINK_ASSERT_NOT_REACHED(); }
+    virtual void registerForeignFetchScopes(const WebVector<WebURL>& subScopes, const WebVector<WebSecurityOrigin>& origins) { BLINK_ASSERT_NOT_REACHED(); }
 };
 
 } // namespace blink

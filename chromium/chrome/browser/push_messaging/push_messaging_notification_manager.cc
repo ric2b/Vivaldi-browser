@@ -9,7 +9,6 @@
 #include <bitset>
 
 #include "base/metrics/histogram_macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/notifications/platform_notification_service_impl.h"
@@ -18,6 +17,7 @@
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/prefs/pref_service.h"
 #include "components/rappor/rappor_utils.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/browser_context.h"
@@ -27,9 +27,9 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/notification_resources.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
-#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
@@ -38,12 +38,13 @@
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
 #else
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_iterator.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #endif
 
 using content::BrowserThread;
 using content::NotificationDatabaseData;
+using content::NotificationResources;
 using content::PlatformNotificationContext;
 using content::PlatformNotificationData;
 using content::PushMessagingService;
@@ -153,10 +154,10 @@ void PushMessagingNotificationManager::DidGetNotificationsFromDatabase(
     Profile* profile = (*it)->GetProfile();
     WebContents* active_web_contents = (*it)->GetActiveWebContents();
 #else
-  for (chrome::BrowserIterator it; !it.done(); it.Next()) {
-    Profile* profile = it->profile();
+  for (auto* browser : *BrowserList::GetInstance()) {
+    Profile* profile = browser->profile();
     WebContents* active_web_contents =
-        it->tab_strip_model()->GetActiveWebContents();
+        browser->tab_strip_model()->GetActiveWebContents();
 #endif
     if (IsTabVisible(profile, active_web_contents, origin)) {
       notification_needed = false;
@@ -344,8 +345,8 @@ void PushMessagingNotificationManager::DidWriteNotificationData(
   }
 
   PlatformNotificationServiceImpl::GetInstance()->DisplayPersistentNotification(
-      profile_, persistent_notification_id, origin, SkBitmap() /* icon */,
-      notification_data);
+      profile_, persistent_notification_id, origin, notification_data,
+      NotificationResources());
 
   message_handled_closure.Run();
 }

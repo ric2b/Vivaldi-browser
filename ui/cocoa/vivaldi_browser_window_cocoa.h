@@ -46,7 +46,7 @@ public:
   ~VivaldiBrowserWindowCocoa() override;
 
   // Overridden from BrowserWindow
-  void Show() override {}
+  void Show() override;
   void ShowInactive() override {}
   void Hide() override {}
   void SetBounds(const gfx::Rect& bounds) override;
@@ -110,7 +110,7 @@ public:
           translate::TranslateErrors::Type error_type,
           bool is_user_gesture) override {}
 
-#if defined(ENABLE_ONE_CLICK_SIGNIN)
+#if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
   void ShowOneClickSigninBubble(
           OneClickSigninBubbleType type,
           const base::string16& email,
@@ -141,9 +141,6 @@ public:
   void HandleKeyboardEvent(
                         const content::NativeWebKeyboardEvent& event) override;
   void CutCopyPaste(int command_id) override{}
-  bool SupportsFullscreenWithToolbar() const override;
-  void UpdateFullscreenWithToolbar(bool with_toolbar) override {};
-  bool IsFullscreenWithToolbar() const  override;
   WindowOpenDisposition GetDispositionForPopupBounds(
                                               const gfx::Rect& bounds) override;
   FindBar* CreateFindBar() override;
@@ -159,16 +156,12 @@ public:
       content::WebContents* contents,
       autofill::SaveCardBubbleController* controller,
       bool is_user_gesture) override;
-  void ToggleFullscreenToolbar() override {}
-  bool ShouldHideFullscreenToolbar() const override;
   void ShowAvatarBubbleFromAvatarButton(
       AvatarBubbleMode mode,
       const signin::ManageAccountsParams& manage_accounts_params,
       signin_metrics::AccessPoint access_point) override {}
-  void CloseModalSigninWindow() override {}
-  void ShowModalSigninWindow(
-      AvatarBubbleMode mode,
-      signin_metrics::AccessPoint access_point) override {}
+
+  gfx::Size GetContentsSize() const override;
 
  protected:
   void DestroyBrowser() override;
@@ -177,8 +170,6 @@ public:
   NSWindow* window() const;  // Accessor for the (current) |NSWindow|.
 
   scoped_ptr<Browser> browser_;
-  // Is the window active.
-  bool is_active_;
 
   // The window bounds.
   gfx::Rect bounds_;

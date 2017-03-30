@@ -6,8 +6,8 @@
 
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
-#include "core/inspector/InspectorState.h"
 #include "core/page/Page.h"
+#include "web/InspectorOverlay.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebViewImpl.h"
 
@@ -18,16 +18,18 @@ static const char showDebugBorders[] = "showDebugBorders";
 static const char showFPSCounter[] = "showFPSCounter";
 static const char showPaintRects[] = "showPaintRects";
 static const char showScrollBottleneckRects[] = "showScrollBottleneckRects";
+static const char showSizeOnResize[] = "showSizeOnResize";
 }
 
-PassOwnPtrWillBeRawPtr<InspectorRenderingAgent> InspectorRenderingAgent::create(WebLocalFrameImpl* webLocalFrameImpl)
+PassOwnPtrWillBeRawPtr<InspectorRenderingAgent> InspectorRenderingAgent::create(WebLocalFrameImpl* webLocalFrameImpl, InspectorOverlay* overlay)
 {
-    return adoptPtrWillBeNoop(new InspectorRenderingAgent(webLocalFrameImpl));
+    return adoptPtrWillBeNoop(new InspectorRenderingAgent(webLocalFrameImpl, overlay));
 }
 
-InspectorRenderingAgent::InspectorRenderingAgent(WebLocalFrameImpl* webLocalFrameImpl)
-    : InspectorBaseAgent<InspectorRenderingAgent, InspectorFrontend::Rendering>("Rendering")
+InspectorRenderingAgent::InspectorRenderingAgent(WebLocalFrameImpl* webLocalFrameImpl, InspectorOverlay* overlay)
+    : InspectorBaseAgent<InspectorRenderingAgent, protocol::Frontend::Rendering>("Rendering")
     , m_webLocalFrameImpl(webLocalFrameImpl)
+    , m_overlay(overlay)
 {
 }
 
@@ -39,10 +41,11 @@ WebViewImpl* InspectorRenderingAgent::webViewImpl()
 void InspectorRenderingAgent::restore()
 {
     ErrorString error;
-    setShowDebugBorders(&error, m_state->getBoolean(RenderingAgentState::showDebugBorders));
-    setShowFPSCounter(&error, m_state->getBoolean(RenderingAgentState::showFPSCounter));
-    setShowPaintRects(&error, m_state->getBoolean(RenderingAgentState::showPaintRects));
-    setShowScrollBottleneckRects(&error, m_state->getBoolean(RenderingAgentState::showScrollBottleneckRects));
+    setShowDebugBorders(&error, m_state->booleanProperty(RenderingAgentState::showDebugBorders, false));
+    setShowFPSCounter(&error, m_state->booleanProperty(RenderingAgentState::showFPSCounter, false));
+    setShowPaintRects(&error, m_state->booleanProperty(RenderingAgentState::showPaintRects, false));
+    setShowScrollBottleneckRects(&error, m_state->booleanProperty(RenderingAgentState::showScrollBottleneckRects, false));
+    setShowViewportSizeOnResize(&error, m_state->booleanProperty(RenderingAgentState::showSizeOnResize, false));
 }
 
 void InspectorRenderingAgent::disable(ErrorString*)
@@ -52,6 +55,7 @@ void InspectorRenderingAgent::disable(ErrorString*)
     setShowFPSCounter(&error, false);
     setShowPaintRects(&error, false);
     setShowScrollBottleneckRects(&error, false);
+    setShowViewportSizeOnResize(&error, false);
 }
 
 void InspectorRenderingAgent::setShowDebugBorders(ErrorString* errorString, bool show)
@@ -86,6 +90,13 @@ void InspectorRenderingAgent::setShowScrollBottleneckRects(ErrorString* errorStr
     webViewImpl()->setShowScrollBottleneckRects(show);
 }
 
+void InspectorRenderingAgent::setShowViewportSizeOnResize(ErrorString* errorString, bool show)
+{
+    m_state->setBoolean(RenderingAgentState::showSizeOnResize, show);
+    if (m_overlay)
+        m_overlay->setShowViewportSizeOnResize(show);
+}
+
 bool InspectorRenderingAgent::compositingEnabled(ErrorString* errorString)
 {
     if (!webViewImpl()->page()->settings().acceleratedCompositingEnabled()) {
@@ -99,6 +110,7 @@ bool InspectorRenderingAgent::compositingEnabled(ErrorString* errorString)
 DEFINE_TRACE(InspectorRenderingAgent)
 {
     visitor->trace(m_webLocalFrameImpl);
+    visitor->trace(m_overlay);
     InspectorBaseAgent::trace(visitor);
 }
 

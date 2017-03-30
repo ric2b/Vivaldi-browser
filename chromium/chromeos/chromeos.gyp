@@ -511,7 +511,6 @@
       'dependencies': [
         '../base/base.gyp:base',
         '../base/base.gyp:base_i18n',
-        '../base/base.gyp:base_prefs',
         '../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
         '../build/linux/system.gyp:dbus',
         '../build/linux/system.gyp:ssl',
@@ -520,6 +519,7 @@
         '../components/components.gyp:onc_component',
         '../components/components.gyp:proxy_config',
         '../components/components.gyp:signin_core_account_id',
+        '../components/prefs/prefs.gyp:prefs',
         '../crypto/crypto.gyp:crypto',
         '../dbus/dbus.gyp:dbus',
         '../google_apis/google_apis.gyp:google_apis',
@@ -529,7 +529,6 @@
         '../third_party/protobuf/protobuf.gyp:protobuf_lite',
         '../url/url.gyp:url_lib',
         'cryptohome_proto',
-        'ime/input_method.gyp:gencode',
         'power_manager_proto',
       ],
       'defines': [
@@ -645,13 +644,13 @@
       'target_name': 'chromeos_unittests',
       'type': 'executable',
       'dependencies': [
-        '../base/base.gyp:base_prefs_test_support',
         '../base/base.gyp:run_all_unittests',
         '../base/base.gyp:test_support_base',
         '../build/linux/system.gyp:dbus',
         '../build/linux/system.gyp:ssl',
         '../components/components.gyp:onc_component',
         '../components/components.gyp:proxy_config',
+        '../components/prefs/prefs.gyp:prefs_test_support',
         '../crypto/crypto.gyp:crypto',
         '../crypto/crypto.gyp:crypto_test_support',
         '../dbus/dbus.gyp:dbus_test_support',
@@ -672,12 +671,6 @@
         '..',
       ],
       'conditions': [
-        [ 'use_allocator!="none"', {
-          'dependencies': [
-            '../base/allocator/allocator.gyp:allocator',
-          ],
-          },
-        ],
         ['use_binder == 1', {
           'sources': [ '<@(chromeos_binder_test_sources)' ],
           'conditions': [

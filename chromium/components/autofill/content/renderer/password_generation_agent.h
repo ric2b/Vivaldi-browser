@@ -70,6 +70,7 @@ class PasswordGenerationAgent : public content::RenderFrameObserver {
     AccountCreationFormData(
         linked_ptr<PasswordForm> form,
         std::vector<blink::WebInputElement> password_elements);
+    AccountCreationFormData(const AccountCreationFormData& other);
     ~AccountCreationFormData();
   };
 
@@ -102,6 +103,10 @@ class PasswordGenerationAgent : public content::RenderFrameObserver {
   // Hides a password generation popup if one exists.
   void HidePopup();
 
+  // Sets |generation_element_| to the focused password field and shows a
+  // generation popup at this field.
+  void OnUserTriggeredGeneratePassword();
+
   // Stores forms that are candidates for account creation.
   AccountCreationFormDataList possible_account_creation_forms_;
 
@@ -124,6 +129,9 @@ class PasswordGenerationAgent : public content::RenderFrameObserver {
   // If the password field at |generation_element_| contains a generated
   // password.
   bool password_is_generated_;
+
+  // True if password generation was manually triggered.
+  bool is_manually_triggered_;
 
   // True if a password was generated and the user edited it. Used for UMA
   // stats.

@@ -534,6 +534,24 @@ void Dispatcher::DidCreateDocumentElement(blink::WebLocalFrame* frame) {
   }
 }
 
+void Dispatcher::RunScriptsAtDocumentStart(content::RenderFrame* render_frame) {
+  ExtensionFrameHelper* frame_helper = ExtensionFrameHelper::Get(render_frame);
+  if (!frame_helper)
+    return;  // The frame is invisible to extensions.
+
+  frame_helper->RunScriptsAtDocumentStart();
+  // |frame_helper| and |render_frame| might be dead by now.
+}
+
+void Dispatcher::RunScriptsAtDocumentEnd(content::RenderFrame* render_frame) {
+  ExtensionFrameHelper* frame_helper = ExtensionFrameHelper::Get(render_frame);
+  if (!frame_helper)
+    return;  // The frame is invisible to extensions.
+
+  frame_helper->RunScriptsAtDocumentEnd();
+  // |frame_helper| and |render_frame| might be dead by now.
+}
+
 void Dispatcher::OnExtensionResponse(int request_id,
                                      bool success,
                                      const base::ListValue& response,
@@ -678,6 +696,8 @@ std::vector<std::pair<std::string, int> > Dispatcher::GetJsResources() {
   resources.push_back(std::make_pair("webViewEvents", IDR_WEB_VIEW_EVENTS_JS));
   resources.push_back(std::make_pair("webViewInternal",
                                      IDR_WEB_VIEW_INTERNAL_CUSTOM_BINDINGS_JS));
+  resources.push_back(
+      std::make_pair("webViewExperimental", IDR_WEB_VIEW_EXPERIMENTAL_JS));
   if (content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests()) {
     resources.push_back(std::make_pair("webViewIframe",
                                        IDR_WEB_VIEW_IFRAME_JS));
@@ -843,13 +863,9 @@ void Dispatcher::RegisterNativeHandlers(ModuleSystem* module_system,
       scoped_ptr<NativeHandler>(new FileSystemNatives(context)));
 
   // Custom bindings.
-  // |dispatcher| is null in unit tests.
-  const ScriptContextSet* script_context_set = dispatcher ?
-      &dispatcher->script_context_set() : nullptr;
   module_system->RegisterNativeHandler(
       "app_window_natives",
-      scoped_ptr<NativeHandler>(new AppWindowCustomBindings(
-          script_context_set, context)));
+      scoped_ptr<NativeHandler>(new AppWindowCustomBindings(context)));
   module_system->RegisterNativeHandler(
       "blob_natives",
       scoped_ptr<NativeHandler>(new BlobNativeHandler(context)));
@@ -993,6 +1009,10 @@ void Dispatcher::OnRenderProcessShutdown() {
   v8_schema_registry_.reset();
   forced_idle_timer_.reset();
   content_watcher_.reset();
+  script_context_set_->ForEach(
+      std::string(), nullptr,
+      base::Bind(&ScriptContextSet::Remove,
+                 base::Unretained(script_context_set_.get())));
 }
 
 void Dispatcher::OnActivateExtension(const std::string& extension_id) {
@@ -1642,6 +1662,10 @@ void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
     module_system->Require("webView");
     module_system->Require("webViewApiMethods");
     module_system->Require("webViewAttributes");
+    if (context->GetAvailability("webViewExperimentalInternal")
+            .is_available()) {
+      module_system->Require("webViewExperimental");
+    }
 
     if (content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests()) {
       module_system->Require("webViewIframe");

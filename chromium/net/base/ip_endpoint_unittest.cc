@@ -54,7 +54,7 @@ struct TestData {
   std::string host;
   std::string host_normalized;
   bool ipv6;
-  IPAddressNumber ip_address;
+  IPAddress ip_address;
 } tests[] = {
   { "127.0.00.1", "127.0.0.1", false},
   { "192.168.1.1", "192.168.1.1", false },
@@ -68,8 +68,8 @@ class IPEndPointTest : public PlatformTest {
   void SetUp() override {
     // This is where we populate the TestData.
     for (int index = 0; index < test_count; ++index) {
-      EXPECT_TRUE(ParseIPLiteralToNumber(tests[index].host,
-          &tests[index].ip_address));
+      EXPECT_TRUE(
+          tests[index].ip_address.AssignFromIPLiteral(tests[index].host));
     }
   }
 };
@@ -198,6 +198,12 @@ TEST_F(IPEndPointTest, ToString) {
     EXPECT_EQ(tests[index].host_normalized + ":" + base::UintToString(port),
               result);
   }
+
+  // ToString() shouldn't crash on invalid addresses.
+  IPAddress invalid_address;
+  IPEndPoint invalid_endpoint(invalid_address, 8080);
+  EXPECT_EQ("", invalid_endpoint.ToString());
+  EXPECT_EQ("", invalid_endpoint.ToStringWithoutPort());
 }
 
 }  // namespace

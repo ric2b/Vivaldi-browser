@@ -16,7 +16,6 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config_service_client.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_configurator.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_delegate.h"
-#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_experiments_stats.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_interceptor.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_mutable_config_values.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_network_delegate.h"
@@ -27,6 +26,7 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_switches.h"
+#include "net/base/load_flags.h"
 #include "net/log/net_log.h"
 #include "net/url_request/http_user_agent_settings.h"
 #include "net/url_request/static_http_user_agent_settings.h"
@@ -149,13 +149,9 @@ DataReductionProxyIOData::DataReductionProxyIOData(
                    base::Unretained(this))));
   }
 
-  proxy_delegate_.reset(
-      new DataReductionProxyDelegate(request_options_.get(), config_.get()));
-  // It is safe to use base::Unretained here, since it gets executed
-  // synchronously on the IO thread, and |this| outlives the caller (since the
-  // caller is owned by |this|.
-  experiments_stats_.reset(new DataReductionProxyExperimentsStats(base::Bind(
-      &DataReductionProxyIOData::SetInt64Pref, base::Unretained(this))));
+  proxy_delegate_.reset(new DataReductionProxyDelegate(
+      request_options_.get(), config_.get(), configurator_.get(),
+      event_creator_.get(), bypass_stats_.get(), net_log_));
  }
 
  DataReductionProxyIOData::DataReductionProxyIOData()
@@ -195,7 +191,6 @@ void DataReductionProxyIOData::InitializeOnIOThread() {
   config_->InitializeOnIOThread(basic_url_request_context_getter_.get());
   if (config_client_.get())
     config_client_->InitializeOnIOThread(url_request_context_getter_);
-  experiments_stats_->InitializeOnIOThread();
   if (ui_task_runner_->BelongsToCurrentThread()) {
     service_->SetIOData(weak_factory_.GetWeakPtr());
     return;
@@ -227,11 +222,18 @@ DataReductionProxyIOData::CreateNetworkDelegate(
   scoped_ptr<DataReductionProxyNetworkDelegate> network_delegate(
       new DataReductionProxyNetworkDelegate(
           std::move(wrapped_network_delegate), config_.get(),
-          request_options_.get(), configurator_.get(), experiments_stats_.get(),
-          net_log_, event_creator_.get()));
+          request_options_.get(), configurator_.get()));
   if (track_proxy_bypass_statistics)
     network_delegate->InitIODataAndUMA(this, bypass_stats_.get());
   return network_delegate;
+}
+
+scoped_ptr<DataReductionProxyDelegate>
+DataReductionProxyIOData::CreateProxyDelegate() const {
+  DCHECK(io_task_runner_->BelongsToCurrentThread());
+  return make_scoped_ptr(new DataReductionProxyDelegate(
+      request_options_.get(), config_.get(), configurator_.get(),
+      event_creator_.get(), bypass_stats_.get(), net_log_));
 }
 
 // TODO(kundaji): Rename this method to something more descriptive.
@@ -266,6 +268,7 @@ void DataReductionProxyIOData::SetDataReductionProxyConfiguration(
 
 bool DataReductionProxyIOData::ShouldEnableLoFiMode(
     const net::URLRequest& request) {
+  DCHECK((request.load_flags() & net::LOAD_MAIN_FRAME) != 0);
   if (!config_ || (config_->IsBypassedByDataReductionProxyLocalRules(
                       request, configurator_->GetProxyConfig()))) {
     return false;

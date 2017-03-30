@@ -30,8 +30,14 @@
 
 #include "platform/geometry/FloatQuad.h"
 
+#include "third_party/skia/include/core/SkPoint.h"
 #include <algorithm>
+#include <cmath>
 #include <limits>
+
+#ifndef NDEBUG
+#include <stdio.h>
+#endif
 
 namespace blink {
 
@@ -78,13 +84,23 @@ inline bool isPointInTriangle(const FloatPoint& p, const FloatPoint& t1, const F
     return (u >= 0) && (v >= 0) && (u + v <= 1);
 }
 
+static inline float saturateInf(float value)
+{
+    if (UNLIKELY(std::isinf(value))) {
+        return std::signbit(value)
+            ? std::numeric_limits<int>::min()
+            : std::numeric_limits<int>::min();
+    }
+    return value;
+}
+
 FloatRect FloatQuad::boundingBox() const
 {
-    float left   = min4(m_p1.x(), m_p2.x(), m_p3.x(), m_p4.x());
-    float top    = min4(m_p1.y(), m_p2.y(), m_p3.y(), m_p4.y());
+    float left   = saturateInf(min4(m_p1.x(), m_p2.x(), m_p3.x(), m_p4.x()));
+    float top    = saturateInf(min4(m_p1.y(), m_p2.y(), m_p3.y(), m_p4.y()));
 
-    float right  = max4(m_p1.x(), m_p2.x(), m_p3.x(), m_p4.x());
-    float bottom = max4(m_p1.y(), m_p2.y(), m_p3.y(), m_p4.y());
+    float right  = saturateInf(max4(m_p1.x(), m_p2.x(), m_p3.x(), m_p4.x()));
+    float bottom = saturateInf(max4(m_p1.y(), m_p2.y(), m_p3.y(), m_p4.y()));
 
     return FloatRect(left, top, right - left, bottom - top);
 }
@@ -92,6 +108,11 @@ FloatRect FloatQuad::boundingBox() const
 static inline bool withinEpsilon(float a, float b)
 {
     return fabs(a - b) < std::numeric_limits<float>::epsilon();
+}
+
+FloatQuad::FloatQuad(const SkPoint(&quad)[4])
+    : FloatQuad(FloatPoint(quad[0]), FloatPoint(quad[1]), FloatPoint(quad[2]), FloatPoint(quad[3]))
+{
 }
 
 bool FloatQuad::isRectilinear() const
@@ -198,6 +219,7 @@ static inline bool lineIntersectsCircle(const FloatPoint& center, float radius, 
     // The nearest point on the line is between p0 and p1?
     float x = - a * c / (a * a + b * b);
     float y = - b * c / (a * a + b * b);
+
     return (((x0 <= x && x <= x1) || (x0 >= x && x >= x1))
         && ((y0 <= y && y <= y1) || (y1 <= y && y <= y0)));
 }
@@ -229,5 +251,12 @@ bool FloatQuad::isCounterclockwise() const
     // Return if the two first vectors are turning clockwise. If the quad is convex then all following vectors will turn the same way.
     return determinant(m_p2 - m_p1, m_p3 - m_p2) < 0;
 }
+
+#ifndef NDEBUG
+void FloatQuad::show() const
+{
+    fprintf(stderr, "FloatQuad: [p1=(%f,%f), p2=(%f,%f), p3=(%f,%f), p4=(%f,%f))]\n", m_p1.x(), m_p1.y(), m_p2.x(), m_p2.y(), m_p3.x(), m_p3.y(), m_p4.x(), m_p4.y());
+}
+#endif
 
 } // namespace blink

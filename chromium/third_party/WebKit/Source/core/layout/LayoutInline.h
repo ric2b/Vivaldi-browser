@@ -232,8 +232,8 @@ private:
 
     LayoutUnit offsetLeft() const final;
     LayoutUnit offsetTop() const final;
-    LayoutUnit offsetWidth() const final { return linesBoundingBox().width(); }
-    LayoutUnit offsetHeight() const final { return linesBoundingBox().height(); }
+    LayoutUnit offsetWidth() const final { return LayoutUnit(linesBoundingBox().width()); }
+    LayoutUnit offsetHeight() const final { return LayoutUnit(linesBoundingBox().height()); }
 
     LayoutRect absoluteClippedOverflowRect() const override;
     LayoutRect clippedOverflowRectForPaintInvalidation(const LayoutBoxModelObject* paintInvalidationContainer, const PaintInvalidationState* = nullptr) const override;
@@ -242,8 +242,6 @@ private:
     // This method differs from clippedOverflowRectForPaintInvalidation in that it includes
     // the rects for culled inline boxes, which aren't necessary for paint invalidation.
     LayoutRect clippedOverflowRect(const LayoutBoxModelObject*, const PaintInvalidationState* = nullptr) const;
-
-    void mapLocalToAncestor(const LayoutBoxModelObject* ancestor, TransformState&, MapCoordinatesFlags = ApplyContainerFlip, bool* wasFixed = 0, const PaintInvalidationState* = nullptr) const override;
 
     PositionWithAffinity positionForPoint(const LayoutPoint&) final;
 
@@ -257,6 +255,7 @@ private:
 
     void dirtyLinesFromChangedChild(LayoutObject* child) final { m_lineBoxes.dirtyLinesFromChangedChild(LineLayoutItem(this), LineLayoutItem(child)); }
 
+    // TODO(leviw): This should probably be an int. We don't snap equivalent lines to different heights.
     LayoutUnit lineHeight(bool firstLine, LineDirectionMode, LinePositionMode = PositionOnContainingLine) const final;
     int baselinePosition(FontBaseline, bool firstLine, LineDirectionMode, LinePositionMode = PositionOnContainingLine) const final;
 

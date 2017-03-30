@@ -81,6 +81,30 @@ CommandUtil.getCommandEntries = function(element) {
 };
 
 /**
+ * Extracts a directory which contains entries on which command event was
+ * dispatched.
+ *
+ * @param {EventTarget} element Element which is the command event's target.
+ * @param {DirectoryModel} directoryModel
+ * @return {DirectoryEntry|FakeEntry} The extracted parent entry.
+ */
+CommandUtil.getParentEntry = function(element, directoryModel) {
+  if (element instanceof DirectoryTree) {
+    if (!element.selectedItem)
+      return null;
+    var parentItem = element.selectedItem.parentItem;
+    return parentItem ? parentItem.entry : null;
+  } else if (element instanceof DirectoryItem ||
+             element instanceof ShortcutItem) {
+    return element.parentItem ? element.parentItem.entry : null;
+  } else if (element instanceof cr.ui.List) {
+    return directoryModel ? directoryModel.getCurrentDirEntry() : null;
+  } else {
+    return null;
+  }
+};
+
+/**
  * @param {EventTarget} element
  * @param {!FileManager} fileManager
  * @return {VolumeInfo}
@@ -251,20 +275,39 @@ CommandUtil.getOnlyOneSelectedDirectory = function(selection) {
 };
 
 /**
- * If entry is fake or root entry, we don't show menu item for it.
+ * Returns true if the given entry is the root entry of the volume.
+ * @param {VolumeManagerWrapper} volumeManager
+ * @param {(!Entry|!FakeEntry)} entry Entry or a fake entry.
+ * @return {boolean} True if the entry is a root entry.
+ */
+CommandUtil.isRootEntry = function(volumeManager, entry) {
+  if (!volumeManager || !entry)
+    return false;
+
+  var volumeInfo = volumeManager.getVolumeInfo(entry);
+  return !!volumeInfo && volumeInfo.displayRoot === entry;
+};
+
+/**
+ * If entry is fake/invalid/root, we don't show menu item for it.
  * @param {VolumeManagerWrapper} volumeManager
  * @param {(!Entry|!FakeEntry)} entry Entry or a fake entry.
  * @return {boolean} True if we should show menu item for the entry.
  */
 CommandUtil.shouldShowMenuItemForEntry = function(volumeManager, entry) {
-  if (!volumeManager || util.isFakeEntry(entry))
+  // If the entry is fake entry, hide context menu entries.
+  if (util.isFakeEntry(entry))
     return false;
 
-  var volumeInfo = volumeManager.getVolumeInfo(entry);
-  if (!volumeInfo)
+  // If the entry is not a valid entry, hide context menu entries.
+  if (!volumeManager || !volumeManager.getVolumeInfo(entry))
     return false;
 
-  return volumeInfo.displayRoot !== entry;
+  // If the entry is root entry of its volume, hide context menu entries.
+  if (CommandUtil.isRootEntry(volumeManager, entry))
+    return false;
+
+  return true;
 };
 
 /**
@@ -576,8 +619,7 @@ CommandHandler.COMMANDS_['new-folder'] = (function() {
     if (event.target instanceof DirectoryItem ||
         event.target instanceof DirectoryTree) {
       var entry = CommandUtil.getCommandEntry(event.target);
-      if (!entry || !CommandUtil.shouldShowMenuItemForEntry(
-          fileManager.volumeManager, entry)) {
+      if (!entry || util.isFakeEntry(entry)) {
         event.canExecute = false;
         event.command.setHidden(true);
         return;
@@ -585,7 +627,8 @@ CommandHandler.COMMANDS_['new-folder'] = (function() {
 
       var locationInfo = fileManager.volumeManager.getLocationInfo(entry);
       event.canExecute = locationInfo && !locationInfo.isReadOnly;
-      event.command.setHidden(false);
+      event.command.setHidden(
+          CommandUtil.isRootEntry(fileManager.volumeManager, entry));
     } else {
       var directoryModel = fileManager.directoryModel;
       event.canExecute = !fileManager.isOnReadonlyDirectory() &&
@@ -892,9 +935,12 @@ CommandHandler.COMMANDS_['rename'] = /** @type {Command} */ ({
       return;
     }
 
-    var locationInfo = fileManager.volumeManager.getLocationInfo(entries[0]);
-    event.canExecute = entries.length === 1 && !!locationInfo &&
-        !locationInfo.isReadOnly;
+    var parentEntry =
+        CommandUtil.getParentEntry(event.target, fileManager.directoryModel);
+    var locationInfo = parentEntry ?
+        fileManager.volumeManager.getLocationInfo(parentEntry) : null;
+    event.canExecute =
+        entries.length === 1 && !!locationInfo && !locationInfo.isReadOnly;
     event.command.setHidden(false);
   }
 });
@@ -1417,6 +1463,27 @@ CommandHandler.COMMANDS_['install-new-extension'] = /** @type {Command} */ ({
 });
 
 /**
+ * Opens the gear menu on Alt-E.
+ * @type {Command}
+ */
+CommandHandler.COMMANDS_['open-gear-menu'] = /** @type {Command} */ ({
+  /**
+   * @param {!Event} event Command event.
+   * @param {!FileManager} fileManager FileManager to use.
+   */
+  execute: function(event, fileManager) {
+    fileManager.ui.gearButton.showMenu(true);
+  },
+  /**
+   * @param {!Event} event Command event.
+   * @param {!FileManager} fileManager FileManager to use.
+   */
+  canExecute: function(event, fileManager) {
+    event.canExecute = CommandUtil.canExecuteAlways;
+  }
+});
+
+/**
  * Configures the currently selected volume.
  */
 CommandHandler.COMMANDS_['configure'] = /** @type {Command} */ ({
@@ -1459,5 +1526,66 @@ CommandHandler.COMMANDS_['refresh'] = /** @type {Command} */ ({
     event.canExecute = volumeInfo && !volumeInfo.watchable;
     event.command.setHidden(!event.canExecute ||
         fileManager.directoryModel.getFileListSelection().getCheckSelectMode());
+  }
+});
+
+/**
+ * Refreshes the currently selected directory.
+ */
+CommandHandler.COMMANDS_['set-wallpaper'] = /** @type {Command} */ ({
+  /**
+   * @param {!Event} event Command event.
+   * @param {!FileManager} fileManager FileManager to use.
+   */
+  execute: function(event, fileManager) {
+    var entry = fileManager.getSelection().entries[0];
+    new Promise(function(resolve, reject) {
+      entry.file(resolve, reject);
+    }).then(function(blob) {
+      var fileReader = new FileReader();
+      return new Promise(function(resolve, reject) {
+        fileReader.onload = function() {
+          resolve(fileReader.result);
+        };
+        fileReader.onerror = function() {
+          reject(fileReader.error);
+        };
+        fileReader.readAsArrayBuffer(blob);
+      })
+    }).then(function(/** @type {!ArrayBuffer} */ arrayBuffer) {
+      return new Promise(function(resolve, reject) {
+        chrome.wallpaper.setWallpaper({
+            data: arrayBuffer,
+            layout: chrome.wallpaper.WallpaperLayout.CENTER_CROPPED,
+            filename: 'wallpaper'
+          }, function() {
+            if (chrome.runtime.lastError) {
+              reject(chrome.runtime.lastError);
+            }else{
+              resolve(null);
+            }
+          });
+      });
+    }).catch(function() {
+      fileManager.ui.alertDialog.showHtml(
+          '', str('ERROR_INVALID_WALLPAPER'), null, null, null);
+    });
+  },
+  canExecute: function(event, fileManager) {
+    var entries = CommandUtil.getCommandEntries(event.target);
+    if (entries.length === 0) {
+      event.canExecute = false;
+      event.command.setHidden(true);
+      return;
+    }
+    var type = FileType.getType(entries[0]);
+    if (entries.length !== 1 || type.type !== 'image') {
+      event.canExecute = false;
+      event.command.setHidden(true);
+      return;
+    }
+
+    event.canExecute = type.subtype === 'JPEG' || type.subtype === 'PNG';
+    event.command.setHidden(false);
   }
 });

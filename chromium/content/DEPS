@@ -13,11 +13,6 @@ include_rules = [
   "+content/shell",  # for content_browsertests
   "+content/test",
 
-  # content isn't tied to prefs so that other embedders are able to pick
-  # different ways of storing their preferences. Also, this is to avoid prefs
-  # being used as a parallel API to the Content API.
-  "-base/prefs",
-
   "+blink",
 
   "+cc",
@@ -34,6 +29,9 @@ include_rules = [
   "+dbus",
   "+gpu",
   "+mojo/common",
+  "+mojo/edk/embedder",
+  "+mojo/edk/js",
+  "+mojo/edk/test",
   "+mojo/message_pump",
   "+mojo/public",
   "+net",
@@ -62,16 +60,12 @@ include_rules = [
   "+third_party/angle",
   "+third_party/flac",
   "+third_party/libjingle",
-  "+third_party/mojo/src/mojo/edk/embedder",
-  "+third_party/mojo/src/mojo/edk/js",
-  "+third_party/mojo/src/mojo/edk/test",
   "+third_party/mozilla",
   "+third_party/npapi/bindings",
   "+third_party/ocmock",
   "+third_party/re2",
   "+third_party/skia",
   "+third_party/sqlite",
-  "+third_party/tcmalloc",
   "+third_party/khronos",
   "+third_party/webrtc",
   "+third_party/zlib/google",

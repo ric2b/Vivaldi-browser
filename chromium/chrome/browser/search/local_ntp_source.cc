@@ -30,6 +30,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "grit/browser_resources.h"
 #include "grit/theme_resources.h"
 #include "net/url_request/url_request.h"
@@ -211,7 +212,7 @@ void LocalNtpSource::StartDataRequest(
     return;
   }
 
-#if !defined(GOOGLE_CHROME_BUILD) && !defined(OS_IOS) && !defined(OFFICIAL_BUILD) && !defined(VIVALDI_BUILD)
+#if !defined(GOOGLE_CHROME_BUILD) && !defined(OFFICIAL_BUILD) && !defined(VIVALDI_BUILD)
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kLocalNtpReload)) {
     if (stripped_path == "local-ntp.html" || stripped_path == "local-ntp.js" ||
@@ -221,7 +222,7 @@ void LocalNtpSource::StartDataRequest(
       return;
     }
   }
-#endif  // !defined(GOOGLE_CHROME_BUILD) && !defined(OS_IOS)
+#endif  // !defined(GOOGLE_CHROME_BUILD)
 
   float scale = 1.0f;
   std::string filename;

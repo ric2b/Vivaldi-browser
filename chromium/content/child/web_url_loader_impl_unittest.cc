@@ -14,8 +14,11 @@
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
+#include "components/scheduler/child/scheduler_tqm_delegate_impl.h"
 #include "components/scheduler/child/web_task_runner_impl.h"
+#include "components/scheduler/child/worker_scheduler.h"
 #include "content/child/request_extra_data.h"
 #include "content/child/request_info.h"
 #include "content/child/resource_dispatcher.h"
@@ -68,7 +71,6 @@ class TestResourceDispatcher : public ResourceDispatcher {
  public:
   TestResourceDispatcher() :
       ResourceDispatcher(nullptr, nullptr),
-      peer_(NULL),
       canceled_(false) {
   }
 
@@ -78,10 +80,11 @@ class TestResourceDispatcher : public ResourceDispatcher {
 
   int StartAsync(const RequestInfo& request_info,
                  ResourceRequestBody* request_body,
-                 RequestPeer* peer) override {
+                 scoped_ptr<RequestPeer> peer) override {
     EXPECT_FALSE(peer_);
-    peer_ = peer;
+    peer_ = std::move(peer);
     url_ = request_info.url;
+    stream_url_ = request_info.resource_body_stream_url;
     return 1;
   }
 
@@ -90,29 +93,29 @@ class TestResourceDispatcher : public ResourceDispatcher {
     canceled_ = true;
   }
 
-  RequestPeer* peer() { return peer_; }
+  RequestPeer* peer() { return peer_.get(); }
 
   bool canceled() { return canceled_; }
 
   const GURL& url() { return url_; }
+  const GURL& stream_url() { return stream_url_; }
 
  private:
-  RequestPeer* peer_;
+  scoped_ptr<RequestPeer> peer_;
   bool canceled_;
   GURL url_;
+  GURL stream_url_;
 
   DISALLOW_COPY_AND_ASSIGN(TestResourceDispatcher);
 };
 
 class TestWebURLLoaderClient : public blink::WebURLLoaderClient {
  public:
-  TestWebURLLoaderClient(
-      ResourceDispatcher* dispatcher,
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner)
-      : loader_(
-          new WebURLLoaderImpl(
-              dispatcher,
-              make_scoped_ptr(new scheduler::WebTaskRunnerImpl(task_runner)))),
+  TestWebURLLoaderClient(ResourceDispatcher* dispatcher,
+                         scoped_refptr<scheduler::TaskQueue> task_runner)
+      : loader_(new WebURLLoaderImpl(
+            dispatcher,
+            make_scoped_ptr(new scheduler::WebTaskRunnerImpl(task_runner)))),
         expect_multipart_response_(false),
         delete_on_receive_redirect_(false),
         delete_on_receive_response_(false),
@@ -261,7 +264,15 @@ class TestWebURLLoaderClient : public blink::WebURLLoaderClient {
 class WebURLLoaderImplTest : public testing::Test {
  public:
   explicit WebURLLoaderImplTest()
-      : client_(&dispatcher_, message_loop_.task_runner()) {}
+      : worker_scheduler_(scheduler::WorkerScheduler::Create(
+            scheduler::SchedulerTqmDelegateImpl::Create(
+                &message_loop_,
+                make_scoped_ptr(new base::DefaultTickClock())))) {
+    worker_scheduler_->Init();
+    client_.reset(new TestWebURLLoaderClient(
+        &dispatcher_, worker_scheduler_->DefaultTaskRunner()));
+  }
+
   ~WebURLLoaderImplTest() override {}
 
   void DoStartAsyncRequest() {
@@ -304,23 +315,6 @@ class WebURLLoaderImplTest : public testing::Test {
                                strlen(kTestData));
     EXPECT_TRUE(client()->did_finish());
     // There should be no error.
-    EXPECT_EQ(net::OK, client()->error().reason);
-    EXPECT_EQ("", client()->error().domain.utf8());
-  }
-
-  void DoReceiveCompletedResponse() {
-    EXPECT_FALSE(client()->did_receive_response());
-    EXPECT_EQ("", client()->received_data());
-    EXPECT_FALSE(client()->did_finish());
-
-    peer()->OnReceivedCompletedResponse(
-        content::ResourceResponseInfo(),
-        make_scoped_ptr(new FixedReceivedData(kTestData, strlen(kTestData),
-                                              strlen(kTestData))),
-        net::OK, false, false, "", base::TimeTicks(), strlen(kTestData));
-
-    EXPECT_TRUE(client()->did_receive_response());
-    EXPECT_EQ(kTestData, client()->received_data());
     EXPECT_EQ(net::OK, client()->error().reason);
     EXPECT_EQ("", client()->error().domain.utf8());
   }
@@ -368,15 +362,18 @@ class WebURLLoaderImplTest : public testing::Test {
     EXPECT_NE(kMultipartResponse, client()->received_data());
   }
 
-  TestWebURLLoaderClient* client() { return &client_; }
+  TestWebURLLoaderClient* client() { return client_.get(); }
   TestResourceDispatcher* dispatcher() { return &dispatcher_; }
   RequestPeer* peer() { return dispatcher()->peer(); }
   base::MessageLoop* message_loop() { return &message_loop_; }
 
  private:
   base::MessageLoop message_loop_;
+  // WorkerScheduler is needed because WebURLLoaderImpl needs a
+  // scheduler::TaskQueue.
+  scoped_ptr<scheduler::WorkerScheduler> worker_scheduler_;
   TestResourceDispatcher dispatcher_;
-  TestWebURLLoaderClient client_;
+  scoped_ptr<TestWebURLLoaderClient> client_;
 };
 
 TEST_F(WebURLLoaderImplTest, Success) {
@@ -404,13 +401,6 @@ TEST_F(WebURLLoaderImplTest, Failure) {
   DoReceiveData();
   DoFailRequest();
   EXPECT_FALSE(dispatcher()->canceled());
-}
-
-TEST_F(WebURLLoaderImplTest, ReceiveCompletedResponse) {
-  DoStartAsyncRequest();
-  DoReceiveCompletedResponse();
-  EXPECT_FALSE(dispatcher()->canceled());
-  EXPECT_EQ(kTestData, client()->received_data());
 }
 
 // The client may delete the WebURLLoader during any callback from the loader.
@@ -681,11 +671,12 @@ TEST_F(WebURLLoaderImplTest, MultipartDeleteFail) {
 // navigation commit are properly applied.
 TEST_F(WebURLLoaderImplTest, BrowserSideNavigationCommit) {
   // Initialize the request and the stream override.
+  const GURL kNavigationURL = GURL(kTestURL);
   const GURL kStreamURL = GURL("http://bar");
   const std::string kMimeType = "text/html";
   blink::WebURLRequest request;
   request.initialize();
-  request.setURL(GURL(kTestURL));
+  request.setURL(kNavigationURL);
   request.setFrameType(blink::WebURLRequest::FrameTypeTopLevel);
   request.setRequestContext(blink::WebURLRequest::RequestContextFrame);
   scoped_ptr<StreamOverrideParameters> stream_override(
@@ -700,9 +691,10 @@ TEST_F(WebURLLoaderImplTest, BrowserSideNavigationCommit) {
 
   client()->loader()->loadAsynchronously(request, client());
 
-  // The stream url should have been requestead instead of the request url.
+  // The stream url should have been added to the RequestInfo.
   ASSERT_TRUE(peer());
-  EXPECT_EQ(kStreamURL, dispatcher()->url());
+  EXPECT_EQ(kNavigationURL, dispatcher()->url());
+  EXPECT_EQ(kStreamURL, dispatcher()->stream_url());
 
   EXPECT_FALSE(client()->did_receive_response());
   peer()->OnReceivedResponse(content::ResourceResponseInfo());

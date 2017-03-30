@@ -21,7 +21,7 @@ class InkDropAnimationController;
 class InkDropHost;
 class View;
 
-// An InkDropDelegate that handles animations for toolbar buttons.
+// An InkDropDelegate that handles animations for things that act like buttons.
 class VIEWS_EXPORT ButtonInkDropDelegate : public InkDropDelegate,
                                            public ui::EventHandler {
  public:
@@ -29,14 +29,12 @@ class VIEWS_EXPORT ButtonInkDropDelegate : public InkDropDelegate,
   ~ButtonInkDropDelegate() override;
 
   // InkDropDelegate:
-  void SetInkDropSize(int large_size,
-                      int large_corner_radius,
-                      int small_size,
-                      int small_corner_radius) override;
-  void OnLayout() override;
   void OnAction(InkDropState state) override;
+  void SnapToActivated() override;
+  void SetHovered(bool is_hovered) override;
 
   // ui::EventHandler:
+  void OnMouseEvent(ui::MouseEvent* event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
 
  private:

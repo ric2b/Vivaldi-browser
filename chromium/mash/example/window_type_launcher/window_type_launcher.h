@@ -7,22 +7,21 @@
 
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "mojo/shell/public/cpp/application_delegate.h"
+#include "mojo/shell/public/cpp/shell_client.h"
 
 namespace views {
 class AuraInit;
 }
 
-class WindowTypeLauncher : public mojo::ApplicationDelegate {
+class WindowTypeLauncher : public mojo::ShellClient {
  public:
   WindowTypeLauncher();
   ~WindowTypeLauncher() override;
 
  private:
-  // ApplicationDelegate:
-  void Initialize(mojo::ApplicationImpl* app) override;
-  bool ConfigureIncomingConnection(
-      mojo::ApplicationConnection* connection) override;
+  // mojo::ShellClient:
+  void Initialize(mojo::Connector* connector, const std::string& url,
+                  uint32_t id, uint32_t user_id) override;
 
   scoped_ptr<views::AuraInit> aura_init_;
 

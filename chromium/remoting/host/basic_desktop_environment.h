@@ -21,8 +21,6 @@ class DesktopCaptureOptions;
 
 namespace remoting {
 
-class GnubbyAuthHandler;
-
 // Used to create audio/video capturers and event executor that work with
 // the local console.
 class BasicDesktopEnvironment : public DesktopEnvironment {
@@ -37,20 +35,24 @@ class BasicDesktopEnvironment : public DesktopEnvironment {
   scoped_ptr<webrtc::MouseCursorMonitor> CreateMouseCursorMonitor() override;
   std::string GetCapabilities() const override;
   void SetCapabilities(const std::string& capabilities) override;
-  scoped_ptr<GnubbyAuthHandler> CreateGnubbyAuthHandler(
-      protocol::ClientStub* client_stub) override;
 
  protected:
   friend class BasicDesktopEnvironmentFactory;
 
   BasicDesktopEnvironment(
       scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner,
+      scoped_refptr<base::SingleThreadTaskRunner> video_capture_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> input_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner,
       bool supports_touch_events);
 
   scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner() const {
     return caller_task_runner_;
+  }
+
+  scoped_refptr<base::SingleThreadTaskRunner> video_capture_task_runner()
+      const {
+    return video_capture_task_runner_;
   }
 
   scoped_refptr<base::SingleThreadTaskRunner> input_task_runner() const {
@@ -69,6 +71,9 @@ class BasicDesktopEnvironment : public DesktopEnvironment {
   // Task runner on which methods of DesktopEnvironment interface should be
   // called.
   scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner_;
+
+  // Used to run video capturer.
+  scoped_refptr<base::SingleThreadTaskRunner> video_capture_task_runner_;
 
   // Used to run input-related tasks.
   scoped_refptr<base::SingleThreadTaskRunner> input_task_runner_;
@@ -94,6 +99,7 @@ class BasicDesktopEnvironmentFactory : public DesktopEnvironmentFactory {
  public:
   BasicDesktopEnvironmentFactory(
       scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner,
+      scoped_refptr<base::SingleThreadTaskRunner> video_capture_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> input_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner);
   ~BasicDesktopEnvironmentFactory() override;
@@ -110,6 +116,11 @@ class BasicDesktopEnvironmentFactory : public DesktopEnvironmentFactory {
     return caller_task_runner_;
   }
 
+  scoped_refptr<base::SingleThreadTaskRunner> video_capture_task_runner()
+      const {
+    return video_capture_task_runner_;
+  }
+
   scoped_refptr<base::SingleThreadTaskRunner> input_task_runner() const {
     return input_task_runner_;
   }
@@ -124,6 +135,9 @@ class BasicDesktopEnvironmentFactory : public DesktopEnvironmentFactory {
   // Task runner on which methods of DesktopEnvironmentFactory interface should
   // be called.
   scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner_;
+
+  // Used to run video capture tasks.
+  scoped_refptr<base::SingleThreadTaskRunner> video_capture_task_runner_;
 
   // Used to run input-related tasks.
   scoped_refptr<base::SingleThreadTaskRunner> input_task_runner_;

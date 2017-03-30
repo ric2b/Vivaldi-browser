@@ -178,7 +178,7 @@ const Extension* ExtensionContextMenuModelTest::AddExtensionWithHostPermission(
 
 Browser* ExtensionContextMenuModelTest::GetBrowser() {
   if (!browser_) {
-    Browser::CreateParams params(profile(), chrome::GetActiveDesktop());
+    Browser::CreateParams params(profile());
     test_window_.reset(new TestBrowserWindow());
     params.window = test_window_.get();
     browser_.reset(new Browser(params));
@@ -522,7 +522,7 @@ TEST_F(ExtensionContextMenuModelTest, TestPageAccessSubmenu) {
   int run_count = 0;
   base::Closure increment_run_count(base::Bind(&Increment, &run_count));
   active_script_controller->RequestScriptInjectionForTesting(
-      extension, increment_run_count);
+      extension, UserScript::DOCUMENT_IDLE, increment_run_count);
 
   ExtensionContextMenuModel menu(extension, GetBrowser(),
                                  ExtensionContextMenuModel::VISIBLE, nullptr);
@@ -582,7 +582,7 @@ TEST_F(ExtensionContextMenuModelTest, TestPageAccessSubmenu) {
 
   // Request another run.
   active_script_controller->RequestScriptInjectionForTesting(
-      extension, increment_run_count);
+      extension, UserScript::DOCUMENT_IDLE, increment_run_count);
 
   // Change the mode to be "Run on all sites".
   menu.ExecuteCommand(kRunOnAllSites, 0);
@@ -612,7 +612,7 @@ TEST_F(ExtensionContextMenuModelTest, TestPageAccessSubmenu) {
   EXPECT_TRUE(menu.IsCommandIdChecked(kRunOnAllSites));
 
   active_script_controller->RequestScriptInjectionForTesting(
-      extension, increment_run_count);
+      extension, UserScript::DOCUMENT_IDLE, increment_run_count);
 
   // Return the mode to "Run on click".
   menu.ExecuteCommand(kRunOnClick, 0);

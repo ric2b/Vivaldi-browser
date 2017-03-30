@@ -109,7 +109,7 @@ void ServicePortProvider::OnConnectResult(
     scoped_ptr<blink::WebServicePortConnectCallbacks> callbacks,
     ServicePortConnectResult result,
     int32_t port_id) {
-  if (result == SERVICE_PORT_CONNECT_RESULT_ACCEPT) {
+  if (result == ServicePortConnectResult::ACCEPT) {
     callbacks->onSuccess(port_id);
   } else {
     callbacks->onError();
@@ -124,9 +124,7 @@ ServicePortServicePtr& ServicePortProvider::GetServicePortServicePtr() {
                                                base::Passed(&request)));
 
     // Setup channel for browser to post events back to this class.
-    ServicePortServiceClientPtr client_ptr;
-    binding_.Bind(GetProxy(&client_ptr));
-    service_port_service_->SetClient(std::move(client_ptr));
+    service_port_service_->SetClient(binding_.CreateInterfacePtrAndBind());
   }
   return service_port_service_;
 }

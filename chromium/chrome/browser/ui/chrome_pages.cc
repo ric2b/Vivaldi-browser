@@ -45,7 +45,7 @@
 #include "extensions/browser/extension_registry.h"
 #endif
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "components/signin/core/browser/signin_manager.h"
 #endif
@@ -124,8 +124,7 @@ void ShowHelpImpl(Browser* browser,
   }
   scoped_ptr<ScopedTabbedBrowserDisplayer> displayer;
   if (!browser) {
-    displayer.reset(
-        new ScopedTabbedBrowserDisplayer(profile, host_desktop_type));
+    displayer.reset(new ScopedTabbedBrowserDisplayer(profile));
     browser = displayer->browser();
   }
   ShowSingletonTab(browser, url);
@@ -161,12 +160,9 @@ void ShowHistory(Browser* browser) {
 
 void ShowDownloads(Browser* browser) {
   content::RecordAction(UserMetricsAction("ShowDownloads"));
-  if (browser->window()) {
-    DownloadShelf* shelf = browser->window()->GetDownloadShelf();
-    // The downloads page is always shown in response to a user action.
-    if (shelf && shelf->IsShowing())
-      shelf->Close(DownloadShelf::USER_ACTION);
-  }
+  if (browser->window() && browser->window()->IsDownloadShelfVisible())
+    browser->window()->GetDownloadShelf()->Close(DownloadShelf::USER_ACTION);
+
   ShowSingletonTabOverwritingNTP(
       browser,
       GetSingletonTabNavigateParams(browser, GURL(kChromeUIDownloadsURL)));
@@ -285,11 +281,9 @@ void ShowSettingsSubPageForProfile(Profile* profile,
         profile, GetSettingsUrl(sub_page));
     return;
   }
-  Browser* browser =
-      chrome::FindTabbedBrowser(profile, false, HOST_DESKTOP_TYPE_NATIVE);
+  Browser* browser = chrome::FindTabbedBrowser(profile, false);
   if (!browser) {
-    browser = new Browser(
-        Browser::CreateParams(profile, chrome::HOST_DESKTOP_TYPE_NATIVE));
+    browser = new Browser(Browser::CreateParams(profile));
   }
   ShowSettingsSubPageInTabbedBrowser(browser, sub_page);
 }
@@ -359,7 +353,7 @@ void ShowSearchEngineSettings(Browser* browser) {
   ShowSettingsSubPage(browser, kSearchEnginesSubPage);
 }
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 void ShowBrowserSignin(Browser* browser,
                        signin_metrics::AccessPoint access_point) {
   Profile* original_profile = browser->profile()->GetOriginalProfile();
@@ -373,8 +367,7 @@ void ShowBrowserSignin(Browser* browser,
   scoped_ptr<ScopedTabbedBrowserDisplayer> displayer;
   if (browser->profile()->IsOffTheRecord()) {
     switched_browser = true;
-    displayer.reset(new ScopedTabbedBrowserDisplayer(
-        original_profile, chrome::HOST_DESKTOP_TYPE_NATIVE));
+    displayer.reset(new ScopedTabbedBrowserDisplayer(original_profile));
     browser = displayer->browser();
   }
 

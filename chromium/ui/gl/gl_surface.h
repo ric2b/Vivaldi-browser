@@ -36,11 +36,22 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
  public:
   GLSurface();
 
+  // Minimum bit depth of surface.
+  enum Format {
+    SURFACE_ARGB8888,
+    SURFACE_RGB565,
+    SURFACE_OSMESA_BGRA,
+    SURFACE_OSMESA_RGBA,
+    SURFACE_SURFACELESS,
+    SURFACE_DEFAULT = SURFACE_ARGB8888
+  };
+
   // (Re)create the surface. TODO(apatrick): This is an ugly hack to allow the
   // EGL surface associated to be recreated without destroying the associated
   // context. The implementation of this function for other GLSurface derived
   // classes is in a pending changelist.
   virtual bool Initialize();
+  virtual bool Initialize(GLSurface::Format format);
 
   // Destroys the surface.
   virtual void Destroy() = 0;
@@ -144,7 +155,7 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
   virtual void* GetConfig();
 
   // Get the GL pixel format of the surface, if available.
-  virtual unsigned GetFormat();
+  virtual GLSurface::Format GetFormat();
 
   // Get access to a helper providing time of recent refresh and period
   // of screen refresh. If unavailable, returns NULL.
@@ -183,6 +194,10 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
   virtual bool IsSurfaceless() const;
 
   virtual bool FlipsVertically() const;
+
+  // Returns true if SwapBuffers or PostSubBuffers causes a flip, such that
+  // the next buffer may be 2 frames old.
+  virtual bool BuffersFlipped() const;
 
   // Create a GL surface that renders directly to a view.
   static scoped_refptr<GLSurface> CreateViewGLSurface(
@@ -231,7 +246,7 @@ class GL_EXPORT GLSurfaceAdapter : public GLSurface {
  public:
   explicit GLSurfaceAdapter(GLSurface* surface);
 
-  bool Initialize() override;
+  bool Initialize(GLSurface::Format format) override;
   void Destroy() override;
   bool Resize(const gfx::Size& size,
               float scale_factor,
@@ -262,7 +277,7 @@ class GL_EXPORT GLSurfaceAdapter : public GLSurface {
   void* GetShareHandle() override;
   void* GetDisplay() override;
   void* GetConfig() override;
-  unsigned GetFormat() override;
+  GLSurface::Format GetFormat() override;
   VSyncProvider* GetVSyncProvider() override;
   bool ScheduleOverlayPlane(int z_order,
                             OverlayTransform transform,
@@ -271,6 +286,7 @@ class GL_EXPORT GLSurfaceAdapter : public GLSurface {
                             const RectF& crop_rect) override;
   bool IsSurfaceless() const override;
   bool FlipsVertically() const override;
+  bool BuffersFlipped() const override;
 
   GLSurface* surface() const { return surface_.get(); }
 

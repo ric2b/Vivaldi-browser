@@ -106,6 +106,7 @@ WebInspector.TimelineModel.RecordType = {
 
     TimeStamp: "TimeStamp",
     ConsoleTime: "ConsoleTime",
+    UserTiming: "UserTiming",
 
     ResourceSendRequest: "ResourceSendRequest",
     ResourceReceiveResponse: "ResourceReceiveResponse",
@@ -156,7 +157,13 @@ WebInspector.TimelineModel.RecordType = {
     PictureSnapshot: "cc::Picture",
     DisplayItemListSnapshot: "cc::DisplayItemList",
     LatencyInfo: "LatencyInfo",
+    LatencyInfoFlow: "LatencyInfo.Flow",
     InputLatencyMouseMove: "InputLatency::MouseMove",
+    InputLatencyMouseWheel: "InputLatency::MouseWheel",
+    ImplSideFling: "InputHandlerProxy::HandleGestureFling::started",
+    GCIdleLazySweep: "ThreadState::performIdleLazySweep",
+    GCCompleteSweep: "ThreadState::completeSweep",
+    GCCollectGarbage: "Heap::collectGarbage",
 
     // CpuProfile is a virtual event created on frontend to support
     // serialization of CPU Profiles within tracing timeline data.
@@ -173,6 +180,7 @@ WebInspector.TimelineModel.Events = {
 
 WebInspector.TimelineModel.Category = {
     Console: "blink.console",
+    UserTiming: "blink.user_timing",
     LatencyInfo: "latencyInfo"
 };
 
@@ -256,6 +264,7 @@ WebInspector.TimelineModel.forAllRecords = function(recordsArray, preOrderCallba
 WebInspector.TimelineModel.TransferChunkLengthBytes = 5000000;
 
 WebInspector.TimelineModel.DevToolsMetadataEvent = {
+    TracingStartedInBrowser: "TracingStartedInBrowser",
     TracingStartedInPage: "TracingStartedInPage",
     TracingSessionIdForWorker: "TracingSessionIdForWorker",
 };
@@ -407,6 +416,8 @@ WebInspector.TimelineModel._eventType = function(event)
 {
     if (event.hasCategory(WebInspector.TimelineModel.Category.Console))
         return WebInspector.TimelineModel.RecordType.ConsoleTime;
+    if (event.hasCategory(WebInspector.TimelineModel.Category.UserTiming))
+        return WebInspector.TimelineModel.RecordType.UserTiming;
     if (event.hasCategory(WebInspector.TimelineModel.Category.LatencyInfo))
         return WebInspector.TimelineModel.RecordType.LatencyInfo;
     return /** @type !WebInspector.TimelineModel.RecordType */ (event.name);
@@ -432,7 +443,8 @@ WebInspector.TimelineModel.prototype = {
             disabledByDefault("devtools.timeline"),
             disabledByDefault("devtools.timeline.frame"),
             WebInspector.TracingModel.TopLevelEventCategory,
-            WebInspector.TimelineModel.Category.Console
+            WebInspector.TimelineModel.Category.Console,
+            WebInspector.TimelineModel.Category.UserTiming
         ];
         if (Runtime.experiments.isEnabled("timelineLatencyInfo"))
             categoriesArray.push(WebInspector.TimelineModel.Category.LatencyInfo)
@@ -756,10 +768,14 @@ WebInspector.TimelineModel.prototype = {
         var pageDevToolsMetadataEvents = [];
         var workersDevToolsMetadataEvents = [];
         for (var event of metadataEvents) {
-            if (event.name === WebInspector.TimelineModel.DevToolsMetadataEvent.TracingStartedInPage)
+            if (event.name === WebInspector.TimelineModel.DevToolsMetadataEvent.TracingStartedInPage) {
                 pageDevToolsMetadataEvents.push(event);
-            else if (event.name === WebInspector.TimelineModel.DevToolsMetadataEvent.TracingSessionIdForWorker)
+            } else if (event.name === WebInspector.TimelineModel.DevToolsMetadataEvent.TracingSessionIdForWorker) {
                 workersDevToolsMetadataEvents.push(event);
+            } else if (event.name === WebInspector.TimelineModel.DevToolsMetadataEvent.TracingStartedInBrowser) {
+                console.assert(!this._mainFrameNodeId, "Multiple sessions in trace");
+                this._mainFrameNodeId = event.args["frameTreeNodeId"];
+            }
         }
         if (!pageDevToolsMetadataEvents.length) {
             // The trace is probably coming not from DevTools. Make a mock Metadata event.
@@ -888,7 +904,12 @@ WebInspector.TimelineModel.prototype = {
         var browserMain = this._tracingModel.threadByName("Browser", "CrBrowserMain");
         if (!browserMain)
             return;
-        this._processAsyncEvents(this._mainThreadAsyncEventsByGroup, browserMain.asyncEvents());
+        // Disregard regular events, we don't need them yet, but still process to get proper metadata.
+        browserMain.events().forEach(this._processBrowserEvent, this);
+        /** @type {!Map<!WebInspector.AsyncEventGroup, !Array<!WebInspector.TracingModel.AsyncEvent>>} */
+        var asyncEventsByGroup = new Map();
+        this._processAsyncEvents(asyncEventsByGroup, browserMain.asyncEvents());
+        this._mergeAsyncEvents(this._mainThreadAsyncEventsByGroup, asyncEventsByGroup);
     },
 
     _buildTimelineRecords: function()
@@ -974,6 +995,8 @@ WebInspector.TimelineModel.prototype = {
         this._eventStack = [];
         this._hadCommitLoad = false;
         this._firstCompositeLayers = null;
+        /** @type {!Set<string>} */
+        this._knownInputEvents = new Set();
         this._currentPage = null;
     },
 
@@ -1033,6 +1056,11 @@ WebInspector.TimelineModel.prototype = {
             this._inspectedTargetEvents.push(event);
         }
         this._processAsyncEvents(threadAsyncEventsByGroup, asyncEvents, startTime, endTime);
+        // Pretend the compositor's async events are on the main thread.
+        if (thread.name() === "Compositor") {
+            this._mergeAsyncEvents(this._mainThreadAsyncEventsByGroup, threadAsyncEventsByGroup);
+            threadAsyncEventsByGroup.clear();
+        }
     },
 
     /**
@@ -1227,10 +1255,6 @@ WebInspector.TimelineModel.prototype = {
                 event.warning = WebInspector.TimelineModel.WarningType.IdleDeadlineExceeded;
             }
             break;
-
-        case recordTypes.Animation:
-            // FIXME: bring back Animation events as we figure out a way to show them while not cluttering the UI.
-            return false;
         }
         if (WebInspector.TracingModel.isAsyncPhase(event.phase))
             return true;
@@ -1253,6 +1277,18 @@ WebInspector.TimelineModel.prototype = {
     },
 
     /**
+     * @param {!WebInspector.TracingModel.Event} event
+     */
+    _processBrowserEvent: function(event)
+    {
+        if (event.name !== WebInspector.TimelineModel.RecordType.LatencyInfoFlow)
+            return;
+        var frameId = event.args["frameTreeNodeId"];
+        if (typeof frameId === "number" && frameId === this._mainFrameNodeId)
+            this._knownInputEvents.add(event.bind_id);
+    },
+
+    /**
      * @param {!WebInspector.TracingModel.AsyncEvent} asyncEvent
      * @return {?WebInspector.AsyncEventGroup}
      */
@@ -1261,14 +1297,25 @@ WebInspector.TimelineModel.prototype = {
         var groups = WebInspector.TimelineUIUtils.asyncEventGroups();
         if (asyncEvent.hasCategory(WebInspector.TimelineModel.Category.Console))
             return groups.console;
-        if (asyncEvent.hasCategory(WebInspector.TimelineModel.Category.LatencyInfo)) {
-            if (!Runtime.experiments.isEnabled("timelineLatencyInfo"))
-                return null;
+        if (asyncEvent.hasCategory(WebInspector.TimelineModel.Category.UserTiming))
+            return groups.userTiming;
+        if (!Runtime.experiments.isEnabled("timelineLatencyInfo"))
+            return null;
+        if (asyncEvent.name === WebInspector.TimelineModel.RecordType.Animation)
+            return groups.animation;
+        if (asyncEvent.hasCategory(WebInspector.TimelineModel.Category.LatencyInfo) || asyncEvent.name === WebInspector.TimelineModel.RecordType.ImplSideFling) {
+            var lastStep = asyncEvent.steps.peekLast();
             // FIXME: fix event termination on the back-end instead.
-            if (asyncEvent.steps.peekLast().phase !== WebInspector.TracingModel.Phase.AsyncEnd)
+            if (lastStep.phase !== WebInspector.TracingModel.Phase.AsyncEnd)
                 return null;
-            if (asyncEvent.name === WebInspector.TimelineModel.RecordType.InputLatencyMouseMove)
-                return null;
+            var data = lastStep.args["data"];
+            asyncEvent.causedFrame = !!(data && data["INPUT_EVENT_LATENCY_RENDERER_SWAP_COMPONENT"]);
+            if (asyncEvent.hasCategory(WebInspector.TimelineModel.Category.LatencyInfo)) {
+                if (!this._knownInputEvents.has(lastStep.id))
+                    return null;
+                if (asyncEvent.name === WebInspector.TimelineModel.RecordType.InputLatencyMouseMove && !asyncEvent.causedFrame)
+                    return null;
+            }
             return groups.input;
         }
         return null;
@@ -1286,6 +1333,19 @@ WebInspector.TimelineModel.prototype = {
                 return event;
         }
         return null;
+    },
+
+    /**
+     * @param {!Map<!WebInspector.AsyncEventGroup, !Array<!WebInspector.TracingModel.AsyncEvent>>} target
+     * @param {!Map<!WebInspector.AsyncEventGroup, !Array<!WebInspector.TracingModel.AsyncEvent>>} source
+     */
+    _mergeAsyncEvents: function(target, source)
+    {
+        for (var group of source.keys()) {
+            var events = target.get(group) || [];
+            events = events.mergeOrdered(source.get(group) || [], WebInspector.TracingModel.Event.compareStartAndEndTime);
+            target.set(group, events);
+        }
     },
 
     /**
@@ -1334,6 +1394,8 @@ WebInspector.TimelineModel.prototype = {
         this._eventDividerRecords = [];
         /** @type {?string} */
         this._sessionId = null;
+        /** @type {?number} */
+        this._mainFrameNodeId = null;
         this._loadedFromFile = false;
         this.dispatchEventToListeners(WebInspector.TimelineModel.Events.RecordsCleared);
     },
@@ -1490,6 +1552,8 @@ WebInspector.TimelineModel.NetworkRequest = function(event)
 {
     this.startTime = event.name === WebInspector.TimelineModel.RecordType.ResourceSendRequest ? event.startTime : 0;
     this.endTime = Infinity;
+    /** @type {!Array<!WebInspector.TracingModel.Event>} */
+    this.children = [];
     this.addEvent(event);
 }
 
@@ -1499,6 +1563,7 @@ WebInspector.TimelineModel.NetworkRequest.prototype = {
      */
     addEvent: function(event)
     {
+        this.children.push(event);
         var recordType = WebInspector.TimelineModel.RecordType;
         this.startTime = Math.min(this.startTime, event.startTime);
         var eventData = event.args["data"];
@@ -1915,7 +1980,7 @@ WebInspector.InvalidationTrackingEvent = function(event)
         this.cause.reason = "Layout forced";
 }
 
-/** @typedef {{reason: string, stackTrace: ?Array.<!ConsoleAgent.CallFrame>}} */
+/** @typedef {{reason: string, stackTrace: ?Array.<!RuntimeAgent.CallFrame>}} */
 WebInspector.InvalidationCause;
 
 /**

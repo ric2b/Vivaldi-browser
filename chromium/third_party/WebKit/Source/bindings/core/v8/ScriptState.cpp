@@ -8,6 +8,7 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "platform/v8_inspector/public/V8Debugger.h"
 
 namespace blink {
 
@@ -62,22 +63,7 @@ void ScriptState::detachGlobalObject()
 
 void ScriptState::disposePerContextData()
 {
-    Vector<Observer*> observers(m_observers);
-    for (auto& observer : observers)
-        observer->willDisposeScriptState(this);
     m_perContextData = nullptr;
-}
-
-void ScriptState::addObserver(Observer* observer)
-{
-    m_observers.append(observer);
-}
-
-void ScriptState::removeObserver(Observer* observer)
-{
-    size_t index = m_observers.find(observer);
-    if (index != kNotFound)
-        m_observers.remove(index);
 }
 
 bool ScriptState::evalEnabled() const
@@ -127,6 +113,12 @@ LocalDOMWindow* ScriptState::domWindow() const
     return toLocalDOMWindow(toDOMWindow(context()));
 }
 
+int ScriptState::contextIdInDebugger()
+{
+    v8::HandleScope scope(m_isolate);
+    return V8Debugger::contextId(m_context.newLocal(m_isolate));
+}
+
 ScriptState* ScriptState::forMainWorld(LocalFrame* frame)
 {
     return ScriptState::forWorld(frame, DOMWrapperWorld::mainWorld());
@@ -144,4 +136,4 @@ ScriptState* ScriptState::forWorld(LocalFrame* frame, DOMWrapperWorld& world)
     return scriptState;
 }
 
-}
+} // namespace blink

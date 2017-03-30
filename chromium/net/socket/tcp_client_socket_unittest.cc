@@ -10,7 +10,6 @@
 
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
 #include "net/base/test_completion_callback.h"
 #include "net/socket/tcp_server_socket.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -36,7 +35,7 @@ TEST(TCPClientSocketTest, BindLoopbackToLoopback) {
 
   IPEndPoint local_address_result;
   EXPECT_EQ(OK, socket.GetLocalAddress(&local_address_result));
-  EXPECT_EQ(lo_address, local_address_result.address());
+  EXPECT_EQ(lo_address, local_address_result.address().bytes());
 
   TestCompletionCallback connect_callback;
   EXPECT_EQ(ERR_IO_PENDING, socket.Connect(connect_callback.callback()));

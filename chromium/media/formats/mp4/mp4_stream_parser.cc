@@ -54,7 +54,7 @@ void MP4StreamParser::Init(
     bool /* ignore_text_tracks */,
     const EncryptedMediaInitDataCB& encrypted_media_init_data_cb,
     const NewMediaSegmentCB& new_segment_cb,
-    const base::Closure& end_of_segment_cb,
+    const EndMediaSegmentCB& end_of_segment_cb,
     const scoped_refptr<MediaLog>& media_log) {
   DCHECK_EQ(state_, kWaitingForInit);
   DCHECK(init_cb_.is_null());
@@ -62,6 +62,7 @@ void MP4StreamParser::Init(
   DCHECK(!config_cb.is_null());
   DCHECK(!new_buffers_cb.is_null());
   DCHECK(!encrypted_media_init_data_cb.is_null());
+  DCHECK(!new_segment_cb.is_null());
   DCHECK(!end_of_segment_cb.is_null());
 
   ChangeState(kParsingBoxes);
@@ -448,7 +449,7 @@ bool MP4StreamParser::EnqueueSample(BufferQueue* audio_buffers,
 
   if (!runs_->IsRunValid()) {
     // Flush any buffers we've gotten in this chunk so that buffers don't
-    // cross NewSegment() calls
+    // cross |new_segment_cb_| calls
     *err = !SendAndFlushSamples(audio_buffers, video_buffers);
     if (*err)
       return false;

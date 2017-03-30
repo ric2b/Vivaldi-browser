@@ -144,6 +144,24 @@ void RecordUMAForTransferredWindowType(aura::Window* window) {
   ash::MultiProfileUMA::RecordTeleportWindowType(window_type);
 }
 
+bool HasSystemModalTransientChildWindow(aura::Window* window) {
+  if (window == nullptr)
+    return false;
+
+  aura::Window* system_modal_container = window->GetRootWindow()->GetChildById(
+      ash::kShellWindowId_SystemModalContainer);
+  if (window->parent() == system_modal_container)
+    return true;
+
+  aura::Window::Windows::const_iterator it =
+      wm::GetTransientChildren(window).begin();
+  for (; it != wm::GetTransientChildren(window).end(); ++it) {
+    if (HasSystemModalTransientChildWindow(*it))
+      return true;
+  }
+  return false;
+}
+
 }  // namespace
 
 namespace chrome {
@@ -396,7 +414,7 @@ void MultiUserWindowManagerChromeOS::AddUser(content::BrowserContext* context) {
     account_id_to_app_observer_[account_id]->OnAppWindowAdded(*it);
 
   // Account all existing browser windows of this user accordingly.
-  BrowserList* browser_list = BrowserList::GetInstance(HOST_DESKTOP_TYPE_ASH);
+  BrowserList* browser_list = BrowserList::GetInstance();
   BrowserList::const_iterator browser_it = browser_list->begin();
   for (; browser_it != browser_list->end(); ++browser_it) {
     if ((*browser_it)->profile()->GetOriginalProfile() == profile)
@@ -591,7 +609,11 @@ bool MultiUserWindowManagerChromeOS::ShowWindowForUserIntern(
 
 void MultiUserWindowManagerChromeOS::SetWindowVisibility(
     aura::Window* window, bool visible, int animation_time_in_ms) {
-  if (window->IsVisible() == visible)
+  // For a panel window, it's possible that this panel window is in the middle
+  // of relayout animation because of hiding/reshowing shelf during profile
+  // switch. Thus the window's visibility might not be its real visibility. See
+  // crbug.com/564725 for more info.
+  if (window->TargetVisibility() == visible)
     return;
 
   // Hiding a system modal dialog should not be allowed. Instead we switch to
@@ -599,11 +621,7 @@ void MultiUserWindowManagerChromeOS::SetWindowVisibility(
   // Note that in some cases (e.g. unit test) windows might not have a root
   // window.
   if (!visible && window->GetRootWindow()) {
-    // Get the system modal container for the window's root window.
-    aura::Window* system_modal_container =
-        window->GetRootWindow()->GetChildById(
-            ash::kShellWindowId_SystemModalContainer);
-    if (window->parent() == system_modal_container) {
+    if (HasSystemModalTransientChildWindow(window)) {
       // The window is system modal and we need to find the parent which owns
       // it so that we can switch to the desktop accordingly.
       AccountId account_id = GetUserPresentingWindow(window);
@@ -742,10 +760,6 @@ void MultiUserWindowManagerChromeOS::SetWindowVisible(
     window->Show();
   else
     window->Hide();
-
-  // Make sure that animations have no influence on the window state after the
-  // call.
-  DCHECK_EQ(visible, window->IsVisible());
 }
 
 int MultiUserWindowManagerChromeOS::GetAdjustedAnimationTimeInMS(

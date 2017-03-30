@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/shared_memory_handle.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "ipc/ipc_message.h"
@@ -451,6 +452,18 @@ struct FuzzTraits<base::NullableString16> {
     return true;
   }
 };
+
+#if defined(OS_WIN) || defined(OS_MACOSX)
+template <>
+struct FuzzTraits<base::SharedMemoryHandle> {
+  static bool Fuzz(base::SharedMemoryHandle* p, Fuzzer* fuzzer) {
+    // This generates an invalid SharedMemoryHandle. Generating a valid
+    // SharedMemoryHandle requires setting/knowing state in both the sending and
+    // receiving process, which is not currently possible.
+    return true;
+  }
+};
+#endif  // defined(OS_WIN) || defined(OS_MACOSX)
 
 template <>
 struct FuzzTraits<base::Time> {
@@ -1193,6 +1206,18 @@ struct FuzzTraits<gfx::Vector2dF> {
   }
 };
 
+template <typename TypeMarker, typename WrappedType, WrappedType kInvalidValue>
+struct FuzzTraits<gpu::IdType<TypeMarker, WrappedType, kInvalidValue>> {
+  using param_type = gpu::IdType<TypeMarker, WrappedType, kInvalidValue>;
+  static bool Fuzz(param_type* id, Fuzzer* fuzzer) {
+    WrappedType raw_value = id->GetUnsafeValue();
+    if (!FuzzParam(&raw_value, fuzzer))
+      return false;
+    *id = param_type::FromUnsafeValue(raw_value);
+    return true;
+  }
+};
+
 template <>
 struct FuzzTraits<gpu::Mailbox> {
   static bool Fuzz(gpu::Mailbox* p, Fuzzer* fuzzer) {
@@ -1208,7 +1233,7 @@ struct FuzzTraits<gpu::SyncToken> {
     gpu::CommandBufferNamespace namespace_id =
         gpu::CommandBufferNamespace::INVALID;
     int32_t extra_data_field = 0;
-    uint64_t command_buffer_id = 0;
+    gpu::CommandBufferId command_buffer_id;
     uint64_t release_count = 0;
 
     if (!FuzzParam(&verified_flush, fuzzer))
@@ -1456,13 +1481,13 @@ struct FuzzTraits<net::HostPortPair> {
 template <>
 struct FuzzTraits<net::IPEndPoint> {
   static bool Fuzz(net::IPEndPoint* p, Fuzzer* fuzzer) {
-    net::IPAddressNumber address = p->address();
+    net::IPAddressNumber address_number = p->address().bytes();
     int port = p->port();
-    if (!FuzzParam(&address, fuzzer))
+    if (!FuzzParam(&address_number, fuzzer))
       return false;
     if (!FuzzParam(&port, fuzzer))
       return false;
-    net::IPEndPoint ip_endpoint(address, port);
+    net::IPEndPoint ip_endpoint(address_number, port);
     *p = ip_endpoint;
     return true;
   }
@@ -2001,135 +2026,110 @@ struct FuzzTraits<webrtc::MouseCursor> {
 #include "tools/ipc_fuzzer/message_lib/all_messages.h"
 #include "tools/ipc_fuzzer/message_lib/all_message_null_macros.h"
 
-// Redefine macros to generate generating funtions
-#undef IPC_MESSAGE_DECL
-#define IPC_MESSAGE_DECL(kind, type, name, in, out, ilist, olist)       \
-  IPC_##kind##_##type##_FUZZ(name, in, out, ilist, olist)
-
-#define IPC_EMPTY_CONTROL_FUZZ(name, in, out, ilist, olist)             \
-  IPC::Message* fuzzer_for_##name(IPC::Message* msg, Fuzzer* fuzzer) {  \
-    if (msg) {                                                          \
-      return NULL;                                                      \
-    }                                                                   \
-    return new name();                                                  \
-  }
-
-#define IPC_EMPTY_ROUTED_FUZZ(name, in, out, ilist, olist)              \
-  IPC::Message* fuzzer_for_##name(IPC::Message* msg, Fuzzer* fuzzer) {  \
-    if (msg) {                                                          \
-      return NULL;                                                      \
-    }                                                                   \
-    return new name(RandInRange(MAX_FAKE_ROUTING_ID));                  \
-  }
-
-#define IPC_ASYNC_CONTROL_FUZZ(name, in, out, ilist, olist)             \
-  IPC::Message* fuzzer_for_##name(IPC::Message* msg, Fuzzer* fuzzer) {  \
-    IPC_TUPLE_IN_##in ilist p;                                          \
-    if (msg) {                                                          \
-      name::Read(static_cast<name*>(msg), &p);                          \
-    }                                                                   \
-    if (FuzzParam(&p, fuzzer)) {                                        \
-      return new name(IPC_MEMBERS_IN_##in(p));                          \
-    }                                                                   \
-    std::cerr << "Don't know how to handle " << #name << "\n";          \
-    return 0;                                                           \
-  }
-
-#define IPC_ASYNC_ROUTED_FUZZ(name, in, out, ilist, olist)              \
-  IPC::Message* fuzzer_for_##name(IPC::Message* msg, Fuzzer* fuzzer) {  \
-    IPC_TUPLE_IN_##in ilist p;                                          \
-    if (msg) {                                                          \
-      name::Read(static_cast<name*>(msg), &p);                          \
-    }                                                                   \
-    if (FuzzParam(&p, fuzzer)) {                                        \
-      return new name(RandInRange(MAX_FAKE_ROUTING_ID)                  \
-                      IPC_COMMA_##in                                    \
-                      IPC_MEMBERS_IN_##in(p));                          \
-    }                                                                   \
-    std::cerr << "Don't know how to handle " << #name << "\n";          \
-    return 0;                                                           \
-  }
-
-#define IPC_SYNC_CONTROL_FUZZ(name, in, out, ilist, olist)              \
-  IPC::Message* fuzzer_for_##name(IPC::Message* msg, Fuzzer* fuzzer) {  \
-    IPC_TUPLE_IN_##in ilist p;                                          \
-    name* real_msg = static_cast<name*>(msg);                           \
-    name* new_msg = NULL;                                               \
-    if (real_msg) {                                                     \
-      name::ReadSendParam(real_msg, &p);                                \
-    }                                                                   \
-    if (FuzzParam(&p, fuzzer)) {                                        \
-      new_msg = new name(IPC_MEMBERS_IN_##in(p)                         \
-                         IPC_COMMA_AND_##out(IPC_COMMA_##in)            \
-                         IPC_MEMBERS_OUT_##out());                      \
-    }                                                                   \
-    if (real_msg && new_msg) {                                          \
-      MessageCracker::CopyMessageID(new_msg, real_msg);                 \
-    }                                                                   \
-    else if (!new_msg) {                                                     \
-      std::cerr << "Don't know how to handle " << #name << "\n";        \
-    }                                                                   \
-    return new_msg;                                                     \
-  }
-
-#define IPC_SYNC_ROUTED_FUZZ(name, in, out, ilist, olist)               \
-  IPC::Message* fuzzer_for_##name(IPC::Message* msg, Fuzzer* fuzzer) {  \
-    IPC_TUPLE_IN_##in ilist p;                                          \
-    name* real_msg = static_cast<name*>(msg);                           \
-    name* new_msg = NULL;                                               \
-    if (real_msg) {                                                     \
-      name::ReadSendParam(real_msg, &p);                                \
-    }                                                                   \
-    if (FuzzParam(&p, fuzzer)) {                                        \
-      new_msg = new name(RandInRange(MAX_FAKE_ROUTING_ID)               \
-                         IPC_COMMA_OR_##out(IPC_COMMA_##in)             \
-                         IPC_MEMBERS_IN_##in(p)                         \
-                         IPC_COMMA_AND_##out(IPC_COMMA_##in)            \
-                         IPC_MEMBERS_OUT_##out());                      \
-    }                                                                   \
-    if (real_msg && new_msg) {                                          \
-      MessageCracker::CopyMessageID(new_msg, real_msg);                 \
-    }                                                                   \
-    else if (!new_msg) {                                                     \
-      std::cerr << "Don't know how to handle " << #name << "\n";        \
-    }                                                                   \
-    return new_msg;                                                     \
-  }
-
 #define MAX_FAKE_ROUTING_ID 15
 
-#define IPC_MEMBERS_IN_0(p)
-#define IPC_MEMBERS_IN_1(p) base::get<0>(p)
-#define IPC_MEMBERS_IN_2(p) base::get<0>(p), base::get<1>(p)
-#define IPC_MEMBERS_IN_3(p) base::get<0>(p), base::get<1>(p), base::get<2>(p)
-#define IPC_MEMBERS_IN_4(p) base::get<0>(p), base::get<1>(p), base::get<2>(p), \
-                            base::get<3>(p)
-#define IPC_MEMBERS_IN_5(p) base::get<0>(p), base::get<1>(p), base::get<2>(p), \
-                            base::get<3>(p), base::get<4>(p)
+// MessageFactory abstracts away constructing control/routed messages by
+// providing an additional random routing ID argument when necessary.
+template <typename Message, IPC::MessageKind>
+class MessageFactory;
 
-#define IPC_MEMBERS_OUT_0()
-#define IPC_MEMBERS_OUT_1() NULL
-#define IPC_MEMBERS_OUT_2() NULL, NULL
-#define IPC_MEMBERS_OUT_3() NULL, NULL, NULL
-#define IPC_MEMBERS_OUT_4() NULL, NULL, NULL, NULL
-#define IPC_MEMBERS_OUT_5() NULL, NULL, NULL, NULL, NULL
+template <typename Message>
+class MessageFactory<Message, IPC::MessageKind::CONTROL> {
+ public:
+  template <typename... Args>
+  static Message* New(const Args&... args) {
+    return new Message(args...);
+  }
+};
 
-#include "tools/ipc_fuzzer/message_lib/all_messages.h"
+template <typename Message>
+class MessageFactory<Message, IPC::MessageKind::ROUTED> {
+ public:
+  template <typename... Args>
+  static Message* New(const Args&... args) {
+    return new Message(RandInRange(MAX_FAKE_ROUTING_ID), args...);
+  }
+};
+
+template <typename Message>
+class FuzzerHelper;
+
+template <typename Meta, typename... Ins>
+class FuzzerHelper<IPC::MessageT<Meta, base::Tuple<Ins...>, void>> {
+ public:
+  using Message = IPC::MessageT<Meta, base::Tuple<Ins...>, void>;
+
+  static IPC::Message* Fuzz(IPC::Message* msg, Fuzzer* fuzzer) {
+    return FuzzImpl(msg, fuzzer, base::MakeIndexSequence<sizeof...(Ins)>());
+  }
+
+ private:
+  template <size_t... Ns>
+  static IPC::Message* FuzzImpl(IPC::Message* msg,
+                                Fuzzer* fuzzer,
+                                base::IndexSequence<Ns...>) {
+    typename Message::Param p;
+    if (msg) {
+      Message::Read(static_cast<Message*>(msg), &p);
+    }
+    if (FuzzParam(&p, fuzzer)) {
+      return MessageFactory<Message, Meta::kKind>::New(base::get<Ns>(p)...);
+    }
+    std::cerr << "Don't know how to handle " << Meta::kName << "\n";
+    return nullptr;
+  }
+};
+
+template <typename Meta, typename... Ins, typename... Outs>
+class FuzzerHelper<
+    IPC::MessageT<Meta, base::Tuple<Ins...>, base::Tuple<Outs...>>> {
+ public:
+  using Message =
+      IPC::MessageT<Meta, base::Tuple<Ins...>, base::Tuple<Outs...>>;
+
+  static IPC::Message* Fuzz(IPC::Message* msg, Fuzzer* fuzzer) {
+    return FuzzImpl(msg, fuzzer, base::MakeIndexSequence<sizeof...(Ins)>());
+  }
+
+ private:
+  template <size_t... Ns>
+  static IPC::Message* FuzzImpl(IPC::Message* msg,
+                                Fuzzer* fuzzer,
+                                base::IndexSequence<Ns...>) {
+    typename Message::SendParam p;
+    Message* real_msg = static_cast<Message*>(msg);
+    Message* new_msg = nullptr;
+    if (real_msg) {
+      Message::ReadSendParam(real_msg, &p);
+    }
+    if (FuzzParam(&p, fuzzer)) {
+      new_msg = MessageFactory<Message, Meta::kKind>::New(
+          base::get<Ns>(p)..., static_cast<Outs*>(nullptr)...);
+    }
+    if (real_msg && new_msg) {
+      MessageCracker::CopyMessageID(new_msg, real_msg);
+    } else if (!new_msg) {
+      std::cerr << "Don't know how to handle " << Meta::kName << "\n";
+    }
+    return new_msg;
+  }
+};
+
 #include "tools/ipc_fuzzer/message_lib/all_message_null_macros.h"
 
 void PopulateFuzzerFunctionVector(
     FuzzerFunctionVector* function_vector) {
 #undef IPC_MESSAGE_DECL
-#define IPC_MESSAGE_DECL(kind, type, name, in, out, ilist, olist) \
-  function_vector->push_back(fuzzer_for_##name);
+#define IPC_MESSAGE_DECL(name, ...) \
+  function_vector->push_back(FuzzerHelper<name>::Fuzz);
 #include "tools/ipc_fuzzer/message_lib/all_messages.h"
 }
 
 // Redefine macros to register fuzzing functions into map.
 #include "tools/ipc_fuzzer/message_lib/all_message_null_macros.h"
 #undef IPC_MESSAGE_DECL
-#define IPC_MESSAGE_DECL(kind, type, name, in, out, ilist, olist) \
-  (*map)[static_cast<uint32_t>(name::ID)] = fuzzer_for_##name;
+#define IPC_MESSAGE_DECL(name, ...) \
+  (*map)[static_cast<uint32_t>(name::ID)] = FuzzerHelper<name>::Fuzz;
 
 void PopulateFuzzerFunctionMap(FuzzerFunctionMap* map) {
 #include "tools/ipc_fuzzer/message_lib/all_messages.h"

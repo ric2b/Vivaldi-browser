@@ -15,6 +15,7 @@
 #include "base/time/time.h"
 #include "printing/print_settings.h"
 #include "skia/ext/refptr.h"
+#include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkDocument.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
@@ -64,6 +65,21 @@ bool WriteAssetToBuffer(const SkStreamAsset* asset,
   return (length == assetCopy->read(buffer, length));
 }
 
+SkTime::DateTime TimeToSkTime(base::Time time) {
+    base::Time::Exploded exploded;
+    time.UTCExplode(&exploded);
+    SkTime::DateTime skdate;
+    skdate.fTimeZoneMinutes = 0;
+    skdate.fYear = exploded.year;
+    skdate.fMonth = exploded.month;
+    skdate.fDayOfWeek = exploded.day_of_week;
+    skdate.fDay = exploded.day_of_month;
+    skdate.fHour = exploded.hour;
+    skdate.fMinute = exploded.minute;
+    skdate.fSecond = exploded.second;
+    return skdate;
+}
+
 }  // namespace
 
 namespace printing {
@@ -98,7 +114,7 @@ bool PdfMetafileSkia::StartPage(const gfx::Size& page_size,
                                 const gfx::Rect& content_area,
                                 const float& scale_factor) {
   if (data_->recorder_.getRecordingCanvas())
-    this->FinishPage();
+    FinishPage();
   DCHECK(!data_->recorder_.getRecordingCanvas());
   SkSize sk_page_size = gfx::SizeFToSkSize(gfx::SizeF(page_size));
   data_->pages_.push_back(
@@ -114,7 +130,7 @@ bool PdfMetafileSkia::StartPage(const gfx::Size& page_size,
                                            NULL, 0);
 }
 
-skia::PlatformCanvas* PdfMetafileSkia::GetVectorCanvasForNewPage(
+SkCanvas* PdfMetafileSkia::GetVectorCanvasForNewPage(
     const gfx::Size& page_size,
     const gfx::Rect& content_area,
     const float& scale_factor) {
@@ -132,28 +148,13 @@ bool PdfMetafileSkia::FinishPage() {
   return true;
 }
 
-static SkTime::DateTime TimeToSkTime(base::Time time) {
-    base::Time::Exploded exploded;
-    time.UTCExplode(&exploded);
-    SkTime::DateTime skdate;
-    skdate.fTimeZoneMinutes = 0;
-    skdate.fYear = exploded.year;
-    skdate.fMonth = exploded.month;
-    skdate.fDayOfWeek = exploded.day_of_week;
-    skdate.fDay = exploded.day_of_month;
-    skdate.fHour = exploded.hour;
-    skdate.fMinute = exploded.minute;
-    skdate.fSecond = exploded.second;
-    return skdate;
-}
-
 bool PdfMetafileSkia::FinishDocument() {
   // If we've already set the data in InitFromData, leave it be.
   if (data_->pdf_data_)
     return false;
 
   if (data_->recorder_.getRecordingCanvas())
-    this->FinishPage();
+    FinishPage();
 
   SkDynamicMemoryWStream pdf_stream;
   skia::RefPtr<SkDocument> pdf_doc =
@@ -166,14 +167,15 @@ bool PdfMetafileSkia::FinishDocument() {
     canvas->drawPicture(page.content_.get());
     pdf_doc->endPage();
   }
-  SkTArray<SkDocument::Attribute> info;
   const std::string& user_agent = GetAgent();
-  info.emplace_back(SkString("Creator"),
-                    user_agent.empty()
-                        ? SkString("Chromium")
-                        : SkString(user_agent.c_str(), user_agent.size()));
+  SkDocument::Attribute info[] = {
+      SkDocument::Attribute(SkString("Creator"),
+                            user_agent.empty()
+                            ? SkString("Chromium")
+                            : SkString(user_agent.c_str(), user_agent.size())),
+  };
   SkTime::DateTime now = TimeToSkTime(base::Time::Now());
-  pdf_doc->setMetadata(info, &now, &now);
+  pdf_doc->setMetadata(info, SK_ARRAY_COUNT(info), &now, &now);
   if (!pdf_doc->close())
     return false;
 

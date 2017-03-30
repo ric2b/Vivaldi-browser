@@ -57,9 +57,8 @@ public:
     virtual bool isLoaded() const { return true; }
     virtual bool errorOccurred() const { return false; }
     virtual LayoutSize imageSize(const LayoutObject*, float multiplier) const = 0;
-    virtual void computeIntrinsicDimensions(const LayoutObject*, Length& intrinsicWidth, Length& intrinsicHeight, FloatSize& intrinsicRatio) = 0;
-    virtual bool imageHasRelativeWidth() const = 0;
-    virtual bool imageHasRelativeHeight() const = 0;
+    virtual void computeIntrinsicDimensions(const LayoutObject*, FloatSize& intrinsicSize, FloatSize& intrinsicRatio) = 0;
+    virtual bool imageHasRelativeSize() const = 0;
     virtual bool usesImageContainerSize() const = 0;
     virtual void addClient(LayoutObject*) = 0;
     virtual void removeClient(LayoutObject*) = 0;
@@ -73,6 +72,7 @@ public:
     ALWAYS_INLINE bool isPendingImage() const { return m_isPendingImage; }
     ALWAYS_INLINE bool isGeneratedImage() const { return m_isGeneratedImage; }
     ALWAYS_INLINE bool isImageResourceSet() const { return m_isImageResourceSet; }
+    ALWAYS_INLINE bool isInvalidImage() const { return m_isInvalidImage; }
 
     DEFINE_INLINE_VIRTUAL_TRACE() { }
 
@@ -82,12 +82,14 @@ protected:
         , m_isPendingImage(false)
         , m_isGeneratedImage(false)
         , m_isImageResourceSet(false)
+        , m_isInvalidImage(false)
     {
     }
     bool m_isImageResource:1;
     bool m_isPendingImage:1;
     bool m_isGeneratedImage:1;
     bool m_isImageResourceSet:1;
+    bool m_isInvalidImage:1;
 };
 
 #define DEFINE_STYLE_IMAGE_TYPE_CASTS(thisType, function) \
@@ -95,5 +97,5 @@ protected:
     inline thisType* to##thisType(const RefPtrWillBeMember<StyleImage>& styleImage) { return to##thisType(styleImage.get()); } \
     typedef int NeedsSemiColonAfterDefineStyleImageTypeCasts
 
-}
+} // namespace blink
 #endif

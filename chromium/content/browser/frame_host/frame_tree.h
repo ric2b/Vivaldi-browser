@@ -18,7 +18,6 @@
 
 namespace content {
 
-class FrameTreeNode;
 class Navigator;
 class RenderFrameHostDelegate;
 class RenderProcessHost;
@@ -41,6 +40,80 @@ class RenderWidgetHostDelegate;
 // This object is only used on the UI thread.
 class CONTENT_EXPORT FrameTree {
  public:
+  class NodeRange;
+  class ConstNodeRange;
+
+  class CONTENT_EXPORT NodeIterator {
+   public:
+    NodeIterator(const NodeIterator& other);
+    ~NodeIterator();
+
+    NodeIterator& operator++();
+
+    bool operator==(const NodeIterator& rhs) const;
+    bool operator!=(const NodeIterator& rhs) const { return !(*this == rhs); }
+
+    FrameTreeNode* operator*() { return current_node_; }
+
+   private:
+    friend class NodeRange;
+
+    NodeIterator(FrameTreeNode* starting_node, FrameTreeNode* node_to_skip);
+
+    FrameTreeNode* current_node_;
+    FrameTreeNode* const node_to_skip_;
+    std::queue<FrameTreeNode*> queue_;
+  };
+
+  class CONTENT_EXPORT NodeRange {
+   public:
+    NodeIterator begin();
+    NodeIterator end();
+
+   private:
+    friend class FrameTree;
+
+    NodeRange(FrameTree* tree, FrameTreeNode* node_to_skip);
+
+    FrameTree* const tree_;
+    FrameTreeNode* const node_to_skip_;
+  };
+
+  class CONTENT_EXPORT ConstNodeIterator {
+   public:
+    ~ConstNodeIterator();
+
+    ConstNodeIterator& operator++();
+
+    bool operator==(const ConstNodeIterator& rhs) const;
+    bool operator!=(const ConstNodeIterator& rhs) const {
+      return !(*this == rhs);
+    }
+
+    const FrameTreeNode* operator*() { return current_node_; }
+
+   private:
+    friend class ConstNodeRange;
+
+    ConstNodeIterator(const FrameTreeNode* starting_node);
+
+    const FrameTreeNode* current_node_;
+    std::queue<const FrameTreeNode*> queue_;
+  };
+
+  class CONTENT_EXPORT ConstNodeRange {
+   public:
+    ConstNodeIterator begin();
+    ConstNodeIterator end();
+
+   private:
+    friend class FrameTree;
+
+    ConstNodeRange(const FrameTree* tree);
+
+    const FrameTree* const tree_;
+  };
+
   // Each FrameTreeNode will default to using the given |navigator| for
   // navigation tasks in the frame.
   // A set of delegates are remembered here so that we can create
@@ -69,12 +142,13 @@ class CONTENT_EXPORT FrameTree {
   // nor searching other FrameTrees (unlike blink::WebView::findFrameByName).
   FrameTreeNode* FindByName(const std::string& name);
 
-  // Executes |on_node| on each node in the frame tree.  If |on_node| returns
-  // false, terminates the iteration immediately. Returning false is useful
-  // if |on_node| is just doing a search over the tree.  The iteration proceeds
-  // top-down and visits a node before adding its children to the queue, making
-  // it safe to remove children during the callback.
-  void ForEach(const base::Callback<bool(FrameTreeNode*)>& on_node) const;
+  // Returns a range to iterate over all FrameTreeNodes in the frame tree in
+  // breadth-first traversal order.
+  NodeRange Nodes();
+
+  // Returns a range to iterate over all FrameTreeNodes in the frame tree in
+  // breadth-first traversal order. All FrameTreeNodes returned will be const.
+  ConstNodeRange ConstNodes() const;
 
   // Adds a new child frame to the frame tree. |process_id| is required to
   // disambiguate |new_routing_id|, and it must match the process of the
@@ -84,6 +158,7 @@ class CONTENT_EXPORT FrameTree {
                 int new_routing_id,
                 blink::WebTreeScopeType scope,
                 const std::string& frame_name,
+                const std::string& frame_unique_name,
                 blink::WebSandboxFlags sandbox_flags,
                 const blink::WebFrameOwnerProperties& frame_owner_properties);
 
@@ -157,7 +232,7 @@ class CONTENT_EXPORT FrameTree {
   void ResetLoadProgress();
 
   // Returns true if at least one of the nodes in this FrameTree is loading.
-  bool IsLoading();
+  bool IsLoading() const;
 
   // Set page-level focus in all SiteInstances involved in rendering
   // this FrameTree, not including the current main frame's
@@ -170,14 +245,15 @@ class CONTENT_EXPORT FrameTree {
   void SetPageFocus(SiteInstance* instance, bool is_focused);
 
  private:
+  friend class FrameTreeTest;
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostImplBrowserTest, RemoveFocusedFrame);
   typedef base::hash_map<int, RenderViewHostImpl*> RenderViewHostMap;
   typedef std::multimap<int, RenderViewHostImpl*> RenderViewHostMultiMap;
 
-  // A variation to the public ForEach method with a difference that the subtree
-  // starting at |skip_this_subtree| will not be recursed into.
-  void ForEach(const base::Callback<bool(FrameTreeNode*)>& on_node,
-               FrameTreeNode* skip_this_subtree) const;
+  // Returns a range to iterate over all FrameTreeNodes in the frame tree in
+  // breadth-first traversal order, skipping the subtree rooted at
+  // |node_to_skip|.
+  NodeRange NodesExcept(FrameTreeNode* node_to_skip);
 
   // These delegates are installed into all the RenderViewHosts and
   // RenderFrameHosts that we create.

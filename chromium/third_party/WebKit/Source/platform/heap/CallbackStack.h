@@ -6,6 +6,7 @@
 #define CallbackStack_h
 
 #include "platform/heap/ThreadState.h"
+#include "wtf/Allocator.h"
 #include "wtf/Assertions.h"
 
 namespace blink {
@@ -15,9 +16,11 @@ namespace blink {
 // If more space is needed a new CallbackStack instance is created and chained
 // together with the former instance. I.e. a logical CallbackStack can be made of
 // multiple chained CallbackStack object instances.
-class CallbackStack {
+class CallbackStack final {
+    USING_FAST_MALLOC(CallbackStack);
 public:
     class Item {
+        DISALLOW_NEW();
     public:
         Item() { }
         Item(void* object, VisitorCallback callback)
@@ -34,10 +37,11 @@ public:
         VisitorCallback m_callback;
     };
 
-    CallbackStack();
+    explicit CallbackStack(size_t blockSize = defaultBlockSize);
     ~CallbackStack();
 
     void clear();
+    void decommit();
 
     Item* allocateEntry();
     Item* pop();
@@ -51,24 +55,18 @@ public:
 #endif
 
 private:
-    static const size_t blockSize = 8192;
+    static const size_t defaultBlockSize = (1 << 13);
 
     class Block {
+        USING_FAST_MALLOC(Block);
     public:
-        explicit Block(Block* next)
-            : m_limit(&(m_buffer[blockSize]))
-            , m_current(&(m_buffer[0]))
-            , m_next(next)
-        {
-            clearUnused();
-        }
+        Block(Block* next, size_t blockSize);
+        ~Block();
 
-        ~Block()
-        {
-            clearUnused();
-        }
-
+#if ENABLE(ASSERT)
         void clear();
+#endif
+        void decommit();
 
         Block* next() const { return m_next; }
         void setNext(Block* next) { m_next = next; }
@@ -78,10 +76,7 @@ private:
             return m_current == &(m_buffer[0]);
         }
 
-        size_t size() const
-        {
-            return blockSize - (m_limit - m_current);
-        }
+        size_t blockSize() const { return m_blockSize; }
 
         Item* allocateEntry()
         {
@@ -98,14 +93,15 @@ private:
         }
 
         void invokeEphemeronCallbacks(Visitor*);
+
 #if ENABLE(ASSERT)
         bool hasCallbackForObject(const void*);
 #endif
 
     private:
-        void clearUnused();
+        size_t m_blockSize;
 
-        Item m_buffer[blockSize];
+        Item* m_buffer;
         Item* m_limit;
         Item* m_current;
         Block* m_next;

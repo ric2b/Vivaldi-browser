@@ -29,7 +29,6 @@
 #include "core/html/parser/HTMLDocumentParser.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/html/parser/XSSAuditor.h"
-#include "platform/Task.h"
 #include "platform/ThreadSafeFunctional.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebTaskRunner.h"
@@ -80,9 +79,9 @@ static void checkThatXSSInfosAreSafeToSendToAnotherThread(const XSSInfoStream& i
 
 #endif
 
-void BackgroundHTMLParser::start(PassRefPtr<WeakReference<BackgroundHTMLParser>> reference, PassOwnPtr<Configuration> config, PassOwnPtr<WebTaskRunner> loadingTaskRunner)
+void BackgroundHTMLParser::start(PassRefPtr<WeakReference<BackgroundHTMLParser>> reference, PassOwnPtr<Configuration> config, const KURL& documentURL, PassOwnPtr<CachedDocumentParameters> cachedDocumentParameters, const MediaValuesCached::MediaValuesCachedData& mediaValuesCachedData, PassOwnPtr<WebTaskRunner> loadingTaskRunner)
 {
-    new BackgroundHTMLParser(reference, config, loadingTaskRunner);
+    new BackgroundHTMLParser(reference, config, documentURL, cachedDocumentParameters, mediaValuesCachedData, loadingTaskRunner);
     // Caller must free by calling stop().
 }
 
@@ -92,7 +91,7 @@ BackgroundHTMLParser::Configuration::Configuration()
 {
 }
 
-BackgroundHTMLParser::BackgroundHTMLParser(PassRefPtr<WeakReference<BackgroundHTMLParser>> reference, PassOwnPtr<Configuration> config, PassOwnPtr<WebTaskRunner> loadingTaskRunner)
+BackgroundHTMLParser::BackgroundHTMLParser(PassRefPtr<WeakReference<BackgroundHTMLParser>> reference, PassOwnPtr<Configuration> config, const KURL& documentURL, PassOwnPtr<CachedDocumentParameters> cachedDocumentParameters, const MediaValuesCached::MediaValuesCachedData& mediaValuesCachedData, PassOwnPtr<WebTaskRunner> loadingTaskRunner)
     : m_weakFactory(reference, this)
     , m_token(adoptPtr(new HTMLToken))
     , m_tokenizer(HTMLTokenizer::create(config->options))
@@ -103,7 +102,7 @@ BackgroundHTMLParser::BackgroundHTMLParser(PassRefPtr<WeakReference<BackgroundHT
     , m_pendingTokens(adoptPtr(new CompactHTMLTokenStream))
     , m_pendingTokenLimit(config->pendingTokenLimit)
     , m_xssAuditor(config->xssAuditor.release())
-    , m_preloadScanner(config->preloadScanner.release())
+    , m_preloadScanner(adoptPtr(new TokenPreloadScanner(documentURL, cachedDocumentParameters, mediaValuesCachedData)))
     , m_decoder(config->decoder.release())
     , m_loadingTaskRunner(loadingTaskRunner)
     , m_parsedChunkQueue(config->parsedChunkQueue.release())
@@ -284,7 +283,7 @@ void BackgroundHTMLParser::sendTokensToMainThread()
     OwnPtr<HTMLDocumentParser::ParsedChunk> chunk = adoptPtr(new HTMLDocumentParser::ParsedChunk);
     chunk->preloads.swap(m_pendingPreloads);
     chunk->xssInfos.swap(m_pendingXSSInfos);
-    chunk->tokenizerState = m_tokenizer->state();
+    chunk->tokenizerState = m_tokenizer->getState();
     chunk->treeBuilderState = m_treeBuilderSimulator.state();
     chunk->inputCheckpoint = m_input.createCheckpoint(m_pendingTokens->size());
     chunk->preloadScannerCheckpoint = m_preloadScanner->createCheckpoint();
@@ -296,10 +295,10 @@ void BackgroundHTMLParser::sendTokensToMainThread()
     if (isEmpty) {
         m_loadingTaskRunner->postTask(
             BLINK_FROM_HERE,
-            new Task(threadSafeBind(&HTMLDocumentParser::notifyPendingParsedChunks, AllowCrossThreadAccess(m_parser))));
+            threadSafeBind(&HTMLDocumentParser::notifyPendingParsedChunks, AllowCrossThreadAccess(m_parser)));
     }
 
     m_pendingTokens = adoptPtr(new CompactHTMLTokenStream);
 }
 
-}
+} // namespace blink

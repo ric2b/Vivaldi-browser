@@ -154,12 +154,18 @@ DisplayChangeObserver::~DisplayChangeObserver() {
 ui::MultipleDisplayState DisplayChangeObserver::GetStateForDisplayIds(
     const ui::DisplayConfigurator::DisplayStateList& display_states) const {
   UpdateInternalDisplayId(display_states);
-  if (display_states.size() != 2)
-    return ui::MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED;
-  DisplayIdPair pair = CreateDisplayIdPair(display_states[0]->display_id(),
-                                           display_states[1]->display_id());
-  DisplayLayout layout = Shell::GetInstance()->display_manager()->
-      layout_store()->GetRegisteredDisplayLayout(pair);
+  if (display_states.size() == 1)
+    return ui::MULTIPLE_DISPLAY_STATE_SINGLE;
+  DisplayIdList list =
+      GenerateDisplayIdList(display_states.begin(), display_states.end(),
+                            [](const ui::DisplaySnapshot* display_state) {
+                              return display_state->display_id();
+                            });
+
+  const DisplayLayout& layout = Shell::GetInstance()
+                                    ->display_manager()
+                                    ->layout_store()
+                                    ->GetRegisteredDisplayLayout(list);
   return layout.mirrored ? ui::MULTIPLE_DISPLAY_STATE_DUAL_MIRROR :
                            ui::MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED;
 }
@@ -284,11 +290,9 @@ void DisplayChangeObserver::OnDisplayModeChangeFailed(
 }
 
 void DisplayChangeObserver::OnAppTerminating() {
-#if defined(USE_ASH)
   // Stop handling display configuration events once the shutdown
   // process starts. crbug.com/177014.
   Shell::GetInstance()->display_configurator()->PrepareForExit();
-#endif
 }
 
 // static

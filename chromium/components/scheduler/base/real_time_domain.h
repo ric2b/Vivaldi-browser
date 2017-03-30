@@ -19,7 +19,8 @@ class SCHEDULER_EXPORT RealTimeDomain : public TimeDomain {
   ~RealTimeDomain() override;
 
   // TimeDomain implementation:
-  LazyNow CreateLazyNow() override;
+  LazyNow CreateLazyNow() const override;
+  base::TimeTicks Now() const override;
   base::TimeTicks ComputeDelayedRunTime(base::TimeTicks time_domain_now,
                                         base::TimeDelta delay) const override;
   bool MaybeAdvanceTime() override;
@@ -28,7 +29,7 @@ class SCHEDULER_EXPORT RealTimeDomain : public TimeDomain {
  protected:
   void OnRegisterWithTaskQueueManager(
       TaskQueueManager* task_queue_manager) override;
-  void RequestWakeup(LazyNow* lazy_now, base::TimeDelta delay) override;
+  void RequestWakeup(base::TimeTicks now, base::TimeDelta delay) override;
   void AsValueIntoInternal(
       base::trace_event::TracedValue* state) const override;
 

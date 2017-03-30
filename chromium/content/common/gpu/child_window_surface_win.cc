@@ -8,6 +8,7 @@
 #include "base/win/scoped_hdc.h"
 #include "base/win/wrapped_window_proc.h"
 #include "content/common/gpu/gpu_channel_manager.h"
+#include "content/common/gpu/gpu_channel_manager_delegate.h"
 #include "content/common/gpu/gpu_messages.h"
 #include "ui/base/win/hidden_window.h"
 #include "ui/gfx/native_widget_types.h"
@@ -73,7 +74,9 @@ ChildWindowSurfaceWin::ChildWindowSurfaceWin(GpuChannelManager* manager,
                                              HWND parent_window)
     : gfx::NativeViewGLSurfaceEGL(0),
       parent_window_(parent_window),
-      manager_(manager) {
+      manager_(manager),
+      alpha_(true),
+      first_swap_(true) {
   // Don't use EGL_ANGLE_window_fixed_size so that we can avoid recreating the
   // window surface, which can cause flicker on DirectComposition.
   enable_fixed_size_angle_ = false;
@@ -124,8 +127,8 @@ bool ChildWindowSurfaceWin::InitializeNativeWindow() {
       windowRect.right - windowRect.left, windowRect.bottom - windowRect.top,
       ui::GetHiddenWindow(), NULL, NULL, NULL);
   gfx::SetWindowUserData(window_, this);
-  manager_->Send(new GpuHostMsg_AcceleratedSurfaceCreatedChildWindow(
-      parent_window_, window_));
+  manager_->delegate()->SendAcceleratedSurfaceCreatedChildWindow(parent_window_,
+                                                                 window_);
   return true;
 }
 
@@ -136,12 +139,16 @@ bool ChildWindowSurfaceWin::Resize(const gfx::Size& size,
     if (!MoveWindow(window_, 0, 0, size.width(), size.height(), FALSE)) {
       return false;
     }
+    alpha_ = has_alpha;
     return gfx::NativeViewGLSurfaceEGL::Resize(size, scale_factor, has_alpha);
   } else {
     if (size == GetSize() && has_alpha == alpha_)
       return true;
 
-    if (!MoveWindow(window_, 0, 0, size.width(), size.height(), FALSE)) {
+    // Force a resize and redraw (but not a move, activate, etc.).
+    if (!SetWindowPos(window_, nullptr, 0, 0, size.width(), size.height(),
+                      SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOCOPYBITS |
+                          SWP_NOOWNERZORDER | SWP_NOZORDER)) {
       return false;
     }
     size_ = size;
@@ -175,6 +182,13 @@ bool ChildWindowSurfaceWin::Resize(const gfx::Size& size,
 
 gfx::SwapResult ChildWindowSurfaceWin::SwapBuffers() {
   gfx::SwapResult result = NativeViewGLSurfaceEGL::SwapBuffers();
+  // Force the driver to finish drawing before clearing the contents to
+  // transparent, to reduce or eliminate the period of time where the contents
+  // have flashed black.
+  if (first_swap_) {
+    glFinish();
+    first_swap_ = false;
+  }
   ClearInvalidContents();
   return result;
 }

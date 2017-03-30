@@ -46,6 +46,7 @@
 
 #include "core/CoreExport.h"
 #include "core/layout/LayoutBox.h"
+#include "core/layout/ScrollAnchor.h"
 #include "core/paint/PaintInvalidationCapableScrollableArea.h"
 #include "core/paint/PaintLayerFragment.h"
 #include "platform/heap/Handle.h"
@@ -228,11 +229,13 @@ public:
     // FIXME: We shouldn't allow access to m_overflowRect outside this class.
     LayoutRect overflowRect() const { return m_overflowRect; }
 
-    void scrollToPosition(const DoublePoint& scrollPosition, ScrollOffsetClamping = ScrollOffsetUnclamped, ScrollBehavior = ScrollBehaviorInstant, ScrollType = ProgrammaticScroll);
+    void scrollToPosition(const DoublePoint& scrollPosition, ScrollOffsetClamping = ScrollOffsetUnclamped,
+        ScrollBehavior = ScrollBehaviorInstant, ScrollType = ProgrammaticScroll);
 
-    void scrollToOffset(const DoubleSize& scrollOffset, ScrollOffsetClamping clamp = ScrollOffsetUnclamped, ScrollBehavior scrollBehavior = ScrollBehaviorInstant)
+    void scrollToOffset(const DoubleSize& scrollOffset, ScrollOffsetClamping clamp = ScrollOffsetUnclamped,
+        ScrollBehavior scrollBehavior = ScrollBehaviorInstant, ScrollType scrollType = ProgrammaticScroll)
     {
-        scrollToPosition(-scrollOrigin() + scrollOffset, clamp, scrollBehavior);
+        scrollToPosition(-scrollOrigin() + scrollOffset, clamp, scrollBehavior, scrollType);
     }
 
     void scrollToXOffset(double x, ScrollOffsetClamping clamp = ScrollOffsetUnclamped, ScrollBehavior scrollBehavior = ScrollBehaviorInstant)
@@ -247,16 +250,19 @@ public:
 
     void setScrollPosition(const DoublePoint& position, ScrollType scrollType, ScrollBehavior scrollBehavior = ScrollBehaviorInstant) override
     {
-        scrollToOffset(toDoubleSize(position), ScrollOffsetClamped, scrollBehavior);
+        scrollToOffset(toDoubleSize(position), ScrollOffsetClamped, scrollBehavior, scrollType);
     }
 
-    void updateAfterLayout();
+    // Returns true if a layout object was marked for layout. In such a case, the layout scope's root
+    // should be laid out again.
+    bool updateAfterLayout(SubtreeLayoutScope* = nullptr);
     void updateAfterStyleChange(const ComputedStyle*);
     void updateAfterOverflowRecalc();
 
     bool updateAfterCompositingChange() override;
 
     bool hasScrollbar() const { return hasHorizontalScrollbar() || hasVerticalScrollbar(); }
+    bool hasOverflowControls() const { return hasScrollbar() || scrollCorner() || resizer(); }
 
     LayoutScrollbarPart* scrollCorner() const override { return m_scrollCorner; }
 
@@ -298,7 +304,7 @@ public:
     bool scrollsOverflow() const { return m_scrollsOverflow; }
 
     // Rectangle encompassing the scroll corner and resizer rect.
-    IntRect scrollCornerAndResizerRect() const;
+    IntRect scrollCornerAndResizerRect() const final;
 
     enum LCDTextMode {
         ConsiderLCDText,
@@ -327,6 +333,12 @@ public:
     IntRect rectForVerticalScrollbar(const IntRect& borderBoxRect) const;
 
     Widget* widget() override;
+    ScrollAnchor& scrollAnchor() { return m_scrollAnchor; }
+    bool isPaintLayerScrollableArea() const override { return true; }
+
+    bool shouldRebuildHorizontalScrollbarLayer() const { return m_rebuildHorizontalScrollbarLayer; }
+    bool shouldRebuildVerticalScrollbarLayer() const { return m_rebuildVerticalScrollbarLayer; }
+    void resetRebuildScrollbarLayerFlags();
 
     DECLARE_VIRTUAL_TRACE();
 
@@ -346,8 +358,8 @@ private:
     void setScrollOffset(const IntPoint&, ScrollType) override;
     void setScrollOffset(const DoublePoint&, ScrollType) override;
 
-    LayoutUnit verticalScrollbarStart(int minX, int maxX) const;
-    LayoutUnit horizontalScrollbarStart(int minX) const;
+    int verticalScrollbarStart(int minX, int maxX) const;
+    int horizontalScrollbarStart(int minX) const;
     IntSize scrollbarOffset(const Scrollbar&) const;
 
     void setHasHorizontalScrollbar(bool hasScrollbar);
@@ -382,6 +394,12 @@ private:
     // no longer need this bit.
     unsigned m_needsCompositedScrolling : 1;
 
+    // Set to indicate that a scrollbar layer, if present, needs to be rebuilt
+    // in the next compositing update because the underlying blink::Scrollbar
+    // instance has been reconstructed.
+    unsigned m_rebuildHorizontalScrollbarLayer : 1;
+    unsigned m_rebuildVerticalScrollbarLayer : 1;
+
     // The width/height of our scrolled area.
     // This is OverflowModel's layout overflow translated to physical
     // coordinates. See OverflowModel for the different overflow and
@@ -402,10 +420,16 @@ private:
     // LayoutObject to hold our custom resizer.
     LayoutScrollbarPart* m_resizer;
 
+    ScrollAnchor m_scrollAnchor;
+
 #if ENABLE(ASSERT)
     bool m_hasBeenDisposed;
 #endif
 };
+
+DEFINE_TYPE_CASTS(PaintLayerScrollableArea, ScrollableArea, scrollableArea,
+    scrollableArea->isPaintLayerScrollableArea(),
+    scrollableArea.isPaintLayerScrollableArea());
 
 } // namespace blink
 

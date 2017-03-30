@@ -4,15 +4,18 @@
 
 package com.android.webview.chromium;
 
+import android.Manifest;
 import android.app.ActivityManager;
 import android.content.ComponentCallbacks2;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Looper;
+import android.os.Process;
 import android.os.StrictMode;
 import android.util.Log;
 import android.webkit.CookieManager;
@@ -34,6 +37,7 @@ import org.chromium.android_webview.AwContentsStatics;
 import org.chromium.android_webview.AwCookieManager;
 import org.chromium.android_webview.AwDataReductionProxyManager;
 import org.chromium.android_webview.AwDevToolsServer;
+import org.chromium.android_webview.AwNetworkChangeNotifierRegistrationPolicy;
 import org.chromium.android_webview.AwQuotaManagerBridge;
 import org.chromium.android_webview.AwResource;
 import org.chromium.android_webview.AwSettings;
@@ -50,6 +54,7 @@ import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.content.browser.ContentViewStatics;
+import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.ui.base.ResourceBundle;
 
 import java.io.File;
@@ -119,13 +124,6 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
             CommandLine.init(null);
         }
 
-        CommandLine cl = CommandLine.getInstance();
-        // TODO: currently in a relase build the DCHECKs only log. We either need to insall
-        // a report handler with SetLogReportHandler to make them assert, or else compile
-        // them out of the build altogether (b/8284203). Either way, so long they're
-        // compiled in, we may as unconditionally enable them here.
-        cl.appendSwitch("enable-dcheck");
-
         ThreadUtils.setWillOverrideUiThread();
         // Load chromium library.
         AwBrowserProcess.loadLibrary(getWrappedCurrentApplicationContext());
@@ -176,6 +174,15 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
         DrawGLFunctor.setChromiumAwDrawGLFunction(AwContents.getAwDrawGLFunction());
         AwContents.setAwDrawSWFunctionTable(GraphicsUtils.getDrawSWFunctionTable());
         AwContents.setAwDrawGLFunctionTable(GraphicsUtils.getDrawGLFunctionTable());
+    }
+
+    private void initNetworkChangeNotifier(Context applicationContext) {
+        if (applicationContext.checkPermission(Manifest.permission.ACCESS_NETWORK_STATE,
+                Process.myPid(), Process.myUid()) == PackageManager.PERMISSION_GRANTED) {
+            NetworkChangeNotifier.init(applicationContext);
+            NetworkChangeNotifier.setAutoDetectConnectivityState(
+                    new AwNetworkChangeNotifierRegistrationPolicy());
+        }
     }
 
     private void ensureChromiumStartedLocked(boolean onMainThread) {
@@ -248,6 +255,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
         setUpResources(webViewPackageName, context);
         ResourceBundle.initializeLocalePaks(context, R.array.locale_paks);
         initPlatSupportLibrary();
+        initNetworkChangeNotifier(context);
         final int extraBindFlags = 0;
         AwBrowserProcess.configureChildProcessLauncher(webViewPackageName, extraBindFlags);
         AwBrowserProcess.start(context);
@@ -362,8 +370,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
                         }
                     }
 
-                    // TODO enable after L release to AOSP
-                    //@Override
+                    @Override
                     public void clearClientCertPreferences(Runnable onCleared) {
                         AwContentsStatics.clearClientCertPreferences(onCleared);
                     }
@@ -376,7 +383,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
                         }
                     }
 
-                    // TODO: Add @Override.
+                    @Override
                     public void enableSlowWholeDocumentDraw() {
                         WebViewChromium.enableSlowWholeDocumentDraw();
                     }

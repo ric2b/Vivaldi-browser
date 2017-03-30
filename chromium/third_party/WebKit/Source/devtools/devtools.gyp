@@ -41,14 +41,6 @@
                 'frontend_protocol_sources',
                 'build_applications',
             ],
-            'conditions': [
-                ['debug_devtools==0', {
-                    'dependencies': [
-                        'concatenated_inspector_css',
-                        'concatenated_toolbox_css',
-                    ],
-                }],
-            ],
             'copies': [
                 {
                     'destination': '<(PRODUCT_DIR)/resources/inspector/Images',
@@ -106,10 +98,8 @@
                         'devtools_static_files_list': '<|(devtools_static_grd_files.tmp <@(_static_files))',
                         'generated_files': [
                             # Core and remote modules should not be listed here.
-                            '<(PRODUCT_DIR)/resources/inspector/inspector.css',
                             '<(PRODUCT_DIR)/resources/inspector/inspector.html',
                             '<(PRODUCT_DIR)/resources/inspector/inspector.js',
-                            '<(PRODUCT_DIR)/resources/inspector/toolbox.css',
                             '<(PRODUCT_DIR)/resources/inspector/toolbox.html',
                             '<(PRODUCT_DIR)/resources/inspector/toolbox.js',
                             '<(PRODUCT_DIR)/resources/inspector/accessibility_module.js',
@@ -126,6 +116,7 @@
                             '<(PRODUCT_DIR)/resources/inspector/profiler_module.js',
                             '<(PRODUCT_DIR)/resources/inspector/promises_module.js',
                             '<(PRODUCT_DIR)/resources/inspector/resources_module.js',
+                            '<(PRODUCT_DIR)/resources/inspector/sass_module.js',
                             '<(PRODUCT_DIR)/resources/inspector/security_module.js',
                             '<(PRODUCT_DIR)/resources/inspector/script_formatter_worker_module.js',
                             '<(PRODUCT_DIR)/resources/inspector/settings_module.js',
@@ -292,6 +283,7 @@
                             '<(_output_path)/profiler_module.js',
                             '<(_output_path)/promises_module.js',
                             '<(_output_path)/resources_module.js',
+                            '<(_output_path)/sass_module.js',
                             '<(_output_path)/security_module.js',
                             '<(_output_path)/screencast_module.js',
                             '<(_output_path)/script_formatter_worker_module.js',
@@ -322,7 +314,6 @@
                             'destination': '<(_output_path)',
                             'files': [
                                 '<@(devtools_core_base_files)',
-                                '<@(devtools_core_css_files)',
                             ],
                         },
                         {
@@ -342,45 +333,5 @@
                 }]
             ]
         },
-    ], # targets
-    'conditions': [
-        ['debug_devtools==0', {
-            'targets': [
-                {
-                    'target_name': 'concatenated_inspector_css',
-                    'type': 'none',
-                    'actions': [{
-                        'action_name': 'concatenate_inspector_css',
-                        'script_name': 'scripts/concatenate_css_files.py',
-                        'input_stylesheet': 'front_end/inspector.css',
-                        'inputs': [
-                            '<@(_script_name)',
-                            '<@(_input_stylesheet)',
-                            '<@(devtools_core_css_files)',
-                        ],
-                        'search_path': [ 'front_end' ],
-                        'outputs': ['<(PRODUCT_DIR)/resources/inspector/inspector.css'],
-                        'action': ['python', '<@(_script_name)', '<@(_input_stylesheet)', '<@(_outputs)'],
-                    }],
-                },
-                {
-                    'target_name': 'concatenated_toolbox_css',
-                    'type': 'none',
-                    'actions': [{
-                        'action_name': 'concatenate_toolbox_css',
-                        'script_name': 'scripts/concatenate_css_files.py',
-                        'input_stylesheet': 'front_end/toolbox.css',
-                        'inputs': [
-                            '<@(_script_name)',
-                            '<@(_input_stylesheet)',
-                            '<@(devtools_core_css_files)',
-                        ],
-                        'search_path': [ 'front_end' ],
-                        'outputs': ['<(PRODUCT_DIR)/resources/inspector/toolbox.css'],
-                        'action': ['python', '<@(_script_name)', '<@(_input_stylesheet)', '<@(_outputs)'],
-                    }],
-                },
-            ],
-        }],
-    ], # conditions
+    ]
 }

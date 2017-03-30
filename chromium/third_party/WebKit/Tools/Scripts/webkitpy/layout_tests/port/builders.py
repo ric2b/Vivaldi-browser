@@ -1,4 +1,4 @@
-# Copyright (C) 2011 Google Inc. All rights reserved.
+﻿# Copyright (C) 2011 Google Inc. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
@@ -28,9 +28,6 @@
 
 import re
 
-from webkitpy.common.memoized import memoized
-
-
 # In this dictionary, each item stores:
 # * port_name -- a fully qualified port name
 # * rebaseline_override_dir -- (optional) directory to put baselines in instead of where you would normally put them.
@@ -41,22 +38,18 @@ from webkitpy.common.memoized import memoized
 #      TestExpectationsParser._configuration_tokens_list
 
 _exact_matches = {
-    "WebKit XP": {"port_name": "win-xp", "specifiers": ['XP', 'Release']},
     "WebKit Win7": {"port_name": "win-win7", "specifiers": ['Win7', 'Release']},
     "WebKit Win7 (dbg)": {"port_name": "win-win7", "specifiers": ['Win7', 'Debug']},
     "WebKit Win10": {"port_name": "win-win10", "specifiers": ['Win10', 'Release']},
     # FIXME: Rename this to 'WebKit Linux Precise'
     "WebKit Linux": {"port_name": "linux-precise", "specifiers": ['Precise', 'Release']},
     "WebKit Linux Trusty": {"port_name": "linux-trusty", "specifiers": ['Trusty', 'Release']},
-    "WebKit Linux 32": {"port_name": "linux-x86", "specifiers": ['Linux32', 'Release']},
     "WebKit Linux (dbg)": {"port_name": "linux-precise", "specifiers": ['Precise', 'Debug']},
-    "WebKit Mac10.6": {"port_name": "mac-snowleopard", "specifiers": ['SnowLeopard', 'Release']},
-    "WebKit Mac10.7": {"port_name": "mac-lion", "specifiers": ['Lion', 'Release']},
-    "WebKit Mac10.7 (dbg)": {"port_name": "mac-lion", "specifiers": ['Lion', 'Debug']},
-    "WebKit Mac10.8": {"port_name": "mac-mountainlion", "specifiers": ['MountainLion', 'Release']},
-    "WebKit Mac10.9 (retina)": {"port_name": "mac-retina", "specifiers": ['Retina', 'Release']},
-    "WebKit Mac10.9": {"port_name": "mac-mavericks", "specifiers": ['Mavericks', 'Release']},
+    "WebKit Mac10.9": {"port_name": "mac-mac10.9", "specifiers": ['Mac10.9', 'Release']},
     "WebKit Mac10.10": {"port_name": "mac-mac10.10", "specifiers": ['Mac10.10', 'Release']},
+    "WebKit Mac10.11": {"port_name": "mac-mac10.11", "specifiers": ['10.11', 'Release']},
+    "WebKit Mac10.11 (dbg)": {"port_name": "mac-mac10.11", "specifiers": ['10.11', 'Debug']},
+    "WebKit Mac10.11 (retina)": {"port_name": "mac-retina", "specifiers": ['Retina', 'Release']},
     "WebKit Android (Nexus4)": {"port_name": "android", "specifiers": ['Android', 'Release']},
 }
 

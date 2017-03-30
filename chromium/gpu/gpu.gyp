@@ -199,7 +199,7 @@
         'command_buffer/common/gles2_cmd_format_test_autogen.h',
         'command_buffer/common/gles2_cmd_utils_unittest.cc',
         'command_buffer/common/id_allocator_test.cc',
-        'command_buffer/common/trace_event.h',
+        'command_buffer/common/id_type_unittest.cc',
         'command_buffer/common/unittest_main.cc',
         'command_buffer/service/buffer_manager_unittest.cc',
         'command_buffer/service/cmd_parser_test.cc',
@@ -279,12 +279,6 @@
             '../testing/android/native_test.gyp:native_test_native_code',
           ],
         }],
-        # See http://crbug.com/162998#c4 for why this is needed.
-        ['OS=="linux" and use_allocator!="none"', {
-          'dependencies': [
-            '../base/allocator/allocator.gyp:allocator',
-          ],
-        }],
       ],
       # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
       'msvs_disabled_warnings': [ 4267, ],
@@ -313,14 +307,6 @@
           {
             'dependencies': [
               '../testing/android/native_test.gyp:native_test_native_code',
-            ],
-          }
-        ],
-        # See http://crbug.com/162998#c4 for why this is needed.
-        ['OS=="linux" and use_allocator!="none"',
-          {
-            'dependencies': [
-              '../base/allocator/allocator.gyp:allocator',
             ],
           }
         ],
@@ -368,6 +354,7 @@
         'command_buffer/tests/gl_copy_texture_CHROMIUM_unittest.cc',
         'command_buffer/tests/gl_cube_map_texture_unittest.cc',
         'command_buffer/tests/gl_depth_texture_unittest.cc',
+        'command_buffer/tests/gl_dynamic_config_unittest.cc',
         'command_buffer/tests/gl_ext_blend_func_extended_unittest.cc',
         'command_buffer/tests/gl_ext_multisample_compatibility_unittest.cc',
         'command_buffer/tests/gl_ext_srgb_unittest.cc',
@@ -380,6 +367,7 @@
         'command_buffer/tests/gl_program_unittest.cc',
         'command_buffer/tests/gl_query_unittest.cc',
         'command_buffer/tests/gl_readback_unittest.cc',
+        'command_buffer/tests/gl_request_extension_unittest.cc',
         'command_buffer/tests/gl_shared_resources_unittest.cc',
         'command_buffer/tests/gl_stream_draw_unittest.cc',
         'command_buffer/tests/gl_test_utils.cc',
@@ -435,6 +423,7 @@
       'type': 'shared_library',
       'dependencies': [
         '../base/base.gyp:base',
+        '../gpu/command_buffer/command_buffer.gyp:gles2_utils',
         '../gpu/gpu.gyp:command_buffer_service',
         '../ui/gfx/gfx.gyp:gfx_geometry',
         '../ui/gl/gl.gyp:gl',
@@ -451,23 +440,63 @@
         'gles2_conform_support/egl/egl.cc',
         'gles2_conform_support/egl/surface.cc',
         'gles2_conform_support/egl/surface.h',
+        'gles2_conform_support/egl/test_support.cc',
+        'gles2_conform_support/egl/test_support.h',
+      ],
+	  'defines': [
+        'COMMAND_BUFFER_GLES_LIB_SUPPORT_ONLY',
+        'EGLAPIENTRY=',
+	  ],
+      'conditions': [
+        ['OS=="win"', {
+          'defines': [
+            'EGLAPI=__declspec(dllexport)',
+          ],
+        }, { # OS!="win"
+		  'defines': [
+            'EGLAPI=__attribute__((visibility(\"default\")))'
+          ],
+        }],
+      ],
+    },
+    {
+      # GN version: //gpu:command_buffer_gles2_tests
+      'target_name': 'command_buffer_gles2_tests',
+      'type': '<(gtest_target_type)',
+      'dependencies': [
+        '../base/base.gyp:base',
+        '../base/base.gyp:test_support_base',
+        '../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
+        '../testing/gmock.gyp:gmock',
+        '../testing/gtest.gyp:gtest',
+        'command_buffer_gles2',
+      ],
+      'sources': [
+        # Note: sources list duplicated in GN build.
+        'command_buffer/tests/command_buffer_gles2_tests_main.cc',
+        'command_buffer/tests/egl_test.cc',
+      ],
+	  'defines': [
+         'COMMAND_BUFFER_GLES_LIB_SUPPORT_ONLY',
+         'EGLAPIENTRY=',
       ],
       'conditions': [
         ['OS=="win"', {
           'defines': [
-            'COMMAND_BUFFER_GLES_LIB_SUPPORT_ONLY',
-            'EGLAPIENTRY=',
-            'EGLAPI=__declspec(dllexport)',
+            'EGLAPI=__declspec(dllimport)',
           ],
         }, { # OS!="win"
-          'defines': [
-            'COMMAND_BUFFER_GLES_LIB_SUPPORT_ONLY',
-            'EGLAPIENTRY=',
-            'EGLAPI=__attribute__((visibility(\"default\")))'
+		  'defines': [
+            'EGLAPI=',
           ],
-        }, ],
+		}],
+        ['OS == "android"', {
+          'dependencies': [
+            '../testing/android/native_test.gyp:native_test_native_code',
+          ],
+        }],
       ],
-    }
+    },
   ],
   'conditions': [
     ['component=="static_library"', {
@@ -767,6 +796,19 @@
           },
           'includes': [ '../build/apk_test.gypi' ],
         },
+        {
+          'target_name': 'command_buffer_gles2_tests_apk',
+          'type': 'none',
+          'dependencies': [
+            'command_buffer_gles2_tests',
+          ],
+          'variables': {
+            'test_suite_name': 'command_buffer_gles2_tests',
+          },
+          'includes': [
+            '../build/apk_test.gypi',
+          ],
+        },
       ],
     }],
     ['OS == "win" or (OS == "linux" and use_x11==1) or OS == "mac"', {
@@ -893,6 +935,19 @@
     ['OS == "android" and test_isolation_mode != "noop"',
       {
         'targets': [
+          {
+            'target_name': 'command_buffer_gles2_tests_apk_run',
+            'type': 'none',
+            'dependencies': [
+              'command_buffer_gles2_tests_apk',
+            ],
+            'includes': [
+              '../build/isolate.gypi',
+            ],
+            'sources': [
+              'command_buffer_gles2_apk.isolate',
+            ],
+          },
           {
             'target_name': 'gl_tests_apk_run',
             'type': 'none',

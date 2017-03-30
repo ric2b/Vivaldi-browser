@@ -12,7 +12,6 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/prefs/testing_pref_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -26,6 +25,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "components/prefs/testing_pref_service.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/syncable_prefs/pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -554,7 +554,7 @@ TEST_F(ProfileInfoCacheTest, AddStubProfile) {
 }
 
 // High res avatar downloading is only supported on desktop.
-#if !defined(OS_ANDROID) && !defined(OS_IOS) && !defined(OS_CHROMEOS)
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
 TEST_F(ProfileInfoCacheTest, DownloadHighResAvatarTest) {
   // The TestingProfileManager's ProfileInfoCache doesn't download avatars.
   ProfileInfoCache profile_info_cache(g_browser_process->local_state(),
@@ -690,7 +690,7 @@ TEST_F(ProfileInfoCacheTest, MigrateLegacyProfileNamesWithNewAvatarMenu) {
 }
 #endif
 
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
 TEST_F(ProfileInfoCacheTest,
        DontMigrateLegacyProfileNamesWithoutNewAvatarMenu) {
   EXPECT_EQ(0U, GetCache()->GetNumberOfProfiles());

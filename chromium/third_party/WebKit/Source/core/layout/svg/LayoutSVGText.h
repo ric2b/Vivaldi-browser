@@ -44,6 +44,7 @@ public:
     FloatRect paintInvalidationRectInLocalCoordinates() const override;
     FloatRect objectBoundingBox() const override { return FloatRect(frameRect()); }
     FloatRect strokeBoundingBox() const override;
+    bool isObjectBoundingBoxValid() const;
 
     static LayoutSVGText* locateLayoutSVGTextAncestor(LayoutObject*);
     static const LayoutSVGText* locateLayoutSVGTextAncestor(const LayoutObject*);
@@ -91,6 +92,6 @@ private:
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutSVGText, isSVGText());
 
-}
+} // namespace blink
 
 #endif

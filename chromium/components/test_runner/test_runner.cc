@@ -26,7 +26,6 @@
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
 #include "gin/wrappable.h"
-#include "third_party/WebKit/public/platform/WebBatteryStatus.h"
 #include "third_party/WebKit/public/platform/WebCanvas.h"
 #include "third_party/WebKit/public/platform/WebData.h"
 #include "third_party/WebKit/public/platform/WebPasswordCredential.h"
@@ -221,11 +220,7 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void SetMockDeviceMotion(gin::Arguments* args);
   void SetMockDeviceOrientation(gin::Arguments* args);
   void SetMockScreenOrientation(const std::string& orientation);
-  void DidChangeBatteryStatus(bool charging,
-                              double chargingTime,
-                              double dischargingTime,
-                              double level);
-  void ResetBatteryStatus();
+  void DisableMockScreenOrientation();
   void DidAcquirePointerLock();
   void DidNotAcquirePointerLock();
   void DidLosePointerLock();
@@ -239,6 +234,7 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void OverridePreference(const std::string& key, v8::Local<v8::Value> value);
   void SetAcceptLanguages(const std::string& accept_languages);
   void SetPluginsEnabled(bool enabled);
+  bool AnimationScheduled();
   void DumpEditingCallbacks();
   void DumpAsMarkup();
   void DumpAsText();
@@ -295,7 +291,8 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
                        v8::Local<v8::Function> callback);
   void SetPOSIXLocale(const std::string& locale);
   void SetMIDIAccessorResult(bool result);
-  void SimulateWebNotificationClick(gin::Arguments* args);
+  void SimulateWebNotificationClick(const std::string& title, int action_index);
+  void SimulateWebNotificationClose(const std::string& title, bool by_user);
   void AddMockSpeechRecognitionResult(const std::string& transcript,
                                       double confidence);
   void SetMockSpeechRecognitionError(const std::string& error,
@@ -459,9 +456,8 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
                  &TestRunnerBindings::SetMockDeviceOrientation)
       .SetMethod("setMockScreenOrientation",
                  &TestRunnerBindings::SetMockScreenOrientation)
-      .SetMethod("didChangeBatteryStatus",
-                 &TestRunnerBindings::DidChangeBatteryStatus)
-      .SetMethod("resetBatteryStatus", &TestRunnerBindings::ResetBatteryStatus)
+      .SetMethod("disableMockScreenOrientation",
+                 &TestRunnerBindings::DisableMockScreenOrientation)
       .SetMethod("didAcquirePointerLock",
                  &TestRunnerBindings::DidAcquirePointerLock)
       .SetMethod("didNotAcquirePointerLock",
@@ -518,6 +514,7 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
       .SetMethod("setScriptsAllowed", &TestRunnerBindings::SetScriptsAllowed)
       .SetMethod("setStorageAllowed", &TestRunnerBindings::SetStorageAllowed)
       .SetMethod("setPluginsAllowed", &TestRunnerBindings::SetPluginsAllowed)
+      .SetMethod("animationScheduled", &TestRunnerBindings::AnimationScheduled)
       .SetMethod("setAllowDisplayOfInsecureContent",
                  &TestRunnerBindings::SetAllowDisplayOfInsecureContent)
       .SetMethod("setAllowRunningOfInsecureContent",
@@ -572,6 +569,8 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
                  &TestRunnerBindings::SetMIDIAccessorResult)
       .SetMethod("simulateWebNotificationClick",
                  &TestRunnerBindings::SimulateWebNotificationClick)
+      .SetMethod("simulateWebNotificationClose",
+                 &TestRunnerBindings::SimulateWebNotificationClose)
       .SetMethod("addMockSpeechRecognitionResult",
                  &TestRunnerBindings::AddMockSpeechRecognitionResult)
       .SetMethod("setMockSpeechRecognitionError",
@@ -1015,19 +1014,9 @@ void TestRunnerBindings::SetMockScreenOrientation(
   runner_->SetMockScreenOrientation(orientation);
 }
 
-void TestRunnerBindings::DidChangeBatteryStatus(bool charging,
-                                                double chargingTime,
-                                                double dischargingTime,
-                                                double level) {
-  if (runner_) {
-    runner_->DidChangeBatteryStatus(charging, chargingTime,
-                                    dischargingTime, level);
-  }
-}
-
-void TestRunnerBindings::ResetBatteryStatus() {
+void TestRunnerBindings::DisableMockScreenOrientation() {
   if (runner_)
-    runner_->ResetBatteryStatus();
+    runner_->DisableMockScreenOrientation();
 }
 
 void TestRunnerBindings::DidAcquirePointerLock() {
@@ -1097,6 +1086,13 @@ void TestRunnerBindings::SetAcceptLanguages(
 void TestRunnerBindings::SetPluginsEnabled(bool enabled) {
   if (runner_)
     runner_->SetPluginsEnabled(enabled);
+}
+
+bool TestRunnerBindings::AnimationScheduled() {
+  if (runner_)
+    return runner_->AnimationScheduled();
+  else
+    return false;
 }
 
 void TestRunnerBindings::DumpEditingCallbacks() {
@@ -1413,16 +1409,18 @@ void TestRunnerBindings::SetMIDIAccessorResult(bool result) {
     runner_->SetMIDIAccessorResult(result);
 }
 
-void TestRunnerBindings::SimulateWebNotificationClick(gin::Arguments* args) {
+void TestRunnerBindings::SimulateWebNotificationClick(const std::string& title,
+                                                      int action_index) {
   if (!runner_)
     return;
-  std::string title;
-  int action_index = -1;
-  if (args->GetNext(&title) &&
-      (args->PeekNext().IsEmpty() || args->GetNext(&action_index)))
-    runner_->SimulateWebNotificationClick(title, action_index);
-  else
-    args->ThrowError();
+  runner_->SimulateWebNotificationClick(title, action_index);
+}
+
+void TestRunnerBindings::SimulateWebNotificationClose(const std::string& title,
+                                                      bool by_user) {
+  if (!runner_)
+    return;
+  runner_->SimulateWebNotificationClose(title, by_user);
 }
 
 void TestRunnerBindings::AddMockSpeechRecognitionResult(
@@ -1661,6 +1659,15 @@ TestRunner::TestRunner(TestInterfaces* interfaces)
       disable_notify_done_(false),
       web_history_item_count_(0),
       intercept_post_message_(false),
+      layout_dump_flags_(
+          false,  // dump_as_text
+          false,  // dump_child_frames_as_text
+          false,  // dump_as_markup
+          false,  // dump_child_frames_as_markup
+          false,  // dump_child_frame_scroll_positions
+          false,  // is_printing
+          false,  // dump_line_box_trees
+          false),  // debug_render_tree
       test_interfaces_(interfaces),
       delegate_(nullptr),
       web_view_(nullptr),
@@ -1726,17 +1733,16 @@ void TestRunner::Reset() {
     delegate_->SetBluetoothMockDataSet("");
     delegate_->ClearGeofencingMockProvider();
     delegate_->ResetPermissions();
-    ResetBatteryStatus();
     ResetDeviceLight();
   }
 
   dump_editting_callbacks_ = false;
-  dump_as_text_ = false;
-  dump_as_markup_ = false;
+  layout_dump_flags_.dump_as_text = false;
+  layout_dump_flags_.dump_as_markup = false;
   generate_pixel_results_ = true;
-  dump_child_frame_scroll_positions_ = false;
-  dump_child_frames_as_markup_ = false;
-  dump_child_frames_as_text_ = false;
+  layout_dump_flags_.dump_child_frame_scroll_positions = false;
+  layout_dump_flags_.dump_child_frames_as_text = false;
+  layout_dump_flags_.dump_child_frames_as_markup = false;
   dump_icon_changes_ = false;
   dump_as_audio_ = false;
   dump_frame_load_callbacks_ = false;
@@ -1756,7 +1762,7 @@ void TestRunner::Reset() {
   dump_navigation_policy_ = false;
   test_repaint_ = false;
   sweep_horizontally_ = false;
-  is_printing_ = false;
+  layout_dump_flags_.is_printing = false;
   midi_accessor_result_ = true;
   should_stay_on_page_after_handling_before_unload_ = false;
   should_dump_resource_priorities_ = false;
@@ -1799,21 +1805,12 @@ bool TestRunner::shouldDumpEditingCallbacks() const {
   return dump_editting_callbacks_;
 }
 
-bool TestRunner::shouldDumpAsText() {
-  CheckResponseMimeType();
-  return dump_as_text_;
-}
-
 void TestRunner::setShouldDumpAsText(bool value) {
-  dump_as_text_ = value;
-}
-
-bool TestRunner::shouldDumpAsMarkup() {
-  return dump_as_markup_;
+  layout_dump_flags_.dump_as_text = value;
 }
 
 void TestRunner::setShouldDumpAsMarkup(bool value) {
-  dump_as_markup_ = value;
+  layout_dump_flags_.dump_as_markup = value;
 }
 
 bool TestRunner::shouldDumpAsCustomText() const {
@@ -1843,24 +1840,26 @@ void TestRunner::setShouldGeneratePixelResults(bool value) {
   generate_pixel_results_ = value;
 }
 
-bool TestRunner::shouldDumpChildFrameScrollPositions() const {
-  return dump_child_frame_scroll_positions_;
-}
-
-bool TestRunner::shouldDumpChildFramesAsMarkup() const {
-  return dump_child_frames_as_markup_;
-}
-
-bool TestRunner::shouldDumpChildFramesAsText() const {
-  return dump_child_frames_as_text_;
-}
-
 bool TestRunner::ShouldDumpAsAudio() const {
   return dump_as_audio_;
 }
 
 void TestRunner::GetAudioData(std::vector<unsigned char>* buffer_view) const {
   *buffer_view = audio_data_;
+}
+
+const LayoutDumpFlags& TestRunner::GetLayoutDumpFlags() {
+  CheckResponseMimeType();
+  return layout_dump_flags_;
+}
+
+bool TestRunner::HasCustomTextDump(std::string* custom_text_dump) const {
+  if (shouldDumpAsCustomText()) {
+    *custom_text_dump = customDumpText();
+    return true;
+  }
+
+  return false;
 }
 
 bool TestRunner::shouldDumpFrameLoadCallbacks() const {
@@ -1936,7 +1935,7 @@ bool TestRunner::shouldDumpSelectionRect() const {
 }
 
 bool TestRunner::isPrinting() const {
-  return is_printing_;
+  return layout_dump_flags_.is_printing;
 }
 
 bool TestRunner::shouldWaitUntilExternalURLLoad() const {
@@ -2366,7 +2365,7 @@ bool TestRunner::FindString(const std::string& search_text,
       wrap_around = true;
   }
 
-  WebFrame* frame = web_view_->mainFrame();
+  WebLocalFrame* frame = web_view_->mainFrame()->toWebLocalFrame();
   const bool find_result = frame->find(0, WebString::fromUTF8(search_text),
                                        find_options, wrap_around, 0);
   frame->stopFinding(false);
@@ -2527,21 +2526,8 @@ void TestRunner::SetMockScreenOrientation(const std::string& orientation_str) {
   delegate_->SetScreenOrientation(orientation);
 }
 
-void TestRunner::DidChangeBatteryStatus(bool charging,
-                                        double chargingTime,
-                                        double dischargingTime,
-                                        double level) {
-  blink::WebBatteryStatus status;
-  status.charging = charging;
-  status.chargingTime = chargingTime;
-  status.dischargingTime = dischargingTime;
-  status.level = level;
-  delegate_->DidChangeBatteryStatus(status);
-}
-
-void TestRunner::ResetBatteryStatus() {
-  blink::WebBatteryStatus status;
-  delegate_->DidChangeBatteryStatus(status);
+void TestRunner::DisableMockScreenOrientation() {
+  delegate_->DisableMockScreenOrientation();
 }
 
 void TestRunner::DidAcquirePointerLock() {
@@ -2650,35 +2636,39 @@ void TestRunner::SetPluginsEnabled(bool enabled) {
   delegate_->ApplyPreferences();
 }
 
+bool TestRunner::AnimationScheduled() {
+  return proxy_->AnimationScheduled();
+}
+
 void TestRunner::DumpEditingCallbacks() {
   dump_editting_callbacks_ = true;
 }
 
 void TestRunner::DumpAsMarkup() {
-  dump_as_markup_ = true;
+  layout_dump_flags_.dump_as_markup = true;
   generate_pixel_results_ = false;
 }
 
 void TestRunner::DumpAsText() {
-  dump_as_text_ = true;
+  layout_dump_flags_.dump_as_text = true;
   generate_pixel_results_ = false;
 }
 
 void TestRunner::DumpAsTextWithPixelResults() {
-  dump_as_text_ = true;
+  layout_dump_flags_.dump_as_text = true;
   generate_pixel_results_ = true;
 }
 
 void TestRunner::DumpChildFrameScrollPositions() {
-  dump_child_frame_scroll_positions_ = true;
+  layout_dump_flags_.dump_child_frame_scroll_positions = true;
 }
 
 void TestRunner::DumpChildFramesAsMarkup() {
-  dump_child_frames_as_markup_ = true;
+  layout_dump_flags_.dump_child_frames_as_markup = true;
 }
 
 void TestRunner::DumpChildFramesAsText() {
-  dump_child_frames_as_text_ = true;
+  layout_dump_flags_.dump_child_frames_as_text = true;
 }
 
 void TestRunner::DumpIconChanges() {
@@ -2777,11 +2767,11 @@ void TestRunner::DumpSelectionRect() {
 }
 
 void TestRunner::SetPrinting() {
-  is_printing_ = true;
+  layout_dump_flags_.is_printing = true;
 }
 
 void TestRunner::ClearPrinting() {
-  is_printing_ = false;
+  layout_dump_flags_.is_printing = false;
 }
 
 void TestRunner::SetShouldStayOnPageAfterHandlingBeforeUnload(bool value) {
@@ -2963,6 +2953,11 @@ void TestRunner::SimulateWebNotificationClick(const std::string& title,
   delegate_->SimulateWebNotificationClick(title, action_index);
 }
 
+void TestRunner::SimulateWebNotificationClose(const std::string& title,
+                                              bool by_user) {
+  delegate_->SimulateWebNotificationClose(title, by_user);
+}
+
 void TestRunner::AddMockSpeechRecognitionResult(const std::string& transcript,
                                                 double confidence) {
   proxy_->GetSpeechRecognizerMock()->AddMockResult(
@@ -3078,20 +3073,20 @@ void TestRunner::CapturePixelsCallback(scoped_ptr<InvokeCallbackTask> task,
   int height = snapshot.info().height();
   argv[1] = v8::Number::New(isolate, height);
 
+  // Skia's internal byte order is platform-dependent. Always convert to RGBA
+  // in order to provide a consistent ordering to the layout tests.
+  const SkImageInfo bufferInfo =
+      snapshot.info().makeColorType(kRGBA_8888_SkColorType);
+  const size_t bufferRowBytes = bufferInfo.minRowBytes();
   blink::WebArrayBuffer buffer =
-      blink::WebArrayBuffer::create(snapshot.getSize(), 1);
-  memcpy(buffer.data(), snapshot.getPixels(), buffer.byteLength());
-#if (SK_R32_SHIFT == 16) && !SK_B32_SHIFT
-  {
-    // Skia's internal byte order is BGRA. Must swap the B and R channels in
-    // order to provide a consistent ordering to the layout tests.
-    unsigned char* pixels = static_cast<unsigned char*>(buffer.data());
-    unsigned len = buffer.byteLength();
-    for (unsigned i = 0; i < len; i += 4) {
-      std::swap(pixels[i], pixels[i + 2]);
-    }
+      blink::WebArrayBuffer::create(bufferInfo.getSafeSize(bufferRowBytes), 1);
+  if (!snapshot.readPixels(bufferInfo,
+                           buffer.data(),
+                           bufferRowBytes,
+                           0, 0)) {
+    // We only expect readPixels to fail for null bitmaps.
+    DCHECK(snapshot.isNull());
   }
-#endif
 
   argv[2] = blink::WebArrayBufferConverter::toV8Value(
       &buffer, context->Global(), isolate);
@@ -3154,11 +3149,11 @@ void TestRunner::LocationChangeDone() {
 void TestRunner::CheckResponseMimeType() {
   // Text output: the test page can request different types of output which we
   // handle here.
-  if (!dump_as_text_) {
+  if (!layout_dump_flags_.dump_as_text) {
     std::string mimeType =
         web_view_->mainFrame()->dataSource()->response().mimeType().utf8();
     if (mimeType == "text/plain") {
-      dump_as_text_ = true;
+      layout_dump_flags_.dump_as_text = true;
       generate_pixel_results_ = false;
     }
   }

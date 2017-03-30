@@ -9,7 +9,6 @@
 #include "base/mac/bundle_locations.h"
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/metrics/histogram.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/bookmark_stats.h"
@@ -56,6 +55,7 @@
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/managed/managed_bookmark_service.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_registry.h"
@@ -63,6 +63,7 @@
 #include "extensions/common/extension_set.h"
 #include "grit/theme_resources.h"
 #import "ui/base/cocoa/cocoa_base_utils.h"
+#import "ui/base/cocoa/nsview_additions.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
@@ -1041,7 +1042,12 @@ void RecordAppLaunch(Profile* profile, GURL url) {
 
   switch (currentState_) {
     case BookmarkBar::SHOW:
-      return chrome::kBookmarkBarHeight;
+      // When on a Retina display, -[ToolbarContrller baseToolbarHeight] reduces
+      // the height of the toolbar by 1pt. In this case the bookmark bar needs
+      // to be 1pt taller to maintain the proper spacing between bookmark icons
+      // and toolbar items. See https://crbug.com/326245 .
+      return [[self view] cr_lineWidth] == 0.5 ? chrome::kBookmarkBarHeight + 1
+                                               : chrome::kBookmarkBarHeight;
     case BookmarkBar::DETACHED:
       return chrome::kNTPBookmarkBarHeight;
     case BookmarkBar::HIDDEN:
@@ -1305,9 +1311,9 @@ void RecordAppLaunch(Profile* profile, GURL url) {
   if (!appsPageShortcutButton_.get())
     return NO;
 
-  BOOL visible = bookmarkModel_->loaded() &&
-      chrome::ShouldShowAppsShortcutInBookmarkBar(
-          browser_->profile(), browser_->host_desktop_type());
+  BOOL visible =
+      bookmarkModel_->loaded() &&
+      chrome::ShouldShowAppsShortcutInBookmarkBar(browser_->profile());
   [appsPageShortcutButton_ setHidden:!visible];
   return visible;
 }

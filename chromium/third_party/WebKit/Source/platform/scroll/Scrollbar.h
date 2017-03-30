@@ -97,6 +97,7 @@ public:
     int scrollbarThickness() const;
 
     // Called by the ScrollableArea when the scroll offset changes.
+    // Will trigger paint invalidation if required.
     void offsetDidChange();
 
     void disconnectFromScrollableArea();
@@ -157,7 +158,7 @@ public:
     // DisplayItemClient methods.
     String debugName() const final { return m_orientation == HorizontalScrollbar ? "HorizontalScrollbar" : "VerticalScrollbar"; }
     // TODO(chrishtr): fix this.
-    IntRect visualRect() const override { return IntRect(); }
+    LayoutRect visualRect() const override { return LayoutRect(); }
 
     // Marks the scrollbar as needing to be redrawn.
     //

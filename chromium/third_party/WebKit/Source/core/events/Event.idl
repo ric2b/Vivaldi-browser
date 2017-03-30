@@ -43,6 +43,8 @@
     void preventDefault();
     readonly attribute boolean defaultPrevented;
 
+    [RuntimeEnabled=ShadowDOMV1, MeasureAs=EventScoped] readonly attribute boolean scoped;
+
     [RuntimeEnabled=TrustedEvents, Unforgeable] readonly attribute boolean isTrusted;
 
     // TODO(majidvp): At the moment the actual return value type can either
@@ -64,6 +66,7 @@
     // Shadow DOM
     // https://w3c.github.io/webcomponents/spec/shadow/#extensions-to-event-interface
     [MeasureAs=EventPath, CallWith=ScriptState] readonly attribute EventTarget[] path;
+    [RuntimeEnabled=ShadowDOMV1, MeasureAs=EventDeepPath, CallWith=ScriptState] sequence<EventTarget> deepPath();
 
     // Non-standard APIs
     const unsigned short MOUSEDOWN = 1;

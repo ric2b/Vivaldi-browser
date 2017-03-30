@@ -14,6 +14,7 @@
 
 namespace blink {
 
+// Represents the components of a PropertySpecificKeyframe's value that change smoothly as it interpolates to an adjacent value.
 class CORE_EXPORT InterpolableValue {
     USING_FAST_MALLOC(InterpolableValue);
 public:
@@ -60,6 +61,7 @@ public:
     PassOwnPtr<InterpolableValue> cloneAndZero() const final { return create(0); }
     void scale(double scale) final;
     void scaleAndAdd(double scale, const InterpolableValue& other) final;
+    void set(double value) { m_value = value; }
 
 private:
     void interpolate(const InterpolableValue& to, const double progress, InterpolableValue& result) const final;
@@ -122,7 +124,7 @@ public:
     void set(size_t position, PassOwnPtr<InterpolableValue> value)
     {
         ASSERT(position < m_size);
-        m_values[position] = value;
+        m_values[position] = std::move(value);
     }
     const InterpolableValue* get(size_t position) const
     {
@@ -192,6 +194,6 @@ DEFINE_TYPE_CASTS(InterpolableBool, InterpolableValue, value, value->isBool(), v
 DEFINE_TYPE_CASTS(InterpolableList, InterpolableValue, value, value->isList(), value.isList());
 DEFINE_TYPE_CASTS(InterpolableAnimatableValue, InterpolableValue, value, value->isAnimatableValue(), value.isAnimatableValue());
 
-}
+} // namespace blink
 
 #endif

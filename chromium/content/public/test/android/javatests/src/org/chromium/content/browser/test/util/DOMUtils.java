@@ -4,6 +4,8 @@
 
 package org.chromium.content.browser.test.util;
 
+import static org.chromium.base.test.util.ScalableTimeout.scaleTimeout;
+
 import android.graphics.Rect;
 import android.test.ActivityInstrumentationTestCase2;
 import android.util.JsonReader;
@@ -15,12 +17,17 @@ import org.chromium.content_public.browser.WebContents;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
  * Collection of DOM-based utilities.
  */
 public class DOMUtils {
+
+    private static final long MEDIA_TIMEOUT_SECONDS = scaleTimeout(10);
+    private static final long MEDIA_TIMEOUT_MILLISECONDS = MEDIA_TIMEOUT_SECONDS * 1000;
+
     /**
      * Plays the media with given {@code id}.
      * @param webContents The WebContents in which the media element lives.
@@ -34,7 +41,8 @@ public class DOMUtils {
         sb.append("  if (media) media.play();");
         sb.append("})();");
         JavaScriptUtils.executeJavaScriptAndWaitForResult(
-                webContents, sb.toString());
+                webContents, sb.toString(),
+                MEDIA_TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
     /**
@@ -50,7 +58,8 @@ public class DOMUtils {
         sb.append("  if (media) media.pause();");
         sb.append("})();");
         JavaScriptUtils.executeJavaScriptAndWaitForResult(
-                webContents, sb.toString());
+                webContents, sb.toString(),
+                MEDIA_TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
     /**
@@ -65,6 +74,28 @@ public class DOMUtils {
     }
 
     /**
+     * Returns whether the media with given {@code id} has ended.
+     * @param webContents The WebContents in which the media element lives.
+     * @param id The element's id to check.
+     * @return whether the media has ended.
+     */
+    private static boolean isMediaEnded(final WebContents webContents, final String id)
+            throws InterruptedException, TimeoutException {
+        return getNodeField("ended", webContents, id, Boolean.class);
+    }
+
+    /**
+     * Returns the current time of the media with given {@code id}.
+     * @param webContents The WebContents in which the media element lives.
+     * @param id The element's id to check.
+     * @return the current time (in seconds) of the media.
+     */
+    private static double getCurrentTime(final WebContents webContents, final String id)
+            throws InterruptedException, TimeoutException {
+        return getNodeField("currentTime", webContents, id, Double.class);
+    }
+
+    /**
      * Waits until the playback of the media with given {@code id} has started.
      * @param webContents The WebContents in which the media element lives.
      * @param id The element's id to check.
@@ -75,7 +106,9 @@ public class DOMUtils {
             @Override
             public boolean isSatisfied() {
                 try {
-                    return !DOMUtils.isMediaPaused(webContents, id);
+                    // Playback can't be reliably detected until current time moves forward.
+                    return !DOMUtils.isMediaPaused(webContents, id)
+                            && DOMUtils.getCurrentTime(webContents, id) > 0;
                 } catch (InterruptedException e) {
                     // Intentionally do nothing
                     return false;
@@ -84,21 +117,22 @@ public class DOMUtils {
                     return false;
                 }
             }
-        });
+        }, MEDIA_TIMEOUT_MILLISECONDS, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
     }
 
     /**
-     * Waits until the playback of the media with given {@code id} has stopped.
+     * Waits until the playback of the media with given {@code id} has paused before ended.
      * @param webContents The WebContents in which the media element lives.
      * @param id The element's id to check.
      */
-    public static void waitForMediaPause(final WebContents webContents, final String id)
+    public static void waitForMediaPauseBeforeEnd(final WebContents webContents, final String id)
             throws InterruptedException {
         CriteriaHelper.pollForCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 try {
-                    return DOMUtils.isMediaPaused(webContents, id);
+                    return DOMUtils.isMediaPaused(webContents, id)
+                            && !DOMUtils.isMediaEnded(webContents, id);
                 } catch (InterruptedException e) {
                     // Intentionally do nothing
                     return false;

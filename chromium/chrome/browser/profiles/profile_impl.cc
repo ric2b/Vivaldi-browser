@@ -19,8 +19,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
-#include "base/prefs/json_pref_store.h"
-#include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -76,6 +74,7 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
@@ -89,6 +88,8 @@
 #include "components/metrics/metrics_service.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/json_pref_store.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/proxy_config/pref_proxy_config_tracker.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/signin_pref_names.h"
@@ -121,7 +122,7 @@
 #include "components/user_manager/user_manager.h"
 #endif
 
-#if defined(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND)
 #include "chrome/browser/background/background_mode_manager.h"
 #endif
 
@@ -542,7 +543,7 @@ void ProfileImpl::DoFinalInit() {
           local_state,
           BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO)));
 
-#if defined(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND)
   // Initialize the BackgroundModeManager - this has to be done here before
   // InitExtensions() is called because it relies on receiving notifications
   // when extensions are loaded. BackgroundModeManager is not needed under
@@ -558,7 +559,7 @@ void ProfileImpl::DoFinalInit() {
     if (g_browser_process->background_mode_manager())
       g_browser_process->background_mode_manager()->RegisterProfile(this);
   }
-#endif  // defined(ENABLE_BACKGROUND)
+#endif  // BUILDFLAG(ENABLE_BACKGROUND)
 
   base::FilePath cookie_path = GetPath();
   cookie_path = cookie_path.Append(chrome::kCookieFilename);
@@ -644,7 +645,7 @@ void ProfileImpl::DoFinalInit() {
 
   PushMessagingServiceImpl::InitializeForProfile(this);
 
-#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS) && !defined(OS_IOS)
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
   signin_ui_util::InitializePrefsForProfile(this);
 #endif
 }
@@ -745,6 +746,7 @@ Profile* ProfileImpl::GetOffTheRecordProfile() {
 
 void ProfileImpl::DestroyOffTheRecordProfile() {
   off_the_record_profile_.reset();
+  otr_prefs_->ClearMutableValues();
 #if defined(ENABLE_EXTENSIONS)
   ExtensionPrefValueMapFactory::GetForBrowserContext(this)->
       ClearAllIncognitoSessionOnlyPreferences();

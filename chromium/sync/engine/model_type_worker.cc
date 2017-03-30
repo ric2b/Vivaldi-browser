@@ -33,8 +33,7 @@ using syncer::SyncerError;
 
 ModelTypeWorker::ModelTypeWorker(
     ModelType type,
-    const DataTypeState& initial_state,
-    const UpdateResponseDataList& saved_pending_updates,
+    const sync_pb::DataTypeState& initial_state,
     scoped_ptr<Cryptographer> cryptographer,
     NudgeHandler* nudge_handler,
     scoped_ptr<ModelTypeProcessor> model_type_processor)
@@ -45,18 +44,8 @@ ModelTypeWorker::ModelTypeWorker(
       nudge_handler_(nudge_handler),
       weak_ptr_factory_(this) {
   // Request an initial sync if it hasn't been completed yet.
-  if (!data_type_state_.initial_sync_done) {
+  if (!data_type_state_.initial_sync_done()) {
     nudge_handler_->NudgeForInitialDownload(type_);
-  }
-
-  for (UpdateResponseDataList::const_iterator it =
-           saved_pending_updates.begin();
-       it != saved_pending_updates.end(); ++it) {
-    scoped_ptr<EntityTracker> entity_tracker =
-        EntityTracker::FromUpdateResponse(*it);
-    entity_tracker->ReceivePendingUpdate(*it);
-    entities_.insert(
-        std::make_pair(it->entity->client_tag_hash, std::move(entity_tracker)));
   }
 
   if (cryptographer_) {
@@ -94,13 +83,13 @@ void ModelTypeWorker::UpdateCryptographer(
 void ModelTypeWorker::GetDownloadProgress(
     sync_pb::DataTypeProgressMarker* progress_marker) const {
   DCHECK(CalledOnValidThread());
-  progress_marker->CopyFrom(data_type_state_.progress_marker);
+  progress_marker->CopyFrom(data_type_state_.progress_marker());
 }
 
 void ModelTypeWorker::GetDataTypeContext(
     sync_pb::DataTypeContext* context) const {
   DCHECK(CalledOnValidThread());
-  context->CopyFrom(data_type_state_.type_context);
+  context->CopyFrom(data_type_state_.type_context());
 }
 
 SyncerError ModelTypeWorker::ProcessGetUpdatesResponse(
@@ -111,8 +100,8 @@ SyncerError ModelTypeWorker::ProcessGetUpdatesResponse(
   DCHECK(CalledOnValidThread());
 
   // TODO(rlarocque): Handle data type context conflicts.
-  data_type_state_.type_context = mutated_context;
-  data_type_state_.progress_marker = progress_marker;
+  *data_type_state_.mutable_type_context() = mutated_context;
+  *data_type_state_.mutable_progress_marker() = progress_marker;
 
   UpdateResponseDataList response_datas;
   UpdateResponseDataList pending_updates;
@@ -163,14 +152,14 @@ SyncerError ModelTypeWorker::ProcessGetUpdatesResponse(
       // No encryption.
       entity_tracker->ReceiveUpdate(update_entity->version());
       data.specifics = specifics;
-      response_data.entity = data.Pass();
+      response_data.entity = data.PassToPtr();
       response_datas.push_back(response_data);
     } else if (specifics.has_encrypted() && cryptographer_ &&
                cryptographer_->CanDecrypt(specifics.encrypted())) {
       // Encrypted, but we know the key.
       if (DecryptSpecifics(cryptographer_.get(), specifics, &data.specifics)) {
         entity_tracker->ReceiveUpdate(update_entity->version());
-        response_data.entity = data.Pass();
+        response_data.entity = data.PassToPtr();
         response_data.encryption_key_name = specifics.encrypted().key_name();
         response_datas.push_back(response_data);
       }
@@ -179,7 +168,7 @@ SyncerError ModelTypeWorker::ProcessGetUpdatesResponse(
                 !cryptographer_->CanDecrypt(specifics.encrypted()))) {
       // Can't decrypt right now.  Ask the entity tracker to handle it.
       data.specifics = specifics;
-      response_data.entity = data.Pass();
+      response_data.entity = data.PassToPtr();
       if (entity_tracker->ReceivePendingUpdate(response_data)) {
         // Send to the model thread for safe-keeping across restarts if the
         // tracker decides the update is worth keeping.
@@ -194,8 +183,7 @@ SyncerError ModelTypeWorker::ProcessGetUpdatesResponse(
                                  response_datas.size(), pending_updates.size());
 
   // Forward these updates to the model thread so it can do the rest.
-  model_type_processor_->OnUpdateReceived(data_type_state_, response_datas,
-                                          pending_updates);
+  model_type_processor_->OnUpdateReceived(data_type_state_, response_datas);
 
   return syncer::SYNCER_OK;
 }
@@ -206,13 +194,13 @@ void ModelTypeWorker::ApplyUpdates(syncer::sessions::StatusController* status) {
   // got a response with changes_remaining == 0.  If this is our first download
   // cycle, we should update our state so the ModelTypeProcessor knows that
   // it's safe to commit items now.
-  if (!data_type_state_.initial_sync_done) {
+  if (!data_type_state_.initial_sync_done()) {
     DVLOG(1) << "Delivering 'initial sync done' ping.";
 
-    data_type_state_.initial_sync_done = true;
+    data_type_state_.set_initial_sync_done(true);
 
     model_type_processor_->OnUpdateReceived(
-        data_type_state_, UpdateResponseDataList(), UpdateResponseDataList());
+        data_type_state_, UpdateResponseDataList());
   }
 }
 
@@ -271,7 +259,8 @@ scoped_ptr<CommitContribution> ModelTypeWorker::GetContribution(
     return scoped_ptr<CommitContribution>();
 
   return scoped_ptr<CommitContribution>(new NonBlockingTypeCommitContribution(
-      data_type_state_.type_context, commit_entities, sequence_numbers, this));
+      data_type_state_.type_context(), commit_entities, sequence_numbers,
+      this));
 }
 
 void ModelTypeWorker::StorePendingCommit(const CommitRequestData& request) {
@@ -327,8 +316,8 @@ base::WeakPtr<ModelTypeWorker> ModelTypeWorker::AsWeakPtr() {
 }
 
 bool ModelTypeWorker::IsTypeInitialized() const {
-  return data_type_state_.initial_sync_done &&
-         !data_type_state_.progress_marker.token().empty();
+  return data_type_state_.initial_sync_done() &&
+         !data_type_state_.progress_marker().token().empty();
 }
 
 bool ModelTypeWorker::CanCommitItems() const {
@@ -392,10 +381,11 @@ void ModelTypeWorker::OnCryptographerUpdated() {
   const std::string& new_key_name = cryptographer_->GetDefaultNigoriKeyName();
 
   // Handle a change in encryption key.
-  if (data_type_state_.encryption_key_name != new_key_name) {
+  if (data_type_state_.encryption_key_name() != new_key_name) {
     DVLOG(1) << ModelTypeToString(type_) << ": Updating encryption key "
-             << data_type_state_.encryption_key_name << " -> " << new_key_name;
-    data_type_state_.encryption_key_name = new_key_name;
+             << data_type_state_.encryption_key_name() << " -> "
+             << new_key_name;
+    data_type_state_.set_encryption_key_name(new_key_name);
     new_encryption_key = true;
   }
 
@@ -424,7 +414,7 @@ void ModelTypeWorker::OnCryptographerUpdated() {
           decrypted_data.modification_time = data.modification_time;
 
           UpdateResponseData decrypted_response;
-          decrypted_response.entity = decrypted_data.Pass();
+          decrypted_response.entity = decrypted_data.PassToPtr();
           decrypted_response.response_version = saved_pending.response_version;
           decrypted_response.encryption_key_name =
               data.specifics.encrypted().key_name();
@@ -441,8 +431,7 @@ void ModelTypeWorker::OnCryptographerUpdated() {
              << base::StringPrintf("Delivering encryption key and %" PRIuS
                                    " decrypted updates.",
                                    response_datas.size());
-    model_type_processor_->OnUpdateReceived(data_type_state_, response_datas,
-                                            UpdateResponseDataList());
+    model_type_processor_->OnUpdateReceived(data_type_state_, response_datas);
   }
 }
 

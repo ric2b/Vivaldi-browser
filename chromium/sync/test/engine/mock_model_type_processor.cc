@@ -18,12 +18,12 @@ MockModelTypeProcessor::MockModelTypeProcessor() : is_synchronous_(true) {
 MockModelTypeProcessor::~MockModelTypeProcessor() {
 }
 
-void MockModelTypeProcessor::OnConnect(scoped_ptr<CommitQueue> commit_queue) {
+void MockModelTypeProcessor::ConnectSync(scoped_ptr<CommitQueue> commit_queue) {
   NOTREACHED();
 }
 
 void MockModelTypeProcessor::OnCommitCompleted(
-    const DataTypeState& type_state,
+    const sync_pb::DataTypeState& type_state,
     const CommitResponseDataList& response_list) {
   base::Closure task =
       base::Bind(&MockModelTypeProcessor::OnCommitCompletedImpl,
@@ -36,14 +36,12 @@ void MockModelTypeProcessor::OnCommitCompleted(
 }
 
 void MockModelTypeProcessor::OnUpdateReceived(
-    const DataTypeState& type_state,
-    const UpdateResponseDataList& response_list,
-    const UpdateResponseDataList& pending_updates) {
+    const sync_pb::DataTypeState& type_state,
+    const UpdateResponseDataList& response_list) {
   base::Closure task = base::Bind(&MockModelTypeProcessor::OnUpdateReceivedImpl,
                                   base::Unretained(this),
                                   type_state,
-                                  response_list,
-                                  pending_updates);
+                                  response_list);
   pending_tasks_.push_back(task);
   if (is_synchronous_)
     RunQueuedTasks();
@@ -84,7 +82,7 @@ CommitRequestData MockModelTypeProcessor::CommitRequest(
   data.non_unique_name = "Name: " + tag_hash;
 
   CommitRequestData request_data;
-  request_data.entity = data.Pass();
+  request_data.entity = data.PassToPtr();
   request_data.sequence_number = GetNextSequenceNumber(tag_hash);
   request_data.base_version = base_version;
 
@@ -112,7 +110,7 @@ CommitRequestData MockModelTypeProcessor::DeleteRequest(
       data.creation_time + base::TimeDelta::FromSeconds(base_version);
 
   CommitRequestData request_data;
-  request_data.entity = data.Pass();
+  request_data.entity = data.PassToPtr();
   request_data.sequence_number = GetNextSequenceNumber(tag_hash);
   request_data.base_version = base_version;
 
@@ -129,13 +127,8 @@ UpdateResponseDataList MockModelTypeProcessor::GetNthUpdateResponse(
   return received_update_responses_[n];
 }
 
-UpdateResponseDataList MockModelTypeProcessor::GetNthPendingUpdates(
-    size_t n) const {
-  DCHECK_LT(n, GetNumUpdateResponses());
-  return received_pending_updates_[n];
-}
-
-DataTypeState MockModelTypeProcessor::GetNthTypeStateReceivedInUpdateResponse(
+sync_pb::DataTypeState
+MockModelTypeProcessor::GetNthTypeStateReceivedInUpdateResponse(
     size_t n) const {
   DCHECK_LT(n, GetNumUpdateResponses());
   return type_states_received_on_update_[n];
@@ -151,7 +144,8 @@ CommitResponseDataList MockModelTypeProcessor::GetNthCommitResponse(
   return received_commit_responses_[n];
 }
 
-DataTypeState MockModelTypeProcessor::GetNthTypeStateReceivedInCommitResponse(
+sync_pb::DataTypeState
+MockModelTypeProcessor::GetNthTypeStateReceivedInCommitResponse(
     size_t n) const {
   DCHECK_LT(n, GetNumCommitResponses());
   return type_states_received_on_commit_[n];
@@ -188,7 +182,7 @@ CommitResponseData MockModelTypeProcessor::GetCommitResponse(
 }
 
 void MockModelTypeProcessor::OnCommitCompletedImpl(
-    const DataTypeState& type_state,
+    const sync_pb::DataTypeState& type_state,
     const CommitResponseDataList& response_list) {
   received_commit_responses_.push_back(response_list);
   type_states_received_on_commit_.push_back(type_state);
@@ -203,11 +197,9 @@ void MockModelTypeProcessor::OnCommitCompletedImpl(
 }
 
 void MockModelTypeProcessor::OnUpdateReceivedImpl(
-    const DataTypeState& type_state,
-    const UpdateResponseDataList& response_list,
-    const UpdateResponseDataList& pending_updates) {
+    const sync_pb::DataTypeState& type_state,
+    const UpdateResponseDataList& response_list) {
   received_update_responses_.push_back(response_list);
-  received_pending_updates_.push_back(pending_updates);
   type_states_received_on_update_.push_back(type_state);
   for (UpdateResponseDataList::const_iterator it = response_list.begin();
        it != response_list.end(); ++it) {

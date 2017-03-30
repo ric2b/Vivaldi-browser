@@ -77,11 +77,7 @@ class PasswordFormManager : public PasswordStoreConsumer {
 
   // Retrieves potential matching logins from the database. In addition the
   // statistics is retrived on platforms with the password bubble.
-  // |prompt_policy| indicates whether it's permissible to prompt the user to
-  // authorize access to locked passwords. This argument is only used on
-  // platforms that support prompting the user for access (such as Mac OS).
-  void FetchDataFromPasswordStore(
-      PasswordStore::AuthorizationPromptPolicy prompt_policy);
+  void FetchDataFromPasswordStore();
 
   // Simple state-check to verify whether this object as received a callback
   // from the PasswordStore and completed its matching phase. Note that the
@@ -181,6 +177,16 @@ class PasswordFormManager : public PasswordStoreConsumer {
     has_generated_password_ = generated_password;
   }
 
+  bool is_manual_generation() { return is_manual_generation_; }
+  void set_is_manual_generation(bool is_manual_generation) {
+    is_manual_generation_ = is_manual_generation;
+  }
+
+  const base::string16& generation_element() { return generation_element_; }
+  void set_generation_element(const base::string16& generation_element) {
+    generation_element_ = generation_element;
+  }
+
   bool password_overridden() const { return password_overridden_; }
 
   bool retry_password_form_password_update() const {
@@ -223,6 +229,10 @@ class PasswordFormManager : public PasswordStoreConsumer {
 
   bool is_possible_change_password_form_without_username() const {
     return is_possible_change_password_form_without_username_;
+  }
+
+  const std::vector<scoped_ptr<autofill::PasswordForm>>& federated_matches() {
+    return federated_matches_;
   }
 
   // Use this to wipe copies of |pending_credentials_| from the password store
@@ -399,6 +409,12 @@ class PasswordFormManager : public PasswordStoreConsumer {
   bool UploadChangePasswordForm(const autofill::ServerFieldType& password_type,
                                 const std::string& login_form_signature);
 
+  // Try to label a password field that was used for generation with information
+  // that the password was generated and upload |form_data|. For labelling
+  // |generation_element_| and |is_manual_generation_| fields are used. Returns
+  // true on success.
+  bool UploadGeneratedVote();
+
   // Create pending credentials from provisionally saved form and forms received
   // from password store.
   void CreatePendingCredentials();
@@ -423,9 +439,12 @@ class PasswordFormManager : public PasswordStoreConsumer {
   // Try to find best matched to |form| from |best_matches_| by the rules:
   // 1. If there is an element in |best_matches_| with the same username then
   // return it;
-  // 2. If |form| has no username and there is an element from |best_matches_|
-  // with the same password as in |form| then return it;
-  // 3. Otherwise return nullptr.
+  // 2. If |form| is created with Credential API return nullptr, i.e. we match
+  // Credentials API forms only by username;
+  // 3. If |form| has no |username_element| and no |new_password_element| (i.e.
+  // a form contains only one field which is a password) and there is an element
+  // from |best_matches_| with the same password as in |form| then return it;
+  // 4. Otherwise return nullptr.
   autofill::PasswordForm* FindBestSavedMatch(
       const autofill::PasswordForm* form) const;
 
@@ -437,6 +456,12 @@ class PasswordFormManager : public PasswordStoreConsumer {
   // Set of forms from PasswordStore that correspond to the current site and
   // that are not in |best_matches_|.
   ScopedVector<autofill::PasswordForm> not_best_matches_;
+
+  // Federated credentials relevant to the observed form. They are neither
+  // filled not saved by this PasswordFormManager, so they are kept separately
+  // from |best_matches_|. The PasswordFormManager passes them further to
+  // PasswordManager to show them in the UI.
+  std::vector<scoped_ptr<autofill::PasswordForm>> federated_matches_;
 
   // Set of blacklisted forms from the PasswordStore that best match the current
   // form.
@@ -472,14 +497,20 @@ class PasswordFormManager : public PasswordStoreConsumer {
   // Whether this form has an auto generated password.
   bool has_generated_password_;
 
+  // Whether password generation was manually triggered.
+  bool is_manual_generation_;
+
+  // A password field name that is used for generation.
+  base::string16 generation_element_;
+
   // Whether the saved password was overridden.
   bool password_overridden_;
 
   // A form is considered to be "retry" password if it has only one field which
   // is a current password field.
   // This variable is true if the password passed through ProvisionallySave() is
-  // a password that is not equal to any password from stored for this origin
-  // credentials and it was entered on a retry password form.
+  // a password that is not part of any password form stored for this origin
+  // and it was entered on a retry password form.
   bool retry_password_form_password_update_;
 
   // Whether the user can choose to generate a password for this form.
@@ -544,10 +575,9 @@ class PasswordFormManager : public PasswordStoreConsumer {
   // user has entered.
   FormType form_type_;
 
-  // Null unless FetchMatchingLoginsFromPasswordStore has been called again
-  // without the password store returning results in the meantime. In that case
-  // this stores the prompt policy for the refresh call.
-  scoped_ptr<PasswordStore::AuthorizationPromptPolicy> next_prompt_policy_;
+  // False unless FetchMatchingLoginsFromPasswordStore has been called again
+  // without the password store returning results in the meantime.
+  bool need_to_refetch_;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordFormManager);
 };

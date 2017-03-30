@@ -52,7 +52,7 @@ class ExitLoopOnRelease : public View {
   ~ExitLoopOnRelease() override {}
 
  private:
-  // Overridden from View:
+  // View:
   void OnMouseReleased(const ui::MouseEvent& event) override {
     GetWidget()->Close();
     base::MessageLoop::current()->QuitNow();
@@ -68,7 +68,7 @@ class GestureCaptureView : public View {
   ~GestureCaptureView() override {}
 
  private:
-  // Overridden from View:
+  // View:
   void OnGestureEvent(ui::GestureEvent* event) override {
     if (event->type() == ui::ET_GESTURE_TAP_DOWN) {
       GetWidget()->SetCapture(this);
@@ -132,7 +132,7 @@ class NestedLoopCaptureView : public View {
   ~NestedLoopCaptureView() override {}
 
  private:
-  // Overridden from View:
+  // View:
   bool OnMousePressed(const ui::MouseEvent& event) override {
     // Start a nested loop.
     widget_->Show();
@@ -654,6 +654,7 @@ TEST_F(WidgetTestInteractive, ViewFocusOnHWNDEnabledChanges) {
   }
 
   widget->Show();
+  widget->GetNativeWindow()->GetHost()->Show();
   const HWND hwnd = HWNDForWidget(widget);
   EXPECT_TRUE(::IsWindow(hwnd));
   EXPECT_TRUE(::IsWindowEnabled(hwnd));
@@ -739,6 +740,69 @@ TEST_F(WidgetTestInteractive, WidgetNotActivatedOnFakeActivationMessages) {
   ::SetActiveWindow(win32_native_window1);
   EXPECT_EQ(true, widget1.active());
   EXPECT_EQ(false, widget2.active());
+}
+
+// On Windows if we create a fullscreen window on a thread, then it affects the
+// way other windows on the thread interact with the taskbar. To workaround
+// this we reduce the bounds of a fullscreen window by 1px when it loses
+// activation. This test verifies the same.
+TEST_F(WidgetTestInteractive, FullscreenBoundsReducedOnActivationLoss) {
+  Widget widget1;
+  Widget::InitParams params =
+      CreateParams(Widget::InitParams::TYPE_WINDOW);
+  params.native_widget = new DesktopNativeWidgetAura(&widget1);
+  params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  widget1.Init(params);
+  widget1.SetBounds(gfx::Rect(0, 0, 200, 200));
+  widget1.Show();
+
+  widget1.Activate();
+  RunPendingMessages();
+  EXPECT_EQ(::GetActiveWindow(),
+            widget1.GetNativeWindow()->GetHost()->GetAcceleratedWidget());
+
+  widget1.SetFullscreen(true);
+  EXPECT_TRUE(widget1.IsFullscreen());
+  // Ensure that the StopIgnoringPosChanges task in HWNDMessageHandler runs.
+  // This task is queued when a widget becomes fullscreen.
+  RunPendingMessages();
+  EXPECT_EQ(::GetActiveWindow(),
+            widget1.GetNativeWindow()->GetHost()->GetAcceleratedWidget());
+  gfx::Rect fullscreen_bounds = widget1.GetWindowBoundsInScreen();
+
+  Widget widget2;
+  params.native_widget = new DesktopNativeWidgetAura(&widget2);
+  params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  widget2.Init(params);
+  widget2.SetBounds(gfx::Rect(0, 0, 200, 200));
+  widget2.Show();
+
+  widget2.Activate();
+  RunPendingMessages();
+  EXPECT_EQ(::GetActiveWindow(),
+            widget2.GetNativeWindow()->GetHost()->GetAcceleratedWidget());
+
+  gfx::Rect fullscreen_bounds_after_activation_loss =
+      widget1.GetWindowBoundsInScreen();
+
+  // After deactivation loss the bounds of the fullscreen widget should be
+  // reduced by 1px.
+  EXPECT_EQ(fullscreen_bounds.height() -
+            fullscreen_bounds_after_activation_loss.height(), 1);
+
+  widget1.Activate();
+  RunPendingMessages();
+  EXPECT_EQ(::GetActiveWindow(),
+            widget1.GetNativeWindow()->GetHost()->GetAcceleratedWidget());
+
+  gfx::Rect fullscreen_bounds_after_activate =
+      widget1.GetWindowBoundsInScreen();
+
+  // After activation the bounds of the fullscreen widget should be restored.
+  EXPECT_EQ(fullscreen_bounds, fullscreen_bounds_after_activate);
+
+  widget1.CloseNow();
+  widget2.CloseNow();
 }
 #endif  // defined(OS_WIN)
 
@@ -1107,9 +1171,60 @@ TEST_F(WidgetTestInteractive, MAYBE_ExitFullscreenRestoreState) {
   RunPendingMessages();
 }
 
+// Testing widget delegate that creates a widget with a single view, which
+// should be initially focused.
+class TestInitialFocusWidgetDelegate : public TestDesktopWidgetDelegate {
+ public:
+  explicit TestInitialFocusWidgetDelegate(gfx::NativeWindow context)
+      : view_(new View) {
+    view_->SetFocusable(true);
+
+    Widget::InitParams params(Widget::InitParams::TYPE_WINDOW);
+    params.context = context;
+    InitWidget(params);
+    GetWidget()->GetContentsView()->AddChildView(view_);
+  }
+
+  View* view() { return view_; }
+
+  // DialogDelegateView:
+  View* GetInitiallyFocusedView() override { return view_; }
+
+ private:
+  View* view_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestInitialFocusWidgetDelegate);
+};
+
+// Testing initial focus is assigned properly for normal top-level widgets,
+// and subclasses that specify a initially focused child view.
+TEST_F(WidgetTestInteractive, InitialFocus) {
+  // By default, there is no initially focused view (even if there is a
+  // focusable subview).
+  Widget* toplevel(CreateTopLevelPlatformWidget());
+  View* view = new View;
+  view->SetFocusable(true);
+  toplevel->GetContentsView()->AddChildView(view);
+
+  ShowSync(toplevel);
+  toplevel->Show();
+  EXPECT_FALSE(view->HasFocus());
+  EXPECT_FALSE(toplevel->GetFocusManager()->GetStoredFocusView());
+  toplevel->CloseNow();
+
+  // Testing a widget which specifies a initially focused view.
+  TestInitialFocusWidgetDelegate delegate(GetContext());
+
+  Widget* widget = delegate.GetWidget();
+  ShowSync(widget);
+  widget->Show();
+  EXPECT_TRUE(delegate.view()->HasFocus());
+  EXPECT_EQ(delegate.view(), widget->GetFocusManager()->GetStoredFocusView());
+}
+
 namespace {
 
-// Used to veirfy OnMouseCaptureLost() has been invoked.
+// Used to verify OnMouseCaptureLost() has been invoked.
 class CaptureLostTrackingWidget : public Widget {
  public:
   CaptureLostTrackingWidget() : got_capture_lost_(false) {}

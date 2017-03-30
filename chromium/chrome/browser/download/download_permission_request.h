@@ -24,8 +24,7 @@ class DownloadPermissionRequest : public PermissionBubbleRequest {
   int GetIconId() const override;
   base::string16 GetMessageText() const override;
   base::string16 GetMessageTextFragment() const override;
-  bool HasUserGesture() const override;
-  GURL GetRequestingHostname() const override;
+  GURL GetOrigin() const override;
   void PermissionGranted() override;
   void PermissionDenied() override;
   void Cancelled() override;
@@ -33,7 +32,7 @@ class DownloadPermissionRequest : public PermissionBubbleRequest {
 
  private:
   base::WeakPtr<DownloadRequestLimiter::TabDownloadState> host_;
-  GURL request_url_;
+  GURL request_origin_;
 
   DISALLOW_COPY_AND_ASSIGN(DownloadPermissionRequest);
 };

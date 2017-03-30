@@ -33,7 +33,6 @@ class Thread;
 namespace net {
 class HttpResponseHeaders;
 class URLRequest;
-class URLRequestContext;
 class URLRequestContextGetter;
 }
 
@@ -81,13 +80,13 @@ class SafeBrowsingService
 
   // Get current enabled status. Must be called on IO thread.
   bool enabled() const {
-    DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::IO);
+    DCHECK_CURRENTLY_ON(web::WebThread::IO);
     return enabled_;
   }
 
   // Whether the service is enabled by the current set of profiles.
   bool enabled_by_prefs() const {
-    DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::UI);
+    DCHECK_CURRENTLY_ON(web::WebThread::UI);
     return enabled_by_prefs_;
   }
 
@@ -128,14 +127,6 @@ class SafeBrowsingService
   friend struct web::WebThread::DeleteOnThread<web::WebThread::UI>;
   friend class base::DeleteHelper<SafeBrowsingService>;
   friend class SafeBrowsingURLRequestContextGetter;
-
-  void InitURLRequestContextOnIOThread(
-      net::URLRequestContextGetter* system_url_request_context_getter);
-
-  // Destroys the URLRequest and shuts down the provided getter on the
-  // IO thread.
-  void DestroyURLRequestContextOnIOThread(
-      scoped_refptr<SafeBrowsingURLRequestContextGetter> context_getter);
 
   // Called to initialize objects that are used on the io_thread.  This may be
   // called multiple times during the life of the SafeBrowsingService.
@@ -179,9 +170,6 @@ class SafeBrowsingService
   // |url_request_context_|. Accessed on UI thread.
   scoped_refptr<SafeBrowsingURLRequestContextGetter>
       url_request_context_getter_;
-
-  // The SafeBrowsingURLRequestContext. Accessed on IO thread.
-  scoped_ptr<net::URLRequestContext> url_request_context_;
 
   // Provides phishing and malware statistics. Accessed on IO thread.
   SafeBrowsingPingManager* ping_manager_;

@@ -145,6 +145,11 @@ Iwapo sera hii haijawekwa, hali ya juu ya utoafautishaji huzimwa wakati skrini y
 <translation id="1522425503138261032">Ruhusu tovuti kufuatilia eneo halisi la mtumiaji</translation>
 <translation id="152657506688053119">Orodha ya URL mbadala za mtoa huduma chaguo-msingi wa utafutaji.</translation>
 <translation id="1530812829012954197">Onyesha ruwaza zifuatazo za URL mara kwa mara katika kivinjari cha mpangishaji</translation>
+<translation id="1553684822621013552">Sera hii ikiwekwa kuwa ndivyo, kipengee cha ARC kitawashiwa mtumiaji
+      (kutegemea kanuni za mipangilio ya ziada ya sera - kipengee cha ARC bado hakitapatikana ikiwa kipindi cha matumizi ya muda au kipengee cha kuingia katika akaunti nyingi kitawashwa katika kipindi cha sasa cha mtumiaji).
+
+      Mipangilio hii ikizimwa au isiposanidiwa, basi watumiaji wa biashara
+      hawawezi kutumia kipengee cha ARC.</translation>
 <translation id="1561424797596341174">Ubatilishaji wa sera kwa miundo ya Hitilafu ya seva pangishi ya ufikiaji wa mbali</translation>
 <translation id="1583248206450240930">Tumia <ph name="PRODUCT_FRAME_NAME" /> kwa chaguo-msingi</translation>
 <translation id="1608755754295374538">URL ambazo zitapewa ufikiaji wa vifaa vya kunasa sauti bila ushawishi</translation>
@@ -198,6 +203,13 @@ itabadilishwa na data ya hoja za utafutaji za kweli.
 
           Sera hii inatumika tu endapo sera ya 'DefaultSearchProviderEnabled' imewashwa.</translation>
 <translation id="1859633270756049523">Punguza urefu wa kipindi</translation>
+<translation id="1859859319036806634">Onyo: Toleo la TLS mbadala litaondolewa kwenye <ph name="PRODUCT_NAME" /> baada ya toleo la 52 (kufikia Septemba 2016) na sera hii itaacha kufanya kazi wakati huo.
+
+      TLS ikishindwa kukubaliana,  <ph name="PRODUCT_NAME" /> itajaribu kuunganisha tena kwa kutumia toleo la awali la TLS ili kutatua hitilafu katika seva za HTTPS. Mipangilio hii huweka toleo ambako mchakato huu mbadala huu utaacha kufanya kazi. Seva ikitekeleza makubaliano ya toleo vizuri (yaani bila kukata muunganisho) basi mipangilio hii haitumiki. Hata hivyo, lazima muunganisho unaotokea utii SSLVersionMin.
+
+      Ikiwa sera hii haitawekwa au ikiwekwa kuwa "tls1.2" basi <ph name="PRODUCT_NAME" /> haitatekeleza mbadala huu. Kumbuka hili halizimi matumizi ya matoleo ya awali ya TLS, ni iwapo tu <ph name="PRODUCT_NAME" /> itafanya kazi kwenye seva zenye hitilafu ambazo haziwezi kuendesha matoleo vizuri.
+
+      Vinginevyo, ikiwa ni lazima uoanifu na seva zenye hitilafu udumishwe, hii huenda ikawekwa hadi "tls1.1". Huu ni mkakati wa muda tu na seva inapaswa kurekebishwa haraka.</translation>
 <translation id="1861037019115362154">Inabainisha orodha ya programu jalizi ambazo zinalemazwa katika <ph name="PRODUCT_NAME" /> na huzuia watumiaji kubadilisha mpangilio huu.
 
       Vibambo vya kadi egemezi '*' na '?' vinaweza kutumiwa kulinganisha misururu ya vibambo vibadala. '*' inalinganisha vibambo kadhaa vibadala huku '?' ikibainisha kibambo kimoja cha chaguo, yaani inalinganisha sufuri au kibambo kimoja. Kibambo cha kutoka ni '\', kwa hivyo ili kulinganisha '*', '?', halisi au vibambo '\', unaweza kuweka '\' mbele yavyo.
@@ -249,6 +261,7 @@ Sera hii ikiondolewa, chaguo-msingi zitatumika kwa mipangilio yote.</translation
       Sera hii ikiwekwa kuwa ndivyo, <ph name="PRODUCT_OS_NAME" /> itajaribu kupakua sasisho za data  kiotomatiki kupitia HTTP. Sera ikiwekwa kuwa sivyo ama isiwekwe, HTTPS itatumika kupakua sasisho za data kiotomatiki.</translation>
 <translation id="2006530844219044261">Usimamizi wa nishati</translation>
 <translation id="201557587962247231">Idadi ya upakiaji wa ripoti ya hali ya kifaa</translation>
+<translation id="2024476116966025075">Weka mipangilio ya jina la kikoa linalohitajika kwa ajili ya seva teja za ufikiaji wa mbali</translation>
 <translation id="2030905906517501646">Nenomsingi la mtoa huduma chaguo-msingi wa utafutaji</translation>
 <translation id="206623763829450685">Hubainisha mipango ya uthibitishaji wa HTTP inayotumia na <ph name="PRODUCT_NAME" />.
 
@@ -479,6 +492,7 @@ Sera hii ikiondolewa, chaguo-msingi zitatumika kwa mipangilio yote.</translation
        Kama sera hii imeachwa bila kuwekwa, kipengee cha proksi ya kupunguza data kitapatikana ili mtumiaji achague kama atakitumia au la.</translation>
 <translation id="2587719089023392205">Weka <ph name="PRODUCT_NAME" /> kama Kivinjari Chaguo-msingi</translation>
 <translation id="2592091433672667839">Muda wa shughuli kabla ya seva ya skrini kuonyeshwa kwenye skrini ya kuingia katika modi ya rejareja</translation>
+<translation id="260705825237536216">Weka mipangilio ya programu za ARC</translation>
 <translation id="2623014935069176671">Subiri shughuli ya kwanza ya mtumiaji</translation>
 <translation id="262740370354162807">Wezesha uwasilishaji wa nyaraka kwenye <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="2633084400146331575">Wezesha maoni yaliyozungumzwa</translation>
@@ -487,15 +501,6 @@ Sera hii ikiondolewa, chaguo-msingi zitatumika kwa mipangilio yote.</translation
           Ikiwa sera hii itasalia kama haijawekwa, 'AskGeolocation' itatumika na mtumiaji ataweza kuibadilisha.</translation>
 <translation id="2650049181907741121">Hatua ya kuchukua mtumiaji anapofunga mfuniko</translation>
 <translation id="2660846099862559570">Usitumie proksi kamwe</translation>
-<translation id="2665596266623707739">Onyo: Toleo la TLS 1.0 mbadala litaondolewa kwenye <ph name="PRODUCT_NAME" /> baada ya toleo la 47 (kufikia Januari 2016) na chaguo la "tls1" litaacha kufanya kazi wakati huo.
-
-      TLS ikishindwa kukubaliana, <ph name="PRODUCT_NAME" /> itajaribu tena muunganisho kwa kutumia toleo la chini la TLS ili kutatua hitilafu katika seva za HTTPS. Mipangilio hii husanidi toleo ambalo mchakato wa mbadala huu utaacha kufanya kazi. Seva ikitekeleza makubaliano ya toleo vizuri (yaani bila kukata muunganisho) basi mipangilio hii haitumiki. Hata hivyo, lazima muunganisho unaotokea utii SSLVersionMin.
-
-      Ikiwa sera hii haitasanidiwa basi <ph name="PRODUCT_NAME" /> hutumia toleo chaguo-msingi la chini ambalo ni TLS 1.0 katika <ph name="PRODUCT_NAME" /> 44 na TLS 1.1 katika matoleo ya baadaye. Kumbuka hili halizimi matumizi ya TLS 1.0, ni wapo tu <ph name="PRODUCT_NAME" /> itafanya kazi kwenye seva zenye hitilafu ambazo haziwezi kuendesha matoleo vizuri.
-
-      Vinginevyo inaweza kuwekwa kuwa mojawapo ya thamani zifuatazo: "tls1", "tls1.1" au "tls1.2". Ikiwa ni lazima muoano na seva zenye hitilafu udumishwe, hii inaweza kuwekwa kuwa "tls1". Huu ni mkakati tu wa muda na seva inapaswa kurekebishwa haraka.
-
-      Mipangilio ya "tls1.2" huzima mbadala zote lakini hili linaweza kuwa na athari kubwa ya muoano.</translation>
 <translation id="267596348720209223">Inabainisha usimbaji wa vibambo unaohimiliwa na kitoaji cha utafutaji. Usimbaji ni majini ya ukurasa msimbo kama UTF-8, GB2312, na ISO-8859-1. Yanajaribiwa katika mpangilio uliotolewa.
 
           Sera hii ni ya hiari. Ikiwa haijawekwa, chaguo-msingi itatumika ambayo nis UTF-8.
@@ -516,11 +521,6 @@ Sera hii ikiondolewa, chaguo-msingi zitatumika kwa mipangilio yote.</translation
       Iwapo mpangilio huu umelemazwa, kurasa za wavuti haziwezi kutumia JavaScript na mtumiaji hawezi kubadilisha mpangilio huo.
 
       Iwapo mpangilio huu umezimwa au la, kurasa za wavuti zinaweza kutumia JavaScript lakini mtumiaji anaweza kubadilisha mpangilio huo.</translation>
-<translation id="2747783890942882652">Inasanidi jina la kikoa linalohitajika litakalolazimishwa kwa wapangishaji wa ufikvu wa mbali na huzuia watumiaji kulibadilisha.
-
-          Ikiwa mpangilio huu utawezeshwa, basi wapangishaji wanaweza kushirikiwa tu kwa kutumia akaunti zilizosajiliwa kwenye jina la kikoa lililobainishwa.
-
-          Ikiwa mpangilio huu utalemazwa au haujawekwa, basi wapangishaji wanaweza kushirikiwa kwa kutumia akaunti yoyote.</translation>
 <translation id="2757054304033424106">Aina za viendelezi/programu zinazoruhusiwa kusakinishwa</translation>
 <translation id="2759224876420453487">Dhibiti tabia ya mtumiaji katika kipindi cha wasifu nyingi</translation>
 <translation id="2761483219396643566">Onyo ya kuchelewa wakati wa kutokuwa na shughuli  wakati wa kuendesha kwa nishati ya betri</translation>
@@ -588,6 +588,7 @@ Kama sera hii haitawekwa, hii itawashwa lakini mtumiaji ataweza kuibadilisha.</t
       Inabainisha ikiwa kiendelezi cha vyeti vilivyo katika kikoa cha TLS kinastahili kuwashwa.
 
       Mpangilio huu unatumiwa kuwasha kiendelezi cha vyeti vilivyo katika kikoa cha TLS kwa uchunguzi. Mpangilio wa majaribio utaondolewa siku zijazo.</translation>
+<translation id="2957506574938329824">Usiruhusu tovuti yoyote kuomba idhini ya kufikia vifaa vya Bluetooth kupitia API ya Bluetooth ya Wavuti</translation>
 <translation id="2957513448235202597">Aina ya Akaunti kwa uthibitishaji wa <ph name="HTTP_NEGOTIATE" /></translation>
 <translation id="2959898425599642200">Kanuni za ukwepaji proksi</translation>
 <translation id="2960691910306063964">Washa au zima uthibitishaji usiotumia PIN kwa seva pangishi za uwezo wa kufikia kwa mbali</translation>
@@ -600,6 +601,8 @@ Kama sera hii haitawekwa, hii itawashwa lakini mtumiaji ataweza kuibadilisha.</t
           Sera hii inapokuwa haijawekwa, urefu wa muda wa chaguo-msingi unatumiwa.
 
           Sera ya thamani inastahili kubainishwa kwa nukta. Thamani zinabanwa ili kuwa chini ya ucheleweshaji wa kutokuwa na shughuli.</translation>
+<translation id="2987155890997901449">Washa kipengele cha ARC</translation>
+<translation id="2987227569419001736">Dhibiti matumizi ya API ya Bluetooth ya Wavuti</translation>
 <translation id="2998881342848488968">Sera hii inaruhusu <ph name="PRODUCT_OS_NAME" /> kukwepa seva mbadala yoyote kwa uthibitishaji wa ukurasa wa kwanza wa kuingia kwenye wavuti.
 
       Sera hii inatumika tu ikiwa seva mbadala imesanidiwa (kwa mfano kupitia sera, na mtumiaji katika mipangilio ya://chrome, au kwa kiendelezi).
@@ -922,6 +925,7 @@ Thamani ya sera inapaswa kubainishwa katika sekunde. Thamani huwekwa pamoja ili 
 
           Sera hii inatumika tu endapo sera ya 'DefaultSearchProviderEnabled' imewashwa.</translation>
 <translation id="4320376026953250541">Microsoft Windows XP SP2 au ya karibuni zaidi</translation>
+<translation id="4322842393287974810">Ruhusu kipengele kilichofunguliwa kiotomatiki bila chochote kuchelewesha programu inayotumia skrini nzima kudhibiti toleo la <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="4325690621216251241">Ongeza kitufe cha kuondoka kwenye chano la mfumo</translation>
 <translation id="4347908978527632940">Ikiwa ndivyo na mtumiaji ni anayesimamiwa, basi programu nyingine za Android zinaweza kudadisi vikwazo vya wavuti vya mtumiaji kupitia kwa mtoa huduma za maudhui.
 
@@ -1204,6 +1208,10 @@ Sera hii huathiri aina zote za vifaa vya kuingiza video na si tu kamera iliyojen
 <translation id="5307432759655324440">Upatikanaji wa hali fiche</translation>
 <translation id="5318185076587284965">Washa matumizi ya seva za relei kwa mpangishi wa ufikiaji wa mbali</translation>
 <translation id="5330684698007383292">Ruhusu <ph name="PRODUCT_FRAME_NAME" /> kushughulikia aina zifuatazo za maudhui</translation>
+<translation id="5345267406698765263">Hubainisha sera ya programu ya ARC ikiwa mfuatano wa JSON ambao unaweza
+      kutolewa kama ulivyo programu kwenye ARC inapotumika. Kwa sasa, mipangilio inatumika tu kubainisha usakinishaji wa kulazimisha wa programu.
+
+      Sera hii isipowekwa, hakuna programu zitakazosakinishwa kiotomatiki.</translation>
 <translation id="5365946944967967336">Onyesha kitufe cha Mwazo kwenye upauzana</translation>
 <translation id="5366977351895725771">Ikiwekwa kuwa si kweli, uwezo wa mtumiaji huu wa kufungua akaunti ya mtumiaji anayesimamiwa utazimwa. Bado mtumiaji yeyote ambaye hivi sasa anasimamiwa atapatikana.
 
@@ -1276,6 +1284,13 @@ Sera hii huathiri aina zote za vifaa vya kuingiza video na si tu kamera iliyojen
       Iwapo sera itaachwa bila kuwekwa, watumiaji wanaweza kuamua iwapo rafu itajificha kiotomatiki.</translation>
 <translation id="557658534286111200">Inawezesha au kulemaza uhariri wa alamisho</translation>
 <translation id="5586942249556966598">Usifanye chochote</translation>
+<translation id="5613179474872285001">Huweka mipangilio ya jina la kikoa cha seva teja ambalo litawekwa kwenye seva teja za ufikiaji wa mbali na huzuia watumiaji kulibadilisha.
+
+          Mipangilio hii ikiwashwa, basi ni seva teja kutoka kwenye kikoa kilichobainishwa pekee zinazoweza kuunganisha kwenye seva pangishi.
+
+          Mipangilio hii ikizimwa au isipowekwa, basi sera chaguo-msingi ya aina ya uunganishi hutumika. Kwa ajili ya usaidizi wa mbali, hii huruhusu seva teja kutoka kwenye kikoa chochote kuunganisha kwenye seva pangishi; kwa ufikiaji wa mbali wa wakati wowote, ni mmiliki wa seva panishi pekee anayeweza kuunganisha.
+
+          Angalia pia RemoteAccessHostDomain.</translation>
 <translation id="5630352020869108293">Rejesha kipindi kilichopita</translation>
 <translation id="5645779841392247734">Ruhusu vidakuzi kwenye tovuti hizi</translation>
 <translation id="5677038592630896441">Huhitaji jina la mtumiaji wa ndani na mmiliki wa seva pangishi ya uwezo wa kufikia kwa mbali vilingane.
@@ -1580,6 +1595,9 @@ Thamani ya sera inapaswa kubainishwa katika milisekunde. Thamani huwekwa pamoja 
 
           Sera hii isipowekwa, kibodi ya skrini inawashwa skrini ya kuingia katika akaunti inapoonyeshwa mara ya kwanza. Watumiaji wanaweza wakazima au kuwasha kibodi ya skrini wakati wowote na hali yake kwenye skrini ya kuingia katika akaunti inadumu kati ya watumiaji.</translation>
 <translation id="6598235178374410284">Picha ya ishara ya mtumiaji</translation>
+<translation id="6628646143828354685">Hukuruhusu kuweka ikiwa tovuti zinaruhusiwa kupata idhini ya kufikia vifaa vya karibu vya Bluetooth. Idhini ya kufikia inaweza kuzuiwa kabisa, au mtumiaji anaweza kuulizwa kila wakati tovuti inapotaka kufikia vifaa vya karibu vya Bluetooth.
+
+          Sera hii ikiachwa bila kuwekwa, chaguo la '3' litatumiwa, na mtumiaji ataweza kulibadilisha.</translation>
 <translation id="6636268606788232221">Sanidi mipangilio ya kusimamia nishati mtumiaji anapokuwa hafanyi kitu.
 
          Sera hii hudhibiti mipangilio mingi ya mkakati wa kusimamia nishati mtumiaji anapokuwa hafanyi kitu.
@@ -1669,6 +1687,7 @@ Iwapo sera hii haitawekwa au orodha ni tupu miradi yote itapatikana katika <ph n
           Ukiweka sera hii, watumiaji hawawezi kuibadilisha au kuibatilisha.
 
           Sera hii isipowekwa, chaguo za Ufikiaji hazitaonekana katika menyu ya treya ya mfumo, lakini mtumiaji anaweza kusababisha chaguo za Ufikiaji zionekane kupitia ukurasa wa Mipangilio.</translation>
+<translation id="6766216162565713893">Ruhusu tovuti zimwombe mtumiaji atoe idhini ya kufikia vifaa vya karibu vya Bluetooth</translation>
 <translation id="6770454900105963262">Ripoti taarifa kuhusu vipindi vya skrini nzima vinavyoendelea</translation>
 <translation id="6774533686631353488">Ruhusu wapangishi wa Ujumbe Asili wa ngazi ya mtumiaji (wanaosakinishwa bila idhini ya msimamizi).</translation>
 <translation id="6786747875388722282">Viendelezi</translation>
@@ -1714,6 +1733,13 @@ Iwapo sera hii haijawekwa, maoni yanayotamkwaa yatazimwa mwanzoni lakini yanawez
 <translation id="6943577887654905793">Jina la Mac/Linux inayopendelewa:</translation>
 <translation id="69525503251220566">Kigezo kinachotoa kipengele cha kutafuta kwa picha kwa mtoa huduma wa utafutaji chaguo-msingi</translation>
 <translation id="6956272732789158625">Usiruhusu tovuti yoyote itumie uundaji ufunguo</translation>
+<translation id="695891079107014261">Huweka mipangilio ya jina la kikoa cha seva pangishi linalohitajika litakalolazimishwa kwa seva pangishi za ufikiaji wa mbali na huzuia watumiaji kulibadilisha.
+
+          Ikiwa mipangilio hii itawashwa, basi seva pangishi zinaweza kushirikiwa tu kwa kutumia akaunti zilizosajiliwa kwenye jina la kikoa lililobainishwa.
+
+          Ikiwa mipangilio hii itazimwa au isiwekwe, basi seva pangishi zinaweza kushirikiwa kwa kutumia akaunti yoyote.
+
+          Angalia pia RemoteAccessHostClientDomain.</translation>
 <translation id="6997592395211691850">Iwapo ukaguzi wa OCSP/CRL mtandaoni unahitajika kwa nanga za uaminifu za karibu</translation>
 <translation id="7003334574344702284">Sera hii inalazimisha manaenosiri yaliyohifadhiwa kuletwa kutoka kwenye kivinjari chaguo-msingi cha awali ikiwezeshwa. Ikiwezeshwa, sera hii pia inaathiri kidadisi cha kuleta.
 
@@ -1852,6 +1878,13 @@ Kama sera haitawekwa, kikuza skrini kitazimwa wakati skrini ya kuingia katika ak
 
       Ikiwa sera hii itaachwa bila kuwekwa, SPDY itapatikana.</translation>
 <translation id="7384999953864505698">Huruhusu itifaki ya QUIC</translation>
+<translation id="7406651467768226499">Kuruhusu au kutoruhusu kipengele kilichofunguliwa kiotomatiki bila chochote kuchelewesha programu inayotumia skrini nzima kudhibiti toleo la <ph name="PRODUCT_OS_NAME" />.
+
+      Sera hii hudhibiti ikiwa uruhusu kipengele kilichofunguliwa kiotomatiki bila chochote kuchelewesha programu inayotumia skrini nzima kudhibiti toleo la <ph name="PRODUCT_OS_NAME" /> kwa kutangaza required_platform_version katika faili yake ya maelezo na kuitumia kama kiambishi awali cha toleo lengwa la sasisho otomatiki.
+
+     Sera hii ikiwekwa kuwa ndivyo, thamani ya ufunguo wa faili ya maelezo ya required_platform_version ya kipengele kilichofunguliwa kiotomatiki bila chochote kuchelewesha programu inayotumia skrini nzima inatumika kama kiambishi awali cha toleo lengwa la sasisho otomatiki.
+
+     Sera hii isipoweka mipangilio au ikawekwa kuwa sivyo, ufunguo wa faili ya maelezo ya required_platform_version hupuuzwa na kusasisha kiotomatiki huendelea kama kawaida.</translation>
 <translation id="7417972229667085380">Asilimia ya kupima kuchelewesha kwa mwanga wa skrini katika modi ya wasilisho (kimewacha kuendesha huduma)</translation>
 <translation id="7421483919690710988">Weka ukubwa wa akiba ya diski ya media katika vipimo vya baiti</translation>
 <translation id="7424751532654212117">Orodha ya vighairi katika orodha ya programu jalizi zilizolemazwa</translation>
@@ -1960,6 +1993,7 @@ Kama sera haitawekwa, kikuza skrini kitazimwa wakati skrini ya kuingia katika ak
       Kuacha sera hii bila kuiweka kutafanya <ph name="PRODUCT_NAME" /> itumie thamani chaguo-msingi ya milisekunde 5000.</translation>
 <translation id="7841880500990419427">Kiwango cha chini cha toleo la TLS cha kutumia kama kibadala</translation>
 <translation id="7842869978353666042">Sanidi chaguo za Hifadhi ya Google</translation>
+<translation id="7843525027689416831">Hubainisha alama zinazotakiwa kutumika kwenye <ph name="PRODUCT_NAME" /> inapoanza. Alama zinazobainishwa hutumika kwenye skrini ya kuingia katika akaunti pekee. Alama zilizowekwa kupitia sera hii hazienei ndani ya vipindi vya mtumiaji.</translation>
 <translation id="7848840259379156480">Inakuruhusu kusanidi kionyeshi cha HTML chaguo-msingi wakati <ph name="PRODUCT_FRAME_NAME" /> imesakinishwa.
       Mpangilio chaguo-msingi ni wa kuruhusu kivinjari kipangishi kufanya uonyeshaji, lakini unaweza kufuta kwa hiari hii na kuruhusu <ph name="PRODUCT_FRAME_NAME" /> kuonyesha kurasa za HTML kwa chaguo-msingi.</translation>
 <translation id="7882585827992171421">Sera hii ni amilifu katika modi rejareja tu.
@@ -2280,7 +2314,6 @@ Mfumo wa kipimo  lazima uwe 100% au zaidi. Thamani zitakazofupisha kuchelewa kwa
           Sera ya thamani inastahili kubainishwa kwa nukta. Thamani zinabanwa ili kuwa chini ya ucheleweshaji wa kutokuwa na shughuli.</translation>
 <translation id="891435090623616439">imesimbwa kama mfuatano wa JSON, kwa maelezo angalia <ph name="COMPLEX_POLICIES_URL" /></translation>
 <translation id="8947415621777543415">Ripoti eneo la kifaa</translation>
-<translation id="89493502583189945">Hubainisha alama zinazotakiwa kutumika kwenye <ph name="PRODUCT_NAME" /> inapoanza. Alama zinazobainishwa hutumika kabla <ph name="PRODUCT_NAME" /> haijaanzishwa hata kwa skrini ya kuingia katika akaunti.</translation>
 <translation id="8951350807133946005">Weka saraka ya akiba ya diski</translation>
 <translation id="8955719471735800169">Rudi juu</translation>
 <translation id="8960850473856121830">Ruwaza katika orodha hii zitalinganishwa dhidi ya asili ya usalama wa

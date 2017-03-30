@@ -32,8 +32,7 @@ const int kAnchorlessTopPadding = 10;
 
 // Get the view this bubble will be anchored to via |controller|.
 views::View* GetAnchor(NewCreditCardBubbleController* controller) {
-  Browser* browser = chrome::FindTabbedBrowser(controller->profile(), false,
-                                               chrome::GetActiveDesktop());
+  Browser* browser = chrome::FindTabbedBrowser(controller->profile(), false);
   if (!browser)
     return NULL;
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
@@ -110,8 +109,7 @@ gfx::Rect NewCreditCardBubbleViews::GetBubbleBounds() {
   if (GetAnchorView())
     return bounds;
 
-  Browser* browser = chrome::FindBrowserWithProfile(controller_->profile(),
-                                                    chrome::GetActiveDesktop());
+  Browser* browser = chrome::FindBrowserWithProfile(controller_->profile());
   DCHECK(browser);
 
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
@@ -155,8 +153,6 @@ NewCreditCardBubbleViews::NewCreditCardBubbleViews(
     : BubbleDelegateView(GetAnchor(controller), GetArrow(controller)),
       controller_(controller),
       weak_ptr_factory_(this) {
-  gfx::Insets insets = views::BubbleFrameView::GetTitleInsets();
-  set_margins(gfx::Insets(0, insets.left(), insets.top(), insets.left()));
 }
 
 }  // namespace autofill

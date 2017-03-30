@@ -98,7 +98,7 @@ class ProfileManager : public base::NonThreadSafe,
 
   // Returns true if the profile pointer is known to point to an existing
   // profile.
-  bool IsValidProfile(void* profile);
+  bool IsValidProfile(const void* profile);
 
   // Returns the directory where the first created profile is stored,
   // relative to the user data directory currently in use.
@@ -163,13 +163,18 @@ class ProfileManager : public base::NonThreadSafe,
 
   // Returns a ProfileInfoCache object which can be used to get information
   // about profiles without having to load them from disk.
+  // Deprecated, use GetProfileAttributesStorage() instead.
   ProfileInfoCache& GetProfileInfoCache();
+
+  // Returns a ProfileAttributesStorage object which can be used to get
+  // information about profiles without having to load them from disk.
+  ProfileAttributesStorage& GetProfileAttributesStorage();
 
   // Returns a ProfileShortcut Manager that enables the caller to create
   // profile specfic desktop shortcuts.
   ProfileShortcutManager* profile_shortcut_manager();
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
   // Schedules the profile at the given path to be deleted on shutdown. If we're
   // deleting the last profile, a new one will be created in its place, and in
   // that case the callback will be called when profile creation is complete.
@@ -270,7 +275,7 @@ class ProfileManager : public base::NonThreadSafe,
   // creation and adds it to the set managed by this ProfileManager.
   Profile* CreateAndInitializeProfile(const base::FilePath& profile_dir);
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
   // Schedules the profile at the given path to be deleted on shutdown,
   // and marks the new profile as active.
   void FinishDeletingProfile(const base::FilePath& profile_dir,
@@ -304,7 +309,7 @@ class ProfileManager : public base::NonThreadSafe,
                     Profile* profile,
                     Profile::CreateStatus status);
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
   // Updates the last active user of the current session.
   // On Chrome OS updating this user will have no effect since when browser is
   // restored after crash there's another preference that is taken into account.
@@ -337,7 +342,7 @@ class ProfileManager : public base::NonThreadSafe,
       const CreateCallback& original_callback,
       Profile* loaded_profile,
       Profile::CreateStatus status);
-#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
+#endif  // !defined(OS_ANDROID)
 
   // Object to cache various information about profiles. Contains information
   // about every profile which has been created for this instance of Chrome,
@@ -356,9 +361,9 @@ class ProfileManager : public base::NonThreadSafe,
   // default.
   bool logged_in_;
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
   BrowserListObserver browser_list_observer_;
-#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
+#endif  // !defined(OS_ANDROID)
 
   // Maps profile path to ProfileInfo (if profile has been created). Use
   // RegisterProfile() to add into this map. This map owns all loaded profile

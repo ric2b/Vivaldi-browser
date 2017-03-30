@@ -42,14 +42,14 @@ gfx::Rect ScreenUtil::GetMaximizedWindowBoundsInParent(aura::Window* window) {
 gfx::Rect ScreenUtil::GetDisplayBoundsInParent(aura::Window* window) {
   return ConvertRectFromScreen(
       window->parent(),
-      Shell::GetScreen()->GetDisplayNearestWindow(window).bounds());
+      gfx::Screen::GetScreen()->GetDisplayNearestWindow(window).bounds());
 }
 
 // static
 gfx::Rect ScreenUtil::GetDisplayWorkAreaBoundsInParent(aura::Window* window) {
   return ConvertRectFromScreen(
       window->parent(),
-      Shell::GetScreen()->GetDisplayNearestWindow(window).work_area());
+      gfx::Screen::GetScreen()->GetDisplayNearestWindow(window).work_area());
 }
 
 gfx::Rect ScreenUtil::GetShelfDisplayBoundsInRoot(aura::Window* window) {
@@ -65,6 +65,16 @@ gfx::Rect ScreenUtil::GetShelfDisplayBoundsInRoot(aura::Window* window) {
     size.Scale(scale, scale);
     return gfx::Rect(gfx::ToCeiledSize(size));
   } else {
+    if (window->GetRootWindow()->bounds().IsEmpty()) {
+      // TODO(sad): This only happens when running with mustash, since the
+      // root-window here refers to the shelf Widget, which has not been
+      // sized/positioned yet. Use the bounds of the display in this case.
+      // Ideally, we would not run this code at all for mustash.
+      NOTIMPLEMENTED();
+      gfx::Display display =
+          gfx::Screen::GetScreen()->GetDisplayNearestWindow(window);
+      return gfx::Rect(display.size());
+    }
     return window->GetRootWindow()->bounds();
   }
 }
@@ -92,8 +102,9 @@ const gfx::Display& ScreenUtil::GetSecondaryDisplay() {
   DisplayManager* display_manager = GetDisplayManager();
   CHECK_LE(2U, display_manager->GetNumDisplays());
   return display_manager->GetDisplayAt(0).id() ==
-      Shell::GetScreen()->GetPrimaryDisplay().id() ?
-      display_manager->GetDisplayAt(1) : display_manager->GetDisplayAt(0);
+                 gfx::Screen::GetScreen()->GetPrimaryDisplay().id()
+             ? display_manager->GetDisplayAt(1)
+             : display_manager->GetDisplayAt(0);
 }
 
 }  // namespace ash

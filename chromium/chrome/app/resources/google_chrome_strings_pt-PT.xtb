@@ -3,7 +3,6 @@
 <translationbundle lang="pt-PT">
 <translation id="1001534784610492198">O arquivo do programa de instalação está corrompido ou é inválido. Transfira de novo o Google Chrome.</translation>
 <translation id="1013290471399003443">O Chrome confirmou que <ph name="ISSUER" /> emitiu o certificado deste Website. O servidor forneceu informações de Transparência do certificado válidas.</translation>
-<translation id="1016765312371154165">O Chrome não foi corretamente encerrado.</translation>
 <translation id="103396972844768118">Informações importantes acerca dos seus dados do Chrome</translation>
 <translation id="1035334672863811645">inicie sessão no Chrome</translation>
 <translation id="1061441684050139317">O Chrome necessita de acesso ao microfone para o partilhar com este site.</translation>
@@ -51,7 +50,6 @@ Se, mesmo assim, iniciar sessão, as informações do Chrome, como marcadores, h
 <translation id="2397416548179033562">Mostrar menu do Chrome</translation>
 <translation id="2429317896000329049">O Google Chrome não conseguiu sincronizar os dados porque a Sincronização não está disponível para o seu domínio.</translation>
 <translation id="2485422356828889247">Desinstalar</translation>
-<translation id="2576431527583832481">O Chrome ficou ainda melhor! Está disponível uma nova versão.</translation>
 <translation id="2580411288591421699">Não é possível instalar a mesma versão do Google Chrome atualmente em execução. Feche o Google Chrome e tente novamente.</translation>
 <translation id="2582790009689336987">Em breve, este computador deixará de receber atualizações do Google Chrome, uma vez que este sistema Linux já não será suportado.</translation>
 <translation id="2588322182880276190">Logótipo do Chrome</translation>
@@ -111,7 +109,6 @@ Se, mesmo assim, iniciar sessão, as informações do Chrome, como marcadores, h
 <translation id="4633000520311261472">Para tornar o Chrome mais seguro, desativámos algumas extensões que não estão listadas na <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> e é possível que tenham sido adicionadas sem o seu conhecimento.</translation>
 <translation id="4700157086864140907">O Google Chrome pode disponibilizar uma verificação ortográfica mais inteligente, enviando o que escreve no navegador para os servidores da Google, o que lhe permite utilizar a mesma tecnologia de verificação ortográfica da pesquisa do Google.</translation>
 <translation id="4728575227883772061">Houve uma falha na instalação devido a um erro não especificado. Se o Google Chrome estiver atualmente em execução, feche-o e tente de novo.</translation>
-<translation id="473775607612524610">Actualizar</translation>
 <translation id="4743926867934016338">Aceitar e pesquisar</translation>
 <translation id="4751441238232965030">Em breve, este computador deixará de receber atualizações do Google Chrome de 32 bits. Atualize para o Google Chrome de 64 bits.</translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
@@ -208,7 +205,6 @@ Se, mesmo assim, iniciar sessão, as informações do Chrome, como marcadores, h
 <translation id="7808348361785373670">Remover do Chrome...</translation>
 <translation id="7825851276765848807">Ocorreu uma falha na instalação devido a um erro não especificado. Transfira novamente o Google Chrome.</translation>
 <translation id="7890208801193284374">Se partilhar um computador, os amigos e os familiares podem navegar separadamente e configurar o Chrome da forma que quiserem.</translation>
-<translation id="8000275528373650868">O Google Chrome requer o Windows Vista ou o Windows XP com SP2 ou superior.</translation>
 <translation id="8005540215158006229">O Chrome está quase pronto.</translation>
 <translation id="8008534537613507642">Reinstalar Chrome</translation>
 <translation id="8030318113982266900">A atualizar o dispositivo para o canal <ph name="CHANNEL_NAME" />...</translation>
@@ -237,6 +233,7 @@ Se, mesmo assim, iniciar sessão, as informações do Chrome, como marcadores, h
 <translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">Não tem os direitos adequados para uma instalação ao nível do sistema. Tente executar o programa de instalação novamente como Administrador.</translation>
 <translation id="9026991721384951619">O SO Chrome não conseguiu sincronizar os dados porque os detalhes de início de sessão da sua conta estão desatualizados.</translation>
+<translation id="9067395829937117663">O Google Chrome requer o Windows 7 ou superior.</translation>
 <translation id="9102715433345326100">Este ficheiro é malicioso e o Chrome bloqueou-o.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Aviso:<ph name="END_BOLD" /> o Google Chrome não consegue impedir que as extensões gravem o seu histórico de navegação. Para desativar esta extensão no modo de navegação anónima, desmarque esta opção.</translation>
 <translation id="911206726377975832">Eliminar também os seus dados de navegação?</translation>

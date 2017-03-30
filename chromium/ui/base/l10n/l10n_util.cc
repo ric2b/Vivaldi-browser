@@ -32,6 +32,8 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
 
+#include "app/vivaldi_apptools.h"
+
 #if defined(OS_ANDROID)
 #include "base/android/locale_utils.h"
 #include "ui/base/l10n/l10n_util_android.h"
@@ -401,6 +403,13 @@ bool CheckAndResolveLocale(const std::string& locale,
 
 std::string GetApplicationLocaleInternal(const std::string& pref_locale) {
 #if defined(OS_MACOSX)
+  if (vivaldi::IsVivaldiRunning()) {
+    if (!pref_locale.empty()) {
+      std::string app_locale = base::i18n::GetCanonicalLocale(pref_locale);
+      if (!app_locale.empty())
+        return app_locale;
+    }
+  }
 
   // Use any override (Cocoa for the browser), otherwise use the preference
   // passed to the function.
@@ -449,6 +458,10 @@ std::string GetApplicationLocaleInternal(const std::string& pref_locale) {
   candidates.push_back(base::android::GetDefaultLocale());
 
 #elif defined(USE_GLIB) && !defined(OS_CHROMEOS)
+  if (vivaldi::IsVivaldiRunning()) {
+    if (!pref_locale.empty())
+      candidates.push_back(base::i18n::GetCanonicalLocale(pref_locale));
+  }
 
   // GLib implements correct environment variable parsing with
   // the precedence order: LANGUAGE, LC_ALL, LC_MESSAGES and LANG.

@@ -45,7 +45,6 @@ namespace media {
 
 namespace {
 
-const int kNumOutputChannels = 2;
 const int64_t kMaxInputQueueUs = 90000;
 const int64_t kFadeMs = 15;
 // Number of samples to report as readable when paused. When paused, the mixer
@@ -76,6 +75,7 @@ StreamMixerAlsaInputImpl::StreamMixerAlsaInputImpl(
                          base::Time::kMicrosecondsPerSecond),
       fade_frames_remaining_(0),
       fade_out_frames_total_(0),
+      zeroed_frames_(0),
       weak_factory_(this) {
   DCHECK(delegate_);
   DCHECK(mixer_);
@@ -111,9 +111,7 @@ void StreamMixerAlsaInputImpl::Initialize(
     double resample_ratio = static_cast<double>(input_samples_per_second_) /
                             mixer_->output_samples_per_second();
     resampler_.reset(new ::media::MultiChannelResampler(
-        kNumOutputChannels,
-        resample_ratio,
-        kDefaultReadSize,
+        mixer_->num_output_channels(), resample_ratio, kDefaultReadSize,
         base::Bind(&StreamMixerAlsaInputImpl::ReadCB, base::Unretained(this))));
     resampler_->PrimeWithSilence();
   }
@@ -193,7 +191,8 @@ MediaPipelineBackendAlsa::RenderingDelay StreamMixerAlsaInputImpl::QueueData(
     const scoped_refptr<DecoderBufferBase>& data) {
   queue_lock_.AssertAcquired();
   if (!data->end_of_stream()) {
-    int frames = data->data_size() / (kNumOutputChannels * sizeof(float));
+    int frames =
+        data->data_size() / (mixer_->num_output_channels() * sizeof(float));
     queue_.push_back(data);
     queued_frames_ += frames;
     queued_frames_including_resampler_ += frames;
@@ -237,7 +236,7 @@ void StreamMixerAlsaInputImpl::AfterWriteFrames(
     queued_frames_ = 0;
     for (const auto& data : queue_)
       queued_frames_ +=
-          data->data_size() / (kNumOutputChannels * sizeof(float));
+          data->data_size() / (mixer_->num_output_channels() * sizeof(float));
     queued_frames_ -= current_buffer_offset_;
     DCHECK_GE(queued_frames_, 0);
     queued_frames_including_resampler_ =
@@ -289,7 +288,7 @@ void StreamMixerAlsaInputImpl::GetResampledData(::media::AudioBus* dest,
                                                 int frames) {
   DCHECK(mixer_task_runner_->BelongsToCurrentThread());
   DCHECK(dest);
-  DCHECK_EQ(kNumOutputChannels, dest->channels());
+  DCHECK_EQ(mixer_->num_output_channels(), dest->channels());
   DCHECK_GE(dest->frames(), frames);
 
   if (state_ == kStatePaused || state_ == kStateDeleted) {
@@ -337,8 +336,8 @@ void StreamMixerAlsaInputImpl::FillFrames(int frame_delay,
       base::AutoLock lock(queue_lock_);
       if (!queue_.empty()) {
         buffer = queue_.front();
-        buffer_frames =
-            buffer->data_size() / (kNumOutputChannels * sizeof(float));
+        buffer_frames = buffer->data_size() /
+                        (mixer_->num_output_channels() * sizeof(float));
         frames_to_copy =
             std::min(frames_left, buffer_frames - current_buffer_offset_);
         // Note that queued_frames_ is not updated until AfterWriteFrames().
@@ -355,17 +354,20 @@ void StreamMixerAlsaInputImpl::FillFrames(int frame_delay,
     if (buffer) {
       const float* buffer_samples =
           reinterpret_cast<const float*>(buffer->data());
-      for (int i = 0; i < kNumOutputChannels; ++i) {
+      for (int i = 0; i < mixer_->num_output_channels(); ++i) {
         const float* buffer_channel = buffer_samples + (buffer_frames * i);
         memcpy(output->channel(i) + frames_filled,
-               buffer_channel + buffer_offset,
-               frames_to_copy * sizeof(float));
+               buffer_channel + buffer_offset, frames_to_copy * sizeof(float));
       }
       frames_left -= frames_to_copy;
       frames_filled += frames_to_copy;
+      LOG_IF(WARNING, zeroed_frames_ > 0) << "Filled a total of "
+                                          << zeroed_frames_ << " frames with 0";
+      zeroed_frames_ = 0;
     } else {
       // No data left in queue; fill remaining frames with zeros.
-      LOG(WARNING) << "Filling " << frames_left << " frames with 0";
+      LOG_IF(WARNING, zeroed_frames_ == 0) << "Starting to fill frames with 0";
+      zeroed_frames_ += frames_left;
       output->ZeroFramesPartial(frames_filled, frames_left);
       frames_filled += frames_left;
       frames_left = 0;
@@ -380,7 +382,8 @@ void StreamMixerAlsaInputImpl::FillFrames(int frame_delay,
 int StreamMixerAlsaInputImpl::NormalFadeFrames() {
   DCHECK(mixer_task_runner_->BelongsToCurrentThread());
   int frames = (mixer_->output_samples_per_second() * kFadeMs /
-                base::Time::kMillisecondsPerSecond) - 1;
+                base::Time::kMillisecondsPerSecond) -
+               1;
   return std::max(frames, 0);
 }
 
@@ -391,7 +394,7 @@ void StreamMixerAlsaInputImpl::FadeIn(::media::AudioBus* dest, int frames) {
                          base::Time::kMillisecondsPerSecond;
   for (int f = 0; f < frames && fade_frames_remaining_; ++f) {
     float fade_multiplier = 1.0 - fade_frames_remaining_ / fade_in_frames;
-    for (int c = 0; c < kNumOutputChannels; ++c)
+    for (int c = 0; c < mixer_->num_output_channels(); ++c)
       dest->channel(c)[f] *= fade_multiplier;
     --fade_frames_remaining_;
   }
@@ -404,13 +407,13 @@ void StreamMixerAlsaInputImpl::FadeOut(::media::AudioBus* dest, int frames) {
   for (; f < frames && fade_frames_remaining_; ++f) {
     float fade_multiplier =
         fade_frames_remaining_ / static_cast<float>(fade_out_frames_total_);
-    for (int c = 0; c < kNumOutputChannels; ++c)
+    for (int c = 0; c < mixer_->num_output_channels(); ++c)
       dest->channel(c)[f] *= fade_multiplier;
     --fade_frames_remaining_;
   }
   // Zero remaining frames
   for (; f < frames; ++f) {
-    for (int c = 0; c < kNumOutputChannels; ++c)
+    for (int c = 0; c < mixer_->num_output_channels(); ++c)
       dest->channel(c)[f] = 0.0f;
   }
 
@@ -450,7 +453,7 @@ void StreamMixerAlsaInputImpl::SetPaused(bool paused) {
     } else {
       return;
     }
-    LOG(INFO) << "Pausing";
+    LOG(INFO) << "Pausing " << this;
   } else {
     if (state_ == kStateFadingOut) {
       fade_frames_remaining_ = NormalFadeFrames() - fade_frames_remaining_;
@@ -459,7 +462,7 @@ void StreamMixerAlsaInputImpl::SetPaused(bool paused) {
     } else {
       return;
     }
-    LOG(INFO) << "Unpausing";
+    LOG(INFO) << "Unpausing " << this;
     state_ = kStateNormalPlayback;
   }
   DCHECK_GE(fade_frames_remaining_, 0);

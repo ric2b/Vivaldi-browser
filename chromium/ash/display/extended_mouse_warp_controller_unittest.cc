@@ -9,6 +9,7 @@
 #include "ash/display/mouse_cursor_event_filter.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/display_manager_test_api.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/display.h"
 #include "ui/gfx/screen.h"
@@ -43,8 +44,9 @@ TEST_F(ExtendedMouseWarpControllerTest, IndicatorBoundsTestOnRight) {
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
   DisplayManager* display_manager = Shell::GetInstance()->display_manager();
-  DisplayLayout layout(DisplayLayout::RIGHT, 0);
-  display_manager->SetLayoutForCurrentDisplays(layout);
+  scoped_ptr<DisplayLayout> layout(
+      test::CreateDisplayLayout(DisplayPlacement::RIGHT, 0));
+  display_manager->SetLayoutForCurrentDisplays(layout->Copy());
   event_filter()->ShowSharedEdgeIndicator(root_windows[0] /* primary */);
 
   ASSERT_EQ(1U, mouse_warp_controller()->warp_regions_.size());
@@ -59,8 +61,8 @@ TEST_F(ExtendedMouseWarpControllerTest, IndicatorBoundsTestOnRight) {
             mouse_warp_controller()->warp_regions_[0]->b_indicator_bounds());
 
   // Move 2nd display downwards a bit.
-  layout.offset = 5;
-  display_manager->SetLayoutForCurrentDisplays(layout);
+  layout->placement_list[0]->offset = 5;
+  display_manager->SetLayoutForCurrentDisplays(layout->Copy());
   event_filter()->ShowSharedEdgeIndicator(root_windows[0] /* primary */);
   // This is same as before because the 2nd display's y is above
   // the indicator's x.
@@ -77,8 +79,8 @@ TEST_F(ExtendedMouseWarpControllerTest, IndicatorBoundsTestOnRight) {
 
   // Move it down further so that the shared edge is shorter than
   // minimum hole size (160).
-  layout.offset = 200;
-  display_manager->SetLayoutForCurrentDisplays(layout);
+  layout->placement_list[0]->offset = 200;
+  display_manager->SetLayoutForCurrentDisplays(layout->Copy());
   event_filter()->ShowSharedEdgeIndicator(root_windows[0] /* primary */);
   ASSERT_EQ(1U, mouse_warp_controller()->warp_regions_.size());
   EXPECT_EQ(gfx::Rect(359, 200, 1, 160),
@@ -93,8 +95,8 @@ TEST_F(ExtendedMouseWarpControllerTest, IndicatorBoundsTestOnRight) {
             mouse_warp_controller()->warp_regions_[0]->b_indicator_bounds());
 
   // Now move 2nd display upwards
-  layout.offset = -5;
-  display_manager->SetLayoutForCurrentDisplays(layout);
+  layout->placement_list[0]->offset = -5;
+  display_manager->SetLayoutForCurrentDisplays(layout->Copy());
   event_filter()->ShowSharedEdgeIndicator(root_windows[0] /* primary */);
   ASSERT_EQ(1U, mouse_warp_controller()->warp_regions_.size());
   EXPECT_EQ(gfx::Rect(359, 16, 1, 344),
@@ -121,8 +123,9 @@ TEST_F(ExtendedMouseWarpControllerTest, IndicatorBoundsTestOnLeft) {
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
   DisplayManager* display_manager = Shell::GetInstance()->display_manager();
-  DisplayLayout layout(DisplayLayout::LEFT, 0);
-  display_manager->SetLayoutForCurrentDisplays(layout);
+  scoped_ptr<DisplayLayout> layout(
+      test::CreateDisplayLayout(DisplayPlacement::LEFT, 0));
+  display_manager->SetLayoutForCurrentDisplays(layout->Copy());
   event_filter()->ShowSharedEdgeIndicator(root_windows[0] /* primary */);
   ASSERT_EQ(1U, mouse_warp_controller()->warp_regions_.size());
   EXPECT_EQ(gfx::Rect(0, 16, 1, 344),
@@ -136,8 +139,8 @@ TEST_F(ExtendedMouseWarpControllerTest, IndicatorBoundsTestOnLeft) {
   EXPECT_EQ(gfx::Rect(0, 0, 1, 360),
             mouse_warp_controller()->warp_regions_[0]->b_indicator_bounds());
 
-  layout.offset = 250;
-  display_manager->SetLayoutForCurrentDisplays(layout);
+  layout->placement_list[0]->offset = 250;
+  display_manager->SetLayoutForCurrentDisplays(layout->Copy());
   event_filter()->ShowSharedEdgeIndicator(root_windows[0] /* primary */);
   ASSERT_EQ(1U, mouse_warp_controller()->warp_regions_.size());
   EXPECT_EQ(gfx::Rect(0, 250, 1, 110),
@@ -161,8 +164,9 @@ TEST_F(ExtendedMouseWarpControllerTest, IndicatorBoundsTestOnTopBottom) {
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
   DisplayManager* display_manager = Shell::GetInstance()->display_manager();
-  DisplayLayout layout(DisplayLayout::TOP, 0);
-  display_manager->SetLayoutForCurrentDisplays(layout);
+  scoped_ptr<DisplayLayout> layout(
+      test::CreateDisplayLayout(DisplayPlacement::TOP, 0));
+  display_manager->SetLayoutForCurrentDisplays(layout->Copy());
   event_filter()->ShowSharedEdgeIndicator(root_windows[0] /* primary */);
   ASSERT_EQ(1U, mouse_warp_controller()->warp_regions_.size());
   EXPECT_EQ(gfx::Rect(0, 0, 360, 1),
@@ -176,8 +180,8 @@ TEST_F(ExtendedMouseWarpControllerTest, IndicatorBoundsTestOnTopBottom) {
   EXPECT_EQ(gfx::Rect(0, 0, 360, 1),
             mouse_warp_controller()->warp_regions_[0]->b_indicator_bounds());
 
-  layout.offset = 250;
-  display_manager->SetLayoutForCurrentDisplays(layout);
+  layout->placement_list[0]->offset = 250;
+  display_manager->SetLayoutForCurrentDisplays(layout->Copy());
   event_filter()->ShowSharedEdgeIndicator(root_windows[0] /* primary */);
   ASSERT_EQ(1U, mouse_warp_controller()->warp_regions_.size());
   EXPECT_EQ(gfx::Rect(250, 0, 110, 1),
@@ -191,9 +195,9 @@ TEST_F(ExtendedMouseWarpControllerTest, IndicatorBoundsTestOnTopBottom) {
   EXPECT_EQ(gfx::Rect(250, 0, 110, 1),
             mouse_warp_controller()->warp_regions_[0]->b_indicator_bounds());
 
-  layout.position = DisplayLayout::BOTTOM;
-  layout.offset = 0;
-  display_manager->SetLayoutForCurrentDisplays(layout);
+  layout->placement_list[0]->position = DisplayPlacement::BOTTOM;
+  layout->placement_list[0]->offset = 0;
+  display_manager->SetLayoutForCurrentDisplays(layout->Copy());
   event_filter()->ShowSharedEdgeIndicator(root_windows[0] /* primary */);
   ASSERT_EQ(1U, mouse_warp_controller()->warp_regions_.size());
   EXPECT_EQ(gfx::Rect(0, 359, 360, 1),
@@ -260,9 +264,7 @@ TEST_F(ExtendedMouseWarpControllerTest, IndicatorBoundsTestThreeDisplays) {
   UpdateDisplay("360x360,700x700,1000x1000");
   run_test();
 
-  UpdateDisplay("360x360,700x700,1000x1000");
-  Shell::GetInstance()->window_tree_host_manager()->SwapPrimaryDisplay();
-  run_test();
+  // TODO(oshima): Add test cases with layouts, primary swap.
 }
 
 }  // namespace ash

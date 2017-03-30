@@ -154,7 +154,7 @@ void SimplifiedBackwardsTextIteratorAlgorithm<Strategy>::advance()
         // Don't handle node if we start iterating at [node, 0].
         if (!m_handledNode && !(m_node == m_endNode && !m_endOffset)) {
             LayoutObject* layoutObject = m_node->layoutObject();
-            if (layoutObject && layoutObject->isText() && m_node->nodeType() == Node::TEXT_NODE) {
+            if (layoutObject && layoutObject->isText() && m_node->getNodeType() == Node::TEXT_NODE) {
                 // FIXME: What about CDATA_SECTION_NODE?
                 if (layoutObject->style()->visibility() == VISIBLE && m_offset > 0)
                     m_handledNode = handleTextNode();
@@ -403,8 +403,54 @@ UChar SimplifiedBackwardsTextIteratorAlgorithm<Strategy>::characterAt(unsigned i
     return m_textContainer[m_textOffset + m_textLength - 1 - index];
 }
 
+template <typename Strategy>
+bool SimplifiedBackwardsTextIteratorAlgorithm<Strategy>::isBetweenSurrogatePair(int position) const
+{
+    ASSERT(position >= 0);
+    return position > 0 && position < length() && U16_IS_TRAIL(characterAt(position - 1)) && U16_IS_LEAD(characterAt(position));
+}
+
+template <typename Strategy>
+int SimplifiedBackwardsTextIteratorAlgorithm<Strategy>::copyTextTo(BackwardsTextBuffer* output, int position, int minLength) const
+{
+    int end = std::min(length(), position + minLength);
+    if (isBetweenSurrogatePair(end))
+        ++end;
+    int copiedLength = end - position;
+    copyCodeUnitsTo(output, position, copiedLength);
+    return copiedLength;
+}
+
+template <typename Strategy>
+int SimplifiedBackwardsTextIteratorAlgorithm<Strategy>::copyTextTo(BackwardsTextBuffer* output, int position) const
+{
+    return copyTextTo(output, position, m_textLength - position);
+}
+
+template <typename Strategy>
+void SimplifiedBackwardsTextIteratorAlgorithm<Strategy>::copyCodeUnitsTo(BackwardsTextBuffer* output, int position, int copyLength) const
+{
+    ASSERT(position >= 0);
+    ASSERT(copyLength >= 0);
+    ASSERT(position + copyLength <= m_textLength);
+    // Make sure there's no integer overflow.
+    ASSERT(position + copyLength >= position);
+    if (m_textLength == 0 || copyLength == 0)
+        return;
+    ASSERT(output);
+    if (m_singleCharacterBuffer) {
+        output->pushCharacters(m_singleCharacterBuffer, 1);
+        return;
+    }
+    int offset = m_textOffset + m_textLength - position - copyLength;
+    if (m_textContainer.is8Bit())
+        output->pushRange(m_textContainer.characters8() + offset, copyLength);
+    else
+        output->pushRange(m_textContainer.characters16() + offset, copyLength);
+}
+
 template class CORE_TEMPLATE_EXPORT SimplifiedBackwardsTextIteratorAlgorithm<EditingStrategy>;
-template class CORE_TEMPLATE_EXPORT SimplifiedBackwardsTextIteratorAlgorithm<EditingInComposedTreeStrategy>;
+template class CORE_TEMPLATE_EXPORT SimplifiedBackwardsTextIteratorAlgorithm<EditingInFlatTreeStrategy>;
 
 
 } // namespace blink

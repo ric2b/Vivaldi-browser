@@ -14,7 +14,6 @@
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "base/bind.h"
-#include "base/prefs/pref_service.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/extensions/extension_util.h"
@@ -25,6 +24,7 @@
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/common/context_menu_params.h"
 #include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -150,7 +150,14 @@ void LauncherContextMenu::Init() {
             MENU_PIN,
             l10n_util::GetStringUTF16(IDS_LAUNCHER_CONTEXT_MENU_PIN));
       }
-      if (controller_->IsOpen(item_.id)) {
+      bool show_close_button = controller_->IsOpen(item_.id);
+#if defined(OS_CHROMEOS)
+      if (extension_misc::IsImeMenuExtensionId(
+              controller_->GetAppIDForShelfID(item_.id))) {
+        show_close_button = false;
+      }
+#endif
+      if (show_close_button) {
         AddItem(MENU_CLOSE,
                 l10n_util::GetStringUTF16(IDS_LAUNCHER_CONTEXT_MENU_CLOSE));
       }

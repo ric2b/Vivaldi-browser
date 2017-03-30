@@ -26,7 +26,6 @@ class LayerTreeImplTest : public LayerTreeHostCommonTest {
   LayerTreeImplTest() : output_surface_(FakeOutputSurface::Create3d()) {
     LayerTreeSettings settings;
     settings.layer_transforms_should_scale_layer_contents = true;
-    settings.verify_property_trees = true;
     host_impl_.reset(new FakeLayerTreeHostImpl(settings, &task_runner_provider_,
                                                &shared_bitmap_manager_,
                                                &task_graph_runner_));
@@ -110,7 +109,6 @@ TEST_F(LayerTreeImplTest, UpdateViewportAndHitTest) {
   TestTaskGraphRunner task_graph_runner;
   FakeImplTaskRunnerProvider task_runner_provider;
   LayerTreeSettings settings;
-  settings.verify_property_trees = true;
   scoped_ptr<OutputSurface> output_surface = FakeOutputSurface::Create3d();
   scoped_ptr<FakeLayerTreeHostImpl> host_impl;
   host_impl.reset(new FakeLayerTreeHostImpl(settings, &task_runner_provider,
@@ -1679,12 +1677,13 @@ TEST_F(LayerTreeImplTest,
   host_impl().SetViewportSize(scaled_bounds_for_root);
 
   host_impl().active_tree()->SetDeviceScaleFactor(device_scale_factor);
-  host_impl().active_tree()->PushPageScaleFromMainThread(
-      page_scale_factor, page_scale_factor, max_page_scale_factor);
-  host_impl().active_tree()->SetPageScaleOnActiveTree(page_scale_factor);
   host_impl().active_tree()->SetRootLayer(std::move(root));
   host_impl().active_tree()->SetViewportLayersFromIds(Layer::INVALID_ID, 1, 1,
                                                       Layer::INVALID_ID);
+  host_impl().active_tree()->BuildPropertyTreesForTesting();
+  host_impl().active_tree()->PushPageScaleFromMainThread(
+      page_scale_factor, page_scale_factor, max_page_scale_factor);
+  host_impl().active_tree()->SetPageScaleOnActiveTree(page_scale_factor);
   host_impl().UpdateNumChildrenAndDrawPropertiesForActiveTree();
 
   // Sanity check the scenario we just created.
@@ -2016,6 +2015,7 @@ TEST_F(LayerTreeImplTest, HitTestingTouchHandlerRegionsForLayerThatIsNotDrawn) {
   // inside the test_layer.
   test_layer = host_impl().active_tree()->root_layer()->children()[0].get();
   test_layer->SetPosition(gfx::PointF(10.f, 10.f));
+  test_layer->NoteLayerPropertyChanged();
   expected_screen_space_transform.MakeIdentity();
   expected_screen_space_transform.Translate(10.f, 10.f);
 
@@ -2244,12 +2244,14 @@ TEST_F(LayerTreeImplTest, SelectionBoundsForScaledLayers) {
   host_impl().SetViewportSize(scaled_bounds_for_root);
 
   host_impl().active_tree()->SetDeviceScaleFactor(device_scale_factor);
-  host_impl().active_tree()->PushPageScaleFromMainThread(
-      page_scale_factor, page_scale_factor, page_scale_factor);
   host_impl().active_tree()->SetPageScaleOnActiveTree(page_scale_factor);
   host_impl().active_tree()->SetRootLayer(std::move(root));
   host_impl().active_tree()->SetViewportLayersFromIds(Layer::INVALID_ID, 1, 1,
                                                       Layer::INVALID_ID);
+  host_impl().active_tree()->BuildPropertyTreesForTesting();
+  host_impl().active_tree()->PushPageScaleFromMainThread(
+      page_scale_factor, page_scale_factor, page_scale_factor);
+  host_impl().active_tree()->SetPageScaleOnActiveTree(page_scale_factor);
   host_impl().UpdateNumChildrenAndDrawPropertiesForActiveTree();
 
   // Sanity check the scenario we just created.
@@ -2376,6 +2378,57 @@ TEST_F(LayerTreeImplTest, DeviceScaleFactorNeedsDrawPropertiesUpdate) {
   EXPECT_FALSE(host_impl().active_tree()->needs_update_draw_properties());
   host_impl().active_tree()->SetDeviceScaleFactor(2.f);
   EXPECT_TRUE(host_impl().active_tree()->needs_update_draw_properties());
+}
+
+TEST_F(LayerTreeImplTest, HitTestingCorrectLayerWheelListener) {
+  host_impl().active_tree()->set_event_listener_properties(
+      EventListenerClass::kMouseWheel, EventListenerProperties::kBlocking);
+  scoped_ptr<LayerImpl> root = LayerImpl::Create(host_impl().active_tree(), 1);
+  scoped_ptr<LayerImpl> left_child =
+      LayerImpl::Create(host_impl().active_tree(), 2);
+  scoped_ptr<LayerImpl> right_child =
+      LayerImpl::Create(host_impl().active_tree(), 3);
+
+  gfx::Point3F transform_origin;
+  gfx::PointF position;
+  gfx::Size bounds(100, 100);
+  {
+    gfx::Transform translate_z;
+    translate_z.Translate3d(0, 0, 10);
+    SetLayerPropertiesForTesting(root.get(), translate_z, transform_origin,
+                                 position, bounds, false, false, true);
+    root->SetDrawsContent(true);
+  }
+  {
+    gfx::Transform translate_z;
+    translate_z.Translate3d(0, 0, 10);
+    SetLayerPropertiesForTesting(left_child.get(), translate_z,
+                                 transform_origin, position, bounds, false,
+                                 false, false);
+    left_child->SetDrawsContent(true);
+  }
+  {
+    gfx::Transform translate_z;
+    translate_z.Translate3d(0, 0, 10);
+    SetLayerPropertiesForTesting(right_child.get(), translate_z,
+                                 transform_origin, position, bounds, false,
+                                 false, false);
+  }
+
+  root->AddChild(std::move(left_child));
+  root->AddChild(std::move(right_child));
+
+  host_impl().SetViewportSize(root->bounds());
+  host_impl().active_tree()->SetRootLayer(std::move(root));
+  host_impl().UpdateNumChildrenAndDrawPropertiesForActiveTree();
+  CHECK_EQ(1u, RenderSurfaceLayerList().size());
+
+  gfx::PointF test_point = gfx::PointF(1.f, 1.f);
+  LayerImpl* result_layer =
+      host_impl().active_tree()->FindLayerThatIsHitByPoint(test_point);
+
+  CHECK(result_layer);
+  EXPECT_EQ(2, result_layer->id());
 }
 
 }  // namespace

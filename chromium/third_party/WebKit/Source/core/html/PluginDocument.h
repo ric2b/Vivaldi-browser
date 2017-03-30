@@ -54,13 +54,11 @@ private:
 
     PassRefPtrWillBeRawPtr<DocumentParser> createParser() override;
 
-    String debugName() const override { return "PluginDocument"; }
-
     RefPtrWillBeMember<Node> m_pluginNode;
 };
 
 DEFINE_DOCUMENT_TYPE_CASTS(PluginDocument);
 
-}
+} // namespace blink
 
 #endif // PluginDocument_h

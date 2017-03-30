@@ -106,6 +106,56 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
     }
 
     /**
+     * Tests that calling {@link HttpURLConnection#connect} will also initialize
+     * {@code OutputStream} if necessary in the case where
+     * {@code setFixedLengthStreamingMode} is called.
+     * Regression test for crbug.com/582975.
+     */
+    @SmallTest
+    @Feature({"Cronet"})
+    @CompareDefaultWithCronet
+    public void testInitOutputStreamInConnect() throws Exception {
+        URL url = new URL(NativeTestServer.getEchoBodyURL());
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setDoOutput(true);
+        String dataString = "some very important data";
+        byte[] data = dataString.getBytes();
+        connection.setFixedLengthStreamingMode(data.length);
+        connection.connect();
+        OutputStream out = connection.getOutputStream();
+        out.write(data);
+        assertEquals(200, connection.getResponseCode());
+        assertEquals("OK", connection.getResponseMessage());
+        assertEquals(dataString, TestUtil.getResponseAsString(connection));
+        connection.disconnect();
+    }
+
+    /**
+     * Tests that calling {@link HttpURLConnection#connect} will also initialize
+     * {@code OutputStream} if necessary in the case where
+     * {@code setChunkedStreamingMode} is called.
+     * Regression test for crbug.com/582975.
+     */
+    @SmallTest
+    @Feature({"Cronet"})
+    @CompareDefaultWithCronet
+    public void testInitChunkedOutputStreamInConnect() throws Exception {
+        URL url = new URL(NativeTestServer.getEchoBodyURL());
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setDoOutput(true);
+        String dataString = "some very important chunked data";
+        byte[] data = dataString.getBytes();
+        connection.setChunkedStreamingMode(0);
+        connection.connect();
+        OutputStream out = connection.getOutputStream();
+        out.write(data);
+        assertEquals(200, connection.getResponseCode());
+        assertEquals("OK", connection.getResponseMessage());
+        assertEquals(dataString, TestUtil.getResponseAsString(connection));
+        connection.disconnect();
+    }
+
+    /**
      * Tests that using reflection to find {@code fixedContentLengthLong} works.
      */
     @SmallTest
@@ -1025,6 +1075,25 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         assertEquals(null, connection.getHeaderField(5));
         assertEquals(null, connection.getHeaderFieldKey(6));
         assertEquals(null, connection.getHeaderField(6));
+        connection.disconnect();
+    }
+
+    @SmallTest
+    @Feature({"Cronet"})
+    @OnlyRunCronetHttpURLConnection
+    // Test that Cronet strips content-encoding header.
+    public void testStripContentEncoding() throws Exception {
+        URL url = new URL(NativeTestServer.getFileURL("/gzipped.html"));
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        assertEquals("foo", connection.getHeaderFieldKey(0));
+        assertEquals("bar", connection.getHeaderField(0));
+        assertEquals(null, connection.getHeaderField("content-encoding"));
+        Map<String, List<String>> responseHeaders = connection.getHeaderFields();
+        assertEquals(1, responseHeaders.size());
+        assertEquals(200, connection.getResponseCode());
+        assertEquals("OK", connection.getResponseMessage());
+        // Make sure Cronet decodes the gzipped content.
+        assertEquals("Hello, World!", TestUtil.getResponseAsString(connection));
         connection.disconnect();
     }
 

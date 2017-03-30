@@ -43,7 +43,7 @@ public:
 
     bool canStartSelection() const override { return false; }
     bool canContainRangeEndPoint() const override { return false; }
-    PseudoId pseudoId() const override { return m_pseudoId; }
+    PseudoId getPseudoId() const override { return m_pseudoId; }
 
     static String pseudoElementNameForEvents(PseudoId);
 
@@ -75,6 +75,6 @@ inline bool pseudoElementLayoutObjectIsNeeded(const ComputedStyle* style)
 
 DEFINE_ELEMENT_TYPE_CASTS(PseudoElement, isPseudoElement());
 
-} // namespace
+} // namespace blink
 
 #endif

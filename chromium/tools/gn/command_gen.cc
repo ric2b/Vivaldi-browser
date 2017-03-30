@@ -10,6 +10,7 @@
 #include "base/timer/elapsed_timer.h"
 #include "tools/gn/build_settings.h"
 #include "tools/gn/commands.h"
+#include "tools/gn/eclipse_writer.h"
 #include "tools/gn/ninja_target_writer.h"
 #include "tools/gn/ninja_writer.h"
 #include "tools/gn/runtime_deps.h"
@@ -18,12 +19,20 @@
 #include "tools/gn/standard_out.h"
 #include "tools/gn/switches.h"
 #include "tools/gn/target.h"
+#include "tools/gn/visual_studio_writer.h"
 
 namespace commands {
 
 namespace {
 
 const char kSwitchCheck[] = "check";
+const char kSwitchFilters[] = "filters";
+const char kSwitchIde[] = "ide";
+const char kSwitchIdeValueEclipse[] = "eclipse";
+const char kSwitchIdeValueVs[] = "vs";
+const char kSwitchIdeValueVs2013[] = "vs2013";
+const char kSwitchIdeValueVs2015[] = "vs2015";
+const char kSwitchSln[] = "sln";
 
 // Called on worker thread to write the ninja file.
 void BackgroundDoWrite(const Target* target) {
@@ -144,6 +153,47 @@ bool CheckForInvalidGeneratedInputs(Setup* setup) {
   return false;
 }
 
+bool RunIdeWriter(const std::string& ide,
+                  const BuildSettings* build_settings,
+                  Builder* builder,
+                  Err* err) {
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+  base::ElapsedTimer timer;
+
+  if (ide == kSwitchIdeValueEclipse) {
+    bool res = EclipseWriter::RunAndWriteFile(build_settings, builder, err);
+    if (res && !command_line->HasSwitch(switches::kQuiet)) {
+      OutputString("Generating Eclipse settings took " +
+                   base::Int64ToString(timer.Elapsed().InMilliseconds()) +
+                   "ms\n");
+    }
+    return res;
+  } else if (ide == kSwitchIdeValueVs || ide == kSwitchIdeValueVs2013 ||
+             ide == kSwitchIdeValueVs2015) {
+    VisualStudioWriter::Version version =
+        ide == kSwitchIdeValueVs2013 ? VisualStudioWriter::Version::Vs2013
+                                     : VisualStudioWriter::Version::Vs2015;
+    std::string sln_name;
+    if (command_line->HasSwitch(kSwitchSln))
+      sln_name = command_line->GetSwitchValueASCII(kSwitchSln);
+    std::string filters;
+    if (command_line->HasSwitch(kSwitchFilters))
+      filters = command_line->GetSwitchValueASCII(kSwitchFilters);
+    bool res = VisualStudioWriter::RunAndWriteFiles(
+        build_settings, builder, version, sln_name, filters, err);
+    if (res && !command_line->HasSwitch(switches::kQuiet)) {
+      OutputString("Generating Visual Studio projects took " +
+                   base::Int64ToString(timer.Elapsed().InMilliseconds()) +
+                   "ms\n");
+    }
+    return res;
+  }
+
+  *err = Err(Location(), "Unknown IDE: " + ide);
+  return false;
+}
+
 }  // namespace
 
 const char kGen[] = "gen";
@@ -152,7 +202,7 @@ const char kGen_HelpShort[] =
 const char kGen_Help[] =
     "gn gen: Generate ninja files.\n"
     "\n"
-    "  gn gen <out_dir>\n"
+    "  gn gen [<ide options>] <out_dir>\n"
     "\n"
     "  Generates ninja files from the current tree and puts them in the given\n"
     "  output directory.\n"
@@ -162,7 +212,40 @@ const char kGen_Help[] =
     "  Or it can be a directory relative to the current directory such as:\n"
     "      out/foo\n"
     "\n"
-    "  See \"gn help switches\" for the common command-line switches.\n";
+    "  See \"gn help switches\" for the common command-line switches.\n"
+    "\n"
+    "IDE options\n"
+    "\n"
+    "  GN optionally generates files for IDE. Possibilities for <ide options>\n"
+    "\n"
+    "  --ide=<ide_name>\n"
+    "      Generate files for an IDE. Currently supported values:\n"
+    "      \"eclipse\" - Eclipse CDT settings file.\n"
+    "      \"vs\" - Visual Studio project/solution files.\n"
+    "             (default Visual Studio version: 2015)\n"
+    "      \"vs2013\" - Visual Studio 2013 project/solution files.\n"
+    "      \"vs2015\" - Visual Studio 2015 project/solution files.\n"
+    "\n"
+    "  --sln=<file_name>\n"
+    "      Override default sln file name (\"all\"). Solution file is written\n"
+    "      to the root build directory. Only for Visual Studio.\n"
+    "\n"
+    "  --filters=<path_prefixes>\n"
+    "      Semicolon-separated list of label patterns used to limit the set\n"
+    "      of generated projects (see \"gn help label_pattern\"). Only\n"
+    "      matching targets will be included to the solution. Only for Visual\n"
+    "      Studio.\n"
+    "\n"
+    "Eclipse IDE Support\n"
+    "\n"
+    "  GN DOES NOT generate Eclipse CDT projects. Instead, it generates a\n"
+    "  settings file which can be imported into an Eclipse CDT project. The\n"
+    "  XML file contains a list of include paths and defines. Because GN does\n"
+    "  not generate a full .cproject definition, it is not possible to\n"
+    "  properly define includes/defines for each file individually.\n"
+    "  Instead, one set of includes/defines is generated for the entire\n"
+    "  project. This works fairly well but may still result in a few indexer\n"
+    "  issues here and there.\n";
 
 int RunGen(const std::vector<std::string>& args) {
   base::ElapsedTimer timer;
@@ -179,7 +262,9 @@ int RunGen(const std::vector<std::string>& args) {
   if (!setup->DoSetup(args[0], true))
     return 1;
 
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(kSwitchCheck))
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(kSwitchCheck))
     setup->set_check_public_headers(true);
 
   // Cause the load to also generate the ninja files for each target. We wrap
@@ -210,9 +295,16 @@ int RunGen(const std::vector<std::string>& args) {
   if (!CheckForInvalidGeneratedInputs(setup))
     return 1;
 
+  if (command_line->HasSwitch(kSwitchIde) &&
+      !RunIdeWriter(command_line->GetSwitchValueASCII(kSwitchIde),
+                    &setup->build_settings(), setup->builder(), &err)) {
+    err.PrintToStdout();
+    return 1;
+  }
+
   base::TimeDelta elapsed_time = timer.Elapsed();
 
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kQuiet)) {
+  if (!command_line->HasSwitch(switches::kQuiet)) {
     OutputString("Done. ", DECORATION_GREEN);
 
     std::string stats = "Wrote " +

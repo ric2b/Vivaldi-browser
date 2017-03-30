@@ -16,18 +16,22 @@
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "chrome/browser/devtools/devtools_window.h"
+#include "chrome/browser/extensions/extension_commands_global_registry.h"
+#include "chrome/browser/extensions/extension_keybinding_registry.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 #include "chrome/browser/ui/infobar_container_delegate.h"
+#include "chrome/browser/ui/signin_view_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/views/exclusive_access_bubble_views_context.h"
+#include "chrome/browser/ui/views/extensions/extension_keybinding_registry_views.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/contents_web_view.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/frame/web_contents_close_handler.h"
 #include "chrome/browser/ui/views/load_complete_listener.h"
-#include "chrome/browser/ui/views/profiles/signin_view_controller.h"
+#include "chrome/common/features.h"
 #include "components/omnibox/browser/omnibox_popup_model_observer.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/models/simple_menu_model.h"
@@ -65,6 +69,8 @@ class JumpList;
 #endif
 
 namespace extensions {
+class ActiveTabPermissionGranter;
+class Command;
 class Extension;
 }
 
@@ -90,7 +96,8 @@ class BrowserView : public BrowserWindow,
                     public LoadCompleteListener::Delegate,
                     public OmniboxPopupModelObserver,
                     public ExclusiveAccessContext,
-                    public ExclusiveAccessBubbleViewsContext {
+                    public ExclusiveAccessBubbleViewsContext,
+                    public extensions::ExtensionKeybindingRegistry::Delegate {
  public:
   // The browser view's class name.
   static const char kViewClassName[];
@@ -279,6 +286,7 @@ class BrowserView : public BrowserWindow,
   gfx::Rect GetRestoredBounds() const override;
   ui::WindowShowState GetRestoredState() const override;
   gfx::Rect GetBounds() const override;
+  gfx::Size GetContentsSize() const override;
   bool IsMaximized() const override;
   bool IsMinimized() const override;
   void Maximize() override;
@@ -295,11 +303,6 @@ class BrowserView : public BrowserWindow,
   bool ShouldHideUIForFullscreen() const override;
   bool IsFullscreen() const override;
   bool IsFullscreenBubbleVisible() const override;
-  bool SupportsFullscreenWithToolbar() const override;
-  void UpdateFullscreenWithToolbar(bool with_toolbar) override;
-  void ToggleFullscreenToolbar() override;
-  bool IsFullscreenWithToolbar() const override;
-  bool ShouldHideFullscreenToolbar() const override;
 #if defined(OS_WIN)
   void SetMetroSnapMode(bool enable) override;
   bool IsInMetroSnapMode() const override;
@@ -337,7 +340,7 @@ class BrowserView : public BrowserWindow,
                            translate::TranslateStep step,
                            translate::TranslateErrors::Type error_type,
                            bool is_user_gesture) override;
-#if defined(ENABLE_ONE_CLICK_SIGNIN)
+#if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
   void ShowOneClickSigninBubble(
       OneClickSigninBubbleType type,
       const base::string16& email,
@@ -375,9 +378,6 @@ class BrowserView : public BrowserWindow,
       AvatarBubbleMode mode,
       const signin::ManageAccountsParams& manage_accounts_params,
       signin_metrics::AccessPoint access_point) override;
-  void ShowModalSigninWindow(AvatarBubbleMode mode,
-                             signin_metrics::AccessPoint access_point) override;
-  void CloseModalSigninWindow() override;
   int GetRenderViewHeightInsetWithDetachedBookmarkBar() override;
   void ExecuteExtensionCommand(const extensions::Extension* extension,
                                const extensions::Command& command) override;
@@ -445,11 +445,11 @@ class BrowserView : public BrowserWindow,
   // Overridden from views::View:
   const char* GetClassName() const override;
   void Layout() override;
-  void PaintChildren(const ui::PaintContext& context) override;
   void ViewHierarchyChanged(
       const ViewHierarchyChangedDetails& details) override;
   void ChildPreferredSizeChanged(View* child) override;
   void GetAccessibleState(ui::AXViewState* state) override;
+  void OnThemeChanged() override;
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
 
   // Overridden from ui::AcceleratorTarget:
@@ -466,9 +466,17 @@ class BrowserView : public BrowserWindow,
 
   // ExclusiveAccessBubbleViewsContext overrides
   ExclusiveAccessManager* GetExclusiveAccessManager() override;
-  bool IsImmersiveModeEnabled() override;
   views::Widget* GetBubbleAssociatedWidget() override;
+  ui::AcceleratorProvider* GetAcceleratorProvider() override;
+  gfx::NativeView GetBubbleParentView() const override;
+  gfx::Point GetCursorPointInParent() const override;
+  gfx::Rect GetClientAreaBoundsInScreen() const override;
+  bool IsImmersiveModeEnabled() override;
   gfx::Rect GetTopContainerBoundsInScreen() override;
+
+  // extension::ExtensionKeybindingRegistry::Delegate overrides
+  extensions::ActiveTabPermissionGranter* GetActiveTabPermissionGranter()
+      override;
 
   // Testing interface:
   views::View* GetContentsContainerForTest() { return contents_container_; }
@@ -675,6 +683,10 @@ class BrowserView : public BrowserWindow,
   // True if we have already been initialized.
   bool initialized_;
 
+  // True if we're currently handling a theme change (i.e. inside
+  // OnThemeChanged()).
+  bool handling_theme_changed_;
+
   // True when in ProcessFullscreen(). The flag is used to avoid reentrance and
   // to ignore requests to layout while in ProcessFullscreen() to reduce
   // jankiness.
@@ -720,6 +732,9 @@ class BrowserView : public BrowserWindow,
   scoped_ptr<WebContentsCloseHandler> web_contents_close_handler_;
 
   SigninViewController signin_view_controller_;
+
+  // The class that registers for keyboard shortcuts for extension commands.
+  scoped_ptr<ExtensionKeybindingRegistryViews> extension_keybinding_registry_;
 
   mutable base::WeakPtrFactory<BrowserView> activate_modal_dialog_factory_;
 

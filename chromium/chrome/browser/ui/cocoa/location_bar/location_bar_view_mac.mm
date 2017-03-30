@@ -7,7 +7,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/message_loop/message_loop.h"
-#include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
@@ -54,6 +53,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #import "components/omnibox/browser/omnibox_popup_model.h"
+#include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/translate/core/browser/language_state.h"
@@ -64,7 +64,6 @@
 #include "extensions/common/extension.h"
 #include "grit/components_scaled_resources.h"
 #include "grit/theme_resources.h"
-#include "net/base/net_util.h"
 #include "skia/ext/skia_utils_mac.h"
 #import "ui/base/cocoa/cocoa_base_utils.h"
 #include "ui/base/l10n/l10n_util_mac.h"
@@ -199,6 +198,7 @@ void LocationBarViewMac::UpdateSaveCreditCardIcon() {
   command_updater()->UpdateCommandEnabled(IDC_SAVE_CREDIT_CARD_FOR_PAGE,
                                           enabled);
   save_credit_card_decoration_->SetVisible(enabled);
+  OnDecorationsChanged();
 }
 
 void LocationBarViewMac::UpdatePageActions() {

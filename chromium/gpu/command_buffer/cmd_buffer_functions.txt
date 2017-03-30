@@ -108,6 +108,7 @@ GL_APICALL void         GL_APIENTRY glGetShaderInfoLog (GLidShader shader, GLsiz
 GL_APICALL void         GL_APIENTRY glGetShaderPrecisionFormat (GLenumShaderType shadertype, GLenumShaderPrecision precisiontype, GLint* range, GLint* precision);
 GL_APICALL void         GL_APIENTRY glGetShaderSource (GLidShader shader, GLsizeiNotNegative bufsize, GLsizeiOptional* length, char* source);
 GL_APICALL const GLubyte* GL_APIENTRY glGetString (GLenumStringType name);
+GL_APICALL const GLubyte* GL_APIENTRY glGetStringi (GLenumIndexedStringType name, GLuint index);
 GL_APICALL void         GL_APIENTRY glGetSynciv (GLsync sync, GLenumSyncParameter pname, GLsizeiNotNegative bufsize, GLsizeiOptional* length, GLint* values);
 GL_APICALL void         GL_APIENTRY glGetTexParameterfv (GLenumGetTexParamTarget target, GLenumTextureParameter pname, GLfloat* params);
 GL_APICALL void         GL_APIENTRY glGetTexParameteriv (GLenumGetTexParamTarget target, GLenumTextureParameter pname, GLint* params);
@@ -198,15 +199,15 @@ GL_APICALL void         GL_APIENTRY glUniform4iv (GLintUniformLocation location,
 GL_APICALL void         GL_APIENTRY glUniform4ui (GLintUniformLocation location, GLuint x, GLuint y, GLuint z, GLuint w);
 GL_APICALL void         GL_APIENTRY glUniform4uiv (GLintUniformLocation location, GLsizeiNotNegative count, const GLuint* v);
 GL_APICALL void         GL_APIENTRY glUniformBlockBinding (GLidProgram program, GLuint index, GLuint binding);
-GL_APICALL void         GL_APIENTRY glUniformMatrix2fv (GLintUniformLocation location, GLsizeiNotNegative count, GLbooleanFalseOnly transpose, const GLfloat* value);
-GL_APICALL void         GL_APIENTRY glUniformMatrix2x3fv (GLintUniformLocation location, GLsizeiNotNegative count, GLbooleanFalseOnly transpose, const GLfloat* value);
-GL_APICALL void         GL_APIENTRY glUniformMatrix2x4fv (GLintUniformLocation location, GLsizeiNotNegative count, GLbooleanFalseOnly transpose, const GLfloat* value);
-GL_APICALL void         GL_APIENTRY glUniformMatrix3fv (GLintUniformLocation location, GLsizeiNotNegative count, GLbooleanFalseOnly transpose, const GLfloat* value);
-GL_APICALL void         GL_APIENTRY glUniformMatrix3x2fv (GLintUniformLocation location, GLsizeiNotNegative count, GLbooleanFalseOnly transpose, const GLfloat* value);
-GL_APICALL void         GL_APIENTRY glUniformMatrix3x4fv (GLintUniformLocation location, GLsizeiNotNegative count, GLbooleanFalseOnly transpose, const GLfloat* value);
-GL_APICALL void         GL_APIENTRY glUniformMatrix4fv (GLintUniformLocation location, GLsizeiNotNegative count, GLbooleanFalseOnly transpose, const GLfloat* value);
-GL_APICALL void         GL_APIENTRY glUniformMatrix4x2fv (GLintUniformLocation location, GLsizeiNotNegative count, GLbooleanFalseOnly transpose, const GLfloat* value);
-GL_APICALL void         GL_APIENTRY glUniformMatrix4x3fv (GLintUniformLocation location, GLsizeiNotNegative count, GLbooleanFalseOnly transpose, const GLfloat* value);
+GL_APICALL void         GL_APIENTRY glUniformMatrix2fv (GLintUniformLocation location, GLsizeiNotNegative count, GLboolean transpose, const GLfloat* value);
+GL_APICALL void         GL_APIENTRY glUniformMatrix2x3fv (GLintUniformLocation location, GLsizeiNotNegative count, GLboolean transpose, const GLfloat* value);
+GL_APICALL void         GL_APIENTRY glUniformMatrix2x4fv (GLintUniformLocation location, GLsizeiNotNegative count, GLboolean transpose, const GLfloat* value);
+GL_APICALL void         GL_APIENTRY glUniformMatrix3fv (GLintUniformLocation location, GLsizeiNotNegative count, GLboolean transpose, const GLfloat* value);
+GL_APICALL void         GL_APIENTRY glUniformMatrix3x2fv (GLintUniformLocation location, GLsizeiNotNegative count, GLboolean transpose, const GLfloat* value);
+GL_APICALL void         GL_APIENTRY glUniformMatrix3x4fv (GLintUniformLocation location, GLsizeiNotNegative count, GLboolean transpose, const GLfloat* value);
+GL_APICALL void         GL_APIENTRY glUniformMatrix4fv (GLintUniformLocation location, GLsizeiNotNegative count, GLboolean transpose, const GLfloat* value);
+GL_APICALL void         GL_APIENTRY glUniformMatrix4x2fv (GLintUniformLocation location, GLsizeiNotNegative count, GLboolean transpose, const GLfloat* value);
+GL_APICALL void         GL_APIENTRY glUniformMatrix4x3fv (GLintUniformLocation location, GLsizeiNotNegative count, GLboolean transpose, const GLfloat* value);
 GL_APICALL void         GL_APIENTRY glUseProgram (GLidZeroProgram program);
 GL_APICALL void         GL_APIENTRY glValidateProgram (GLidProgram program);
 GL_APICALL void         GL_APIENTRY glVertexAttrib1f (GLuint indx, GLfloat x);
@@ -303,8 +304,6 @@ GL_APICALL void         GL_APIENTRY glTraceBeginCHROMIUM (const char* category_n
 GL_APICALL void         GL_APIENTRY glTraceEndCHROMIUM (void);
 GL_APICALL void         GL_APIENTRY glDiscardFramebufferEXT (GLenum target, GLsizei count, const GLenum* attachments);
 GL_APICALL void         GL_APIENTRY glLoseContextCHROMIUM (GLenumResetStatus current, GLenumResetStatus other);
-GL_APICALL GLuint       GL_APIENTRY glInsertSyncPointCHROMIUM (void);
-GL_APICALL void         GL_APIENTRY glWaitSyncPointCHROMIUM (GLuint sync_point);
 GL_APICALL GLuint64     GL_APIENTRY glInsertFenceSyncCHROMIUM (void);
 GL_APICALL void         GL_APIENTRY glGenSyncTokenCHROMIUM (GLuint64 fence_sync, GLbyte* sync_token);
 GL_APICALL void         GL_APIENTRY glGenUnverifiedSyncTokenCHROMIUM (GLuint64 fence_sync, GLbyte* sync_token);
@@ -361,3 +360,5 @@ GL_APICALL void         GL_APIENTRY glBindFragDataLocationIndexedEXT (GLidProgra
 GL_APICALL void         GL_APIENTRY glBindFragDataLocationEXT (GLidProgram program, GLuint colorNumber, const char* name);
 GL_APICALL GLint        GL_APIENTRY glGetFragDataIndexEXT (GLidProgram program, const char* name);
 
+// Extension CHROMIUM_stream_texture_matrix
+GL_APICALL void         GL_APIENTRY glUniformMatrix4fvStreamTextureMatrixCHROMIUM (GLintUniformLocation location, GLbooleanFalseOnly transpose, const GLfloat* default_value);

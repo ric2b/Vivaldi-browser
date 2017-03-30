@@ -104,8 +104,8 @@ class TestList(object):
 # These numbers may need to be updated whenever we add or delete tests. This includes virtual tests.
 #
 TOTAL_TESTS = 114
-TOTAL_SKIPS = 29
-
+TOTAL_SKIPS = 26
+TOTAL_CRASHES = 80
 UNEXPECTED_PASSES = 1
 UNEXPECTED_FAILURES = 26
 
@@ -244,7 +244,7 @@ layer at (0,0) size 800x34
     tests.add('websocket/tests/passes/text.html')
 
     # For testing that we don't run tests under platform/. Note that these don't contribute to TOTAL_TESTS.
-    tests.add('platform/test-mac-leopard/http/test.html')
+    tests.add('platform/test-mac-10.10/http/test.html')
     tests.add('platform/test-win-win7/http/test.html')
 
     # For testing if perf tests are running in a locked shard.
@@ -301,9 +301,9 @@ Bug(test) failures/expected/newlines_with_excess_CR.html [ Failure ]
 Bug(test) failures/expected/reftest.html [ Failure ]
 Bug(test) failures/expected/text.html [ Failure ]
 Bug(test) failures/expected/timeout.html [ Timeout ]
-Bug(test) failures/expected/keyboard.html [ WontFix ]
-Bug(test) failures/expected/exception.html [ WontFix ]
-Bug(test) failures/expected/device_failure.html [ WontFix ]
+Bug(test) failures/expected/keyboard.html [ Crash ]
+Bug(test) failures/expected/exception.html [ Crash ]
+Bug(test) failures/expected/device_failure.html [ Crash ]
 Bug(test) failures/expected/leak.html [ Leak ]
 Bug(test) failures/unexpected/pass.html [ Failure ]
 Bug(test) passes/skipped/skip.html [ Skip ]
@@ -360,20 +360,26 @@ Bug(test) passes/text.html [ Pass ]
 
 class TestPort(Port):
     port_name = 'test'
-    default_port_name = 'test-mac-leopard'
+    default_port_name = 'test-mac-mac10.10'
 
-    """Test implementation of the Port interface."""
+    # TODO(wkorman): The below constant is legacy code and is only referenced by a unit test. Find the modern way to do
+    # the same thing that test is doing and delete this.
+    #
+    # A list of platform names sufficient to cover all the baselines.
+    # The list should be sorted so that a later platform  will reuse
+    # an earlier platform's baselines if they are the same (e.g.,
+    # 'mac10.10' should precede 'mac10.9').
     ALL_BASELINE_VARIANTS = (
         'test-linux-trusty', 'test-linux-precise', 'test-linux-x86',
-        'test-mac-snowleopard', 'test-mac-leopard',
-        'test-win-win7', 'test-win-xp',
+        'test-mac-mac10.11', 'test-mac-mac10.10',
+        'test-win-win10', 'test-win-win7'
     )
 
     FALLBACK_PATHS = {
-        'xp':          ['test-win-win7', 'test-win-xp'],
-        'win7':        ['test-win-win7'],
-        'leopard':     ['test-mac-leopard', 'test-mac-snowleopard'],
-        'snowleopard': ['test-mac-snowleopard'],
+        'win7':        ['test-win-win7', 'test-win-win10'],
+        'win10':       ['test-win-win10'],
+        'mac10.10':    ['test-mac-mac10.10', 'test-mac-mac10.11'],
+        'mac10.11':    ['test-mac-mac10.11'],
         'trusty':      ['test-linux-trusty', 'test-win-win7'],
         'precise':     ['test-linux-precise', 'test-linux-trusty', 'test-win-win7'],
         'linux32':     ['test-linux-x86', 'test-linux-precise', 'test-linux-trusty', 'test-win-win7'],
@@ -409,10 +415,10 @@ class TestPort(Port):
             self._operating_system = 'linux'
 
         version_map = {
-            'test-win-xp': 'xp',
             'test-win-win7': 'win7',
-            'test-mac-leopard': 'leopard',
-            'test-mac-snowleopard': 'snowleopard',
+            'test-win-win10': 'win10',
+            'test-mac-mac10.10': 'mac10.10',
+            'test-mac-mac10.11': 'mac10.11',
             'test-linux-x86': 'linux32',
             'test-linux-precise': 'precise',
             'test-linux-trusty': 'trusty',
@@ -423,7 +429,7 @@ class TestPort(Port):
             self._architecture = 'x86_64'
 
     def buildbot_archives_baselines(self):
-        return self._name != 'test-win-xp'
+        return self._name != 'test-win-win7'
 
     def default_pixel_tests(self):
         return True
@@ -515,7 +521,7 @@ class TestPort(Port):
         return self._generic_expectations_path
 
     def _port_specific_expectations_files(self):
-        return [self._filesystem.join(self._webkit_baseline_path(d), 'TestExpectations') for d in ['test', 'test-win-xp']]
+        return [self._filesystem.join(self._webkit_baseline_path(d), 'TestExpectations') for d in ['test', 'test-win-win7']]
 
     def all_test_configurations(self):
         """Returns a sequence of the TestConfigurations the port supports."""
@@ -531,10 +537,10 @@ class TestPort(Port):
         return test_configurations
 
     def _all_systems(self):
-        return (('leopard', 'x86'),
-                ('snowleopard', 'x86'),
-                ('xp', 'x86'),
+        return (('mac10.10', 'x86'),
+                ('mac10.11', 'x86'),
                 ('win7', 'x86'),
+                ('win10', 'x86'),
                 ('linux32', 'x86'),
                 ('precise', 'x86_64'),
                 ('trusty', 'x86_64'))
@@ -545,13 +551,10 @@ class TestPort(Port):
     def configuration_specifier_macros(self):
         """To avoid surprises when introducing new macros, these are intentionally fixed in time."""
         return {
-            'mac': ['leopard', 'snowleopard'],
-            'win': ['xp', 'win7'],
+            'mac': ['mac10.10', 'mac10.11'],
+            'win': ['win7', 'win10'],
             'linux': ['linux32', 'precise', 'trusty']
         }
-
-    def all_baseline_variants(self):
-        return self.ALL_BASELINE_VARIANTS
 
     def virtual_test_suites(self):
         return [

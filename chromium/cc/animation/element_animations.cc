@@ -239,7 +239,7 @@ void ElementAnimations::DestroyPendingValueObserver() {
 
 void ElementAnimations::NotifyAnimationStarted(
     base::TimeTicks monotonic_time,
-    Animation::TargetProperty target_property,
+    TargetProperty::Type target_property,
     int group) {
   for (PlayersListNode* node = players_list_->head();
        node != players_list_->end(); node = node->next()) {
@@ -250,7 +250,7 @@ void ElementAnimations::NotifyAnimationStarted(
 
 void ElementAnimations::NotifyAnimationFinished(
     base::TimeTicks monotonic_time,
-    Animation::TargetProperty target_property,
+    TargetProperty::Type target_property,
     int group) {
   for (PlayersListNode* node = players_list_->head();
        node != players_list_->end(); node = node->next()) {
@@ -261,12 +261,28 @@ void ElementAnimations::NotifyAnimationFinished(
 
 void ElementAnimations::NotifyAnimationAborted(
     base::TimeTicks monotonic_time,
-    Animation::TargetProperty target_property,
+    TargetProperty::Type target_property,
     int group) {
   for (PlayersListNode* node = players_list_->head();
        node != players_list_->end(); node = node->next()) {
     AnimationPlayer* player = node->value();
     player->NotifyAnimationAborted(monotonic_time, target_property, group);
+  }
+}
+
+void ElementAnimations::NotifyAnimationTakeover(
+    base::TimeTicks monotonic_time,
+    TargetProperty::Type target_property,
+    double animation_start_time,
+    scoped_ptr<AnimationCurve> curve) {
+  DCHECK(curve);
+  for (PlayersListNode* node = players_list_->head();
+       node != players_list_->end(); node = node->next()) {
+    scoped_ptr<AnimationCurve> animation_curve = curve->Clone();
+    AnimationPlayer* player = node->value();
+    player->NotifyAnimationTakeover(monotonic_time, target_property,
+                                    animation_start_time,
+                                    std::move(animation_curve));
   }
 }
 

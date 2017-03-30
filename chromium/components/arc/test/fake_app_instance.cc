@@ -36,15 +36,16 @@ void FakeAppInstance::RefreshAppList() {
   ++refresh_app_list_count_;
 }
 
-void FakeAppInstance::LaunchApp(const mojo::String& package,
+void FakeAppInstance::LaunchApp(const mojo::String& package_name,
                                 const mojo::String& activity) {
-  launch_requests_.push_back(new Request(package, activity));
+  launch_requests_.push_back(new Request(package_name, activity));
 }
 
-void FakeAppInstance::RequestAppIcon(const mojo::String& package,
+void FakeAppInstance::RequestAppIcon(const mojo::String& package_name,
                                      const mojo::String& activity,
                                      ScaleFactor scale_factor) {
-  icon_requests_.push_back(new IconRequest(package, activity, scale_factor));
+  icon_requests_.push_back(
+      new IconRequest(package_name, activity, scale_factor));
 }
 
 void FakeAppInstance::SendRefreshAppList(const std::vector<AppInfo>& apps) {
@@ -57,31 +58,31 @@ bool FakeAppInstance::GenerateAndSendIcon(const AppInfo& app,
   CHECK(png_data_as_string != nullptr);
   std::string icon_file_name;
   switch (scale_factor) {
-    case SCALE_FACTOR_SCALE_FACTOR_100P:
+    case ScaleFactor::SCALE_FACTOR_100P:
       icon_file_name = "icon_100p.png";
       break;
-    case SCALE_FACTOR_SCALE_FACTOR_125P:
+    case ScaleFactor::SCALE_FACTOR_125P:
       icon_file_name = "icon_125p.png";
       break;
-    case SCALE_FACTOR_SCALE_FACTOR_133P:
+    case ScaleFactor::SCALE_FACTOR_133P:
       icon_file_name = "icon_133p.png";
       break;
-    case SCALE_FACTOR_SCALE_FACTOR_140P:
+    case ScaleFactor::SCALE_FACTOR_140P:
       icon_file_name = "icon_140p.png";
       break;
-    case SCALE_FACTOR_SCALE_FACTOR_150P:
+    case ScaleFactor::SCALE_FACTOR_150P:
       icon_file_name = "icon_150p.png";
       break;
-    case SCALE_FACTOR_SCALE_FACTOR_180P:
+    case ScaleFactor::SCALE_FACTOR_180P:
       icon_file_name = "icon_180p.png";
       break;
-    case SCALE_FACTOR_SCALE_FACTOR_200P:
+    case ScaleFactor::SCALE_FACTOR_200P:
       icon_file_name = "icon_200p.png";
       break;
-    case SCALE_FACTOR_SCALE_FACTOR_250P:
+    case ScaleFactor::SCALE_FACTOR_250P:
       icon_file_name = "icon_250p.png";
       break;
-    case SCALE_FACTOR_SCALE_FACTOR_300P:
+    case ScaleFactor::SCALE_FACTOR_300P:
       icon_file_name = "icon_300p.png";
       break;
     default:
@@ -99,7 +100,7 @@ bool FakeAppInstance::GenerateAndSendIcon(const AppInfo& app,
   CHECK(base::PathExists(icon_file_path));
   CHECK(base::ReadFileToString(icon_file_path, png_data_as_string));
 
-  app_host_->OnAppIcon(app.package, app.activity, scale_factor,
+  app_host_->OnAppIcon(app.package_name, app.activity, scale_factor,
                        mojo::Array<uint8_t>::From(*png_data_as_string));
 
   return true;

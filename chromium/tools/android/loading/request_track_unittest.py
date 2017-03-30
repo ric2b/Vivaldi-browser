@@ -2,9 +2,76 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import copy
+import json
 import unittest
 
-from request_track import (Request, RequestTrack, _TimingFromDict)
+from request_track import (TimeBetween, Request, RequestTrack, TimingFromDict)
+
+
+class TimeBetweenTestCase(unittest.TestCase):
+  _REQUEST = Request.FromJsonDict({'url': 'http://bla.com',
+                                   'request_id': '1234.1',
+                                   'frame_id': '123.1',
+                                   'initiator': {'type': 'other'},
+                                   'timestamp': 2,
+                                   'timing': TimingFromDict({})})
+  def setUp(self):
+    super(TimeBetweenTestCase, self).setUp()
+    self.first = copy.deepcopy(self._REQUEST)
+    self.first.timing = TimingFromDict({'requestTime': 123456,
+                                        'receiveHeadersEnd': 100,
+                                        'loadingFinished': 500})
+    self.second = copy.deepcopy(self._REQUEST)
+    self.second.timing = TimingFromDict({'requestTime': 123456 + 1,
+                                        'receiveHeadersEnd': 200,
+                                        'loadingFinished': 600})
+
+  def testTimeBetweenParser(self):
+    self.assertEquals(900, TimeBetween(self.first, self.second, 'parser'))
+
+  def testTimeBetweenScript(self):
+    self.assertEquals(500, TimeBetween(self.first, self.second, 'script'))
+
+
+class RequestTestCase(unittest.TestCase):
+  def testContentType(self):
+    r = Request()
+    r.response_headers = {}
+    self.assertEquals(None, r.GetContentType())
+    r.response_headers = {'Content-Type': 'application/javascript'}
+    self.assertEquals('application/javascript', r.GetContentType())
+    # Case-insensitive match.
+    r.response_headers = {'content-type': 'application/javascript'}
+    self.assertEquals('application/javascript', r.GetContentType())
+    # Parameters are filtered out.
+    r.response_headers = {'Content-Type': 'application/javascript;bla'}
+    self.assertEquals('application/javascript', r.GetContentType())
+    # MIME type takes precedence over 'Content-Type' header.
+    r.mime_type = 'image/webp'
+    self.assertEquals('image/webp', r.GetContentType())
+    r.mime_type = None
+    # Test for 'ping' type.
+    r.status = 204
+    self.assertEquals('ping', r.GetContentType())
+    r.status = None
+    r.response_headers = {'Content-Type': 'application/javascript',
+                          'content-length': '0'}
+    self.assertEquals('ping', r.GetContentType())
+    # Test for 'redirect' type.
+    r.response_headers = {'Content-Type': 'application/javascript',
+                          'location': 'http://foo',
+                          'content-length': '0'}
+    self.assertEquals('redirect', r.GetContentType())
+
+  def testGetHTTPResponseHeader(self):
+    r = Request()
+    r.response_headers = {}
+    self.assertEquals(None, r.GetHTTPResponseHeader('Foo'))
+    r.response_headers = {'Foo': 'Bar', 'Baz': 'Foo'}
+    self.assertEquals('Bar', r.GetHTTPResponseHeader('Foo'))
+    r.response_headers = {'foo': 'Bar', 'Baz': 'Foo'}
+    self.assertEquals('Bar', r.GetHTTPResponseHeader('Foo'))
 
 
 class RequestTrackTestCase(unittest.TestCase):
@@ -180,6 +247,49 @@ class RequestTrackTestCase(unittest.TestCase):
                               RequestTrackTestCase._REDIRECT)
     self.assertEquals(1, len(self.request_track._requests_in_flight))
     self.assertEquals(1, len(self.request_track.GetEvents()))
+    redirect_request = self.request_track.GetEvents()[0]
+    self.assertTrue(redirect_request.request_id.endswith(
+        RequestTrack._REDIRECT_SUFFIX + '.1'))
+    request = self.request_track._requests_in_flight.values()[0][0]
+    self.assertEquals('redirect', request.initiator['type'])
+    self.assertEquals(
+        redirect_request.request_id,
+        request.initiator[Request.INITIATING_REQUEST])
+    self.assertEquals(0, self.request_track.inconsistent_initiators_count)
+
+  def testMultipleRedirects(self):
+    self.request_track.Handle('Network.requestWillBeSent',
+                              RequestTrackTestCase._REQUEST_WILL_BE_SENT)
+    self.request_track.Handle('Network.requestWillBeSent',
+                              RequestTrackTestCase._REDIRECT)
+    self.request_track.Handle('Network.requestWillBeSent',
+                              RequestTrackTestCase._REDIRECT)
+    self.assertEquals(1, len(self.request_track._requests_in_flight))
+    self.assertEquals(2, len(self.request_track.GetEvents()))
+    first_redirect_request = self.request_track.GetEvents()[0]
+    self.assertTrue(first_redirect_request.request_id.endswith(
+        RequestTrack._REDIRECT_SUFFIX + '.1'))
+    second_redirect_request = self.request_track.GetEvents()[1]
+    self.assertTrue(second_redirect_request.request_id.endswith(
+        RequestTrack._REDIRECT_SUFFIX + '.2'))
+    self.assertEquals('redirect', second_redirect_request.initiator['type'])
+    self.assertEquals(
+        first_redirect_request.request_id,
+        second_redirect_request.initiator[Request.INITIATING_REQUEST])
+    request = self.request_track._requests_in_flight.values()[0][0]
+    self.assertEquals('redirect', request.initiator['type'])
+    self.assertEquals(
+        second_redirect_request.request_id,
+        request.initiator[Request.INITIATING_REQUEST])
+    self.assertEquals(0, self.request_track.inconsistent_initiators_count)
+
+  def testInconsistentInitiators(self):
+    self.request_track.Handle('Network.requestWillBeSent',
+                              RequestTrackTestCase._REQUEST_WILL_BE_SENT)
+    request = copy.deepcopy(RequestTrackTestCase._REDIRECT)
+    request['params']['initiator']['type'] = 'script'
+    self.request_track.Handle('Network.requestWillBeSent', request)
+    self.assertEquals(1, self.request_track.inconsistent_initiators_count)
 
   def testRejectDuplicates(self):
     msg = RequestTrackTestCase._REQUEST_WILL_BE_SENT
@@ -219,7 +329,7 @@ class RequestTrackTestCase(unittest.TestCase):
     self.assertEquals(False, r.served_from_cache)
     self.assertEquals(False, r.from_disk_cache)
     self.assertEquals(False, r.from_service_worker)
-    timing = _TimingFromDict(response['timing'])
+    timing = TimingFromDict(response['timing'])
     loading_finished = RequestTrackTestCase._LOADING_FINISHED['params']
     loading_finished_offset = r._TimestampOffsetFromStartMs(
         loading_finished['timestamp'])
@@ -241,6 +351,53 @@ class RequestTrackTestCase(unittest.TestCase):
     self.assertEquals(
         RequestTrackTestCase._DATA_RECEIVED_2['params']['encodedDataLength'],
         r.data_chunks[1][1])
+
+  def testDuplicatedResponseReceived(self):
+    msg1 = RequestTrackTestCase._REQUEST_WILL_BE_SENT
+    msg2 = copy.deepcopy(RequestTrackTestCase._RESPONSE_RECEIVED)
+    msg2_other_timestamp = copy.deepcopy(msg2)
+    msg2_other_timestamp['params']['timestamp'] += 12
+    msg2_different = copy.deepcopy(msg2)
+    msg2_different['params']['response']['encodedDataLength'] += 1
+    self.request_track.Handle('Network.requestWillBeSent', msg1)
+    self.request_track.Handle('Network.responseReceived', msg2)
+    # Should not raise an AssertionError.
+    self.request_track.Handle('Network.responseReceived', msg2)
+    self.assertEquals(1, self.request_track.duplicates_count)
+    with self.assertRaises(AssertionError):
+      self.request_track.Handle('Network.responseReceived', msg2_different)
+
+  def testCanSerialize(self):
+    self._ValidSequence(self.request_track)
+    json_dict = self.request_track.ToJsonDict()
+    _ = json.dumps(json_dict)  # Should not raise an exception.
+
+  def testCanDeserialize(self):
+    self._ValidSequence(self.request_track)
+    self.request_track.duplicates_count = 142
+    self.request_track.inconsistent_initiators_count = 123
+    json_dict = self.request_track.ToJsonDict()
+    request_track = RequestTrack.FromJsonDict(json_dict)
+    self.assertEquals(self.request_track, request_track)
+
+  def testMaxAge(self):
+    rq = Request()
+    self.assertEqual(-1, rq.MaxAge())
+    rq.response_headers = {}
+    self.assertEqual(-1, rq.MaxAge())
+    rq.response_headers[
+        'Cache-Control'] = 'private,s-maxage=0,max-age=0,must-revalidate'
+    self.assertEqual(0, rq.MaxAge())
+    rq.response_headers[
+        'Cache-Control'] = 'private,s-maxage=0,no-store,max-age=100'
+    self.assertEqual(-1, rq.MaxAge())
+    rq.response_headers[
+        'Cache-Control'] = 'private,s-maxage=0'
+    self.assertEqual(-1, rq.MaxAge())
+    # Case-insensitive match.
+    rq.response_headers['cache-control'] = 'max-age=600'
+    self.assertEqual(600, rq.MaxAge())
+
 
   @classmethod
   def _ValidSequence(cls, request_track):

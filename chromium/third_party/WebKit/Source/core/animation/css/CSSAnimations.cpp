@@ -53,6 +53,7 @@
 #include "core/frame/UseCounter.h"
 #include "core/layout/LayoutObject.h"
 #include "core/paint/PaintLayer.h"
+#include "platform/Histogram.h"
 #include "platform/animation/TimingFunction.h"
 #include "public/platform/Platform.h"
 #include "wtf/BitArray.h"
@@ -116,9 +117,10 @@ static StringKeyframeEffectModel* createKeyframeEffectModel(StyleResolver* resol
         }
     }
 
+    DEFINE_STATIC_LOCAL(SparseHistogram, propertyHistogram, ("WebCore.Animation.CSSProperties"));
     for (CSSPropertyID property : specifiedPropertiesForUseCounter) {
         ASSERT(property != CSSPropertyInvalid);
-        Platform::current()->histogramSparse("WebCore.Animation.CSSProperties", UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(property));
+        propertyHistogram.sample(UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(property));
     }
 
     // Merge duplicate keyframes.
@@ -400,8 +402,8 @@ void CSSAnimations::maybeApplyPendingUpdate(Element* element)
         const InertEffect* inertAnimation = entry.effect.get();
         AnimationEventDelegate* eventDelegate = new AnimationEventDelegate(element, entry.name);
         KeyframeEffect* effect = KeyframeEffect::create(element, inertAnimation->model(), inertAnimation->specifiedTiming(), KeyframeEffect::DefaultPriority, eventDelegate);
-        effect->setName(entry.name);
         Animation* animation = element->document().timeline().play(effect);
+        animation->setId(entry.name);
         if (inertAnimation->paused())
             animation->pause();
         animation->update(TimingUpdateOnDemand);
@@ -481,8 +483,8 @@ void CSSAnimations::maybeApplyPendingUpdate(Element* element)
         }
 
         KeyframeEffect* transition = KeyframeEffect::create(element, model, inertAnimation->specifiedTiming(), KeyframeEffect::TransitionPriority, eventDelegate);
-        transition->setName(getPropertyName(newTransition.id));
         Animation* animation = element->document().timeline().play(transition);
+        animation->setId(getPropertyName(newTransition.id));
         // Set the current time as the start time for retargeted transitions
         if (retargetedCompositorTransitions.contains(id))
             animation->setStartTime(element->document().timeline().currentTime());
@@ -490,7 +492,9 @@ void CSSAnimations::maybeApplyPendingUpdate(Element* element)
         runningTransition.animation = animation;
         m_transitions.set(id, runningTransition);
         ASSERT(id != CSSPropertyInvalid);
-        Platform::current()->histogramSparse("WebCore.Animation.CSSProperties", UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(id));
+
+        DEFINE_STATIC_LOCAL(SparseHistogram, propertyHistogram, ("WebCore.Animation.CSSProperties"));
+        propertyHistogram.sample(UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(id));
     }
     clearPendingUpdate();
 }
@@ -774,7 +778,7 @@ void CSSAnimations::TransitionEventDelegate::onEventCondition(const AnimationEff
         const Timing& timing = animationNode.specifiedTiming();
         double elapsedTime = timing.iterationDuration;
         const AtomicString& eventType = EventTypeNames::transitionend;
-        String pseudoElement = PseudoElement::pseudoElementNameForEvents(pseudoId());
+        String pseudoElement = PseudoElement::pseudoElementNameForEvents(getPseudoId());
         RefPtrWillBeRawPtr<TransitionEvent> event = TransitionEvent::create(eventType, propertyName, elapsedTime, pseudoElement);
         event->setTarget(eventTarget());
         document().enqueueAnimationFrameEvent(event);

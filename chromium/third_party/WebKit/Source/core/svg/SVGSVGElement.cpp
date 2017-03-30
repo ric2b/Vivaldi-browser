@@ -31,14 +31,14 @@
 #include "core/dom/StaticNodeList.h"
 #include "core/editing/FrameSelection.h"
 #include "core/events/EventListener.h"
-#include "core/frame/LocalFrame.h"
-#include "core/page/FrameTree.h"
+#include "core/frame/Deprecation.h"
 #include "core/frame/FrameView.h"
-#include "core/frame/UseCounter.h"
+#include "core/frame/LocalFrame.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/svg/LayoutSVGModelObject.h"
 #include "core/layout/svg/LayoutSVGRoot.h"
 #include "core/layout/svg/LayoutSVGViewportContainer.h"
+#include "core/page/FrameTree.h"
 #include "core/svg/SVGAngleTearOff.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGNumberTearOff.h"
@@ -201,16 +201,18 @@ void SVGSVGElement::parseAttribute(const QualifiedName& name, const AtomicString
         bool setListener = true;
 
         // Only handle events if we're the outermost <svg> element
-        if (name == HTMLNames::onunloadAttr)
+        if (name == HTMLNames::onunloadAttr) {
             document().setWindowAttributeEventListener(EventTypeNames::unload, createAttributeEventListener(document().frame(), name, value, eventParameterName()));
-        else if (name == HTMLNames::onresizeAttr)
+        } else if (name == HTMLNames::onresizeAttr) {
             document().setWindowAttributeEventListener(EventTypeNames::resize, createAttributeEventListener(document().frame(), name, value, eventParameterName()));
-        else if (name == HTMLNames::onscrollAttr)
+        } else if (name == HTMLNames::onscrollAttr) {
             document().setWindowAttributeEventListener(EventTypeNames::scroll, createAttributeEventListener(document().frame(), name, value, eventParameterName()));
-        else if (name == SVGNames::onzoomAttr)
+        } else if (name == SVGNames::onzoomAttr) {
+            Deprecation::countDeprecation(document(), UseCounter::SVGZoomEvent);
             document().setWindowAttributeEventListener(EventTypeNames::zoom, createAttributeEventListener(document().frame(), name, value, eventParameterName()));
-        else
+        } else {
             setListener = false;
+        }
 
         if (setListener)
             return;
@@ -263,9 +265,8 @@ void SVGSVGElement::collectStyleForPresentationAttribute(const QualifiedName& na
 void SVGSVGElement::svgAttributeChanged(const QualifiedName& attrName)
 {
     bool updateRelativeLengthsOrViewBox = false;
-    bool widthChanged = attrName == SVGNames::widthAttr;
-    bool heightChanged = attrName == SVGNames::heightAttr;
-    if (widthChanged || heightChanged
+    bool widthOrHeightChanged = attrName == SVGNames::widthAttr || attrName == SVGNames::heightAttr;
+    if (widthOrHeightChanged
         || attrName == SVGNames::xAttr
         || attrName == SVGNames::yAttr) {
         updateRelativeLengthsOrViewBox = true;
@@ -275,11 +276,7 @@ void SVGSVGElement::svgAttributeChanged(const QualifiedName& attrName)
         // At the SVG/HTML boundary (aka LayoutSVGRoot), the width and
         // height attributes can affect the replaced size so we need
         // to mark it for updating.
-        //
-        // FIXME: For width/height animated as XML attributes on SVG
-        // roots, there is an attribute synchronization missing. See
-        // http://crbug.com/364807
-        if (widthChanged || heightChanged) {
+        if (widthOrHeightChanged) {
             LayoutObject* layoutObject = this->layoutObject();
             if (layoutObject && layoutObject->isSVGRoot()) {
                 invalidateSVGPresentationAttributeStyle();
@@ -614,7 +611,7 @@ FloatRect SVGSVGElement::currentViewBoxRect() const
 
     // If no viewBox is specified but non-relative width/height values, then we
     // should always synthesize a viewBox if we're embedded through a SVGImage.
-    return FloatRect(FloatPoint(), FloatSize(floatValueForLength(intrinsicWidth(), 0), floatValueForLength(intrinsicHeight(), 0)));
+    return FloatRect(FloatPoint(), FloatSize(intrinsicWidth(), intrinsicHeight()));
 }
 
 FloatSize SVGSVGElement::currentViewportSize() const
@@ -641,22 +638,22 @@ bool SVGSVGElement::hasIntrinsicHeight() const
     return height()->currentValue()->typeWithCalcResolved() != CSSPrimitiveValue::UnitType::Percentage;
 }
 
-Length SVGSVGElement::intrinsicWidth() const
+float SVGSVGElement::intrinsicWidth() const
 {
     if (width()->currentValue()->typeWithCalcResolved() == CSSPrimitiveValue::UnitType::Percentage)
-        return Length(0, Fixed);
+        return 0;
 
     SVGLengthContext lengthContext(this);
-    return Length(width()->currentValue()->value(lengthContext), Fixed);
+    return width()->currentValue()->value(lengthContext);
 }
 
-Length SVGSVGElement::intrinsicHeight() const
+float SVGSVGElement::intrinsicHeight() const
 {
     if (height()->currentValue()->typeWithCalcResolved() == CSSPrimitiveValue::UnitType::Percentage)
-        return Length(0, Fixed);
+        return 0;
 
     SVGLengthContext lengthContext(this);
-    return Length(height()->currentValue()->value(lengthContext), Fixed);
+    return height()->currentValue()->value(lengthContext);
 }
 
 AffineTransform SVGSVGElement::viewBoxToViewTransform(float viewWidth, float viewHeight) const

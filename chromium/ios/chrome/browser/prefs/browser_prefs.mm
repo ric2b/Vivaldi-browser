@@ -4,7 +4,6 @@
 
 #include "ios/chrome/browser/prefs/browser_prefs.h"
 
-#include "base/prefs/pref_service.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_prefs.h"
@@ -15,11 +14,13 @@
 #include "components/omnibox/browser/zero_suggest_provider.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "components/proxy_config/pref_proxy_config_tracker_impl.h"
 #include "components/rappor/rappor_service.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/signin/core/common/signin_pref_names.h"
 #include "components/ssl_config/ssl_config_service_manager.h"
+#include "components/strings/grit/components_locale_settings.h"
 #include "components/sync_driver/sync_prefs.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "components/translate/core/common/translate_pref_names.h"
@@ -34,7 +35,6 @@
 #include "ios/chrome/browser/net/http_server_properties_manager_factory.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
-#include "ios/chrome/grit/ios_locale_settings.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -101,13 +101,11 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(
       prefs::kEnableTranslate, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  registry->RegisterStringPref(
-      prefs::kAcceptLanguages,
-      l10n_util::GetStringUTF8(IDS_IOS_ACCEPT_LANGUAGES));
-  registry->RegisterStringPref(
-      prefs::kDefaultCharset,
-      l10n_util::GetStringUTF8(IDS_IOS_DEFAULT_ENCODING),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterStringPref(prefs::kAcceptLanguages,
+                               l10n_util::GetStringUTF8(IDS_ACCEPT_LANGUAGES));
+  registry->RegisterStringPref(prefs::kDefaultCharset,
+                               l10n_util::GetStringUTF8(IDS_DEFAULT_ENCODING),
+                               user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterInt64Pref(prefs::kRateThisAppDialogLastShownTime, 0,
                               user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(

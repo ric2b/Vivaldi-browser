@@ -22,6 +22,7 @@
 
 #include "core/layout/svg/LayoutSVGHiddenContainer.h"
 #include "core/svg/SVGDocumentExtensions.h"
+#include "core/svg/SVGResourceClient.h"
 
 namespace blink {
 
@@ -60,9 +61,8 @@ public:
     }
 
     void idChanged();
-    void addClientLayer(Node*);
-    void addClientLayer(PaintLayer*);
-    void removeClientLayer(PaintLayer*);
+    void addResourceClient(SVGResourceClient*);
+    void removeResourceClient(SVGResourceClient*);
 
     void invalidateCacheAndMarkForLayout(SubtreeLayoutScope* = nullptr);
 
@@ -81,7 +81,7 @@ protected:
 
     // Used from the invalidateClient/invalidateClients methods from classes, inheriting from us.
     void markAllClientsForInvalidation(InvalidationMode);
-    void markAllClientLayersForInvalidation();
+    void markAllResourceClientsForInvalidation();
     void markClientForInvalidation(LayoutObject*, InvalidationMode);
 
     void willBeDestroyed() override;
@@ -105,7 +105,7 @@ private:
     // 22 padding bits available
 
     HashSet<LayoutObject*> m_clients;
-    HashSet<PaintLayer*> m_clientLayers;
+    HashSet<SVGResourceClient*> m_resourceClients;
 };
 
 inline LayoutSVGResourceContainer* getLayoutSVGResourceContainerById(TreeScope& treeScope, const AtomicString& id)
@@ -134,6 +134,6 @@ DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutSVGResourceContainer, isSVGResourceContain
 #define DEFINE_LAYOUT_SVG_RESOURCE_TYPE_CASTS(thisType, typeName) \
     DEFINE_TYPE_CASTS(thisType, LayoutSVGResourceContainer, resource, resource->resourceType() == typeName, resource.resourceType() == typeName)
 
-}
+} // namespace blink
 
 #endif

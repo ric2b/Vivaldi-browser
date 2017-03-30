@@ -6,7 +6,6 @@
 
 #include "base/logging.h"
 #include "build/build_config.h"
-#include "skia/ext/bitmap_platform_device.h"
 #include "skia/ext/platform_device.h"
 #include "third_party/skia/include/core/SkMetaData.h"
 #include "third_party/skia/include/core/SkTypes.h"
@@ -63,8 +62,7 @@ bool GetWritablePixels(SkCanvas* canvas, SkPixmap* result) {
 }
 
 bool SupportsPlatformPaint(const SkCanvas* canvas) {
-  PlatformDevice* platform_device = GetPlatformDevice(GetTopDevice(*canvas));
-  return platform_device && platform_device->SupportsPlatformPaint();
+  return GetPlatformDevice(GetTopDevice(*canvas)) != nullptr;
 }
 
 PlatformSurface BeginPlatformPaint(SkCanvas* canvas) {
@@ -79,19 +77,6 @@ void EndPlatformPaint(SkCanvas* canvas) {
   PlatformDevice* platform_device = GetPlatformDevice(GetTopDevice(*canvas));
   if (platform_device)
     platform_device->EndPlatformPaint();
-}
-
-void MakeOpaque(SkCanvas* canvas, int x, int y, int width, int height) {
-  if (width <= 0 || height <= 0)
-    return;
-
-  SkRect rect;
-  rect.setXYWH(SkIntToScalar(x), SkIntToScalar(y),
-               SkIntToScalar(width), SkIntToScalar(height));
-  SkPaint paint;
-  paint.setColor(SK_ColorBLACK);
-  paint.setXfermodeMode(SkXfermode::kDstATop_Mode);
-  canvas->drawRect(rect, paint);
 }
 
 size_t PlatformCanvasStrideForWidth(unsigned width) {

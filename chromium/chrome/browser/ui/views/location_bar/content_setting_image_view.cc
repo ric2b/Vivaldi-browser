@@ -12,14 +12,15 @@
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/resource/material_design/material_design_controller.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/views/animation/button_ink_drop_delegate.h"
+#include "ui/views/animation/ink_drop_hover.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/widget/widget.h"
-
 
 namespace {
 // Time spent with animation fully open.
@@ -46,7 +47,9 @@ ContentSettingImageView::ContentSettingImageView(
       slide_animator_(this),
       pause_animation_(false),
       pause_animation_state_(0.0),
-      bubble_widget_(NULL) {
+      bubble_view_(nullptr),
+      suppress_mouse_released_action_(false),
+      ink_drop_delegate_(new views::ButtonInkDropDelegate(this, this)) {
   if (!ui::MaterialDesignController::IsModeMaterial()) {
     static const int kBackgroundImages[] =
         IMAGE_GRID(IDR_OMNIBOX_CONTENT_SETTING_BUBBLE);
@@ -55,15 +58,18 @@ ContentSettingImageView::ContentSettingImageView(
 
   image()->SetHorizontalAlignment(views::ImageView::LEADING);
   image()->set_interactive(true);
+  image()->EnableCanvasFlippingForRTLUI(true);
+  image()->SetAccessibilityFocusable(true);
   label()->SetElideBehavior(gfx::NO_ELIDE);
+  label()->SetVisible(false);
 
   slide_animator_.SetSlideDuration(kAnimationDurationMS);
   slide_animator_.SetTweenType(gfx::Tween::LINEAR);
 }
 
 ContentSettingImageView::~ContentSettingImageView() {
-  if (bubble_widget_)
-    bubble_widget_->RemoveObserver(this);
+  if (bubble_view_ && bubble_view_->GetWidget())
+    bubble_view_->GetWidget()->RemoveObserver(this);
 }
 
 void ContentSettingImageView::Update(content::WebContents* web_contents) {
@@ -151,20 +157,55 @@ const char* ContentSettingImageView::GetClassName() const {
   return "ContentSettingsImageView";
 }
 
+void ContentSettingImageView::OnBoundsChanged(
+    const gfx::Rect& previous_bounds) {
+  if (bubble_view_)
+    bubble_view_->OnAnchorBoundsChanged();
+}
+
 bool ContentSettingImageView::OnMousePressed(const ui::MouseEvent& event) {
+  // If the bubble is showing then don't reshow it when the mouse is released.
+  suppress_mouse_released_action_ = IsBubbleShowing();
+  if (!suppress_mouse_released_action_ && !label()->visible())
+    ink_drop_delegate_->OnAction(views::InkDropState::ACTION_PENDING);
+
   // We want to show the bubble on mouse release; that is the standard behavior
   // for buttons.
   return true;
 }
 
 void ContentSettingImageView::OnMouseReleased(const ui::MouseEvent& event) {
-  if (HitTestPoint(event.location()))
+  // If this is the second click on this view then the bubble was showing on the
+  // mouse pressed event and is hidden now. Prevent the bubble from reshowing by
+  // doing nothing here.
+  if (suppress_mouse_released_action_) {
+    suppress_mouse_released_action_ = false;
+    return;
+  }
+  const bool activated = HitTestPoint(event.location());
+  if (!label()->visible()) {
+    ink_drop_delegate_->OnAction(activated ? views::InkDropState::ACTIVATED
+                                           : views::InkDropState::HIDDEN);
+  }
+  if (activated)
     OnClick();
 }
 
+bool ContentSettingImageView::OnKeyPressed(const ui::KeyEvent& event) {
+  if (event.key_code() != ui::VKEY_SPACE && event.key_code() != ui::VKEY_RETURN)
+    return false;
+
+  ink_drop_delegate_->OnAction(views::InkDropState::ACTIVATED);
+  OnClick();
+  return true;
+}
+
 void ContentSettingImageView::OnGestureEvent(ui::GestureEvent* event) {
-  if (event->type() == ui::ET_GESTURE_TAP)
+  if (event->type() == ui::ET_GESTURE_TAP) {
+    if (!label()->visible())
+      ink_drop_delegate_->OnAction(views::InkDropState::ACTIVATED);
     OnClick();
+  }
   if ((event->type() == ui::ET_GESTURE_TAP) ||
       (event->type() == ui::ET_GESTURE_TAP_DOWN))
     event->SetHandled();
@@ -179,15 +220,23 @@ void ContentSettingImageView::OnNativeThemeChanged(
 }
 
 void ContentSettingImageView::OnWidgetDestroying(views::Widget* widget) {
-  DCHECK_EQ(bubble_widget_, widget);
-  bubble_widget_->RemoveObserver(this);
-  bubble_widget_ = NULL;
+  DCHECK(bubble_view_);
+  DCHECK_EQ(bubble_view_->GetWidget(), widget);
+  widget->RemoveObserver(this);
+  bubble_view_ = nullptr;
 
   if (pause_animation_) {
     slide_animator_.Reset(pause_animation_state_);
     pause_animation_ = false;
     slide_animator_.Show();
   }
+}
+
+void ContentSettingImageView::OnWidgetVisibilityChanged(views::Widget* widget,
+                                                        bool visible) {
+  // |widget| is a bubble that has just got shown / hidden.
+  if (!visible && !label()->visible())
+    ink_drop_delegate_->OnAction(views::InkDropState::DEACTIVATED);
 }
 
 void ContentSettingImageView::OnClick() {
@@ -200,19 +249,31 @@ void ContentSettingImageView::OnClick() {
   }
 
   content::WebContents* web_contents = parent_->GetWebContents();
-  if (web_contents && !bubble_widget_) {
-    bubble_widget_ =
-        parent_->delegate()->CreateViewsBubble(new ContentSettingBubbleContents(
-            content_setting_image_model_->CreateBubbleModel(
-                parent_->delegate()->GetContentSettingBubbleModelDelegate(),
-                web_contents, parent_->profile()),
-            web_contents, this, views::BubbleBorder::TOP_RIGHT));
-    bubble_widget_->AddObserver(this);
-    bubble_widget_->Show();
+  if (web_contents && !bubble_view_) {
+    bubble_view_ = new ContentSettingBubbleContents(
+                content_setting_image_model_->CreateBubbleModel(
+                    parent_->delegate()->GetContentSettingBubbleModelDelegate(),
+                    web_contents, parent_->profile()),
+                web_contents, this, views::BubbleBorder::TOP_RIGHT);
+    views::Widget* bubble_widget =
+        parent_->delegate()->CreateViewsBubble(bubble_view_);
+    bubble_widget->AddObserver(this);
+    // This is triggered by an input event. If the user clicks the icon while
+    // it's not animating, the icon will be placed in an active state, so the
+    // bubble doesn't need an arrow. If the user clicks during an animation,
+    // the animation simply pauses and no other visible state change occurs, so
+    // show the arrow in this case.
+    if (ui::MaterialDesignController::IsModeMaterial() && !pause_animation_)
+      bubble_view_->SetArrowPaintType(views::BubbleBorder::PAINT_TRANSPARENT);
+    bubble_widget->Show();
   }
 }
 
 void ContentSettingImageView::UpdateImage() {
   SetImage(content_setting_image_model_->GetIcon(GetTextColor()).AsImageSkia());
   image()->SetTooltipText(content_setting_image_model_->get_tooltip());
+}
+
+bool ContentSettingImageView::IsBubbleShowing() const {
+  return bubble_view_ != nullptr;
 }

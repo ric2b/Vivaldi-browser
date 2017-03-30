@@ -21,13 +21,11 @@
 #include "content/public/browser/cert_store.h"
 
 #ifdef VIVALDI_BUILD
-#include "base/prefs/pref_service.h"
 #include "chrome/browser/ssl/chrome_security_state_model_client.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/toolbar/toolbar_model_impl.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
@@ -49,9 +47,6 @@ using guest_view::GuestViewManager;
 using security_state::SecurityStateModel;
 using vivaldi::IsVivaldiApp;
 using vivaldi::IsVivaldiRunning;
-
-// TODO(andre@vivaldi.com) : Move this into some other space than global.
-extensions::WebViewGuest* s_current_webviewguest = NULL;
 
 namespace extensions {
 
@@ -158,8 +153,8 @@ void WebViewGuest::ExtendedLoadProgressChanged(WebContents* source,
   args->SetDouble(webview::kLoadedBytes, loaded_bytes);
   args->SetInteger(webview::kLoadedElements, loaded_elements);
   args->SetInteger(webview::kTotalElements, total_elements);
-  DispatchEventToView(
-      new GuestViewEvent(webview::kEventLoadProgress, std::move(args)));
+  DispatchEventToView(make_scoped_ptr(
+      new GuestViewEvent(webview::kEventLoadProgress, std::move(args))));
 }
 
 // Initialize listeners (cannot do it in constructor as RenderViewHost not ready.)
@@ -216,8 +211,8 @@ void WebViewGuest::ToggleFullscreenModeForTab(
     }
   }
   if (state_changed) {
-    DispatchEventToView(
-        new GuestViewEvent(webview::kEventOnFullscreen, std::move(args)));
+    DispatchEventToView(make_scoped_ptr(
+        new GuestViewEvent(webview::kEventOnFullscreen, std::move(args))));
   }
 }
 
@@ -268,11 +263,6 @@ void WebViewGuest::SetVisible(bool is_visible) {
       widgethostview->Hide();
     }
   }
-
-  // NOTE(andre@vivaldi.com): Note that this assume we only have one visible
-  // VivaldiViewGuest.
-  if (is_visible)
-    s_current_webviewguest = this;
 
 }
 
@@ -329,8 +319,8 @@ void WebViewGuest::UpdateMediaState(TabMediaState state) {
 
     args->SetString("activeMediaType", TabMediaStateToString(state));
 
-    DispatchEventToView(
-        new GuestViewEvent(webview::kEventMediaStateChanged, std::move(args)));
+    DispatchEventToView(make_scoped_ptr(
+        new GuestViewEvent(webview::kEventMediaStateChanged, std::move(args))));
   }
   media_state_ = state;
 }
@@ -395,8 +385,8 @@ void WebViewGuest::VisibleSSLStateChanged(const WebContents* source) {
     }
 
   }
-  DispatchEventToView(
-      new GuestViewEvent(webview::kEventSSLStateChanged, std::move(args)));
+  DispatchEventToView(make_scoped_ptr(
+      new GuestViewEvent(webview::kEventSSLStateChanged, std::move(args))));
 #endif // VIVALDI_BUILD
 }
 
@@ -578,8 +568,8 @@ void WebViewGuest::UpdateTargetURL(content::WebContents *source,
                                    const GURL &url) {
   scoped_ptr<base::DictionaryValue> args(new base::DictionaryValue());
   args->SetString(webview::kNewURL, url.spec());
-  DispatchEventToView(
-      new GuestViewEvent(webview::kEventTargetURLChanged, std::move(args)));
+  DispatchEventToView(make_scoped_ptr(
+      new GuestViewEvent(webview::kEventTargetURLChanged, std::move(args))));
 }
 
 void WebViewGuest::CreateSearch(const base::ListValue & search) {
@@ -597,8 +587,8 @@ void WebViewGuest::CreateSearch(const base::ListValue & search) {
   scoped_ptr<base::DictionaryValue> args(new base::DictionaryValue());
   args->SetString(webview::kNewSearchName, keyword);
   args->SetString(webview::kNewSearchUrl, url);
-  DispatchEventToView(
-      new GuestViewEvent(webview::kEventCreateSearch, std::move(args)));
+  DispatchEventToView(make_scoped_ptr(
+      new GuestViewEvent(webview::kEventCreateSearch, std::move(args))));
 }
 
 void WebViewGuest::PasteAndGo(const base::ListValue & search) {
@@ -611,8 +601,8 @@ void WebViewGuest::PasteAndGo(const base::ListValue & search) {
 
   scoped_ptr<base::DictionaryValue> args(new base::DictionaryValue());
   args->SetString(webview::kClipBoardText, clipBoardText);
-  DispatchEventToView(
-      new GuestViewEvent(webview::kEventPasteAndGo, std::move(args)));
+  DispatchEventToView(make_scoped_ptr(
+      new GuestViewEvent(webview::kEventPasteAndGo, std::move(args))));
 }
 
 void WebViewGuest::SetWebContentsWasInitiallyGuest(bool born_guest) {
@@ -702,8 +692,8 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
 bool WebViewGuest::RequestPageInfo(const GURL& url) {
   scoped_ptr<base::DictionaryValue> args(new base::DictionaryValue());
   args->Set(webview::kTargetURL, new base::StringValue(url.spec()));
-  DispatchEventToView(
-      new GuestViewEvent(webview::kEventRequestPageInfo, std::move(args)));
+  DispatchEventToView(make_scoped_ptr(
+      new GuestViewEvent(webview::kEventRequestPageInfo, std::move(args))));
   return true;
 }
 
@@ -752,6 +742,24 @@ void WebViewGuest::CreateExtensionHost(const std::string& extension_id) {
 }
 
 void WebViewGuest::SetExtensionHost(const std::string& extensionhost) {
+}
+
+content::SecurityStyle WebViewGuest::GetSecurityStyle(
+    WebContents* contents,
+    content::SecurityStyleExplanations* security_style_explanations) {
+  Browser* browser = chrome::FindBrowserWithWebContents(contents);
+  if (browser) {
+    return browser->GetSecurityStyle(contents, security_style_explanations);
+  } else {
+    return content::SECURITY_STYLE_UNKNOWN;
+  }
+}
+
+void WebViewGuest::ShowCertificateViewerInDevTools(content::WebContents* web_contents, int cert_id) {
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  if (browser) {
+    browser->ShowCertificateViewerInDevTools(web_contents, cert_id);
+  }
 }
 
 } // namespace extensions

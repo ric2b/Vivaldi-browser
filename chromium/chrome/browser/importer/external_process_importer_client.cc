@@ -122,6 +122,10 @@ bool ExternalProcessImporterClient::OnMessageReceived(
                         OnNotesImportStart)
     IPC_MESSAGE_HANDLER(ProfileImportProcessHostMsg_NotifyNotesImportGroup,
                         OnNotesImportGroup)
+    IPC_MESSAGE_HANDLER(ProfileImportProcessHostMsg_NotifySpeedDialImportStart,
+                        OnSpeedDialImportStart)
+    IPC_MESSAGE_HANDLER(ProfileImportProcessHostMsg_NotifySpeedDialImportGroup,
+                        OnSpeedDialImportGroup)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -241,6 +245,24 @@ void ExternalProcessImporterClient::OnNotesImportGroup(
                     notes_group.end());
   if (notes_.size() == total_notes_count_)
     bridge_->AddNotes(notes_, notes_first_folder_name_);
+}
+
+void ExternalProcessImporterClient::OnSpeedDialImportStart(size_t total_count) {
+  if (cancelled_)
+    return;
+
+  total_speeddial_count_ = total_count;
+  speeddial_.reserve(total_count);
+}
+
+void ExternalProcessImporterClient::OnSpeedDialImportGroup(
+    const std::vector<ImportedSpeedDialEntry>& group) {
+  if (cancelled_)
+    return;
+
+  speeddial_.insert(speeddial_.end(), group.begin(), group.end());
+  if (speeddial_.size() == total_speeddial_count_)
+    bridge_->AddSpeedDial(speeddial_);
 }
 
 void ExternalProcessImporterClient::OnFaviconsImportStart(

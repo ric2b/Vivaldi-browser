@@ -18,7 +18,6 @@
 #include "remoting/codec/audio_encoder_verbatim.h"
 #include "remoting/host/audio_capturer.h"
 #include "remoting/host/audio_pump.h"
-#include "remoting/host/desktop_capturer_proxy.h"
 #include "remoting/host/desktop_environment.h"
 #include "remoting/host/host_extension_session.h"
 #include "remoting/host/input_injector.h"
@@ -34,7 +33,6 @@
 #include "remoting/protocol/session_config.h"
 #include "remoting/protocol/video_frame_pump.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
-#include "third_party/webrtc/modules/desktop_capture/mouse_cursor_monitor.h"
 
 // Default DPI to assume for old clients that use notifyClientDimensions.
 const int kDefaultDPI = 96;
@@ -65,11 +63,6 @@ scoped_ptr<AudioEncoder> CreateAudioEncoder(
 ClientSession::ClientSession(
     EventHandler* event_handler,
     scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> input_task_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> video_capture_task_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> video_encode_task_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> network_task_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner,
     scoped_ptr<protocol::ConnectionToClient> connection,
     DesktopEnvironmentFactory* desktop_environment_factory,
     const base::TimeDelta& max_duration,
@@ -87,11 +80,6 @@ ClientSession::ClientSession(
       client_clipboard_factory_(clipboard_echo_filter_.client_filter()),
       max_duration_(max_duration),
       audio_task_runner_(audio_task_runner),
-      input_task_runner_(input_task_runner),
-      video_capture_task_runner_(video_capture_task_runner),
-      video_encode_task_runner_(video_encode_task_runner),
-      network_task_runner_(network_task_runner),
-      ui_task_runner_(ui_task_runner),
       pairing_registry_(pairing_registry),
       is_authenticated_(false),
       pause_video_(false),
@@ -238,13 +226,6 @@ void ClientSession::DeliverClientMessage(
         reply.set_data(message.data().substr(0, 16));
       connection_->client_stub()->DeliverHostMessage(reply);
       return;
-    } else if (message.type() == "gnubby-auth") {
-      if (gnubby_auth_handler_) {
-        gnubby_auth_handler_->DeliverClientMessage(message.data());
-      } else {
-        HOST_LOG << "gnubby auth is not enabled";
-      }
-      return;
     } else {
       if (extension_manager_->OnExtensionMessage(message))
         return;
@@ -314,10 +295,6 @@ void ClientSession::OnConnectionAuthenticated(
   connection_->set_clipboard_stub(&disable_clipboard_filter_);
   clipboard_echo_filter_.set_host_stub(input_injector_.get());
   clipboard_echo_filter_.set_client_stub(connection_->client_stub());
-
-  // Create a GnubbyAuthHandler to proxy gnubbyd messages.
-  gnubby_auth_handler_ = desktop_environment_->CreateGnubbyAuthHandler(
-      connection_->client_stub());
 }
 
 void ClientSession::OnConnectionChannelsConnected(
@@ -456,18 +433,12 @@ void ClientSession::ResetVideoPipeline() {
 
   // Create MouseShapePump to send mouse cursor shape.
   mouse_shape_pump_.reset(
-      new MouseShapePump(video_capture_task_runner_,
-                         desktop_environment_->CreateMouseCursorMonitor(),
+      new MouseShapePump(desktop_environment_->CreateMouseCursorMonitor(),
                          connection_->client_stub()));
 
   // Create a VideoStream to pump frames from the capturer to the client.
+  video_stream_ = connection_->StartVideoStream(std::move(video_capturer));
 
-  // TODO(sergeyu): Move DesktopCapturerProxy creation to DesktopEnvironment.
-  // When using IpcDesktopCapturer the capture thread is not useful.
-  scoped_ptr<webrtc::DesktopCapturer> capturer_proxy(new DesktopCapturerProxy(
-      video_capture_task_runner_, std::move(video_capturer)));
-
-  video_stream_ = connection_->StartVideoStream(std::move(capturer_proxy));
   video_stream_->SetSizeCallback(
       base::Bind(&ClientSession::OnScreenSizeChanged, base::Unretained(this)));
 
@@ -477,12 +448,6 @@ void ClientSession::ResetVideoPipeline() {
 
   // Pause capturing if necessary.
   video_stream_->Pause(pause_video_);
-}
-
-void ClientSession::SetGnubbyAuthHandlerForTesting(
-    GnubbyAuthHandler* gnubby_auth_handler) {
-  DCHECK(CalledOnValidThread());
-  gnubby_auth_handler_.reset(gnubby_auth_handler);
 }
 
 scoped_ptr<protocol::ClipboardStub> ClientSession::CreateClipboardProxy() {

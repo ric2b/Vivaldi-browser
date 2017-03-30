@@ -32,6 +32,7 @@
 #define Character_h
 
 #include "platform/PlatformExport.h"
+#include "platform/fonts/CharacterProperty.h"
 #include "platform/text/TextDirection.h"
 #include "platform/text/TextPath.h"
 #include "platform/text/TextRun.h"
@@ -61,7 +62,6 @@ public:
             || isInRange(character, 0xE0100, 0xE01EF); // VARIATION SELECTOR-17 to 256
     }
 
-    static bool isCJKIdeograph(UChar32);
     static bool isCJKIdeographOrSymbol(UChar32);
 
     static unsigned expansionOpportunityCount(const LChar*, size_t length, TextDirection, bool& isAfterExpansion, const TextJustify);
@@ -95,6 +95,17 @@ public:
     }
     static bool canReceiveTextEmphasis(UChar32);
 
+    static bool isGraphemeExtended(UChar32 c)
+    {
+        // http://unicode.org/reports/tr29/#Extend
+        return u_hasBinaryProperty(c, UCHAR_GRAPHEME_EXTEND);
+    }
+
+    static bool isEmojiTextPresentation(UChar32);
+    static bool isEmojiEmojiPresentation(UChar32);
+    static bool isEmojiModifierBase(UChar32);
+    static bool isEmojiKeycapBase(UChar32);
+    static bool isRegionalIndicator(UChar32);
     static bool isModifier(UChar32 c)
     {
         return c >= 0x1F3FB && c <= 0x1F3FF;
@@ -126,6 +137,9 @@ public:
     static String normalizeSpaces(const UChar*, unsigned length);
 
     static bool isCommonOrInheritedScript(UChar32);
+
+private:
+    static bool hasProperty(UChar32, CharacterProperty);
 };
 
 } // namespace blink

@@ -36,21 +36,20 @@
 
 namespace blink {
 
+class AssignedNodesOptions;
+
 class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
     DEFINE_WRAPPERTYPEINFO();
 public:
     DECLARE_NODE_FACTORY(HTMLSlotElement);
 
     const WillBeHeapVector<RefPtrWillBeMember<Node>>& getAssignedNodes() const { ASSERT(!needsDistributionRecalc()); return m_assignedNodes; }
-    const WillBeHeapVector<RefPtrWillBeMember<Node>>& getDistributedNodes() const { ASSERT(!needsDistributionRecalc()); return m_distributedNodes; }
-
-    const WillBeHeapVector<RefPtrWillBeMember<Node>> getAssignedNodesForBinding() { updateDistribution(); return m_assignedNodes; }
-    const WillBeHeapVector<RefPtrWillBeMember<Node>> getDistributedNodesForBinding() { updateDistribution(); return m_distributedNodes; }
+    const WillBeHeapVector<RefPtrWillBeMember<Node>>& getDistributedNodes();
+    const WillBeHeapVector<RefPtrWillBeMember<Node>> getAssignedNodesForBinding(const AssignedNodesOptions&);
 
     Node* firstDistributedNode() const { return m_distributedNodes.isEmpty() ? nullptr : m_distributedNodes.first().get(); }
     Node* lastDistributedNode() const { return m_distributedNodes.isEmpty() ? nullptr : m_distributedNodes.last().get(); }
 
-    // TODO(hayato): This takes O(N). Make it O(1) with node-to-index hash table.
     Node* distributedNodeNextTo(const Node&) const;
     Node* distributedNodePreviousTo(const Node&) const;
 
@@ -59,26 +58,41 @@ public:
     void appendDistributedNodesFrom(const HTMLSlotElement& other);
     void clearDistribution();
 
+    bool hasSlotChangeEventListener();
+
     void updateDistributedNodesWithFallback();
+    void didUpdateDistribution();
 
-    void attach(const AttachContext& = AttachContext()) override;
-    void detach(const AttachContext& = AttachContext()) override;
+    void attach(const AttachContext& = AttachContext()) final;
+    void detach(const AttachContext& = AttachContext()) final;
 
-    void attributeChanged(const QualifiedName&, const AtomicString& oldValue, const AtomicString& newValue, AttributeModificationReason = ModifiedDirectly) override;
+    void attributeChanged(const QualifiedName&, const AtomicString& oldValue, const AtomicString& newValue, AttributeModificationReason = ModifiedDirectly) final;
 
     DECLARE_VIRTUAL_TRACE();
-
-protected:
-    void childrenChanged(const ChildrenChange&) override;
-    InsertionNotificationRequest insertedInto(ContainerNode*) override;
-    void removedFrom(ContainerNode*) override;
 
 private:
     HTMLSlotElement(Document&);
 
+    enum DistributionState {
+        DistributionReset,
+        DistributionChanged,
+        DistributionUnchanged
+    };
+
+    void childrenChanged(const ChildrenChange&) final;
+    InsertionNotificationRequest insertedInto(ContainerNode*) final;
+    void removedFrom(ContainerNode*) final;
+    void willRecalcStyle(StyleRecalcChange) final;
+
+    void dispatchSlotChangeEvent();
+    bool distributionChanged();
+
     WillBeHeapVector<RefPtrWillBeMember<Node>> m_assignedNodes;
-    // TODO(hayato): Share code with DistributedNode class
     WillBeHeapVector<RefPtrWillBeMember<Node>> m_distributedNodes;
+    WillBeHeapHashMap<RawPtrWillBeMember<const Node>, size_t> m_distributedIndices;
+    // TODO(hayato): Remove m_oldDistibutedNodes and make SlotAssignment check the diffirence between old and new distributed nodes for each slot to save the memories.
+    WillBeHeapVector<RefPtrWillBeMember<Node>> m_oldDistributedNodes;
+    DistributionState m_distributionState;
 };
 
 } // namespace blink

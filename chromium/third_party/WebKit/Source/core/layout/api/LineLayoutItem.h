@@ -20,7 +20,7 @@ class HitTestLocation;
 class LayoutObject;
 class LineLayoutBox;
 class LineLayoutBoxModel;
-class LineLayoutPaintShim;
+class LineLayoutAPIShim;
 
 enum HitTestFilter;
 
@@ -43,6 +43,12 @@ public:
     // switching all of core/layout/line to using the API.
     // https://crbug.com/499321
     operator LayoutObject*() const { return m_layoutObject; }
+
+    // TODO(dgrogan): Remove this when we replace the operator above with UnspecifiedBoolType.
+    bool isNull() const
+    {
+        return !m_layoutObject;
+    }
 
     bool isEqual(const LayoutObject* layoutObject) const
     {
@@ -91,7 +97,7 @@ public:
 
     bool isDescendantOf(const LineLayoutItem item) const
     {
-        return m_layoutObject->isDescendantOf(item);
+        return m_layoutObject->isDescendantOf(item.m_layoutObject);
     }
 
     void updateHitTestResult(HitTestResult& result, const LayoutPoint& point)
@@ -259,9 +265,24 @@ public:
         return m_layoutObject->isRubyBase();
     }
 
+    bool isSVGInline() const
+    {
+        return m_layoutObject->isSVGInline();
+    }
+
     bool isSVGInlineText() const
     {
         return m_layoutObject->isSVGInlineText();
+    }
+
+    bool isSVGText() const
+    {
+        return m_layoutObject->isSVGText();
+    }
+
+    bool isSVGTextPath() const
+    {
+        return m_layoutObject->isSVGTextPath();
     }
 
     bool isTableCell() const
@@ -314,14 +335,19 @@ public:
         return m_layoutObject->hitTest(result, locationInContainer, accumulatedOffset, filter);
     }
 
-    SelectionState selectionState() const
+    SelectionState getSelectionState() const
     {
-        return m_layoutObject->selectionState();
+        return m_layoutObject->getSelectionState();
     }
 
     Color selectionBackgroundColor() const
     {
         return m_layoutObject->selectionBackgroundColor();
+    }
+
+    Color resolveColor(const ComputedStyle& styleToUse, int colorProperty)
+    {
+        return m_layoutObject->resolveColor(styleToUse, colorProperty);
     }
 
     bool isInFlowPositioned() const
@@ -359,6 +385,16 @@ public:
         return m_layoutObject->nextOffset(current);
     }
 
+    FloatPoint localToAbsolute(const FloatPoint& localPoint = FloatPoint(), MapCoordinatesFlags flags = 0) const
+    {
+        return m_layoutObject->localToAbsolute(localPoint, flags);
+    }
+
+    bool hasOverflowClip() const
+    {
+        return m_layoutObject->hasOverflowClip();
+    }
+
 #ifndef NDEBUG
 
     const char* name() const
@@ -382,7 +418,9 @@ protected:
 private:
     LayoutObject* m_layoutObject;
 
-    friend class LineLayoutPaintShim;
+    friend class LineLayoutAPIShim;
+    friend class LineLayoutBlockFlow;
+    friend class LineLayoutRubyRun;
 };
 
 } // namespace blink

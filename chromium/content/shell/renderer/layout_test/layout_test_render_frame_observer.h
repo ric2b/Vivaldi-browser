@@ -8,6 +8,14 @@
 #include "base/macros.h"
 #include "content/public/renderer/render_frame_observer.h"
 
+namespace test_runner {
+struct LayoutDumpFlags;
+}
+
+namespace IPC {
+class Message;
+}  // namespace IPC
+
 namespace content {
 class RenderFrame;
 
@@ -16,7 +24,12 @@ class LayoutTestRenderFrameObserver : public RenderFrameObserver {
   explicit LayoutTestRenderFrameObserver(RenderFrame* render_frame);
   ~LayoutTestRenderFrameObserver() override {}
 
+  bool OnMessageReceived(const IPC::Message& message) override;
+
  private:
+  void OnLayoutDumpRequest(
+      const test_runner::LayoutDumpFlags& layout_dump_flags);
+
   DISALLOW_COPY_AND_ASSIGN(LayoutTestRenderFrameObserver);
 };
 

@@ -51,44 +51,33 @@ String SVGNumber::valueAsString() const
 }
 
 template<typename CharType>
-bool SVGNumber::parse(const CharType*& ptr, const CharType* end)
+SVGParsingError SVGNumber::parse(const CharType*& ptr, const CharType* end)
 {
-    if (!parseNumber(ptr, end, m_value, AllowLeadingAndTrailingWhitespace)) {
-        m_value = 0;
-        return false;
-    }
-
-    if (ptr != end) {
-        m_value = 0;
-        return false;
-    }
-
-    return true;
+    float value = 0;
+    const CharType* start = ptr;
+    if (!parseNumber(ptr, end, value, AllowLeadingAndTrailingWhitespace))
+        return SVGParsingError(SVGParseStatus::ExpectedNumber, ptr - start);
+    if (ptr != end)
+        return SVGParsingError(SVGParseStatus::TrailingGarbage, ptr - start);
+    m_value = value;
+    return SVGParseStatus::NoError;
 }
 
 SVGParsingError SVGNumber::setValueAsString(const String& string)
 {
-    if (string.isEmpty()) {
-        m_value = 0;
-        return NoError;
-    }
+    m_value = 0;
 
-    bool valid = false;
+    if (string.isEmpty())
+        return SVGParseStatus::NoError;
+
     if (string.is8Bit()) {
         const LChar* ptr = string.characters8();
         const LChar* end = ptr + string.length();
-        valid = parse(ptr, end);
-    } else {
-        const UChar* ptr = string.characters16();
-        const UChar* end = ptr + string.length();
-        valid = parse(ptr, end);
+        return parse(ptr, end);
     }
-
-    if (!valid) {
-        m_value = 0;
-        return ParsingAttributeFailedError;
-    }
-    return NoError;
+    const UChar* ptr = string.characters16();
+    const UChar* end = ptr + string.length();
+    return parse(ptr, end);
 }
 
 void SVGNumber::add(PassRefPtrWillBeRawPtr<SVGPropertyBase> other, SVGElement*)
@@ -117,13 +106,42 @@ PassRefPtrWillBeRawPtr<SVGNumber> SVGNumberAcceptPercentage::clone() const
     return create(m_value);
 }
 
+template<typename CharType>
+static SVGParsingError parseNumberOrPercentage(const CharType*& ptr, const CharType* end, float& number)
+{
+    const CharType* start = ptr;
+    if (!parseNumber(ptr, end, number, AllowLeadingWhitespace))
+        return SVGParsingError(SVGParseStatus::ExpectedNumberOrPercentage, ptr - start);
+    if (ptr < end && *ptr == '%') {
+        number /= 100;
+        ptr++;
+    }
+    if (skipOptionalSVGSpaces(ptr, end))
+        return SVGParsingError(SVGParseStatus::TrailingGarbage, ptr - start);
+    return SVGParseStatus::NoError;
+}
+
 SVGParsingError SVGNumberAcceptPercentage::setValueAsString(const String& string)
 {
-    if (parseNumberOrPercentage(string, m_value))
-        return NoError;
-
     m_value = 0;
-    return ParsingAttributeFailedError;
+
+    if (string.isEmpty())
+        return SVGParseStatus::ExpectedNumberOrPercentage;
+
+    float number = 0;
+    SVGParsingError error;
+    if (string.is8Bit()) {
+        const LChar* ptr = string.characters8();
+        const LChar* end = ptr + string.length();
+        error = parseNumberOrPercentage(ptr, end, number);
+    } else {
+        const UChar* ptr = string.characters16();
+        const UChar* end = ptr + string.length();
+        error = parseNumberOrPercentage(ptr, end, number);
+    }
+    if (error == SVGParseStatus::NoError)
+        m_value = number;
+    return error;
 }
 
 SVGNumberAcceptPercentage::SVGNumberAcceptPercentage(float value)
@@ -131,4 +149,4 @@ SVGNumberAcceptPercentage::SVGNumberAcceptPercentage(float value)
 {
 }
 
-}
+} // namespace blink

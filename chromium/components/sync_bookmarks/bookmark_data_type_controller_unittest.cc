@@ -9,13 +9,13 @@
 #include "base/callback.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
-#include "base/prefs/testing_pref_service.h"
 #include "base/run_loop.h"
 #include "base/thread_task_runner_handle.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
 #include "components/bookmarks/test/test_bookmark_client.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/prefs/testing_pref_service.h"
 #include "components/sync_driver/change_processor_mock.h"
 #include "components/sync_driver/data_type_controller_mock.h"
 #include "components/sync_driver/fake_sync_client.h"
@@ -71,7 +71,6 @@ class SyncBookmarkDataTypeControllerTest : public testing::Test,
   void SetUp() override {
     model_associator_ = new ModelAssociatorMock();
     change_processor_ = new ChangeProcessorMock();
-    bookmark_client_.reset(new bookmarks::TestBookmarkClient());
     history_service_.reset(new HistoryMock());
     profile_sync_factory_.reset(
         new SyncApiComponentFactoryMock(model_associator_,
@@ -88,7 +87,8 @@ class SyncBookmarkDataTypeControllerTest : public testing::Test,
   };
 
   void CreateBookmarkModel(BookmarkLoadPolicy bookmark_load_policy) {
-    bookmark_model_.reset(new BookmarkModel(bookmark_client_.get()));
+    bookmark_model_.reset(new BookmarkModel(
+        make_scoped_ptr(new bookmarks::TestBookmarkClient())));
     if (bookmark_load_policy == LOAD_MODEL) {
       TestingPrefServiceSimple prefs;
       bookmark_model_->Load(&prefs, std::string(), base::FilePath(),
@@ -136,7 +136,6 @@ class SyncBookmarkDataTypeControllerTest : public testing::Test,
   base::MessageLoop message_loop_;
   scoped_refptr<BookmarkDataTypeController> bookmark_dtc_;
   scoped_ptr<SyncApiComponentFactoryMock> profile_sync_factory_;
-  scoped_ptr<bookmarks::TestBookmarkClient> bookmark_client_;
   scoped_ptr<BookmarkModel> bookmark_model_;
   scoped_ptr<HistoryMock> history_service_;
   sync_driver::FakeSyncService service_;

@@ -268,7 +268,15 @@ void Connection::ReportDiagnosticInfo(int extended_error, Statement* stmt) {
   std::string debug_info;
   const int error = (extended_error & 0xFF);
   if (error == SQLITE_CORRUPT) {
+    // CollectCorruptionInfo() is implemented in terms of sql::Connection,
+    // prevent reentrant calls to the error callback.
+    // TODO(shess): Rewrite IntegrityCheckHelper() in terms of raw SQLite.
+    ErrorCallback original_callback = std::move(error_callback_);
+    reset_error_callback();
+
     debug_info = CollectCorruptionInfo();
+
+    error_callback_ = std::move(original_callback);
   } else {
     debug_info = CollectErrorInfo(extended_error, stmt);
   }
@@ -587,7 +595,12 @@ void Connection::Preload() {
 // work.  There could be two prepared statements, one for cache_size=1 one for
 // cache_size=goal.
 void Connection::ReleaseCacheMemoryIfNeeded(bool implicit_change_performed) {
-  DCHECK(is_open());
+  // The database could have been closed during a transaction as part of error
+  // recovery.
+  if (!db_) {
+    DLOG_IF(FATAL, !poisoned_) << "Illegal use of connection without a db";
+    return;
+  }
 
   // If memory-mapping is not enabled, the page cache helps performance.
   if (!mmap_enabled_)

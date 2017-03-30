@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/views/bookmarks/bookmark_menu_delegate.h"
 
-#include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -19,6 +18,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/managed/managed_bookmark_service.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/user_metrics.h"
 #include "grit/theme_resources.h"
@@ -331,7 +331,6 @@ bool BookmarkMenuDelegate::ShowContextMenu(MenuItemView* source,
       ShouldCloseOnRemove(node)));
   context_menu_->set_observer(this);
   context_menu_->RunMenuAt(p, source_type);
-  context_menu_.reset(nullptr);
   return true;
 }
 
@@ -443,6 +442,10 @@ void BookmarkMenuDelegate::DidRemoveBookmarks() {
   GetBookmarkModel()->AddObserver(this);
   DCHECK(is_mutating_model_);
   is_mutating_model_ = false;
+}
+
+void BookmarkMenuDelegate::OnContextMenuClosed() {
+  context_menu_.reset();
 }
 
 bool BookmarkMenuDelegate::ShouldCloseOnRemove(const BookmarkNode* node) const {

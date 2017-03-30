@@ -34,7 +34,6 @@
 #include "chrome/browser/extensions/api/preference/preference_api.h"
 #include "chrome/browser/extensions/api/processes/processes_api.h"
 #include "chrome/browser/extensions/api/screenlock_private/screenlock_private_api.h"
-#include "chrome/browser/extensions/api/search_engines_private/search_engines_private_event_router_factory.h"
 #include "chrome/browser/extensions/api/sessions/sessions_api.h"
 #include "chrome/browser/extensions/api/settings_overrides/settings_overrides_api.h"
 #include "chrome/browser/extensions/api/settings_private/settings_private_event_router_factory.h"
@@ -65,6 +64,8 @@
 #include "chrome/browser/chromeos/extensions/media_player_api.h"
 #include "chrome/browser/extensions/api/input_ime/input_ime_api.h"
 #include "chrome/browser/extensions/api/log_private/log_private_api.h"
+#elif defined(OS_LINUX) || defined(OS_WIN)
+#include "chrome/browser/extensions/api/input_ime/input_ime_api.h"
 #endif
 
 #if defined(ENABLE_SPELLCHECK)
@@ -104,6 +105,8 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
 #if defined(OS_CHROMEOS)
   extensions::InputImeAPI::GetFactoryInstance();
   extensions::InputMethodAPI::GetFactoryInstance();
+#elif defined(OS_LINUX) || defined(OS_WIN)
+  extensions::InputImeAPI::GetFactoryInstance();
 #endif
   extensions::LanguageSettingsPrivateDelegateFactory::GetInstance();
   extensions::LocationManager::GetFactoryInstance();
@@ -123,7 +126,6 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   extensions::PreferenceAPI::GetFactoryInstance();
   extensions::ProcessesAPI::GetFactoryInstance();
   extensions::ScreenlockPrivateEventRouter::GetFactoryInstance();
-  extensions::SearchEnginesPrivateEventRouterFactory::GetInstance();
   extensions::SessionsAPI::GetFactoryInstance();
   extensions::SettingsPrivateEventRouterFactory::GetInstance();
   extensions::SettingsOverridesAPI::GetFactoryInstance();

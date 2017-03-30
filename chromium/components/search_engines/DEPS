@@ -1,14 +1,17 @@
 include_rules = [
   "+components/google/core",
   "+components/history/core",
+  "+components/infobars/core",
   "+components/keyed_service/core",
   "+components/metrics/proto",
   # TODO(mpearson): for experiment; remove after crbug.com/488901 is launched.
   "+components/omnibox/browser/omnibox_field_trial.h",
   "+components/policy/core",
   "+components/pref_registry",
+  "+components/prefs",
   "+components/rappor",
   "+components/sync_driver",
+  "+components/syncable_prefs/testing_pref_service_syncable.h",
   "+components/url_formatter",
   "+components/webdata",
   "+google_apis",
@@ -21,15 +24,3 @@ include_rules = [
   "+ui/base",
   "+ui/gfx",
 ]
-
-specific_include_rules = {
-  ".*_unittest\.cc$": [
-    "!chrome/browser/history/history_service.h",
-    "!chrome/browser/history/history_service_factory.h",
-    "!chrome/browser/search_engines/template_url_service_test_util.h",
-    "!chrome/common/chrome_paths.h",
-    "!chrome/test/base/testing_profile.h",
-    "!components/syncable_prefs/testing_pref_service_syncable.h",
-    "!content/public/test/test_browser_thread_bundle.h",
-  ],
-}

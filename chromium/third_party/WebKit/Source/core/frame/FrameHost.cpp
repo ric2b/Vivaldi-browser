@@ -76,6 +76,11 @@ UseCounter& FrameHost::useCounter() const
     return m_page->useCounter();
 }
 
+Deprecation& FrameHost::deprecation() const
+{
+    return m_page->deprecation();
+}
+
 float FrameHost::deviceScaleFactor() const
 {
     return m_page->deviceScaleFactor();
@@ -178,4 +183,4 @@ void FrameHost::setUserAgentPageScaleConstraints(PageScaleConstraints newConstra
     rootView->setNeedsLayout();
 }
 
-}
+} // namespace blink

@@ -17,6 +17,7 @@
 
 class GURL;
 struct ImportedBookmarkEntry;
+struct ImportedSpeedDialEntry;
 struct FaviconUsageData;
 class ExternalProcessImporterHost;
 
@@ -40,6 +41,9 @@ class InProcessImporterBridge : public ImporterBridge {
   void AddNotes(
       const std::vector<ImportedNotesEntry>& notes,
       const base::string16& first_folder_name) override;
+
+  void AddSpeedDial(
+      const std::vector<ImportedSpeedDialEntry>& speeddials) override;
 
   void AddHomePage(const GURL& home_page) override;
 

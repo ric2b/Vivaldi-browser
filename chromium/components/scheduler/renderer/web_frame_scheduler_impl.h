@@ -8,9 +8,10 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
+#include "components/scheduler/base/task_queue.h"
 #include "components/scheduler/scheduler_export.h"
 #include "third_party/WebKit/public/platform/WebFrameScheduler.h"
-#include "third_party/WebKit/public/web/WebSecurityOrigin.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -18,6 +19,7 @@ class SingleThreadTaskRunner;
 
 namespace scheduler {
 
+class AutoAdvancingVirtualTimeDomain;
 class RendererSchedulerImpl;
 class TaskQueue;
 class WebTaskRunnerImpl;
@@ -31,12 +33,13 @@ class SCHEDULER_EXPORT WebFrameSchedulerImpl : public blink::WebFrameScheduler {
   ~WebFrameSchedulerImpl() override;
 
   // blink::WebFrameScheduler implementation:
-  void setFrameVisible(bool visible) override;
+  void setFrameVisible(bool frame_visible) override;
+  void setPageVisible(bool page_visible) override;
   blink::WebTaskRunner* loadingTaskRunner() override;
   blink::WebTaskRunner* timerTaskRunner() override;
   void setFrameOrigin(const blink::WebSecurityOrigin& origin) override;
 
-  void SetPageInBackground(bool page_in_background);
+  void OnVirtualTimeDomainChanged();
 
  private:
   friend class WebViewSchedulerImpl;
@@ -48,11 +51,12 @@ class SCHEDULER_EXPORT WebFrameSchedulerImpl : public blink::WebFrameScheduler {
   scoped_refptr<TaskQueue> timer_task_queue_;
   scoped_ptr<WebTaskRunnerImpl> loading_web_task_runner_;
   scoped_ptr<WebTaskRunnerImpl> timer_web_task_runner_;
-  RendererSchedulerImpl* renderer_scheduler_;        // NOT OWNED
-  WebViewSchedulerImpl* parent_web_view_scheduler_;  // NOT OWNED
+  RendererSchedulerImpl* renderer_scheduler_;            // NOT OWNED
+  WebViewSchedulerImpl* parent_web_view_scheduler_;      // NOT OWNED
+  TaskQueue::PumpPolicy virtual_time_pump_policy_;
   blink::WebSecurityOrigin origin_;
-  bool visible_;
-  bool page_in_background_;
+  bool frame_visible_;
+  bool page_visible_;
 
   DISALLOW_COPY_AND_ASSIGN(WebFrameSchedulerImpl);
 };

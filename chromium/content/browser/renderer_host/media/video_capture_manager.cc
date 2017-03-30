@@ -52,14 +52,22 @@ namespace {
 // by the ConsolidateCaptureFormats() method.
 bool IsCaptureFormatSmaller(const media::VideoCaptureFormat& format1,
                             const media::VideoCaptureFormat& format2) {
-  if (format1.frame_size.GetArea() == format2.frame_size.GetArea())
+  DCHECK(format1.frame_size.GetCheckedArea().IsValid());
+  DCHECK(format2.frame_size.GetCheckedArea().IsValid());
+  if (format1.frame_size.GetCheckedArea().ValueOrDefault(0) ==
+      format2.frame_size.GetCheckedArea().ValueOrDefault(0)) {
     return format1.frame_rate > format2.frame_rate;
-  return format1.frame_size.GetArea() < format2.frame_size.GetArea();
+  }
+  return format1.frame_size.GetCheckedArea().ValueOrDefault(0) <
+         format2.frame_size.GetCheckedArea().ValueOrDefault(0);
 }
 
 bool IsCaptureFormatSizeEqual(const media::VideoCaptureFormat& format1,
                               const media::VideoCaptureFormat& format2) {
-  return format1.frame_size.GetArea() == format2.frame_size.GetArea();
+  DCHECK(format1.frame_size.GetCheckedArea().IsValid());
+  DCHECK(format2.frame_size.GetCheckedArea().IsValid());
+  return format1.frame_size.GetCheckedArea().ValueOrDefault(0) ==
+         format2.frame_size.GetCheckedArea().ValueOrDefault(0);
 }
 
 // This function receives a list of capture formats, removes duplicated
@@ -509,7 +517,14 @@ VideoCaptureManager::DoStartDesktopCaptureOnDeviceThread(
   scoped_ptr<media::VideoCaptureDevice> video_capture_device;
 #if defined(ENABLE_SCREEN_CAPTURE)
   DesktopMediaID desktop_id = DesktopMediaID::Parse(id);
-  if (!desktop_id.is_null()) {
+  if (desktop_id.is_null()) {
+    device_client->OnError(FROM_HERE, "Desktop media ID is null");
+    return nullptr;
+  }
+
+  if (desktop_id.type == DesktopMediaID::TYPE_WEB_CONTENTS) {
+    video_capture_device.reset(WebContentsVideoCaptureDevice::Create(id));
+  } else {
 #if defined(USE_AURA)
     video_capture_device = DesktopCaptureDeviceAura::Create(desktop_id);
 #endif

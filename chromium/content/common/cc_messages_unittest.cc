@@ -433,7 +433,7 @@ TEST_F(CCMessagesTest, AllQuads) {
       arbitrary_rect1_inside_rect1, arbitrary_bool1, arbitrary_rectf1,
       arbitrary_rectf2, arbitrary_size1, arbitrary_size2, arbitrary_resourceid1,
       arbitrary_resourceid2, arbitrary_resourceid3, arbitrary_resourceid4,
-      arbitrary_color_space);
+      arbitrary_color_space, arbitrary_float1, arbitrary_float2);
   pass_cmp->CopyFromAndAppendDrawQuad(yuvvideo_in,
                                       yuvvideo_in->shared_quad_state);
 
@@ -617,8 +617,14 @@ TEST_F(CCMessagesTest, UnusedSharedQuadStates) {
 TEST_F(CCMessagesTest, Resources) {
   IPC::Message msg(1, 2, IPC::Message::PRIORITY_NORMAL);
   gfx::Size arbitrary_size(757, 1281);
-  gpu::SyncToken arbitrary_token1(71234838);
-  gpu::SyncToken arbitrary_token2(53589793);
+  gpu::SyncToken arbitrary_token1(gpu::CommandBufferNamespace::GPU_IO, 0,
+                                  gpu::CommandBufferId::FromUnsafeValue(0x123),
+                                  71234838);
+  arbitrary_token1.SetVerifyFlush();
+  gpu::SyncToken arbitrary_token2(gpu::CommandBufferNamespace::GPU_IO, 0,
+                                  gpu::CommandBufferId::FromUnsafeValue(0x123),
+                                  53589793);
+  arbitrary_token2.SetVerifyFlush();
 
   GLbyte arbitrary_mailbox1[GL_MAILBOX_SIZE_CHROMIUM] = {
       1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2,

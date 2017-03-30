@@ -70,6 +70,7 @@ public:
     ~Path();
 
     Path(const Path&);
+    Path(const SkPath&);
     Path& operator=(const Path&);
     Path& operator=(const SkPath&);
     bool operator==(const Path&) const;
@@ -106,6 +107,7 @@ public:
 
     void clear();
     bool isEmpty() const;
+    bool isClosed() const;
     // Specify whether this path is volatile. Temporary paths that are discarded or
     // modified after use should be marked as volatile. This is a hint to the device
     // to not cache this path.
@@ -122,6 +124,7 @@ public:
     void addQuadCurveTo(const FloatPoint& controlPoint, const FloatPoint& endPoint);
     void addBezierCurveTo(const FloatPoint& controlPoint1, const FloatPoint& controlPoint2, const FloatPoint& endPoint);
     void addArcTo(const FloatPoint&, const FloatPoint&, float radius);
+    void addArcTo(const FloatPoint&, const FloatSize& r, float xRotate, bool largeArc, bool sweep);
     void closeSubpath();
 
     void addArc(const FloatPoint&, float radius, float startAngle, float endAngle, bool anticlockwise);
@@ -148,6 +151,7 @@ public:
 
     // Updates the path to the union (inclusive-or) of itself with the given argument.
     bool unionPath(const Path& other);
+    bool intersectPath(const Path& other);
 
 private:
     void addEllipse(const FloatPoint&, float radiusX, float radiusY, float startAngle, float endAngle, bool anticlockwise);

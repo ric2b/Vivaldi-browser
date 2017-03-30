@@ -39,6 +39,7 @@ enum CacheStorageCacheOperationType {
 // A single batch operation for the Cache API.
 struct CONTENT_EXPORT CacheStorageBatchOperation {
   CacheStorageBatchOperation();
+  CacheStorageBatchOperation(const CacheStorageBatchOperation& other);
 
   CacheStorageCacheOperationType operation_type;
   ServiceWorkerFetchRequest request;
@@ -53,7 +54,9 @@ enum CacheStorageError {
   CACHE_STORAGE_ERROR_EXISTS,
   CACHE_STORAGE_ERROR_STORAGE,
   CACHE_STORAGE_ERROR_NOT_FOUND,
-  CACHE_STORAGE_ERROR_LAST = CACHE_STORAGE_ERROR_NOT_FOUND
+  CACHE_STORAGE_ERROR_QUOTA_EXCEEDED,
+  CACHE_STORAGE_ERROR_CACHE_NAME_NOT_FOUND,
+  CACHE_STORAGE_ERROR_LAST = CACHE_STORAGE_ERROR_CACHE_NAME_NOT_FOUND
 };
 
 }  // namespace content

@@ -27,6 +27,7 @@ class NetworkListViewBase;
 
 namespace views {
 class BubbleDelegateView;
+class ImageButton;
 }
 
 namespace ash {
@@ -55,9 +56,6 @@ class NetworkStateListDetailedView
   void Init() override;
   DetailedViewType GetViewType() const override;
   void Update() override;
-
-  // Called by the WiFi Scanning Throbber when pressed.
-  bool ThrobberPressed(views::View* sender, const ui::Event& event);
 
  protected:
   // Overridden from ButtonListener.
@@ -125,7 +123,7 @@ class NetworkStateListDetailedView
   bool wifi_scanning_;
 
   // Child views.
-  TrayPopupHeaderButton* info_icon_;
+  views::ImageButton* info_icon_;
   TrayPopupHeaderButton* button_wifi_;
   TrayPopupHeaderButton* button_mobile_;
   TrayPopupLabelButton* other_wifi_;

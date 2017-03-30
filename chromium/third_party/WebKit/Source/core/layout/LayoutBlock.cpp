@@ -98,14 +98,12 @@ static_assert(sizeof(LayoutBlock) == sizeof(SameSizeAsLayoutBlock), "LayoutBlock
 // the middle of recomputing the style so we can't rely on any of its
 // information), which is why it's easier to just update it for every layout.
 static TrackedDescendantsMap* gPositionedDescendantsMap = nullptr;
+static TrackedContainerMap* gPositionedContainerMap = nullptr;
 
 // This map keeps track of the descendants whose 'height' is percentage associated
 // with a containing block. Like |gPositionedDescendantsMap|, it is also recomputed
 // for every layout (see the comment above about why).
 static TrackedDescendantsMap* gPercentHeightDescendantsMap = nullptr;
-
-static TrackedContainerMap* gPositionedContainerMap = nullptr;
-static TrackedContainerMap* gPercentHeightContainerMap = nullptr;
 
 typedef WTF::HashSet<LayoutBlock*> DelayedUpdateScrollInfoSet;
 static int gDelayUpdateScrollInfo = 0;
@@ -118,37 +116,34 @@ LayoutBlock::LayoutBlock(ContainerNode* node)
     , m_beingDestroyed(false)
     , m_hasMarkupTruncation(false)
     , m_widthAvailableToChildrenChanged(false)
+    , m_heightAvailableToChildrenChanged(false)
     , m_hasOnlySelfCollapsingChildren(false)
     , m_descendantsWithFloatsMarkedForLayout(false)
-    , m_needsRecalcLogicalWidthAfterLayoutChildren(false)
+    , m_hasPositionedObjects(false)
+    , m_hasPercentHeightDescendants(false)
 {
     // LayoutBlockFlow calls setChildrenInline(true).
     // By default, subclasses do not have inline children.
 }
 
-static void removeBlockFromDescendantAndContainerMaps(LayoutBlock* block, TrackedDescendantsMap*& descendantMap, TrackedContainerMap*& containerMap)
-{
-    if (OwnPtr<TrackedLayoutBoxListHashSet> descendantSet = descendantMap->take(block)) {
-        for (auto& descendant : *descendantSet) {
-            TrackedContainerMap::iterator it = containerMap->find(descendant);
-            ASSERT(it != containerMap->end());
-            if (it == containerMap->end())
-                continue;
-            HashSet<LayoutBlock*>* containerSet = it->value.get();
-            ASSERT(containerSet->contains(block));
-            containerSet->remove(block);
-            if (containerSet->isEmpty())
-                containerMap->remove(it);
-        }
-    }
-}
-
 void LayoutBlock::removeFromGlobalMaps()
 {
-    if (gPercentHeightDescendantsMap)
-        removeBlockFromDescendantAndContainerMaps(this, gPercentHeightDescendantsMap, gPercentHeightContainerMap);
-    if (gPositionedDescendantsMap)
-        removeBlockFromDescendantAndContainerMaps(this, gPositionedDescendantsMap, gPositionedContainerMap);
+    if (hasPositionedObjects()) {
+        OwnPtr<TrackedLayoutBoxListHashSet> descendants = gPositionedDescendantsMap->take(this);
+        ASSERT(!descendants->isEmpty());
+        for (LayoutBox* descendant : *descendants) {
+            ASSERT(gPositionedContainerMap->get(descendant) == this);
+            gPositionedContainerMap->remove(descendant);
+        }
+    }
+    if (hasPercentHeightDescendants()) {
+        OwnPtr<TrackedLayoutBoxListHashSet> descendants = gPercentHeightDescendantsMap->take(this);
+        ASSERT(!descendants->isEmpty());
+        for (LayoutBox* descendant : *descendants) {
+            ASSERT(descendant->percentHeightContainer() == this);
+            descendant->setPercentHeightContainer(nullptr);
+        }
+    }
 }
 
 LayoutBlock::~LayoutBlock()
@@ -240,9 +235,10 @@ void LayoutBlock::styleWillChange(StyleDifference diff, const ComputedStyle& new
     LayoutBox::styleWillChange(diff, newStyle);
 }
 
-static bool borderOrPaddingLogicalWidthChanged(const ComputedStyle& oldStyle, const ComputedStyle& newStyle)
+enum LogicalExtent { LogicalWidth, LogicalHeight };
+static bool borderOrPaddingLogicalDimensionChanged(const ComputedStyle& oldStyle, const ComputedStyle& newStyle, LogicalExtent logicalExtent)
 {
-    if (newStyle.isHorizontalWritingMode()) {
+    if (newStyle.isHorizontalWritingMode() == (logicalExtent == LogicalWidth)) {
         return oldStyle.borderLeftWidth() != newStyle.borderLeftWidth()
             || oldStyle.borderRightWidth() != newStyle.borderRightWidth()
             || oldStyle.paddingLeft() != newStyle.paddingLeft()
@@ -285,9 +281,10 @@ void LayoutBlock::styleDidChange(StyleDifference diff, const ComputedStyle* oldS
 
     propagateStyleToAnonymousChildren(true);
 
-    // It's possible for our border/padding to change, but for the overall logical width of the block to
+    // It's possible for our border/padding to change, but for the overall logical width or height of the block to
     // end up being the same. We keep track of this change so in layoutBlock, we can know to set relayoutChildren=true.
-    m_widthAvailableToChildrenChanged |= oldStyle && diff.needsFullLayout() && needsLayout() && borderOrPaddingLogicalWidthChanged(*oldStyle, newStyle);
+    m_widthAvailableToChildrenChanged |= oldStyle && diff.needsFullLayout() && needsLayout() && borderOrPaddingLogicalDimensionChanged(*oldStyle, newStyle, LogicalWidth);
+    m_heightAvailableToChildrenChanged |= oldStyle && diff.needsFullLayout() && needsLayout() && borderOrPaddingLogicalDimensionChanged(*oldStyle, newStyle, LogicalHeight);
 }
 
 void LayoutBlock::invalidatePaintOfSubtreesIfNeeded(PaintInvalidationState& childPaintInvalidationState)
@@ -646,6 +643,11 @@ void LayoutBlock::collapseAnonymousBlockChild(LayoutBlock* parent, LayoutBlock* 
     // destroyed. See crbug.com/282088
     if (child->beingDestroyed())
         return;
+    if (child->continuation())
+        return;
+    // Ruby elements use anonymous wrappers for ruby runs and ruby bases by design, so we don't remove them.
+    if (child->isRubyRun() || child->isRubyBase())
+        return;
     parent->setNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(LayoutInvalidationReason::ChildAnonymousBlockChanged);
 
     child->moveAllChildrenTo(parent, child->nextSibling(), child->hasLayer());
@@ -835,8 +837,10 @@ void LayoutBlock::startDelayUpdateScrollInfo()
     ++gDelayUpdateScrollInfo;
 }
 
-void LayoutBlock::finishDelayUpdateScrollInfo()
+bool LayoutBlock::finishDelayUpdateScrollInfo(SubtreeLayoutScope* layoutScope, ScrollPositionMap* scrollMap)
 {
+    bool childrenMarkedForRelayout = false;
+
     --gDelayUpdateScrollInfo;
     ASSERT(gDelayUpdateScrollInfo >= 0);
     if (gDelayUpdateScrollInfo == 0) {
@@ -847,10 +851,14 @@ void LayoutBlock::finishDelayUpdateScrollInfo()
 
         for (auto* block : *infoSet) {
             if (block->hasOverflowClip()) {
-                block->layer()->scrollableArea()->updateAfterLayout();
+                PaintLayerScrollableArea* scrollableArea = block->layer()->scrollableArea();
+                if (scrollMap)
+                    scrollMap->add(scrollableArea, scrollableArea->scrollPositionDouble());
+                childrenMarkedForRelayout |= scrollableArea->updateAfterLayout(layoutScope);
             }
         }
     }
+    return childrenMarkedForRelayout;
 }
 
 void LayoutBlock::updateScrollInfoAfterLayout()
@@ -876,6 +884,10 @@ void LayoutBlock::layout()
 {
     LayoutAnalyzer::Scope analyzer(*this);
 
+    bool needsScrollAnchoring = RuntimeEnabledFeatures::scrollAnchoringEnabled() && hasOverflowClip();
+    if (needsScrollAnchoring)
+        scrollableArea()->scrollAnchor().save();
+
     // Table cells call layoutBlock directly, so don't add any logic here.  Put code into
     // layoutBlock().
     layoutBlock(false);
@@ -886,10 +898,16 @@ void LayoutBlock::layout()
         clearLayoutOverflow();
 
     invalidateBackgroundObscurationStatus();
+
+    if (needsScrollAnchoring)
+        scrollableArea()->scrollAnchor().restore();
+
+    m_heightAvailableToChildrenChanged = false;
 }
 
 bool LayoutBlock::widthAvailableToChildrenHasChanged()
 {
+    // TODO(robhogan): Does m_widthAvailableToChildrenChanged always get reset when it needs to?
     bool widthAvailableToChildrenHasChanged = m_widthAvailableToChildrenChanged;
     m_widthAvailableToChildrenChanged = false;
 
@@ -938,9 +956,9 @@ void LayoutBlock::computeOverflow(LayoutUnit oldClientAfterEdge, bool)
         LayoutRect clientRect(noOverflowRect());
         LayoutRect rectToApply;
         if (isHorizontalWritingMode())
-            rectToApply = LayoutRect(clientRect.x(), clientRect.y(), 1, std::max<LayoutUnit>(0, oldClientAfterEdge - clientRect.y()));
+            rectToApply = LayoutRect(clientRect.x(), clientRect.y(), LayoutUnit(1), (oldClientAfterEdge - clientRect.y()).clampNegativeToZero());
         else
-            rectToApply = LayoutRect(clientRect.x(), clientRect.y(), std::max<LayoutUnit>(0, oldClientAfterEdge - clientRect.x()), 1);
+            rectToApply = LayoutRect(clientRect.x(), clientRect.y(), (oldClientAfterEdge - clientRect.x()).clampNegativeToZero(), LayoutUnit(1));
         addLayoutOverflow(rectToApply);
         if (hasOverflowModel())
             m_overflow->setLayoutClientAfterEdge(oldClientAfterEdge);
@@ -989,6 +1007,13 @@ bool LayoutBlock::createsNewFormattingContext() const
         || isDocumentElement() || isColumnSpanAll() || isGridItem() || style()->containsPaint();
 }
 
+static inline bool changeInAvailableLogicalHeightAffectsChild(LayoutBlock* parent, LayoutBox& child)
+{
+    if (parent->style()->boxSizing() != BORDER_BOX)
+        return false;
+    return parent->style()->isHorizontalWritingMode() && !child.style()->isHorizontalWritingMode();
+}
+
 void LayoutBlock::updateBlockChildDirtyBitsBeforeLayout(bool relayoutChildren, LayoutBox& child)
 {
     if (child.isOutOfFlowPositioned()) {
@@ -1003,7 +1028,8 @@ void LayoutBlock::updateBlockChildDirtyBitsBeforeLayout(bool relayoutChildren, L
     bool hasRelativeLogicalHeight = child.hasRelativeLogicalHeight()
         || (child.isAnonymous() && this->hasRelativeLogicalHeight())
         || child.stretchesToViewport();
-    if (relayoutChildren || (hasRelativeLogicalHeight && !isLayoutView())) {
+    if (relayoutChildren || (hasRelativeLogicalHeight && !isLayoutView())
+        || (m_heightAvailableToChildrenChanged && changeInAvailableLogicalHeightAffectsChild(this, child))) {
         child.setChildNeedsLayout(MarkOnlyThis);
 
         // If the child has percentage padding or an embedded content box, we also need to invalidate the childs pref widths.
@@ -1064,6 +1090,11 @@ bool LayoutBlock::simplifiedLayout()
 
         if (needsPositionedMovementLayout() && !tryLayoutDoingPositionedMovementOnly())
             return false;
+
+        if (LayoutFlowThread* flowThread = flowThreadContainingBlock()) {
+            if (!flowThread->canSkipLayout(*this))
+                return false;
+        }
 
         TextAutosizer::LayoutScope textAutosizerLayoutScope(this);
 
@@ -1141,7 +1172,7 @@ LayoutUnit LayoutBlock::marginIntrinsicLogicalWidthForChild(LayoutBox& child) co
     // Fixed margins can be added in as is.
     Length marginLeft = child.style()->marginStartUsing(style());
     Length marginRight = child.style()->marginEndUsing(style());
-    LayoutUnit margin = 0;
+    LayoutUnit margin;
     if (marginLeft.isFixed())
         margin += marginLeft.value();
     if (marginRight.isFixed())
@@ -1195,7 +1226,7 @@ void LayoutBlock::layoutPositionedObjects(bool relayoutChildren, PositionedLayou
             continue;
         }
 
-        if (!positionedObject->normalChildNeedsLayout() && (relayoutChildren || needsLayoutDueToStaticPosition(positionedObject)))
+        if (!positionedObject->normalChildNeedsLayout() && (relayoutChildren || m_heightAvailableToChildrenChanged || needsLayoutDueToStaticPosition(positionedObject)))
             layoutScope.setChildNeedsLayout(positionedObject);
 
         // If relayoutChildren is set and the child has percentage padding or an embedded content box, we also need to invalidate the childs pref widths.
@@ -1375,77 +1406,58 @@ void LayoutBlock::setSelectionState(SelectionState state)
         inlineBoxWrapper()->root().setHasSelectedChildren(state != SelectionNone);
 }
 
-void LayoutBlock::insertIntoTrackedLayoutBoxMaps(LayoutBox* descendant, TrackedDescendantsMap*& descendantsMap, TrackedContainerMap*& containerMap)
+TrackedLayoutBoxListHashSet* LayoutBlock::positionedObjectsInternal() const
 {
-    if (!descendantsMap) {
-        descendantsMap = new TrackedDescendantsMap;
-        containerMap = new TrackedContainerMap;
-    }
-
-    TrackedLayoutBoxListHashSet* descendantSet = descendantsMap->get(this);
-    if (!descendantSet) {
-        descendantSet = new TrackedLayoutBoxListHashSet;
-        descendantsMap->set(this, adoptPtr(descendantSet));
-    }
-    bool added = descendantSet->add(descendant).isNewEntry;
-    if (!added) {
-        ASSERT(containerMap->get(descendant));
-        ASSERT(containerMap->get(descendant)->contains(this));
-        return;
-    }
-
-    HashSet<LayoutBlock*>* containerSet = containerMap->get(descendant);
-    if (!containerSet) {
-        containerSet = new HashSet<LayoutBlock*>;
-        containerMap->set(descendant, adoptPtr(containerSet));
-    }
-    ASSERT(!containerSet->contains(this));
-    containerSet->add(this);
-}
-
-void LayoutBlock::removeFromTrackedLayoutBoxMaps(LayoutBox* descendant, TrackedDescendantsMap*& descendantsMap, TrackedContainerMap*& containerMap)
-{
-    if (!descendantsMap)
-        return;
-
-    OwnPtr<HashSet<LayoutBlock*>> containerSet = containerMap->take(descendant);
-    if (!containerSet)
-        return;
-
-    for (auto* container : *containerSet) {
-        // FIXME: Disabling this assert temporarily until we fix the layout
-        // bugs associated with positioned objects not properly cleared from
-        // their ancestor chain before being moved. See webkit bug 93766.
-        // ASSERT(descendant->isDescendantOf(container));
-
-        TrackedDescendantsMap::iterator descendantsMapIterator = descendantsMap->find(container);
-        ASSERT(descendantsMapIterator != descendantsMap->end());
-        if (descendantsMapIterator == descendantsMap->end())
-            continue;
-        TrackedLayoutBoxListHashSet* descendantSet = descendantsMapIterator->value.get();
-        ASSERT(descendantSet->contains(descendant));
-        descendantSet->remove(descendant);
-        if (descendantSet->isEmpty())
-            descendantsMap->remove(descendantsMapIterator);
-    }
-}
-
-TrackedLayoutBoxListHashSet* LayoutBlock::positionedObjects() const
-{
-    if (gPositionedDescendantsMap)
-        return gPositionedDescendantsMap->get(this);
-    return nullptr;
+    return gPositionedDescendantsMap ? gPositionedDescendantsMap->get(this) : nullptr;
 }
 
 void LayoutBlock::insertPositionedObject(LayoutBox* o)
 {
     ASSERT(!isAnonymousBlock());
-    insertIntoTrackedLayoutBoxMaps(o, gPositionedDescendantsMap, gPositionedContainerMap);
+    ASSERT(o->containingBlock() == this);
+
+    if (gPositionedContainerMap) {
+        auto containerMapIt = gPositionedContainerMap->find(o);
+        if (containerMapIt != gPositionedContainerMap->end()) {
+            if (containerMapIt->value == this) {
+                ASSERT(hasPositionedObjects() && positionedObjects()->contains(o));
+                return;
+            }
+            removePositionedObject(o);
+        }
+    } else {
+        gPositionedContainerMap = new TrackedContainerMap;
+    }
+    gPositionedContainerMap->set(o, this);
+
+    if (!gPositionedDescendantsMap)
+        gPositionedDescendantsMap = new TrackedDescendantsMap;
+    TrackedLayoutBoxListHashSet* descendantSet = gPositionedDescendantsMap->get(this);
+    if (!descendantSet) {
+        descendantSet = new TrackedLayoutBoxListHashSet;
+        gPositionedDescendantsMap->set(this, adoptPtr(descendantSet));
+    }
+    descendantSet->add(o);
+
+    m_hasPositionedObjects = true;
 }
 
 void LayoutBlock::removePositionedObject(LayoutBox* o)
 {
-    removeFromTrackedLayoutBoxMaps(o, gPositionedDescendantsMap, gPositionedContainerMap);
+    if (!gPositionedContainerMap)
+        return;
+
+    LayoutBlock* container = gPositionedContainerMap->take(o);
+    if (!container)
+        return;
+
+    TrackedLayoutBoxListHashSet* positionedDescendants = gPositionedDescendantsMap->get(container);
+    ASSERT(positionedDescendants && positionedDescendants->contains(o));
+    positionedDescendants->remove(o);
+    if (positionedDescendants->isEmpty()) {
+        gPositionedDescendantsMap->remove(container);
+        container->m_hasPositionedObjects = false;
+    }
 }
 
 void LayoutBlock::removePositionedObjects(LayoutBlock* o, ContainingBlockState containingBlockState)
@@ -1484,45 +1496,60 @@ void LayoutBlock::removePositionedObjects(LayoutBlock* o, ContainingBlockState c
         }
     }
 
-    for (unsigned i = 0; i < deadObjects.size(); i++)
-        removePositionedObject(deadObjects.at(i));
+    for (auto object : deadObjects) {
+        ASSERT(gPositionedContainerMap->get(object) == this);
+        positionedDescendants->remove(object);
+        gPositionedContainerMap->remove(object);
+    }
+    if (positionedDescendants->isEmpty()) {
+        gPositionedDescendantsMap->remove(this);
+        m_hasPositionedObjects = false;
+    }
 }
 
 void LayoutBlock::addPercentHeightDescendant(LayoutBox* descendant)
 {
-    insertIntoTrackedLayoutBoxMaps(descendant, gPercentHeightDescendantsMap, gPercentHeightContainerMap);
+    if (descendant->percentHeightContainer()) {
+        if (descendant->percentHeightContainer() == this) {
+            ASSERT(hasPercentHeightDescendant(descendant));
+            return;
+        }
+        descendant->removeFromPercentHeightContainer();
+    }
+    descendant->setPercentHeightContainer(this);
+
+    if (!gPercentHeightDescendantsMap)
+        gPercentHeightDescendantsMap = new TrackedDescendantsMap;
+    TrackedLayoutBoxListHashSet* descendantSet = gPercentHeightDescendantsMap->get(this);
+    if (!descendantSet) {
+        descendantSet = new TrackedLayoutBoxListHashSet;
+        gPercentHeightDescendantsMap->set(this, adoptPtr(descendantSet));
+    }
+    descendantSet->add(descendant);
+
+    m_hasPercentHeightDescendants = true;
 }
 
 void LayoutBlock::removePercentHeightDescendant(LayoutBox* descendant)
 {
-    removeFromTrackedLayoutBoxMaps(descendant, gPercentHeightDescendantsMap, gPercentHeightContainerMap);
+    if (TrackedLayoutBoxListHashSet* descendants = percentHeightDescendants()) {
+        descendants->remove(descendant);
+        descendant->setPercentHeightContainer(nullptr);
+        if (descendants->isEmpty()) {
+            gPercentHeightDescendantsMap->remove(this);
+            m_hasPercentHeightDescendants = false;
+        }
+    }
 }
 
-TrackedLayoutBoxListHashSet* LayoutBlock::percentHeightDescendants() const
+TrackedLayoutBoxListHashSet* LayoutBlock::percentHeightDescendantsInternal() const
 {
-    return gPercentHeightDescendantsMap ? gPercentHeightDescendantsMap->get(this) : 0;
-}
-
-bool LayoutBlock::hasPercentHeightContainerMap()
-{
-    return gPercentHeightContainerMap;
-}
-
-bool LayoutBlock::hasPercentHeightDescendant(LayoutBox* descendant)
-{
-    // We don't null check gPercentHeightContainerMap since the caller
-    // already ensures this and we need to call this function on every
-    // descendant in clearPercentHeightDescendantsFrom().
-    ASSERT(gPercentHeightContainerMap);
-    return gPercentHeightContainerMap->contains(descendant);
+    return gPercentHeightDescendantsMap ? gPercentHeightDescendantsMap->get(this) : nullptr;
 }
 
 void LayoutBlock::dirtyForLayoutFromPercentageHeightDescendants(SubtreeLayoutScope& layoutScope)
 {
-    if (!gPercentHeightDescendantsMap)
-        return;
-
-    TrackedLayoutBoxListHashSet* descendants = gPercentHeightDescendantsMap->get(this);
+    TrackedLayoutBoxListHashSet* descendants = percentHeightDescendants();
     if (!descendants)
         return;
 
@@ -1540,38 +1567,9 @@ void LayoutBlock::dirtyForLayoutFromPercentageHeightDescendants(SubtreeLayoutSco
     }
 }
 
-void LayoutBlock::removePercentHeightDescendantIfNeeded(LayoutBox* descendant)
-{
-    // We query the map directly, rather than looking at style's
-    // logicalHeight()/logicalMinHeight()/logicalMaxHeight() since those
-    // can change with writing mode/directional changes.
-    if (!hasPercentHeightContainerMap())
-        return;
-
-    if (!hasPercentHeightDescendant(descendant))
-        return;
-
-    removePercentHeightDescendant(descendant);
-}
-
-void LayoutBlock::clearPercentHeightDescendantsFrom(LayoutBox* parent)
-{
-    ASSERT(gPercentHeightContainerMap);
-    for (LayoutObject* curr = parent->slowFirstChild(); curr; curr = curr->nextInPreOrder(parent)) {
-        if (!curr->isBox())
-            continue;
-
-        LayoutBox* box = toLayoutBox(curr);
-        if (!hasPercentHeightDescendant(box))
-            continue;
-
-        removePercentHeightDescendant(box);
-    }
-}
-
 LayoutUnit LayoutBlock::textIndentOffset() const
 {
-    LayoutUnit cw = 0;
+    LayoutUnit cw;
     if (style()->textIndent().hasPercent())
         cw = containingBlock()->availableLogicalWidth();
     return minimumValueForLength(style()->textIndent(), cw);
@@ -1633,7 +1631,7 @@ bool LayoutBlock::nodeAtPoint(HitTestResult& result, const HitTestLocation& loca
         && isPointInOverflowControl(result, locationInContainer.point(), adjustedLocation)) {
         updateHitTestResult(result, locationInContainer.point() - localOffset);
         // FIXME: isPointInOverflowControl() doesn't handle rect-based tests yet.
-        if (!result.addNodeToListBasedTestResult(nodeForHitTest(), locationInContainer))
+        if (result.addNodeToListBasedTestResult(nodeForHitTest(), locationInContainer) == StopHitTesting)
             return true;
     }
 
@@ -1651,7 +1649,7 @@ bool LayoutBlock::nodeAtPoint(HitTestResult& result, const HitTestLocation& loca
         LayoutRect boundsRect(adjustedLocation, size());
         if (visibleToHitTestRequest(result.hitTestRequest()) && locationInContainer.intersects(boundsRect)) {
             updateHitTestResult(result, flipForWritingMode(locationInContainer.point() - localOffset));
-            if (!result.addNodeToListBasedTestResult(nodeForHitTest(), locationInContainer, boundsRect))
+            if (result.addNodeToListBasedTestResult(nodeForHitTest(), locationInContainer, boundsRect) == StopHitTesting)
                 return true;
         }
     }
@@ -1709,14 +1707,14 @@ Position LayoutBlock::positionForBox(InlineBox *box, bool start) const
     if (!box)
         return Position();
 
-    if (!box->lineLayoutItem().nonPseudoNode())
+    if (!box->getLineLayoutItem().nonPseudoNode())
         return Position::editingPositionOf(nonPseudoNode(), start ? caretMinOffset() : caretMaxOffset());
 
     if (!box->isInlineTextBox())
-        return Position::editingPositionOf(box->lineLayoutItem().nonPseudoNode(), start ? box->lineLayoutItem().caretMinOffset() : box->lineLayoutItem().caretMaxOffset());
+        return Position::editingPositionOf(box->getLineLayoutItem().nonPseudoNode(), start ? box->getLineLayoutItem().caretMinOffset() : box->getLineLayoutItem().caretMaxOffset());
 
     InlineTextBox* textBox = toInlineTextBox(box);
-    return Position::editingPositionOf(box->lineLayoutItem().nonPseudoNode(), start ? textBox->start() : textBox->start() + textBox->len());
+    return Position::editingPositionOf(box->getLineLayoutItem().nonPseudoNode(), start ? textBox->start() : textBox->start() + textBox->len());
 }
 
 static inline bool isEditingBoundary(LayoutObject* ancestor, LayoutObject* child)
@@ -1831,9 +1829,9 @@ PositionWithAffinity LayoutBlock::positionForPointWithInlineChildren(const Layou
         LayoutPoint point(pointInLogicalContents.x(), closestBox->root().blockDirectionPointInLine());
         if (!isHorizontalWritingMode())
             point = point.transposedPoint();
-        if (closestBox->lineLayoutItem().isAtomicInlineLevel())
-            return positionForPointRespectingEditingBoundaries(this, LineLayoutBox(closestBox->lineLayoutItem()), point);
-        return closestBox->lineLayoutItem().positionForPoint(point);
+        if (closestBox->getLineLayoutItem().isAtomicInlineLevel())
+            return positionForPointRespectingEditingBoundaries(this, LineLayoutBox(closestBox->getLineLayoutItem()), point);
+        return closestBox->getLineLayoutItem().positionForPoint(point);
     }
 
     if (lastRootBoxWithChildren) {
@@ -1926,6 +1924,12 @@ int LayoutBlock::columnGap() const
     return static_cast<int>(style()->columnGap());
 }
 
+void LayoutBlock::scrollbarsChanged(bool horizontalScrollbarChanged, bool verticalScrollbarChanged)
+{
+    m_widthAvailableToChildrenChanged |= verticalScrollbarChanged;
+    m_heightAvailableToChildrenChanged |= horizontalScrollbarChanged;
+}
+
 void LayoutBlock::computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth) const
 {
     if (childrenInline()) {
@@ -1943,7 +1947,7 @@ void LayoutBlock::computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, Lay
     if (isTableCell()) {
         Length tableCellWidth = toLayoutTableCell(this)->styleOrColLogicalWidth();
         if (tableCellWidth.isFixed() && tableCellWidth.value() > 0)
-            maxLogicalWidth = std::max(minLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(tableCellWidth.value()));
+            maxLogicalWidth = std::max(minLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(LayoutUnit(tableCellWidth.value())));
     }
 
     int scrollbarWidth = intrinsicScrollbarLogicalWidth();
@@ -1955,32 +1959,32 @@ void LayoutBlock::computePreferredLogicalWidths()
 {
     ASSERT(preferredLogicalWidthsDirty());
 
-    m_minPreferredLogicalWidth = 0;
-    m_maxPreferredLogicalWidth = 0;
+    m_minPreferredLogicalWidth = LayoutUnit();
+    m_maxPreferredLogicalWidth = LayoutUnit();
 
     // FIXME: The isFixed() calls here should probably be checking for isSpecified since you
     // should be able to use percentage, calc or viewport relative values for width.
     const ComputedStyle& styleToUse = styleRef();
     if (!isTableCell() && styleToUse.logicalWidth().isFixed() && styleToUse.logicalWidth().value() >= 0
         && !(isDeprecatedFlexItem() && !styleToUse.logicalWidth().intValue()))
-        m_minPreferredLogicalWidth = m_maxPreferredLogicalWidth = adjustContentBoxLogicalWidthForBoxSizing(styleToUse.logicalWidth().value());
+        m_minPreferredLogicalWidth = m_maxPreferredLogicalWidth = adjustContentBoxLogicalWidthForBoxSizing(LayoutUnit(styleToUse.logicalWidth().value()));
     else
         computeIntrinsicLogicalWidths(m_minPreferredLogicalWidth, m_maxPreferredLogicalWidth);
 
     if (styleToUse.logicalMinWidth().isFixed() && styleToUse.logicalMinWidth().value() > 0) {
-        m_maxPreferredLogicalWidth = std::max(m_maxPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse.logicalMinWidth().value()));
-        m_minPreferredLogicalWidth = std::max(m_minPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse.logicalMinWidth().value()));
+        m_maxPreferredLogicalWidth = std::max(m_maxPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(LayoutUnit(styleToUse.logicalMinWidth().value())));
+        m_minPreferredLogicalWidth = std::max(m_minPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(LayoutUnit(styleToUse.logicalMinWidth().value())));
     }
 
     if (styleToUse.logicalMaxWidth().isFixed()) {
-        m_maxPreferredLogicalWidth = std::min(m_maxPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse.logicalMaxWidth().value()));
-        m_minPreferredLogicalWidth = std::min(m_minPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse.logicalMaxWidth().value()));
+        m_maxPreferredLogicalWidth = std::min(m_maxPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(LayoutUnit(styleToUse.logicalMaxWidth().value())));
+        m_minPreferredLogicalWidth = std::min(m_minPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(LayoutUnit(styleToUse.logicalMaxWidth().value())));
     }
 
     // Table layout uses integers, ceil the preferred widths to ensure that they can contain the contents.
     if (isTableCell()) {
-        m_minPreferredLogicalWidth = m_minPreferredLogicalWidth.ceil();
-        m_maxPreferredLogicalWidth = m_maxPreferredLogicalWidth.ceil();
+        m_minPreferredLogicalWidth = LayoutUnit(m_minPreferredLogicalWidth.ceil());
+        m_maxPreferredLogicalWidth = LayoutUnit(m_maxPreferredLogicalWidth.ceil());
     }
 
     LayoutUnit borderAndPadding = borderAndPaddingLogicalWidth();
@@ -1997,7 +2001,7 @@ void LayoutBlock::computeBlockPreferredLogicalWidths(LayoutUnit& minLogicalWidth
 
     LayoutObject* child = firstChild();
     LayoutBlock* containingBlock = this->containingBlock();
-    LayoutUnit floatLeftWidth = 0, floatRightWidth = 0;
+    LayoutUnit floatLeftWidth, floatRightWidth;
     while (child) {
         // Positioned children don't affect the min/max width. Spanners only affect the min/max
         // width of the multicol container, not the flow thread.
@@ -2011,11 +2015,11 @@ void LayoutBlock::computeBlockPreferredLogicalWidths(LayoutUnit& minLogicalWidth
             LayoutUnit floatTotalWidth = floatLeftWidth + floatRightWidth;
             if (childStyle->clear() & CLEFT) {
                 maxLogicalWidth = std::max(floatTotalWidth, maxLogicalWidth);
-                floatLeftWidth = 0;
+                floatLeftWidth = LayoutUnit();
             }
             if (childStyle->clear() & CRIGHT) {
                 maxLogicalWidth = std::max(floatTotalWidth, maxLogicalWidth);
-                floatRightWidth = 0;
+                floatRightWidth = LayoutUnit();
             }
         }
 
@@ -2024,9 +2028,9 @@ void LayoutBlock::computeBlockPreferredLogicalWidths(LayoutUnit& minLogicalWidth
         // Fixed margins can be added in as is.
         Length startMarginLength = childStyle->marginStartUsing(&styleToUse);
         Length endMarginLength = childStyle->marginEndUsing(&styleToUse);
-        LayoutUnit margin = 0;
-        LayoutUnit marginStart = 0;
-        LayoutUnit marginEnd = 0;
+        LayoutUnit margin;
+        LayoutUnit marginStart;
+        LayoutUnit marginEnd;
         if (startMarginLength.isFixed())
             marginStart += startMarginLength.value();
         if (endMarginLength.isFixed())
@@ -2060,7 +2064,7 @@ void LayoutBlock::computeBlockPreferredLogicalWidths(LayoutUnit& minLogicalWidth
             } else {
                 maxLogicalWidth = std::max(floatLeftWidth + floatRightWidth, maxLogicalWidth);
             }
-            floatLeftWidth = floatRightWidth = 0;
+            floatLeftWidth = floatRightWidth = LayoutUnit();
         }
 
         if (child->isFloating()) {
@@ -2076,8 +2080,8 @@ void LayoutBlock::computeBlockPreferredLogicalWidths(LayoutUnit& minLogicalWidth
     }
 
     // Always make sure these values are non-negative.
-    minLogicalWidth = std::max<LayoutUnit>(0, minLogicalWidth);
-    maxLogicalWidth = std::max<LayoutUnit>(0, maxLogicalWidth);
+    minLogicalWidth = minLogicalWidth.clampNegativeToZero();
+    maxLogicalWidth = maxLogicalWidth.clampNegativeToZero();
 
     maxLogicalWidth = std::max(floatLeftWidth + floatRightWidth, maxLogicalWidth);
 }
@@ -2091,7 +2095,6 @@ void LayoutBlock::computeChildPreferredLogicalWidths(LayoutObject& child, Layout
             minPreferredLogicalWidth = maxPreferredLogicalWidth = toLayoutBox(child).logicalHeight();
             return;
         }
-        m_needsRecalcLogicalWidthAfterLayoutChildren = true;
         minPreferredLogicalWidth = maxPreferredLogicalWidth = toLayoutBox(child).computeLogicalHeightWithoutLayout();
         return;
     }
@@ -2107,9 +2110,6 @@ void LayoutBlock::computeChildPreferredLogicalWidths(LayoutObject& child, Layout
         else if (computedInlineSize.isMinContent())
             maxPreferredLogicalWidth = minPreferredLogicalWidth;
     }
-
-    if (child.isLayoutBlock() && toLayoutBlock(child).needsRecalcLogicalWidthAfterLayoutChildren())
-        m_needsRecalcLogicalWidthAfterLayoutChildren = true;
 }
 
 bool LayoutBlock::hasLineIfEmpty() const
@@ -2136,7 +2136,7 @@ LayoutUnit LayoutBlock::lineHeight(bool firstLine, LineDirectionMode direction, 
         return LayoutBox::lineHeight(firstLine, direction, linePositionMode);
 
     const ComputedStyle& style = styleRef(firstLine && document().styleEngine().usesFirstLineRules());
-    return style.computedLineHeight();
+    return LayoutUnit(style.computedLineHeight());
 }
 
 int LayoutBlock::beforeMarginInLineDirection(LineDirectionMode direction) const
@@ -2528,7 +2528,7 @@ void LayoutBlock::addOutlineRects(Vector<LayoutRect>& rects, const LayoutPoint& 
         LayoutUnit bottomMargin = nextInlineHasLineBox ? collapsedMarginAfter() : LayoutUnit();
         if (topMargin || bottomMargin) {
             LayoutRect rect(additionalOffset, size());
-            rect.expandEdges(topMargin, 0, bottomMargin, 0);
+            rect.expandEdges(topMargin, LayoutUnit(), bottomMargin, LayoutUnit());
             rects.append(rect);
         }
     } else if (!isAnonymous()) { // For anonymous blocks, the children add outline rects.
@@ -2636,10 +2636,10 @@ LayoutUnit LayoutBlock::calculatePaginationStrutToFitContent(LayoutUnit offset, 
     return strutToNextPage + flowThread->nextLogicalTopForUnbreakableContent(flowThreadOffset, contentLogicalHeight) - flowThreadOffset;
 }
 
-void LayoutBlock::paginatedContentWasLaidOut(LayoutUnit logicalTopOffsetAfterPagination)
+void LayoutBlock::paginatedContentWasLaidOut(LayoutUnit logicalBottomOffsetAfterPagination)
 {
     if (LayoutFlowThread* flowThread = flowThreadContainingBlock())
-        flowThread->contentWasLaidOut(offsetFromLogicalTopOfFirstPage() + logicalTopOffsetAfterPagination);
+        flowThread->contentWasLaidOut(offsetFromLogicalTopOfFirstPage() + logicalBottomOffsetAfterPagination);
 }
 
 LayoutUnit LayoutBlock::collapsedMarginBeforeForChild(const LayoutBox& child) const

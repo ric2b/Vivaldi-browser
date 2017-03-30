@@ -16,7 +16,9 @@
 #define {{header_guard}}
 
 #include <stdint.h>
+#include <ostream>
 
+#include "base/strings/string_piece.h"
 #include "mojo/public/cpp/bindings/array.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr_info.h"
@@ -26,6 +28,7 @@
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/lib/control_message_handler.h"
 #include "mojo/public/cpp/bindings/lib/control_message_proxy.h"
+#include "mojo/public/cpp/bindings/lib/native_serialization.h"
 #include "mojo/public/cpp/bindings/map.h"
 #include "mojo/public/cpp/bindings/message_filter.h"
 #include "mojo/public/cpp/bindings/no_interface.h"
@@ -49,8 +52,12 @@ namespace {{variant}} {
 
 {#--- Enums #}
 {% from "enum_macros.tmpl" import enum_decl -%}
-{%  for enum in enums %}
+{% from "enum_macros.tmpl" import enum_stream_operator -%}
+{% from "enum_macros.tmpl" import is_known_enum_value -%}
+{%- for enum in enums %}
   {{enum_decl(enum)}}
+  {{enum_stream_operator(enum)}}
+  {{is_known_enum_value(enum)}}
 {%- endfor %}
 
 {#--- Constants #}
@@ -68,7 +75,14 @@ extern const {{constant.kind|cpp_pod_type}} {{constant.name}};
 {%  for interface in interfaces %}
 class {{interface.name}};
 using {{interface.name}}Ptr = mojo::InterfacePtr<{{interface.name}}>;
-using {{interface.name}}AssociatedPtr = mojo::AssociatedInterfacePtr<{{interface.name}}>;
+using {{interface.name}}PtrInfo = mojo::InterfacePtrInfo<{{interface.name}}>;
+using {{interface.name}}Request = mojo::InterfaceRequest<{{interface.name}}>;
+using {{interface.name}}AssociatedPtr =
+    mojo::AssociatedInterfacePtr<{{interface.name}}>;
+using {{interface.name}}AssociatedPtrInfo =
+    mojo::AssociatedInterfacePtrInfo<{{interface.name}}>;
+using {{interface.name}}AssociatedRequest =
+    mojo::AssociatedInterfaceRequest<{{interface.name}}>;
 {%  endfor %}
 
 {#--- Struct Forward Declarations -#}
@@ -153,6 +167,20 @@ typedef mojo::StructPtr<{{union.name}}> {{union.name}}Ptr;
 {%      include "union_serialization_declaration.tmpl" %}
 {%-   endfor %}
 {%- endif %}
+
+{%- for struct in structs %}
+{%-   for enum in struct.enums %}
+{{enum_stream_operator(enum)}}
+{{is_known_enum_value(enum)}}
+{%-   endfor %}
+{%- endfor %}
+
+{%- for interface in interfaces %}
+{%-   for enum in interface.enums %}
+{{enum_stream_operator(enum)}}
+{{is_known_enum_value(enum)}}
+{%-   endfor %}
+{%- endfor %}
 
 {%- if variant %}
 }  // namespace {{variant}}

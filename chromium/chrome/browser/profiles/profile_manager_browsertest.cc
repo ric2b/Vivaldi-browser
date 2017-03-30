@@ -7,7 +7,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
@@ -27,6 +26,7 @@
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/test/test_utils.h"
 
 #if defined(OS_CHROMEOS)
@@ -55,7 +55,7 @@ void ProfileCreationComplete(Profile* profile, Profile::CreateStatus status) {
   ASSERT_NE(status, Profile::CREATE_STATUS_LOCAL_FAIL);
   ASSERT_NE(status, Profile::CREATE_STATUS_REMOTE_FAIL);
   // No browser should have been created for this profile yet.
-  EXPECT_EQ(chrome::GetTotalBrowserCountForProfile(profile), 0U);
+  EXPECT_EQ(chrome::GetBrowserCount(profile), 0U);
   EXPECT_EQ(chrome::GetTotalBrowserCount(), 1U);
   if (status == Profile::CREATE_STATUS_INITIALIZED)
     base::MessageLoop::current()->QuitWhenIdle();
@@ -134,7 +134,7 @@ static base::FilePath GetFirstNonSigninProfile(const ProfileInfoCache& cache) {
 #endif
 }
 
-} // namespace
+}  // namespace
 
 // This file contains tests for the ProfileManager that require a heavyweight
 // InProcessBrowserTest.  These include tests involving profile deletion.
@@ -273,8 +273,8 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest,
   // Create a profile, make sure callback is invoked before any callbacks are
   // invoked (so they can do things like sign in the profile, etc).
   ProfileManager::CreateMultiProfileAsync(
-      base::string16(), // name
-      std::string(), // icon url
+      base::string16(),  // name
+      std::string(),  // icon url
       base::Bind(ProfileCreationComplete),
       std::string());
   // Wait for profile to finish loading.
@@ -323,30 +323,26 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest,
   // terminated by OnUnblockOnProfileCreation when the profile is created.
   run_loop.Run();
 
-  chrome::HostDesktopType desktop_type = chrome::GetActiveDesktop();
-  BrowserList* browser_list = BrowserList::GetInstance(desktop_type);
+  BrowserList* browser_list = BrowserList::GetInstance();
   ASSERT_EQ(initial_profile_count + 1, cache.GetNumberOfProfiles());
   EXPECT_EQ(1U, browser_list->size());
 
   // Open a browser window for the first profile.
-  profiles::SwitchToProfile(path_profile1, desktop_type, false,
-                            kOnProfileSwitchDoNothing,
+  profiles::SwitchToProfile(path_profile1, false, kOnProfileSwitchDoNothing,
                             ProfileMetrics::SWITCH_PROFILE_ICON);
   EXPECT_EQ(1U, chrome::GetTotalBrowserCount());
   EXPECT_EQ(1U, browser_list->size());
   EXPECT_EQ(path_profile1, browser_list->get(0)->profile()->GetPath());
 
   // Open a browser window for the second profile.
-  profiles::SwitchToProfile(path_profile2, desktop_type, false,
-                            kOnProfileSwitchDoNothing,
+  profiles::SwitchToProfile(path_profile2, false, kOnProfileSwitchDoNothing,
                             ProfileMetrics::SWITCH_PROFILE_ICON);
   EXPECT_EQ(2U, chrome::GetTotalBrowserCount());
   EXPECT_EQ(2U, browser_list->size());
   EXPECT_EQ(path_profile2, browser_list->get(1)->profile()->GetPath());
 
   // Switch to the first profile without opening a new window.
-  profiles::SwitchToProfile(path_profile1, desktop_type, false,
-                            kOnProfileSwitchDoNothing,
+  profiles::SwitchToProfile(path_profile1, false, kOnProfileSwitchDoNothing,
                             ProfileMetrics::SWITCH_PROFILE_ICON);
   EXPECT_EQ(2U, chrome::GetTotalBrowserCount());
   EXPECT_EQ(2U, browser_list->size());
@@ -392,22 +388,19 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, MAYBE_EphemeralProfile) {
   // Spin to allow profile creation to take place.
   content::RunMessageLoop();
 
-  chrome::HostDesktopType desktop_type = chrome::GetActiveDesktop();
-  BrowserList* browser_list = BrowserList::GetInstance(desktop_type);
+  BrowserList* browser_list = BrowserList::GetInstance();
   ASSERT_EQ(initial_profile_count + 1, cache.GetNumberOfProfiles());
   EXPECT_EQ(1U, browser_list->size());
 
   // Open a browser window for the second profile.
-  profiles::SwitchToProfile(path_profile2, desktop_type, false,
-                            kOnProfileSwitchDoNothing,
+  profiles::SwitchToProfile(path_profile2, false, kOnProfileSwitchDoNothing,
                             ProfileMetrics::SWITCH_PROFILE_ICON);
   EXPECT_EQ(2U, chrome::GetTotalBrowserCount());
   EXPECT_EQ(2U, browser_list->size());
   EXPECT_EQ(path_profile2, browser_list->get(1)->profile()->GetPath());
 
   // Create a second window for the ephemeral profile.
-  profiles::SwitchToProfile(path_profile2, desktop_type, true,
-                            kOnProfileSwitchDoNothing,
+  profiles::SwitchToProfile(path_profile2, true, kOnProfileSwitchDoNothing,
                             ProfileMetrics::SWITCH_PROFILE_ICON);
   EXPECT_EQ(3U, chrome::GetTotalBrowserCount());
   EXPECT_EQ(3U, browser_list->size());
@@ -466,3 +459,48 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeletePasswords) {
   EXPECT_EQ(0u, verify_delete.GetPasswords().size());
 }
 #endif  // !defined(OS_WIN) && !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+
+// Tests Profile::HasOffTheRecordProfile, Profile::IsValidProfile and the
+// profile counts in ProfileManager with respect to the creation and destruction
+// of incognito profiles.
+IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, IncognitoProfile) {
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  ASSERT_TRUE(profile_manager);
+
+  Profile* profile = ProfileManager::GetActiveUserProfile();
+  ASSERT_TRUE(profile);
+  EXPECT_FALSE(profile->HasOffTheRecordProfile());
+
+  size_t initial_profile_count = profile_manager->GetNumberOfProfiles();
+
+  // Create an incognito profile.
+  Profile* incognito_profile = profile->GetOffTheRecordProfile();
+
+  EXPECT_TRUE(profile->HasOffTheRecordProfile());
+  ASSERT_TRUE(profile_manager->IsValidProfile(incognito_profile));
+  EXPECT_EQ(initial_profile_count, profile_manager->GetNumberOfProfiles());
+
+  // Check that a default save path is not empty, since it's taken from the
+  // main profile preferences, set it to empty and verify that it becomes
+  // empty.
+  EXPECT_FALSE(profile->GetOffTheRecordPrefs()
+                   ->GetFilePath(prefs::kSaveFileDefaultDirectory)
+                   .empty());
+  profile->GetOffTheRecordPrefs()->SetFilePath(prefs::kSaveFileDefaultDirectory,
+                                               base::FilePath());
+  EXPECT_TRUE(profile->GetOffTheRecordPrefs()
+                  ->GetFilePath(prefs::kSaveFileDefaultDirectory)
+                  .empty());
+
+  // Delete the incognito profile.
+  incognito_profile->GetOriginalProfile()->DestroyOffTheRecordProfile();
+
+  EXPECT_FALSE(profile->HasOffTheRecordProfile());
+  EXPECT_FALSE(profile_manager->IsValidProfile(incognito_profile));
+  EXPECT_EQ(initial_profile_count, profile_manager->GetNumberOfProfiles());
+  // After destroying the incognito profile incognito preferences should be
+  // cleared so the default save path should be taken from the main profile.
+  EXPECT_FALSE(profile->GetOffTheRecordPrefs()
+                   ->GetFilePath(prefs::kSaveFileDefaultDirectory)
+                   .empty());
+}

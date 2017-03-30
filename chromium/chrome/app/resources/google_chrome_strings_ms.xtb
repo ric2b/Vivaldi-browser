@@ -3,7 +3,6 @@
 <translationbundle lang="ms">
 <translation id="1001534784610492198">Arkib pemasang rosak atau tidak sah. Sila muat turun Google Chrome semula.</translation>
 <translation id="1013290471399003443">Chrome mengesahkan bahawa <ph name="ISSUER" /> mengeluarkan sijil tapak web ini. Pelayan membekalkan maklumat Ketelusan Sijil yang sah.</translation>
-<translation id="1016765312371154165">Chrome tidak ditutup dengan betul.</translation>
 <translation id="103396972844768118">Maklumat penting mengenai data Chrome anda</translation>
 <translation id="1035334672863811645">log masuk ke Chrome</translation>
 <translation id="1061441684050139317">Chrome memerlukan akses mikrofon untuk mengongsikannya dengan tapak ini.</translation>
@@ -51,7 +50,6 @@ Teruskan juga log masuk akan menggabungkan maklumat Chrome seperti penanda halam
 <translation id="2397416548179033562">Paparkan menu Chrome</translation>
 <translation id="2429317896000329049">Google Chrome tidak dapat menyegerakkan data anda kerana Segerak tidak tersedia untuk domain anda.</translation>
 <translation id="2485422356828889247">Nyahpasang</translation>
-<translation id="2576431527583832481">Chrome telah dipertingkatkan! Versi baharu kini boleh didapati.</translation>
 <translation id="2580411288591421699">Tidak dapat memasang versi Google Chrome yang sama yang kini dijalankan. Sila tutup Google Chrome dan cuba semula.</translation>
 <translation id="2582790009689336987">Tidak lama lagi, komputer ini akan berhenti menerima kemas kini Google Chrome kerana sistem Linux ini tidak akan disokong lagi.</translation>
 <translation id="2588322182880276190">Logo Chrome</translation>
@@ -111,7 +109,6 @@ Teruskan juga log masuk akan menggabungkan maklumat Chrome seperti penanda halam
 <translation id="4633000520311261472">Untuk menjadikan Chrome lebih selamat, kami melumpuhkan beberapa sambungan yang tidak disenaraikan dalam <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> dan mungkin telah ditambahkan tanpa pengetahuan anda.</translation>
 <translation id="4700157086864140907">Google Chrome dapat menyediakan semakan ejaan yang lebih pintar dengan menghantar apa yang anda taip dalam penyemak imbas kepada pelayan Google, membolehkan anda menggunakan teknologi semakan ejaan yang sama seperti yang digunakan oleh carian Google.</translation>
 <translation id="4728575227883772061">Pemasangan gagal disebabkan ralat tidak dinyatakan. Jika Google Chrome kini dijalankan, sila tutupnya dan cuba semula.</translation>
-<translation id="473775607612524610">Kemas kini</translation>
 <translation id="4743926867934016338">Terima &amp; Cari</translation>
 <translation id="4751441238232965030">Komputer ini akan berhenti menerima kemas kini Google Chrome 32 bit tidak lama lagi. Sila tingkatkan kepada Google Chrome 64 bit.</translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
@@ -208,7 +205,6 @@ Teruskan juga log masuk akan menggabungkan maklumat Chrome seperti penanda halam
 <translation id="7808348361785373670">Alih keluar daripada Chrome...</translation>
 <translation id="7825851276765848807">Gagal pemasangan disebabkan ralat yang tidak dinyatakan. Sila muat turun semula Google Chrome.</translation>
 <translation id="7890208801193284374">Jika anda berkongsi komputer, rakan dan keluarga boleh menyemak imbas secara berasingan dan menyediakan Chrome sebagaimana yang mereka mahukan.</translation>
-<translation id="8000275528373650868">Google Chrome memerlukan Windows Vista atau Windows XP dengan SP2 atau lebih tinggi.</translation>
 <translation id="8005540215158006229">Chrome hampir sedia.</translation>
 <translation id="8008534537613507642">Pasang Semula Chrome</translation>
 <translation id="8030318113982266900">Mengemas kini peranti anda kepada saluran <ph name="CHANNEL_NAME" />...</translation>
@@ -237,6 +233,7 @@ Teruskan juga log masuk akan menggabungkan maklumat Chrome seperti penanda halam
 <translation id="8851136666856101339">utama</translation>
 <translation id="8862326446509486874">Anda tidak mempunyai hak wajar untuk pemasangan peringkat sistem. Cuba jalankan pemasang semula sebagai Pentadbir.</translation>
 <translation id="9026991721384951619">OS Chrome tidak dapat menyegerakkan data anda kerana butiran log masuk akaun anda sudah lapuk.</translation>
+<translation id="9067395829937117663">Google Chrome memerlukan Windows 7 atau lebih tinggi.</translation>
 <translation id="9102715433345326100">Fail ini bersifat hasad dan Chrome telah menyekatnya.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Amaran:<ph name="END_BOLD" /> Google Chrome tidak dapat menghalang sambungan daripada merekodkan sejarah penyemakan imbas anda. Untuk melumpuhkan sambungan ini dalam mod inkognito, nyahpilih pilihan ini.</translation>
 <translation id="911206726377975832">Padamkan juga data menyemak imbas anda?</translation>
